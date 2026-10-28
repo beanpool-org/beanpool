@@ -6,7 +6,7 @@ import {
     HIDDEN_AUTHOR, SEARCH_TERMS_MAX, searchTermsOfQuery, type MarketplacePost, type PostFilter,
 } from '../posts.js';
 import { areaBox, boundingBox, haversineKm, registerGeoFunctions, roundToArea, MAX_RADIUS_KM } from '../geo.js';
-import { roundToArea as coreRoundToArea, searchTermsFor } from '@beanpool/core';
+import { roundToArea as coreRoundToArea, searchTermsFor, shopPhotoUrlOf } from '@beanpool/core';
 
 describe('the words a search asks posts_fts for (#1808 review, finding 5)', () => {
     it('asks each word once: 4,000 × "a" is one prefix, not 4,000 that each read the whole index', () => {
@@ -131,7 +131,8 @@ const POSTS_FIXTURE_DDL = `
         earned_credit REAL DEFAULT 0,
         paused INTEGER DEFAULT 0,
         joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        is_visitor INTEGER NOT NULL DEFAULT 0
+        is_visitor INTEGER NOT NULL DEFAULT 0,
+        is_treasury INTEGER DEFAULT 0
     );
     CREATE TABLE groups (
         id TEXT PRIMARY KEY,
@@ -181,6 +182,12 @@ const POSTS_FIXTURE_DDL = `
         photo_data TEXT,
         order_num INTEGER,
         updated_at DATETIME
+    );
+    CREATE TABLE shops (
+        id TEXT PRIMARY KEY,
+        owner_pubkey TEXT NOT NULL,
+        opened_at TEXT NOT NULL,
+        photo_ref TEXT
     );
     CREATE TABLE posts (
         id TEXT PRIMARY KEY,
@@ -453,6 +460,48 @@ describe('The listings, not the people (G9a)', () => {
             authorCallsign: 'Ann', createdAt: member.createdAt, active: false, status: 'cancelled', photos: [] } as MarketplacePost);
         assert.deepStrictEqual(Object.keys(removal).sort(), ['active', 'authorCallsign', 'authorPublicKey', 'category', 'createdAt', 'credits', 'description', 'id', 'photos', 'status', 'title', 'type']);
         assert.strictEqual(removal.authorPublicKey, HIDDEN_AUTHOR);
+    });
+});
+
+// The enterprise's banner on its listings (Pictures S6, DESIGN-pictures-fable.md §6). The node's HTTP suite (apps/server
+// test-shop-banner) covers the routes; these pin the engine's own field.
+describe("The enterprise's banner on its listings (Pictures S6)", () => {
+    function board(): Database.Database {
+        const db = new Database(':memory:');
+        registerGeoFunctions(db);
+        db.exec(POSTS_FIXTURE_DDL);
+        db.exec(`INSERT INTO members (public_key, callsign, is_treasury) VALUES ('ent', 'Bakery Co-op', 1), ('ann', 'Ann', 0);
+                 INSERT INTO shops (id, owner_pubkey, opened_at, photo_ref) VALUES
+                     ('shop_ent_old', 'ent', '2026-10-01T00:00:00.000Z', 'old1'),
+                     ('shop_ent', 'ent', '2026-10-20T00:00:00.000Z', 'abc123'),
+                     ('shop_ann', 'ann', '2026-10-20T00:00:00.000Z', 'def456');`);
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at)
+                                VALUES (?, 'offer', 'food', ?, '', 0, ?, '2026-10-21T00:00:00.000Z', '2026-10-21T00:00:00.000Z')`);
+        ins.run('p_ent', 'Bread', 'ent');
+        ins.run('p_ann', 'Lemons', 'ann');
+        return db;
+    }
+    const byId = (posts: MarketplacePost[]) => new Map(posts.map(p => [p.id, p]));
+
+    it("an enterprise's listing carries its newest shop's banner; a member's carries none, though their shop has a photo", () => {
+        const posts = byId(getPosts(board()));
+        assert.strictEqual(posts.get('p_ent')?.authorBannerUrl, shopPhotoUrlOf('shop_ent', 'abc123'));
+        assert.ok(!('authorBannerUrl' in posts.get('p_ann')!), "a member's listing has no authorBannerUrl key");
+    });
+
+    it('an enterprise whose shop has no photo carries none', () => {
+        const db = board();
+        db.exec("UPDATE shops SET photo_ref = NULL WHERE id = 'shop_ent'");
+        assert.ok(!('authorBannerUrl' in byId(getPosts(db)).get('p_ent')!));
+    });
+
+    it("a visitor's read reads none, and guestPost drops one a member's copy had", () => {
+        const db = board();
+        const guest = byId(getPosts(db, { guest: true }).map(guestPost));
+        assert.ok(!('authorBannerUrl' in guest.get('p_ent')!));
+        const member = byId(getPosts(db)).get('p_ent')!;
+        assert.ok(typeof member.authorBannerUrl === 'string');
+        assert.ok(!('authorBannerUrl' in guestPost(member)));
     });
 });
 

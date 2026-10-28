@@ -10,9 +10,10 @@
  *
  *   pnpm --filter @beanpool/manager test:phone-width
  *
- * Then every modal and wizard (ALL_MODALS in harness.mjs) at 320 and 360px, at both text sizes: its overlay covers the
- * whole screen, top bar included; every button, link, field and line of text in it lies inside its card, no controls
- * overlap each other, no text runs under its ✕ (the cards clip, so the page check above cannot see a button pushed off the edge),
+ * Then every modal and wizard (ALL_MODALS in harness.mjs) at 320 and 360px, at both text sizes: it shows what its scenario
+ * is there for (`shows`); its overlay covers the whole screen, top bar included; every button, link, field and line of
+ * text in it lies inside its card, no controls overlap each other, no text runs under its ✕ (the cards clip, so the page
+ * check above cannot see a button pushed off the edge),
  * and a tap on the centre of its ✕ closes it. At 320px, normal text, the backdrop, Escape and the phone's Back button
  * each close it too, and Back does not leave Settings — except a card marked `holdsOpen` (one showing a one-time
  * secret, such as the recovery code), which all three must leave open.
@@ -287,6 +288,12 @@ try {
                     checks++;
                     if (opened <= before) { fail('did not open'); continue; }
                     const { overlay, card } = topModal(page);
+                    // What this scenario is there to measure (ALL_MODALS `shows`), so a fixture edit that did not take fails here.
+                    for (const sel of modal.shows ?? []) {
+                        checks++;
+                        if (!(await card.locator(sel).count())) fail(`it does not show ${sel}`);
+                        else console.log(`  ✓ ${modal.name} ${at}: shows ${sel}`);
+                    }
                     // The dimmed overlay covers the whole screen, top bar included.
                     checks++;
                     const cover = await overlay.evaluate((o) => {

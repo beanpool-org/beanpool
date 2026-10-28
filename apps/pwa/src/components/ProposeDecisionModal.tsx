@@ -5,7 +5,7 @@ import {
     type DecisionEffect,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
-import { keeperWords, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, t, tn, word, type WordKey } from '@beanpool/core';
+import { keeperWords, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
     onClose: () => void;
     onCreated: () => void;
     identity: BeanPoolIdentity | null;
+    /** Not read since removal by vote S3: it fed the removal's debt line, and a removal is no longer proposed here. */
     commonsBalance: number;
     members?: Array<{ publicKey: string; callsign?: string; balance?: number }>;
     treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
@@ -24,9 +25,13 @@ const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: WordKey; icon: string }> 
     { id: 'pool', label: word('Commons Pool'), icon: '🏛️' },
 ];
 
+/**
+ * Not a vote on removing a member: since removal by vote S3 (Amendment A of the design, point 1) that opens only when an
+ * admin pauses someone, and the node refuses it as a proposal (server decisions-engine.ts REMOVAL_FOLLOWS_A_PAUSE). A
+ * report is how a member asks for it.
+ */
 const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label: WordKey; desc: WordKey }>> = {
     member: [
-        { id: 'remove_member', label: word('Remove Member'), desc: word('Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)') },
         { id: 'suspend_member', label: word('Suspend Member'), desc: word('Temporary freeze of trading and messaging') },
         { id: 'unsuspend_member', label: word('Unsuspend Member'), desc: word('Restore member to active standing (simple majority)') },
         { id: 'reinstate_member', label: word('Reinstate Member'), desc: word('Cancel pending removal and restore account (simple majority)') },
@@ -71,7 +76,6 @@ export function ProposeDecisionModal({
     onClose,
     onCreated,
     identity,
-    commonsBalance,
     members = [],
     treasuries = [],
 }: Props) {
@@ -114,29 +118,15 @@ export function ProposeDecisionModal({
         return map;
     }, [members]);
 
-    // Lookup selected member details for removal preview
+    // Lookup selected member details by callsign or key
     const selectedMember = useMemo(() => {
         if (!subject) return null;
         return membersByKeyMap.get(subject) || membersByKeyMap.get(subject.toLowerCase()) || null;
     }, [membersByKeyMap, subject]);
 
-    // What the node records as the member's name stays as it always was; only the line shown is in the member's language.
-    const targetName = selectedMember?.callsign || subject || 'Member';
-    const shownName = selectedMember?.callsign || subject || t('Member');
     // The one removed is a project's leader or an enterprise's lead keeper (§3.1); until one is picked, both words.
     const pickedGroup = treasuries.find(tr => tr.publicKey === enterprisePubkey.trim());
     const lead = leadWords(pickedGroup ? (keeperWords(pickedGroup.lifecycle).lead === 'leader' ? 'leader' : 'lead keeper') : 'either');
-    const poolAmount = Math.round(commonsBalance || 0);
-
-    // §3.8, with balances private (Marty, 2026-09-28): the proposer does not see the member's balance. The community
-    // records it, and any debt, when the vote opens, and shows them to everyone who can vote in it. English writes
-    // "beans" for one and many, as it always has.
-    const debtWriteOffLine = tn(
-        poolAmount,
-        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
-        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
-        { name: shownName },
-    );
 
     if (!isOpen) return null;
 
@@ -189,12 +179,6 @@ export function ProposeDecisionModal({
                 setError(t('Please pick the project or enterprise, or enter its public key.'));
                 return;
             }
-        } else if (effect === 'remove_member') {
-            // The debt and balance are the node's to record when the vote opens (decisions-engine createDecision).
-            params = {
-                memberName: targetName,
-                commonsPool: poolAmount,
-            };
         }
 
         setSubmitting(true);
@@ -347,6 +331,12 @@ export function ProposeDecisionModal({
                                 </button>
                             ))}
                         </div>
+                        {/* Removal by vote S3: in place of proposing a removal, the way a member asks for one */}
+                        {touches === 'member' && (
+                            <p className="text-xs text-nature-300 leading-snug mt-2" data-testid="removal-follows-a-pause">
+                                {t('A vote on removing a member opens only when an admin pauses them. To ask for one, report them with Report Member on their profile.')}
+                            </p>
+                        )}
                     </div>
 
                     {/* Enterprise Input for remove_lead_keeper and write_off_deficit */}
@@ -449,21 +439,6 @@ export function ProposeDecisionModal({
                                 placeholder={t('e.g. {amount}', { amount: 100 })}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
-                        </div>
-                    )}
-
-                    {/* §3.8 Removal Ballot Special Debt Disclosure Warning Box */}
-                    {effect === 'remove_member' && (
-                        <div
-                            className="bg-red-500/10 border border-red-500/30 rounded-xl p-3"
-                            data-testid="removal-debt-write-off-box"
-                        >
-                            <div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">
-                                {t('Mandatory Debt Disclosure (§3.8)')}
-                            </div>
-                            <div className="text-sm font-semibold text-red-200" data-testid="removal-debt-write-off-line">
-                                {debtWriteOffLine}
-                            </div>
                         </div>
                     )}
 

@@ -166,7 +166,10 @@ export async function askOneWayBackStanding(
  * The record, made to agree with the node's word, and kept:
  * - the node says 12 words and this phone has no record (the account restored here): started, unless the key vault
  *   keeps a copy of the key (`vaultCopy`), which is a way back in every community: then nothing is written, and the
- *   card offers a sign-in quietly in Settings only (join-global.tsx skips the card for the same reason);
+ *   card offers a sign-in quietly in Settings only (join-global.tsx skips the card for the same reason). `vaultCopy` is
+ *   what the phone knows (vault.ts `vaultCopyKnown`): a deposit and a status read keep it, and so does a removal
+ *   (vault rethink VR1: Remove everything records "none", and the list read after removing one copy says what is left),
+ *   so once the last vault copy is removed the card is back where a 12-words account with no copy has it;
  * - the phone thought a sign-in was added and the node says not: opened again;
  * - the node says the account has a sign-in (added anywhere): done for good, over "I still have my 12 words" too, and
  *   written even with no record yet, so the phone stops asking (PR #1452 re-review, findings 1-3).

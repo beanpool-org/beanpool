@@ -46,7 +46,8 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 earned_credit REAL DEFAULT 0,
                 paused INTEGER DEFAULT 0,
                 joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                is_visitor INTEGER NOT NULL DEFAULT 0
+                is_visitor INTEGER NOT NULL DEFAULT 0,
+                is_treasury INTEGER DEFAULT 0
             );
             CREATE TABLE member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL);
 
@@ -163,6 +164,13 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 photo_data TEXT,
                 order_num INTEGER,
                 updated_at DATETIME
+            );
+
+            CREATE TABLE shops (
+                id TEXT PRIMARY KEY,
+                owner_pubkey TEXT NOT NULL,
+                opened_at TEXT NOT NULL,
+                photo_ref TEXT
             );
 
             INSERT INTO members (public_key, callsign) VALUES

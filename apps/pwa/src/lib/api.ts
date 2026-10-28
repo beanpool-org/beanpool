@@ -1246,6 +1246,8 @@ export interface MarketplacePost {
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
     /** The author's face, carried on the row for a member's read (null for a visitor's, and for no photo). */
     authorAvatarUrl?: string | null;
+    /** The shop banner URL of the author enterprise (Pictures S6). */
+    authorBannerUrl?: string | null;
     pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
@@ -2913,6 +2915,25 @@ export async function getSignInRecovery(): Promise<string[] | null> {
         return Array.isArray(res?.enrolledSso) ? res.enrolledSso.filter((p): p is string => typeof p === 'string') : null;
     } catch {
         return null;
+    }
+}
+
+/**
+ * Remove this community's copy of the account for one sign-in ("Where your account can be brought back from", vault
+ * rethink VR1): the signed `DELETE /api/recovery/shares/sso/:provider`, as the phone sends it. True only on the server's
+ * own answer (routes/keepers.ts): a 2xx whose JSON names the copy removed, or a 404 with its JSON `error` (it keeps none
+ * for that sign-in). False for anything else: no answer, a refusal, or an answer that isn't the server's (a proxy's
+ * page, a 2xx naming nothing), as the phone's removeCommunityCopy (utils/vault-move.ts) counts them. Never throws.
+ */
+export async function removeSignInCopy(provider: string): Promise<boolean> {
+    try {
+        const res = await signedFetch('DELETE', `/api/recovery/shares/sso/${encodeURIComponent(provider)}`);
+        if (!res.ok && res.status !== 404) return false;
+        const body = await res.json().catch(() => null) as { removed?: unknown; error?: unknown } | null;
+        if (!body || typeof body !== 'object') return false;
+        return res.ok ? body.removed === provider : typeof body.error === 'string';
+    } catch {
+        return false;
     }
 }
 

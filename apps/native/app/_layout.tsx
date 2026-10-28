@@ -51,6 +51,7 @@ import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
+import { retryCommunityRemovals } from '../utils/vault-move';
 import { attestOwnRekeys, declineRekey, operatorContact, rekeyToAsk } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
@@ -848,6 +849,19 @@ function RootLayoutNav() {
             sub.remove();
             waits.forEach((cancel) => cancel());
         };
+    }, [identity?.publicKey]);
+
+    // A community's copy the member asked to remove whose delete didn't land (the move card, or "Where your account can be
+    // brought back from": utils/vault-move.ts `retryCommunityRemovals`): tried again at app open and at each return, in the
+    // background, in any build. With none waiting it reads the phone's list and asks nobody; nothing waits for it.
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        const tryAgain = () => { retryCommunityRemovals(identity).catch(() => {}); };
+        tryAgain();
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') tryAgain();
+        });
+        return () => sub.remove();
     }, [identity?.publicKey]);
 
     // A re-key to this key nobody has confirmed (an admin-path re-key, or one an older app completed): asked once per run,

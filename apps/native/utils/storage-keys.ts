@@ -269,6 +269,15 @@ export function oneWayBackStoreKey(publicKey: string): string {
     return `beanpool_one_way_back:${publicKey.toLowerCase()}`;
 }
 
+/**
+ * One account's say-so that its 12 words are written down ('1', or '0' once taken back), from "Where your account can be
+ * brought back from" (utils/ways-back.ts). A flag only, nothing of the words. Kept when the account leaves the phone, as
+ * the "one way back" card is: the paper is the same paper when the account comes back.
+ */
+export function wordsWrittenDownStoreKey(publicKey: string): string {
+    return `beanpool_words_written_down:${publicKey.toLowerCase()}`;
+}
+
 /** The last time the "one way back" card asked the global community about this account, and its answer (one-way-back.ts). */
 export function oneWayBackAskedStoreKey(publicKey: string): string {
     return `beanpool_one_way_back_asked:${publicKey.toLowerCase()}`;

@@ -222,6 +222,16 @@ export function OffboardMemberWizard({
                 ) : preview ? (
                     <div className="space-y-5 text-xs">
 
+                        {/* Where the community votes, this settles the removal it voted for (removal by vote S3) */}
+                        {preview.settlesRemoval && (
+                            <div data-testid="offboard-settles-removal" className="p-3 bg-nature-900/80 border border-nature-800 rounded-2xl text-nature-200">
+                                The community voted to remove @{member.callsign}. Offboarding settles their Beans and completes the removal now
+                                {preview.settlesRemoval.gracePeriodEndsAt
+                                    ? `, before its grace window ends on ${new Date(preview.settlesRemoval.gracePeriodEndsAt).toLocaleDateString()}.`
+                                    : '.'}
+                            </div>
+                        )}
+
                         {/* Sole Owner Guard */}
                         {preview.isSoleOwner && (
                             <div id={REASON_SOLE_OWNER} className="p-3 bg-amber-950/40 border border-amber-800/70 rounded-2xl text-amber-200">

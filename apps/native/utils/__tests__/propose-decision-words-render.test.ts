@@ -159,8 +159,12 @@ describe('the phone propose form on a Beans-off community ({ beans: false, decis
         expect(button('Commons Pool')).toBeFalsy();
         expect(button('Member')).toBeTruthy();
 
-        // Allowed member effects are present
-        expect(radio('Remove Member')).toBeTruthy();
+        // Allowed member effects are present. Not a removal (removal by vote S3): a pause opens that vote, and the form
+        // says how to ask for one instead.
+        expect(radio('Remove Member')).toBeFalsy();
+        expect(container.querySelector('[data-testid="removal-follows-a-pause"]')?.textContent).toBe(
+            "A vote on removing a member opens only when an admin pauses them. To ask for one, tell your community's moderators: blocking someone reports them, as reporting one of their posts does.",
+        );
         expect(radio('Suspend Member')).toBeTruthy();
         expect(radio('Unsuspend Member')).toBeTruthy();
         expect(radio('Reinstate Member')).toBeTruthy();
@@ -177,8 +181,7 @@ describe('the phone propose form on a Beans-off community ({ beans: false, decis
         // Placeholder does not mention Beans
         expect(container.querySelector('input[placeholder*="bean"]')).toBeFalsy();
 
-        // When Remove Member is selected, no Commons pool debt box is rendered
-        click(radio('Remove Member'));
+        // No Commons pool debt box: the form has no removal to show one for
         expect(container.querySelector('[data-testid="removal-debt-write-off-box"]')).toBeFalsy();
         expect(text()).not.toMatch(/Commons pool, which holds \d+ beans/i);
 

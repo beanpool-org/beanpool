@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { palette } from '../constants/colors';
 import {
     type DecisionTouch,
     type DecisionEffect,
@@ -22,7 +21,7 @@ import {
 } from '../utils/db';
 import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { decisionTouchesFor, decisionEffectsFor, proposeTitlePlaceholder } from '../utils/beans-off';
-import { amountRefusalWords, ANY_DECIMALS, inCapitalsOf, isAmbiguousAmount, keeperWords, parseAmount, t, tn, word, type WordKey } from '@beanpool/core';
+import { amountRefusalWords, ANY_DECIMALS, inCapitalsOf, isAmbiguousAmount, keeperWords, parseAmount, t, word, type WordKey } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { signedRequestWords } from './signed-request-lines';
 
@@ -31,6 +30,7 @@ interface Props {
     onClose: () => void;
     onCreated: () => void;
     identity: any;
+    /** Not read since removal by vote S3: it fed the removal's debt line, and a removal is no longer proposed here. */
     commonsBalance: number;
     members?: Array<{ publicKey: string; callsign?: string; balance?: number }>;
     treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
@@ -43,9 +43,13 @@ const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: WordKey; icon: string }> 
     { id: 'pool', label: word('Commons Pool'), icon: 'bank' },
 ];
 
+/**
+ * Not a vote on removing a member: since removal by vote S3 (Amendment A of the design, point 1) that opens only when an
+ * admin pauses someone, and the node refuses it as a proposal (server decisions-engine.ts REMOVAL_FOLLOWS_A_PAUSE). A
+ * report is how a member asks for it.
+ */
 const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label: WordKey; desc: WordKey }>> = {
     member: [
-        { id: 'remove_member', label: word('Remove Member'), desc: word('Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)') },
         { id: 'suspend_member', label: word('Suspend Member'), desc: word('Temporary freeze of trading and messaging') },
         { id: 'unsuspend_member', label: word('Unsuspend Member'), desc: word('Restore member to active standing (simple majority)') },
         { id: 'reinstate_member', label: word('Reinstate Member'), desc: word('Cancel pending removal and restore account (simple majority)') },
@@ -90,7 +94,6 @@ export function ProposeDecisionModal({
     onClose,
     onCreated,
     identity,
-    commonsBalance,
     members = [],
     treasuries = [],
     features,
@@ -140,29 +143,15 @@ export function ProposeDecisionModal({
         return map;
     }, [members]);
 
-    // Lookup selected member details for removal preview via O(1) Map lookup
+    // Lookup selected member details via O(1) Map lookup
     const selectedMember = useMemo(() => {
         if (!subject) return null;
         return membersMap.get(subject) || membersMap.get(subject.toLowerCase()) || null;
     }, [membersMap, subject]);
 
-    // What the node records as the member's name stays as it always was; only the line shown is in the member's language.
-    const targetName = selectedMember?.callsign || subject || 'Member';
-    const shownName = selectedMember?.callsign || subject || t('Member');
     // The one removed is a project's leader or an enterprise's lead keeper (§3.1); until one is picked, both words.
     const pickedGroup = treasuries.find(tr => tr.publicKey === enterprisePubkey.trim());
     const lead = leadWords(pickedGroup ? (keeperWords(pickedGroup.lifecycle).lead === 'leader' ? 'leader' : 'lead keeper') : 'either');
-    const poolAmount = Math.round(commonsBalance || 0);
-
-    // §3.8, with balances private (Marty, 2026-09-28): the proposer does not see the member's balance. The community
-    // records it, and any debt, when the vote opens, and shows them to everyone who can vote in it. English writes
-    // "beans" for one and many, as it always has.
-    const debtWriteOffLine = tn(
-        poolAmount,
-        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
-        "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.",
-        { name: shownName },
-    );
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -283,27 +272,12 @@ export function ProposeDecisionModal({
             color: colors.text.secondary,
             lineHeight: 16,
         },
-        removalWarningBox: {
-            backgroundColor: palette.red100,
-            borderRadius: 12,
-            padding: 14,
-            marginTop: 10,
-            marginBottom: 12,
-            borderWidth: 1,
-            borderColor: palette.red300,
-        },
-        removalWarningTitle: {
+        removalNote: {
             fontSize: 12,
-            fontWeight: '800',
-            color: palette.red700,
-            letterSpacing: 0.5,
-            marginBottom: 4,
-        },
-        debtLineText: {
-            fontSize: 13,
-            color: palette.red900,
-            lineHeight: 18,
-            fontWeight: '600',
+            color: colors.text.secondary,
+            lineHeight: 17,
+            marginTop: 2,
+            marginBottom: 12,
         },
         noBondNotice: {
             flexDirection: 'row',
@@ -391,12 +365,6 @@ export function ProposeDecisionModal({
                 Alert.alert(t('Missing project or enterprise'), t('Please pick the project or enterprise, or enter its public key.'));
                 return;
             }
-        } else if (effect === 'remove_member') {
-            // The debt and balance are the node's to record when the vote opens (decisions-engine createDecision).
-            params = {
-                memberName: targetName,
-                commonsPool: poolAmount,
-            };
         }
 
         setSubmitting(true);
@@ -508,6 +476,13 @@ export function ProposeDecisionModal({
                                 </Pressable>
                             ))}
                         </View>
+                        {/* Removal by vote S3: in place of proposing a removal, the way a member asks for one. The phone has no
+                            report button for a person: blocking them reports them (the guide's "Reporting a problem"). */}
+                        {touches === 'member' && (
+                            <Text style={styles.removalNote} testID="removal-follows-a-pause">
+                                {t("A vote on removing a member opens only when an admin pauses them. To ask for one, tell your community's moderators: blocking someone reports them, as reporting one of their posts does.")}
+                            </Text>
+                        )}
 
                         {/* Enterprise Input for remove_lead_keeper and write_off_deficit */}
                         {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
@@ -601,16 +576,6 @@ export function ProposeDecisionModal({
                                     keyboardType="numeric"
                                 />
                             </>
-                        )}
-
-                        {/* Removal Ballot Special §3.8 Warning Box */}
-                        {showsBeans && effect === 'remove_member' && (
-                            <View style={styles.removalWarningBox} testID="removal-debt-write-off-box">
-                                <Text style={styles.removalWarningTitle}>{inCapitalsOf(t('Mandatory Debt Disclosure (§3.8)'))}</Text>
-                                <Text style={styles.debtLineText} testID="removal-debt-write-off-line">
-                                    {debtWriteOffLine}
-                                </Text>
-                            </View>
                         )}
 
                         {/* No Bond Notice (§3.2, §7) */}

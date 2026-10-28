@@ -47,7 +47,9 @@ On the global community no vote opens. The suspension lasts 7 days and then lift
 
 ## Removing someone
 
-Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons.
+Only the community removes a member, by a Decision, and that vote opens only when someone is suspended (above): nobody proposes one, member or admin. A removal a member proposed before this version still runs to its end. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons. In those 7 days, **Offboard** on their page settles their beans as you choose (to the commons, or to a member) and completes the removal at once.
+
+Two exceptions. An owner can still remove a member together with everyone they invited (**Prune Branch**, see Members and invites), until a branch can be put to one vote. And where community votes are switched off, the admins remove members themselves (**Prune Account** and **Offboard**).
 
 No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it, not even by the vote that opens when one of them is suspended (above). If an admin must go, an owner takes the role away first; after that they are a member like any other.
 

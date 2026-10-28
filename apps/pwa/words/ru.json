@@ -1972,7 +1972,6 @@
   "A quick look at this community economy.": "Краткий обзор экономики этого сообщества.",
   "Done ✓": "Готово ✓",
   "Member\u0004what a Decision touches": "Участник",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Исключение с этого узла (квалифицированное большинство 66%, кворум 25%, льготный период 7 дней)",
   "Temporary freeze of trading and messaging": "Временная заморозка сделок и сообщений",
   "Restore member to active standing (simple majority)": "Восстановление активного статуса участника (простое большинство)",
   "Cancel pending removal and restore account (simple majority)": "Отмена готовящегося исключения и восстановление аккаунта (простое большинство)",
@@ -1997,12 +1996,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Пожалуйста, введите позывной или публичный ключ старшего хранителя или лидера.",
   "The lead keeper or leader to remove: callsign or public key": "Старший хранитель или лидер, которого нужно снять: позывной или публичный ключ",
   "Enter the lead keeper or leader's callsign or pubkey...": "Введите позывной или публичный ключ старшего хранителя или лидера...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} боб.",
-    "few": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} боба.",
-    "many": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} бобов.",
-    "other": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} бобов."
-  },
   "Please enter a clear title for this decision.": "Укажите понятный заголовок для этого решения.",
   "Please provide a description and rationale.": "Добавьте описание и обоснование.",
   "Please enter a valid member callsign or 64-character public key.": "Введите корректное имя участника или 64-значный публичный ключ.",

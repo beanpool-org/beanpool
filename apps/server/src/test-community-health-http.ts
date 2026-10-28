@@ -46,6 +46,8 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { getNodeRole, setNodeRole } from './config/node-role.js';
+import { setSwitchOverride } from './config/node-profile.js';
+import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 
 let run = 0, passed = 0;
@@ -346,6 +348,9 @@ async function main(): Promise<void> {
 
     // ── 8. an admin's look at a member's balance while removing them is logged ──────────────────────
     console.log('── 8. removing a member: the look at their balance is logged ──');
+    // An admin removes a member outright only where community votes are switched off (removal by vote S3); where they are
+    // on, the offboarding wizard settles a removal the community voted for, and logs the same look (test-removal-doors).
+    setSwitchOverride('decisions', false);
     const lastLine = () => db.prepare('SELECT actor_pubkey, action, subject_pubkey FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT 1').get() as any;
     const before8 = logRows();
     const prev = await call('GET', null, `/api/local/admin/members/${una.pk}/offboard/preview`, undefined, adaSession);
@@ -370,6 +375,7 @@ async function main(): Promise<void> {
         `the admins and the owner read every such look: who, whose, when (${show(logRead)})`);
     const missing = await call('GET', null, `/api/local/admin/members/${'f'.repeat(64)}/offboard/preview`, undefined, adaSession);
     assert(missing.status === 404 && logRows() === before8 + 3, `no member, no balance, no line (${show(missing)})`);
+    setSwitchOverride('decisions', true);
     // The activity log carries no settled balance to anyone (review r4176631042): the removal's line names no number, and a
     // line a node wrote before this (planted here, as it was written) is answered without it, its search included.
     const ottLine = db.prepare("SELECT message FROM system_logs WHERE json_extract(metadata, '$.memberPubkey') = ?").get(ott.pk) as { message: string } | undefined;
@@ -397,7 +403,8 @@ async function main(): Promise<void> {
     // of a member up for removal, whether or not they could vote in it. The rule (Marty, 28 Sep): everyone who can vote in
     // it sees the balance, in that vote only. Being an admin is no reason to see it.
     console.log('── 8b. a vote on removing a member: its balance reaches its voters only ──');
-    const removal = createDecision({ authorPubkey: founder.pk, title: 'Remove Kimberly', description: 'Owes 600 and gone quiet', touches: 'member', effect: 'remove_member', subject: kim.pk });
+    // A removal proposed before removal by vote S3 (since then only an admin's pause opens one), still open.
+    const removal = removalProposedFromBefore({ authorPubkey: founder.pk, title: 'Remove Kimberly', description: 'Owes 600 and gone quiet', subject: kim.pk });
     const lateAdmin = makeMember('Latecomer');   // an admin who joined after the vote opened: can't vote in it
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() + 1000).toISOString(), lateAdmin.pk);
     grantNodeRole(lateAdmin.pk, 'admin', 'SYSTEM');
@@ -667,7 +674,9 @@ async function main(): Promise<void> {
     assert(tokenData9.status === 200 && tokenAlerts9.length === named9.length && tokenAlerts9.every((l) => l.action === 'alerts_read' && l.token_id === tokenId9 && l.token_name === 'suite admin'),
         `a token's read of the alerts is a line per member named, each naming the token (${tokenData9.status} ${tokenAlerts9.length} lines for ${named9.length} named)`);
     const beforeT9c = logRows();
+    setSwitchOverride('decisions', false);
     const tokenPreview9 = await call('GET', null, `/api/local/admin/members/${una.pk}/offboard/preview`, undefined, tokenHeaders9);
+    setSwitchOverride('decisions', true);
     const previewLine9 = tokenLines(1)[0];
     assert(tokenPreview9.status === 200 && logRows() === beforeT9c + 1 && previewLine9?.action === 'offboard_preview' && previewLine9?.subject_pubkey === una.pk
         && previewLine9?.token_id === tokenId9 && previewLine9?.token_name === 'suite admin',

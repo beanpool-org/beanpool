@@ -392,9 +392,10 @@ describe('proposing a Decision in the pseudo-locale', () => {
         expect(screen.getByText(xx('Please enter a valid member callsign or 64-character public key.'))).toBeInTheDocument();
         expect(bypassing()).toEqual([]);
 
-        fireEvent.click(radio('Remove Member'));
+        // Removal by vote S3: no removal is proposed (a pause opens that vote); the form says how a member asks for one.
+        expect(radio('Remove Member')).toBeUndefined();
+        expect(screen.getByTestId('removal-follows-a-pause').textContent).toBe(xx('A vote on removing a member opens only when an admin pauses them. To ask for one, report them with Report Member on their profile.'));
         fireEvent.change(screen.getByPlaceholderText(xx('Enter member callsign or pubkey...')), { target: { value: 'Mia' } });
-        expect(screen.getByTestId('removal-debt-write-off-line').textContent).toContain('Mia');
         expect(bypassing(document.body, { others: ['Mia'] })).toEqual([]);
 
         fireEvent.click(radio('Remove a lead keeper or project leader'));
@@ -430,19 +431,22 @@ describe('proposing a Decision in the pseudo-locale', () => {
 });
 
 describe('proposing a Decision in English', () => {
-    it('reads as it always has, and the node still records the name as written', async () => {
+    it('reads as it always has, offers no removal, and says how a member asks for one', async () => {
         vi.mocked(createDecision).mockReset();
         vi.mocked(createDecision).mockResolvedValueOnce({ success: true } as never);
         drawPropose();
         expect(bracketed()).toBe(0);
         expect(within(screen.getByRole('dialog')).getAllByRole('button').slice(1, 3).map((b) => b.textContent)).toEqual(['👤Member', '🏛️Commons Pool']);
-        fireEvent.click(screen.getAllByRole('radio').find((r) => r.textContent?.includes('Remove Member'))!);
-        expect(screen.getByTestId('removal-debt-write-off-line').textContent).toBe("Balances are private: you can't see Member's. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds 322 beans now.");
+        // Removal by vote S3: a removal is never proposed (a pause opens that vote), so no radio and no debt line for one.
+        expect(screen.getAllByRole('radio').some((r) => r.textContent?.includes('Remove Member'))).toBe(false);
+        expect(screen.queryByTestId('removal-debt-write-off-line')).toBeNull();
+        expect(screen.getByTestId('removal-follows-a-pause').textContent).toBe('A vote on removing a member opens only when an admin pauses them. To ask for one, report them with Report Member on their profile.');
+        fireEvent.click(screen.getAllByRole('radio').find((r) => r.textContent?.includes('Suspend Member'))!);
         expect(screen.getByText(/No bond required\./).parentElement!.textContent).toBe('No bond required. Open to members who have completed a trade, and to node admins. Open for 7 days, executing automatically on pass.');
         fireEvent.change(screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library'), { target: { value: 'Mia away' } });
         fireEvent.change(screen.getByPlaceholderText(/Explain why this decision is needed/), { target: { value: 'Moved' } });
         fireEvent.change(screen.getByPlaceholderText('Enter member callsign or pubkey...'), { target: { value: 'Mia' } });
         await submit();
-        expect(vi.mocked(createDecision).mock.calls[0][0]).toMatchObject({ effect: 'remove_member', params: { memberName: 'Mia', commonsPool: 322 } });
+        expect(vi.mocked(createDecision).mock.calls[0][0]).toMatchObject({ effect: 'suspend_member', subject: 'm'.repeat(64) });
     });
 });

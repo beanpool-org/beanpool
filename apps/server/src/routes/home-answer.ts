@@ -239,7 +239,7 @@ export interface HomeMe {
     standing: 'member' | 'suspended';
 }
 
-export interface MarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
+export interface MarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null }
 /**
  * One line of "Coming up". `startLocal` and `tz` are the host's clock and its zone (DESIGN-event-times §4: the line reads the
  * place's clock, with its zone named only when it differs from the reader's); `online` an event with no place. Each is
@@ -907,6 +907,8 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
             id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
             ...(c.switches.beans ? { credits: p.credits } : {}),
             photoUrl: p.photos?.[0] ?? null,
+            // Only where there is one, so a member's listing and every visitor's row read as before (test-home W3).
+            ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
             ...(c.point ? { distanceKm: p.distanceKm ?? null } : {}),
         }));
     // The empty state (§6.1): on a node that asks for example cards, fewer than a handful of real listings in view.
@@ -941,6 +943,7 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
         id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
         ...(c.switches.beans ? { credits: p.credits } : {}),
         photoUrl: p.photos?.[0] ?? null,
+        ...(p.authorBannerUrl ? { bannerUrl: p.authorBannerUrl } : {}),
         ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
     }));
     return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items, more: pool.length > SEARCH_ITEMS };

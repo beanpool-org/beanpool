@@ -50,3 +50,82 @@ describe('MarketplaceCard with no photo', () => {
         expect(tile).toBeInTheDocument();
     });
 });
+
+describe('MarketplaceCard picture ladder: banner before tile', () => {
+    const postWithBannerOnly = {
+        ...post,
+        photos: [],
+        authorBannerUrl: '/api/shops/s1/photo?v=17&k=KEY0',
+    } as unknown as MarketplacePost;
+
+    it.each(['grid', 'list'] as const)('the %s card renders the enterprise banner before the category tile', (viewMode) => {
+        const { container, queryByTestId } = render(<MarketplaceCard post={postWithBannerOnly} viewMode={viewMode} />);
+        const img = container.querySelector(`img[alt="${postWithBannerOnly.title}"]`);
+        expect(img?.getAttribute('src')).toBe('/api/shops/s1/photo?v=17&k=KEY0');
+        expect(queryByTestId('category-tile')).toBeNull();
+    });
+
+    it('the compact card renders the enterprise banner before the category tile', () => {
+        const { container, queryByTestId } = render(<MarketplaceCard post={postWithBannerOnly} viewMode="compact" />);
+        const img = container.querySelector('img');
+        expect(img?.getAttribute('src')).toBe('/api/shops/s1/photo?v=17&k=KEY0');
+        expect(queryByTestId('category-tile')).toBeNull();
+    });
+
+    it.each(['grid', 'list'] as const)('the %s card prefers own photo over the enterprise banner', (viewMode) => {
+        const postWithBoth = {
+            ...post,
+            photos: PHOTOS,
+            authorBannerUrl: '/api/shops/s1/photo?v=17&k=KEY0',
+        } as unknown as MarketplacePost;
+        const { container } = render(<MarketplaceCard post={postWithBoth} viewMode={viewMode} />);
+        const img = container.querySelector(`img[alt="${post.title}"]`);
+        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+    });
+
+    it.each(['grid', 'list'] as const)('the %s card does not render a zoom button or trigger onPhotoClick for enterprise banner fallback', (viewMode) => {
+        const onPhotoClick = vi.fn();
+        const { queryByLabelText, container } = render(<MarketplaceCard post={postWithBannerOnly} viewMode={viewMode} onPhotoClick={onPhotoClick} />);
+        expect(queryByLabelText(`View enlarged photo: ${postWithBannerOnly.title}`)).toBeNull();
+        const img = container.querySelector(`img[alt="${postWithBannerOnly.title}"]`);
+        expect(img).not.toBeNull();
+        fireEvent.click(img!);
+        expect(onPhotoClick).not.toHaveBeenCalled();
+    });
+});
+
+// A banner that will not load (a weak connection, or a URL from before the enterprise replaced or took it down) gives way
+// to the tile, never an empty box (review of #2565, finding 8).
+describe('MarketplaceCard picture ladder: a banner that fails gives way to the tile', () => {
+    const BANNER = '/api/shops/s1/photo?v=17&k=KEY0';
+    const bannerOnly = { ...post, photos: [], authorBannerUrl: BANNER } as unknown as MarketplacePost;
+
+    it.each(['grid', 'list', 'compact'] as const)('the %s card draws the CategoryTile once its banner fails to load', (viewMode) => {
+        const { container, queryByTestId } = render(<MarketplaceCard post={bannerOnly} viewMode={viewMode} />);
+        const img = container.querySelector(`img[alt="${post.title}"]`);
+        expect(img?.getAttribute('src')).toBe(BANNER);
+        fireEvent.error(img!);
+        expect(container.querySelector(`img[alt="${post.title}"]`)).toBeNull();
+        expect(queryByTestId('category-tile')).toBeInTheDocument();
+    });
+
+    it('a new banner the next read brings is drawn again', () => {
+        const { container, rerender, queryByTestId } = render(<MarketplaceCard post={bannerOnly} viewMode="grid" />);
+        fireEvent.error(container.querySelector(`img[alt="${post.title}"]`)!);
+        expect(queryByTestId('category-tile')).toBeInTheDocument();
+        const NEW = '/api/shops/s1/photo?v=18&k=KEY1';
+        rerender(<MarketplaceCard post={{ ...bannerOnly, authorBannerUrl: NEW } as unknown as MarketplacePost} viewMode="grid" />);
+        expect(container.querySelector(`img[alt="${post.title}"]`)?.getAttribute('src')).toBe(NEW);
+        expect(queryByTestId('category-tile')).toBeNull();
+    });
+
+    it.each(['grid', 'list', 'compact'] as const)('the %s card keeps its own photo when that fails: no tile in place of a listing photo', (viewMode) => {
+        const both = { ...post, authorBannerUrl: BANNER } as unknown as MarketplacePost;
+        const { container, queryByTestId } = render(<MarketplaceCard post={both} viewMode={viewMode} />);
+        const img = container.querySelector(`img[alt="${post.title}"]`);
+        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+        fireEvent.error(img!);
+        expect(container.querySelector(`img[alt="${post.title}"]`)?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+        expect(queryByTestId('category-tile')).toBeNull();
+    });
+});

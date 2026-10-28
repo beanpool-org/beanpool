@@ -42,7 +42,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, createGroup, adminPruneUser } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createGroup, adminPruneUser, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -507,7 +507,7 @@ async function main(): Promise<void> {
         assert((await call('POST', b, `/api/groups/${g}/join`, {})).status === 200, 'Bree joins');
         assert((await call('POST', a, `${kp}/epoch`, { epoch: epochBy(a, g, 1, 'start', [a, b]).record })).status === 201, 'Abe starts epoch 1 for Abe and Bree');
         assert((await call('POST', p, `/api/groups/${g}/join`, {})).status === 200 && fromEpochCol(g, p.pk) === 2, 'Pru joins with no epoch: from_epoch 2');
-        adminPruneUser(p.pk, owner.pk);
+        adminPruneUser(p.pk, COMMUNITY_DECISION_ACTOR);
         const pRow = db.prepare('SELECT status FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, p.pk) as any;
         assert(pRow?.status === 'active' && !(await keysOf(a, g)).roster.includes(p.pk), "Pru is pruned: her group row stays active, and she is in no roster");
         assert((await call('POST', a, `${kp}/epoch`, { epoch: epochBy(a, g, 2, 'rotate', [a, b]).record })).status === 201, "Abe rotates to 2 for today's roster, Abe and Bree");

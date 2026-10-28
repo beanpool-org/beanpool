@@ -298,7 +298,9 @@ async function main() {
     assert(hankRow.status === 'active' && hankRow.frozen === 0, `Hank was neither frozen nor suspended (${JSON.stringify(hankRow)})`);
 
     setOverride('true');
-    const removal = de.createDecision({ authorPubkey: carol.pk, title: 'Remove Ivan', description: 'Voted before the switch went off', touches: 'member', effect: 'remove_member', subject: ivan.pk });
+    // One a member proposed before removal by vote S3 (since then only an admin's pause opens one).
+    const { removalProposedFromBefore } = await import('./decisions-from-before-test-fixture.js');
+    const removal = removalProposedFromBefore({ authorPubkey: carol.pk, title: 'Remove Ivan', description: 'Voted before the switch went off', subject: ivan.pk });
     const graced = de.executeDecision(removal.id);
     assert(graced.status === 'execution_pending_grace' && statusOf(ivan) === 'disabled', `with votes on, a removal starts its grace window (${graced.status})`);
     setOverride('false');

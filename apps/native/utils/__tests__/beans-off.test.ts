@@ -229,9 +229,12 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(src).not.toContain('credits: Number(credits) || 0,');
     });
 
-    it('Propose Decision: no Commons pool debt line when Beans are off, and features passed', () => {
+    // Removal by vote S3: a removal is never proposed (a pause opens its vote), so the form has no removal and no debt line
+    // for one, Beans on or off.
+    it('Propose Decision: no removal and no Commons pool debt line for one, and features passed', () => {
         const src = read('components/ProposeDecisionModal.tsx');
-        expect(src).toContain("{showsBeans && effect === 'remove_member' && (");
+        expect(src).not.toContain("'remove_member'");
+        expect(src).not.toContain('removal-debt-write-off');
         expect(src).toContain('decisionTouchesFor');
         expect(src).toContain('decisionEffectsFor');
     });
@@ -254,7 +257,6 @@ describe('the propose form on Beans off (utils/beans-off.ts)', () => {
         expect(decisionTouchesFor(GLOBAL)).toEqual(['member']);
         const memberEffects = decisionEffectsFor('member', GLOBAL);
         expect(memberEffects).toEqual([
-            'remove_member',
             'suspend_member',
             'unsuspend_member',
             'reinstate_member',
@@ -264,15 +266,16 @@ describe('the propose form on Beans off (utils/beans-off.ts)', () => {
         expect(memberEffects).not.toContain('freeze_credit');
         expect(memberEffects).not.toContain('unfreeze_credit');
         expect(memberEffects).not.toContain('remove_lead_keeper');
+        // Removal by vote S3: a removal is never proposed; a pause opens its vote.
+        expect(memberEffects).not.toContain('remove_member');
         expect(decisionEffectsFor('pool', GLOBAL)).toEqual([]);
         expect(proposeTitlePlaceholder(GLOBAL)).not.toMatch(/bean/i);
     });
 
     for (const [name, f] of BEANS_ON) {
-        it(`Beans on (${name}): offers all touches, all effects, original placeholder`, () => {
+        it(`Beans on (${name}): offers all touches, every effect but a removal, original placeholder`, () => {
             expect(decisionTouchesFor(f)).toEqual(['member', 'pool']);
             expect(decisionEffectsFor('member', f)).toEqual([
-                'remove_member',
                 'suspend_member',
                 'unsuspend_member',
                 'reinstate_member',

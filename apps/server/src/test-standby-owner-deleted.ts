@@ -51,7 +51,7 @@ async function child(): Promise<void> {
             }
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(a.rhea, a.friend);
             db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(a.friend, a.rhea);
-            se.adminPruneUser(a.rhea, 'owner:password');
+            se.adminPruneUser(a.rhea, se.COMMUNITY_DECISION_ACTOR);
             return true;
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {

@@ -883,7 +883,7 @@ export function firstSteps(
         // §3.2, §6: the card ends after 14 days or all done
         return { lines, note, show: young && lines.some(l => !l.done) };
     }
-    return { lines, note, show: young || lines.some(l => !l.done && !l.suggestion) || note !== null };
+    return { lines, note: null, show: lines.some(l => !l.done) };
 }
 
 /**

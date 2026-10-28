@@ -1950,9 +1950,9 @@ export default function MarketScreen() {
                 <ActiveFilterChip label={filterSummary} onPress={showControls} onClear={clearAllFilters} />
             )}
             </View>
-            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}
+            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. A visitor with no
+                account (slice S12): the door, where the key is made, in place of the chooser. */}
             {!categoryPanel.open && (
-            // A visitor with no account (slice S12): the door, where the key is made, in place of the chooser.
             <Pressable accessibilityRole="button" style={styles.fab} onPress={() => (identity ? setShowNewPostTypePicker(true) : openLookDoor())} testID="market-add-post">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>

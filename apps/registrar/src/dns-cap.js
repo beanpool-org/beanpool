@@ -28,6 +28,9 @@ export async function getOrCountDnsRecords(env, now = Math.floor(Date.now() / 10
                 if (parsed.count !== null && parsed.count !== undefined) {
                     return { ok: true, count: parsed.count, cap: parsed.cap || cap, pct: parsed.pct, checked_at: mark.since };
                 }
+                if (parsed.error) {
+                    return { ok: false, error: parsed.error, count: null, cap: parsed.cap || cap, pct: null, checked_at: mark.since };
+                }
             }
         } catch { /* ignore D1 error */ }
     }

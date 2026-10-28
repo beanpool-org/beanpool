@@ -63,6 +63,30 @@ test('daily digest: failed count raises nothing and says so', async () => {
     } finally { w.restore(); }
 });
 
+test('getOrCountDnsRecords: failure caching returns cached error without calling Cloudflare again within cadence', async () => {
+    const w = await world();
+    try {
+        const now = Math.floor(T0 / 1000);
+        w.cf.fail.countDns = true;
+
+        // 1st call fails and records error in watch_marks
+        const r1 = await getOrCountDnsRecords(w.env, now, { force: true });
+        assert.equal(r1.ok, false);
+        assert.equal(r1.count, null);
+        assert.match(r1.error, /internal error/);
+        const cfDnsCalls = () => w.cf.calls.filter((c) => c.includes('GET /zones/zone/dns_records')).length;
+        assert.equal(cfDnsCalls(), 1);
+
+        // 2nd call 5 minutes later with force: false returns cached error without calling CF again
+        const r2 = await getOrCountDnsRecords(w.env, now + 300, { force: false });
+        assert.equal(r2.ok, false);
+        assert.equal(r2.count, null);
+        assert.equal(r2.error, r1.error);
+        assert.equal(r2.checked_at, now);
+        assert.equal(cfDnsCalls(), 1, 'did not issue redundant CF API request');
+    } finally { w.restore(); }
+});
+
 test('alert: raised at 160/200, not at 159; cleared at 150', async () => {
     const w = await world();
     try {

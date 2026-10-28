@@ -86,6 +86,12 @@ async function call(method: string, path: string, opts: { id?: Id | null; body?:
 }
 const get = (path: string, id: Id | null = null, headers?: Record<string, string>) => call('GET', path, { id, headers });
 
+// createPost answers null when it refuses; a sentinel that wasn't made is the suite's own failure, said by name.
+function must<T>(v: T | null | undefined, what: string): T {
+    if (v == null) throw new Error(`setup: ${what} was not created`);
+    return v;
+}
+
 async function main(): Promise<void> {
     console.log('\n=== The peek ticket: one post shared outside the community (S6) ===\n');
     const { initTls } = await import('./services/tls.js');
@@ -130,20 +136,20 @@ async function main(): Promise<void> {
         publicAddress: { mode: 'own', hostname: HOST, status: 'live', since: new Date().toISOString() },
     } as any);
 
-    const offer = createPost('offer', 'tools', 'Sentinel ladder to lend', 'A tall ladder.\nLight enough to carry.', 5, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
-    const other = createPost('offer', 'food', 'Sentinel lemons to give', 'Lemons, any amount.', 2, 'fixed', bob.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
+    const offer = must(createPost('offer', 'tools', 'Sentinel ladder to lend', 'A tall ladder.\nLight enough to carry.', 5, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'offer');
+    const other = must(createPost('offer', 'food', 'Sentinel lemons to give', 'Lemons, any amount.', 2, 'fixed', bob.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'other');
     const startAt = new Date(Date.now() + 3 * DAY).toISOString();
     const endAt = new Date(Date.now() + 3 * DAY + 2 * 3_600_000).toISOString();
-    const event = createPost('event', 'social', 'Sentinel working bee', 'Bring gloves.', 0, 'fixed', bob.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {
+    const event = must(createPost('event', 'social', 'Sentinel working bee', 'Bring gloves.', 0, 'fixed', bob.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {
         eventStartAt: startAt, eventEndAt: endAt, eventPlaceName: '42 Sentinel Crescent', eventPrivateNote: 'Gate code 4417',
-    });
-    const groupPost = createPost('offer', 'tools', 'Sentinel group drill', 'For the group.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
+    }), 'event');
+    const groupPost = must(createPost('offer', 'tools', 'Sentinel group drill', 'For the group.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'groupPost');
     db.prepare("UPDATE posts SET audience_scope = 'group', target_group_id = 'g-sentinel' WHERE id = ?").run(groupPost.id);
-    const directPost = createPost('offer', 'tools', 'Sentinel direct saw', 'For one.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
+    const directPost = must(createPost('offer', 'tools', 'Sentinel direct saw', 'For one.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'directPost');
     db.prepare("UPDATE posts SET audience_scope = 'direct', target_pubkey = ? WHERE id = ?").run(bob.pk, directPost.id);
-    const hiddenPost = createPost('offer', 'tools', 'Sentinel hidden thing', 'Reported.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
+    const hiddenPost = must(createPost('offer', 'tools', 'Sentinel hidden thing', 'Reported.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'hiddenPost');
     db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(new Date().toISOString(), hiddenPost.id);
-    const pausedPost = createPost('offer', 'tools', 'Sentinel paused thing', 'Paused.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
+    const pausedPost = must(createPost('offer', 'tools', 'Sentinel paused thing', 'Paused.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'pausedPost');
     db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(pausedPost.id);
 
     /** What a ticket holder must never read, in a body. */
@@ -287,7 +293,7 @@ async function main(): Promise<void> {
     const runOut = await share(alice, other.id);
     db.prepare('UPDATE peek_tickets SET expires_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), runOut.body?.id);
     assert(sameAsNoTicket(await peekRead(other.id, runOut.body?.ticket), 'unsigned'), 'run out: answered as with no ticket');
-    const gone = createPost('offer', 'tools', 'Sentinel gone thing', 'Soon gone.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {});
+    const gone = must(createPost('offer', 'tools', 'Sentinel gone thing', 'Soon gone.', 1, 'fixed', alice.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, {}), 'gone');
     const goneShare = await share(alice, gone.id);
     assert((await peekRead(gone.id, goneShare.body?.ticket)).status === 200, 'a fresh link opens before its post goes');
     se.removePost(gone.id, alice.pk);
@@ -319,8 +325,8 @@ async function main(): Promise<void> {
     ];
     for (const [label, author, flip, extra] of later) {
         const kind = extra ? 'event' : 'offer';
-        const p = createPost(kind, kind === 'event' ? 'social' : 'tools', `Sentinel ${label}`, 'Soon off the board.', kind === 'event' ? 0 : 1, 'fixed',
-            author.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, extra ?? {});
+        const p = must(createPost(kind, kind === 'event' ? 'social' : 'tools', `Sentinel ${label}`, 'Soon off the board.', kind === 'event' ? 0 : 1, 'fixed',
+            author.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, extra ?? {}), `later: ${label}`);
         const s = await share(alice, p.id);
         const opened = s.status === 201 && (await peekRead(p.id, s.body?.ticket)).status === 200;
         flip(p.id);

@@ -4,7 +4,7 @@
 //  - alert raised at 160/200, not at 159
 //  - cleared at 150
 //  - a failed count raises nothing and says so in the digest: "DNS records: couldn't count (…)"
-//  - cap/threshold vars honoured: DNS_RECORD_CAP and DNS_RECORD_ALERT_PCT
+//  - the cap is the `capacity` setting (raised in /admin), alerted at 80% of it; 159 of 200 shows 79%, never an amber 80%
 //  - counted at most once per hour (sweep cadence; no call on /admin or within 1h)
 //  - /admin shows the same count beside the other control-room facts
 // No real Cloudflare call in any test (test/harness.js fetch trap).
@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import worker from '../src/index.js';
 import * as alerts from '../src/alerts.js';
 import * as cf from '../src/cf.js';
-import { checkDnsRecordCap, getOrCountDnsRecords, dnsRecordCap, dnsRecordAlertPct } from '../src/dns-cap.js';
+import { checkDnsRecordCap, getOrCountDnsRecords, dnsRecordCap } from '../src/dns-cap.js';
 import { dailyLine, watchOurServers } from '../src/watch.js';
 import { world } from './harness.js';
 
@@ -130,41 +130,54 @@ test('alert: raised at 160/200, not at 159; cleared at 150', async () => {
     } finally { w.restore(); }
 });
 
-test('cap/threshold vars honoured: DNS_RECORD_CAP and DNS_RECORD_ALERT_PCT', async () => {
-    const customEnv = {
-        DNS_RECORD_CAP: '1000',
-        DNS_RECORD_ALERT_PCT: '75',
-    };
-    const w = await world({ env: customEnv });
+test('the cap is the capacity setting: raised to 1,000 in /admin, alerted at 800 (80%), not at 799', async () => {
+    const w = await world();
     try {
         let now = Math.floor(T0 / 1000);
         const realNow = Date.now;
         Date.now = () => now * 1000;
         try {
-            assert.equal(dnsRecordCap(w.env), 1000);
-            assert.equal(dnsRecordAlertPct(w.env), 75);
+            assert.equal(await dnsRecordCap(w.env), 200, 'default: the Free plan cap');
+            w.sqlite.prepare("INSERT INTO settings (key, value, updated_at, updated_by) VALUES ('capacity', '1000', ?, 'admin')").run(now);
+            assert.equal(await dnsRecordCap(w.env), 1000);
 
-            // At 740/1000 (74% < 75%): not raised
-            w.cf.paging.dnsTotal = 740;
+            // 799/1000 (79%): not raised
+            w.cf.paging.dnsTotal = 799;
             await watchOurServers(w.env);
             assert.equal(w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get(), undefined);
 
-            // At 750/1000 (75% >= 75%): raised
+            // 800/1000 (80%): raised
             now += 3600;
-            w.cf.paging.dnsTotal = 750;
+            w.cf.paging.dnsTotal = 800;
             await watchOurServers(w.env);
             const state = w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get();
             assert.ok(state);
-            assert.equal(state.detail, 'beanpool.org has 750 of 1000 DNS records (75%). Time to move the zone to Cloudflare Pro, or free unused names.');
+            assert.equal(state.detail, 'beanpool.org has 800 of 1000 DNS records (80%). Time to move the zone to Cloudflare Pro, or free unused names.');
 
-            // Digest line uses custom cap
+            // Digest line uses the same cap
             const at = Math.floor(Date.UTC(2026, 9, 28, 22, 0) / 1000);
             await dailyLine(w.env, [], at);
             const line = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary'").get().body;
-            assert.match(line, /DNS records: 750 of 1000 \(75%\)/);
+            assert.match(line, /DNS records: 800 of 1000 \(80%\)/);
         } finally {
             Date.now = realNow;
         }
+    } finally { w.restore(); }
+});
+
+test('159 of 200 shows 79% (rounded down), so /admin is not amber while no alert is raised', async () => {
+    const w = await world();
+    try {
+        w.cf.paging.dnsTotal = 159;
+        await watchOurServers(w.env);
+        assert.equal(w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get(), undefined);
+        const res = await worker.fetch(new Request('https://beanpool.org/api/local/admin/registrar/alerts', {
+            headers: { 'x-admin-secret': 'test-admin-secret', 'x-bp-admin': '1' },
+        }), w.env);
+        const data = await res.json();
+        assert.equal(data.dns_records.pct, 79);
+        assert.equal(data.dns_alert_pct, 80);
+        assert.ok(data.dns_records.pct < data.dns_alert_pct, 'amber only at the alert line');
     } finally { w.restore(); }
 });
 

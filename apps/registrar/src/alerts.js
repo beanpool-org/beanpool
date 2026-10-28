@@ -242,10 +242,15 @@ export const nonceCondition = (missing) => ({
         : 'The request_nonces table is there again: v2 requests are served.',
 });
 
-export function dnsRecordCapCondition(env, { count, cap, alertPct }) {
+// DNS records on the zone against its cap (Marty, 28 Oct: "Not CloudFlare pro yet. When we need it. At 80% capacity").
+// The percentage is rounded DOWN, so what is shown and what is alerted agree: 159 of 200 reads 79%, 160 reads 80%.
+export const DNS_RECORD_ALERT_PCT = 80;
+export const dnsRecordPct = (count, cap) => Math.floor((count * 100) / cap);
+
+export function dnsRecordCapCondition(env, { count, cap }) {
     const domain = base(env);
-    const pct = Math.round((count / cap) * 100);
-    const active = (count / cap) * 100 >= alertPct;
+    const pct = dnsRecordPct(count, cap);
+    const active = pct >= DNS_RECORD_ALERT_PCT;
     return {
         key: 'dns-record-cap',
         category: 'health',
@@ -574,7 +579,7 @@ export async function alertStatus(env) {
         if (CATEGORIES.includes(r.category) && MODES.includes(r.mode)) settings[r.category] = r.mode;
     let dns_records = {
         count: null,
-        cap: Number(env?.DNS_RECORD_CAP) || 200,
+        cap: null,
         pct: null,
         checked_at: null,
         error: null,
@@ -605,6 +610,7 @@ export async function alertStatus(env) {
         active: (await env.DB.prepare('SELECT key, since, last_told_at, detail FROM alert_state ORDER BY since').all()).results || [],
         recent: (await env.DB.prepare('SELECT id, at, category, priority, title, body, name, held, muted, sent_at FROM alert_outbox ORDER BY id DESC LIMIT 50').all()).results || [],
         dns_records,
+        dns_alert_pct: DNS_RECORD_ALERT_PCT,
     };
 }
 

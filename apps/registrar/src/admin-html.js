@@ -711,7 +711,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             const dns = st.dns_records;
             if (dns) {
                 if (dns.count != null) {
-                    html += '<p style="font-size: 0.8rem; color: ' + (dns.pct >= (st.dns_alert_pct || 80) ? '#fbbf24' : 'var(--text-muted)') + ';">DNS records: <b>' + esc(dns.count) + '</b> of ' + esc(dns.cap) + ' (' + esc(dns.pct) + '%)' + (dns.checked_at ? ' · checked ' + esc(when(dns.checked_at)) : '') + '.</p>';
+                    html += '<p style="font-size: 0.8rem; color: ' + (dns.pct >= st.dns_alert_pct ? '#fbbf24' : 'var(--text-muted)') + ';">DNS records: <b>' + esc(dns.count) + '</b> of ' + esc(dns.cap) + ' (' + esc(dns.pct) + '%)' + (dns.checked_at ? ' · checked ' + esc(when(dns.checked_at)) : '') + '.</p>';
                 } else if (dns.error) {
                     html += '<p style="font-size: 0.8rem; color: #f87171;">' + "DNS records: couldn't count (" + esc(dns.error) + ')' + (dns.checked_at ? ' · checked ' + esc(when(dns.checked_at)) : '') + '.</p>';
                 }

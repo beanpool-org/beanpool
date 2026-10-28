@@ -337,7 +337,9 @@ export async function dailyLine(env, targets, now) {
     const live = await db.countLive(env);
     const waiting = await db.countAwaitingApproval(env);
     lines.push(`${live} ${live === 1 ? 'name' : 'names'} live${waiting ? `, ${waiting} waiting for your approval` : ''}.`);
-    const dns = await getOrCountDnsRecords(env, now).catch((e) => ({ ok: false, error: e.message || String(e), count: null }));
+    // One settings read serves the DNS cap and the hold line below.
+    const s = await settings.read(env).catch((e) => { console.error('[DAILY_SETTINGS]', e.message || e); return null; });
+    const dns = await getOrCountDnsRecords(env, now, { cap: s?.capacity }).catch((e) => ({ ok: false, error: e.message || String(e), count: null }));
     if (dns.ok && dns.count !== null) {
         lines.push(`DNS records: ${dns.count} of ${dns.cap} (${dns.pct}%)`);
     } else {
@@ -345,7 +347,6 @@ export async function dailyLine(env, targets, now) {
     }
     // "Hold all new names" (index.js claimGate) is said every day it is on: it lets go by itself after 24 h.
     // A read that fails (D1 busy) says so, and the rest of the line still goes.
-    const s = await settings.read(env).catch((e) => { console.error('[DAILY_SETTINGS]', e.message || e); return null; });
     if (!s) lines.push('Hold all new names: its setting could not be read just now; see /admin.');
     else if (settings.holding(s, now)) lines.push(`Hold all new names is on, until ${when(s.hold_until)}: every new name waits for your approval.`);
     const raised = (await env.DB.prepare('SELECT key, detail FROM alert_state ORDER BY since').all()).results || [];

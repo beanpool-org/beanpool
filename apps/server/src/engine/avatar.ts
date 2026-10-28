@@ -319,7 +319,7 @@ export function findBundledAvatarFile(name: string): { filePath: string; mimeTyp
     if (!/^[a-z0-9_-]{1,64}$/i.test(name)) return null;
     const base = `avatar_${name.replace(/-/g, '_')}`;
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const repoRoot = path.resolve(here, '../../..');
+    const repoRoot = path.resolve(here, '../../../..'); // src/engine or dist/engine: four up is the repo root
     const candidates = [
         path.resolve('public', 'avatars'),
         path.join(process.cwd(), 'public', 'avatars'),

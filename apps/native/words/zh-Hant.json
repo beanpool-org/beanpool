@@ -4803,7 +4803,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "如果你希望除了你之外無人能存取，請僅使用你的 12 個詞。",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "位於冰島的小型伺服器 BeanPool 金鑰庫保存著你登入開啟的帳號複本。BeanPool 可以解開這些複本：目前由 BeanPool 創辦人一人管理該保存庫，正逐步移交給不同國家的三人（需其中兩人共同操作）。主機代管公司可在伺服器運作時讀取其記憶體。法院可下令開啟複本，且任何掌控你登入帳號的人也都能登入。",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "綁定多個登入方式以防遺失。透過保存複本的社群伺服器，其中任何一個都能在新手機上還原你的帳號。",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "綁定多個登入方式以防遺失。在每個社群中，其中任何一個都能在新手機上還原你的帳號。",
   "🛡️ You're covered on {community}": "🛡️ 你在 {community} 享有保護",
   "🛡️ You're covered": "🛡️ 你享有保護",
   "Sign-In Recovery Providers (1-of-N)": "登入還原提供者 (1/N)",

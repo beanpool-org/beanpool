@@ -64,7 +64,11 @@ const MEASURE = () => {
             const fg = lum(rgb(getComputedStyle(el).color));
             return Math.round(((Math.max(fg, cardBg) + 0.05) / (Math.min(fg, cardBg) + 0.05)) * 100) / 100;
         };
-        const wayBackOf = wayBack ? { wayBackText: wayBack.textContent, wayBackContrast: onCard(wayBack) } : { wayBackText: null, wayBackContrast: 0 };
+        const where = box?.querySelector('[data-testid="signin-recovery-where"]');
+        const wayBackOf = {
+            ...(wayBack ? { wayBackText: wayBack.textContent, wayBackContrast: onCard(wayBack) } : { wayBackText: null, wayBackContrast: 0 }),
+            ...(where ? { whereText: where.textContent, whereContrast: onCard(where) } : { whereText: null, whereContrast: 0 }),
+        };
         if (!line) { cases[id] = { line: false, ...wayBackOf }; continue; }
         const lr = line.getBoundingClientRect();
         const cr = card.getBoundingClientRect();
@@ -157,6 +161,12 @@ try {
                 if (k.wayBackContrast < 4.5) failures.push(`${shot}: the line under the heading is too faint (${id}, ${k.wayBackContrast}:1, under 4.5:1)`);
                 if (noWords && !/aren't saved in this browser/.test(k.wayBackText)) failures.push(`${shot}: without the words, "${k.wayBackText}" (${id})`);
                 if (noWords && /as your 12 words do|are the way back to this account/.test(k.wayBackText)) failures.push(`${shot}: promises words this browser hasn't got: "${k.wayBackText}" (${id})`);
+                // Where the copy is (vault rethink VR0): this community's server keeps it, or none; never the key vault.
+                const connected = !id.startsWith('case-none');
+                if (!k.whereText) { failures.push(`${shot}: no line saying where the copy is (${id})`); continue; }
+                if (!(connected ? /server keeps the copy of your account/ : /server keeps no copy of your account/).test(k.whereText)) failures.push(`${shot}: where the copy is reads "${k.whereText}" (${id})`);
+                if (/key vault|Iceland/.test(k.whereText)) failures.push(`${shot}: the web app names the key vault (${id})`);
+                if (k.whereContrast < 4.5) failures.push(`${shot}: the line on where the copy is is too faint (${id}, ${k.whereContrast}:1, under 4.5:1)`);
             }
             if (!m.phone) failures.push(`${shot}: no lines on putting the account on a phone (case-phone)`);
             else {

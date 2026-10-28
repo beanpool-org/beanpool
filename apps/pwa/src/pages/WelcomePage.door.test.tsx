@@ -188,11 +188,75 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
         expect(screen.getByLabelText("I've written these words down somewhere safe")).not.toBeChecked();
     });
 
-    it('not stored: the words screen is exactly as before', async () => {
+    it('not stored: the words screen as before, the words the only way back, and no sign-in line', async () => {
         await toTheWords({ enrolled: false, error: 'The recovery keeper could not be stored.' });
         expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
         expect(screen.getByText(/way to recover your identity if you lose this device\./)).toBeInTheDocument();
         expect(within(wordsIntro()).getAllByText('only', { selector: 'strong' }).length).toBeGreaterThan(0);
+    });
+
+    // Vault rethink VR0 (design §1.2, §7): where the copy is, at the moment it is made. The web app has no key vault
+    // client, so a sign-in join's copy is on this community's server, which answered that it keeps it; with none kept
+    // (here, or any join without a sign-in: an invite, or 12 words), this community keeps nothing.
+    it("stored: this community's server keeps the copy, the key and its 12 words, and who can open it; never the key vault", async () => {
+        await toTheWords({ enrolled: true, generation: 1, provider: 'google', enrolledSso: ['google'] });
+        expect(screen.getByTestId('backup-signin-recovery').textContent).toBe(
+            "Signing in with Google also brings this account back. This community's server keeps a locked copy of your key and 12 words for it. The people who run it can open that copy, and so can anyone who gets into your sign-in account.");
+        expect(screen.queryByTestId('backup-no-copy')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/key vault|Iceland/);
+    });
+
+    it("not stored: this community's server keeps no copy", async () => {
+        await toTheWords({ enrolled: false, error: 'The recovery keeper could not be stored.' });
+        expect(screen.getByTestId('backup-no-copy').textContent).toBe("This community's server keeps no copy of your account.");
+        expect(document.body.textContent).not.toMatch(/key vault|Iceland/);
+    });
+
+    // Review 4397050530: the join carried the copy, and the member was let in without the join's own answer about it.
+    // The node may have stored it in that same request, so "keeps no copy" is not said (Settings reads the node's list).
+    async function toTheWordsWithoutTheAnswer(handlers: Record<string, Handler>) {
+        await savePendingJoin({ identity, provider: 'google', nonce: 'n1', startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: false });
+        const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g1', nonce: 'n1' }))}.c2ln`;
+        window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
+        const calls = stubNode(GLOBAL_OPEN, { '/api/join/work': () => json(404, {}), ...handlers });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Your Safety Backup/);
+        return calls;
+    }
+
+    it('the answer lost, and the node then says a member: neither "keeps no copy" nor the sign-in line', async () => {
+        const calls = await toTheWordsWithoutTheAnswer({
+            '/api/join': () => json(502, {}),
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+        });
+        expect(calls.find((c) => c.path === '/api/join')?.body.recovery.shares).toHaveLength(1);
+        expect(calls.some((c) => c.path.startsWith('/api/community/membership/'))).toBe(true);
+        expect(screen.queryByTestId('backup-no-copy')).toBeNull();
+        expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/keeps no copy/);
+    });
+
+    it('already a member: neither "keeps no copy" nor the sign-in line', async () => {
+        const calls = await toTheWordsWithoutTheAnswer({ '/api/join': () => json(409, { code: 'already_member' }) });
+        expect(calls.find((c) => c.path === '/api/join')?.body.recovery.shares).toHaveLength(1);
+        expect(screen.queryByTestId('backup-no-copy')).toBeNull();
+        expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/keeps no copy/);
+    });
+
+    it('joined with 12 words, which carry no copy: keeps no copy', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('backup-words-only');
+        expect(screen.getByTestId('backup-no-copy').textContent).toBe("This community's server keeps no copy of your account.");
     });
 });
 

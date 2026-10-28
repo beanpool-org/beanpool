@@ -28,7 +28,8 @@
  * Nothing here talks to a node or a provider: /api is answered by the stubs below (and fixtures.mjs for the Market),
  * and every provider host is answered by Playwright. The tokens are fixtures, not signed by anyone.
  *
- * Run: pnpm --filter @beanpool/pwa web-join-check   (WEB_JOIN_ONLY=<text> runs only the scenarios whose name has it)
+ * Run: pnpm --filter @beanpool/pwa web-join-check   (WEB_JOIN_ONLY=<text> runs only the scenarios whose name has it;
+ * WEB_JOIN_SCHEME=dark draws them in the dark scheme)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
 /* global Buffer, URL, URLSearchParams, console, process, document, window, indexedDB, IDBObjectStore, DOMException, location, localStorage, sessionStorage -- Node, and the page's side of evaluate() */
@@ -91,7 +92,8 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer } 
         // Every name check (with the key it left out) and every profile update (with the key that signed it).
         nameChecks: [], profileUpdates: [],
     };
-    const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
+    // WEB_JOIN_SCHEME=dark draws every screen in the dark scheme (the page follows the system's, as a member's does).
+    const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce', colorScheme: process.env.WEB_JOIN_SCHEME === 'dark' ? 'dark' : 'light' });
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
     await context.addInitScript(([scale]) => {
         document.addEventListener('securitypolicyviolation', (e) => {
@@ -567,7 +569,8 @@ async function addressBarClean(page, origin, where) {
 /** Photo, 12 words, tour, and into the app. */
 async function throughOnboarding(page, view, { shots = false, signIn = null } = {}) {
     await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
-    const bar = await page.getByTestId('onboarding-stepper').innerText();
+    // textContent, not innerText: under 360 px the bar draws marks only, its names hidden (the current one is said below it).
+    const bar = await page.getByTestId('onboarding-stepper').textContent();
     if (!/Sign in/.test(bar)) throw new Failure(`the steps bar says "${bar.replace(/\s+/g, ' ')}", not "Sign in"`);
     await noSideScroll(page, 'photo step');
     if (shots) await shot(page, view, 'photo');
@@ -576,7 +579,8 @@ async function throughOnboarding(page, view, { shots = false, signIn = null } = 
     await page.getByText('Your Safety Backup').waitFor();
     if (signIn) {
         const line = await page.getByTestId('backup-signin-recovery').innerText();
-        if (line !== `Signing in with ${signIn} also brings this account back.`) throw new Failure(`the 12 words step says "${line}"`);
+        // And where its copy is (vault rethink VR0): this community's server, never BeanPool's key vault (no vault client here).
+        if (line !== `Signing in with ${signIn} also brings this account back. This community's server keeps a locked copy of your key and 12 words for it. The people who run it can open that copy, and so can anyone who gets into your sign-in account.`) throw new Failure(`the 12 words step says "${line}"`);
     }
     await noSideScroll(page, '12 words step');
     if (shots) await shot(page, view, 'words');

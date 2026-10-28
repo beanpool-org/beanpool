@@ -25,9 +25,10 @@
  * body, and the signature middleware's spoof check refuses a body key that names anyone but the signer. The two reads
  * are on the public list (https-server.ts): a guest deciding whether to join can see what is near, and a signed read
  * adds the caller's own watches to the card. An unsigned read of either is everyone's, which an edge in front may keep for
- * a minute; a signed one is the reader's alone (guest-cache.ts, slice L0). A guest's count of the posts near a point (anyone who doesn't read as a
- * member, whether or not the visitors' view `guestListingsOnly` is on) is worked out from each post's 0.1° area, as the
- * visitors' view of the listing is; the communities are the public directory's, each at the place it publishes there.
+ * a minute; a signed one is the reader's alone (guest-cache.ts, slice L0). A guest's count of the posts near a point
+ * (anyone who doesn't read as a member, whether or not the visitors' view `guestListingsOnly` is on) is worked out from
+ * each post's 0.1° area, as the visitors' view of the listing is; the communities are the public directory's, each at the
+ * place it publishes there.
  */
 import crypto from 'node:crypto';
 import Router from '@koa/router';

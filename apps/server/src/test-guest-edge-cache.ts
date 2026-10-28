@@ -95,7 +95,9 @@ async function main() {
     db.prepare('INSERT INTO post_photos (post_id, order_num, photo_data) VALUES (?, 0, ?)').run('gec-post-0', 'data:image/jpeg;base64,/9j/AAAA');
     const conv = se.createConversation('dm', [alice.pubKeyHex, bob.pubKeyHex], alice.pubKeyHex);
     if (!conv) throw new Error('setup: no conversation');
-    se.sendMessage(conv.id, alice.pubKeyHex, 'first-line', 'nonce-1');
+    // A line as both apps seal one (engine/messaging.ts isEncryptedDmPayload): the node keeps nothing else in a DM.
+    const sealed = () => [crypto.randomBytes(32).toString('base64'), `x25519-xc20p-v2:${crypto.randomBytes(24).toString('base64')}`] as const;
+    se.sendMessage(conv.id, alice.pubKeyHex, ...sealed());
 
     type Got = { status: number; cc: string | null; vary: string; view: string | null; etag: string | null; body: string };
     async function get(path: string, how: { as?: Id; headers?: Record<string, string> } = {}): Promise<Got> {
@@ -202,7 +204,7 @@ async function main() {
     assert(!!convs1.etag, `the conversation list has a tag (${convs1.etag})`);
     const convs304 = await get(CONVS, { as: alice, headers: { 'If-None-Match': convs1.etag ?? '' } });
     assert(convs304.status === 304, `asked again with it, unchanged: 304 (${convs304.status})`);
-    se.sendMessage(conv.id, bob.pubKeyHex, 'second-line', 'nonce-2');
+    se.sendMessage(conv.id, bob.pubKeyHex, ...sealed());
     const convs2 = await get(CONVS, { as: alice, headers: { 'If-None-Match': convs1.etag ?? '' } });
     assert(convs2.status === 200 && !!convs2.etag && convs2.etag !== convs1.etag, `a new line: 200 with a new tag (${convs2.status} ${convs2.etag})`);
     const bobsConvs = await get(`/api/messages/conversations/${bob.pubKeyHex}`, { as: bob, headers: { 'If-None-Match': convs2.etag ?? '' } });

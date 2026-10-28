@@ -15,6 +15,12 @@
  *   when it doesn't land ({@link removeInstead}).
  *
  * Nothing sent to the community here carries a token, a copy or a nonce request: its status, and the delete.
+ *
+ * "Where your account can be brought back from" (vault rethink VR1, design §5.1; utils/ways-back.ts) removes a community's
+ * copy with the same delete and keeps the same list of deletes that didn't land, so either one's are tried again by the
+ * other: when the card looks, when that screen opens, and at app open ({@link retryCommunityRemovals}). A delete it
+ * remembers also remembers the community's `generation` when it was asked: tried again, it goes only while that is
+ * unchanged, so a copy the member made there afterwards, from any device, is never the one deleted.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -53,21 +59,37 @@ function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
         .finally(() => { if (timer) clearTimeout(timer); });
 }
 
-/** The sign-ins the community at `url` keeps a copy for, for this key. Empty when it can't say in time. */
-export async function communityCopies(identity: BeanPoolIdentity, url: string): Promise<SsoProvider[]> {
+/** What the community at `url` keeps for this key: its sign-in copies, and the `generation` of its copies (null when unsaid). */
+export interface CommunityCopyStatus {
+    providers: SsoProvider[];
+    generation: number | null;
+}
+
+/**
+ * The community's own answer about this key's copies, or null when it gave none in time: no answer, a refusal (not a
+ * member there, a server that can't open its copies), or one that isn't a status. Null is "couldn't ask", never "none".
+ */
+export async function communityCopyStatus(identity: BeanPoolIdentity, url: string): Promise<CommunityCopyStatus | null> {
     try {
         const controller = new AbortController();
         const res = await within(signedPost(url, '/api/recovery/shares/status', {}, identity, controller.signal), COMMUNITY_TIMEOUT_MS);
         if (!res) {
             controller.abort();
-            return [];
+            return null;
         }
-        if (!res.ok) return [];
-        const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { enrolledSso?: unknown } | null;
-        return offeredProviders(body?.enrolledSso);
+        if (!res.ok) return null;
+        const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { enrolledSso?: unknown; generation?: unknown } | null;
+        if (!body || !Array.isArray(body.enrolledSso)) return null;
+        const generation = typeof body.generation === 'number' && Number.isSafeInteger(body.generation) ? body.generation : null;
+        return { providers: [...new Set(offeredProviders(body.enrolledSso))], generation };
     } catch {
-        return [];
+        return null;
     }
+}
+
+/** The sign-ins the community at `url` keeps a copy for, for this key. Empty when it can't say in time. */
+export async function communityCopies(identity: BeanPoolIdentity, url: string): Promise<SsoProvider[]> {
+    return (await communityCopyStatus(identity, url))?.providers ?? [];
 }
 
 /**
@@ -99,11 +121,14 @@ export async function vaultMoveOffer(
     } catch {
         return null;
     }
-    await retryUnfinishedMoves(identity);
+    await retryCommunityRemovals(identity);
     const atCommunity = communityUrl ? await communityCopies(identity, communityUrl) : [];
     const later = Number(await AsyncStorage.getItem(vaultMoveLaterStoreKey(identity.publicKey)).catch(() => null));
     if (later && now - later < MOVE_AGAIN_AFTER_MS) return null;
-    const move = atCommunity.find(p => !atVault.includes(p) && canSignInHere(p));
+    // A copy the member asked to remove, whose delete hasn't landed yet, is never offered as one to move.
+    const removing = await unfinishedMoves(identity);
+    const move = atCommunity.find(p => !atVault.includes(p) && canSignInHere(p)
+        && !removing.some(m => m.provider === p && sameCommunity(m.url, communityUrl as string)));
     if (move && communityUrl) return { kind: 'move', provider: move, communityUrl };
     const retry = (await connectWanted(identity.publicKey)).find(p => !atVault.includes(p) && canSignInHere(p));
     return retry ? { kind: 'retry', provider: retry } : null;
@@ -117,14 +142,34 @@ export async function moveLater(identity: BeanPoolIdentity, now: number = Date.n
 interface UnfinishedMove {
     url: string;
     provider: SsoProvider;
+    /**
+     * The community's `generation` when the member asked (utils/ways-back.ts): tried again, the delete goes only while
+     * it is unchanged. Absent on the card's own deletes, which are tried again as they always were.
+     */
+    generation?: number;
 }
+
+/** A delete that hasn't landed yet: which community, and which sign-in's copy there. */
+export interface PendingRemoval {
+    url: string;
+    provider: SsoProvider;
+}
+
+/** Two addresses of one community, as the phone saves them (case and a trailing slash aside). */
+export function sameCommunity(a: string, b: string): boolean {
+    const plain = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
+    return plain(a) === plain(b);
+}
+
+const sameRemoval = (a: PendingRemoval, b: PendingRemoval) => a.provider === b.provider && sameCommunity(a.url, b.url);
 
 async function unfinishedMoves(identity: BeanPoolIdentity): Promise<UnfinishedMove[]> {
     try {
         const raw = await AsyncStorage.getItem(vaultMoveUnfinishedStoreKey(identity.publicKey));
         const list = raw ? JSON.parse(raw) as unknown : [];
         return Array.isArray(list)
-            ? list.filter((m): m is UnfinishedMove => !!m && typeof m.url === 'string' && offeredProviders([m.provider]).length === 1)
+            ? list.filter((m): m is UnfinishedMove => !!m && typeof m.url === 'string' && offeredProviders([m.provider]).length === 1
+                && (m.generation === undefined || Number.isSafeInteger(m.generation)))
             : [];
     } catch {
         return [];
@@ -136,13 +181,53 @@ async function keepUnfinishedMoves(identity: BeanPoolIdentity, moves: Unfinished
     await (moves.length ? AsyncStorage.setItem(key, JSON.stringify(moves)) : AsyncStorage.removeItem(key)).catch(() => {});
 }
 
-/** Deletes that didn't land: tried again, and kept until each lands. Only ones this phone moved or was asked to remove. */
-async function retryUnfinishedMoves(identity: BeanPoolIdentity): Promise<void> {
+/**
+ * Every change to the list, one at a time. A retry takes seconds per community, and writes its answer only to the
+ * entries it tried, so a delete remembered meanwhile (Remove everything while the app-open retry runs) is kept.
+ */
+let listTurn: Promise<unknown> = Promise.resolve();
+function changeList<T>(change: () => Promise<T>): Promise<T> {
+    const turn = listTurn.then(change, change);
+    listTurn = turn.catch(() => {});
+    return turn;
+}
+
+/** The deletes this phone was asked for that haven't landed yet, of `identity`'s copies. */
+export async function pendingCommunityRemovals(identity: BeanPoolIdentity): Promise<PendingRemoval[]> {
+    return (await unfinishedMoves(identity)).map(({ url, provider }) => ({ url, provider }));
+}
+
+/**
+ * Deletes that didn't land: tried again, and kept until each lands. Only ones this phone moved or was asked to remove.
+ * One remembered with the community's generation is asked about first: gone already, it is done; the community's copies
+ * changed since (a sign-in linked or removed there, from any device), it is dropped and nothing is deleted, as the copy
+ * may be a newer one, which the member's list then shows as kept; the community can't say, it waits. Never throws.
+ */
+export async function retryCommunityRemovals(identity: BeanPoolIdentity): Promise<void> {
     const moves = await unfinishedMoves(identity);
     if (!moves.length) return;
-    const left: UnfinishedMove[] = [];
-    for (const m of moves) if (!(await removeCommunityCopy(identity, m.url, m.provider))) left.push(m);
-    await keepUnfinishedMoves(identity, left);
+    const finished: UnfinishedMove[] = [];
+    for (const m of moves) {
+        if (m.generation !== undefined) {
+            const now = await communityCopyStatus(identity, m.url);
+            if (!now) continue;
+            if (!now.providers.includes(m.provider)) {
+                finished.push(m);
+                continue;
+            }
+            if (now.generation !== m.generation) {
+                console.log(`[VAULT] a remembered delete of a ${m.provider} copy was dropped: that community's copies changed since it was asked`);
+                finished.push(m);
+                continue;
+            }
+        }
+        if (await removeCommunityCopy(identity, m.url, m.provider)) finished.push(m);
+    }
+    if (!finished.length) return;
+    await changeList(async () => {
+        const list = await unfinishedMoves(identity);
+        await keepUnfinishedMoves(identity, list.filter(m => !finished.some(f => sameRemoval(f, m) && f.generation === m.generation)));
+    });
 }
 
 /**
@@ -164,11 +249,30 @@ export async function removeInstead(identity: BeanPoolIdentity, offer: VaultMove
     return deleteOrRemember(identity, offer.communityUrl, offer.provider);
 }
 
-async function deleteOrRemember(identity: BeanPoolIdentity, url: string, provider: SsoProvider): Promise<boolean> {
-    if (await removeCommunityCopy(identity, url, provider)) return true;
-    const moves = await unfinishedMoves(identity);
-    if (!moves.some(m => m.url === url && m.provider === provider)) {
-        await keepUnfinishedMoves(identity, [...moves, { url, provider }]);
+/**
+ * The community's copy for `provider` goes now, or is remembered and tried again ({@link retryCommunityRemovals}). With
+ * `generation` (the community's, as the member saw its copies), a retry deletes only while it is unchanged. True once
+ * it is gone; false when it is remembered: not yet removed.
+ */
+export async function deleteOrRemember(
+    identity: BeanPoolIdentity, url: string, provider: SsoProvider, generation: number | null = null,
+): Promise<boolean> {
+    if (await removeCommunityCopy(identity, url, provider)) {
+        // Gone: a delete of it that was waiting is done too.
+        await changeList(async () => {
+            const list = await unfinishedMoves(identity);
+            const left = list.filter(m => !sameRemoval(m, { url, provider }));
+            if (left.length !== list.length) await keepUnfinishedMoves(identity, left);
+        });
+        return true;
     }
+    await changeList(async () => {
+        const list = await unfinishedMoves(identity);
+        const was = list.find(m => sameRemoval(m, { url, provider }));
+        // The card's own delete of the same copy, already waiting, stays as it was; otherwise this one, with its generation.
+        if (was && (was.generation === undefined || generation === null)) return;
+        const entry: UnfinishedMove = generation === null ? { url, provider } : { url, provider, generation };
+        await keepUnfinishedMoves(identity, [...list.filter(m => !sameRemoval(m, entry)), entry]);
+    });
     return false;
 }

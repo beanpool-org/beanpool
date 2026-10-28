@@ -58,6 +58,7 @@ import { isPairLink } from '../utils/pair-link';
 import { isGlobalLink } from '../utils/global-link';
 import { doorLinkFromSystemPath } from '../utils/open-door';
 import { isCommunityCardPath } from '../utils/community-card-link';
+import { isPeekPath } from '../utils/peek-link';
 import * as WebBrowser from 'expo-web-browser';
 import { t } from '@beanpool/core';
 import { settingsLineWords } from '../components/settings/settings-lines';
@@ -351,6 +352,9 @@ function RootLayoutNav() {
         // doors S15): routed by +native-intent.ts. Not an invite: extractInviteToken reads the route's name as one
         // ("COMMUNITY-CARD"), as it did the door screen's.
         if (isCommunityCardPath(currentUrl)) return;
+        // A post shared outside its community, `https://<community>/?post=…&peek=…` or `beanpool://peek?…` (utils/peek-link.ts,
+        // front doors S6): routed by +native-intent.ts to the peek screen. Never an invite.
+        if (isPeekPath(currentUrl)) return;
 
         // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
         // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).
@@ -944,6 +948,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="community-card" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="peek" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="shared-outside" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />

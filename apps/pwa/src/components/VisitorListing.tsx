@@ -5,7 +5,7 @@
  * for an author's profile, ratings or anything else about who posted it.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
@@ -94,17 +94,25 @@ interface DetailProps {
     post: MarketplacePost;
     beans: boolean;
     distanceKm: number | null;
-    onBack: () => void;
+    /** Back to the lobby's Market. Absent (a post shared outside, pages/PeekPage.tsx): no Back, there is no Market to go to. */
+    onBack?: () => void;
     onJoin: () => void;
     /** A poll's card says it decides nothing (lib/informal-polls.ts). */
     pollsInformal?: boolean;
+    /**
+     * In place of the Join button and the report line: a post shared outside its community (pages/PeekPage.tsx), whose
+     * way in is that community's own doors, not the lobby's join.
+     */
+    footer?: ReactNode;
+    /** Above the listing, inside the sheet's top (which it scrolls to when it opens): who shared it, for a shared post. */
+    header?: ReactNode;
 }
 
 /**
  * The visitor's detail sheet: the listing's photos (a row that swipes), its words and category, the rough distance,
  * an event's time with its place held back, and one full-width button to join. No chat, no accept, no profile link.
  */
-export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pollsInformal = false }: DetailProps) {
+export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pollsInformal = false, footer, header }: DetailProps) {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const typeColor = POST_TYPE_COLORS[post.type] || '#888';
     const photos = post.photos ?? [];
@@ -113,13 +121,16 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
     useEffect(() => { top.current?.scrollIntoView?.({ block: 'start' }); }, [post.id]);
     return (
         <div ref={top} data-testid="visitor-detail" className="p-4 max-w-lg mx-auto" style={{ paddingBottom: 'calc(var(--bottom-nav-offset, 0px) + 4rem)' }}>
-            <button
-                type="button"
-                onClick={onBack}
-                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-200 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
-            >
-                <span className="text-xl leading-none" aria-hidden="true">←</span> {t('Back to Market')}
-            </button>
+            {onBack && (
+                <button
+                    type="button"
+                    onClick={onBack}
+                    className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-200 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
+                >
+                    <span className="text-xl leading-none" aria-hidden="true">←</span> {t('Back to Market')}
+                </button>
+            )}
+            {header}
 
             {post.type === 'poll' ? (
                 <PollCard post={post} visitor informal={pollsInformal} />
@@ -186,21 +197,25 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                 </div>
             )}
 
-            <button
-                type="button"
-                data-testid="visitor-join"
-                onClick={onJoin}
-                className="w-full min-h-[48px] py-3 px-4 rounded-xl border-0 bg-blue-600 hover:bg-blue-700 text-white font-bold text-base cursor-pointer break-words"
-            >
-                {joinToSeeLabel(post)}
-            </button>
-            {/* A visitor can't report from here (a report is a member's, signed): where they can (rehearsal 14 Oct N3). */}
-            <p data-testid="visitor-report" className="m-0 mt-3 text-sm text-nature-700 dark:text-nature-300 break-words">
-                <span>{t(REPORT_WORDS.visitorLine)}</span>{' '}
-                <a href={VISITOR_REPORT_URL} target="_blank" rel="noopener noreferrer" className="font-semibold underline text-bp-ink-accent">
-                    {t(REPORT_WORDS.visitorLink)}
-                </a>
-            </p>
+            {footer ?? (
+                <>
+                    <button
+                        type="button"
+                        data-testid="visitor-join"
+                        onClick={onJoin}
+                        className="w-full min-h-[48px] py-3 px-4 rounded-xl border-0 bg-blue-600 hover:bg-blue-700 text-white font-bold text-base cursor-pointer break-words"
+                    >
+                        {joinToSeeLabel(post)}
+                    </button>
+                    {/* A visitor can't report from here (a report is a member's, signed): where they can (rehearsal 14 Oct N3). */}
+                    <p data-testid="visitor-report" className="m-0 mt-3 text-sm text-nature-700 dark:text-nature-300 break-words">
+                        <span>{t(REPORT_WORDS.visitorLine)}</span>{' '}
+                        <a href={VISITOR_REPORT_URL} target="_blank" rel="noopener noreferrer" className="font-semibold underline text-bp-ink-accent">
+                            {t(REPORT_WORDS.visitorLink)}
+                        </a>
+                    </p>
+                </>
+            )}
         </div>
     );
 }

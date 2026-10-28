@@ -9,6 +9,7 @@ import { holdStartUpLinkRoute } from '../utils/member-landing';
 import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
 import { doorLinkFromSystemPath, doorLinkRoute, type DoorLink } from '../utils/open-door';
 import { cardRouteFromSystemPath, isCommunityCardPath } from '../utils/community-card-link';
+import { isPeekPath, peekRouteFromSystemPath } from '../utils/peek-link';
 
 /**
  * What the global community's link needs to know about the phone: whether it keeps a key, whether a join wizard was left
@@ -160,6 +161,18 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // their checks. The screen itself offers the claim only when that node answers that it has no owner.
     const claimRoute = claimRouteFromSystemPath(path);
     if (claimRoute) return claimRoute;
+
+    // A post shared outside its community (front doors S6, utils/peek-link.ts): `https://<community>/?post=<id>&peek=<t>`, or
+    // `beanpool://peek?node=…&post=…&peek=…` from the node's share page. The peek screen reads that one post as a visitor
+    // (a member of that community on this phone is sent on to the post itself). Before the shared post below, which would
+    // open it as a member's read. A `beanpool://peek` that names nothing this phone may read opens as from the icon (cold)
+    // or stays where it is (warm); an https one falls through to the shared post, as before.
+    const peekRouteFound = peekRouteFromSystemPath(path);
+    if (peekRouteFound) {
+        if (initial) holdStartUpLinkRoute();
+        return peekRouteFound;
+    }
+    if (isPeekPath(path) && !/^https:\/\//i.test(path.trim())) return initial ? '/' : null;
 
     // A shared event: `https://<node>/?post=<id>` (apps/native/utils/event-extras.ts). Path "/" is what the
     // app links claim on every node host, so a link a member sends from the event screen opens the event

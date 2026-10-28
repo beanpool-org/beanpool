@@ -364,6 +364,7 @@ export const SUITES = [
     'test-registrar-contract',
     'test-invite-trampoline',
     'test-community-card',
+    'test-peek-ticket',
     'test-ticket-redeem-fault',
     'test-offline-ticket-check',
     'test-request-body',

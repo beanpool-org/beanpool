@@ -58,8 +58,10 @@ export function setupRedirect(segments: readonly string[], { hasIdentity, pendin
     // the account there, on the member's tap: a self-hosted community's first owner needs nothing of ours.
     // `community-card`: a community's public card from its bare address (front doors S15, app/community-card.tsx). It reads
     // the community's public card and nothing else, and its doors lead to welcome; a stranger with no account is who it is for.
+    // `peek`: one post a member shared outside their community (front doors S6, app/peek.tsx), read from it as a visitor,
+    // with Ask to join leading to that community's card. A stranger with no account is who it is for too.
     if (!hasIdentity) {
-        if (root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' || root === 'community-card') return null;
+        if (root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' || root === 'community-card' || root === 'peek') return null;
         // The bare root is the app's start: the first screen, looking around or not (a restart lands there).
         if (lookingAround && root !== undefined) return isLookRoute(segments) ? null : LOOK_DOOR;
         return '/welcome';

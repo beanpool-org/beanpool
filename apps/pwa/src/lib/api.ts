@@ -333,6 +333,9 @@ export interface CommunityInfo {
         /** Present, and true, only where anyone can join in a minute (the worldwide community): the node refuses the whole
          *  directory and the whole invite tree, and an open group's roster to anyone outside it. Absent: as before. */
         openMembership?: true;
+        /** Present, and true, only where members may share a post outside the community (front doors S6, lib/peek.ts):
+         *  Share outside the community, and Settings' Shared outside. Absent (turned off, global, an older node): neither. */
+        shareOutside?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;

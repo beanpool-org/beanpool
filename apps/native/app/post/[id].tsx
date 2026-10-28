@@ -35,6 +35,7 @@ import { EventDetail } from '../../components/EventDetail';
 import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { SharePostButtons } from '../../components/SharePost';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
@@ -1204,6 +1205,9 @@ export default function PostDetailModal() {
                     && !isOperatorOfAuthor && (
                     <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: cardAuthor })}</Text>
                 )}
+
+                {/* Share with members, and outside the community where it allows it (front doors S6). */}
+                <SharePostButtons post={post} />
 
                 {/* Action Buttons */}
 

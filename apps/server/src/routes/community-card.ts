@@ -244,6 +244,14 @@ function cardIsForThisRequest(ctx: Koa.Context): boolean {
 /** `/` for a stranger at a local community (routes/settings.ts): the card, and true; else false, and nothing written. */
 export function serveCommunityCard(ctx: Koa.Context): boolean {
     if (!cardIsForThisRequest(ctx)) return false;
+    return serveCommunityCardPage(ctx);
+}
+
+/**
+ * The card as this request's page, whatever else its address asks: `/` for a stranger, and a shared link outside that
+ * opens nothing now (routes/peek.ts servePeekPage), whose plain visitor answer at a community's address is its card.
+ */
+export function serveCommunityCardPage(ctx: Koa.Context): true {
     const card = communityCard();
     const lang = cardLanguage(ctx);
     useAppDocumentPolicy(ctx);

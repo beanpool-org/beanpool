@@ -117,8 +117,8 @@ describe('the Commons page in the pseudo-locale', () => {
         const startDialog = await screen.findByRole('dialog', { name: (n) => n.includes(xx('Start something')) });
         expect(startDialog).toBeInTheDocument();
 
-        // Project row opens propose modal with Project selected
-        fireEvent.click(within(startDialog).getByRole('button', { name: (n) => n.includes(xx('Project')) }));
+        // Project row opens propose modal with Project selected (the row waits for what the node says it offers)
+        fireEvent.click(await within(startDialog).findByRole('button', { name: (n) => n.includes(xx('Project')) }));
         const dialog = screen.getByRole('dialog');
         expect(within(dialog).getByRole('heading').textContent).toBe(xx('Start a project'));
         expect(within(dialog).getByText(xx('WHAT IS IT?'))).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe('the Commons page in the pseudo-locale', () => {
         expect(within(dialog).getByRole('heading').textContent).toBe(xx('Start an enterprise'));
         expect(within(dialog).queryByText(xx('Goal Amount (🫘 Beans)'))).toBeNull();
         expect(within(dialog).getByRole('button', { name: xx('Choose a logo') })).toBeInTheDocument();
-        fireEvent.click(within(dialog).getByRole('button', { name: (n) => n.includes(xx('Select Green Bean avatar')) }));
+        fireEvent.click(within(dialog).getByRole('button', { name: (n) => n.includes(xx('Green Bean')) }));
         expect(within(dialog).getByRole('button', { name: xx('Start the enterprise 🏛️') })).toBeInTheDocument();
         expect(bypassing(dialog)).toEqual([]);
     });

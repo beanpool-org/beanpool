@@ -7,9 +7,13 @@
  * 2. No file imports or routes to the two deleted screens.
  * 3. Deep links targeting them redirect cleanly to the new Commons screen (/(tabs)/projects).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+vi.mock('react-native', () => ({ Platform: { OS: 'android' }, DeviceEventEmitter: { emit: vi.fn() } }));
+vi.mock('expo-web-browser', () => ({ dismissBrowser: vi.fn(async () => undefined), maybeCompleteAuthSession: vi.fn() }));
+
 import { redirectSystemPath } from '../../app/+native-intent';
 
 const NATIVE_DIR = path.resolve(__dirname, '../..');

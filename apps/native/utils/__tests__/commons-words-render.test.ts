@@ -50,6 +50,7 @@ vi.mock('react-native', () => {
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
+        if (disabled || props.accessibilityState?.disabled) attrs['aria-disabled'] = 'true';
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (placeholder) attrs.placeholder = placeholder;
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
@@ -640,7 +641,7 @@ describe('the start form by kind and the new-poll form in the pseudo-locale (Fab
 
         const submit = byLabel(pseudoLocalise('Choose a project or an enterprise first'));
         expect(submit, 'submit button when unselected').toBeTruthy();
-        expect(submit?.getAttribute('aria-disabled') === 'true' || (submit as HTMLButtonElement).disabled, 'submit is disabled').toBeTruthy();
+        expect(submit?.getAttribute('aria-disabled'), 'submit is disabled').toBe('true');
 
         // Picking Project updates header and submit button
         await click(byLabel(pseudoLocalise('Project: a leader, a goal, an end date')), 'pick project');

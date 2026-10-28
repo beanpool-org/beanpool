@@ -3218,7 +3218,6 @@
   "Post\u0004button: publish": "Опублікувати",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Використовуйте вкладку {ledger}, щоб миттєво надсилати бали сусідам.",
   "Member\u0004what a Decision touches": "Учасник",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Виключення з цього вузла (кваліфікована більшість 66%, кворум 25%, 7-денний пільговий період)",
   "Temporary freeze of trading and messaging": "Тимчасове замороження обмінів і повідомлень",
   "Restore member to active standing (simple majority)": "Поновити активний статус учасника (проста більшість)",
   "Cancel pending removal and restore account (simple majority)": "Скасувати заплановане вилучення та відновити акаунт (проста більшість)",
@@ -3246,12 +3245,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Будь ласка, введіть позивний або відкритий ключ старшого доглядача чи керівника.",
   "The lead keeper or leader to remove: callsign or public key": "Старший доглядач чи керівник для зняття: позивний або відкритий ключ",
   "Enter the lead keeper or leader's callsign or pubkey...": "Введіть позивний або ключ старшого доглядача чи керівника...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Баланси приватні: ви не бачите баланс {name}. Коли це голосування почнеться, спільнота зафіксує баланс і будь-який борг та покаже їх усім, хто має право голосу. У разі вилучення борг буде списано зі Спільного фонду, де зараз є {n} біб.",
-    "few": "Баланси приватні: ви не бачите баланс {name}. Коли це голосування почнеться, спільнота зафіксує баланс і будь-який борг та покаже їх усім, хто має право голосу. У разі вилучення борг буде списано зі Спільного фонду, де зараз є {n} боби.",
-    "many": "Баланси приватні: ви не бачите баланс {name}. Коли це голосування почнеться, спільнота зафіксує баланс і будь-який борг та покаже їх усім, хто має право голосу. У разі вилучення борг буде списано зі Спільного фонду, де зараз є {n} бобів.",
-    "other": "Баланси приватні: ви не бачите баланс {name}. Коли це голосування почнеться, спільнота зафіксує баланс і будь-який борг та покаже їх усім, хто має право голосу. У разі вилучення борг буде списано зі Спільного фонду, де зараз є {n} бобів."
-  },
   "Missing Title": "Немає заголовка",
   "Please enter a clear, concise title for this decision.": "Будь ласка, введіть чітку та коротку назву для цього рішення.",
   "Missing Description": "Немає опису",

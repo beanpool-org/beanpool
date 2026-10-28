@@ -1892,7 +1892,6 @@
   "A quick look at this community economy.": "Mabilisang pagsilip sa ekonomiya ng komunidad na ito.",
   "Done ✓": "Tapos na ✓",
   "Member\u0004what a Decision touches": "Miyembro",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Pagpapatalsik mula sa node na ito (66% supermajority, 25% quorum, 7-araw na palugit)",
   "Temporary freeze of trading and messaging": "Pansamantalang pag-freeze ng pakikipagpalitan at pagmemensahe",
   "Restore member to active standing (simple majority)": "Ibalik ang miyembro sa aktibong katayuan (simpleng mayorya)",
   "Cancel pending removal and restore account (simple majority)": "Kanselahin ang nakabinbing pag-alis at ibalik ang account (simpleng mayorya)",
@@ -1917,10 +1916,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Pakilagay ang callsign o public key ng punong tagapangalaga o lider.",
   "The lead keeper or leader to remove: callsign or public key": "Ang punong tagapangalaga o lider na aalisin: callsign o public key",
   "Enter the lead keeper or leader's callsign or pubkey...": "Ilagay ang callsign o pubkey ng punong tagapangalaga o lider...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Pribado ang mga balanse: hindi mo makikita ang balanse ni {name}. Kapag nagbukas ang botohang ito, itatala ng komunidad ang kanilang balanse at anumang utang, at ipapakita ang mga ito sa lahat ng maaaring bumoto rito. Kung aalisin sila, ang utang ay sisingilin sa Commons Pool, na may hawak na {n} munggo ngayon.",
-    "other": "Pribado ang mga balanse: hindi mo makikita ang balanse ni {name}. Kapag nagbukas ang botohang ito, itatala ng komunidad ang kanilang balanse at anumang utang, at ipapakita ang mga ito sa lahat ng maaaring bumoto rito. Kung aalisin sila, ang utang ay sisingilin sa Commons Pool, na may hawak na {n} munggo ngayon."
-  },
   "Please enter a clear title for this decision.": "Mangyaring maglagay ng malinaw na pamagat para sa desisyong ito.",
   "Please provide a description and rationale.": "Mangyaring magbigay ng paglalarawan at batayan.",
   "Please enter a valid member callsign or 64-character public key.": "Mangyaring maglagay ng wastong callsign ng miyembro o 64-character na public key.",

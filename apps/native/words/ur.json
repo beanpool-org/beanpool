@@ -2972,7 +2972,6 @@
   "Post\u0004button: publish": "پوسٹ کریں",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 پڑوسیوں کو فوری طور پر کریڈٹس بھیجنے کے لیے {ledger} ٹیب استعمال کریں۔",
   "Member\u0004what a Decision touches": "رکن",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "اس سرور سے بے دخلی (66% بھاری اکثریت، 25% کورم، 7 دن کی مہلت)",
   "Temporary freeze of trading and messaging": "تجارت اور پیغامات پر عارضی پابندی",
   "Restore member to active standing (simple majority)": "رکن کی فعال حیثیت بحال کریں (سادہ اکثریت)",
   "Cancel pending removal and restore account (simple majority)": "زیر التواء اخراج منسوخ کریں اور اکاؤنٹ بحال کریں (سادہ اکثریت)",
@@ -3000,10 +2999,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "براہ کرم سربراہ نگران یا لیڈر کی عرفیت یا پبلک کی درج کریں۔",
   "The lead keeper or leader to remove: callsign or public key": "ہٹائے جانے والے سربراہ نگران یا لیڈر: عرفیت یا پبلک کی",
   "Enter the lead keeper or leader's callsign or pubkey...": "سربراہ نگران یا لیڈر کی عرفیت یا پبلک کی درج کریں...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "بیلنس نجی ہیں: آپ {name} کا بیلنس نہیں دیکھ سکتے۔ جب یہ ووٹنگ کھلتی ہے تو کمیونٹی ان کا بیلنس اور کوئی بھی قرض ریکارڈ کر کے ووٹ دینے کے مجاز افراد کو دکھاتی ہے۔ اگر انہیں ہٹایا جائے تو قرض کامنز پول کے ذمے ہوگا، جس میں ابھی {n} پھلی ہے۔",
-    "other": "بیلنس نجی ہیں: آپ {name} کا بیلنس نہیں دیکھ سکتے۔ جب یہ ووٹنگ کھلتی ہے تو کمیونٹی ان کا بیلنس اور کوئی بھی قرض ریکارڈ کر کے ووٹ دینے کے مجاز افراد کو دکھاتی ہے۔ اگر انہیں ہٹایا جائے تو قرض کامنز پول کے ذمے ہوگا، جس میں ابھی {n} پھلیاں ہیں۔"
-  },
   "Missing Title": "عنوان درج نہیں ہے",
   "Please enter a clear, concise title for this decision.": "براہ کرم اس فیصلے کے لیے ایک واضح اور مختصر عنوان درج کریں۔",
   "Missing Description": "تفصیل درج نہیں ہے",

@@ -10,8 +10,9 @@
  *     instead (pause them; the community's vote decides), an owner's of another owner before any fresh proof is asked.
  *     Nothing changes: the member stays active and no Bean moves. The engine refuses underneath, whatever route reaches
  *     it (adminPruneUser by an admin, an owner, the password: a burst's removal included).
- *  2. Offboard, votes on: refused outside a removal the community voted for (400 in words), and its preview too, which
- *     then logs no look at the member's balance. Inside one's grace window (Hal, paused, the vote passed): the preview
+ *  2. Offboard, votes on: refused outside a removal the community voted for (400 in words; an owner's before any fresh
+ *     proof is asked; the engine underneath in the same words), and its preview too, which then logs no look at the
+ *     member's balance. Inside one's grace window (Hal, paused, the vote passed): the preview
  *     answers and names the removal, and the offboarding settles Hal's Beans exactly as chosen (a gift to Gil), completes
  *     the removal now as Accelerate does (the Decision executed, Hal removed) and moves nothing else.
  *  3. Proposing a removal: a member with standing and an admin are refused 400 in words, and nothing is written. Other
@@ -113,6 +114,7 @@ async function main() {
     const { ownerSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
+    const { executeOffboard } = await import('./engine/member-wizards.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const createPost = wrapCreatePost(se.createPost);
     // An open removal a member proposed before this version (decisions-from-before-test-fixture.ts). Where the fixture is
@@ -225,6 +227,13 @@ async function main() {
             `offboarding Olly (${resolution}) is refused 400 in words (${r.status} ${r.text.slice(0, 200)})`);
     }
     assert(statusOf(olly) === 'active' && accountsNow() === accountsBeforeOlly, `Olly is still active and no Bean moved (${statusOf(olly)})`);
+    fresh();
+    const ottoOff = await admin('POST', `/api/local/admin/members/${otto.pubKeyHex}/offboard`, gwenSession, { resolution: 'donate_to_commons' });
+    assert(ottoOff.status === 400 && ottoOff.body?.code === 'removal_is_the_vote' && statusOf(otto) === 'active',
+        `offboarding an owner is refused the same way, before any fresh proof is asked (${ottoOff.status} ${ottoOff.text.slice(0, 160)})`);
+    const engineOff = refusalOf(() => executeOffboard(olly.pubKeyHex, { resolution: 'donate_to_commons' }, ada.pubKeyHex));
+    assert(engineOff.status === 400 && /^Offboarding settles a removal the community voted for/.test(engineOff.message) && statusOf(olly) === 'active',
+        `the offboarding engine refuses underneath, in the same words (${engineOff.status}: ${engineOff.message.slice(0, 80)})`);
 
     const hal = seedMember('HalfwayHal', gen.pubKeyHex, 37.5);
     const halVote = await pause(hal);

@@ -1893,7 +1893,6 @@
   "A quick look at this community economy.": "Uma visão rápida da economia desta comunidade.",
   "Done ✓": "Concluído ✓",
   "Member\u0004what a Decision touches": "Membro",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Expulsão deste nó (supermaioria de 66%, quórum de 25%, prazo de tolerância de 7 dias)",
   "Temporary freeze of trading and messaging": "Congelamento temporário de trocas e mensagens",
   "Restore member to active standing (simple majority)": "Reintegrar membro ao status ativo (maioria simples)",
   "Cancel pending removal and restore account (simple majority)": "Cancelar remoção pendente e restaurar conta (maioria simples)",
@@ -1918,10 +1917,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Informe o codinome ou a chave pública do mantenedor principal ou líder.",
   "The lead keeper or leader to remove: callsign or public key": "Mantenedor principal ou líder a remover: codinome ou chave pública",
   "Enter the lead keeper or leader's callsign or pubkey...": "Digite o codinome ou chave pública do mantenedor principal ou líder...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Os saldos são privados: você não pode ver o de {name}. Quando esta votação abre, a comunidade registra o saldo e qualquer dívida, e mostra a todos que podem votar. Se forem removidos, uma dívida é cobrada do fundo dos Bens comuns, que contém {n} feijão agora.",
-    "other": "Os saldos são privados: você não pode ver o de {name}. Quando esta votação abre, a comunidade registra o saldo e qualquer dívida, e mostra a todos que podem votar. Se forem removidos, uma dívida é cobrada do fundo dos Bens comuns, que contém {n} feijões agora."
-  },
   "Please enter a clear title for this decision.": "Por favor, digite um título claro para esta decisão.",
   "Please provide a description and rationale.": "Por favor, forneça uma descrição e justificativa.",
   "Please enter a valid member callsign or 64-character public key.": "Digite um apelido de membro válido ou uma chave pública de 64 caracteres.",

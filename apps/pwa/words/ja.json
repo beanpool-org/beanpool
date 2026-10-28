@@ -2489,7 +2489,6 @@
   "A quick look at this community economy.": "このコミュニティ経済を簡単にご紹介します。",
   "Done ✓": "完了 ✓",
   "Member\u0004what a Decision touches": "メンバー",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "このノードからの除名（66%の特別多数、25%の定足数、7日間の猶予期間）",
   "Temporary freeze of trading and messaging": "取引とメッセージ送信の一時凍結",
   "Restore member to active standing (simple majority)": "メンバーを通常資格に復帰（単純過半数）",
   "Cancel pending removal and restore account (simple majority)": "保留中の除名を取り消してアカウントを復元（単純過半数）",
@@ -2514,9 +2513,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "代表運営者またはリーダーのコールサインまたは公開鍵を入力してください。",
   "The lead keeper or leader to remove: callsign or public key": "解任する代表運営者またはリーダー：コールサインまたは公開鍵",
   "Enter the lead keeper or leader's callsign or pubkey...": "代表運営者またはリーダーのコールサインまたは公開鍵を入力...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "other": "残高は非公開です。{name}の残高を見ることはできません。この投票が開始されると、コミュニティはその残高と債務を記録し、投票権を持つ全員に表示します。除名された場合、その債務は現在{n} 豆を保有するコモンズプールに請求されます。"
-  },
   "Please enter a clear title for this decision.": "この決定事項の明確なタイトルを入力してください。",
   "Please provide a description and rationale.": "説明と提案理由を入力してください。",
   "Please enter a valid member callsign or 64-character public key.": "有効なメンバーのコールサインまたは64文字の公開鍵を入力してください。",

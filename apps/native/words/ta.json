@@ -2974,7 +2974,6 @@
   "Post\u0004button: publish": "பதிவிடு",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 அண்டை வீட்டாருக்கு உடனடியாக வரவுகளை அனுப்ப {ledger} தாவலைப் பயன்படுத்தவும்.",
   "Member\u0004what a Decision touches": "உறுப்பினர்",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "இந்த சர்வரிலிருந்து வெளியேற்றுதல் (66% பெரும்பான்மை, 25% குறைந்தபட்ச வாக்கு, 7 நாள் அவகாசம்)",
   "Temporary freeze of trading and messaging": "வர்த்தகம் மற்றும் செய்தியிடலைத் தற்காலிகமாக முடக்குதல்",
   "Restore member to active standing (simple majority)": "உறுப்பினரை மீண்டும் செயலில் உள்ள நிலைக்கு மீட்டமைத்தல் (எளிய பெரும்பான்மை)",
   "Cancel pending removal and restore account (simple majority)": "நிலுவையில் உள்ள நீக்கத்தை ரத்து செய்து கணக்கை மீட்டமைத்தல் (எளிய பெரும்பான்மை)",
@@ -3002,10 +3001,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "முதன்மைப் பொறுப்பாளர் அல்லது தலைவரின் அழைப்புப் பெயர் அல்லது பொதுச் சாவியை உள்ளிடவும்.",
   "The lead keeper or leader to remove: callsign or public key": "நீக்க வேண்டிய முதன்மைப் பொறுப்பாளர் அல்லது தலைவர்: அழைப்புப் பெயர் அல்லது பொதுச் சாவி",
   "Enter the lead keeper or leader's callsign or pubkey...": "முதன்மைப் பொறுப்பாளர் அல்லது தலைவரின் அழைப்புப் பெயர் அல்லது பொதுச் சாவியை உள்ளிடவும்...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "இருப்புகள் தனிப்பட்டவை: {name}-இன் இருப்பை நீங்கள் பார்க்க முடியாது. இந்த வாக்கு தொடங்கும் போது, சமூகம் அவர்களின் இருப்பையும் கடனையும் பதிவு செய்து, இதில் வாக்களிக்கக்கூடிய அனைவருக்கும் காட்டுகிறது. அவர்கள் நீக்கப்பட்டால், கடன் பொதுத் தொகுப்பிற்குச் சுமத்தப்படும், அதில் இப்போது {n} பயறு உள்ளது.",
-    "other": "இருப்புகள் தனிப்பட்டவை: {name}-இன் இருப்பை நீங்கள் பார்க்க முடியாது. இந்த வாக்கு தொடங்கும் போது, சமூகம் அவர்களின் இருப்பையும் கடனையும் பதிவு செய்து, இதில் வாக்களிக்கக்கூடிய அனைவருக்கும் காட்டுகிறது. அவர்கள் நீக்கப்பட்டால், கடன் பொதுத் தொகுப்பிற்குச் சுமத்தப்படும், அதில் இப்போது {n} பயறுகள் உள்ளன."
-  },
   "Missing Title": "தலைப்பு விடுபட்டுள்ளது",
   "Please enter a clear, concise title for this decision.": "இந்த முடிவுக்கு தெளிவான, சுருக்கமான தலைப்பை உள்ளிடவும்.",
   "Missing Description": "விளக்கம் விடுபட்டுள்ளது",

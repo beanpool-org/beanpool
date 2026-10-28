@@ -1892,7 +1892,6 @@
   "A quick look at this community economy.": "Bu topluluk ekonomisine hızlı bir bakış.",
   "Done ✓": "Tamamlandı ✓",
   "Member\u0004what a Decision touches": "Üye",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Bu sunucudan ihraç (%66 nitelikli çoğunluk, %25 yeter sayı, 7 günlük ek süre)",
   "Temporary freeze of trading and messaging": "Takas ve mesajlaşmanın geçici olarak dondurulması",
   "Restore member to active standing (simple majority)": "Üyeyi aktif duruma geri getirme (salt çoğunluk)",
   "Cancel pending removal and restore account (simple majority)": "Bekleyen çıkarmayı iptal etme ve hesabı geri yükleme (salt çoğunluk)",
@@ -1917,10 +1916,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Lütfen baş sorumlunun veya liderin çağrı kodunu ya da genel anahtarını girin.",
   "The lead keeper or leader to remove: callsign or public key": "Görevden alınacak baş sorumlu veya lider: çağrı kodu veya genel anahtar",
   "Enter the lead keeper or leader's callsign or pubkey...": "Baş sorumlunun veya liderin çağrı kodunu ya da genel anahtarını gir...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Bakiyeler gizlidir: {name} adlı kişinin bakiyesini göremezsin. Bu oylama açıldığında, topluluk bakiyesini ve varsa borcunu kaydeder ve oylamada oy kullanabilen herkese gösterir. Çıkarılırsa, borç şu anda {n} fasulye tutan Ortak Havuz'a yansıtılır.",
-    "other": "Bakiyeler gizlidir: {name} adlı kişinin bakiyesini göremezsin. Bu oylama açıldığında, topluluk bakiyesini ve varsa borcunu kaydeder ve oylamada oy kullanabilen herkese gösterir. Çıkarılırsa, borç şu anda {n} fasulye tutan Ortak Havuz'a yansıtılır."
-  },
   "Please enter a clear title for this decision.": "Lütfen bu karar için net bir başlık girin.",
   "Please provide a description and rationale.": "Lütfen bir açıklama ve gerekçe belirtin.",
   "Please enter a valid member callsign or 64-character public key.": "Lütfen geçerli bir üye çağrı kodu veya 64 karakterli genel anahtar girin.",

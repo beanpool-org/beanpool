@@ -3464,7 +3464,6 @@
   "Post\u0004button: publish": "نشر",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 استخدم علامة تبويب {ledger} لإرسال الأرصدة إلى الجيران فورًا.",
   "Member\u0004what a Decision touches": "عضو",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "طرد من هذا الخادم (أغلبية معززة 66%، نصاب 25%، فترة سماح مدتها 7 أيام)",
   "Temporary freeze of trading and messaging": "تجميد مؤقت للتداول والمراسلة",
   "Restore member to active standing (simple majority)": "إعادة العضو إلى الوضع النشط (أغلبية بسيطة)",
   "Cancel pending removal and restore account (simple majority)": "إلغاء الإزالة المعلقة واستعادة الحساب (أغلبية بسيطة)",
@@ -3492,14 +3491,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "يرجى إدخال الاسم التعريفي أو المفتاح العام للمسؤول الرئيسي أو القائد.",
   "The lead keeper or leader to remove: callsign or public key": "المسؤول الرئيسي أو القائد المراد إزالته: الاسم التعريفي أو المفتاح العام",
   "Enter the lead keeper or leader's callsign or pubkey...": "أدخل الاسم التعريفي أو المفتاح العام للمسؤول الرئيسي أو القائد...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "zero": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "one": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "two": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "few": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "many": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "other": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن."
-  },
   "Missing Title": "العنوان مفقود",
   "Please enter a clear, concise title for this decision.": "يرجى إدخال عنوان واضح وموجز لهذا القرار.",
   "Missing Description": "الوصف مفقود",

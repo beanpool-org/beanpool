@@ -2972,7 +2972,6 @@
   "Post\u0004button: publish": "Publier",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Utilisez l'onglet {ledger} pour envoyer instantanément des crédits à vos voisins.",
   "Member\u0004what a Decision touches": "Membre",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Exclusion de ce nœud (supermajorité de 66 %, quorum de 25 %, délai de grâce de 7 jours)",
   "Temporary freeze of trading and messaging": "Gel temporaire des échanges et de la messagerie",
   "Restore member to active standing (simple majority)": "Rétablir le statut actif du membre (majorité simple)",
   "Cancel pending removal and restore account (simple majority)": "Annuler l'exclusion en attente et rétablir le compte (majorité simple)",
@@ -3000,10 +2999,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Veuillez saisir le pseudonyme ou la clé publique du gérant principal ou responsable.",
   "The lead keeper or leader to remove: callsign or public key": "Le gérant principal ou responsable à retirer : pseudonyme ou clé publique",
   "Enter the lead keeper or leader's callsign or pubkey...": "Saisir le pseudonyme ou la clé publique du gérant principal ou responsable…",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Les soldes sont privés : vous ne pouvez pas voir celui de {name}. Lorsque ce vote s'ouvre, la communauté enregistre son solde et toute dette éventuelle, et les montre à tous les votants. Si la personne est exclue, la dette est imputée au fonds des Communs, qui contient {n} haricot actuellement.",
-    "other": "Les soldes sont privés : vous ne pouvez pas voir celui de {name}. Lorsque ce vote s'ouvre, la communauté enregistre son solde et toute dette éventuelle, et les montre à tous les votants. Si la personne est exclue, la dette est imputée au fonds des Communs, qui contient {n} haricots actuellement."
-  },
   "Missing Title": "Titre manquant",
   "Please enter a clear, concise title for this decision.": "Veuillez saisir un titre clair et concis pour cette décision.",
   "Missing Description": "Description manquante",

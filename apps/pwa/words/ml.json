@@ -1892,7 +1892,6 @@
   "A quick look at this community economy.": "ഈ കമ്മ്യൂണിറ്റി സമ്പദ്‌വ്യവസ്ഥയെക്കുറിച്ചുള്ള ഒരു ലഘുവിവരണം.",
   "Done ✓": "പൂർത്തിയായി ✓",
   "Member\u0004what a Decision touches": "അംഗം",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "ഈ നോഡിൽ നിന്നുള്ള പുറത്താക്കൽ (66% ഭൂരിപക്ഷം, 25% കോറം, 7 ദിവസത്തെ ഗ്രേസ് പിരീഡ്)",
   "Temporary freeze of trading and messaging": "ഇടപാടുകളും സന്ദേശമയക്കലും താൽക്കാലികമായി മരവിപ്പിക്കൽ",
   "Restore member to active standing (simple majority)": "അംഗത്തെ സജീവ പദവിയിലേക്ക് പുനഃസ്ഥാപിക്കുക (സാധാരണ ഭൂരിപക്ഷം)",
   "Cancel pending removal and restore account (simple majority)": "നീക്കം ചെയ്യുന്നത് റദ്ദാക്കി അക്കൗണ്ട് പുനഃസ്ഥാപിക്കുക (സാധാരണ ഭൂരിപക്ഷം)",
@@ -1917,10 +1916,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "ദയവായി പ്രധാന സൂക്ഷിപ്പുകാരന്റെയോ ലീഡറുടെയോ കോൾസൈൻ അല്ലെങ്കിൽ പബ്ലിക് കീ നൽകുക.",
   "The lead keeper or leader to remove: callsign or public key": "നീക്കം ചെയ്യേണ്ട പ്രധാന സൂക്ഷിപ്പുകാരൻ അല്ലെങ്കിൽ ലീഡർ: കോൾസൈൻ അല്ലെങ്കിൽ പബ്ലിക് കീ",
   "Enter the lead keeper or leader's callsign or pubkey...": "പ്രധാന സൂക്ഷിപ്പുകാരന്റെയോ ലീഡറുടെയോ കോൾസൈൻ അല്ലെങ്കിൽ പബ്ലിക് കീ നൽകുക...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "ബാലൻസുകൾ സ്വകാര്യമാണ്: നിങ്ങൾക്ക് {name}-ന്റെ ബാലൻസ് കാണാൻ കഴിയില്ല. ഈ വോട്ടെടുപ്പ് ആരംഭിക്കുമ്പോൾ, കമ്മ്യൂണിറ്റി അവരുടെ ബാലൻസും കടവും രേഖപ്പെടുത്തുകയും, വോട്ട് ചെയ്യാൻ കഴിയുന്ന എല്ലാവർക്കും അത് കാണിക്കുകയും ചെയ്യുന്നു. അവരെ നീക്കം ചെയ്താൽ, കടം കോമൺസ് പൂളിൽ നിന്ന് ഈടാക്കും, ഇപ്പോൾ അതിൽ {n} പയർ ഉണ്ട്.",
-    "other": "ബാലൻസുകൾ സ്വകാര്യമാണ്: നിങ്ങൾക്ക് {name}-ന്റെ ബാലൻസ് കാണാൻ കഴിയില്ല. ഈ വോട്ടെടുപ്പ് ആരംഭിക്കുമ്പോൾ, കമ്മ്യൂണിറ്റി അവരുടെ ബാലൻസും കടവും രേഖപ്പെടുത്തുകയും, വോട്ട് ചെയ്യാൻ കഴിയുന്ന എല്ലാവർക്കും അത് കാണിക്കുകയും ചെയ്യുന്നു. അവരെ നീക്കം ചെയ്താൽ, കടം കോമൺസ് പൂളിൽ നിന്ന് ഈടാക്കും, ഇപ്പോൾ അതിൽ {n} പയർ ഉണ്ട്."
-  },
   "Please enter a clear title for this decision.": "ഈ തീരുമാനത്തിന് വ്യക്തമായ ഒരു തലക്കെട്ട് നൽകുക.",
   "Please provide a description and rationale.": "വിവരണവും കാരണവും നൽകുക.",
   "Please enter a valid member callsign or 64-character public key.": "സാധുവായ അംഗ കോൾസൈൻ അല്ലെങ്കിൽ 64-അക്ഷര പബ്ലിക് കീ നൽകുക.",

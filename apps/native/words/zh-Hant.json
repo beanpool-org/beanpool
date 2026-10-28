@@ -2849,7 +2849,6 @@
   "Post\u0004button: publish": "發布",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 使用{ledger}標籤頁，即時向鄰居轉帳信用額度。",
   "Member\u0004what a Decision touches": "成員",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "從此節點除名（需 66% 特別多數、25% 法定人數、7 天寬限期）",
   "Temporary freeze of trading and messaging": "暫時凍結交易與私訊權限",
   "Restore member to active standing (simple majority)": "恢復成員的正常身分（簡單多數）",
   "Cancel pending removal and restore account (simple majority)": "取消待處理的移除並恢復帳號（簡單多數）",
@@ -2877,9 +2876,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "請輸入主要經營者或負責人的呼號或公鑰。",
   "The lead keeper or leader to remove: callsign or public key": "要移除的主要經營者或負責人：呼號或公鑰",
   "Enter the lead keeper or leader's callsign or pubkey...": "輸入主要經營者或負責人的呼號或公鑰…",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "other": "餘額是隱密的：你看不到 {name} 的餘額。當此表決開啟時，社群會記錄其餘額及欠款，並展示給所有有權投票的成員。若其被移除，債務將由目前持有 {n} 顆豆子的公共資金池承擔。"
-  },
   "Missing Title": "缺少標題",
   "Please enter a clear, concise title for this decision.": "請為此項決策輸入清晰簡潔的標題。",
   "Missing Description": "缺少說明",

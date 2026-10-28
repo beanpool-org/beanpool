@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
-import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
-import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
 import { marketCardPicture } from '../../utils/market-card-picture';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { refusalHere, type Refusal } from '../../utils/members-only-listings';
@@ -30,6 +28,7 @@ import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
+import { MarketCardPicture } from '../../components/MarketCardPicture';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -57,7 +56,7 @@ import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listPhotoUrl, readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
+import { readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -1531,20 +1530,17 @@ export default function MarketScreen() {
                     accessibilityRole={isPulse ? undefined : "button"}
                 >
                     <View style={styles.gridImageWrapper}>
-                        {picture ? (
-                            <Image source={{ uri: listPhotoUrl(picture) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
-                                if (coverImage) {
-                                    refreshListingAfterPhotoError(item.id, coverImage);
-                                }
-                            }} />
-                        ) : (
-                            <CategoryTile
-                                category={item.category}
-                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
-                                size="grid"
-                                style={styles.gridImage}
-                            />
-                        )}
+                        <MarketCardPicture
+                            postId={item.id}
+                            cover={coverImage}
+                            picture={picture}
+                            category={item.category}
+                            kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                            size="grid"
+                            accessibilityLabel={item.title}
+                            imageStyle={styles.gridImage}
+                            tileStyle={styles.gridImage}
+                        />
                         {/* One row along the photo's foot, the badges at its start and the price at its end. It wraps,
                             growing upwards: RECURRING and YOU in a longer language (or at 320dp and 1.3x) stack instead
                             of overlapping each other or the price, as fixed offsets did. */}
@@ -1628,15 +1624,15 @@ export default function MarketScreen() {
                 >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
                         <View style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', marginRight: 10 }}>
-                            {picture ? (
-                                <Image source={{ uri: listPhotoUrl(picture) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
-                            ) : (
-                                <CategoryTile
-                                    category={item.category}
-                                    kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
-                                    size="thumb"
-                                />
-                            )}
+                            <MarketCardPicture
+                                postId={item.id}
+                                cover={coverImage}
+                                picture={picture}
+                                category={item.category}
+                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                                size="thumb"
+                                imageStyle={{ width: '100%', height: '100%' }}
+                            />
                         </View>
                         <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
                             <Text style={styles.compactTitle} numberOfLines={1}>
@@ -1693,21 +1689,16 @@ export default function MarketScreen() {
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
-                    {picture ? (
-                        <Image source={{ uri: listPhotoUrl(picture) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => {
-                            if (coverImage) {
-                                refreshListingAfterPhotoError(item.id, coverImage);
-                            }
-                        }} />
-                    ) : (
-                        <View style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}>
-                            <CategoryTile
-                                category={item.category}
-                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
-                                size="thumb"
-                            />
-                        </View>
-                    )}
+                    <MarketCardPicture
+                        postId={item.id}
+                        cover={coverImage}
+                        picture={picture}
+                        category={item.category}
+                        kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                        size="thumb"
+                        imageStyle={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}
+                        tileBox={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}
+                    />
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>

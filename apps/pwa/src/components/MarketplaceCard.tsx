@@ -9,6 +9,7 @@
  *  - Elder treatment (gold border/shadow) for high-energy users
  */
 
+import { useState } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
 import { formatNumber, listPhotoUrl, t } from '@beanpool/core';
@@ -78,7 +79,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
     const firstPhoto = post.photos && post.photos.length > 0 ? post.photos[0] : null;
     const bannerUrl = post.authorBannerUrl || (post as any)?.author_banner_url || null;
-    const displayImage = firstPhoto || bannerUrl;
+    // A banner that will not load (a weak connection, or a URL from before the enterprise changed it) gives way to the
+    // tile, never an empty box (review of #2565, finding 8). The URL that failed is kept, not a flag, so a new one is tried.
+    const [failedBanner, setFailedBanner] = useState<string | null>(null);
+    const banner = bannerUrl && bannerUrl !== failedBanner ? bannerUrl : null;
+    const displayImage = firstPhoto || banner;
+    const onPictureError = firstPhoto ? undefined : () => setFailedBanner(bannerUrl);
     // Only actual listing photos should open the zoom lightbox; shop banner is card branding fallback
     const photosToZoom = firstPhoto ? post.photos! : [];
     // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`).
@@ -153,12 +159,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {/* Compact Category Picture / Tile */}
                     <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
                         {displayImage ? (
-                            <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
+                            <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
                         ) : (
                             <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                         )}
                     </div>
-                    
+
                     {/* Title and Author */}
                     <div className="flex-1 min-w-0">
                         <h3 dir="auto" className="font-extrabold text-sm text-nature-950 dark:text-white truncate">
@@ -252,7 +258,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                         </button>
                     ) : displayImage ? (
-                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
+                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
                     ) : (
                         <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                     )}
@@ -379,7 +385,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                     </button>
                 ) : displayImage ? (
-                    <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
+                    <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" onError={onPictureError} />
                 ) : (
                     <CategoryTile
                         category={post.category}

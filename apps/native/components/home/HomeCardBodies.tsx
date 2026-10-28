@@ -337,9 +337,15 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
     );
 }
 
+/**
+ * A row's picture, or its category's tile. A picture that will not load gives way to the tile, never an empty box (an
+ * enterprise's banner from before it changed it, a weak connection: review of #2565, finding 8). The URL that failed is
+ * kept, not a flag, so a new one is tried.
+ */
 function Thumb({ uri, category, kind, colors }: { uri: string | null; category?: string | null; kind?: CategoryTileKind; colors: AppColors }) {
     const s = homeStyles(colors);
-    if (uri) return <Image source={{ uri }} style={s.thumb} contentFit="cover" accessibilityIgnoresInvertColors />;
+    const [failed, setFailed] = React.useState<string | null>(null);
+    if (uri && uri !== failed) return <Image source={{ uri }} style={s.thumb} contentFit="cover" accessibilityIgnoresInvertColors onError={() => setFailed(uri)} />;
     return (
         <View style={[s.thumb, { overflow: 'hidden' }]}>
             <CategoryTile category={category} kind={kind} size="thumb" />

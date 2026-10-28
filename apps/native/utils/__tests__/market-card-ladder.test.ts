@@ -15,19 +15,32 @@ describe('Phone Market card ladder (Pictures S6)', () => {
         expect(renderItemBlock).toMatch(/const \{ cover: coverImage, picture \} = marketCardPicture\(item\);/);
     });
 
+    // Each view draws that picture through MarketCardPicture: the picture, else the CategoryTile, and the tile in place of
+    // a banner that will not load. Drawn and failed for real in market-banner-fallback-render.test.ts.
+    const drawsThePicture = /<MarketCardPicture\s+postId=\{item\.id\}\s+cover=\{coverImage\}\s+picture=\{picture\}/;
+    const pictureSrc = source('components/MarketCardPicture.tsx');
+
     it('grid card draws that picture before falling back to CategoryTile', () => {
         const gridBlock = renderItemBlock.split("if (viewMode === 'grid')")[1]?.split("if (viewMode === 'compact')")[0] || '';
-        expect(gridBlock).toMatch(/\{picture \? \(\s*<Image source=\{\{ uri: listPhotoUrl\(picture\) \}\}[\s\S]*?\) : \(\s*<CategoryTile/);
+        expect(gridBlock).toMatch(drawsThePicture);
+        expect(gridBlock).not.toMatch(/<Image\b/);
     });
 
     it('compact row draws that picture before falling back to CategoryTile', () => {
         const compactBlock = marketSrc.split("if (viewMode === 'compact')")[1]?.split('// List View')[0] || '';
-        expect(compactBlock).toMatch(/\{picture \? \(\s*<Image source=\{\{ uri: listPhotoUrl\(picture\) \}\}[\s\S]*?\) : \(\s*<CategoryTile/);
+        expect(compactBlock).toMatch(drawsThePicture);
+        expect(compactBlock).not.toMatch(/<Image\b/);
     });
 
     it('list row draws that picture before falling back to CategoryTile', () => {
         const listBlock = marketSrc.split('// List View')[1] || '';
-        expect(listBlock).toMatch(/\{picture \? \(\s*<Image source=\{\{ uri: listPhotoUrl\(picture\) \}\}[\s\S]*?\) : \(\s*<View[^>]*>\s*<CategoryTile/);
+        expect(listBlock).toMatch(drawsThePicture);
+        expect(listBlock).not.toMatch(/<Image\b/);
+    });
+
+    it('MarketCardPicture draws the picture while it loads, and the CategoryTile when there is none or the banner failed', () => {
+        expect(pictureSrc).toMatch(/if \(picture && picture !== failed\) \{\s*return \(\s*<Image\s+source=\{\{ uri: listPhotoUrl\(picture\) \}\}/);
+        expect(pictureSrc).toMatch(/const tile = <CategoryTile /);
     });
 
     it('Home MarketRow falls back to enterprise banner before CategoryTile', () => {
@@ -42,6 +55,8 @@ describe('Phone Market card ladder (Pictures S6)', () => {
     });
 
     it('onError only heals listings with actual coverImage photos', () => {
-        expect(marketSrc.match(/if \(coverImage\) \{\s*refreshListingAfterPhotoError\(item\.id, coverImage\);/g)?.length).toBe(2);
+        // A banner that fails is never sent to the listing-photo heal: it gives way to the tile instead.
+        expect(pictureSrc).toMatch(/onError=\{\(\) => \(cover \? refreshListingAfterPhotoError\(postId, cover\) : setFailed\(picture\)\)\}/);
+        expect(marketSrc).not.toMatch(/refreshListingAfterPhotoError/);
     });
 });

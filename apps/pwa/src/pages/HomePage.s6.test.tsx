@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { HomePage } from './HomePage';
 import * as api from '../lib/api';
@@ -55,5 +55,14 @@ describe('Web Home Market card picture ladder (Pictures S6)', () => {
         const m3 = screen.getByRole('button', { name: /Category Tile Item/ });
         expect(m3.querySelector('img')).toBeNull();
         expect(m3.querySelector('[data-testid="category-tile"]')).toBeInTheDocument();
+
+        // A banner that will not load gives way to the tile, never an empty box (review of #2565, finding 8); a listing's
+        // own photo that fails is left as it is.
+        fireEvent.error(m2Img!);
+        const m2After = screen.getByRole('button', { name: /Enterprise Banner Item/ });
+        expect(m2After.querySelector('img')).toBeNull();
+        expect(m2After.querySelector('[data-testid="category-tile"]')).toBeInTheDocument();
+        fireEvent.error(m1Img!);
+        expect(screen.getByRole('button', { name: /Own Photo Item/ }).querySelector('img')?.getAttribute('src')).toContain('https://example.com/photo.jpg');
     });
 });

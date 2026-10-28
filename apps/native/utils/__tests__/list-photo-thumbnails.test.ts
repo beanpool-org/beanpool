@@ -15,7 +15,10 @@ const source = (rel: string): string => fs.readFileSync(path.join(APP, rel), 'ut
 
 /** Each list, and how its listing photo is drawn now. */
 const LISTS: [string, string[], RegExp[]][] = [
-    ['app/(tabs)/market.tsx', ['uri: listPhotoUrl(picture) }} style={styles.gridImage}', 'uri: listPhotoUrl(picture) }} style={{ width: 80,'], [/uri: (coverImage|picture)\s*}/]],
+    // The Market's three views draw their picture through MarketCardPicture (its banner that fails gives way to the tile),
+    // and none draws one itself.
+    ['app/(tabs)/market.tsx', ['<MarketCardPicture'], [/uri: (coverImage|picture)\s*}/, /<Image\b/]],
+    ['components/MarketCardPicture.tsx', ['source={{ uri: listPhotoUrl(picture) }}'], [/uri: (cover|picture)\s*}/]],
     ['components/home/HomeCardBodies.tsx', ['<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))}'], [/<Thumb uri=\{onNode\(/]],
     ['components/EventCard.tsx', ['source={{ uri: listPhotoUrl(photo) }}'], [/uri: photo\s*}/]],
     ['components/MyDealsSheet.tsx', ['uri: listPhotoUrl(item.coverImage) }}', 'uri: listPhotoUrl(coverImage) }}'], [/uri: (item\.)?coverImage\s*}/]],
@@ -33,8 +36,11 @@ describe("the phone's lists draw the small copy", () => {
     });
 
     it("a Market row that fails to load still heals by the photo's own URL", () => {
+        // Each of the three views hands its listing and its own photo to the picture, which heals by that URL (drawn and
+        // failed for real in market-banner-fallback-render.test.ts).
         const src = source('app/(tabs)/market.tsx');
-        expect(src.match(/refreshListingAfterPhotoError\(item\.id, coverImage\)/g)?.length).toBe(2);
+        expect(src.match(/<MarketCardPicture\s+postId=\{item\.id\}\s+cover=\{coverImage\}/g)?.length).toBe(3);
+        expect(source('components/MarketCardPicture.tsx')).toContain('refreshListingAfterPhotoError(postId, cover)');
     });
 
     it.each(DETAILS)('%s draws the photo itself', (file) => {

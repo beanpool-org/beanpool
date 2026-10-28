@@ -77,7 +77,7 @@ A move deletes the old copy only once the new one is kept where the move meant. 
 Each community chooses where its members' copies go, and only its owners change it:
 
 - **BeanPool's key vault**, where every community starts. A sign-in you link keeps its copy at the key vault.
-- **Its own server.** A sign-in you link keeps its copy on your community's server instead, and the app never contacts the key vault from that community's screens.
+- **Its own server.** A sign-in you link keeps its copy on your community's server instead, and the app doesn't ask the key vault for it. The app still asks the key vault whether it has a copy of your account, so it can offer to move one to your community (see above).
 - **Nowhere.** The community keeps no copies and doesn't use the key vault. The app offers no sign-in to link there, and your 12 words are your way back there. If you lose your phone and your 12 words, an admin can move your Beans and your name to a new key (see "Lost your phone and your 12 words").
 
 A copy you already have is yours, wherever you made it: one key is a member of all your communities, and a copy made through one community also brings you back into the others. No community can remove it; you can, in **Where your account can be brought back from**.

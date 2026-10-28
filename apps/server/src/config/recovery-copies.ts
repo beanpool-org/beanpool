@@ -8,8 +8,9 @@
  *   - `vault` (the default, what every build did until now): a member's phone keeps its sign-in copy at BeanPool's key
  *     vault. Nothing on this server ever calls the vault: the phone deposits there, signed by the member's own key.
  *   - `server`: the copies are kept here, under the recovery seal (services/recovery-seal-key.ts), as a phone built
- *     without a vault keeps them: the phone asks this server for the nonce and deposits here, and from this community's
- *     screens it never contacts the vault.
+ *     without a vault keeps them: the phone asks this server for the nonce and deposits here, and asks the vault nothing
+ *     for it. It still asks the vault, with the member's own key, whether it holds a copy of theirs (the move card offers
+ *     to move one here), and moves or removes one there when the member asks. This server never calls the vault.
  *   - `none`: this community keeps no copies and its screens offer none, at the vault or here. Members' 12 words are
  *     their way back here, and an admin can re-key one to a new key.
  *

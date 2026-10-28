@@ -2869,7 +2869,9 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
 
     try {
         const heldRole = heldNodeRoleOf(String(pubkey).trim().toLowerCase());
-        const counts = removalCounts(ctx, String(pubkey).trim().toLowerCase());
+        // Where the community votes, the offboarding settles a removal the community voted for: the community removed them,
+        // not the admin, so it is no admin's removal to count, as Accelerate's is not.
+        const counts = !decisionsOn() && removalCounts(ctx, String(pubkey).trim().toLowerCase());
         const result = executeOffboard(
             pubkey,
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },

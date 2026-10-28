@@ -14,7 +14,8 @@
  *     proof is asked; the engine underneath in the same words), and its preview too, which then logs no look at the
  *     member's balance. Inside one's grace window (Hal, paused, the vote passed): the preview
  *     answers and names the removal, and the offboarding settles Hal's Beans exactly as chosen (a gift to Gil), completes
- *     the removal now as Accelerate does (the Decision executed, Hal removed) and moves nothing else.
+ *     the removal now as Accelerate does (the Decision executed, Hal removed) and moves nothing else. The owners are not
+ *     told an admin removed someone: the community did.
  *  3. Proposing a removal: a member with standing and an admin are refused 400 in words, and nothing is written. Other
  *     Decisions about a member still open; a pause still opens the node's own removal vote.
  *  4. An open removal a member proposed before this version still ends: one passes, waits out its grace window and the
@@ -23,7 +24,8 @@
  *     removal; and the admin brake (Q12): a plain admin halts a passed removal and the member is back.
  *  6. The sweep: every admin route that removes or offboards someone, each with a fresh member of its own, on this node
  *     where the community votes: what each answers, and nothing changed where it refused.
- *  7. Votes off (the operator's switch, Q11): an admin removes directly, and offboards without a vote.
+ *  7. Votes off (the operator's switch, Q11): an admin removes directly, and offboards without a vote; the owners are told
+ *     of each, as an admin's removal.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-removal-doors.ts
  */
@@ -115,6 +117,7 @@ async function main() {
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { executeOffboard } = await import('./engine/member-wizards.js');
+    const { setSecurityAlertHandler } = await import('./services/security-signal.js');
     const { wrapCreatePost } = await import('./post-test-helper.js');
     const createPost = wrapCreatePost(se.createPost);
     // An open removal a member proposed before this version (decisions-from-before-test-fixture.ts). Where the fixture is
@@ -132,6 +135,10 @@ async function main() {
     const twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
+    // What the owners are told (services/security-signal.ts): an admin's removals are counted, the community's are not.
+    const ownersTold: Array<{ key: string; actorRole?: string }> = [];
+    setSecurityAlertHandler((note: any) => { ownersTold.push(note); });
+    const adminRemovals = () => ownersTold.filter((n) => n.key === 'sec.members').length;
 
     // ── The people ──────────────────────────────────────────────────────────────────────────────────────────────────
     const gen = keypair('GenesisGwen');
@@ -246,6 +253,7 @@ async function main() {
     assert(halPreview.status === 200 && halPreview.body?.balance === 37.5 && halPreview.body?.settlesRemoval?.decisionId === halVote.id,
         `in it, the preview answers with his balance and names the removal it settles (${halPreview.status} ${JSON.stringify(halPreview.body?.settlesRemoval)})`);
     const gilBefore = exactBalance(gil)!, halBefore = exactBalance(hal)!, commonsBefore = se.getCommonsBalanceExact();
+    const adminRemovalsBefore = adminRemovals();
     fresh();
     const halOff = await admin('POST', `/api/local/admin/members/${hal.pubKeyHex}/offboard`, adaSession, { resolution: 'gift_to_member', giftRecipientPubkey: gil.pubKeyHex });
     assert(halOff.status === 200 && statusOf(hal) === 'pruned', `Ada offboards Hal in his grace window, giving his Beans to Gil (${halOff.status} ${halOff.text.slice(0, 160)}; ${statusOf(hal)})`);
@@ -254,6 +262,7 @@ async function main() {
     const halDone = decision(halVote.id);
     assert(halDone?.status === 'executed' && /offboard/i.test(halDone?.execution_reason ?? ''),
         `the removal is complete: its Decision is executed, as Accelerate leaves one, and says the offboarding settled it (${halDone?.status}: ${halDone?.execution_reason})`);
+    assert(adminRemovals() === adminRemovalsBefore, `the owners are not told an admin removed a member: the community did (${adminRemovals() - adminRemovalsBefore} counted)`);
     de.tickDecisions(Date.now() + 8 * DAY);
     assert(decision(halVote.id)?.status === 'executed' && exactBalance(gil) === gilBefore + halBefore, 'a tick after the grace window\'s end changes nothing more');
 
@@ -312,6 +321,10 @@ async function main() {
     const branchByOwner = await admin('POST', `/api/local/admin/branches/${root.pubKeyHex}/prune`, gwenSession, {});
     assert(branchByOwner.status === 200 && statusOf(root) === 'pruned' && statusOf(leaf) === 'pruned',
         `the owner's prune branch still removes a whole invite branch where the community votes, until the branch vote (${branchByOwner.status} ${branchByOwner.text.slice(0, 160)}; ${statusOf(root)}, ${statusOf(leaf)})`);
+    const root2 = seedMember('BranchRootTwo');
+    const branchEngine = refusalOf(() => se.adminPruneBranch(root2.pubKeyHex, ada.pubKeyHex));
+    assert(branchEngine.status === 400 && SAYS_VOTE.test(branchEngine.message) && statusOf(root2) === 'active',
+        `underneath, the branch is an owner's door only: an admin reaching adminPruneBranch is refused (${branchEngine.status}: ${branchEngine.message.slice(0, 60)})`);
 
     const ace = seedMember('AcceleratedAce');
     const aceVote = await pause(ace);
@@ -372,9 +385,11 @@ async function main() {
     console.log('\n── 7. Votes off (the operator\'s switch) ──');
     setSwitchOverride('decisions', false);
     const vera = seedMember('VotesOffVera'), vic = seedMember('VotesOffVic');
+    const toldBeforeVera = adminRemovals();
     fresh();
     const veraPruned = await admin('POST', `/api/local/admin/users/${vera.pubKeyHex}/prune`, adaSession, {});
     assert(veraPruned.status === 200 && statusOf(vera) === 'pruned', `with community votes off, an admin removes Vera directly (${veraPruned.status} ${veraPruned.text.slice(0, 120)})`);
+    assert(adminRemovals() === toldBeforeVera + 1, `and the owners are told an admin removed a member (${adminRemovals() - toldBeforeVera})`);
     fresh();
     const vicPreview = await admin('GET', `/api/local/admin/members/${vic.pubKeyHex}/offboard/preview`, adaSession);
     assert(vicPreview.status === 200 && vicPreview.body?.balance === 50 && !vicPreview.body?.settlesRemoval,
@@ -384,6 +399,7 @@ async function main() {
     const vicOff = await admin('POST', `/api/local/admin/members/${vic.pubKeyHex}/offboard`, adaSession, { resolution: 'donate_to_commons' });
     assert(vicOff.status === 200 && statusOf(vic) === 'pruned' && se.getCommonsBalanceExact() === commonsBeforeVic + 50,
         `and offboards Vic, his 50 Beans to the Commons (${vicOff.status} ${vicOff.text.slice(0, 120)}; ${statusOf(vic)})`);
+    assert(adminRemovals() === toldBeforeVera + 2, `that is an admin's removal the owners are told of too (${adminRemovals() - toldBeforeVera})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

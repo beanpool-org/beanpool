@@ -24,6 +24,7 @@ import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
+import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
@@ -193,6 +194,8 @@ function RootLayoutNav() {
     const returnLock = useRef<ReturnType<typeof createReturnLock> | null>(null);
     const recoveryNavPrompted = useRef(false); // NAT-20: one-shot guard for the recovery confirmation
     const recoveryPromptWait = useRef<(() => void) | null>(null); // it waits for the app to show (whenAppShows)
+    // Each look of the guard with no identity: only the latest one's answer about looking around is acted on.
+    const noKeyGuardTurn = useRef(0);
 
     // App Lock's lock screen and cover are one value for the whole app (utils/app-lock-screen.ts): every screen and pop-up
     // draws them inside itself, not only this layout.
@@ -625,6 +628,8 @@ function RootLayoutNav() {
     useEffect(() => {
         if (isLoading) return;
         const root = (segments as string[])[0];
+        // A look about looking around still out is for the screen before this one: its answer is dropped.
+        const guardTurn = ++noKeyGuardTurn.current;
 
         // If we have no identity, the only screens that make sense are the
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
@@ -633,11 +638,24 @@ function RootLayoutNav() {
         // reachable without one. So are the claim screen, whose claim makes the
         // account, and another community's open door, whose join makes it. Any
         // other route → back to welcome (utils/auth-return.ts, `setupRedirect`).
+        // Unless the phone is looking around the global community as a
+        // visitor, chosen on the first screen (slice S12, utils/look-around.ts):
+        // then its screens stay, and one that needs a key opens the door, where
+        // the key is made at Join. Another community's door and a community's
+        // card stay ahead of that, looking around or not.
         if (!identity) {
             const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
             if (to) {
                 setTimeout(() => {
-                    router.replace(to);
+                    void lookingAroundHere().then((looking) => {
+                        // A later look of the guard (the screen moved, an account arrived) decides instead.
+                        if (!isComponentMounted.current || guardTurn !== noKeyGuardTurn.current) return;
+                        const where = looking ? setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false, lookingAround: true }) : to;
+                        if (!where) return;
+                        // The door from the look is the only screen: its Back returns to the look (app/welcome.tsx).
+                        if (where !== to && router.canDismiss()) router.dismissAll();
+                        router.replace(where);
+                    });
                 }, 50);
             }
             return;

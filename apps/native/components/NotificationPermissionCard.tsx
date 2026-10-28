@@ -46,7 +46,8 @@ export function NotificationPermissionCard({ colors, onAnswered }: { colors: App
         }, []),
     );
 
-    if (!visible) return null;
+    // A visitor with no account, looking around (slice S12): nothing to be told of yet, so nothing is asked.
+    if (!visible || !identity) return null;
 
     const handleTurnOn = async () => {
         if (busy) return;

@@ -174,6 +174,37 @@ export async function readHomeFromNode(
     }
 }
 
+/**
+ * Home for a visitor with no account yet, looking around the global community (slice S12, utils/look-around.ts): the
+ * same address, unsigned, which the node answers with its visitors' cards (apps/server routes/home.ts: the listings and
+ * events in their rough areas, the communities near, its counts). Nothing is kept: a visitor has no Home of their own,
+ * no copy outlives the look, and no account's copy is ever read or written here. Never throws.
+ */
+export async function readVisitorHome(
+    url: string, asked: readonly HomeCardId[],
+    options: { timeoutMs?: number; now?: () => number; point?: HomePoint | null; fetchImpl?: typeof fetch } = {},
+): Promise<Exclude<HomeRead, { kind: 'left' }>> {
+    const now = options.now ?? Date.now;
+    const since = interestsTurnNow();
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), options.timeoutMs ?? HOME_READ_TIMEOUT_MS);
+    try {
+        const res = await (options.fetchImpl ?? fetch)(`${url.replace(/\/+$/, '')}${homePath(asked, options.point)}`, {
+            method: 'GET', headers: { Accept: 'application/json' }, signal: stop.signal,
+        });
+        if (res.status === 401 || res.status === 403) return { kind: 'members_only' };
+        if (res.status === 404) return { kind: 'needs_update' };
+        if (!res.ok) return { kind: 'failed' };
+        const answer = readHomeAnswer(await res.json().catch(() => null));
+        if (!answer) return { kind: 'failed' };
+        return { kind: 'answer', stored: { url, publicKey: '', asked: asked.join(','), etag: null, answer, at: now() }, confirmed: false, since };
+    } catch {
+        return { kind: 'failed' };
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 // ── One read at a time, and the answer the header reads ─────────────────────────────────────────────────────────
 
 let latest: { stored: StoredHome; whose: HomeAccount } | null = null;

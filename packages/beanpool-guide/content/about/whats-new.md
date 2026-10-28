@@ -5,6 +5,14 @@ summary: What changed in the app, in plain words.
 related: home, the-bean, how-it-works, rules, faq, communities
 ---
 
+## Where your sign-in's copy is kept
+
+On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated.
+
+- **Said where it is made.** When you link Google, Apple or Facebook in the phone app, or join with one, **Safety Backup** and **Account Protection** now say, under **A sign-in you link**, that BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it, and who can open that copy, with the whole answer under **Who can open it**. See "Getting your account back".
+- **Your 12 words first.** **Account Protection** lists **Your 12 words** first, then **A sign-in you link**.
+- **In a web browser.** **Safety Backup** and Settings say whether the community's server keeps a copy of your account: on the global community it does, for a sign-in you joined with. The web app never uses BeanPool's key vault.
+
 ## The global community, near you
 
 You get these when the global community's server is updated. On the phone they need an up-to-date app.

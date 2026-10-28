@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-20",
@@ -4803,7 +4803,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "如果你希望除你之外任何人均无法访问，请仅使用 12 个助记词。",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "BeanPool 密钥库（位于冰岛的一台小型服务器）保存着凭登录凭据开启的账户副本。BeanPool 可以解密这些副本：目前由 BeanPool 创始人一人看管该保险库，正在过渡为由分处不同国家的三人共同管理（需其中两人协同方可操作）。托管公司可在服务器运行时读取其内存。法院可能责令开启副本，且任何控制了你登录账户的人也能借此登入。",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "绑定多个登录方式以防丢失。通过保存副本的社区服务器，其中任何一个都能在新手机上恢复你的账户。",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "绑定多个登录方式以备不时之需。在每个社区中，其中任何一个都能在新手机上恢复你的账户。",
   "🛡️ You're covered on {community}": "🛡️ 你在 {community} 享有保护",
   "🛡️ You're covered": "🛡️ 你享有保护",
   "Sign-In Recovery Providers (1-of-N)": "登录恢复提供方 (1/N)",
@@ -5884,5 +5883,8 @@
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手机设置中已关闭 BeanPool 的通知。打开设置即可开启。",
   "Nothing here yet. Be the first:": "这里还没有任何内容。成为第一个发布者：",
   "Choose a banner photo, or keep this one": "选择横幅照片，或保留此照片",
-  "Your picture, until you choose a banner.": "您的头像，直到您选择横幅。"
+  "Your picture, until you choose a banner.": "您的头像，直到您选择横幅。",
+  "You're looking around as a visitor. Nothing is saved until you join.": "你正在以访客身份浏览。加入之前不会保存任何内容。",
+  "Join to post": "加入后发布",
+  "Join to message": "加入后发消息"
 }

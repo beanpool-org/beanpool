@@ -123,6 +123,11 @@ export interface RekeyDeps {
     loadIdentity(): Promise<BeanPoolIdentity | null>;
     draftIdentity(): Promise<BeanPoolIdentity>;
     importIdentity(identity: BeanPoolIdentity): Promise<void>;
+    /**
+     * Just before a key goes onto a phone that held none: the guest mark a look around the global community left is not
+     * this account's (slice S12, utils/look-around.ts forgetTheLook).
+     */
+    forgetLook?(): Promise<void>;
     /** `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`, signed by the key (member-statements.ts signReEnrollStatement). */
     signStatement(nodeUrl: string, code: string, privateKeyHex: string): Promise<{ signature: string; signedFor: string }>;
     /** The replay-proof request headers (crypto.ts buildSignedHeaders). */
@@ -283,7 +288,10 @@ export async function finishRekey(slot: RekeySlot, answer: { callsign: string },
         if (!slot.draft || slot.draft.publicKey !== slot.publicKey) throw new Error(REKEY_TEXT.changedAccount);
         if (stored && stored.publicKey !== slot.publicKey) throw new Error(REKEY_TEXT.changedAccount);
         const identity = { ...slot.draft, callsign: answer.callsign || slot.draft.callsign };
-        if (!stored) await deps.importIdentity(identity);
+        if (!stored) {
+            await deps.forgetLook?.();
+            await deps.importIdentity(identity);
+        }
         await deps.slot.clear();
         return { identity, newWords: true };
     }

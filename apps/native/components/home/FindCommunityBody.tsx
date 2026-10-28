@@ -175,7 +175,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                             />
                         </View>
                         {!!cancelError && (
-                            <Text style={[s.rowSub, { marginTop: 4, color: colors.feedback.error.text }]} accessibilityLiveRegion="polite" testID="home-find-cancel-error">
+                            <Text style={[s.rowSub, { marginTop: 4, color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="home-find-cancel-error">
                                 {cancelError}
                             </Text>
                         )}

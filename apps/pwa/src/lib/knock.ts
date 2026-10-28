@@ -7,8 +7,9 @@
  */
 
 import {
-    buildBoundRequestHeaders, ed25519Signer, hexToBytes, isPublicIpv4, knockStillAnswerable, t, word,
+    buildBoundRequestHeaders, ed25519Signer, isPublicIpv4, knockStillAnswerable, t, word,
 } from '@beanpool/core';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import type { BeanPoolIdentity } from './identity';
 
 export const KNOCK_PATH = '/api/join/knock';

@@ -98,14 +98,14 @@ describe('rememberedKnocks & storage on web', () => {
 
     it('formats cardKnockLines for approved and pending knocks', () => {
         const knocks: RememberedKnock[] = [
-            { url: 'https://approved.example.org', name: 'Approved Town' },
-            { url: 'https://pending.example.org', name: 'Pending Town' },
-            { url: 'https://offline.example.org', name: 'Offline Town' },
+            { url: 'https://approved.example.org', name: 'Approved Town', key: 'approved', sentAt: '2026-10-10T00:00:00Z' },
+            { url: 'https://pending.example.org', name: 'Pending Town', key: 'pending', sentAt: '2026-10-10T00:00:00Z' },
+            { url: 'https://offline.example.org', name: 'Offline Town', key: 'offline', sentAt: '2026-10-10T00:00:00Z' },
         ];
         const lines = cardKnockLines(knocks, {
             'https://approved.example.org': { ok: true, value: { status: 'approved', invite: 'bp:123', expiresAt: null } },
             'https://pending.example.org': { ok: true, value: { status: 'pending' } },
-            'https://offline.example.org': { ok: false, error: 'network' },
+            'https://offline.example.org': { ok: false, kind: 'unreachable', message: 'network error' },
         });
 
         expect(lines).toHaveLength(2);

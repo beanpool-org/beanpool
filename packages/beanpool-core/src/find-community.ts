@@ -96,6 +96,7 @@ export const FIND_COMMUNITY_WORDS = {
      */
     notAnswering: word('Not answering lately'),
     /** The honest waiting card (Lounge L1, entry S1): measured response lines from the directory. */
+    askedOnDate: word('You asked to join {name} on {date}.'),
     answersWeek: word('Usually answers within a week'),
     answersSlow: word("Hasn't answered requests lately"),
     answersNone: word('Not taking requests right now'),

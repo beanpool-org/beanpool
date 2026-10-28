@@ -402,7 +402,7 @@ export function readMarkSent(raw: unknown): MarkSent[] {
 export function findPinned(
     answer: Pick<HomeAnswer, 'profile' | 'me'> & { cards?: { find?: { watches?: unknown[] | null } } },
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): boolean {
     if (answer.profile !== 'global') return false;
     const hasOpenKnock = typeof ctx === 'boolean'
@@ -419,7 +419,7 @@ export function findPinned(
 export function pinnedCards(
     answer: (Pick<HomeAnswer, 'profile' | 'me'> & { cards?: { find?: { watches?: unknown[] | null } } }) | null | undefined,
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): HomeCardId[] {
     return answer && findPinned(answer, now, ctx) ? ['find'] : [];
 }
@@ -755,6 +755,12 @@ export interface HomeDrawContext {
     role?: HomeRole;
     /** The phone remembers a knock this account sent (utils/knock.ts `rememberedKnocks`); absent: not read yet. */
     knocked?: boolean;
+    /** Whether an open knock is known to wait (Lounge L1). */
+    hasOpenKnock?: boolean;
+    /** Whether a place watch is open (Lounge L1). */
+    hasOpenWatch?: boolean;
+    /** Remembered knocks to evaluate wait-based pinning (Lounge L1). */
+    knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[];
     /** The phone's clock, for the 30-day pin; absent: now. */
     now?: number;
     /** The Tips card has a tip to show (@beanpool/core home-tips.ts, from the device's record); absent: none. */

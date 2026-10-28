@@ -46,7 +46,7 @@ import {
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, isHomeDoorbellFor,
     effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
-    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
+    type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
     SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readPhoneOnlySent,

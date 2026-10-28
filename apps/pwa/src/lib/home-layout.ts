@@ -250,7 +250,7 @@ export function readMarkSent(raw: unknown): MarkSent[] {
 export function findPinned(
     answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'>,
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): boolean {
     if (answer.profile !== 'global') return false;
     const hasOpenKnock = typeof ctx === 'boolean'
@@ -267,7 +267,7 @@ export function findPinned(
 export function pinnedCards(
     answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined,
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): string[] {
     return answer && findPinned(answer, now, ctx) ? ['find'] : [];
 }
@@ -276,7 +276,7 @@ export function pinnedCards(
 export function askPinned(
     answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined,
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): string[] {
     return answer ? pinnedCards(answer, now, ctx) : ['find'];
 }

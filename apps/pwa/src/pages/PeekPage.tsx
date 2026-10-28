@@ -6,7 +6,8 @@
  * global lobby draws a listing for a visitor (components/VisitorListing.tsx), under "A member of {community} shared this
  * with you"; then the community's own doors (components/CommunityCardPanel.tsx: Ask to join, Already a member, Look around
  * the global community), I have an invite, and on a phone Open in the BeanPool app and Get the app. A link that opens
- * nothing now says so, and shows the same doors. Nothing here signs or keeps anything: a stranger has no key yet.
+ * nothing now says so, and shows the same doors; a community that couldn't be reached says that instead, never that the
+ * link stopped, with Try again and the same doors. Nothing here signs or keeps anything: a stranger has no key yet.
  */
 import { useEffect, useState } from 'react';
 import { PEEK_WORDS as W, communityCardName, t, type CommunityCard } from '@beanpool/core';
@@ -18,7 +19,7 @@ import { getPeekPost, peekAppDoors } from '../lib/peek';
 import { VisitorPostDetail } from '../components/VisitorListing';
 import { CommunityCardPanel } from '../components/CommunityCardPanel';
 
-type Loaded = { kind: 'loading' } | { kind: 'post'; post: MarketplacePost } | { kind: 'stopped' };
+type Loaded = { kind: 'loading' } | { kind: 'post'; post: MarketplacePost } | { kind: 'stopped' } | { kind: 'unreachable' };
 
 const DOOR = 'block w-full min-h-[48px] px-4 py-3 rounded-xl text-center text-base font-bold break-words no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info';
 
@@ -31,13 +32,17 @@ export function PeekPage({ postId, ticket, onWelcome }: {
     const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
     const [card, setCard] = useState<CommunityCard | null>(null);
     const [beans, setBeans] = useState(true);
+    const [attempt, setAttempt] = useState(0);
     useEffect(() => {
         let cancelled = false;
-        getPeekPost(postId, ticket).then(post => { if (!cancelled) setLoaded(post ? { kind: 'post', post } : { kind: 'stopped' }); });
-        getCommunityCard().then(c => { if (!cancelled) setCard(c); }).catch(() => {});
+        setLoaded(l => (l.kind === 'loading' ? l : { kind: 'loading' }));
+        getPeekPost(postId, ticket).then(r => {
+            if (!cancelled) setLoaded(r === 'stopped' || r === 'unreachable' ? { kind: r } : { kind: 'post', post: r });
+        });
+        getCommunityCard().then(c => { if (!cancelled && c) setCard(c); }).catch(() => {});
         communityInfoOnce().then(info => { if (!cancelled && info) setBeans(beansOn(info)); }).catch(() => {});
         return () => { cancelled = true; };
-    }, [postId, ticket]);
+    }, [postId, ticket, attempt]);
 
     const origin = getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
     const community = card ? communityCardName(card, { t }) : (typeof window !== 'undefined' ? window.location.host : '');
@@ -61,6 +66,23 @@ export function PeekPage({ postId, ticket, onWelcome }: {
 
     if (loaded.kind === 'loading') {
         return <p role="status" className="p-6 text-center text-text-primary">{t('Loading...')}</p>;
+    }
+
+    if (loaded.kind === 'unreachable') {
+        // The community didn't answer (no connection, too many reads just now, the server down): the link may well work,
+        // so it is never called stopped. Try again reads the post anew; the doors are there meanwhile.
+        return (
+            <main data-testid="peek-unreachable" className="p-4 max-w-lg mx-auto">
+                <p role="status" className="m-0 mb-3 p-4 rounded-xl bg-bp-chip-warn-tint text-bp-chip-warn-ink font-semibold break-words">
+                    {t("Can't reach that community right now. Check your connection and try again.")}
+                </p>
+                <button type="button" data-testid="peek-retry" onClick={() => setAttempt(n => n + 1)}
+                    className={`${DOOR} mb-3 bg-transparent border border-bp-ink-info text-bp-ink-info cursor-pointer`}>
+                    {t('Try again')}
+                </button>
+                {doors}
+            </main>
+        );
     }
 
     if (loaded.kind === 'stopped') {

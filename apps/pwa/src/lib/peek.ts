@@ -18,20 +18,23 @@ export function readPeekParam(win: Pick<Window, 'location'> = window): { postId:
 }
 
 /**
- * The post a ticket opens, as the node answers a visitor (guestPost: nobody in it, its area only), or null where the link
- * opens nothing now (stopped, run out, the post gone, sharing outside turned off): the node answers all of those alike.
+ * The post a ticket opens, as the node answers a visitor (guestPost: nobody in it, its area only); or `stopped` where the
+ * node answers that the link opens nothing now (stopped, run out, the post gone, sharing outside turned off: it answers
+ * all of those alike, 401, 403 or 404); or `unreachable` where it couldn't be asked or gave no answer (no connection, a
+ * 429, a 5xx), so a link that works isn't called dead: the phone's split (apps/native utils/peek.ts fetchPeekPost).
  * Unsigned on purpose: the ticket is the whole of what lets the read through, and a stranger here has no key.
  */
-export async function getPeekPost(postId: string, ticket: string, fetcher: typeof fetch = fetch): Promise<MarketplacePost | null> {
+export async function getPeekPost(postId: string, ticket: string, fetcher: typeof fetch = fetch): Promise<MarketplacePost | 'stopped' | 'unreachable'> {
     try {
         const res = await fetcher(`${getNodeApiUrl()}/api/marketplace/posts/${encodeURIComponent(postId)}?peek=${encodeURIComponent(ticket)}`, {
             method: 'GET', cache: 'no-store', credentials: 'omit',
         });
-        if (!res.ok) return null;
+        if (res.status === 401 || res.status === 403 || res.status === 404) return 'stopped';
+        if (!res.ok) return 'unreachable';
         const body = await res.json() as { post?: MarketplacePost };
-        return body?.post && body.post.id === postId ? body.post : null;
+        return body?.post && body.post.id === postId ? body.post : 'stopped';
     } catch {
-        return null;
+        return 'unreachable';
     }
 }
 

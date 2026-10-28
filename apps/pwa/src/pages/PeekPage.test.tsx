@@ -97,7 +97,43 @@ describe('the one-post peek in the browser', () => {
 
     it('a post the node answers for another id is not shown', async () => {
         fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ post: { ...GUEST_POST, id: 'p-elsewhere' } }), { status: 200 }));
-        expect(await getPeekPost(POST_ID, T)).toBeNull();
+        expect(await getPeekPost(POST_ID, T)).toBe('stopped');
+    });
+
+    it('only the node\'s refusal is "stopped"; no connection, a 429 or a 5xx is "unreachable", as on the phone', async () => {
+        for (const status of [401, 403, 404]) {
+            fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'members only', code: 'members_only' }), { status }));
+            expect(await getPeekPost(POST_ID, T)).toBe('stopped');
+        }
+        for (const status of [429, 500, 502, 503]) {
+            fetchMock.mockResolvedValueOnce(new Response('<html>Bad gateway</html>', { status }));
+            expect(await getPeekPost(POST_ID, T)).toBe('unreachable');
+        }
+        fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        expect(await getPeekPost(POST_ID, T)).toBe('unreachable');
+    });
+
+    it('a community that couldn\'t be reached is never called a stopped link: it says so, with Try again and the doors', async () => {
+        vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(DESKTOP);
+        fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} />);
+        await screen.findByTestId('peek-unreachable');
+        expect(screen.getByText("Can't reach that community right now. Check your connection and try again.")).toBeTruthy();
+        expect(screen.queryByText('This link has stopped working. Ask the member who sent it for a new one.')).toBeNull();
+        expect(screen.getByTestId('peek-invite')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('peek-retry'));
+        await screen.findByTestId('peek-page');
+        expect(screen.getByText('Ladder to lend')).toBeTruthy();
+    });
+
+    it('a 429 or a server error is the same: not a stopped link', async () => {
+        for (const status of [429, 503]) {
+            fetchMock.mockResolvedValueOnce(new Response('', { status }));
+            const { unmount } = render(<PeekPage postId={POST_ID} ticket={T} onWelcome={() => {}} />);
+            await screen.findByTestId('peek-unreachable');
+            expect(screen.queryByTestId('peek-stopped')).toBeNull();
+            unmount();
+        }
     });
 });
 
@@ -155,7 +191,7 @@ describe('sharing outside, and the member\'s list', () => {
     it('is not offered for an event that has ended or was cancelled: it stays active until the scrub, and the node refuses it', async () => {
         const { shareableOutside } = await import('../components/SharePost');
         const now = Date.parse('2026-10-29T00:00:00Z');
-        const event = { type: 'event' as const, audienceScope: 'public' as const, status: 'active', active: true };
+        const event = { type: 'event' as const, audienceScope: 'public' as const, status: 'active' as const, active: true };
         expect(shareableOutside({ ...event, eventEndAt: '2026-11-01T00:00:00Z' }, now)).toBe(true);
         expect(shareableOutside({ ...event, eventEndAt: '2026-10-28T00:00:00Z' }, now)).toBe(false);
         expect(shareableOutside({ ...event, eventEndAt: '2026-11-01T00:00:00Z', eventState: 'cancelled' }, now)).toBe(false);

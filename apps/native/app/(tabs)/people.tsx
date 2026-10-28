@@ -1021,20 +1021,17 @@ export default function PeopleScreen() {
                                 {listNote === 'noArea' && (
                                     <Pressable
                                         onPress={() => router.push('/your-area' as any)}
-                                        style={({ pressed }) => [
-                                            {
-                                                marginTop: 16,
-                                                paddingVertical: 10,
-                                                paddingHorizontal: 20,
-                                                borderRadius: 10,
-                                                backgroundColor: colors.brand.fill,
-                                                opacity: pressed ? 0.8 : 1,
-                                                minHeight: 48,
-                                                minWidth: 48,
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                            },
-                                        ]}
+                                        style={{
+                                            marginTop: 16,
+                                            paddingVertical: 10,
+                                            paddingHorizontal: 20,
+                                            borderRadius: 10,
+                                            backgroundColor: colors.brand.fill,
+                                            minHeight: 48,
+                                            minWidth: 48,
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                        }}
                                         accessibilityRole="button"
                                         accessibilityLabel={t('Set your area')}
                                         testID="people-community-set-area"

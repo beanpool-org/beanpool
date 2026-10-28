@@ -60,7 +60,8 @@ vi.mock('react-native', () => {
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
         if (allowFontScaling === false) attrs['data-noscale'] = 'true';
         if (adjustsFontSizeToFit) attrs['data-fit'] = 'true';
-        attrs['data-style'] = JSON.stringify(flat(props.style));
+        const st = typeof props.style === 'function' ? props.style({ pressed: false }) : props.style;
+        attrs['data-style'] = JSON.stringify(flat(st));
         if (tag === 'input') attrs.placeholder = props.placeholder;
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };

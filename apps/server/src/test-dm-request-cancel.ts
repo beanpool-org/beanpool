@@ -12,7 +12,12 @@
  *   8. a withdrawn line leaves a `messages` tombstone, and its photo row, stored object and overlays go with it
  *  10. after a cancel, the person it was for cannot accept it (Marty, 28 Oct 2026): Accept and Ignore 404, and their line,
  *      their asking for the chat or their adding the opener accepts nothing; their line or asking is a request of their own
- *      to the opener. An open with nothing written in it yet (never withdrawn) is accepted by their asking, as before
+ *      to the opener. An open with nothing written in it yet (never withdrawn) is accepted by their asking, as before.
+ *      While the opener blocks them (PR #2540 review 4396980737), their line or asking leaves the opener's row, list and
+ *      chat as the opener left them, and reaches the opener by no push or socket; to them it is a request of their own all
+ *      the same: read as theirs, a second line and a reaction refused, Accept the opener's 403, their cancel withdrawing
+ *      their line. Once the block is lifted, the line kept during it is no request's line, and their next line is
+ *      (turning the request round, under the opener's Requests)
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-dm-request-cancel.ts
  */
@@ -411,6 +416,90 @@ const sidAsks = await openWith(sid, ray);
 assert(sidAsks.status === 200 && sidAsks.body.conversation?.id === rsConv && sidAsks.body.conversation?.request?.state === 'accepted' && reqRow(rsConv)?.from_pubkey === ray.pk,
     `Ray's open with nothing in it is accepted by Sid asking for the chat, as before (${sidAsks.status}, ${JSON.stringify(sidAsks.body.conversation?.request)})`);
 
+// A block the opener made (PR #2540 review 4396980737): what a blocked member does never reaches the person who blocked
+// them. Vic cancels her request to Wes and blocks him; Wes writes. The row stays as she left it: her list and her chat read
+// as before, and nothing is pushed or rung to her. To Wes it is a request of his own, as it is to anyone she hasn't blocked
+// (Ola above): he reads it as his, his second line and a reaction are refused, Accept is an opener's refusal, and his
+// cancel withdraws his line.
+const requestRow = (c: string) => JSON.stringify(db.prepare('SELECT from_pubkey, to_pubkey, state, requested_at, decided_at, accepted_by, state_before FROM dm_requests WHERE conversation_id = ?').get(c));
+const requestIn = (l: any, c: string) => JSON.stringify((l?.conversations || []).find((x: any) => x.id === c)?.request ?? null);
+const readOf = async (id: Id, c: string) => (await call('GET', id, `/api/messages/${c}`)).body.conversation?.request;
+const vic = member('Vic');
+const wes = member('Wes');
+const vicSock = await socket(vic);
+const vwConv: string = (await openWith(vic, wes)).body.conversation.id;
+await sendIn(vwConv, vic);
+const vicCancels = await call('POST', vic, '/api/messages/request', { conversationId: vwConv, decision: 'cancel' });
+const vicBlocks = await call('POST', vic, '/api/blocks', { targetPubkey: wes.pk });
+const vwRowLeft = requestRow(vwConv);
+const vicListLeft = await listOf(vic);
+const vicReadLeft = await readOf(vic, vwConv);
+const vicHeard = vicSock.events.length;
+const vicNotices = noticesTo(vic).length;
+const wv1 = await sendIn(vwConv, wes);
+await new Promise(r => setTimeout(r, 200));
+const vicList = await listOf(vic);
+const vicRead = await readOf(vic, vwConv);
+assert(vicCancels.status === 200 && vicBlocks.status === 200 && wv1.status === 200 && requestRow(vwConv) === vwRowLeft,
+    `Wes's line while Vic blocks him leaves her request's row as she left it (${wv1.status}, ${requestRow(vwConv)})`);
+assert(inChats(vicList, vwConv) && !inRequests(vicList, vwConv) && requestIn(vicList, vwConv) === requestIn(vicListLeft, vwConv)
+    && JSON.stringify(vicRead) === JSON.stringify(vicReadLeft) && vicRead?.from === vic.pk && vicRead?.nextLineIsRequest === true,
+    `Vic's list and chat read as she left them: her own request, her next line its line (${requestIn(vicList, vwConv)}, ${JSON.stringify(vicRead)})`);
+assert(noticesTo(vic).length === vicNotices && !vicSock.events.slice(vicHeard).some(e => e.conversationId === vwConv),
+    `nothing is pushed or rung to Vic (${noticesTo(vic).length - vicNotices} pushes, ${JSON.stringify(vicSock.events.slice(vicHeard).map(e => e.type))})`);
+const wesRead = await readOf(wes, vwConv);
+const wesList = await listOf(wes);
+assert(wesRead?.from === wes.pk && wesRead?.state === 'pending' && wesRead?.nextLineIsRequest === false
+    && inChats(wesList, vwConv) && JSON.parse(requestIn(wesList, vwConv))?.from === wes.pk,
+    `to Wes it is a request of his own, as to anyone Vic hasn't blocked: his, waiting, in his chats (${JSON.stringify(wesRead)}, ${requestIn(wesList, vwConv)})`);
+const wv2 = await sendIn(vwConv, wes);
+const wesReacts = await call('POST', wes, '/api/messages/react', { messageId: wv1.body.message?.id, authorPubkey: wes.pk, emoji: '👍' });
+const wesAccepts = await call('POST', wes, '/api/messages/request', { conversationId: vwConv, decision: 'accept' });
+assert(wv2.status === 403 && wv2.body.code === 'dm_request_pending' && wesReacts.status === 403 && wesReacts.body.code === 'dm_request_pending'
+    && wesAccepts.status === 403 && wesAccepts.body.code === 'not_request_recipient',
+    `his second line and his reaction are refused as any waiting opener's, and Accept is an opener's refusal (${wv2.status} ${wv2.body.code}, ${wesReacts.status} ${wesReacts.body.code}, ${wesAccepts.status} ${wesAccepts.body.code})`);
+const wesCancels = await call('POST', wes, '/api/messages/request', { conversationId: vwConv, decision: 'cancel' });
+const wesKept = (db.prepare('SELECT COUNT(*) AS n FROM withheld_lines WHERE id = ?').get(wv1.body.message?.id) as { n: number }).n;
+const wv3 = await sendIn(vwConv, wes);
+const wesAgain = await sendIn(vwConv, wes);
+assert(wesCancels.status === 200 && wesCancels.body.request?.from === wes.pk && wesCancels.body.request?.nextLineIsRequest === true && wesKept === 0
+    && wv3.status === 200 && wesAgain.status === 403 && requestRow(vwConv) === vwRowLeft && JSON.stringify(await readOf(vic, vwConv)) === JSON.stringify(vicReadLeft),
+    `Wes cancels his own: his kept line goes, his next line is its line again, and Vic's row and chat stay as she left them (${wesCancels.status}, ${JSON.stringify(wesCancels.body.request)}, kept ${wesKept}, ${wv3.status}, ${wesAgain.status})`);
+// Once Vic lifts the block, the line kept during it never reaches her, so it is no request's line: his next line is, as a
+// blocked opener's is after a lift, and it turns the request round, under her Requests.
+const vicLifts = await call('POST', vic, '/api/blocks/remove', { targetPubkey: wes.pk });
+const wesReadLifted = await readOf(wes, vwConv);
+const wv4 = await sendIn(vwConv, wes);
+const vicListLifted = await listOf(vic);
+assert(vicLifts.status === 200 && wesReadLifted?.from === wes.pk && wesReadLifted?.nextLineIsRequest === true && wv4.status === 200
+    && reqRow(vwConv)?.from_pubkey === wes.pk && reqRow(vwConv)?.to_pubkey === vic.pk && reqRow(vwConv)?.state === 'pending' && inRequests(vicListLifted, vwConv),
+    `once Vic lifts the block, Wes's next line is the request's, under her Requests (${JSON.stringify(wesReadLifted)}, ${wv4.status}, ${JSON.stringify(reqRow(vwConv))}, requests ${inRequests(vicListLifted, vwConv)})`);
+// The same by asking for the chat (Message on her profile): Yas, whom Xan blocked after her cancel, gets the answer anyone
+// gets, a request of his own with his next line its line, and Xan's row and chat stay as she left them.
+const xan = member('Xan');
+const yas = member('Yas');
+const xyConv: string = (await openWith(xan, yas)).body.conversation.id;
+await sendIn(xyConv, xan);
+const xanCancels = await call('POST', xan, '/api/messages/request', { conversationId: xyConv, decision: 'cancel' });
+const xanBlocks = await call('POST', xan, '/api/blocks', { targetPubkey: yas.pk });
+const xyRowLeft = requestRow(xyConv);
+const xanReadLeft = JSON.stringify(await readOf(xan, xyConv));
+const yasAsks = await openWith(yas, xan);
+const yasReads = await readOf(yas, xyConv);
+assert(xanCancels.status === 200 && xanBlocks.status === 200 && yasAsks.status === 200 && yasAsks.body.conversation?.id === xyConv
+    && yasAsks.body.conversation?.request?.from === yas.pk && yasAsks.body.conversation?.request?.state === 'pending'
+    && yasAsks.body.conversation?.request?.nextLineIsRequest === true && yasReads?.from === yas.pk && yasReads?.nextLineIsRequest === true,
+    `Yas asking for the chat while Xan blocks him: a request of his own, his next line its line, as Quin's (${yasAsks.status}, ${JSON.stringify(yasAsks.body.conversation?.request)}, ${JSON.stringify(yasReads)})`);
+const xanList = await listOf(xan);
+assert(requestRow(xyConv) === xyRowLeft && JSON.stringify(await readOf(xan, xyConv)) === xanReadLeft && inChats(xanList, xyConv) && !inRequests(xanList, xyConv),
+    `and Xan's row, list and chat stay as she left them (${requestRow(xyConv)}, chats ${inChats(xanList, xyConv)})`);
+const yx1 = await sendIn(xyConv, yas);
+const yx2 = await sendIn(xyConv, yas);
+assert(yx1.status === 200 && yx2.status === 403 && yx2.body.code === 'dm_request_pending' && requestRow(xyConv) === xyRowLeft
+    && JSON.stringify(await readOf(xan, xyConv)) === xanReadLeft,
+    `his line is its line, his second refused, and Xan's row and chat still as she left them (${yx1.status}, ${yx2.status} ${yx2.body.code})`);
+
+vicSock.ws.close();
 natSock.ws.close();
 ginaSock.ws.close();
 bobSock.ws.close();

@@ -1958,6 +1958,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN closing_on TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none'))`).run(); } catch { }
+    // A request of their own the person a withdrawn message request was for made while its opener blocked them
+    // (engine/dm-requests.ts reachedOutRow). No table yet on a database from before message requests: schema.sql makes it.
+    try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reached_out_at TEXT`).run(); } catch { }
     // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
     try {
         const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;

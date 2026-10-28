@@ -3,7 +3,7 @@ slug: messages
 title: Messages
 summary: Start a chat, send photos, reply, react, edit, delete, mute, and what is private.
 help: Your chats. A chat with one person is locked end to end. Tap a chat to open it, or start one from a post or from your friends.
-related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
+related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed, how-this-community-works
 ---
 
 ## Your chats
@@ -30,6 +30,14 @@ At the top of a chat with one person, tapping their name opens their profile (an
 - From a post: tap **Message** and the person's name.
 
 In the web app, use **Message** on their profile, 💬 on their row under **People**, **✉️ New DM**, or the **💬 Message** button on a post.
+
+## Message requests
+
+Where your community's owners have turned on message requests, a first message from someone you have not added as a friend, messaged before, or traded with waits under **Requests** until you accept it.
+
+You can read the message before deciding. The sender cannot write anything more until you accept, and they are never told if you ignore the request or block them. Messages from your community's admins and moderators, and chats that come with a trade, always arrive straight away.
+
+If your community turns message requests off, every message arrives straight away, and any request still waiting becomes an ordinary chat. See "How this community works".
 
 ## Sending
 

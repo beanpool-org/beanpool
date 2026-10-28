@@ -11,6 +11,8 @@ A visual map of every screen in node Settings. Tap any picture to open that scre
 
 [![The Home screen in Settings](images/home.webp)](the-settings-screens)
 
+[![How this community works](images/home.webp)](how-this-community-works)
+
 [![The first-time setup wizard](images/cold-start.webp)](first-time-setup)
 
 [![Signing in to Settings](images/sign-in.webp)](signing-in)

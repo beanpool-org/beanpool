@@ -1511,7 +1511,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * callsign here gave the same person another face one tap later (#2511 review).
      */
     function renderAvatar(avatarUrl: string | null | undefined, faceKey: string, size = 40, style?: React.CSSProperties) {
-        const resolved = resolveAvatarUrl(avatarUrl, faceKey) || '/avatars/avatar_bean_green.jpg';
+        const resolved = resolveAvatarUrl(avatarUrl, faceKey) || '/avatars/avatar_bean_green.webp';
         return (
             <img
                 src={resolved}

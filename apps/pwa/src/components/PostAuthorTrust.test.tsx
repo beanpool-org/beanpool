@@ -72,7 +72,7 @@ describe('PostAuthorTrust face', () => {
         expect(screen.queryByText('R')).toBeNull();
         const img = container.querySelector('img');
         expect(img?.getAttribute('src')).toBe(resolveAvatarUrl(null, KEY));
-        expect(img?.getAttribute('src')).toMatch(/^\/avatars\/avatar_[a-z_]+\.jpg$/);
+        expect(img?.getAttribute('src')).toMatch(/^\/avatars\/avatar_[a-z_]+\.webp$/);
     });
 
     it('a photo is drawn as it was', () => {

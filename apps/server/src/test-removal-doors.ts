@@ -20,12 +20,14 @@
  *     Decisions about a member still open; a pause still opens the node's own removal vote.
  *  4. An open removal a member proposed before this version still ends: one passes, waits out its grace window and the
  *     member is removed at its end; one the community turns down just fails, the member untouched.
- *  5. What stays: the owner's prune branch (design §10 Q5, until slice S5), still the owner's alone; Accelerate on a passed
- *     removal; and the admin brake (Q12): a plain admin halts a passed removal and the member is back.
+ *  5. What stays: the owner's prune branch (design §10 Q5, until slice S5), still the owner's alone, and a branch's: a
+ *     "branch" of one member (who invited nobody, or whose invitees are all gone already) is refused as Prune is, before any
+ *     fresh proof, and in the engine; Accelerate on a passed removal; and the admin brake (Q12): a plain admin halts a
+ *     passed removal and the member is back.
  *  6. The sweep: every admin route that removes or offboards someone, each with a fresh member of its own, on this node
  *     where the community votes: what each answers, and nothing changed where it refused.
  *  7. Votes off (the operator's switch, Q11): an admin removes directly, and offboards without a vote; the owners are told
- *     of each, as an admin's removal.
+ *     of each, as an admin's removal. An owner's prune branch of one member goes through too.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-removal-doors.ts
  */
@@ -325,6 +327,37 @@ async function main() {
     const branchEngine = refusalOf(() => se.adminPruneBranch(root2.pubKeyHex, ada.pubKeyHex));
     assert(branchEngine.status === 400 && SAYS_VOTE.test(branchEngine.message) && statusOf(root2) === 'active',
         `underneath, the branch is an owner's door only: an admin reaching adminPruneBranch is refused (${branchEngine.status}: ${branchEngine.message.slice(0, 60)})`);
+    // And it is a door for a branch, not for one member (review 4397436860): a member who invited nobody, or whose invitees
+    // are all gone already, is a branch of one, and removing them alone is the direct removal only the vote makes here.
+    const loner = seedMember('BranchOfOne');
+    const emptied = seedMember('BranchEmptied');
+    const goneAlready = seedMember('BranchGoneAlready', emptied.pubKeyHex);
+    se.adminPruneUser(goneAlready.pubKeyHex, se.COMMUNITY_DECISION_ACTOR);
+    // A row stored under another spelling of a key is nobody's account (test-doors-key-case), so it makes no branch either.
+    const strayOnly = seedMember('BranchStrayOnly');
+    db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
+        .run(keypair('StrayInvitee').pubKeyHex.toUpperCase(), 'StrayInvitee', ago(DAY), strayOnly.pubKeyHex, 'OLD-DOOR');
+    const accountsBeforeOne = accountsNow();
+    for (const [who, session] of [['an owner', () => gwenSession], ['the password', password]] as const) {
+        for (const [what, one] of [['a member who invited nobody', loner], ['one whose only invitee is gone already', emptied],
+            ['one whose only invitee is a row in another spelling of a key', strayOnly]] as const) {
+            fresh();
+            const r = await admin('POST', `/api/local/admin/branches/${one.pubKeyHex}/prune`, session(), {});
+            assert(r.status === 400 && r.body?.code === 'removal_is_the_vote' && SAYS_VOTE.test(r.body?.error ?? ''),
+                `${who}'s prune branch of ${what} is refused 400 as Prune is: it would remove one member (${r.status} ${r.text.slice(0, 160)})`);
+        }
+    }
+    assert(statusOf(loner) === 'active' && statusOf(emptied) === 'active' && statusOf(strayOnly) === 'active' && accountsNow() === accountsBeforeOne,
+        `all three are still active and no Bean moved (${statusOf(loner)}, ${statusOf(emptied)}, ${statusOf(strayOnly)})`);
+    fresh();
+    const ottoBranch = await admin('POST', `/api/local/admin/branches/${otto.pubKeyHex}/prune`, gwenSession, {});
+    assert(ottoBranch.status === 400 && ottoBranch.body?.code === 'removal_is_the_vote' && statusOf(otto) === 'active',
+        `an owner's prune branch of another owner who invited nobody is refused the same way, before any fresh proof is asked (${ottoBranch.status} ${ottoBranch.text.slice(0, 160)})`);
+    for (const [who, actor] of [['an owner', gen.pubKeyHex], ['the password', 'owner:password']] as const) {
+        const refused = refusalOf(() => se.adminPruneBranch(loner.pubKeyHex, actor));
+        assert(refused.status === 400 && SAYS_VOTE.test(refused.message) && statusOf(loner) === 'active',
+            `underneath, adminPruneBranch refuses ${who} a branch of one too (${refused.status}: ${refused.message.slice(0, 60)})`);
+    }
 
     const ace = seedMember('AcceleratedAce');
     const aceVote = await pause(ace);
@@ -357,6 +390,9 @@ async function main() {
         { route: 'offboard preview', method: 'GET', path: pk => `/api/local/admin/members/${pk}/offboard/preview`, session: () => adaSession, status: 400 },
         { route: 'status pruned', method: 'POST', path: pk => `/api/local/admin/users/${pk}/status`, session: () => adaSession, body: () => ({ status: 'pruned' }), status: 400 },
         { route: 'prune branch, an admin', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: () => adaSession, status: 403 },
+        // Each target invited nobody: its branch is one member.
+        { route: 'prune branch of one, an owner', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: () => gwenSession, status: 400 },
+        { route: 'prune branch of one, the password', method: 'POST', path: pk => `/api/local/admin/branches/${pk}/prune`, session: password, status: 400 },
         { route: 'burst removal (no open door here)', method: 'POST', path: pk => `/api/local/admin/members/${pk}/burst/remove`, session: () => gwenSession, body: pk => ({ members: [pk], count: 1 }), status: 404 },
         { route: 'accelerate an open vote', method: 'POST', path: () => `/api/local/admin/decisions/${openVote.id}/accelerate`, session: () => adaSession, status: 400 },
     ];
@@ -400,6 +436,11 @@ async function main() {
     assert(vicOff.status === 200 && statusOf(vic) === 'pruned' && se.getCommonsBalanceExact() === commonsBeforeVic + 50,
         `and offboards Vic, his 50 Beans to the Commons (${vicOff.status} ${vicOff.text.slice(0, 120)}; ${statusOf(vic)})`);
     assert(adminRemovals() === toldBeforeVera + 2, `that is an admin's removal the owners are told of too (${adminRemovals() - toldBeforeVera})`);
+    const wynn = seedMember('VotesOffWynn');
+    fresh();
+    const wynnBranch = await admin('POST', `/api/local/admin/branches/${wynn.pubKeyHex}/prune`, gwenSession, {});
+    assert(wynnBranch.status === 200 && statusOf(wynn) === 'pruned',
+        `and an owner's prune branch of one removes the member, as Prune does with votes off (${wynnBranch.status} ${wynnBranch.text.slice(0, 120)}; ${statusOf(wynn)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

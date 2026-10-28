@@ -8583,7 +8583,7 @@ export const REMOVAL_IS_THE_VOTE_CODE = 'removal_is_the_vote';
  * is let through only on its own condition, checked there, never on the caller's word:
  *  - 'direct': an admin's own removal (Prune, a burst's removal, the offboarding wizard where votes are off);
  *  - 'owner-branch': an owner's prune branch (adminPruneBranch), the one exception kept until the branch vote (slice S5;
- *    design §10 Q5), by an owner-level actor only;
+ *    design §10 Q5), by an owner-level actor only, and for a branch of more than one member (branchPruneDoor);
  *  - 'settles-removal': the offboarding wizard settling a removal the community voted for (§2 row 5, Q6), only while one
  *    waits out its grace window for this member (member-wizards.ts executeOffboard).
  */
@@ -9050,14 +9050,40 @@ export function inviteBranchOf(rootPublicKey: string): string[] {
 }
 
 /**
+ * The way an owner's prune branch reaches adminPruneUser (PruneDoor): 'owner-branch' only for a branch. A member who invited
+ * nobody, or whose invitees are all gone already, is a branch of one, and removing them alone is the direct removal that
+ * only the community's vote makes where it votes (§10 Q4), not the exception kept for a branch until the branch vote (Q5;
+ * review 4397436860). So it counts whom the prune would remove: the members' accounts in the subtree (a stray row is
+ * nobody's) that are not removed already.
+ */
+export function branchPruneDoor(branch: string[]): PruneDoor {
+    const removes = branch.filter((pubkey) => isMemberKeySpelling(pubkey)
+        && (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pubkey) as { status: string } | undefined)?.status !== 'pruned').length;
+    return removes > 1 ? 'owner-branch' : 'direct';
+}
+
+/** Why this owner's prune branch may not be made here, or null: the check adminPruneBranch makes, which the route asks first. */
+export function branchRemovalRefusal(rootPublicKey: string, actor: string): string | null {
+    const branch = inviteBranchOf(rootPublicKey);
+    const door = branchPruneDoor(branch);
+    for (const pubkey of branch) {
+        const refusal = removalVoteRefusal(pubkey, actor, door);
+        if (refusal) return refusal;
+    }
+    return null;
+}
+
+/**
  * An owner removes a member and their whole invite subtree. Where the community votes, this is the one removal an owner
- * still makes without it, until the branch vote (removal by vote S5; design §10 Q5): PruneDoor 'owner-branch'.
+ * still makes without it, until the branch vote (removal by vote S5; design §10 Q5): PruneDoor 'owner-branch', for a
+ * branch of more than one (branchPruneDoor).
  */
 export function adminPruneBranch(rootPublicKey: string, actor: string) {
     // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
     // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
     const branch = inviteBranchOf(rootPublicKey);
-    for (const pubkey of branch) assertMayPrune(pubkey, actor, 'owner-branch');
+    const door = branchPruneDoor(branch);
+    for (const pubkey of branch) assertMayPrune(pubkey, actor, door);
     // The node must keep an active owner. Checked for the branch as a whole, not member by member: two
     // co-owners in one branch are each not the sole owner until the first is pruned.
     // Same terms as isSoleOwner: an owner in the branch (an active one, or one whose key waits on a re-key code), and no
@@ -9070,7 +9096,7 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
     if (owners.some(o => inBranch.has(o.member_pubkey)) && !owners.some(o => o.acts && !inBranch.has(o.member_pubkey))) {
         throw new Error("This branch holds the node's only owner, so nobody in it was pruned. Appoint another owner outside the branch first");
     }
-    for (const pubkey of branch) adminPruneUser(pubkey, actor, 'owner-branch');
+    for (const pubkey of branch) adminPruneUser(pubkey, actor, door);
 }
 
 export function adminBroadcastAnnouncement(title: string, body: string, severity: 'info'|'warning'|'critical') {

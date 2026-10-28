@@ -32,7 +32,7 @@ import {
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, pushServiceRefusals,
     hideBurst, undoBurst,
-    removalVoteRefusal, REMOVAL_IS_THE_VOTE_CODE,
+    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
@@ -1946,6 +1946,14 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    // Where the community votes, a branch of one (a member who invited nobody) is a direct removal (state-engine
+    // branchPruneDoor): refused in words, as Prune is, before an owner's fresh proof is spent on it.
+    const refusal = branchRemovalRefusal(ctx.params.pubkey, actor);
+    if (refusal) {
+        ctx.status = 400;
+        ctx.body = { error: refusal, code: REMOVAL_IS_THE_VOTE_CODE };
+        return;
+    }
     if (!(await ownerRemovalProof(ctx, 'prune-branch', ctx.params.pubkey, actor))) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
@@ -1953,7 +1961,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = e?.status || 400;
-        ctx.body = { error: e?.message || 'Failed to prune branch' };
+        ctx.body = { error: e?.message || 'Failed to prune branch', code: e?.code };
     }
 });
 

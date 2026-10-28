@@ -402,6 +402,7 @@ export const SUITES = [
     'test-one-open-deal',
     'test-non-members-cant-act',
     'test-marketplace-auth',
+    'test-marketplace-list',
     'test-listing-edit-numbers',
     'test-post-fields',
     'test-sync-author-off-board',

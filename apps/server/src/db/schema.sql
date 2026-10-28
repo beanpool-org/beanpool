@@ -111,8 +111,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- unlike updated_at, a bio, contact or mute never moves it. The one thing beyond the board: when an off-board
     -- enterprise's keepers changed (not who). That is public where /api/treasuries is (it lists keepers with grantedAt);
     -- on a node with the visitors' view and enterprises on, /api/treasuries is members-only and an unsigned delta still
-    -- shows that timing: accepted (#1252's review 4115723106; global has enterprises off). NULL: never changed since
-    -- this column came in.
+    -- shows that timing: accepted (#1252's review 4115723106; global has enterprises off). And when an enterprise's
+    -- banner was set, replaced or taken down, which its listings carry (engine/shops.ts enterpriseBannerMoved; Pictures
+    -- S6): the same kind of timing, about an enterprise, never a member. NULL: never changed since this column came in.
     -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same
     -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
     -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.
@@ -2841,8 +2842,10 @@ CREATE TABLE IF NOT EXISTS shops (
     -- category's emoji. Last, as db.ts adds it to an older database, before this file runs.
     photo_ref     TEXT
 );
--- An account's shop (shopOf).
-CREATE INDEX IF NOT EXISTS idx_shops_owner ON shops(owner_pubkey);
+-- An account's shop (shopOf), and an enterprise's newest one, whose banner its listings carry (engine posts.ts
+-- POST_ROW_SELECT, ORDER BY opened_at DESC): in this order, so that read is a search with no sort in every row of a list
+-- or a sync page (test-posts-sync-paged-cost). It took the place of idx_shops_owner (owner_pubkey alone; db.ts drops it).
+CREATE INDEX IF NOT EXISTS idx_shops_owner_opened ON shops(owner_pubkey, opened_at);
 
 -- A shop's banner, exactly as it was set (a data URL, its metadata stripped, ≤ 2 MB of image bytes: @beanpool/core
 -- MAX_PICTURE_BYTES), out of its row so no read of shops reads it, as a group's picture is (group_pictures). Served by GET

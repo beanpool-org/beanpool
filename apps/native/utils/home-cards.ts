@@ -126,7 +126,7 @@ export function cardRowName(c: Pick<HomeCardInstance, 'type' | 'settings'>, prof
 
 export interface HomeNeedsItem extends NeedsYouEntry { closesAt?: string }
 
-export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
+export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null }
 export interface HomeEventItem {
     id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
     /** The host's clock, its zone and online (DESIGN-event-times §4), when the node's Home answer carries them. */

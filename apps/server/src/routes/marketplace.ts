@@ -679,8 +679,19 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)
         || (!!reader && isTreasuryFast(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
         || (!!reader && !!p.acceptedBy && isTreasuryFast(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
-    const shown = guestView ? posts.map(guestPost)
+    const isMember = viewerTier(ctx) === 'member';
+    let shown = guestView ? posts.map(guestPost)
         : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p);
+    // A visitor (unsigned or non-member) gets no authorBannerUrl (DESIGN-pictures-fable.md §6 S6).
+    if (!isMember) {
+        shown = shown.map(p => {
+            if ('authorBannerUrl' in p) {
+                const { authorBannerUrl: _, ...rest } = p;
+                return rest as MarketplacePost;
+            }
+            return p;
+        });
+    }
     // A member's set answers its rows and the set's ids (DESIGN-global-sync-by-area §2.3): the phone drops what it holds
     // outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied to them, which
     // the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the bare list. The

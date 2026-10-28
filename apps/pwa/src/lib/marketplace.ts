@@ -78,6 +78,7 @@ export interface MarketplacePost {
     acceptedBy?: string;
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean;
+    authorBannerUrl?: string | null;
     lat?: number;
     lng?: number;
     pollOptions?: PollOption[];

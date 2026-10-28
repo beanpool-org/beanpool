@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
 import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
-import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
-import { refreshListingAfterPhotoError } from '../../utils/photo-refresh';
+import { marketCardPicture } from '../../utils/market-card-picture';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { refusalHere, type Refusal } from '../../utils/members-only-listings';
 import { marketEmptyState, refusalLines } from '../../utils/market-empty-state';
@@ -29,6 +28,7 @@ import { PollCard } from '../../components/PollCard';
 import { NewPollModal } from '../../components/NewPollModal';
 import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
 import { CategoryTile } from '../../components/CategoryTile';
+import { MarketCardPicture } from '../../components/MarketCardPicture';
 import { NewEventModal } from '../../components/NewEventModal';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
@@ -59,7 +59,7 @@ import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listPhotoUrl, readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
+import { readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -907,12 +907,16 @@ export default function MarketScreen() {
                         if (Array.isArray(photosArr)) {
                             photosArr = photosArr.map((url: string) => url && url.startsWith('/') ? `${anchorUrl}${url}` : url);
                         }
+                        const bannerUrl = p.authorBannerUrl || p.author_banner_url || null;
+                        const absoluteBannerUrl = bannerUrl && bannerUrl.startsWith('/') ? `${anchorUrl}${bannerUrl}` : bannerUrl;
                         return {
                             ...p,
                             photos: photosArr,
                             author_pubkey: p.author_pubkey ?? p.authorPublicKey,
                             author_callsign: p.author_callsign ?? p.authorCallsign,
                             author_avatar: p.author_avatar ?? p.authorAvatarUrl ?? null,
+                            author_banner_url: absoluteBannerUrl,
+                            authorBannerUrl: absoluteBannerUrl,
                             author_energy_cycled: p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
                             authorFoundingNeeded: p.authorFoundingNeeded ?? (p.author_founding_needed === 1),
                             author_founding_needed: p.author_founding_needed ?? (p.authorFoundingNeeded ? 1 : 0),
@@ -1505,13 +1509,8 @@ export default function MarketScreen() {
             );
         }
 
-        let coverImage: string | null = null;
-        if (item.photos) {
-            try {
-                const arr = Array.isArray(item.photos) ? item.photos : JSON.parse(item.photos);
-                if (arr.length > 0) coverImage = arr[0];
-            } catch {}
-        }
+        // Its own first photo, else its enterprise's shop banner, else the CategoryTile (utils/market-card-picture.ts).
+        const { cover: coverImage, picture } = marketCardPicture(item);
 
         const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || t('Unknown');
         const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
@@ -1541,16 +1540,17 @@ export default function MarketScreen() {
                     accessibilityRole={isPulse ? undefined : "button"}
                 >
                     <View style={styles.gridImageWrapper}>
-                        {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                            <Image source={{ uri: listPhotoUrl(coverImage) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
-                        ) : (
-                            <CategoryTile
-                                category={item.category}
-                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
-                                size="grid"
-                                style={styles.gridImage}
-                            />
-                        )}
+                        <MarketCardPicture
+                            postId={item.id}
+                            cover={coverImage}
+                            picture={picture}
+                            category={item.category}
+                            kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                            size="grid"
+                            accessibilityLabel={item.title}
+                            imageStyle={styles.gridImage}
+                            tileStyle={styles.gridImage}
+                        />
                         {/* One row along the photo's foot, the badges at its start and the price at its end. It wraps,
                             growing upwards: RECURRING and YOU in a longer language (or at 320dp and 1.3x) stack instead
                             of overlapping each other or the price, as fixed offsets did. */}
@@ -1634,15 +1634,15 @@ export default function MarketScreen() {
                 >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
                         <View style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', marginRight: 10 }}>
-                            {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                                <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
-                            ) : (
-                                <CategoryTile
-                                    category={item.category}
-                                    kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
-                                    size="thumb"
-                                />
-                            )}
+                            <MarketCardPicture
+                                postId={item.id}
+                                cover={coverImage}
+                                picture={picture}
+                                category={item.category}
+                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                                size="thumb"
+                                imageStyle={{ width: '100%', height: '100%' }}
+                            />
                         </View>
                         <View style={{ flex: 1, marginRight: 8, justifyContent: 'center' }}>
                             <Text style={styles.compactTitle} numberOfLines={1}>
@@ -1699,17 +1699,16 @@ export default function MarketScreen() {
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
-                    {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
-                    ) : (
-                        <View style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}>
-                            <CategoryTile
-                                category={item.category}
-                                kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
-                                size="thumb"
-                            />
-                        </View>
-                    )}
+                    <MarketCardPicture
+                        postId={item.id}
+                        cover={coverImage}
+                        picture={picture}
+                        category={item.category}
+                        kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
+                        size="thumb"
+                        imageStyle={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}
+                        tileBox={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}
+                    />
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>

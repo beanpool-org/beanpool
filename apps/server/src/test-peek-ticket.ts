@@ -10,7 +10,9 @@
  *   3. what a ticket never opens, each answered exactly as the same caller is answered with no ticket at all: a forged
  *      ticket, a malformed one, two of them, another post, the board, a read by `?id=`, a post's chat
  *   4. Stop sharing: only the member who shared it; their list names the post, never the ticket; stopped, it opens nothing
- *   5. run out (seven days), the post taken down, the sharer no longer a member: each opens nothing
+ *   5. run out (seven days), the post taken down, the sharer no longer a member: each opens nothing; and a post that
+ *      leaves the board after its link was made (an event ended or cancelled, a linked community's copy, its author on
+ *      holiday, paused or winding up, the post paused or hidden by reports) opens nothing at once; a poll opens, nobody in it
  *   6. the owners' switch "Members may share listings outside the community": off stops every link and refuses new ones,
  *      `features.shareOutside` goes; on again, the old links stay stopped and a new one works; a private preview opens
  *      nothing
@@ -298,6 +300,45 @@ async function main(): Promise<void> {
     assert(sameAsNoTicket(await peekRead(other.id, carolShare.body?.ticket), 'unsigned'), 'Carol no longer a member: her links open nothing');
     assert(sameAsNoTicket(await peekRead(event.id, evMade.body?.ticket), 'unsigned'), 'all of them');
     db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(carol.pk);
+
+    // A post that leaves the board after its link was made: each refusal visitorsPost makes, checked at the read, so a
+    // link made while the post was on the board opens nothing the moment it isn't. Alice shares; Dave writes the posts
+    // whose author is what changes, so her standing as a member is never what refuses.
+    console.log('\n── 5b. a post that leaves the board after its link was made ──');
+    const dave = member('SentinelDave');
+    const later: Array<[string, Id, (id: string) => void, Record<string, unknown>?]> = [
+        ['an event that has ended', bob, (id) => db.prepare('UPDATE posts SET event_start_at = ?, event_end_at = ? WHERE id = ?')
+            .run(new Date(Date.now() - 2 * DAY).toISOString(), new Date(Date.now() - DAY).toISOString(), id), { eventStartAt: startAt, eventEndAt: endAt }],
+        ['an event that was cancelled', bob, (id) => db.prepare("UPDATE posts SET event_state = 'cancelled' WHERE id = ?").run(id), { eventStartAt: startAt, eventEndAt: endAt }],
+        ['a linked community\'s copy', bob, (id) => db.prepare("UPDATE posts SET origin_node = 'peer-sentinel-node' WHERE id = ?").run(id)],
+        ['its author on holiday', dave, () => db.prepare("INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'holiday_mode', 'true')").run(dave.pk)],
+        ['its author paused', dave, () => db.prepare('UPDATE members SET paused = 1 WHERE public_key = ?').run(dave.pk)],
+        ['its author an enterprise winding up', dave, () => db.prepare("UPDATE members SET status = 'winding_up' WHERE public_key = ?").run(dave.pk)],
+        ['the post paused', bob, (id) => db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(id)],
+        ['the post hidden by reports', bob, (id) => db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ?').run(new Date().toISOString(), id)],
+    ];
+    for (const [label, author, flip, extra] of later) {
+        const kind = extra ? 'event' : 'offer';
+        const p = createPost(kind, kind === 'event' ? 'social' : 'tools', `Sentinel ${label}`, 'Soon off the board.', kind === 'event' ? 0 : 1, 'fixed',
+            author.pk, PLACE.lat, PLACE.lng, undefined, false, undefined, false, extra ?? {});
+        const s = await share(alice, p.id);
+        const opened = s.status === 201 && (await peekRead(p.id, s.body?.ticket)).status === 200;
+        flip(p.id);
+        const shut = sameAsNoTicket(await peekRead(p.id, s.body?.ticket), 'unsigned') && sameAsNoTicket(await peekRead(p.id, s.body?.ticket, outsider), 'outsider');
+        assert(opened && shut, `${label}: its link opened, and now opens nothing, unsigned or signed by a non-member (made ${s.status}, opened ${opened})`);
+        // Dave back on the board for the next case: each case is the one thing that changed.
+        db.prepare("DELETE FROM member_preferences WHERE public_key = ? AND pref_key = 'holiday_mode'").run(dave.pk);
+        db.prepare("UPDATE members SET paused = 0, status = 'active' WHERE public_key = ?").run(dave.pk);
+    }
+    // A poll may be shared too: what it asks, and nobody who voted.
+    const poll = createPost('poll', 'community', 'Sentinel which Saturday?', 'Pick one.', 0, 'fixed', bob.pk, PLACE.lat, PLACE.lng, [], false, undefined, false,
+        { pollOptions: [{ id: 'a', text: 'The first' }, { id: 'b', text: 'The second' }] })!;
+    const voted = await call('POST', `/api/marketplace/posts/${poll.id}/vote`, { id: carol, body: { optionId: 'a' } });
+    const pollShare = await share(alice, poll.id);
+    const pollRead = await peekRead(poll.id, pollShare.body?.ticket);
+    assert(voted.status === 200 && pollShare.status === 201 && pollRead.status === 200 && pollRead.body?.post?.type === 'poll'
+        && pollRead.body?.post?.title === 'Sentinel which Saturday?' && leaks(pollRead.text).length === 0 && !pollRead.text.includes(carol.pk),
+        `a poll: its link opens it, and nobody who voted (vote ${voted.status}, made ${pollShare.status}, read ${pollRead.status}${leaks(pollRead.text).length ? ` — ${leaks(pollRead.text).join(', ')}` : ''})`);
 
     // ── 6. the owners' switch ──────────────────────────────────────────────────────────────────
     console.log('\n── 6. "Members may share listings outside the community" ──');

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import type { AppColors } from '../../constants/colors';
@@ -7,7 +7,8 @@ import {
     communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
 import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
-import { cancelKnock, cardKnockLines, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
+import { cancelKnock, cardKnockLines, knockCardState, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
+import { findLineWords } from '../find-community-lines';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
 /** Shown through t() in the member's language. */
@@ -42,12 +43,16 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [watched, setWatched] = useState(false);
     const [activeKnocks, setActiveKnocks] = useState<readonly RememberedKnock[]>(knocks);
-    const [cancellingUrl, setCancellingUrl] = useState<string | null>(null);
+    /** The list as it is now, for a cancel that finishes after another one did (a press handler's closure is older). */
+    const latestKnocks = useRef<readonly RememberedKnock[]>(knocks);
+    const showKnocks = (list: readonly RememberedKnock[]) => { latestKnocks.current = list; setActiveKnocks(list); };
+    /** Every cancel still out: two waiting cards are normal, and each one's button is its own. */
+    const [cancellingUrls, setCancellingUrls] = useState<ReadonlySet<string>>(() => new Set());
     /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
     const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
-        setActiveKnocks(knocks);
+        showKnocks(knocks);
     }, [knocks]);
 
     // Only the communities this phone asked, once per knock it remembers.
@@ -72,15 +77,20 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                     text: t(FIND_COMMUNITY_WORDS.cancelRequest),
                     style: 'destructive',
                     onPress: async () => {
-                        setCancellingUrl(k.url);
+                        setCancellingUrls(was => new Set(was).add(k.url));
                         setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
                         const res = await cancelKnock(k.url, identity);
-                        setCancellingUrl(null);
+                        setCancellingUrls(was => { const left = new Set(was); left.delete(k.url); return left; });
                         if (res.ok) {
-                            const next = activeKnocks.filter(item => item.url !== k.url);
-                            setActiveKnocks(next);
+                            const next = latestKnocks.current.filter(item => item.url !== k.url);
+                            showKnocks(next);
                             onKnocksChange?.(next as RememberedKnock[]);
                         } else {
+                            // The community holds nothing open from this key (it lapsed, or was cancelled elsewhere): the
+                            // card says what it now answers and stops offering Cancel.
+                            if (res.status === 404 && res.code === 'not_found') {
+                                setStatuses(was => ({ ...was, [k.url]: { ok: true, value: { status: 'none' } } }));
+                            }
                             setCancelErrors(was => ({ ...was, [k.url]: res.message }));
                         }
                     },
@@ -133,7 +143,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 const status = statuses[k.url];
                 const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                 const answersLine = communityAnswersLine(comm?.answers);
-                const isCancelling = cancellingUrl === k.url;
+                const isCancelling = cancellingUrls.has(k.url);
 
                 if (status?.ok && status.value.status === 'approved') {
                     const approved = cardKnockLines([k], statuses)[0];
@@ -144,14 +154,14 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                     );
                 }
 
+                // What the community now says, as MyJoinRequests reads it: only a waiting request arrived and can be taken
+                // back. Nothing open there (`none`), or an answer that could not be read, is said as it is, with no Cancel.
+                const state = knockCardState(true, true, status);
+                const waiting = state.kind === 'waiting';
                 let arrivedLine: string;
-                if (status === undefined || status === null) {
-                    arrivedLine = t('Checking…');
-                } else if (status.ok) {
-                    arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
-                } else {
-                    arrivedLine = status.message;
-                }
+                if (state.kind === 'checking') arrivedLine = t('Checking…');
+                else if (waiting) arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
+                else arrivedLine = 'note' in state && state.note ? findLineWords(state.note) : '';
 
                 return (
                     <View key={k.url} style={[s.card, { marginHorizontal: 0, marginTop: 8, marginBottom: 8, paddingVertical: 10 }]} testID={`home-find-waiting-${k.url}`}>
@@ -166,19 +176,21 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                                 {answersLine}
                             </Text>
                         )}
-                        <View style={{ marginTop: 8 }}>
-                            <HomeButton
-                                colors={colors}
-                                text={isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
-                                a11y={isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
-                                busy={isCancelling}
-                                onPress={() => onCancelKnock(k)}
-                                testID={`home-find-cancel-${k.url}`}
-                            />
-                        </View>
+                        {waiting && (
+                            <View style={{ marginTop: 8 }}>
+                                <HomeButton
+                                    colors={colors}
+                                    text={isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                    a11y={isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                    busy={isCancelling}
+                                    onPress={() => onCancelKnock(k)}
+                                    testID={`home-find-cancel-${k.url}`}
+                                />
+                            </View>
+                        )}
                         {!!cancelErrors[k.url] && (
                             <Text style={[s.rowSub, { marginTop: 4, color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID={`home-find-cancel-error-${k.url}`}>
-                                {cancelErrors[k.url]}
+                                {findLineWords(cancelErrors[k.url])}
                             </Text>
                         )}
                     </View>

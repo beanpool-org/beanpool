@@ -375,7 +375,7 @@ describe('"Cancel my request" (front doors S1)', () => {
         const me = await member();
         await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' });
         answer = () => ({ status: 404, body: { error: 'There’s no open request to join to cancel.', code: 'not_found' } });
-        expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: 'There’s no open request to join to cancel.' });
+        expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: 'There’s no open request to join to cancel.', status: 404, code: 'not_found' });
         expect((await rememberedKnocks(me.publicKey)).map(k => k.url)).toEqual([COMMUNITY]);
         (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
         expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: KNOCK_MESSAGES.unreachable });

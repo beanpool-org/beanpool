@@ -43,7 +43,8 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
 
-vi.mock('../../utils/knock', () => ({
+vi.mock('../../utils/knock', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../utils/knock')>()),
     readKnockStatus: (...args: unknown[]) => readKnockStatusMock(...args),
     cancelKnock: (...args: unknown[]) => cancelKnockMock(...args),
     cardKnockLines: () => [],
@@ -53,7 +54,7 @@ import { setLanguage } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import type { DirectoryCommunity, GlobalHome } from '../community-directory';
-import type { RememberedKnock } from '../knock';
+import { KNOCK_MESSAGES, type RememberedKnock } from '../knock';
 import type { BeanPoolIdentity } from '../identity';
 
 const ME: BeanPoolIdentity = {
@@ -82,7 +83,7 @@ const knock: RememberedKnock = {
     sentAt: '2026-10-25T00:00:00.000Z',
 };
 
-async function render(knocks: RememberedKnock[]): Promise<HTMLElement> {
+async function render(knocks: RememberedKnock[], onKnocksChange?: (knocks: RememberedKnock[]) => void): Promise<HTMLElement> {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const card = createElement(FindCommunityBody, {
@@ -92,6 +93,7 @@ async function render(knocks: RememberedKnock[]): Promise<HTMLElement> {
         nodeUrl: null,
         point: { lat: -28.65, lng: 153.6 },
         colors: lightColors,
+        onKnocksChange,
     });
     await act(async () => {
         createRoot(host).render(card as unknown as Parameters<Root['render']>[0]);
@@ -242,5 +244,115 @@ describe('FindCommunityBody honest waiting card (Lounge L1)', () => {
         expect(button().textContent).toBe('Cancel my request');
         expect(button().getAttribute('aria-label')).toBe('Cancel my request');
         expect(button().getAttribute('aria-busy')).toBeNull();
+    });
+});
+
+describe('FindCommunityBody tells the truth about what the community now answers (Lounge L1, review of #2573)', () => {
+    const byron = 'https://byron.example.org';
+    const lismore = 'https://lismore.example.org';
+    const other: RememberedKnock = { url: lismore, name: 'Lismore BeanPool', key: 'lismore', sentAt: '2026-10-26T00:00:00.000Z' };
+    const arrived = (host: HTMLElement, url = byron) => host.querySelector(`[data-testid="home-find-waiting-arrived-${url}"]`)?.textContent;
+    const cancelButton = (host: HTMLElement, url = byron) => host.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLButtonElement | null;
+    const confirmCancel = async (host: HTMLElement, url: string, alertCall: number) => {
+        await act(async () => { cancelButton(host, url)!.click(); });
+        const destructive = alertMock.mock.calls[alertCall][2].find((b: any) => b.style === 'destructive');
+        let pending!: Promise<void>;
+        await act(async () => { pending = destructive.onPress(); });
+        // Wrapped: an async function handing back a promise would wait for it, and a cancel left out is meant to stay out.
+        return { pending };
+    };
+
+    it('a community with nothing open (lapsed, cancelled elsewhere) says "No answer came", with no Cancel under it', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'none' } });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).not.toBeNull();
+        expect(arrived(host)).toBe('No answer came. You can ask again.');
+        expect(arrived(host)).not.toBe('Your request arrived.');
+        expect(cancelButton(host)).toBeNull();
+    });
+
+    it('a read that could not be made says why in the member\'s language, with no Cancel', async () => {
+        const FR = { [KNOCK_MESSAGES.unreachable]: 'Impossible de joindre cette communauté. Vérifiez votre connexion et réessayez.' };
+        setLanguage('fr', [FR]);
+        readKnockStatusMock.mockResolvedValueOnce({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(arrived(host)).toBe(FR[KNOCK_MESSAGES.unreachable]);
+        expect(cancelButton(host)).toBeNull();
+    });
+
+    it('a refusal shows the community\'s own words exactly as sent, with no Cancel', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: false, kind: 'refused', status: 500, code: null, message: 'Back in an hour.' });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(arrived(host)).toBe('Back in an hour.');
+        expect(cancelButton(host)).toBeNull();
+    });
+
+    it('a failed cancel is worded in the member\'s language when the phone wrote it, and as sent when the community did', async () => {
+        const FR = { [KNOCK_MESSAGES.unreachable]: 'Impossible de joindre cette communauté. Vérifiez votre connexion et réessayez.' };
+        setLanguage('fr', [FR]);
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: KNOCK_MESSAGES.unreachable });
+        const host = await render([knock, other]);
+
+        await confirmCancel(host, byron, 0);
+        expect(host.querySelector(`[data-testid="home-find-cancel-error-${byron}"]`)?.textContent).toBe(FR[KNOCK_MESSAGES.unreachable]);
+
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'Not today.', status: 429, code: 'rate_limited' });
+        await confirmCancel(host, lismore, 1);
+        expect(host.querySelector(`[data-testid="home-find-cancel-error-${lismore}"]`)?.textContent).toBe('Not today.');
+    });
+
+    it('a cancel the community answers "not_found" stops offering Cancel, and the card says what it now answers', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+        expect(arrived(host)).toBe('Your request arrived.');
+
+        await confirmCancel(host, byron, 0);
+
+        expect(cancelButton(host)).toBeNull();
+        expect(arrived(host)).toBe('No answer came. You can ask again.');
+        expect(host.querySelector(`[data-testid="home-find-cancel-error-${byron}"]`)?.textContent).toBe('There is no open request from you here.');
+    });
+
+    it('two requests cancelled one after the other: the first does not come back, and each button is its own', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        let finishA: (r: { ok: boolean }) => void = () => {};
+        let finishB: (r: { ok: boolean }) => void = () => {};
+        cancelKnockMock
+            .mockReturnValueOnce(new Promise(resolve => { finishA = resolve; }))
+            .mockReturnValueOnce(new Promise(resolve => { finishB = resolve; }));
+        const changes: string[][] = [];
+        const host = await render([knock, other], list => changes.push(list.map(k => k.url)));
+        await act(async () => { await Promise.resolve(); });
+
+        const { pending: pendingA } = await confirmCancel(host, byron, 0);
+        const { pending: pendingB } = await confirmCancel(host, lismore, 1);
+
+        // B started while A is still out: A's button stays busy and a press on it does nothing; B's is busy too.
+        expect(cancelButton(host, byron)!.getAttribute('aria-busy')).toBe('true');
+        expect(cancelButton(host, lismore)!.getAttribute('aria-busy')).toBe('true');
+        await act(async () => { cancelButton(host, byron)!.click(); });
+        expect(alertMock).toHaveBeenCalledTimes(2);
+        expect(cancelKnockMock).toHaveBeenCalledTimes(2);
+
+        // A finishes first: it goes, B stays busy.
+        await act(async () => { finishA({ ok: true }); await pendingA; });
+        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).toBeNull();
+        expect(cancelButton(host, lismore)!.getAttribute('aria-busy')).toBe('true');
+        expect(changes).toEqual([[lismore]]);
+
+        // B finishes with the list as A left it: nothing of A is back, and Home is told neither is open.
+        await act(async () => { finishB({ ok: true }); await pendingB; });
+        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-waiting-${lismore}"]`)).toBeNull();
+        expect(changes).toEqual([[lismore], []]);
     });
 });

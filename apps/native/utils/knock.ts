@@ -202,9 +202,10 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
 /**
  * "Cancel my request" on `communityUrl`. Done, the phone remembers when (`cancelledAt`), so the card says so and offers no
  * "Ask to join" until the node would take one ({@link KNOCK_CANCEL_BLOCK_HOURS}). A community that has nothing open from
- * this key (it lapsed, or a member said yes meanwhile) answers 404 in its own words, shown as they are.
+ * this key (it lapsed, or a member said yes meanwhile) answers 404 `not_found` in its own words, shown as they are; the
+ * refusal carries its `status` and `code` so a card can stop offering Cancel for it.
  */
-export async function cancelKnock(communityUrl: string | null, identity: BeanPoolIdentity, now: Date = new Date()): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function cancelKnock(communityUrl: string | null, identity: BeanPoolIdentity, now: Date = new Date()): Promise<{ ok: true } | { ok: false; message: string; status?: number; code?: string | null }> {
     const origin = communityOrigin(communityUrl);
     if (!origin) return { ok: false, message: KNOCK_MESSAGES.noAddress };
     let res: Response;
@@ -214,8 +215,8 @@ export async function cancelKnock(communityUrl: string | null, identity: BeanPoo
         return { ok: false, message: KNOCK_MESSAGES.unreachable };
     }
     if (!res.ok) {
-        const { message } = await readError(res);
-        return { ok: false, message: message ?? KNOCK_MESSAGES.unreadable };
+        const { message, code } = await readError(res);
+        return { ok: false, message: message ?? KNOCK_MESSAGES.unreadable, status: res.status, code };
     }
     const knocks = await readStore(identity.publicKey);
     await writeStore(identity.publicKey, knocks.map(k => (k.url === origin ? { ...k, cancelledAt: now.toISOString() } : k)));

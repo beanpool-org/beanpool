@@ -64,7 +64,11 @@ vi.mock('../join-link', async (importOriginal) => ({
 }));
 vi.mock('../one-way-back', () => ({ finishOneWayBack: vi.fn(async () => undefined) }));
 const vault = vi.hoisted(() => ({ at: 'vault' as 'vault' | 'community' }));
-vi.mock('../vault-config', async (importOriginal) => ({ ...(await importOriginal<typeof import('../vault-config')>()), signInCopiesAt: () => vault.at }));
+// This build's place is `vault.at`; a community's rule, where one is passed, decides as the real one does (VR2).
+vi.mock('../vault-config', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../vault-config')>()),
+    signInCopiesAt: (rule?: string | null) => (rule === 'none' ? 'none' : rule === 'server' ? 'community' : vault.at),
+}));
 const words = vi.hoisted(() => ({ result: { ok: false, reason: 'mismatch' } as any }));
 vi.mock('../identity', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../identity')>()),
@@ -149,6 +153,24 @@ describe('"Add a sign-in as a second way back" in the pseudo-locale', () => {
         expect(lock.prompts).toEqual([pseudoLocalise('Confirm authentication to add a sign-in to your account.')]);
         expect(host.textContent).toContain(pseudoLocalise('✅ Sign-in added'));
         expect(host.textContent).toContain(pseudoLocalise('Your {provider} sign-in is added: your account now has the usual new-account limits. If you lose this phone, sign in with {provider} to get back in.').split('{provider}').join('Google'));
+        expect(bypassing(host, WRITTEN)).toEqual([]);
+    });
+
+    it('at a door whose community keeps no copies: no way back is promised, and the added notice says none was kept', async () => {
+        // The global community's rule as the door check kept it (utils/node-profile.ts), which join-link.ts links by: none.
+        store.map.set('beanpool_node_profiles', JSON.stringify({
+            'https://global.example': { profile: 'global', features: {}, checkedAt: new Date().toISOString(), recoveryCopies: 'none' },
+        }));
+        link.answer = { kind: 'linked', provider: 'google', enrolment: null, noCopies: true };
+        await renderIn('xx', sheet());
+        expect(host.querySelector('[role="heading"]')?.textContent).toBe(pseudoLocalise('Add a sign-in'));
+        expect(host.textContent).toContain(pseudoLocalise("Sign in once with an account you already have. The global community keeps no copies of members' accounts, so a sign-in only lifts the limits on new 12-words accounts: your 12 words are your way back. BeanPool never sees your password and never posts anything for you."));
+        expect(host.textContent).not.toContain(pseudoLocalise('Sign in once with an account you already have. If you lose this phone, it gets you back into your account, and it lifts the limits on new 12-words accounts. BeanPool never sees your password and never posts anything for you.'));
+        expect(bypassing(host, WRITTEN)).toEqual([]);
+        // 320 - 2 × 24 (the sheet's padding), at 1.3×.
+        expect(unfit(host, 320 - 48)).toEqual([]);
+        await click(host.querySelector('[data-sso="google"]'), 'Google');
+        expect(host.textContent).toContain(pseudoLocalise("Your {provider} sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back.").split('{provider}').join('Google'));
         expect(bypassing(host, WRITTEN)).toEqual([]);
     });
 
@@ -322,6 +344,14 @@ describe('the sentences join-link.ts, add-words.ts and door-work.ts write: in En
                 const answer = { kind: 'linked', provider: 'apple', enrolment } as Extract<LinkAnswer, { kind: 'linked' }>;
                 expect(linkedNoticeWords(answer)).toBe(linkedNotice(answer));
             }
+            // Where the deposit said it was kept, whatever this build's place (a `server` door in a vault build: the community).
+            for (const keptAt of ['vault', 'community'] as const) {
+                const answer = { kind: 'linked', provider: 'apple', enrolment: { ok: true, keptAt } } as unknown as Extract<LinkAnswer, { kind: 'linked' }>;
+                expect(linkedNoticeWords(answer), `kept at ${keptAt}, this build ${at}`).toBe(linkedNotice(answer));
+            }
+            // A door whose community keeps no copies: none was made, by design, and nothing failed.
+            const none = { kind: 'linked', provider: 'apple', enrolment: null, noCopies: true } as Extract<LinkAnswer, { kind: 'linked' }>;
+            expect(linkedNoticeWords(none), `no copies, this build ${at}`).toBe(linkedNotice(none));
         }
     });
 

@@ -215,6 +215,13 @@ describe('the sentences with a name, a number or a time in them', () => {
                 const answer = { kind: 'linked' as const, provider, enrolment };
                 heldTo(linkedNotice(answer), () => linkedNoticeWords(answer), [SSO_PROVIDER_NAMES[provider]]);
             }
+            // Where the deposit said the copy was kept (VR2), and a door whose community keeps none.
+            for (const keptAt of ['vault', 'community'] as const) {
+                const answer = { kind: 'linked' as const, provider, enrolment: { enrolled: [], generation: null, skipped: [], available: 1, keptAt } as KeeperEnrolmentResult };
+                heldTo(linkedNotice(answer), () => linkedNoticeWords(answer), [SSO_PROVIDER_NAMES[provider]]);
+            }
+            const none = { kind: 'linked' as const, provider, enrolment: null, noCopies: true as const };
+            heldTo(linkedNotice(none), () => linkedNoticeWords(none), [SSO_PROVIDER_NAMES[provider]]);
         }
     });
 

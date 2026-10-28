@@ -5,9 +5,9 @@ import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { authenticateUser } from '../utils/LocalAuth';
-import { linkSignIn, LINK_MESSAGES, type LinkAnswer, type LinkRefusal } from '../utils/join-link';
+import { doorCopiesAt, linkedAtVault, linkSignIn, LINK_MESSAGES, type LinkAnswer, type LinkRefusal } from '../utils/join-link';
 import { finishOneWayBack } from '../utils/one-way-back';
-import { signInCopiesAt } from '../utils/vault-config';
+import { signInCopiesAt, type SignInCopies } from '../utils/vault-config';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { welcomeLineWords } from './welcome/welcome-lines';
 import { t, word, type WordKey } from '@beanpool/core';
@@ -16,7 +16,8 @@ import { t, word, type WordKey } from '@beanpool/core';
  * "Add a sign-in as a second way back" (two-doors design §2.5), for a member who joined the global community with 12
  * words: Safety Backup, Settings and the "one way back" card open it. One sign-in, two jobs (utils/join-link.ts): it
  * becomes a way back, and the new-account limits become the usual ones. Every refusal is a sentence; a refusal
- * changes nothing. A sheet the member closes before the provider is done links nothing.
+ * changes nothing. A sheet the member closes before the provider is done links nothing. Where the door's community keeps
+ * no copies (its rule, vault rethink VR2), only the second job is done, and the sheet says so.
  *
  * No KeyboardProvider here (memory `keyboard-avoidance-pattern`): there is no text field.
  *
@@ -57,9 +58,13 @@ export function linkRefusalWords(answer: Extract<LinkAnswer, { kind: 'refused' }
 export function linkedNoticeWords(answer: Extract<LinkAnswer, { kind: 'linked' }>): string {
     const provider = SSO_PROVIDER_NAMES[answer.provider];
     if (!answer.enrolment) {
+        // The door's community keeps no copies (its rule, vault rethink VR2): none was made, by design.
+        if (answer.noCopies) {
+            return t("Your {provider} sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back.", { provider });
+        }
         return t("Your {provider} sign-in is added: your account now has the usual new-account limits. It couldn't keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.", { provider });
     }
-    return signInCopiesAt() === 'vault'
+    return linkedAtVault(answer)
         ? t('Your {provider} sign-in is added: your account now has the usual new-account limits. If you lose this phone, sign in with {provider} to get back in.', { provider })
         : t('Your {provider} sign-in is added: your account now has the usual new-account limits. If you lose this phone, sign in with {provider} to get back into the global community.', { provider });
 }
@@ -94,6 +99,8 @@ export function LinkSignInSheet({
     const [message, setMessage] = useState('');
     const [notice, setNotice] = useState<string | null>(null);
     const [linked, setLinked] = useState<Extract<LinkAnswer, { kind: 'linked' }> | null>(null);
+    /** Where a copy made at this door goes, as join-link.ts decides it: this build's place until the door's rule is read. */
+    const [copiesAt, setCopiesAt] = useState<SignInCopies>(() => signInCopiesAt());
     const abortRef = useRef<AbortController | null>(null);
     const s = styles(colors);
 
@@ -105,6 +112,14 @@ export function LinkSignInSheet({
             setLinked(null);
         }
     }, [visible]);
+    // The door's rule as the door check kept it (vault rethink VR2): where its community keeps no copies, a sign-in here
+    // only lifts the limits, and the sheet says so rather than promise a way back.
+    useEffect(() => {
+        if (!visible) return;
+        let live = true;
+        doorCopiesAt(url).then((at) => { if (live) setCopiesAt(at); }).catch(() => {});
+        return () => { live = false; };
+    }, [visible, url]);
     useEffect(() => () => abortRef.current?.abort(), []);
 
     const close = () => {
@@ -168,9 +183,11 @@ export function LinkSignInSheet({
                 <ScrollView style={s.sheetScroll} contentContainerStyle={s.sheet}>
                     {step === 'choose' && (
                         <>
-                            <Text style={s.title} accessibilityRole="header">{t('Add a sign-in as a second way back')}</Text>
+                            <Text style={s.title} accessibilityRole="header">{copiesAt === 'none' ? t('Add a sign-in') : t('Add a sign-in as a second way back')}</Text>
                             <Text style={s.body}>
-                                {t('Sign in once with an account you already have. If you lose this phone, it gets you back into your account, and it lifts the limits on new 12-words accounts. BeanPool never sees your password and never posts anything for you.')}
+                                {copiesAt === 'none'
+                                    ? t("Sign in once with an account you already have. The global community keeps no copies of members' accounts, so a sign-in only lifts the limits on new 12-words accounts: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.")
+                                    : t('Sign in once with an account you already have. If you lose this phone, it gets you back into your account, and it lifts the limits on new 12-words accounts. BeanPool never sees your password and never posts anything for you.')}
                             </Text>
                             {Platform.OS === 'ios' && (
                                 <AppleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.apple })} onPress={() => add('apple')} style={s.sso} />

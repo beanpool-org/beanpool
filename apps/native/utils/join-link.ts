@@ -33,6 +33,9 @@ import type { BeanPoolIdentity } from './identity';
 export const LINK_NONCE_PATH = '/api/join/link/sso-nonce';
 export const LINK_PATH = '/api/join/link';
 
+/** Where a copy made at the door goes, as linkSignIn decides it: for the sheet's words before a sign-in is chosen. */
+export { doorCopiesAt };
+
 /** Why a sign-in wasn't added. */
 export type LinkRefusal =
     | 'already_joined' | 'removed' | 'not_words_member' | 'already_linked' | 'not_a_member' | 'account_closed' | 'key_invalidated' | 'door_closed'

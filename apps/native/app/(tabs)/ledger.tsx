@@ -450,15 +450,23 @@ export default function LedgerScreen() {
         getAllCommunityMembers().then(m => setMembers(m.filter(mm => mm.publicKey !== identity?.publicKey))).catch(console.error);
     };
 
+    const sawLedgerSent = React.useRef(false);
+
+    React.useEffect(() => {
+        if (identity?.publicKey && !sawLedgerSent.current) {
+            sawLedgerSent.current = true;
+            signedRequest('/api/members/preferences', {
+                publicKey: identity.publicKey,
+                preferences: { saw_ledger: true },
+            }).catch(() => {
+                sawLedgerSent.current = false;
+            });
+        }
+    }, [identity?.publicKey]);
+
     useFocusEffect(
         React.useCallback(() => {
             loadData(); loadMembers();
-            if (identity?.publicKey) {
-                signedRequest('/api/members/preferences', {
-                    publicKey: identity.publicKey,
-                    preferences: { saw_ledger: true },
-                }).catch(() => {});
-            }
             const s1 = DeviceEventEmitter.addListener('transaction_completed', loadData);
             const s2 = DeviceEventEmitter.addListener('sync_data_updated', loadData);
             const s3 = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => setBlocked(new Set(Array.isArray(list) ? list : [])));

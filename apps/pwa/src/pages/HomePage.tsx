@@ -52,7 +52,7 @@ import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
     canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
+    resetLayout, sameList, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
@@ -1027,6 +1027,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         }
     };
 
+    const knocksRef = useRef(knocks);
+    knocksRef.current = knocks;
+
+    const currentPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
+        const hasOpenKnock = (knocksRef.current ?? knocks).some(k => !k.cancelledAt && knockStillAnswerable(k, at));
+        const hasOpenWatch = ((ans?.cards?.find as { watches?: unknown[] })?.watches?.length ?? 0) > 0;
+        return pinnedCards(ans, at, { hasOpenKnock, hasOpenWatch, knocks: knocksRef.current ?? knocks });
+    }, [knocks]);
+
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
@@ -1578,7 +1587,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         setTourOver(true);
         setTourProgress(null);
         if (answered?.me && !answered.welcome) {
-            changeLayout(() => endTourLayout(drawnRef.current, { pinned: pinnedCards(frameOf(answered), Date.now()) }), { reread: true });
+            changeLayout(() => endTourLayout(drawnRef.current, { pinned: currentPins(frameOf(answered)) }), { reread: true });
         }
         if (kind === 'done') { setHintOpen(false); writeFlag(hintKey(publicKey)); }
         else setHintOpen(!readFlag(hintKey(publicKey)));
@@ -1591,7 +1600,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         setTourOver(false);
         // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
         if (answered?.me && drawnRef.current) {
-            const r = addCard(drawnRef.current, 'start', Date.now(), { pinned: pinnedCards(frameOf(answered), Date.now()) });
+            const r = addCard(drawnRef.current, 'start', Date.now(), { pinned: currentPins(frameOf(answered)) });
             if (r.ok) changeLayout(() => r.layout);
         }
         void sendTourRecord(publicKey, tourRecord('open'));
@@ -1799,7 +1808,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const profile = String(a.profile);
     const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
-    const pins = pinnedCards(a, now);
+    const pins = currentPins(a, now);
     let imgCount = 0;
     const nextImageLoading = () => (imgCount++ < 8 ? 'eager' : 'lazy');
     // Only the cards on screen: a "Your way back in" with nothing to say is no place to move to, or a press on the card

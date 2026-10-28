@@ -278,6 +278,10 @@ describe('the honest waiting card on the web find card (Lounge L1)', () => {
         expect(within(card).getByTestId('home-waiting-answers-https://byron.example.org')).toHaveTextContent('Usually answers within a week');
         expect(within(card).getByTestId('home-cancel-knock-https://byron.example.org')).toHaveTextContent('Cancel my request');
 
+        // While a knock is waiting, the Find card remains pinned and cannot be moved or removed (no card menu)
+        const findCard = screen.getByTestId('home-card-find');
+        expect(within(findCard).queryByTestId('home-card-menu')).toBeNull();
+
         readSpy.mockRestore();
     });
 

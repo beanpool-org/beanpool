@@ -26,9 +26,9 @@ A visitor who hasn't joined sees the same thing as every other visitor: the Mark
 
 A cache that honours the Vary header (nginx, Varnish) never gives a member the visitors' copy. Cloudflare ignores Vary unless told otherwise, so on Cloudflare it takes three Cache Rules, in this order:
 
-1. Listing photos: a GET whose path starts /api/marketplace/posts/ and contains /photos/ is eligible for cache, using the Cache-Control the server sends.
-2. The visitors' reads: a GET to /api/marketplace/posts, /api/home, or a path starting /api/global/, is eligible for cache, using the Cache-Control the server sends.
-3. Bypass the cache for any request that carries an X-Signature, X-Public-Key, Authorization or Origin header, or k= in its address. Keep this rule last, so it wins over the two above.
+- First, listing photos: a GET whose path starts /api/marketplace/posts/ and contains /photos/ is eligible for cache, using the Cache-Control the server sends.
+- Second, the visitors' reads: a GET to /api/marketplace/posts, /api/home, or a path starting /api/global/, is eligible for cache, using the Cache-Control the server sends.
+- Last, bypass the cache for any request that carries an X-Signature, X-Public-Key, Authorization or Origin header, or k= in its address. It must be last, so it wins over the two above.
 
 To check them, ask twice within a minute for the same Market address with nothing signed, for example curl -sI "https://your-address/api/marketplace/posts?types=offer,need&limit=50". The second answer's cf-cache-status header says HIT. Ask again with any X-Signature header added (curl -sI -H "X-Signature: test" and the same address): it says BYPASS, and so does every read a member's app makes.
 

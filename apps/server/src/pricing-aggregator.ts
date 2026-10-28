@@ -27,14 +27,13 @@ function tokenize(text: string): string[] {
 
 /**
  * Runs one cycle of the auto-pricing feedback loop. On a standby, none: its guide is its main server's, priced there and
- * copied (a plain table, design G4). Nor where Beans are off: nothing there is priced in Beans, so the hourly read of
- * every listing would aggregate prices that cannot exist (DESIGN-global-lounge-fable.md §5.2 item 5, slice L0).
+ * copied (a plain table, design G4).
  */
 export function runPricingAggregationCycle(): {
     updatedCount: number;
     totalEvaluated: number;
 } {
-    if (standbyWritesNothing() || !getProfileSwitches().beans) return { updatedCount: 0, totalEvaluated: 0 };
+    if (standbyWritesNothing()) return { updatedCount: 0, totalEvaluated: 0 };
     const config = getPricingConfig();
     const items = db.prepare('SELECT * FROM pricing_guide_items').all() as any[];
     if (!items.length) return { updatedCount: 0, totalEvaluated: 0 };
@@ -164,6 +163,16 @@ let aggregatorInterval: NodeJS.Timeout | null = null;
 let initialTimer: NodeJS.Timeout | null = null;
 
 /**
+ * One run of the worker: a cycle, where Beans are on. Where they are off nothing is priced in Beans, so the hourly read
+ * of every listing would aggregate prices that cannot exist, on the one core (DESIGN-global-lounge-fable.md §5.2 item 5,
+ * slice L0). The switch is read on every run: Beans switched back on are priced from the next one. Null when it didn't run.
+ */
+export function pricingAggregatorTick(): ReturnType<typeof runPricingAggregationCycle> | null {
+    if (!getProfileSwitches().beans) return null;
+    return runPricingAggregationCycle();
+}
+
+/**
  * Starts the hourly pricing aggregator worker.
  */
 export function startPricingAggregatorWorker(intervalMs: number = 3600_000): void {
@@ -173,7 +182,7 @@ export function startPricingAggregatorWorker(intervalMs: number = 3600_000): voi
     initialTimer = setTimeout(() => {
         initialTimer = null;
         try {
-            runPricingAggregationCycle();
+            pricingAggregatorTick();
         } catch (e) {
             console.error('[PricingAggregator] Error during initial cycle:', e);
         }
@@ -182,7 +191,7 @@ export function startPricingAggregatorWorker(intervalMs: number = 3600_000): voi
 
     aggregatorInterval = setInterval(() => {
         try {
-            runPricingAggregationCycle();
+            pricingAggregatorTick();
         } catch (e) {
             console.error('[PricingAggregator] Error during cycle:', e);
         }

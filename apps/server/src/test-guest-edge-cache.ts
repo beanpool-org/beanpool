@@ -62,7 +62,7 @@ async function main() {
     const { startHttpsServer } = await import('./https-server.js');
     const { initAdminPassword, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { setSwitchOverride, getProfileSwitches } = await import('./config/node-profile.js');
-    const { runPricingAggregationCycle } = await import('./pricing-aggregator.js');
+    const pricing: any = await import('./pricing-aggregator.js');
     const { ADMIN_SESSION_COOKIE } = await import('./admin-key-auth.js');
     const { db } = await import('./db/db.js');
     const guestCache: any = await import('./guest-cache.js').catch(() => null);
@@ -233,8 +233,11 @@ async function main() {
 
     // ── 6. Beans off: the demurrage tick and the pricing aggregator write nothing ────────────────────────────────────
     console.log('--- 6. the jobs that do nothing where Beans are off ---');
-    // What the 5-minute timer runs: on origin/main persistDecayAndCommons itself, with no switch read.
+    // What the 5-minute timer and the hourly worker run: on origin/main persistDecayAndCommons and runPricingAggregationCycle
+    // themselves, with no switch read.
     const decayTick: () => unknown = typeof se.decayFlushTick === 'function' ? se.decayFlushTick : () => se.persistDecayAndCommons();
+    const pricingTick: () => { updatedCount: number; totalEvaluated: number } | null =
+        typeof pricing.pricingAggregatorTick === 'function' ? pricing.pricingAggregatorTick : pricing.runPricingAggregationCycle;
     const changes = () => (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
     assert(getProfileSwitches().beans === false, 'setup: Beans are off on the global profile');
     const item = db.prepare("SELECT id, price_beans, confidence_count FROM pricing_guide_items WHERE id = 'ls-001'").get() as { id: string; price_beans: number; confidence_count: number } | undefined;
@@ -248,16 +251,16 @@ async function main() {
     decayTick();
     assert(changes() === before, `Beans off: the demurrage tick writes nothing (${changes() - before} rows changed)`);
     before = changes();
-    const offCycle = runPricingAggregationCycle();
-    assert(changes() === before && offCycle.totalEvaluated === 0, `Beans off: the pricing aggregator reads nothing and writes nothing (${changes() - before} rows changed, ${offCycle.totalEvaluated} items evaluated)`);
+    const offCycle = pricingTick();
+    assert(changes() === before && offCycle === null, `Beans off: the hourly pricing run reads nothing and writes nothing (${changes() - before} rows changed, ${offCycle?.totalEvaluated ?? 0} items evaluated)`);
     // Last, as switching Beans on may count as the ledger moving, after which they stay on.
     setSwitchOverride('beans', true);
     assert(getProfileSwitches().beans === true, 'setup: Beans switched on');
     before = changes();
     decayTick();
     assert(changes() > before, `Beans on: the tick flushes the Commons pot, as before (${changes() - before} rows changed)`);
-    const onCycle = runPricingAggregationCycle();
-    assert(onCycle.updatedCount > 0, `Beans on: the aggregator prices the guide, as before (${onCycle.updatedCount} updated)`);
+    const onCycle = pricingTick();
+    assert(!!onCycle && onCycle.updatedCount > 0, `Beans on: the hourly run prices the guide, as before (${onCycle?.updatedCount} updated)`);
 
     // ── 7. the guard's rewrite ───────────────────────────────────────────────────────────────────────────────────────
     console.log("--- 7. the guard's rewrite ---");

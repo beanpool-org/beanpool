@@ -178,3 +178,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `project-detail.tsx` missing an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `project-detail.tsx` so unhandled screen errors on the `/project-detail` route are safely caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-18 - [Refine search parameter typing in names-list.tsx]
+**Issue:** `names-list.tsx` typed `community` query parameter strictly as `string` when Expo Router search parameters can be delivered as `string | string[]`.
+**Learning:** Replaced `{ community?: string }` with `{ community?: string | string[] }` and unwrapped array values using `Array.isArray(params.community) ? params.community[0] : params.community`.
+**Pattern:** Always type `useLocalSearchParams` properties as optional `string | string[]` union types and unwrap array values safely.

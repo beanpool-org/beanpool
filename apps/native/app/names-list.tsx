@@ -86,8 +86,9 @@ export default function NamesListScreen() {
     const { theme, colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create(namesListStyleSpec(colors)));
     const { identity } = useIdentity();
-    const params = useLocalSearchParams<{ community?: string }>();
-    const communityName = typeof params.community === 'string' && params.community.trim() ? params.community.trim() : 'This community';
+    const params = useLocalSearchParams<{ community?: string | string[] }>();
+    const communityParam = Array.isArray(params.community) ? params.community[0] : params.community;
+    const communityName = typeof communityParam === 'string' && communityParam.trim() ? communityParam.trim() : 'This community';
 
     const [anchor, setAnchor] = useState<string | null>(null);
     const [opened, setOpened] = useState<NamesOpened | null>(null);

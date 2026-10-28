@@ -7,6 +7,8 @@
  * 3. A visitor (unsigned caller or non-member) gets none on any listing.
  * 4. A banner a keeper replaces, takes down or closes with the shop moves the list's ETag, so a member's copy held from
  *    before (its URL then opens nothing) is not confirmed with a 304 (engine/shops.ts changeShop, closeShop).
+ * 5. The same changes, and a first banner, reach a phone that already holds the listing: its next delta carries the
+ *    listing with the banner as it is now, or none (engine/shops.ts enterpriseBannerMoved). A member's banner moves none.
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -274,6 +276,77 @@ async function main(): Promise<void> {
     // With nothing changed the tag holds, so the checks above do not pass on a tag that moves on every read.
     const quiet = await call('GET', alice, '/api/marketplace/posts', undefined, { 'If-None-Match': afterClose.etag! });
     assert(quiet.status === 304, `with nothing changed, the same ETag is answered 304 (got ${quiet.status})`);
+
+    // 9. The phone's own copy (apps/native utils/db.ts carried_banner) changes only when a delta sends a listing again, and
+    // a delta sends a listing whose row did not move only when its author's board_standing_changed_at did (engine posts.ts
+    // getPosts). A banner set, replaced, taken down or closed with the shop stamps the enterprise's row (engine/shops.ts
+    // enterpriseBannerMoved), so the phone's next delta carries each listing with the banner as it is now, or none. A
+    // member's shop banner rides none of their listings, so it stamps nothing. Read as the phone reads (services/
+    // pillar-sync.ts): its whole sync, then its next delta from its last sync less five minutes. Every enterprise, author
+    // and listing here dates from a day before, as a long-standing enterprise's listing does.
+    const PHONE_READ = '/api/marketplace/posts?limit=1000&sync=true&types=offer,need,poll,event';
+    const phoneRows = (res: Res): any[] => (Array.isArray(res.body) ? res.body : []);
+    const rowOf = (rows: any[], id: string) => rows.find((p: any) => p.id === id);
+    const DAY_AGO = new Date(Date.now() - 86_400_000).toISOString();
+    const kai = member('Kai');
+    const enterpriseWith = (name: string, banner: string | null, postId: string) => {
+        const e = createTreasury(name, 'bundled://bean-green', 0, { purpose: name });
+        adminAssignTreasuryOperator(e.publicKey, kai.pk, 'admin');
+        const shop = openShop(e.publicKey);
+        if (banner) assert(setShopPhoto(shop.id, banner), `${name}'s banner set`);
+        insertPhotolessPost(postId, e.publicKey, name);
+        return { name, pk: e.publicKey, shopId: shop.id, route: `/api/treasury/${e.publicKey}/shop`, postId };
+    };
+    const river = enterpriseWith('River Mill', TINY_PNG, 'post-river-1');
+    const hill = enterpriseWith('Hill Bakehouse', null, 'post-hill-1');
+    const lane = enterpriseWith('Lane Dairy', TINY_PNG, 'post-lane-1');
+    const fen = enterpriseWith('Fen Farm', TINY_PNG, 'post-fen-1');
+    const carol = member('Carol');
+    insertPhotolessPost('post-carol-1', carol.pk, 'Carol Plum Jam');
+    const ids9 = [river.postId, hill.postId, lane.postId, fen.postId, 'post-carol-1'];
+    for (const pk of [river.pk, hill.pk, lane.pk, fen.pk, carol.pk]) {
+        db.prepare('UPDATE members SET board_standing_changed_at = ?, profile_updated_at = ? WHERE public_key = ?').run(DAY_AGO, DAY_AGO, pk);
+    }
+    for (const id of ids9) db.prepare('UPDATE posts SET created_at = ?, updated_at = ? WHERE id = ?').run(DAY_AGO, DAY_AGO, id);
+
+    const whole = await call('GET', alice, `${PHONE_READ}&paged=1`);
+    const wholeRows = phoneRows(whole);
+    assert(whole.status === 200 && ids9.every(id => !!rowOf(wholeRows, id)), `the phone's whole sync holds all five listings (${whole.status})`);
+    const riverHeld: string | undefined = rowOf(wholeRows, river.postId)?.authorBannerUrl;
+    assert(typeof riverHeld === 'string' && riverHeld.startsWith(`/api/shops/${river.shopId}/photo?v=`), `River Mill's listing carries its banner (${riverHeld})`);
+    assert(!('authorBannerUrl' in rowOf(wholeRows, hill.postId)), 'Hill Bakehouse\'s listing carries none: its shop has no banner yet');
+    const cursor = new Date(Date.now() - 5 * 60_000).toISOString();
+    const nextDelta = async (): Promise<any[]> => {
+        const res = await call('GET', alice, `${PHONE_READ}&updatedAfter=${encodeURIComponent(cursor)}&paged=1`);
+        assert(res.status === 200, `the phone's delta answers 200 (got ${res.status})`);
+        return phoneRows(res);
+    };
+    const quietDelta = await nextDelta();
+    assert(ids9.every(id => !rowOf(quietDelta, id)),
+        `with nothing changed, the phone's next delta carries none of them (got ${ids9.filter(id => rowOf(quietDelta, id)).join(', ') || 'none'})`);
+
+    assert((await call('PUT', kai, river.route, { photo: OTHER_PNG })).status === 200, 'a keeper replaces River Mill\'s banner');
+    assert((await call('PUT', kai, hill.route, { photo: TINY_PNG })).status === 200, 'a keeper adds Hill Bakehouse\'s first banner');
+    assert((await call('PUT', kai, lane.route, { photo: null })).status === 200, 'a keeper takes Lane Dairy\'s banner down');
+    const fenClosed = await call('POST', kai, `${fen.route}/close`, {});
+    assert(fenClosed.status === 200 && fenClosed.body?.cleared === 0, `a keeper closes Fen Farm's shop, which held none of its listings (${fenClosed.status})`);
+    const carolStanding = () => (db.prepare('SELECT board_standing_changed_at AS at FROM members WHERE public_key = ?').get(carol.pk) as { at: string | null }).at;
+    assert((await call('PUT', carol, '/api/shops/mine', { photo: OTHER_PNG })).status === 200, 'a member puts up her own shop\'s banner');
+
+    const delta = await nextDelta();
+    const riverNow: string | undefined = rowOf(delta, river.postId)?.authorBannerUrl;
+    assert(typeof riverNow === 'string' && riverNow.startsWith(`/api/shops/${river.shopId}/photo?v=`) && riverNow !== riverHeld,
+        `the phone's next delta carries River Mill's listing with the new banner (${rowOf(delta, river.postId) ? riverNow : 'not in the delta'})`);
+    assert((await fetch(`${BASE}${riverNow}`)).status === 200, 'which serves it');
+    const hillNow: string | undefined = rowOf(delta, hill.postId)?.authorBannerUrl;
+    assert(typeof hillNow === 'string' && hillNow.startsWith(`/api/shops/${hill.shopId}/photo?v=`),
+        `and Hill Bakehouse's listing with its new banner (${rowOf(delta, hill.postId) ? hillNow : 'not in the delta'})`);
+    const laneNow = rowOf(delta, lane.postId);
+    assert(!!laneNow && !('authorBannerUrl' in laneNow), `and Lane Dairy's listing with no banner (${laneNow ? laneNow.authorBannerUrl : 'not in the delta'})`);
+    const fenNow = rowOf(delta, fen.postId);
+    assert(!!fenNow && !('authorBannerUrl' in fenNow), `and Fen Farm's listing, its shop closed, with no banner (${fenNow ? fenNow.authorBannerUrl : 'not in the delta'})`);
+    assert(!rowOf(delta, 'post-carol-1') && carolStanding() === DAY_AGO,
+        `a member's own banner stamps nothing: her listing is in no delta (${carolStanding()})`);
 
     console.log(`\nAll ${passed}/${run} checks passed!\n`);
     process.exit(0);

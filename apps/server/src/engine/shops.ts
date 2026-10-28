@@ -322,6 +322,22 @@ export function setShopPhoto(shopId: string, photo: string | null): boolean {
     return true;
 }
 
+/**
+ * An enterprise's banner was set, replaced or taken down (setShopPhoto said so). Its listings carry the banner's keyed URL
+ * (engine posts.ts authorBannerUrl), but no listing row moves, and a phone's copy of a listing changes only when a delta
+ * sends it again (apps/native utils/db.ts carried_banner): until the listing itself changed, that copy kept a URL that
+ * opens nothing, or no banner at all. Stamping the enterprise's members.board_standing_changed_at sends every one of its
+ * listings in every phone's next delta (engine posts.ts getPosts, `updatedAfter`), each with its reader's mask, and moves
+ * a by-area set's tag (NearbySet.stamp); updated_at with it, as setHolidayMode's does, so delta sync takes the stamp to a
+ * standby. A delta reader learns only that something about the enterprise's listings moved then, as a pause tells it.
+ * A member's shop banner rides none of their listings (the engine reads it for an enterprise's alone), so a member's row
+ * is never stamped. In the caller's transaction.
+ */
+function enterpriseBannerMoved(owner: string): void {
+    db.prepare(`UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ? AND is_treasury = 1`).run(owner);
+}
+
 /** What a change did to the shop's listings, for the route to tell the apps. */
 export interface ShopListingsMoved {
     /** Offers a pause took off the board. */
@@ -386,6 +402,7 @@ export function changeShop(owner: string, changes: ShopChanges, opts: { enterpri
         }
         if (sets.length > 0) db.prepare(`UPDATE shops SET ${sets.join(', ')} WHERE id = ?`).run(...values, before.id);
         if (photo !== undefined) photoMoved = setShopPhoto(before.id, photo?.photo ?? null);
+        if (photoMoved) enterpriseBannerMoved(owner);
         if (photoMoved && photo) recordStoredPhotoBytes(actor, photo.bytes, now);
         return shopById(before.id)!;
     })();
@@ -429,6 +446,7 @@ export function closeShop(owner: string, endOffers: boolean, now: number = Date.
         }
         db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(nowIso, shop.id);
         bannerGone = setShopPhoto(shop.id, null);
+        if (bannerGone) enterpriseBannerMoved(owner);
         db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
         writeTombstone('shops', shop.id);
         return { shopId: shop.id, cleared: named, ended, paused: [] as string[], resumed };
@@ -477,7 +495,7 @@ export function dropShopOf(owner: string, now: number = Date.now()): string | nu
     const shop = shopOf(owner);
     if (!shop) return null;
     db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(iso(now), shop.id);
-    setShopPhoto(shop.id, null);
+    if (setShopPhoto(shop.id, null)) enterpriseBannerMoved(owner);
     db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
     writeTombstone('shops', shop.id);
     return shop.id;

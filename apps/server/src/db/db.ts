@@ -1613,6 +1613,9 @@ export function initSchema() {
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.
     try { db.prepare(`ALTER TABLE shops ADD COLUMN photo_ref TEXT`).run(); } catch { }
+    // idx_shops_owner_opened (schema.sql) leads on the same column and replaces it. A plain index: an older image booted
+    // back on the data makes its own again, and this drops it at the next boot.
+    try { db.prepare(`DROP INDEX IF EXISTS idx_shops_owner`).run(); } catch { }
     // A shop's kind becomes one of the Market's categories, once (moveShopKindsToCategories).
     moveShopKindsToCategories();
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }

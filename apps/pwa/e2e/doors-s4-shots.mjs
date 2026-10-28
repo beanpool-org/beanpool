@@ -97,6 +97,29 @@ for (const theme of ['light', 'dark']) {
         console.log(`Saved screenshot: ${outPath}`);
         await ctx.close();
     }
+
+    // 4. FAQ answer
+    {
+        const ctx = await browser.newContext({
+            viewport: { width: 320, height: 600 },
+            colorScheme: theme,
+            deviceScaleFactor: 2,
+        });
+        const page = await ctx.newPage();
+        await page.goto(`${origin}/e2e/doors-s4-shots-harness.html?view=faq${theme === 'dark' ? '&dark=1' : ''}`, {
+            waitUntil: 'networkidle',
+        });
+        await page.addStyleTag({
+            content: `html { font-size: ${TEXT_SCALE * 100}% !important; } *, *::before, *::after { transition: none !important; }`,
+        });
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForTimeout(300);
+
+        const outPath = path.join(SHOTS_DIR, `s4-faq-320-x1.3-${theme}.png`);
+        await page.screenshot({ path: outPath, fullPage: true });
+        console.log(`Saved screenshot: ${outPath}`);
+        await ctx.close();
+    }
 }
 
 await browser.close();

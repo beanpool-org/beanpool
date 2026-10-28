@@ -111,9 +111,18 @@ export function restoreAtDoorHref(url: string, nowMs: number = Date.now()): { pa
 
 /** The address a door's Restore handed the first screen's restore just now, or null. Read once: the next reading is null. */
 export function takeRestoreAt(nowMs: number = Date.now()): string | null {
-    const handed = restoreAt;
+    const handed = restoreAtWaiting(nowMs) ? restoreAt!.url : null;
     restoreAt = null;
-    return handed && nowMs >= handed.atMs && nowMs - handed.atMs < TAPPED_DOOR_MS ? handed.url : null;
+    return handed;
+}
+
+/**
+ * Whether a door's Restore has handed the first screen an address it has not taken yet ({@link takeRestoreAt}). Looks
+ * without taking it: welcome's resume asks, so it never sends the member back to the door over the restore the door
+ * opened (app/welcome.tsx; PR #2564 review).
+ */
+export function restoreAtWaiting(nowMs: number = Date.now()): boolean {
+    return !!restoreAt && nowMs >= restoreAt.atMs && nowMs - restoreAt.atMs < TAPPED_DOOR_MS;
 }
 
 /** A link to the door, as the system hands it over. */

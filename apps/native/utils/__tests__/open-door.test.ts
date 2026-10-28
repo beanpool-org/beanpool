@@ -53,7 +53,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { redirectSystemPath } from '../../app/+native-intent';
 import {
     GLOBAL_DOOR_PATH, OPEN_DOOR_PATH, doorLinkFromSystemPath, doorLinkRoute, doorNodeAt, doorNodeFromParam, openDoorHref,
-    openDoorHrefForTap, takeDoorTap,
+    openDoorHrefForTap, restoreAtDoorHref, restoreAtWaiting, takeDoorTap, takeRestoreAt,
 } from '../open-door';
 import {
     doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedTitle, placeAt,
@@ -146,6 +146,26 @@ describe('where a tap goes (openDoorHref)', () => {
         expect(takeDoorTap(GLOBAL_NODE_URL, 1_000)).toBe(false);
         openDoorHrefForTap('http://open.riverbend.example', 1_000);
         expect(takeDoorTap('http://open.riverbend.example', 1_000)).toBe(false);
+    });
+
+    it("the door's Restore hands welcome its address (restoreAtDoorHref), and welcome's resume can look without taking it (restoreAtWaiting)", () => {
+        takeRestoreAt();
+        expect(restoreAtWaiting(1_000)).toBe(false);
+        expect(restoreAtDoorHref(`${SELF}/`, 1_000)).toEqual({ pathname: '/welcome', params: { mode: 'member' } });
+        // Looking leaves it for the restore's own read, once.
+        expect(restoreAtWaiting(1_000)).toBe(true);
+        expect(restoreAtWaiting(1_000)).toBe(true);
+        expect(takeRestoreAt(1_000)).toBe(SELF);
+        expect(restoreAtWaiting(1_000)).toBe(false);
+        expect(takeRestoreAt(1_000)).toBeNull();
+        // Only just now, by the same minute as the read.
+        restoreAtDoorHref(SELF, 1_000);
+        expect(restoreAtWaiting(61_000)).toBe(false);
+        expect(takeRestoreAt(61_000)).toBeNull();
+        // Nothing waits for an address the screen refuses.
+        restoreAtDoorHref('http://open.riverbend.example', 1_000);
+        expect(restoreAtWaiting(1_000)).toBe(false);
+        expect(takeRestoreAt(1_000)).toBeNull();
     });
 
     it('both routes are one screen: join-global re-exports join-open-door', () => {

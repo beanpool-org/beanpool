@@ -98,7 +98,7 @@ import { ConsentText } from '../components/ConsentText';
 import { useWords } from '../components/LanguageProvider';
 import { LanguageSwitch } from '../components/LanguagePicker';
 import { CLAIM_NEW_SERVER_ROUTE, claimRouteFor } from '../utils/claim-link';
-import { openDoorHref, takeRestoreAt } from '../utils/open-door';
+import { openDoorHref, restoreAtWaiting, takeRestoreAt } from '../utils/open-door';
 import { communityName } from '../utils/community-name';
 import { claimSuccessActions, readNodeAddresses } from '../utils/node-claim';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
@@ -858,7 +858,11 @@ export default function WelcomeScreen() {
             if (doorAt) {
                 // A join at another community's open door that never finished (utils/open-door-key.ts): back to that door with
                 // the key it made, where the node says whether it landed. Over this screen, so the door's Back returns here,
-                // where an invite or a restore still work with the same key (one identity per device).
+                // where an invite or a restore still work with the same key (one identity per device). Never over a restore that
+                // door's 🔑 Restore my account opened, taken or still waiting (the focus effect above may not have run yet): the
+                // member was sent back to the door at once (PR #2564 review). The record stays, so Back out of the restore and
+                // the next launch still resume the door; a restore that lands clears it (utils/restore-account.ts).
+                if (restoreAtDoor.current || restoreAtWaiting()) return;
                 router.push(openDoorHref(doorAt));
                 return;
             }

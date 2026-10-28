@@ -86,11 +86,13 @@ vi.mock('react-native', () => {
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
 // Whether the screen is the one in view: every case's single welcome is; a case with two in the stack provides it.
 const focus = vi.hoisted(() => ({ ctx: null as unknown as ReactAll.Context<boolean> }));
+/** Where the screen sent the member with router.push, in order. */
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[] }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect, createContext, useContext } = await import('react');
     focus.ctx = createContext(true);
     return {
-        router: { push() {}, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
+        router: { push(to: unknown) { nav.pushed.push(to); }, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
         useGlobalSearchParams: () => params.now,
         useLocalSearchParams: () => params.now,
         useFocusEffect: (cb: () => void | (() => void)) => {
@@ -349,6 +351,7 @@ beforeEach(() => {
     store.map.clear();
     alerts.said.length = 0; alerts.buttons.length = 0; prompts.asked.length = 0;
     params.now = {};
+    nav.pushed.length = 0;
     clip.has = false; clip.text = '';
     lock.none = true;
     phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null; phone.redeemFails = null;
@@ -753,5 +756,65 @@ describe("another community's door sent the member here to restore", () => {
         await settle();
         const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)');
         expect(address?.value).toBe(SELF);
+    });
+
+    // The door's record still on the phone at its Restore: welcome's resume pushed the door again over the restore it had
+    // just opened, and the button read as doing nothing (PR #2564 review). The record stays: Back out of the restore, and
+    // the next launch, still resume the door; a restore that lands clears it (utils/restore-account.ts).
+    const doorRecord = { step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: SELF, callsign: 'Sally', redeemed: false };
+    for (const [kind, record] of [
+        ['a key an invite join took over (its sign-in had an account there already)', { ...doorRecord, newKey: SALLY.publicKey }],
+        ["a key the door made whose join's answer never came", { ...doorRecord, freshKey: SALLY.publicKey, joinsOut: 1 }],
+    ] as const) {
+        it(`the door's record still on the phone, ${kind}: the restore stays in view, never the door again over it`, async () => {
+            phone.stored = SALLY;
+            phone.pending = { ...record };
+            restoreAtDoorHref(SELF);
+            params.now = { mode: 'member' };
+            await mount('en');
+            expect(nav.pushed).toEqual([]);
+            expect(host!.textContent).toContain('🔑 Restore your account');
+            await press('🔑 Recover with 12 Words', 'en');
+            expect(field()?.value).toBe(SELF);
+        });
+    }
+
+    it("the door's record still on the phone, from a door the welcome screen pushed: the restore in view, its resume run before its focus, sends nobody back", async () => {
+        // welcome (the door's record: back to the door, router.push) → the door's Restore (router.replace). The one in view
+        // mounts before its navigation has loaded, so its resume can finish before its focus effect takes the hand-over:
+        // it looks without taking it (utils/open-door.ts restoreAtWaiting).
+        phone.stored = SALLY;
+        phone.pending = { ...doorRecord, newKey: SALLY.publicKey };
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        const screen = (name: string, focused: boolean) => createElement('div', { key: name, 'data-screen': name }, createElement(focus.ctx.Provider, { value: focused }, createElement(WelcomeScreen)));
+        const stack = (...screens: unknown[]) => createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, ...(screens as any[]));
+        await act(async () => { root!.render(stack(screen('under', true)) as any); });
+        await settle();
+        expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', false)) as any); });
+        await settle();
+        params.now = { mode: '' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', true)) as any); });
+        await settle();
+        expect(nav.pushed).toHaveLength(1);
+        const inView = host.querySelector('[data-screen="in-view"]') as HTMLElement;
+        expect(inView.textContent).toContain('🔑 Restore your account');
+        const recover = Array.from(inView.querySelectorAll('button, [role="button"]')).find((b) => (b.textContent ?? '').includes('🔑 Recover with 12 Words')) as HTMLElement;
+        expect(recover, 'a button "🔑 Recover with 12 Words"').toBeTruthy();
+        await act(async () => { recover.click(); });
+        await settle();
+        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)');
+        expect(address?.value).toBe(SELF);
+    });
+
+    it("the door's record still on the phone, and welcome opened any other way: back to the door, as before", async () => {
+        phone.stored = SALLY;
+        phone.pending = { ...doorRecord, freshKey: SALLY.publicKey, joinsOut: 1 };
+        await mount('en');
+        expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
     });
 });

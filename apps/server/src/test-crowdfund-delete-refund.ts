@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { db, createCrowdfundProject, pledgeToProject, deleteCrowdfundProject, updateCrowdfundProject, getCrowdfundProject } from './db/db.js';
 import {
     initStateEngine, reconcileLedgerFromDb, getBalance, payFromCommons, adminAssignTreasuryOperator, replaceLeadByVote, runLedgerAudit,
+    adminSetOperator, adminSetUserStatus, stepDownAsKeeper,
 } from './state-engine.js';
 
 console.log('Running #139 crowdfund project deletion refund regression test...');
@@ -180,12 +181,93 @@ check(after.ok && Math.abs(after.drift - before.drift) < 0.0001, `the ledger aud
 const again = refusal(() => deleteCrowdfundProject(gate, kim));
 check(again !== null && near(balanceOf(ann), before.ann + 13) && outRows().length === gatePledges.length, `a second cancel pays nobody again (${again ?? 'it ran again'})`);
 
+// ── 9. Only a lead who may act cancels it: not the keeper left when nobody leads it, nor a stopped lead (review of #2554) ──
+// The cancel is the project's wind-up (docs/the-commons.md: its lead keeper starts one) and can't be undone. Its edit's rule
+// falls back to the first keeper when no keeper leads it. That happens when the lead left and no keeper was active with
+// operator access to take over (promoteOrPauseAfterLeadLeft paused it), so the fallback named a keeper the engine had just
+// passed over. And a keeper whose account is suspended, or whose operator access an admin switched off, acts for no
+// enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up already ask.
+console.log('\n── Only a lead who may act cancels it ──');
+const lia = makeMember('lia');
+const ola = makeMember('ola');
+const max = makeMember('max');
+const bench = 'proj_' + crypto.randomUUID();
+const benchEscrow = `escrow_${bench}`;
+createCrowdfundProject(bench, lia, 'Park Bench', 'A bench by the creek', [], 40, null);
+pledgeToProject('pledge_' + crypto.randomUUID(), bench, ann, 4, 'For the bench');
+const shed = 'proj_' + crypto.randomUUID();
+const shedEscrow = `escrow_${shed}`;
+createCrowdfundProject(shed, max, 'Tool Shed', 'A shed for the tool library', [], 50, null);
+pledgeToProject('pledge_' + crypto.randomUUID(), shed, ben, 6, 'For the shed');
+reconcileLedgerFromDb();
+const before9 = { ann: balanceOf(ann), ben: balanceOf(ben), sum: sumBalances(), drift: runLedgerAudit().drift };
+const stillThere = (id: string, escrow: string, held: number, backer: string, was: number) => near(balanceOf(escrow), held)
+    && near(balanceOf(backer), was) && !db.prepare('SELECT 1 FROM transactions WHERE from_pubkey = ?').get(escrow)
+    && !!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(id);
+const benchUntouched = () => stillThere(bench, benchEscrow, 4, ann, before9.ann);
+const shedUntouched = () => stillThere(shed, shedEscrow, 6, ben, before9.ben);
+
+// Ola keeps the bench with Lia, then an admin switches Ola's operator access off. Lia steps down: no keeper is left who
+// could take the lead, so it pauses with nobody leading it, and the edit's rule names Ola.
+adminAssignTreasuryOperator(bench, ola);
+adminSetOperator(ola, false);
+stepDownAsKeeper(bench, lia);
+const benchLeadRow = db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead'").get(bench);
+const benchPaused = (db.prepare('SELECT paused FROM members WHERE public_key = ?').get(bench) as { paused: number } | undefined)?.paused;
+check(!benchLeadRow && benchPaused === 1, `the bench has no lead and is paused (lead row ${benchLeadRow ? 'there' : 'none'}, paused ${benchPaused})`);
+check(getCrowdfundProject(bench)?.creator_pubkey === ola, "and its edit's rule falls back to Ola, its one keeper left");
+
+const olaOffCancel = refusal(() => deleteCrowdfundProject(bench, ola));
+check(olaOffCancel !== null && /Unauthorized/.test(olaOffCancel), `Ola, its keeper with operator access switched off, can't cancel it (${olaOffCancel ?? 'it was cancelled'})`);
+check(benchUntouched(), `and nothing moves: the escrow still holds 4 (${balanceOf(benchEscrow)}), Ann not refunded, the project still there`);
+const liaCancel = refusal(() => deleteCrowdfundProject(bench, lia));
+check(liaCancel !== null && /Unauthorized/.test(liaCancel), `Lia, who made it and stepped down, can't cancel it (${liaCancel ?? 'it was cancelled'})`);
+check(benchUntouched(), 'and nothing moves');
+
+// An admin switches Ola's access back on. Ola is still a keeper who doesn't lead it, and a keeper doesn't wind it up.
+adminSetOperator(ola, true);
+const olaOnCancel = refusal(() => deleteCrowdfundProject(bench, ola));
+check(olaOnCancel !== null && /Unauthorized/.test(olaOnCancel), `Ola, with operator access back on but not its lead, can't cancel it (${olaOnCancel ?? 'it was cancelled'})`);
+check(benchUntouched(), 'and nothing moves');
+
+// The keepers vote Ola its lead: now Ola cancels it, and Ann gets the 4 back.
+replaceLeadByVote(bench, ola);
+const olaLeadCancel = refusal(() => deleteCrowdfundProject(bench, ola));
+check(olaLeadCancel === null, `Ola, voted its lead, cancels it (${olaLeadCancel ?? 'cancelled'})`);
+check(near(balanceOf(ann), before9.ann + 4) && near(balanceOf(benchEscrow), 0) && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(bench),
+    `Ann gets back the 4 (${balanceOf(ann) - before9.ann}), the escrow is empty, the bench is gone`);
+
+// Max makes and leads the shed. An admin switches Max's operator access off: refused, and nothing moves.
+check(getCrowdfundProject(shed)?.creator_pubkey === max, 'Max leads the shed');
+adminSetOperator(max, false);
+const maxOffCancel = refusal(() => deleteCrowdfundProject(shed, max));
+check(maxOffCancel !== null && /Unauthorized/.test(maxOffCancel), `Max, its lead with operator access switched off, can't cancel it (${maxOffCancel ?? 'it was cancelled'})`);
+check(shedUntouched(), `and nothing moves: the escrow still holds 6 (${balanceOf(shedEscrow)}), Ben not refunded, the shed still there`);
+adminSetOperator(max, true);
+
+// Max's account suspended: refused, and nothing moves.
+adminSetUserStatus(max, 'disabled');
+const maxSuspendedCancel = refusal(() => deleteCrowdfundProject(shed, max));
+check(maxSuspendedCancel !== null && /Unauthorized/.test(maxSuspendedCancel), `Max, its lead with the account suspended, can't cancel it (${maxSuspendedCancel ?? 'it was cancelled'})`);
+check(shedUntouched(), 'and nothing moves');
+
+// Max active again: cancelled, Ben gets the 6 back, and every Bean is accounted for.
+adminSetUserStatus(max, 'active');
+const maxCancel = refusal(() => deleteCrowdfundProject(shed, max));
+check(maxCancel === null, `Max, its lead and active again, cancels it (${maxCancel ?? 'cancelled'})`);
+check(near(balanceOf(ben), before9.ben + 6) && near(balanceOf(shedEscrow), 0) && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(shed),
+    `Ben gets back the 6 (${balanceOf(ben) - before9.ben}), the escrow is empty, the shed is gone`);
+check(near(sumBalances(), before9.sum), `the node's total is unchanged (${sumBalances()} vs ${before9.sum})`);
+reconcileLedgerFromDb();
+const after9 = runLedgerAudit();
+check(after9.ok && Math.abs(after9.drift - before9.drift) < 0.0001, `the ledger audit holds, its drift unchanged (ok ${after9.ok}, drift ${before9.drift} → ${after9.drift})`);
+
 console.log(`\n${run - failed}/${run} checks passed`);
 
 // Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally
 // keeps the event loop alive and the process never terminates — it prints a pass and then hangs.
 // In CI that is indistinguishable from a slow run and blocks every suite after it (scripts/test-all.sh
 // runs them in sequence), which is how a single test burns hours of Actions time. Reaching here means
-// every node:assert above held (a failure throws and exits non-zero long before this line); part 8's
-// counted checks decide the rest.
+// every node:assert above held (a failure throws and exits non-zero long before this line); the counted
+// checks of parts 8 and 9 decide the rest.
 process.exit(failed === 0 ? 0 : 1);

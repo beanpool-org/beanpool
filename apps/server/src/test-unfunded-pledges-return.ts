@@ -42,8 +42,9 @@
  *     project's read all say 0 raised, not a float residue; its leader can move its date and lower its goal; and when the
  *     new date ends with nothing pledged, nothing goes back and the page says nothing is held.
  * 14. The lead handed to another keeper, the projects row still naming its maker: the new lead's move of the end date
- *     reaches the row the return reads; its maker can neither move it nor cancel it, nor can a stranger; the new lead's
- *     cancel gives each backer their pledge back once, the escrow ends at 0 and the audit holds.
+ *     reaches the row the return reads; its maker can neither move it nor cancel it, nor can a stranger, nor the new lead
+ *     while an admin has switched their operator access off; the new lead's cancel gives each backer their pledge back
+ *     once, the escrow ends at 0 and the audit holds.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-unfunded-pledges-return
  */
@@ -731,8 +732,10 @@ async function main(): Promise<void> {
     const kim = makeMember('Kim');
     const gate = await makeProject(uma, 'Garden Gate', 60, new Date(Date.now() + 10 * DAY).toISOString());
     await pledge(ann, gate, 4, 'treasury');
-    // The lead passes to Kim, as a handover leaves it: the operators row moves, the projects row still names its maker.
+    // The lead passes to Kim, as a handover leaves it: the operators row moves, the projects row still names its maker, and
+    // Kim's operator switch is on, as every way of making someone a keeper leaves it (adminAssignTreasuryOperator).
     db.prepare("UPDATE treasury_operators SET member_pubkey = ? WHERE treasury_pubkey = ? AND role = 'lead'").run(kim.pubKeyHex, gate);
+    db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(kim.pubKeyHex);
     assert(getCrowdfundProject(gate)?.creator_pubkey === kim.pubKeyHex, `Kim is the project's lead now (${getCrowdfundProject(gate)?.creator_pubkey})`);
     // Its end date 3 days gone, in the week: Kim moves it 10 days on.
     setDeadline(gate, new Date(Date.now() - 3 * DAY).toISOString());
@@ -760,6 +763,13 @@ async function main(): Promise<void> {
         `Uma can't cancel it: nothing moves (${umaCancel.status} ${umaCancel.body?.error ?? ''}; escrow ${escrowOf(gate)})`);
     const calCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: cal.pubKeyHex }, cal);
     assert(calCancel.status !== 200 && near(escrowOf(gate), 6), `nor can Cal (${calCancel.status} ${calCancel.body?.error ?? ''})`);
+    // Nor Kim while an admin has switched Kim's operator access off: such a keeper acts for no enterprise, and the signed
+    // request still reaches the route (db.ts mayCancelProject, review of #2554).
+    stateEngine.adminSetOperator(kim.pubKeyHex, false);
+    const kimOffCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: kim.pubKeyHex }, kim);
+    assert(kimOffCancel.status !== 200 && near(escrowOf(gate), 6) && rowsOutOf(gate).length === 0,
+        `nor Kim, its lead, with operator access switched off: nothing moves (${kimOffCancel.status} ${kimOffCancel.body?.error ?? ''}; escrow ${escrowOf(gate)})`);
+    stateEngine.adminSetOperator(kim.pubKeyHex, true);
     const kimCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: kim.pubKeyHex }, kim);
     assert(kimCancel.status === 200, `Kim, its lead, cancels it (${kimCancel.status} ${kimCancel.body?.error ?? ''})`);
     assert(near(balanceOf(ann.pubKeyHex), gateBefore.ann + 4) && near(balanceOf(ben.pubKeyHex), gateBefore.ben + 2) && near(balanceOf(uma.pubKeyHex), gateBefore.uma),

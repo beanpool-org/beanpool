@@ -1,4 +1,4 @@
-<!-- source-hash: 61572af87e52547a -->
+<!-- source-hash: 0a1bd7282ca4eef1 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -537,10 +537,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">Ένα μπλοκ: λήψη, δίκτυο, εικόνα, εκκίνηση, αναμονή, διεκδίκηση</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Αντιγραφή στο πρόχειρο">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">Η τελευταία γραμμή: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Η διεύθυνσή σας.</strong> Επιλέξτε την πριν επικολλήσετε και αλλάξτε την τελευταία γραμμή ανάλογα. Αν έχετε ήδη επικολλήσει, πατήστε Enter στις ερωτήσεις του και μετά εκτελέστε ξανά την τελευταία γραμμή: ο κωδικός διεκδίκησης περιμένει για ένα τηλέφωνο. <strong>Σε ενοικιασμένο διακομιστή</strong> με δημόσια διεύθυνση IP και τις θύρες 80 και 443 ανοιχτές: προσθέστε <code>--ip</code> και τη διεύθυνση IP του, όπως στο <code>beanpool claim --ip 203.0.113.7</code>. Ο διακομιστής σας λαμβάνει το δικό του πιστοποιητικό για αυτή τη διεύθυνση από το Let's Encrypt, μέσω της θύρας 80, και τα τηλέφωνα συνδέονται σε αυτόν στο https://203.0.113.7. <strong>Σε υπολογιστή στο σπίτι, ή χωρίς ανοιχτές θύρες</strong>: αφήστε το όπως είναι. Ζητά το πρώτο μέρος ενός δωρεάν ονόματος (πληκτρολογήστε απλώς <strong>yourtown</strong> για το yourtown.beanpool.org· το Enter το παρακάμπτει), προσβάσιμο μέσω ενός τούνελ που εκτελεί ο ίδιος ο διακομιστής σας, και περιμένει έως και τρία λεπτά για να ενεργοποιηθεί. <strong>Δικός σας τομέας (domain)</strong>: κατευθύνετε μια εγγραφή A record για αυτόν στη διεύθυνση IP του διακομιστή, ανοίξτε τις θύρες 80 και 443 και προσθέστε <code>--address https://your.domain</code>. Ένα όνομα επιβιώνει από μια αλλαγή διακομιστή· ένας αριθμός όχι: μπορείτε να προσθέσετε ένα όνομα αργότερα στις Ρυθμίσεις, και τα μέλη που χρησιμοποιούν τη διεύθυνση IP συνεχίζουν να λειτουργούν. Για να επιλέξετε αργότερα στις Ρυθμίσεις, προσθέστε <code>--no-name</code>. Μια απλή διεύθυνση <code>http://</code> λειτουργεί μόνο σε οικιακό δίκτυο: τα τηλέφωνα την απορρίπτουν στο διαδίκτυο και η διεκδίκηση σας προειδοποιεί. Αν η υπηρεσία διευθύνσεων του έργου BeanPool είναι εκτός λειτουργίας, η διεκδίκηση εξακολουθεί να λειτουργεί.</li>
+                    <li><strong>Ο κωδικός και το QR.</strong> Εμφανίζει έναν κωδικό διεκδίκησης μίας χρήσης και έναν κωδικό QR. Σαρώστε τον κωδικό QR με την κάμερα του τηλεφώνου σας, ή ανοίξτε το BeanPool, πληκτρολογήστε τη διεύθυνση του διακομιστή στην ενότητα <strong>Βρείτε την κοινότητά σας</strong> και πατήστε <strong>Διεκδίκηση</strong>. Αυτό το τηλέφωνο γίνεται ο ιδιοκτήτης.</li>
+                    <li><strong>Ρυθμίσεις.</strong> Ανοίξτε τη διεύθυνσή σας (ή την ίδια τη διεύθυνση του διακομιστή) ακολουθούμενη από το <strong>/settings</strong>. Ο οδηγός εγκατάστασης ονομάζει την κοινότητά σας, σας ζητά να προσθέσετε έναν δεύτερο ιδιοκτήτη και δημιουργεί τρεις ιδρυτικές προσκλήσεις. Ορίστε την τοποθεσία σας στον χάρτη στην Ταυτότητα κόμβου ώστε οι άνθρωποι στην περιοχή να μπορούν να σας βρουν.</li>
+                </ol>
+                <p class="run-node-note">Αν το μπλοκ εμφανίσει <strong>No claim code after 5 minutes</strong>, ή το <code>beanpool claim</code> εμφανίσει <strong>This community has no claim code waiting</strong>, ο διακομιστής δεν έχει ολοκληρώσει την εκκίνηση: το <code>docker compose logs beanpool-node</code> δείχνει σε ποιο σημείο βρίσκεται. Μόλις το αρχείο καταγραφής αναφέρει ότι η κοινότητα δεν έχει ακόμη ιδιοκτήτη και διαθέτει κωδικό διεκδίκησης, εκτελέστε ξανά την τελευταία γραμμή. Τα πλήρη βήματα βρίσκονται στην <a href="guide/operators/first-time-setup.html">αρχική ρύθμιση</a> του εγχειριδίου διαχειριστή.</p>
+
+                <h3 class="run-node-sub">Προτείνεται: κρατήστε την κοινότητά σας σε λειτουργία όταν ενημερώνεται το Docker</h3>
+                <p>Με ενεργό το live-restore του Docker, το Docker μπορεί να επανεκκινήσει ή να λάβει ενημέρωση κώδικα (patch), χωρίς να σταματήσει την κοινότητά σας. Το βήμα παρακάτω χρειάζεται root ή <code>sudo</code> και μπορείτε να το παραλείψετε με ασφάλεια: η κοινότητά σας λειτουργεί και χωρίς αυτό, και η σελίδα «Updates and health» του εγχειριδίου διαχειριστή έχει τα βήματα για να το κάνετε αργότερα. Ένας βοηθός τεχνητής νοημοσύνης που κάνει την εγκατάσταση εκτελεί πάντα αυτό το βήμα (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">Ρύθμιση του διακομιστή σας με βοηθό τεχνητής νοημοσύνης</a>).</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — κρατήστε την κοινότητα σε λειτουργία</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Προαιρετικό: live-restore του Docker</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -572,28 +609,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Αντιγραφή στο πρόχειρο">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">Η τελευταία γραμμή: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Η διεύθυνσή σας.</strong> Επιλέξτε την πριν επικολλήσετε και αλλάξτε την τελευταία γραμμή ανάλογα. Αν έχετε ήδη επικολλήσει, πατήστε Enter στις ερωτήσεις του και μετά εκτελέστε ξανά την τελευταία γραμμή: ο κωδικός διεκδίκησης περιμένει για ένα τηλέφωνο. <strong>Σε ενοικιασμένο διακομιστή</strong> με δημόσια διεύθυνση IP και τις θύρες 80 και 443 ανοιχτές: προσθέστε <code>--ip</code> και τη διεύθυνση IP του, όπως στο <code>beanpool claim --ip 203.0.113.7</code>. Ο διακομιστής σας λαμβάνει το δικό του πιστοποιητικό για αυτή τη διεύθυνση από το Let's Encrypt, μέσω της θύρας 80, και τα τηλέφωνα συνδέονται σε αυτόν στο https://203.0.113.7. <strong>Σε υπολογιστή στο σπίτι, ή χωρίς ανοιχτές θύρες</strong>: αφήστε το όπως είναι. Ζητά το πρώτο μέρος ενός δωρεάν ονόματος (πληκτρολογήστε απλώς <strong>yourtown</strong> για το yourtown.beanpool.org· το Enter το παρακάμπτει), προσβάσιμο μέσω ενός τούνελ που εκτελεί ο ίδιος ο διακομιστής σας, και περιμένει έως και τρία λεπτά για να ενεργοποιηθεί. <strong>Δικός σας τομέας (domain)</strong>: κατευθύνετε μια εγγραφή A record για αυτόν στη διεύθυνση IP του διακομιστή, ανοίξτε τις θύρες 80 και 443 και προσθέστε <code>--address https://your.domain</code>. Ένα όνομα επιβιώνει από μια αλλαγή διακομιστή· ένας αριθμός όχι: μπορείτε να προσθέσετε ένα όνομα αργότερα στις Ρυθμίσεις, και τα μέλη που χρησιμοποιούν τη διεύθυνση IP συνεχίζουν να λειτουργούν. Για να επιλέξετε αργότερα στις Ρυθμίσεις, προσθέστε <code>--no-name</code>. Μια απλή διεύθυνση <code>http://</code> λειτουργεί μόνο σε οικιακό δίκτυο: τα τηλέφωνα την απορρίπτουν στο διαδίκτυο και η διεκδίκηση σας προειδοποιεί. Αν η υπηρεσία διευθύνσεων του έργου BeanPool είναι εκτός λειτουργίας, η διεκδίκηση εξακολουθεί να λειτουργεί.</li>
-                    <li><strong>Ο κωδικός και το QR.</strong> Εμφανίζει έναν κωδικό διεκδίκησης μίας χρήσης και έναν κωδικό QR. Σαρώστε τον κωδικό QR με την κάμερα του τηλεφώνου σας, ή ανοίξτε το BeanPool, πληκτρολογήστε τη διεύθυνση του διακομιστή στην ενότητα <strong>Βρείτε την κοινότητά σας</strong> και πατήστε <strong>Διεκδίκηση</strong>. Αυτό το τηλέφωνο γίνεται ο ιδιοκτήτης.</li>
-                    <li><strong>Ρυθμίσεις.</strong> Ανοίξτε τη διεύθυνσή σας (ή την ίδια τη διεύθυνση του διακομιστή) ακολουθούμενη από το <strong>/settings</strong>. Ο οδηγός εγκατάστασης ονομάζει την κοινότητά σας, σας ζητά να προσθέσετε έναν δεύτερο ιδιοκτήτη και δημιουργεί τρεις ιδρυτικές προσκλήσεις. Ορίστε την τοποθεσία σας στον χάρτη στην Ταυτότητα κόμβου ώστε οι άνθρωποι στην περιοχή να μπορούν να σας βρουν.</li>
-                </ol>
-                <p class="run-node-note">Αν το μπλοκ εμφανίσει <strong>No claim code after 5 minutes</strong>, ή το <code>beanpool claim</code> εμφανίσει <strong>This community has no claim code waiting</strong>, ο διακομιστής δεν έχει ολοκληρώσει την εκκίνηση: το <code>docker compose logs beanpool-node</code> δείχνει σε ποιο σημείο βρίσκεται. Μόλις το αρχείο καταγραφής αναφέρει ότι η κοινότητα δεν έχει ακόμη ιδιοκτήτη και διαθέτει κωδικό διεκδίκησης, εκτελέστε ξανά την τελευταία γραμμή. Τα πλήρη βήματα βρίσκονται στην <a href="guide/operators/first-time-setup.html">αρχική ρύθμιση</a> του εγχειριδίου διαχειριστή.</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

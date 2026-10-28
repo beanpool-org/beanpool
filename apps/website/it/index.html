@@ -622,10 +622,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">Un solo blocco: scarica, rete, pull, avvio, attesa, riscatto</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Copia negli appunti">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">L'ultima riga: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Il tuo indirizzo.</strong> Sceglilo prima di incollare, e modifica l'ultima riga di conseguenza. Se hai già incollato, premi Invio alle relative domande, quindi esegui di nuovo l'ultima riga: il codice di rivendicazione attende un telefono. <strong>Un server a noleggio</strong> con indirizzo IP pubblico e porte 80 e 443 aperte: aggiungi <code>--ip</code> e il suo indirizzo IP, come in <code>beanpool claim --ip 203.0.113.7</code>. Il tuo server riceve il proprio certificato per quell'indirizzo da Let's Encrypt, tramite la porta 80, e i telefoni lo raggiungono su https://203.0.113.7. <strong>Un computer a casa, o nessuna porta aperta</strong>: lascialo così com'è. Chiede la prima parte di un nome gratuito (digita solo <strong>latuacitta</strong> per latuacitta.beanpool.org; Invio per saltare), raggiungibile tramite un tunnel che il tuo server esegue da solo, e attende fino a tre minuti che sia attivo. <strong>Il tuo dominio</strong>: punta un record A verso l'indirizzo IP del server, apri le porte 80 e 443, e aggiungi <code>--address https://tuo.dominio</code>. Un nome sopravvive a un cambio di server; un numero no: puoi aggiungere un nome in un secondo momento in Impostazioni, e i membri che usano l'indirizzo IP continueranno a funzionare normalmente. Per scegliere più tardi in Impostazioni, aggiungi <code>--no-name</code>. Un semplice indirizzo <code>http://</code> funziona solo su una rete domestica: i telefoni lo rifiutano su Internet e la procedura di rivendicazione ti avvisa. Se il servizio degli indirizzi del progetto BeanPool non è disponibile, la procedura di rivendicazione funziona comunque.</li>
+                    <li><strong>Il codice e il QR.</strong> Mostra un codice di rivendicazione monouso e un codice QR. Scansiona il codice QR con la fotocamera del telefono, oppure apri BeanPool, digita l'indirizzo del server sotto <strong>Trova la tua comunità</strong> e tocca <strong>Rivendica</strong>. Quel telefono diventa il proprietario.</li>
+                    <li><strong>Impostazioni.</strong> Apri il tuo indirizzo (o l'indirizzo del server stesso) seguito da <strong>/settings</strong>. La configurazione guidata assegna un nome alla tua comunità, ti chiede di aggiungere un secondo proprietario e crea tre inviti per i fondatori. Imposta la tua posizione sulla mappa sotto Identità nodo, così le persone nelle vicinanze potranno trovarti.</li>
+                </ol>
+                <p class="run-node-note">Se il blocco indica <strong>No claim code after 5 minutes</strong>, oppure <code>beanpool claim</code> dice <strong>This community has no claim code waiting</strong>, il server non ha ancora completato l'avvio: <code>docker compose logs beanpool-node</code> mostra a che punto si trova. Quando il registro indica che la comunità non ha ancora un proprietario e ha un codice di rivendicazione, esegui di nuovo l'ultima riga. I passaggi completi si trovano nella <a href="../guide/operators/first-time-setup.html">prima configurazione</a> del manuale per i gestori.</p>
+
+                <h3 class="run-node-sub">Consigliato: tieni attiva la tua comunità quando Docker si aggiorna</h3>
+                <p>Con il live-restore di Docker attivo, Docker può riavviarsi, o ricevere un aggiornamento di patch, senza fermare la tua comunità. Il passaggio qui sotto richiede root o <code>sudo</code> e si può saltare senza rischi: la tua comunità funziona anche senza, e la pagina «Updates and health» del manuale per i gestori ha i passaggi per farlo più tardi. Un assistente IA che fa l'installazione esegue sempre questo passaggio (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">Configurare il tuo server con un assistente IA</a>).</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — mantieni attiva la comunità</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Facoltativo: live-restore di Docker</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -657,28 +694,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Copia negli appunti">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">L'ultima riga: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Il tuo indirizzo.</strong> Sceglilo prima di incollare, e modifica l'ultima riga di conseguenza. Se hai già incollato, premi Invio alle relative domande, quindi esegui di nuovo l'ultima riga: il codice di rivendicazione attende un telefono. <strong>Un server a noleggio</strong> con indirizzo IP pubblico e porte 80 e 443 aperte: aggiungi <code>--ip</code> e il suo indirizzo IP, come in <code>beanpool claim --ip 203.0.113.7</code>. Il tuo server riceve il proprio certificato per quell'indirizzo da Let's Encrypt, tramite la porta 80, e i telefoni lo raggiungono su https://203.0.113.7. <strong>Un computer a casa, o nessuna porta aperta</strong>: lascialo così com'è. Chiede la prima parte di un nome gratuito (digita solo <strong>latuacitta</strong> per latuacitta.beanpool.org; Invio per saltare), raggiungibile tramite un tunnel che il tuo server esegue da solo, e attende fino a tre minuti che sia attivo. <strong>Il tuo dominio</strong>: punta un record A verso l'indirizzo IP del server, apri le porte 80 e 443, e aggiungi <code>--address https://tuo.dominio</code>. Un nome sopravvive a un cambio di server; un numero no: puoi aggiungere un nome in un secondo momento in Impostazioni, e i membri che usano l'indirizzo IP continueranno a funzionare normalmente. Per scegliere più tardi in Impostazioni, aggiungi <code>--no-name</code>. Un semplice indirizzo <code>http://</code> funziona solo su una rete domestica: i telefoni lo rifiutano su Internet e la procedura di rivendicazione ti avvisa. Se il servizio degli indirizzi del progetto BeanPool non è disponibile, la procedura di rivendicazione funziona comunque.</li>
-                    <li><strong>Il codice e il QR.</strong> Mostra un codice di rivendicazione monouso e un codice QR. Scansiona il codice QR con la fotocamera del telefono, oppure apri BeanPool, digita l'indirizzo del server sotto <strong>Trova la tua comunità</strong> e tocca <strong>Rivendica</strong>. Quel telefono diventa il proprietario.</li>
-                    <li><strong>Impostazioni.</strong> Apri il tuo indirizzo (o l'indirizzo del server stesso) seguito da <strong>/settings</strong>. La configurazione guidata assegna un nome alla tua comunità, ti chiede di aggiungere un secondo proprietario e crea tre inviti per i fondatori. Imposta la tua posizione sulla mappa sotto Identità nodo, così le persone nelle vicinanze potranno trovarti.</li>
-                </ol>
-                <p class="run-node-note">Se il blocco indica <strong>No claim code after 5 minutes</strong>, oppure <code>beanpool claim</code> dice <strong>This community has no claim code waiting</strong>, il server non ha ancora completato l'avvio: <code>docker compose logs beanpool-node</code> mostra a che punto si trova. Quando il registro indica che la comunità non ha ancora un proprietario e ha un codice di rivendicazione, esegui di nuovo l'ultima riga. I passaggi completi si trovano nella <a href="../guide/operators/first-time-setup.html">prima configurazione</a> del manuale per i gestori.</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

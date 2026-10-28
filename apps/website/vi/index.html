@@ -622,10 +622,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">Một khối lệnh: tải về, tạo mạng, kéo hình ảnh, khởi động, chờ, nhận quyền</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Sao chép vào khay nhớ tạm">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">Dòng lệnh cuối cùng: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Địa chỉ của bạn.</strong> Hãy chọn địa chỉ trước khi dán và điều chỉnh dòng lệnh cuối cùng cho phù hợp. Nếu bạn đã dán lệnh, hãy nhấn Enter khi xuất hiện câu hỏi, sau đó chạy lại dòng lệnh cuối cùng: mã nhận quyền sẽ chờ điện thoại kết nối. <strong>Máy chủ thuê</strong> có địa chỉ IP công khai và mở các cổng 80, 443: thêm <code>--ip</code> cùng địa chỉ IP đó, ví dụ <code>beanpool claim --ip 203.0.113.7</code>. Máy chủ của bạn sẽ tự nhận chứng chỉ cho địa chỉ đó từ Let's Encrypt qua cổng 80, và điện thoại có thể truy cập tại https://203.0.113.7. <strong>Máy tính ở nhà hoặc không mở cổng mạng</strong>: hãy giữ nguyên dòng lệnh. Lệnh sẽ hỏi phần đầu của tên miền miễn phí (chỉ cần nhập <strong>yourtown</strong> cho tên miền yourtown.beanpool.org; nhấn Enter để bỏ qua), được truy cập thông qua đường hầm do chính máy chủ tự chạy, và chờ tối đa ba phút để bắt đầu hoạt động. <strong>Tên miền riêng của bạn</strong>: trỏ bản ghi A về địa chỉ IP của máy chủ, mở các cổng 80 và 443, rồi thêm <code>--address https://your.domain</code>. Tên miền vẫn được giữ nguyên khi thay đổi máy chủ, còn địa chỉ IP thì không: bạn có thể thêm tên miền sau trong Cài đặt, và các thành viên dùng địa chỉ IP vẫn tiếp tục hoạt động bình thường. Để chọn sau trong Cài đặt, thêm <code>--no-name</code>. Địa chỉ <code>http://</code> thông thường chỉ hoạt động trong mạng nội bộ gia đình: điện thoại sẽ từ chối kết nối qua internet và quá trình nhận quyền sẽ cảnh báo bạn. Nếu dịch vụ địa chỉ của dự án BeanPool ngừng hoạt động, lệnh nhận quyền vẫn hoạt động.</li>
+                    <li><strong>Mã và mã QR.</strong> Lệnh sẽ hiển thị một mã nhận quyền dùng một lần và một mã QR. Quét mã QR bằng máy ảnh điện thoại, hoặc mở BeanPool, nhập địa chỉ máy chủ trong mục <strong>Tìm cộng đồng của bạn</strong> và nhấn <strong>Nhận quyền sở hữu</strong>. Điện thoại đó sẽ trở thành chủ sở hữu.</li>
+                    <li><strong>Cài đặt.</strong> Mở địa chỉ của bạn (hoặc địa chỉ riêng của máy chủ) kèm theo <strong>/settings</strong>. Trình hướng dẫn thiết lập sẽ đặt tên cho cộng đồng của bạn, yêu cầu bạn thêm chủ sở hữu thứ hai và tạo ba lời mời sáng lập. Thiết lập vị trí của bạn trên bản đồ trong mục Nhận diện máy chủ (Node Identity) để mọi người ở gần có thể tìm thấy bạn.</li>
+                </ol>
+                <p class="run-node-note">Nếu khối lệnh thông báo <strong>No claim code after 5 minutes</strong>, hoặc <code>beanpool claim</code> thông báo <strong>This community has no claim code waiting</strong>, nghĩa là máy chủ chưa khởi động xong: lệnh <code>docker compose logs beanpool-node</code> sẽ hiển thị tiến trình. Khi nhật ký ghi nhận cộng đồng chưa có chủ sở hữu và đã có mã nhận quyền, hãy chạy lại dòng lệnh cuối cùng. Các bước đầy đủ được hướng dẫn trong phần <a href="../guide/operators/first-time-setup.html">thiết lập lần đầu</a> của cẩm nang người vận hành.</p>
+
+                <h3 class="run-node-sub">Khuyến nghị: giữ cộng đồng của bạn tiếp tục chạy khi Docker cập nhật</h3>
+                <p>Khi bật live-restore của Docker, Docker có thể khởi động lại, hoặc nhận một bản cập nhật vá (patch), mà không làm dừng cộng đồng của bạn. Bước bên dưới cần quyền root hoặc <code>sudo</code> và có thể bỏ qua an toàn: cộng đồng của bạn vẫn chạy khi không có nó, và trang "Updates and health" trong cẩm nang người vận hành có các bước để làm sau. Trợ lý AI thực hiện việc cài đặt luôn chạy bước này (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">Thiết lập máy chủ của bạn với trợ lý AI</a>).</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — giữ cộng đồng tiếp tục chạy</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Tùy chọn: live-restore của Docker</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -657,28 +694,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Sao chép vào khay nhớ tạm">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">Dòng lệnh cuối cùng: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Địa chỉ của bạn.</strong> Hãy chọn địa chỉ trước khi dán và điều chỉnh dòng lệnh cuối cùng cho phù hợp. Nếu bạn đã dán lệnh, hãy nhấn Enter khi xuất hiện câu hỏi, sau đó chạy lại dòng lệnh cuối cùng: mã nhận quyền sẽ chờ điện thoại kết nối. <strong>Máy chủ thuê</strong> có địa chỉ IP công khai và mở các cổng 80, 443: thêm <code>--ip</code> cùng địa chỉ IP đó, ví dụ <code>beanpool claim --ip 203.0.113.7</code>. Máy chủ của bạn sẽ tự nhận chứng chỉ cho địa chỉ đó từ Let's Encrypt qua cổng 80, và điện thoại có thể truy cập tại https://203.0.113.7. <strong>Máy tính ở nhà hoặc không mở cổng mạng</strong>: hãy giữ nguyên dòng lệnh. Lệnh sẽ hỏi phần đầu của tên miền miễn phí (chỉ cần nhập <strong>yourtown</strong> cho tên miền yourtown.beanpool.org; nhấn Enter để bỏ qua), được truy cập thông qua đường hầm do chính máy chủ tự chạy, và chờ tối đa ba phút để bắt đầu hoạt động. <strong>Tên miền riêng của bạn</strong>: trỏ bản ghi A về địa chỉ IP của máy chủ, mở các cổng 80 và 443, rồi thêm <code>--address https://your.domain</code>. Tên miền vẫn được giữ nguyên khi thay đổi máy chủ, còn địa chỉ IP thì không: bạn có thể thêm tên miền sau trong Cài đặt, và các thành viên dùng địa chỉ IP vẫn tiếp tục hoạt động bình thường. Để chọn sau trong Cài đặt, thêm <code>--no-name</code>. Địa chỉ <code>http://</code> thông thường chỉ hoạt động trong mạng nội bộ gia đình: điện thoại sẽ từ chối kết nối qua internet và quá trình nhận quyền sẽ cảnh báo bạn. Nếu dịch vụ địa chỉ của dự án BeanPool ngừng hoạt động, lệnh nhận quyền vẫn hoạt động.</li>
-                    <li><strong>Mã và mã QR.</strong> Lệnh sẽ hiển thị một mã nhận quyền dùng một lần và một mã QR. Quét mã QR bằng máy ảnh điện thoại, hoặc mở BeanPool, nhập địa chỉ máy chủ trong mục <strong>Tìm cộng đồng của bạn</strong> và nhấn <strong>Nhận quyền sở hữu</strong>. Điện thoại đó sẽ trở thành chủ sở hữu.</li>
-                    <li><strong>Cài đặt.</strong> Mở địa chỉ của bạn (hoặc địa chỉ riêng của máy chủ) kèm theo <strong>/settings</strong>. Trình hướng dẫn thiết lập sẽ đặt tên cho cộng đồng của bạn, yêu cầu bạn thêm chủ sở hữu thứ hai và tạo ba lời mời sáng lập. Thiết lập vị trí của bạn trên bản đồ trong mục Nhận diện máy chủ (Node Identity) để mọi người ở gần có thể tìm thấy bạn.</li>
-                </ol>
-                <p class="run-node-note">Nếu khối lệnh thông báo <strong>No claim code after 5 minutes</strong>, hoặc <code>beanpool claim</code> thông báo <strong>This community has no claim code waiting</strong>, nghĩa là máy chủ chưa khởi động xong: lệnh <code>docker compose logs beanpool-node</code> sẽ hiển thị tiến trình. Khi nhật ký ghi nhận cộng đồng chưa có chủ sở hữu và đã có mã nhận quyền, hãy chạy lại dòng lệnh cuối cùng. Các bước đầy đủ được hướng dẫn trong phần <a href="../guide/operators/first-time-setup.html">thiết lập lần đầu</a> của cẩm nang người vận hành.</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

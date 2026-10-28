@@ -1,4 +1,4 @@
-<!-- source-hash: 61572af87e52547a -->
+<!-- source-hash: 0a1bd7282ca4eef1 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -537,10 +537,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">一段命令：获取、建网、拉取、启动、等待、认领</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="复制到剪贴板">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">最后一行命令：beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>你的地址。</strong>在粘贴前确定好，并修改最后一行命令以保持一致。如果你已经粘贴了，在提示问题处按回车键，然后重新运行最后一行：认领码会等待手机扫码。<strong>租用服务器</strong>（具有公网 IP 地址且开放 80 和 443 端口）：添加 <code>--ip</code> 及其 IP 地址，例如 <code>beanpool claim --ip 203.0.113.7</code>。你的服务器会通过 80 端口从 Let's Encrypt 为该地址获取专属证书，手机可通过 https://203.0.113.7 访问。<strong>家用电脑或未开放端口</strong>：保持原样即可。它会询问免费域名的前缀（例如输入 <strong>yourtown</strong> 即可获得 yourtown.beanpool.org；按回车跳过），通过服务器自行运行的隧道进行访问，最多等待三分钟即可上线。<strong>自有域名</strong>：将其 A 记录指向服务器的 IP 地址，开放 80 和 443 端口，并添加 <code>--address https://your.domain</code>。域名在更换服务器后仍能沿用，而 IP 地址不行：你稍后也可以在“设置”中添加域名，使用 IP 地址的成员不受影响。如需稍后在“设置”中选择，请添加 <code>--no-name</code>。普通的 <code>http://</code> 地址仅在家庭网络中有效：手机在互联网上会拒绝连接，认领过程也会给出警告。即使 BeanPool 项目的地址服务暂时不可用，认领操作依然可以正常工作。</li>
+                    <li><strong>认领码与二维码。</strong>它会显示一个一次性认领码和一个二维码。使用手机相机扫描二维码，或者打开 BeanPool，在<strong>寻找你的社区</strong>下输入服务器地址并点击<strong>认领</strong>。该手机即成为所有者。</li>
+                    <li><strong>设置。</strong>在浏览器中打开你的地址（或服务器自身地址）加上 <strong>/settings</strong>。设置向导会引导你为社区命名、添加第二位所有者，并生成三个创办邀请。在“节点身份”下设置你在地图上的位置，以便附近的人能找到你。</li>
+                </ol>
+                <p class="run-node-note">如果命令块提示 <strong>No claim code after 5 minutes</strong>，或者 <code>beanpool claim</code> 提示 <strong>This community has no claim code waiting</strong>，说明服务器尚未完成启动：<code>docker compose logs beanpool-node</code> 会显示当前进度。一旦日志显示该社区尚无所有者并已生成认领码，请重新运行最后一行命令。完整步骤可参见运维手册中的<a href="guide/operators/first-time-setup.html">首次设置</a>。</p>
+
+                <h3 class="run-node-sub">推荐：Docker 更新时让社区继续运行</h3>
+                <p>开启 Docker 的 live-restore 后，Docker 可以重启，或安装补丁更新（patch），而不会让你的社区停止运行。 下面这一步需要 root 或 <code>sudo</code>，跳过也很安全：没有它社区照样运行，之后想做时，运维手册的“Updates and health”页面里有具体步骤。 负责安装的 AI 助手总会执行这一步 (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">用 AI 助手设置你的服务器</a>)。</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — 让社区持续运行</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">可选：Docker live-restore</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -572,28 +609,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="复制到剪贴板">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">最后一行命令：beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>你的地址。</strong>在粘贴前确定好，并修改最后一行命令以保持一致。如果你已经粘贴了，在提示问题处按回车键，然后重新运行最后一行：认领码会等待手机扫码。<strong>租用服务器</strong>（具有公网 IP 地址且开放 80 和 443 端口）：添加 <code>--ip</code> 及其 IP 地址，例如 <code>beanpool claim --ip 203.0.113.7</code>。你的服务器会通过 80 端口从 Let's Encrypt 为该地址获取专属证书，手机可通过 https://203.0.113.7 访问。<strong>家用电脑或未开放端口</strong>：保持原样即可。它会询问免费域名的前缀（例如输入 <strong>yourtown</strong> 即可获得 yourtown.beanpool.org；按回车跳过），通过服务器自行运行的隧道进行访问，最多等待三分钟即可上线。<strong>自有域名</strong>：将其 A 记录指向服务器的 IP 地址，开放 80 和 443 端口，并添加 <code>--address https://your.domain</code>。域名在更换服务器后仍能沿用，而 IP 地址不行：你稍后也可以在“设置”中添加域名，使用 IP 地址的成员不受影响。如需稍后在“设置”中选择，请添加 <code>--no-name</code>。普通的 <code>http://</code> 地址仅在家庭网络中有效：手机在互联网上会拒绝连接，认领过程也会给出警告。即使 BeanPool 项目的地址服务暂时不可用，认领操作依然可以正常工作。</li>
-                    <li><strong>认领码与二维码。</strong>它会显示一个一次性认领码和一个二维码。使用手机相机扫描二维码，或者打开 BeanPool，在<strong>寻找你的社区</strong>下输入服务器地址并点击<strong>认领</strong>。该手机即成为所有者。</li>
-                    <li><strong>设置。</strong>在浏览器中打开你的地址（或服务器自身地址）加上 <strong>/settings</strong>。设置向导会引导你为社区命名、添加第二位所有者，并生成三个创办邀请。在“节点身份”下设置你在地图上的位置，以便附近的人能找到你。</li>
-                </ol>
-                <p class="run-node-note">如果命令块提示 <strong>No claim code after 5 minutes</strong>，或者 <code>beanpool claim</code> 提示 <strong>This community has no claim code waiting</strong>，说明服务器尚未完成启动：<code>docker compose logs beanpool-node</code> 会显示当前进度。一旦日志显示该社区尚无所有者并已生成认领码，请重新运行最后一行命令。完整步骤可参见运维手册中的<a href="guide/operators/first-time-setup.html">首次设置</a>。</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

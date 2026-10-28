@@ -622,10 +622,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">Isang block: kunin, network, i-pull, simulan, maghintay, i-claim</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Kopyahin sa clipboard">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">Ang huling linya: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Ang iyong address.</strong> Piliin ito bago ka mag-paste, at baguhin ang huling linya upang tumugma. Kung na-paste mo na, pindutin ang Enter sa mga tanong nito, pagkatapos ay patakbuhin muli ang huling linya: naghihintay ang claim code para sa isang telepono. <strong>Isang inupahang server</strong> na may pampublikong IP address at bukas ang port 80 at 443: idagdag ang <code>--ip</code> at ang IP address nito, tulad ng sa <code>beanpool claim --ip 203.0.113.7</code>. Nakakakuha ang iyong server ng sarili nitong certificate para sa address na iyon mula sa Let's Encrypt, sa port 80, at nararating ito ng mga telepono sa https://203.0.113.7. <strong>Isang kompyuter sa bahay, o walang bukas na port</strong>: iwanan ito kung ano ito. Hihingi ito ng unang bahagi ng isang libreng pangalan (i-type lamang ang <strong>yourtown</strong> para sa yourtown.beanpool.org; lalampasan ito ng Enter), na nararating sa pamamagitan ng tunnel na pinapatakbo mismo ng iyong server, at naghihintay ng hanggang tatlong minuto para maging live ito. <strong>Sarili mong domain</strong>: ituro ang isang A record para dito sa IP address ng server, buksan ang port 80 at 443, at idagdag ang <code>--address https://your.domain</code>. Nananatili ang isang pangalan sa pagpapalit ng server; ang isang numero ay hindi: maaari kang magdagdag ng pangalan sa ibang pagkakataon sa Mga Setting, at ang mga miyembro na gumagamit ng IP address ay patuloy na gagana. Upang pumili sa ibang pagkakataon sa Mga Setting, idagdag ang <code>--no-name</code>. Ang payak na <code>http://</code> address ay gumagana lamang sa isang home network: tinatanggihan ito ng mga telepono sa internet, at binabalaan ka ng pag-claim. Kung hindi gumagana ang serbisyo ng address ng proyektong BeanPool, gagana pa rin ang pag-claim.</li>
+                    <li><strong>Ang code at QR.</strong> Nagpapakita ito ng isang one-time claim code at isang QR code. I-scan ang QR code gamit ang camera ng iyong telepono, o buksan ang BeanPool, i-type ang address ng server sa ilalim ng <strong>Hanapin ang iyong komunidad</strong> at i-tap ang <strong>I-claim</strong>. Ang teleponong iyon ang magiging may-ari.</li>
+                    <li><strong>Mga Setting.</strong> Buksan ang iyong address (o ang sariling address ng server) na sinusundan ng <strong>/settings</strong>. Pinapangalanan ng setup wizard ang iyong komunidad, hinihiling sa iyo na magdagdag ng pangalawang may-ari, at gumagawa ng tatlong pampundasyong imbitasyon. Itakda ang iyong lugar sa mapa sa ilalim ng Pagkakakilanlan ng Node upang mahanap ka ng mga tao sa malapit.</li>
+                </ol>
+                <p class="run-node-note">Kung sinabi ng block na <strong>No claim code after 5 minutes</strong>, o sinabi ng <code>beanpool claim</code> na <strong>This community has no claim code waiting</strong>, hindi pa natapos magsimula ang server: ipinapakita ng <code>docker compose logs beanpool-node</code> kung nasaan ito. Kapag sinabi ng log na wala pang may-ari ang komunidad at may claim code na, patakbuhin muli ang huling linya. Ang buong mga hakbang ay nasa <a href="../guide/operators/first-time-setup.html">unang pag-set up</a> ng manwal ng operator.</p>
+
+                <h3 class="run-node-sub">Inirerekomenda: panatilihing tumatakbo ang iyong komunidad kapag nag-a-update ang Docker</h3>
+                <p>Kapag naka-on ang live-restore ng Docker, puwedeng mag-restart ang Docker, o tumanggap ng patch update, nang hindi pinahihinto ang iyong komunidad. Ang hakbang sa ibaba ay nangangailangan ng root o <code>sudo</code> at ligtas itong laktawan: tumatakbo pa rin ang iyong komunidad kahit wala ito, at ang pahinang "Updates and health" ng manwal ng operator ay may mga hakbang para gawin ito sa susunod. Ang AI assistant na gumagawa ng install ay palaging ginagawa ang hakbang na ito (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">Pag-set up ng iyong server gamit ang AI assistant</a>).</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — panatilihing tumatakbo ang komunidad</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Opsyonal: live-restore ng Docker</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -657,28 +694,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="Kopyahin sa clipboard">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">Ang huling linya: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Ang iyong address.</strong> Piliin ito bago ka mag-paste, at baguhin ang huling linya upang tumugma. Kung na-paste mo na, pindutin ang Enter sa mga tanong nito, pagkatapos ay patakbuhin muli ang huling linya: naghihintay ang claim code para sa isang telepono. <strong>Isang inupahang server</strong> na may pampublikong IP address at bukas ang port 80 at 443: idagdag ang <code>--ip</code> at ang IP address nito, tulad ng sa <code>beanpool claim --ip 203.0.113.7</code>. Nakakakuha ang iyong server ng sarili nitong certificate para sa address na iyon mula sa Let's Encrypt, sa port 80, at nararating ito ng mga telepono sa https://203.0.113.7. <strong>Isang kompyuter sa bahay, o walang bukas na port</strong>: iwanan ito kung ano ito. Hihingi ito ng unang bahagi ng isang libreng pangalan (i-type lamang ang <strong>yourtown</strong> para sa yourtown.beanpool.org; lalampasan ito ng Enter), na nararating sa pamamagitan ng tunnel na pinapatakbo mismo ng iyong server, at naghihintay ng hanggang tatlong minuto para maging live ito. <strong>Sarili mong domain</strong>: ituro ang isang A record para dito sa IP address ng server, buksan ang port 80 at 443, at idagdag ang <code>--address https://your.domain</code>. Nananatili ang isang pangalan sa pagpapalit ng server; ang isang numero ay hindi: maaari kang magdagdag ng pangalan sa ibang pagkakataon sa Mga Setting, at ang mga miyembro na gumagamit ng IP address ay patuloy na gagana. Upang pumili sa ibang pagkakataon sa Mga Setting, idagdag ang <code>--no-name</code>. Ang payak na <code>http://</code> address ay gumagana lamang sa isang home network: tinatanggihan ito ng mga telepono sa internet, at binabalaan ka ng pag-claim. Kung hindi gumagana ang serbisyo ng address ng proyektong BeanPool, gagana pa rin ang pag-claim.</li>
-                    <li><strong>Ang code at QR.</strong> Nagpapakita ito ng isang one-time claim code at isang QR code. I-scan ang QR code gamit ang camera ng iyong telepono, o buksan ang BeanPool, i-type ang address ng server sa ilalim ng <strong>Hanapin ang iyong komunidad</strong> at i-tap ang <strong>I-claim</strong>. Ang teleponong iyon ang magiging may-ari.</li>
-                    <li><strong>Mga Setting.</strong> Buksan ang iyong address (o ang sariling address ng server) na sinusundan ng <strong>/settings</strong>. Pinapangalanan ng setup wizard ang iyong komunidad, hinihiling sa iyo na magdagdag ng pangalawang may-ari, at gumagawa ng tatlong pampundasyong imbitasyon. Itakda ang iyong lugar sa mapa sa ilalim ng Pagkakakilanlan ng Node upang mahanap ka ng mga tao sa malapit.</li>
-                </ol>
-                <p class="run-node-note">Kung sinabi ng block na <strong>No claim code after 5 minutes</strong>, o sinabi ng <code>beanpool claim</code> na <strong>This community has no claim code waiting</strong>, hindi pa natapos magsimula ang server: ipinapakita ng <code>docker compose logs beanpool-node</code> kung nasaan ito. Kapag sinabi ng log na wala pang may-ari ang komunidad at may claim code na, patakbuhin muli ang huling linya. Ang buong mga hakbang ay nasa <a href="../guide/operators/first-time-setup.html">unang pag-set up</a> ng manwal ng operator.</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

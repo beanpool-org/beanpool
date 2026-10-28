@@ -622,10 +622,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">ஒரே தொகுதி: பெறுதல், நெட்வொர்க், இழுத்தல், தொடங்குதல், காத்திருப்பு, உரிமை கோருதல்</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="கிளிப்போர்டுக்கு நகலெடு">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">கடைசி வரி: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>உங்கள் முகவரி.</strong> ஒட்டுவதற்கு முன் அதைத் தேர்வுசெய்து, பொருந்துமாறு கடைசி வரியை மாற்றவும். நீங்கள் ஏற்கனவே ஒட்டியிருந்தால், அதன் கேள்விகளுக்கு Enter ஐ அழுத்தவும், பிறகு கடைசி வரியை மீண்டும் இயக்கவும்: உரிமை கோரல் குறியீடு ஒரு போனுக்காகக் காத்திருக்கிறது. பொது IP முகவரி மற்றும் 80 மற்றும் 443 போர்ட்கள் திறக்கப்பட்ட <strong>ஒரு வாடகை சர்வர்</strong>: <code>beanpool claim --ip 203.0.113.7</code> என்பதில் உள்ளவாறு <code>--ip</code> மற்றும் அதன் IP முகவரியைச் சேர்க்கவும். உங்கள் சர்வர் போர்ட் 80 வழியாக Let's Encrypt-இலிருந்து அந்த முகவரிக்கான சொந்தச் சான்றிதழைப் பெறுகிறது, மேலும் போன்கள் அதை https://203.0.113.7-ல் அடைகின்றன. <strong>வீட்டில் உள்ள கணினி, அல்லது திறந்த போர்ட்கள் இல்லாதவை</strong>: அதை அப்படியே விட்டுவிடவும். இது ஒரு இலவசப் பெயரின் முதல் பகுதியைக் கேட்கிறது (yourtown.beanpool.org என்பதற்கு <strong>yourtown</strong> என்று மட்டும் தட்டச்சு செய்யவும்; Enter தவிர்த்துவிடும்), உங்கள் சர்வர் தானாகவே இயக்கும் ஒரு டனல் வழியாக அடையப்பட்டு, அது நேரலைக்கு வர மூன்று நிமிடங்கள் வரை காத்திருக்கிறது. <strong>உங்கள் சொந்த டொமைன்</strong>: சர்வரின் IP முகவரிக்கு அதற்கான A பதிவைக் குறிப்பிடவும், 80 மற்றும் 443 போர்ட்களைத் திறக்கவும், மேலும் <code>--address https://your.domain</code> ஐச் சேர்க்கவும். ஒரு பெயர் சர்வர் மாற்றத்தைத் தாங்கும்; ஒரு எண் தாங்காது: நீங்கள் பின்னர் அமைப்புகளில் ஒரு பெயரைச் சேர்க்கலாம், மேலும் IP முகவரியைப் பயன்படுத்தும் உறுப்பினர்கள் தொடர்ந்து பணியாற்றலாம். பின்னர் அமைப்புகளில் தேர்வுசெய்ய, <code>--no-name</code> ஐச் சேர்க்கவும். ஒரு சாதாரண <code>http://</code> முகவரி வீட்டு நெட்வொர்க்கில் மட்டுமே செயல்படும்: இணையத்தில் போன்கள் அதை மறுத்துவிடும், மேலும் உரிமை கோரல் உங்களை எச்சரிக்கிறது. BeanPool திட்டத்தின் முகவரி சேவை முடங்கியிருந்தாலும், உரிமை கோரல் தொடர்ந்து செயல்படும்.</li>
+                    <li><strong>குறியீடும் QR-உம்.</strong> இது ஒருமுறை உரிமை கோரல் குறியீட்டையும் ஒரு QR குறியீட்டையும் காட்டுகிறது. உங்கள் போனின் கேமரா மூலம் QR குறியீட்டை ஸ்கேன் செய்யவும், அல்லது BeanPool-ஐத் திறந்து, <strong>உங்கள் சமூகத்தைக் கண்டறியவும்</strong> என்பதன் கீழ் சர்வரின் முகவரியைத் தட்டச்சு செய்து <strong>உரிமை கோருங்கள்</strong> என்பதைத் தட்டவும். அந்தப் போன் உரிமையாளராக மாறும்.</li>
+                    <li><strong>அமைப்புகள்.</strong> உங்கள் முகவரியைத் (அல்லது சர்வரின் சொந்த முகவரி) தொடர்ந்து <strong>/settings</strong> என்பதைத் திறக்கவும். அமைவு வழிகாட்டி உங்கள் சமூகத்திற்குப் பெயரிடுகிறது, இரண்டாவது உரிமையாளரைச் சேர்க்கும்படி கேட்கிறது மற்றும் மூன்று தொடக்க அழைப்புகளை உருவாக்குகிறது. அருகிலுள்ளவர்கள் உங்களைக் கண்டறியும் வகையில் முனை அடையாளத்தின் (Node Identity) கீழ் வரைபடத்தில் உங்கள் இடத்தை அமைக்கவும்.</li>
+                </ol>
+                <p class="run-node-note">தொகுதியில் <strong>5 நிமிடங்களுக்குப் பிறகு உரிமை கோரல் குறியீடு இல்லை</strong> என்று கூறினால், அல்லது <code>beanpool claim</code> <strong>இந்தச் சமூகத்திற்கு உரிமை கோரல் குறியீடு எதுவும் காத்திருக்கவில்லை</strong> என்று கூறினால், சர்வர் இன்னும் தொடங்கி முடியவில்லை: <code>docker compose logs beanpool-node</code> அது எங்குள்ளது என்பதைக் காட்டுகிறது. சமூகம் இன்னும் உரிமையாளர் இல்லை மற்றும் உரிமை கோரல் குறியீட்டைக் கொண்டுள்ளது என்று பதிவு கூறியவுடன், கடைசி வரியை மீண்டும் இயக்கவும். முழுமையான படிகள் ஆபரேட்டர் கையேட்டின் <a href="../guide/operators/first-time-setup.html">முதல் முறை அமைப்பில்</a> உள்ளன.</p>
+
+                <h3 class="run-node-sub">பரிந்துரைக்கப்படுகிறது: Docker புதுப்பிக்கப்படும்போதும் உங்கள் சமூகத்தை இயங்க வைத்திருங்கள்</h3>
+                <p>Docker-இன் live-restore இயக்கத்தில் இருந்தால், Docker மறுதொடக்கம் செய்யலாம் அல்லது பேட்ச் புதுப்பிப்பைப் பெறலாம்; உங்கள் சமூகம் நிற்காது. கீழே உள்ள படிக்கு root அல்லது <code>sudo</code> தேவை, இதைத் தவிர்ப்பது பாதுகாப்பானது: இது இல்லாமலும் உங்கள் சமூகம் இயங்கும், பின்னர் செய்வதற்கான படிகள் ஆபரேட்டர் கையேட்டின் "Updates and health" பக்கத்தில் உள்ளன. நிறுவலைச் செய்யும் AI உதவியாளர் இந்தப் படியை எப்போதும் செய்வார் (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">AI உதவியாளருடன் உங்கள் சர்வரை அமைத்தல்</a>).</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — சமூகத்தை இயங்க வைத்திருங்கள்</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">விருப்பத்தேர்வு: Docker live-restore</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -657,28 +694,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="கிளிப்போர்டுக்கு நகலெடு">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">கடைசி வரி: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>உங்கள் முகவரி.</strong> ஒட்டுவதற்கு முன் அதைத் தேர்வுசெய்து, பொருந்துமாறு கடைசி வரியை மாற்றவும். நீங்கள் ஏற்கனவே ஒட்டியிருந்தால், அதன் கேள்விகளுக்கு Enter ஐ அழுத்தவும், பிறகு கடைசி வரியை மீண்டும் இயக்கவும்: உரிமை கோரல் குறியீடு ஒரு போனுக்காகக் காத்திருக்கிறது. பொது IP முகவரி மற்றும் 80 மற்றும் 443 போர்ட்கள் திறக்கப்பட்ட <strong>ஒரு வாடகை சர்வர்</strong>: <code>beanpool claim --ip 203.0.113.7</code> என்பதில் உள்ளவாறு <code>--ip</code> மற்றும் அதன் IP முகவரியைச் சேர்க்கவும். உங்கள் சர்வர் போர்ட் 80 வழியாக Let's Encrypt-இலிருந்து அந்த முகவரிக்கான சொந்தச் சான்றிதழைப் பெறுகிறது, மேலும் போன்கள் அதை https://203.0.113.7-ல் அடைகின்றன. <strong>வீட்டில் உள்ள கணினி, அல்லது திறந்த போர்ட்கள் இல்லாதவை</strong>: அதை அப்படியே விட்டுவிடவும். இது ஒரு இலவசப் பெயரின் முதல் பகுதியைக் கேட்கிறது (yourtown.beanpool.org என்பதற்கு <strong>yourtown</strong> என்று மட்டும் தட்டச்சு செய்யவும்; Enter தவிர்த்துவிடும்), உங்கள் சர்வர் தானாகவே இயக்கும் ஒரு டனல் வழியாக அடையப்பட்டு, அது நேரலைக்கு வர மூன்று நிமிடங்கள் வரை காத்திருக்கிறது. <strong>உங்கள் சொந்த டொமைன்</strong>: சர்வரின் IP முகவரிக்கு அதற்கான A பதிவைக் குறிப்பிடவும், 80 மற்றும் 443 போர்ட்களைத் திறக்கவும், மேலும் <code>--address https://your.domain</code> ஐச் சேர்க்கவும். ஒரு பெயர் சர்வர் மாற்றத்தைத் தாங்கும்; ஒரு எண் தாங்காது: நீங்கள் பின்னர் அமைப்புகளில் ஒரு பெயரைச் சேர்க்கலாம், மேலும் IP முகவரியைப் பயன்படுத்தும் உறுப்பினர்கள் தொடர்ந்து பணியாற்றலாம். பின்னர் அமைப்புகளில் தேர்வுசெய்ய, <code>--no-name</code> ஐச் சேர்க்கவும். ஒரு சாதாரண <code>http://</code> முகவரி வீட்டு நெட்வொர்க்கில் மட்டுமே செயல்படும்: இணையத்தில் போன்கள் அதை மறுத்துவிடும், மேலும் உரிமை கோரல் உங்களை எச்சரிக்கிறது. BeanPool திட்டத்தின் முகவரி சேவை முடங்கியிருந்தாலும், உரிமை கோரல் தொடர்ந்து செயல்படும்.</li>
-                    <li><strong>குறியீடும் QR-உம்.</strong> இது ஒருமுறை உரிமை கோரல் குறியீட்டையும் ஒரு QR குறியீட்டையும் காட்டுகிறது. உங்கள் போனின் கேமரா மூலம் QR குறியீட்டை ஸ்கேன் செய்யவும், அல்லது BeanPool-ஐத் திறந்து, <strong>உங்கள் சமூகத்தைக் கண்டறியவும்</strong> என்பதன் கீழ் சர்வரின் முகவரியைத் தட்டச்சு செய்து <strong>உரிமை கோருங்கள்</strong> என்பதைத் தட்டவும். அந்தப் போன் உரிமையாளராக மாறும்.</li>
-                    <li><strong>அமைப்புகள்.</strong> உங்கள் முகவரியைத் (அல்லது சர்வரின் சொந்த முகவரி) தொடர்ந்து <strong>/settings</strong> என்பதைத் திறக்கவும். அமைவு வழிகாட்டி உங்கள் சமூகத்திற்குப் பெயரிடுகிறது, இரண்டாவது உரிமையாளரைச் சேர்க்கும்படி கேட்கிறது மற்றும் மூன்று தொடக்க அழைப்புகளை உருவாக்குகிறது. அருகிலுள்ளவர்கள் உங்களைக் கண்டறியும் வகையில் முனை அடையாளத்தின் (Node Identity) கீழ் வரைபடத்தில் உங்கள் இடத்தை அமைக்கவும்.</li>
-                </ol>
-                <p class="run-node-note">தொகுதியில் <strong>5 நிமிடங்களுக்குப் பிறகு உரிமை கோரல் குறியீடு இல்லை</strong> என்று கூறினால், அல்லது <code>beanpool claim</code> <strong>இந்தச் சமூகத்திற்கு உரிமை கோரல் குறியீடு எதுவும் காத்திருக்கவில்லை</strong> என்று கூறினால், சர்வர் இன்னும் தொடங்கி முடியவில்லை: <code>docker compose logs beanpool-node</code> அது எங்குள்ளது என்பதைக் காட்டுகிறது. சமூகம் இன்னும் உரிமையாளர் இல்லை மற்றும் உரிமை கோரல் குறியீட்டைக் கொண்டுள்ளது என்று பதிவு கூறியவுடன், கடைசி வரியை மீண்டும் இயக்கவும். முழுமையான படிகள் ஆபரேட்டர் கையேட்டின் <a href="../guide/operators/first-time-setup.html">முதல் முறை அமைப்பில்</a> உள்ளன.</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

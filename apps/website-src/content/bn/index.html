@@ -1,4 +1,4 @@
-<!-- source-hash: 61572af87e52547a -->
+<!-- source-hash: 0a1bd7282ca4eef1 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -537,10 +537,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">একটি ব্লক: সংগ্রহ, নেটওয়ার্ক, পুল, চালু, অপেক্ষা, ক্লেইম</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="ক্লিপবোর্ডে কপি করুন">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">শেষ লাইনটি: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>আপনার ঠিকানা।</strong> পেস্ট করার আগেই এটি বেছে নিন এবং মেলানোর জন্য শেষ লাইনটি পরিবর্তন করুন। আপনি যদি ইতিমধ্যে পেস্ট করে থাকেন, তবে এর প্রশ্নগুলিতে Enter চাপুন, তারপর শেষ লাইনটি আবার চালান: দাবি কোডটি একটি ফোনের জন্য অপেক্ষা করে। <strong>একটি ভাড়া করা সার্ভার</strong> যাতে একটি পাবলিক আইপি ঠিকানা এবং ৮০ ও ৪৪৩ পোর্ট খোলা রয়েছে: <code>--ip</code> এবং এর আইপি ঠিকানা যুক্ত করুন, যেমন <code>beanpool claim --ip 203.0.113.7</code>। আপনার সার্ভার পোর্ট ৮০-র মাধ্যমে Let's Encrypt থেকে সেই ঠিকানার জন্য নিজস্ব সার্টিফিকেট পায় এবং ফোনগুলি https://203.0.113.7-এ এতে পৌঁছায়। <strong>বাড়িতে থাকা একটি কম্পিউটার, বা কোনো পোর্ট খোলা নেই</strong>: এটি যেমন আছে তেমনই রাখুন। এটি একটি বিনামূল্যের নামের প্রথম অংশের জন্য জিজ্ঞাসা করে (yourtown.beanpool.org-এর জন্য শুধু <strong>yourtown</strong> লিখুন; Enter চাপলে এড়িয়ে যাবে), যা আপনার সার্ভার নিজেই পরিচালিত একটি টানেলের মাধ্যমে যুক্ত হয়, এবং এটি সক্রিয় হতে তিন মিনিট পর্যন্ত অপেক্ষা করে। <strong>আপনার নিজস্ব ডোমেইন</strong>: সার্ভারের আইপি ঠিকানায় এর জন্য একটি A রেকর্ড নির্দেশ করুন, ৮০ এবং ৪৪৩ পোর্ট খুলুন এবং <code>--address https://your.domain</code> যুক্ত করুন। একটি নাম সার্ভার পরিবর্তনের পরেও টিকে থাকে; কোনো নম্বর টিকে থাকে না: আপনি পরে সেটিংসে একটি নাম যোগ করতে পারেন এবং যে সদস্যরা আইপি ঠিকানা ব্যবহার করেন তাঁদের কাজ অব্যাহত থাকে। সেটিংসে পরে বেছে নিতে, <code>--no-name</code> যোগ করুন। একটি সাধারণ <code>http://</code> ঠিকানা কেবল হোম নেটওয়ার্কে কাজ করে: ফোন ইন্টারনেটে এটি প্রত্যাখ্যান করে এবং ক্লেইম আপনাকে সতর্ক করে। BeanPool প্রকল্পের ঠিকানা পরিষেবা বন্ধ থাকলেও ক্লেইম কাজ করে।</li>
+                    <li><strong>কোড এবং QR।</strong> এটি একটি এককালীন দাবি কোড এবং একটি QR কোড দেখায়। আপনার ফোনের ক্যামেরা দিয়ে QR কোডটি স্ক্যান করুন, অথবা BeanPool খুলুন, <strong>আপনার সম্প্রদায় খুঁজুন</strong>-এর অধীনে সার্ভারের ঠিকানা টাইপ করুন এবং <strong>দাবি করুন</strong>-এ আলতো চাপুন। সেই ফোনটি মালিক হয়ে যায়।</li>
+                    <li><strong>সেটিংস।</strong> আপনার ঠিকানা (বা সার্ভারের নিজস্ব ঠিকানা) এবং তার পরে <strong>/settings</strong> খুলুন। সেটআপ উইজার্ড আপনার সম্প্রদায়ের নামকরণ করে, আপনাকে দ্বিতীয় একজন মালিক যুক্ত করতে বলে এবং তিনটি প্রতিষ্ঠাকালীন আমন্ত্রণ তৈরি করে। নোড আইডেন্টিটি (Node Identity)-এর অধীনে ম্যাপে আপনার অবস্থান সেট করুন যাতে আশেপাশের মানুষ আপনাকে খুঁজে পেতে পারেন।</li>
+                </ol>
+                <p class="run-node-note">যদি ব্লকটি বলে <strong>No claim code after 5 minutes</strong>, অথবা <code>beanpool claim</code> বলে <strong>This community has no claim code waiting</strong>, তবে সার্ভারটি চালু হওয়া এখনও শেষ হয়নি: <code>docker compose logs beanpool-node</code> দেখায় এটি কোন পর্যায়ে রয়েছে। লগ যখন বলে যে সম্প্রদায়ের এখনও কোনো মালিক নেই এবং একটি ক্লেইম কোড রয়েছে, তখন শেষ লাইনটি আবার চালান। সম্পূর্ণ ধাপগুলি অপারেটর ম্যানুয়ালের <a href="guide/operators/first-time-setup.html">প্রথমবারের সেটআপ</a>-এ রয়েছে।</p>
+
+                <h3 class="run-node-sub">প্রস্তাবিত: Docker আপডেট হলেও আপনার সম্প্রদায় চালু রাখুন</h3>
+                <p>Docker-এর live-restore চালু থাকলে Docker রিস্টার্ট করতে পারে, বা প্যাচ আপডেট নিতে পারে, আপনার সম্প্রদায় না থামিয়েই। নিচের ধাপের জন্য root বা <code>sudo</code> লাগে, আর এটি বাদ দেওয়া নিরাপদ: এটি ছাড়াও আপনার সম্প্রদায় চলে, আর পরে করার ধাপগুলো অপারেটর ম্যানুয়ালের "Updates and health" পৃষ্ঠায় আছে। যে এআই সহকারী ইনস্টল করে, সে সবসময় এই ধাপটি করে (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">এআই সহকারী দিয়ে আপনার সার্ভার সেট আপ করা</a>)।</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — সম্প্রদায় চালু রাখুন</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">ঐচ্ছিক: Docker live-restore</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -572,28 +609,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="ক্লিপবোর্ডে কপি করুন">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">শেষ লাইনটি: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>আপনার ঠিকানা।</strong> পেস্ট করার আগেই এটি বেছে নিন এবং মেলানোর জন্য শেষ লাইনটি পরিবর্তন করুন। আপনি যদি ইতিমধ্যে পেস্ট করে থাকেন, তবে এর প্রশ্নগুলিতে Enter চাপুন, তারপর শেষ লাইনটি আবার চালান: দাবি কোডটি একটি ফোনের জন্য অপেক্ষা করে। <strong>একটি ভাড়া করা সার্ভার</strong> যাতে একটি পাবলিক আইপি ঠিকানা এবং ৮০ ও ৪৪৩ পোর্ট খোলা রয়েছে: <code>--ip</code> এবং এর আইপি ঠিকানা যুক্ত করুন, যেমন <code>beanpool claim --ip 203.0.113.7</code>। আপনার সার্ভার পোর্ট ৮০-র মাধ্যমে Let's Encrypt থেকে সেই ঠিকানার জন্য নিজস্ব সার্টিফিকেট পায় এবং ফোনগুলি https://203.0.113.7-এ এতে পৌঁছায়। <strong>বাড়িতে থাকা একটি কম্পিউটার, বা কোনো পোর্ট খোলা নেই</strong>: এটি যেমন আছে তেমনই রাখুন। এটি একটি বিনামূল্যের নামের প্রথম অংশের জন্য জিজ্ঞাসা করে (yourtown.beanpool.org-এর জন্য শুধু <strong>yourtown</strong> লিখুন; Enter চাপলে এড়িয়ে যাবে), যা আপনার সার্ভার নিজেই পরিচালিত একটি টানেলের মাধ্যমে যুক্ত হয়, এবং এটি সক্রিয় হতে তিন মিনিট পর্যন্ত অপেক্ষা করে। <strong>আপনার নিজস্ব ডোমেইন</strong>: সার্ভারের আইপি ঠিকানায় এর জন্য একটি A রেকর্ড নির্দেশ করুন, ৮০ এবং ৪৪৩ পোর্ট খুলুন এবং <code>--address https://your.domain</code> যুক্ত করুন। একটি নাম সার্ভার পরিবর্তনের পরেও টিকে থাকে; কোনো নম্বর টিকে থাকে না: আপনি পরে সেটিংসে একটি নাম যোগ করতে পারেন এবং যে সদস্যরা আইপি ঠিকানা ব্যবহার করেন তাঁদের কাজ অব্যাহত থাকে। সেটিংসে পরে বেছে নিতে, <code>--no-name</code> যোগ করুন। একটি সাধারণ <code>http://</code> ঠিকানা কেবল হোম নেটওয়ার্কে কাজ করে: ফোন ইন্টারনেটে এটি প্রত্যাখ্যান করে এবং ক্লেইম আপনাকে সতর্ক করে। BeanPool প্রকল্পের ঠিকানা পরিষেবা বন্ধ থাকলেও ক্লেইম কাজ করে।</li>
-                    <li><strong>কোড এবং QR।</strong> এটি একটি এককালীন দাবি কোড এবং একটি QR কোড দেখায়। আপনার ফোনের ক্যামেরা দিয়ে QR কোডটি স্ক্যান করুন, অথবা BeanPool খুলুন, <strong>আপনার সম্প্রদায় খুঁজুন</strong>-এর অধীনে সার্ভারের ঠিকানা টাইপ করুন এবং <strong>দাবি করুন</strong>-এ আলতো চাপুন। সেই ফোনটি মালিক হয়ে যায়।</li>
-                    <li><strong>সেটিংস।</strong> আপনার ঠিকানা (বা সার্ভারের নিজস্ব ঠিকানা) এবং তার পরে <strong>/settings</strong> খুলুন। সেটআপ উইজার্ড আপনার সম্প্রদায়ের নামকরণ করে, আপনাকে দ্বিতীয় একজন মালিক যুক্ত করতে বলে এবং তিনটি প্রতিষ্ঠাকালীন আমন্ত্রণ তৈরি করে। নোড আইডেন্টিটি (Node Identity)-এর অধীনে ম্যাপে আপনার অবস্থান সেট করুন যাতে আশেপাশের মানুষ আপনাকে খুঁজে পেতে পারেন।</li>
-                </ol>
-                <p class="run-node-note">যদি ব্লকটি বলে <strong>No claim code after 5 minutes</strong>, অথবা <code>beanpool claim</code> বলে <strong>This community has no claim code waiting</strong>, তবে সার্ভারটি চালু হওয়া এখনও শেষ হয়নি: <code>docker compose logs beanpool-node</code> দেখায় এটি কোন পর্যায়ে রয়েছে। লগ যখন বলে যে সম্প্রদায়ের এখনও কোনো মালিক নেই এবং একটি ক্লেইম কোড রয়েছে, তখন শেষ লাইনটি আবার চালান। সম্পূর্ণ ধাপগুলি অপারেটর ম্যানুয়ালের <a href="guide/operators/first-time-setup.html">প্রথমবারের সেটআপ</a>-এ রয়েছে।</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

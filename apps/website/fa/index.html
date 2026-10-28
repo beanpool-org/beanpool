@@ -622,10 +622,47 @@
                         <div class="cta-step">
                             <span class="cta-step-label">یک بلوک: دریافت، شبکه، دانلود، اجرا، انتظار، ثبت</span>
                             <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="کپی در کلیپ‌بورد">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">خط آخر: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>آدرس شما.</strong> پیش از چسباندن کد، آن را انتخاب کنید و خط آخر را متناسب با آن تغییر دهید. اگر قبلاً چسبانده‌اید، در پاسخ به سؤالات Enter را بزنید، سپس خط آخر را دوباره اجرا کنید: کد مالکیت منتظر یک گوشی می‌ماند. <strong>یک سرور اجاره‌ای</strong> با آدرس IP عمومی و پورت‌های باز ۸۰ و ۴۴۳: عبارت <code>--ip</code> و آدرس IP آن را اضافه کنید، مانند <code>beanpool claim --ip 203.0.113.7</code>. سرور شما گواهی اختصاصی خود را برای آن آدرس از طریق Let's Encrypt روی پورت ۸۰ دریافت می‌کند و گوشی‌ها در نشانی https://203.0.113.7 به آن متصل می‌شوند. <strong>یک رایانه در خانه، یا بدون پورت‌های باز</strong>: آن را همان‌طور که هست بگذارید. این دستور بخش اول نام رایگان را می‌پرسد (فقط عبارت <strong>yourtown</strong> را برای yourtown.beanpool.org تایپ کنید؛ زدن Enter از آن رد می‌شود)، که از طریق تونلی که خود سرور اجرا می‌کند در دسترس قرار می‌گیرد و تا سه دقیقه منتظر فعال شدن آن می‌ماند. <strong>دامنه اختصاصی شما</strong>: یک رکورد A برای آن به سمت آدرس IP سرور تنظیم کنید، پورت‌های ۸۰ و ۴۴۳ را باز بگذارید و عبارت <code>--address https://your.domain</code> را اضافه کنید. یک نام پس از تغییر سرور باقی می‌ماند؛ یک عدد IP باقی نمی‌ماند: می‌توانید بعداً در تنظیمات نامی اضافه کنید و اعضایی که از آدرس IP استفاده می‌کنند همچنان متصل می‌مانند. برای انتخاب در آینده از طریق تنظیمات، عبارت <code>--no-name</code> را اضافه کنید. یک آدرس معمولی <code>http://</code> فقط روی شبکه خانگی کار می‌کند: گوشی‌ها در اینترنت آن را رد می‌کنند و دستور ثبت به شما هشدار می‌دهد. اگر سرویس آدرس پروژه BeanPool قطع باشد، دستور ثبت همچنان کار می‌کند.</li>
+                    <li><strong>کد و QR.</strong> یک کد مالکیت یک‌بارمصرف و یک کد QR نشان می‌دهد. کد QR را با دوربین گوشی خود اسکن کنید، یا BeanPool را باز کنید، آدرس سرور را در بخش <strong>جامعه خود را پیدا کنید</strong> تایپ کنید و روی <strong>ثبت (Claim)</strong> ضربه بزنید. آن گوشی مالک جامعه می‌شود.</li>
+                    <li><strong>تنظیمات.</strong> آدرس خود (یا آدرس سرور) را به همراه <strong>/settings</strong> در انتها باز کنید. راهنمای راه‌اندازی جامعه شما را نام‌گذاری می‌کند، از شما می‌خواهد مالک دومی اضافه کنید و سه دعوت‌نامه اولیه می‌سازد. مکان خود را روی نقشه زیر هویت نود تنظیم کنید تا افراد نزدیک بتوانند شما را پیدا کنند.</li>
+                </ol>
+                <p class="run-node-note">اگر در بلوک متن <strong>No claim code after 5 minutes</strong> نمایش داده شد، یا دستور <code>beanpool claim</code> اعلام کرد <strong>This community has no claim code waiting</strong>، سرور هنوز مراحل راه‌اندازی را به پایان نرسانده است: دستور <code>docker compose logs beanpool-node</code> نشان می‌دهد در چه مرحله‌ای قرار دارد. هنگامی که در گزارش ثبت شد جامعه هنوز مالکی ندارد و کد مالکیت آماده است، خط آخر را دوباره اجرا کنید. مراحل کامل در بخش <a href="../guide/operators/first-time-setup.html">راه‌اندازی اولیه</a> از راهنمای گردانندگان آمده است.</p>
+
+                <h3 class="run-node-sub">توصیه‌شده: هنگام به‌روزرسانی Docker جامعه‌تان را روشن نگه دارید</h3>
+                <p>وقتی live-restore در Docker روشن باشد، Docker می‌تواند راه‌اندازی مجدد شود یا یک به‌روزرسانی وصله‌ای (patch) بگیرد، بدون اینکه جامعه‌تان را متوقف کند. گام زیر به root یا <code>sudo</code> نیاز دارد و رد کردنش بی‌خطر است: جامعه‌تان بدون آن هم کار می‌کند و مراحل انجام دادنش در آینده در صفحهٔ «Updates and health» راهنمای گردانندگان آمده است. دستیار هوش مصنوعی‌ای که نصب را انجام می‌دهد همیشه این گام را اجرا می‌کند (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">راه‌اندازی سرور شما با دستیار هوش مصنوعی</a>).</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — روشن نگه داشتن جامعه</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">اختیاری: live-restore در Docker</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
@@ -657,28 +694,13 @@ os.replace(tmp, p)
 PY
 systemctl reload docker &lt;/dev/null || exit 1
 if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
+EOF</code>
                             <button class="copy-btn" onclick="copyCode(this)" title="کپی در کلیپ‌بورد">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             </button>
                         </div>
                     </div>
                 </div>
-
-                <h3 class="run-node-sub">خط آخر: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>آدرس شما.</strong> پیش از چسباندن کد، آن را انتخاب کنید و خط آخر را متناسب با آن تغییر دهید. اگر قبلاً چسبانده‌اید، در پاسخ به سؤالات Enter را بزنید، سپس خط آخر را دوباره اجرا کنید: کد مالکیت منتظر یک گوشی می‌ماند. <strong>یک سرور اجاره‌ای</strong> با آدرس IP عمومی و پورت‌های باز ۸۰ و ۴۴۳: عبارت <code>--ip</code> و آدرس IP آن را اضافه کنید، مانند <code>beanpool claim --ip 203.0.113.7</code>. سرور شما گواهی اختصاصی خود را برای آن آدرس از طریق Let's Encrypt روی پورت ۸۰ دریافت می‌کند و گوشی‌ها در نشانی https://203.0.113.7 به آن متصل می‌شوند. <strong>یک رایانه در خانه، یا بدون پورت‌های باز</strong>: آن را همان‌طور که هست بگذارید. این دستور بخش اول نام رایگان را می‌پرسد (فقط عبارت <strong>yourtown</strong> را برای yourtown.beanpool.org تایپ کنید؛ زدن Enter از آن رد می‌شود)، که از طریق تونلی که خود سرور اجرا می‌کند در دسترس قرار می‌گیرد و تا سه دقیقه منتظر فعال شدن آن می‌ماند. <strong>دامنه اختصاصی شما</strong>: یک رکورد A برای آن به سمت آدرس IP سرور تنظیم کنید، پورت‌های ۸۰ و ۴۴۳ را باز بگذارید و عبارت <code>--address https://your.domain</code> را اضافه کنید. یک نام پس از تغییر سرور باقی می‌ماند؛ یک عدد IP باقی نمی‌ماند: می‌توانید بعداً در تنظیمات نامی اضافه کنید و اعضایی که از آدرس IP استفاده می‌کنند همچنان متصل می‌مانند. برای انتخاب در آینده از طریق تنظیمات، عبارت <code>--no-name</code> را اضافه کنید. یک آدرس معمولی <code>http://</code> فقط روی شبکه خانگی کار می‌کند: گوشی‌ها در اینترنت آن را رد می‌کنند و دستور ثبت به شما هشدار می‌دهد. اگر سرویس آدرس پروژه BeanPool قطع باشد، دستور ثبت همچنان کار می‌کند.</li>
-                    <li><strong>کد و QR.</strong> یک کد مالکیت یک‌بارمصرف و یک کد QR نشان می‌دهد. کد QR را با دوربین گوشی خود اسکن کنید، یا BeanPool را باز کنید، آدرس سرور را در بخش <strong>جامعه خود را پیدا کنید</strong> تایپ کنید و روی <strong>ثبت (Claim)</strong> ضربه بزنید. آن گوشی مالک جامعه می‌شود.</li>
-                    <li><strong>تنظیمات.</strong> آدرس خود (یا آدرس سرور) را به همراه <strong>/settings</strong> در انتها باز کنید. راهنمای راه‌اندازی جامعه شما را نام‌گذاری می‌کند، از شما می‌خواهد مالک دومی اضافه کنید و سه دعوت‌نامه اولیه می‌سازد. مکان خود را روی نقشه زیر هویت نود تنظیم کنید تا افراد نزدیک بتوانند شما را پیدا کنند.</li>
-                </ol>
-                <p class="run-node-note">اگر در بلوک متن <strong>No claim code after 5 minutes</strong> نمایش داده شد، یا دستور <code>beanpool claim</code> اعلام کرد <strong>This community has no claim code waiting</strong>، سرور هنوز مراحل راه‌اندازی را به پایان نرسانده است: دستور <code>docker compose logs beanpool-node</code> نشان می‌دهد در چه مرحله‌ای قرار دارد. هنگامی که در گزارش ثبت شد جامعه هنوز مالکی ندارد و کد مالکیت آماده است، خط آخر را دوباره اجرا کنید. مراحل کامل در بخش <a href="../guide/operators/first-time-setup.html">راه‌اندازی اولیه</a> از راهنمای گردانندگان آمده است.</p>
 
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>

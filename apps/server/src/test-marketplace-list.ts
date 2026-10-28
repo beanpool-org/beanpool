@@ -183,7 +183,7 @@ async function main(): Promise<void> {
         `a key with no row is refused before the route without the visitors' view (got ${strangerNoViewRes.status})`);
     setSwitchOverride('guestListingsOnly', true);
 
-    // 6. Home Market rows: enterprise photoless listing carries bannerUrl, member's carries null, visitor gets null
+    // 6. Home Market rows: enterprise photoless listing carries bannerUrl; a member's and a visitor's row have no bannerUrl key
     const homeMemberRes = await call('GET', alice, '/api/home');
     assert(homeMemberRes.status === 200, `member GET /api/home returns 200 (got ${homeMemberRes.status})`);
     const homeMarketItems = homeMemberRes.body?.cards?.market?.items || [];
@@ -193,17 +193,17 @@ async function main(): Promise<void> {
     assert(typeof entHomeItem?.bannerUrl === 'string' && entHomeItem.bannerUrl.startsWith(`/api/shops/${entShop.id}/photo?v=`) && entHomeItem.bannerUrl.includes('&k='),
         `enterprise listing in home market items carries shop bannerUrl (got ${entHomeItem?.bannerUrl})`);
     assert(!!bobHomeItem, 'bob listing found in home market items');
-    assert(bobHomeItem?.bannerUrl === null,
-        `member listing in home market items carries null bannerUrl (got ${bobHomeItem?.bannerUrl})`);
+    assert(!('bannerUrl' in bobHomeItem),
+        `member listing in home market items has no bannerUrl key (got ${bobHomeItem?.bannerUrl})`);
 
-    // Visitor read of /api/home: visitor gets null bannerUrl on enterprise listing
+    // Visitor read of /api/home: no bannerUrl key on the enterprise listing (W3: the visitors' answer gains no field)
     const homeVisitorRes = await call('GET', null, '/api/home');
     assert(homeVisitorRes.status === 200, `visitor GET /api/home returns 200 (got ${homeVisitorRes.status})`);
     const homeVisitorItems = homeVisitorRes.body?.cards?.market?.items || [];
     const entVisitorHomeItem = homeVisitorItems.find((p: any) => p.id === 'post-ent-1');
     assert(!!entVisitorHomeItem, 'enterprise listing found in visitor home market items');
-    assert(entVisitorHomeItem?.bannerUrl === null,
-        `visitor gets null bannerUrl on enterprise listing in home (got ${entVisitorHomeItem?.bannerUrl})`);
+    assert(!('bannerUrl' in entVisitorHomeItem),
+        `visitor gets no bannerUrl key on enterprise listing in home (got ${entVisitorHomeItem?.bannerUrl})`);
 
     // 7. Standby sync delta import: multiple shops for an owner do NOT duplicate post rows in feed
     db.prepare(`

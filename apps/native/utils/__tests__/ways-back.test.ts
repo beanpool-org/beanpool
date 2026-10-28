@@ -284,11 +284,13 @@ describe('a community that can\'t be reached: "not yet removed", remembered, and
         // A waiting delete is not a way back the member is counting on.
         expect(knownCopies(waiting).filter(c => c.at === 'community')).toEqual([]);
 
-        // The next open (app/_layout.tsx runs this at app open and at each return): Mullum answers now.
+        // The next open (app/_layout.tsx runs this at app open and at each return): Mullum answers now. One delete is
+        // sent (the stub records the one that didn't get through as well).
         net.communities[MULLUM].down = false;
+        const tried = deletesAt(net, MULLUM).length;
         await retryCommunityRemovals(kim);
         expect(net.communities[MULLUM].copies.size).toBe(0);
-        expect(deletesAt(net, MULLUM)).toHaveLength(1);
+        expect(deletesAt(net, MULLUM).length - tried).toBe(1);
         expect((await listWaysBack(kim)).pending).toEqual([]);
     });
 
@@ -315,9 +317,11 @@ describe('a community that can\'t be reached: "not yet removed", remembered, and
         // Meanwhile Kim linked Google at Mullum again from another device: a fresh copy, a new generation.
         net.communities[MULLUM].down = false;
         net.communities[MULLUM].generation = 6;
+        const tried = deletesAt(net, MULLUM).length;
         await retryCommunityRemovals(kim);
 
-        expect(deletesAt(net, MULLUM)).toHaveLength(0);
+        // Not one delete sent at the retry: only the status asked.
+        expect(deletesAt(net, MULLUM).length - tried).toBe(0);
         expect(net.communities[MULLUM].copies.has('google')).toBe(true);
         const after = await listWaysBack(kim);
         expect(after.pending).toEqual([]);

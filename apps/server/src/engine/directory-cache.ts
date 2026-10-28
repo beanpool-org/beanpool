@@ -504,6 +504,11 @@ export interface CommunityQuery {
     point?: { lat: number; lng: number } | null;
     /** A name search, as the reader typed it. */
     q?: string | null;
+    /**
+     * One community by the host of its address (core askHost: lowercased, port kept), as a community's card names it in
+     * `?ask=<host>` (front doors S15): the lobby opens its Find card on that community.
+     */
+    host?: string | null;
     limit?: number;
     offset?: number;
     /**
@@ -537,6 +542,16 @@ function tieRank(order: number, key: string): number {
     return h >>> 0;
 }
 
+/** The host of a row's https origin, lowercased with its port, or null. */
+function urlHost(url: string | null): string | null {
+    if (!url) return null;
+    try {
+        return new URL(url).host.toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
 /**
  * The listed communities. From a point (design §1.2): nearest first by the centre of each one's service radius, in
  * bands of {@link DISTANCE_BAND_KM} km; within a band, the communities that keep the listing promise and take requests
@@ -552,6 +567,7 @@ export function listCommunities(query: CommunityQuery): { communities: Community
     const order = query.order ?? newDirectoryOrder();
     const rows = listed()
         .filter(x => !needle || (x.folded !== null && x.folded.includes(needle)))
+        .filter(x => !query.host || urlHost(x.row.url) === query.host)
         .map(({ row: r, folded }) => {
             const d = query.point && r.lat !== null && r.lng !== null ? haversineKm(query.point.lat, query.point.lng, r.lat, r.lng) : null;
             return {

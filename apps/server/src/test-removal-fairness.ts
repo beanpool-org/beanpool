@@ -392,11 +392,14 @@ async function main() {
     fresh();
     const finnHidden = await admin(`/api/local/admin/decisions/${finnVote}/hide-case`, abeSession, { reason: 'Finn borrowed the drill with the steward\'s say-so' });
     const finnAfter = await cardFor(vi, finnVote);
+    // Home's Decide card lists the soonest closing first: Finn's closes first, so its row is there.
+    db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(new Date(Date.now() + 3600_000).toISOString(), finnVote);
     fresh();
     const home = await signed('GET', '/api/home?cards=needs,decide', vi);
+    const homeRow = (home.body?.cards?.decide?.items ?? []).find((i: any) => i.id === finnVote);
     assert(finnHidden.status === 200 && finnAfter.card?.title === 'Remove FinnFox?' && !finnAfter.text.includes('thief') && !finnAfter.text.includes('stole')
-        && home.status === 200 && !home.text.includes('thief'),
-        `a member's own title gives way to the node's, on Decide and on Home (${finnHidden.status} "${finnAfter.card?.title}"; home ${home.status})`);
+        && home.status === 200 && homeRow?.title === 'Remove FinnFox?' && !home.text.includes('thief'),
+        `a member's own title gives way to the node's, on Decide and on Home (${finnHidden.status} "${finnAfter.card?.title}"; home ${home.status} "${homeRow?.title}")`);
 
     // ── 5. Reporting the case as false ──────────────────────────────────────────────────────────────────────────────
     console.log('\n5. The member reports the case as a false accusation');
@@ -493,6 +496,16 @@ async function main() {
     const halVote = (await pause(adaSession, hal, 'Spammed the market chat with adverts')).body?.decision?.id as string;
     voteAndClose(halVote, false);
     assert(row(halVote).status === 'failed', 'Hal\'s vote fails');
+    // A closed vote's case can be hidden too: the admin list carries the closed removal votes, newest first.
+    fresh();
+    const listed = await admin('/api/local/admin/decisions', adaSession);
+    const pastIds = (listed.body?.pastRemovals ?? []).map((d: any) => d.id);
+    assert(pastIds[0] === halVote && pastIds.includes(daveVote) && !(listed.body?.decisions ?? []).some((d: any) => d.id === halVote),
+        `the admin list carries the closed votes on removing a member, newest first (${pastIds.length}: ${pastIds.slice(0, 3).join(', ')})`);
+    const hideClosed = await admin(`/api/local/admin/decisions/${halVote}/hide-case`, abeSession, { reason: 'The adverts were the market stall he runs' });
+    const halCard = await cardFor(vi, halVote);
+    assert(hideClosed.status === 200 && halCard.card?.status === 'failed' && halCard.card?.caseHiddenReason === 'The adverts were the market stall he runs'
+        && !halCard.text.includes('Spammed the market chat'), `and its case hidden after the vote (${hideClosed.status})`);
     setSwitchOverride('decisions', false);
     try {
         expo.length = 0;

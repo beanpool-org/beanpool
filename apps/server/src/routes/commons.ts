@@ -349,7 +349,8 @@ router.post('/api/commons/decisions/:id/report', async (ctx) => {
     }
     if (isReportRateLimited(actor)) {
         ctx.status = 429;
-        ctx.body = { error: 'rate_limited', message: word('You have sent a lot of reports recently. Please try again in an hour.') };
+        // The reports route's own answer, as it words it: an app matches on these words (apps/pwa lib/web-join.ts), so they stay English.
+        ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
         return;
     }
     if (!submitReport(actor, about.target, about.reason)) {

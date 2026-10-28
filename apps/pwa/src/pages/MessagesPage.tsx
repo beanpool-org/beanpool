@@ -55,7 +55,7 @@ import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { bundledGroupEmblem, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
-import { readsOwn } from '../lib/features';
+import { readsOwn, useCommunityInfo } from '../lib/features';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -271,6 +271,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => { if (!requests && activeTab === 'requests') setActiveTab('all'); }, [requests, activeTab]);
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
+    // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to Start something on a community with
+    // Beans off (the phone's CreateGroupModal, and Commons' own Create form). Unknown counts as on, as everywhere.
+    const beansOn = useCommunityInfo()?.features?.beans !== false;
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
     // The DM whose lines have arrived: the pinned Rate your partner waits for them, so it never flashes over its own line.
@@ -3287,6 +3290,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <CreateGroupModal
                     isOpen
                     onClose={() => setShowCreateGroup(false)}
+                    onStartWithBeans={!beansOn ? undefined : () => {
+                        setShowCreateGroup(false);
+                        onNavigate?.('projects', 'start');
+                    }}
                     onCreated={(group) => {
                         // As the phone's (decision 8): straight into the new group's chat. Its id is the group's.
                         setShowCreateGroup(false);

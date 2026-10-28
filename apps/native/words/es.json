@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 FINANCIADO",
   "🌱 PROJECT": "🌱 PROYECTO",
   "🏛️ ENTERPRISE": "🏛️ EMPRENDIMIENTO",
-  "Enterprise Balance": "Saldo del emprendimiento",
   "in deficit (keepers eat last)": "en déficit (los encargados comen al final)",
   "Pledge Beans": "Aportar frijoles",
   "Word {n}: {word}": "Palabra {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "DECLARACIÓN DE PROPÓSITO *",
   "Purpose statement": "Declaración de propósito",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Indica claramente para qué existe este emprendimiento (p. ej., «Construimos y mantenemos un sombreadero comunitario para noviembre»).",
-  "The purpose statement is what the community judges the initiative against.": "La declaración de propósito es la base con la que la comunidad evalúa la iniciativa.",
   "FUNDING GOAL ({currency}) *": "META DE FINANCIAMIENTO ({currency}) *",
   "Funding goal amount": "Monto de la meta de financiamiento",
   "Pledges are held safely in the enterprise account.": "Los aportes se guardan de forma segura en la cuenta del emprendimiento.",
@@ -6133,5 +6131,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Avísame cuando empiece una comunidad aquí o indica que ayudarías a empezar una",
   "Nothing within 250 km yet.": "Todavía no hay nada en un radio de 250 km.",
   "See what people post elsewhere ›": "Mira lo que publica la gente en otros lugares ›",
-  "Set your area": "Define tu zona"
+  "Set your area": "Define tu zona",
+  "The purpose statement is what the community judges the project or enterprise against.": "La declaración de propósito es la base con la que la comunidad evalúa el proyecto o emprendimiento."
 }

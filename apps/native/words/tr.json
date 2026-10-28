@@ -424,7 +424,6 @@
   "🎉 FUNDED": "🎉 FONLANDI",
   "🌱 PROJECT": "🌱 PROJE",
   "🏛️ ENTERPRISE": "🏛️ GİRİŞİM",
-  "Enterprise Balance": "Girişim Bakiyesi",
   "in deficit (keepers eat last)": "açıkta (yöneticiler en son alır)",
   "Pledge Beans": "Fasulye Taahhüt Et",
   "Word {n}: {word}": "Kelime {n}: {word}",
@@ -2668,7 +2667,6 @@
   "PURPOSE STATEMENT *": "AMAÇ METNİ *",
   "Purpose statement": "Amaç metni",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Bu girişimin ne yapmak için var olduğunu açıkça belirtin (ör. 'Kasım ayına kadar ortak bir gölgelik inşa edip bakımını yapıyoruz').",
-  "The purpose statement is what the community judges the initiative against.": "Topluluk, girişimi amaç metnine göre değerlendirir.",
   "FUNDING GOAL ({currency}) *": "FONLAMA HEDEFİ ({currency}) *",
   "Funding goal amount": "Fonlama hedefi tutarı",
   "Pledges are held safely in the enterprise account.": "Taahhütler girişim hesabında güvenle tutulur.",
@@ -6129,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Burada bir topluluk başladığında bana haber ver ya da başlatmaya yardım et",
   "Nothing within 250 km yet.": "Henüz 250 km içinde hiçbir şey yok.",
   "See what people post elsewhere ›": "İnsanların başka yerlerde ne paylaştığını gör ›",
-  "Set your area": "Bölgeni ayarla"
+  "Set your area": "Bölgeni ayarla",
+  "The purpose statement is what the community judges the project or enterprise against.": "Topluluk, projeyi veya girişimi amaç metnine göre değerlendirir."
 }

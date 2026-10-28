@@ -61,7 +61,7 @@ The entry carries the name, the time, the place and the link back to the event. 
 
 ## Creating an event
 
-- Tap **+ ADD POST** on the Market tab or the Map, then **Event**.
+- On **Commons**, tap **Start something** (on the phone, the round **+** button) and pick **Event**. Or tap **+ ADD POST** on the Market tab or the Map, then **Event**.
 - **Title**, and when it **Starts**. **Ends** is optional; it is 2 hours later unless you change it.
 - Times are in the event's own time zone, taken from the pin. When that is not your own zone, a line under the times names it. Tap **Change** beside it if it is wrong.
 - **Repeats:** choose how often it comes round, such as every week on that day or once a month, or leave it at **Does not repeat**. **Until** is optional: leave it blank and the event repeats until you cancel it.

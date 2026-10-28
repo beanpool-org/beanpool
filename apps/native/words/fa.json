@@ -424,7 +424,6 @@
   "🎉 FUNDED": "🎉 تأمین مالی‌شده",
   "🌱 PROJECT": "🌱 پروژه",
   "🏛️ ENTERPRISE": "🏛️ طرح تجاری",
-  "Enterprise Balance": "موجودی طرح",
   "in deficit (keepers eat last)": "در کسری (مدیران در آخر سهم می‌برند)",
   "Pledge Beans": "تعهد لوبیا",
   "Word {n}: {word}": "کلمه {n}: {word}",
@@ -2668,7 +2667,6 @@
   "PURPOSE STATEMENT *": "بیانیه هدف *",
   "Purpose statement": "بیانیه هدف",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "به‌روشنی بیان کنید این طرح تجاری برای چه هدفی ایجاد شده است (مثلاً: «تا آبان‌ماه سایه‌بان مشترک محله را ساخته و نگهداری می‌کنیم»).",
-  "The purpose statement is what the community judges the initiative against.": "بیانیه هدف معیاری است که جامعه بر اساس آن ابتکار را می‌سنجد.",
   "FUNDING GOAL ({currency}) *": "هدف تأمین مالی ({currency}) *",
   "Funding goal amount": "مبلغ هدف تأمین مالی",
   "Pledges are held safely in the enterprise account.": "تعهدات با امنیت در حساب طرح تجاری نگهداری می‌شوند.",
@@ -6129,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "وقتی جامعه‌ای اینجا شروع شد به من خبر بده، یا بگو برای شروع کمک می‌کنی",
   "Nothing within 250 km yet.": "هنوز چیزی در فاصله ۲۵۰ کیلومتری نیست.",
   "See what people post elsewhere ›": "ببینید دیگران در جاهای دیگر چه ارسال می‌کنند ›",
-  "Set your area": "منطقه خود را تنظیم کنید"
+  "Set your area": "منطقه خود را تنظیم کنید",
+  "The purpose statement is what the community judges the project or enterprise against.": "بیانیه هدف معیاری است که جامعه بر اساس آن پروژه یا طرح را می‌سنجد."
 }

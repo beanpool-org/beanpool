@@ -433,7 +433,6 @@
   "🎉 FUNDED": "🎉 ПРОФІНАНСОВАНО",
   "🌱 PROJECT": "🌱 ПРОЄКТ",
   "🏛️ ENTERPRISE": "🏛️ ПІДПРИЄМСТВО",
-  "Enterprise Balance": "Баланс підприємства",
   "in deficit (keepers eat last)": "у дефіциті (доглядачі отримують останніми)",
   "Pledge Beans": "Внести боби",
   "Word {n}: {word}": "Слово {n}: {word}",
@@ -2886,7 +2885,6 @@
   "PURPOSE STATEMENT *": "МЕТА ДІЯЛЬНОСТІ *",
   "Purpose statement": "Мета діяльності",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Чітко сформулюйте, задля чого існує це підприємство (наприклад: «Ми будуємо та доглядаємо громадську оранжерею до листопада»).",
-  "The purpose statement is what the community judges the initiative against.": "Мета діяльності — це критерій, за яким спільнота оцінює ініціативу.",
   "FUNDING GOAL ({currency}) *": "ЦІЛЬ ФІНАНСУВАННЯ ({currency}) *",
   "Funding goal amount": "Сума фінансування",
   "Pledges are held safely in the enterprise account.": "Внески надійно зберігаються на рахунку підприємства.",
@@ -6605,5 +6603,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Повідомити, коли спільнота з'явиться тут, або допомогти створити",
   "Nothing within 250 km yet.": "У радіусі 250 км поки нічого немає.",
   "See what people post elsewhere ›": "Подивитися дописи з інших місць ›",
-  "Set your area": "Вкажіть свій район"
+  "Set your area": "Вкажіть свій район",
+  "The purpose statement is what the community judges the project or enterprise against.": "Мета діяльності — це критерій, за яким спільнота оцінює проєкт або підприємство."
 }

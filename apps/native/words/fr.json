@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 FINANCÉ",
   "🌱 PROJECT": "🌱 PROJET",
   "🏛️ ENTERPRISE": "🏛️ ENTREPRISE",
-  "Enterprise Balance": "Solde de l'entreprise",
   "in deficit (keepers eat last)": "en déficit (les gérants passent en dernier)",
   "Pledge Beans": "S'engager en haricots",
   "Word {n}: {word}": "Mot {n} : {word}",
@@ -2663,10 +2662,9 @@
   "NAME / TITLE *": "NOM / TITRE *",
   "Enterprise name or project title": "Nom de l'entreprise ou titre du projet",
   "e.g. Community Tool Shed": "ex. Atelier d'outillage communautaire",
-  "PURPOSE STATEMENT *": "OBJECTIF DE L'INITIATIVE *",
+  "PURPOSE STATEMENT *": "DESCRIPTION DE L'OBJECTIF *",
   "Purpose statement": "Description de l'objectif",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Expliquez clairement la raison d'être de cette entreprise (ex. « Nous construisons et entretenons une serre commune d'ici novembre »).",
-  "The purpose statement is what the community judges the initiative against.": "L'objectif déclaré est le critère sur lequel la communauté évalue l'initiative.",
   "FUNDING GOAL ({currency}) *": "OBJECTIF DE FINANCEMENT ({currency}) *",
   "Funding goal amount": "Montant de l'objectif de financement",
   "Pledges are held safely in the enterprise account.": "Les promesses de contribution sont conservées en sécurité sur le compte de l'entreprise.",
@@ -6129,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Prévenez-moi quand une communauté démarre ici, ou proposez d'en créer une",
   "Nothing within 250 km yet.": "Rien dans un rayon de 250 km pour l'instant.",
   "See what people post elsewhere ›": "Voir ce que les gens publient ailleurs ›",
-  "Set your area": "Définissez votre zone"
+  "Set your area": "Définissez votre zone",
+  "The purpose statement is what the community judges the project or enterprise against.": "L'objectif déclaré est le critère sur lequel la communauté évalue le projet ou l'entreprise."
 }

@@ -745,3 +745,18 @@ test('loadLanguagePages falls back to English section title and summary when man
         fs.rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('the members\' guide: Commons pages mention "Start something" and describe what it offers (Fable 5.1 §4.1, §5 S5)', () => {
+    const { guide } = sourceGuides();
+    const textOf = (slug) => {
+        const p = guide.guides.find(g => g.slug === slug);
+        assert.ok(p, `guide page "${slug}" exists`);
+        return p.blocks.flatMap(b => b.type === 'ul' ? b.items : [b.text]).join('\n');
+    };
+
+    for (const slug of ['enterprises', 'groups', 'decisions', 'polls', 'events']) {
+        const text = textOf(slug);
+        assert.ok(text.includes('Start something'), `${slug}.md must mention "Start something"`);
+    }
+});
+

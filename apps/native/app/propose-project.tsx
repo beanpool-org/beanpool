@@ -182,7 +182,7 @@ export default function ProposeProjectModal() {
                         </Text>
                     </View>
 
-                    {/* Initiative Type Selector */}
+                    {/* Type Selector */}
                     <View style={styles.field}>
                         <Text style={styles.label}>{t('WHAT IS IT?')}</Text>
                         <View style={styles.typeSelectorRow}>
@@ -252,7 +252,7 @@ export default function ProposeProjectModal() {
                             multiline
                             textAlignVertical="top"
                         />
-                        <Text style={styles.hint}>{t('The purpose statement is what the community judges the initiative against.')}</Text>
+                        <Text style={styles.hint}>{t('The purpose statement is what the community judges the project or enterprise against.')}</Text>
                     </View>
 
                     {/* Bounded Project Fields: Goal & Deadline */}

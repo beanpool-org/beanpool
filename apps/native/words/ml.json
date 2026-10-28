@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 ഫണ്ട് ലഭിച്ചു",
   "🌱 PROJECT": "🌱 പ്രോജക്റ്റ്",
   "🏛️ ENTERPRISE": "🏛️ സംരംഭം",
-  "Enterprise Balance": "സംരംഭ ബാലൻസ്",
   "in deficit (keepers eat last)": "കമ്മിയിൽ (സൂക്ഷിപ്പുകാർ അവസാനം സ്വീകരിക്കുന്നു)",
   "Pledge Beans": "പയർ വാഗ്ദാനം ചെയ്യുക",
   "Word {n}: {word}": "വാക്ക് {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "ഉദ്ദേശ്യ പ്രസ്താവന *",
   "Purpose statement": "ഉദ്ദേശ്യ പ്രസ്താവന",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "ഈ സംരംഭം എന്തിനുവേണ്ടിയാണ് നിലകൊള്ളുന്നത് എന്ന് വ്യക്തമാക്കുക (ഉദാ. 'ഞങ്ങൾ നവംബറോടെ ഒരു കമ്മ്യൂണിറ്റി ഷേഡ് ഹൗസ് നിർമ്മിക്കുകയും പരിപാലിക്കുകയും ചെയ്യുന്നു').",
-  "The purpose statement is what the community judges the initiative against.": "ഉദ്ദേശ്യ പ്രസ്താവനയെ അടിസ്ഥാനമാക്കിയാണ് കമ്മ്യൂണിറ്റി സംരംഭത്തെ വിലയിരുത്തുന്നത്.",
   "FUNDING GOAL ({currency}) *": "ഫണ്ടിംഗ് ലക്ഷ്യം ({currency}) *",
   "Funding goal amount": "ഫണ്ടിംഗ് ലക്ഷ്യ തുക",
   "Pledges are held safely in the enterprise account.": "പിന്തുണകൾ സംരംഭ അക്കൗണ്ടിൽ സുരക്ഷിതമായി സൂക്ഷിക്കുന്നു.",
@@ -6129,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "ഇവിടെ ഒരു കമ്മ്യൂണിറ്റി ആരംഭിക്കുമ്പോൾ അറിയിക്കുക, അല്ലെങ്കിൽ ഒരെണ്ണം തുടങ്ങാൻ സഹായിക്കാമെന്ന് പറയുക",
   "Nothing within 250 km yet.": "250 കിലോമീറ്ററിനുള്ളിൽ ഇതുവരെ ഒന്നുമില്ല.",
   "See what people post elsewhere ›": "മറ്റിടങ്ങളിൽ ആളുകൾ എന്താണ് പോസ്റ്റ് ചെയ്യുന്നതെന്ന് കാണുക ›",
-  "Set your area": "പ്രദേശം സജ്ജമാക്കുക"
+  "Set your area": "പ്രദേശം സജ്ജമാക്കുക",
+  "The purpose statement is what the community judges the project or enterprise against.": "ഉദ്ദേശ്യ പ്രസ്താവനയെ അടിസ്ഥാനമാക്കിയാണ് കമ്മ്യൂണിറ്റി പ്രോജക്റ്റിനെയോ സംരംഭത്തെയോ വിലയിരുത്തുന്നത്."
 }

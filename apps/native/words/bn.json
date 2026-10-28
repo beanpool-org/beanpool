@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 অর্থায়িত",
   "🌱 PROJECT": "🌱 প্রকল্প",
   "🏛️ ENTERPRISE": "🏛️ উদ্যোগ",
-  "Enterprise Balance": "উদ্যোগের ব্যালেন্স",
   "in deficit (keepers eat last)": "ঘাটতিতে (পরিচালকরা শেষে পান)",
   "Pledge Beans": "শিমের অঙ্গীকার করুন",
   "Word {n}: {word}": "শব্দ {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "উদ্দেশ্য বিবরণ *",
   "Purpose statement": "উদ্দেশ্য বিবরণ",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "এই উদ্যোগটি কী কাজের জন্য তৈরি তা স্পষ্টভাবে বলুন (যেমন 'আমরা নভেম্বরের মধ্যে একটি কমিউনিটি শেড হাউস তৈরি ও রক্ষণাবেক্ষণ করব')।",
-  "The purpose statement is what the community judges the initiative against.": "উদ্দেশ্য বিবরণের ভিত্তিতেই কমিউনিটি উদ্যোগটি মূল্যায়ন করে।",
   "FUNDING GOAL ({currency}) *": "তহবিলের লক্ষ্য ({currency}) *",
   "Funding goal amount": "তহবিলের লক্ষ্যের পরিমাণ",
   "Pledges are held safely in the enterprise account.": "অঙ্গীকারগুলো উদ্যোগের অ্যাকাউন্টে নিরাপদে রাখা হয়।",
@@ -6129,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "এখানে কোনো সম্প্রদায় শুরু হলে আমাকে জানান, বা শুরু করতে সাহায্য করুন",
   "Nothing within 250 km yet.": "এখনও ২৫০ কিলোমিটারের মধ্যে কিছু নেই।",
   "See what people post elsewhere ›": "অন্যত্র মানুষ কী পোস্ট করে তা দেখুন ›",
-  "Set your area": "আপনার এলাকা সেট করুন"
+  "Set your area": "আপনার এলাকা সেট করুন",
+  "The purpose statement is what the community judges the project or enterprise against.": "উদ্দেশ্য বিবরণের ভিত্তিতেই কমিউনিটি প্রকল্পটি বা উদ্যোগটি মূল্যায়ন করে।"
 }

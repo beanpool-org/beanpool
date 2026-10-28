@@ -755,7 +755,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     if (mode === 'guide') {
         // The members' sheet and manual, full screen. Its Suggest a change opens the same form as the Settings row.
         // From Home's Tips card it opens at the tip's page; Back from there walks to the guide's front page, then Settings.
-        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} initialPage={guidePage ?? undefined} />;
+        return <MemberGuide onBack={() => { setGuidePage(null); setMode('menu'); }} onSuggest={() => setMode('suggest')} initialPage={guidePage ?? undefined} />;
     }
 
     return (
@@ -1146,7 +1146,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
                              not this community's node), the website. The same rows as the member app's Settings. ─── */}
                         <BeanPoolSettingsGroup
-                            onHelp={() => setMode('guide')}
+                            onHelp={() => {
+                                setGuidePage(null);
+                                setMode('guide');
+                            }}
                             onSuggest={() => setMode('suggest')}
                             globalCommunity={globalCommunity}
                             phoneLater={phoneLater}

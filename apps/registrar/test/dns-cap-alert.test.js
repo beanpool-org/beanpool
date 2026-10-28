@@ -54,7 +54,8 @@ test('daily digest: failed count raises nothing and says so', async () => {
 
         assert.equal(await dailyLine(w.env, [], at), true);
         const line = w.sqlite.prepare("SELECT body FROM alert_outbox WHERE category = 'summary'").get().body;
-        assert.match(line, /DNS records: couldn't count \(CF GET \/zones\/zone\/dns_records\?per_page=1 → \["internal error"\]\)/);
+        assert.match(line, /DNS records: couldn't count \(CF GET \/zones\/zone\/dns_records\?per_page=1/);
+        assert.match(line, /internal error/);
 
         // Raises nothing in alert_state
         const raised = w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").all();

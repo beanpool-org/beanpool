@@ -1438,6 +1438,20 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         writeTips(publicKey, tipsLanded);
     }, [tipsLanding, tipsLanded]);
     const tipsView = tips && answer?.me && !visitor ? tipNow(tips, tipsList, localDay()).view : null;
+    const tipsSlug = tipsView?.tip.guide;
+    useEffect(() => {
+        let active = true;
+        if (tipsSlug && !tipsGuide) {
+            loadBundledGuide()
+                .then((guide) => {
+                    if (active) setTipsGuide(guide);
+                })
+                .catch(() => {});
+        }
+        return () => {
+            active = false;
+        };
+    }, [tipsSlug, tipsGuide]);
 
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
@@ -2021,9 +2035,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const v = tipsView;
                 if (!v) return null;
                 const slug = v.tip.guide;
-                if (slug && !tipsGuide) {
-                    loadBundledGuide().then(setTipsGuide).catch(() => {});
-                }
                 const page = slug && tipsGuide ? findGuidePage(tipsGuide, slug) : null;
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (

@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { mockResponse, UNKNOWN } from './fixtures.mjs';
+import { mockResponse, UNKNOWN, VOTES_OFF, IN_A_REMOVALS_GRACE, IN_GRACE_FILTER } from './fixtures.mjs';
 
 const MANAGER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Tailwind reads its config from the working directory, so the build only works from apps/manager.
@@ -283,11 +283,23 @@ export async function boxOverflow(locator, buttonSelector = 'button', { skipScro
  * phone menu and the full-screen manual, which phone-width.mjs checks on their own). `steps` are the buttons to press,
  * in order: `in: 'main'` is the page, `in: 'modal'` the modal already open on top. The fleet manager's own modals
  * (add/edit node, the TOTP prompt, topology history) run only on the Mac manager and are not reachable here.
+ * `shows` (optional) lists what the open modal must hold, so a scenario that needs a fixture edit is measured as named.
  */
+const IN_GRACE_STEP = { in: 'main', fill: 'input[placeholder^="Filter members"]', value: IN_GRACE_FILTER };
 export const ALL_MODALS = [
-    { name: 'member-detail', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }] },
+    // The owner's detail (the first Inspect). The fixture node's community votes (removal by vote S3): no Prune, no Offboard.
+    { name: 'member-detail', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }], shows: ['[data-testid="removal-is-the-vote"]'] },
+    // With votes off (the global node, or the operator's switch) the admins remove: Prune Account and Offboard are there.
+    { name: 'member-detail-votes-off', screen: { tab: 'people', sub: 'directory' }, overrides: VOTES_OFF, steps: [{ in: 'main', button: /^Inspect$/ }],
+        shows: ['button:has-text("Prune Account")', 'button:has-text("Offboard")'] },
+    // A member in a passed removal's grace window: Offboard settles it.
+    { name: 'member-detail-removal-grace', screen: { tab: 'people', sub: 'directory' }, overrides: IN_A_REMOVALS_GRACE,
+        steps: [IN_GRACE_STEP, { in: 'main', button: /^Inspect$/ }], shows: ['[data-testid="removal-is-the-vote"]', 'button:has-text("Offboard")'] },
     { name: 'member-rekey', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Re-Key$/ }] },
-    { name: 'member-offboard', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Offboard$/ }] },
+    // The owner's offboarding, where votes are off: no vote removes an owner, so there is none of theirs to settle.
+    { name: 'member-offboard', screen: { tab: 'people', sub: 'directory' }, overrides: VOTES_OFF, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Offboard$/ }] },
+    { name: 'member-offboard-settles', screen: { tab: 'people', sub: 'directory' }, overrides: IN_A_REMOVALS_GRACE,
+        steps: [IN_GRACE_STEP, { in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Offboard$/ }], shows: ['[data-testid="offboard-settles-removal"]'] },
     { name: 'member-prune-branch', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /^Inspect$/ }, { in: 'modal', button: /Prune Branch$/ }] },
     { name: 'member-tier', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', title: 'Click to upgrade or edit member standing tier' }] },
     { name: 'create-treasury', screen: { tab: 'people', sub: 'directory' }, steps: [{ in: 'main', button: /Create Treasury/ }] },

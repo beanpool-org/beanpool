@@ -26,6 +26,7 @@
  */
 /* global console, process, document, window, URL -- Node, plus page.evaluate callbacks run in the browser */
 import { startServer, launch, openSettings, selectSubTab, settle, CSP_VIOLATIONS } from './harness.mjs';
+import { VOTES_OFF } from './fixtures.mjs';
 
 const STALE = { error: 'Press Manage on your phone again, then make this change within 90 seconds.', code: 'step_up_required' };
 const ASK = { error: 'Enter a current code from your authenticator app (or a backup code) to do this', totpRequired: true };
@@ -94,7 +95,9 @@ const FLOWS = [
     { name: 'Re-key wizard, Make a re-key code', screen: { tab: 'people', sub: 'directory' }, testId: 'rekey-proof',
         refuses: (p, m) => m === 'POST' && /\/rekey\/issue-code$/.test(p),
         press: async (page) => { await rekeyReady(page); await press(page, /Make a re-key code/, topOverlay(page)); } },
-    { name: 'Offboard, Confirm & Prune', screen: { tab: 'people', sub: 'directory' }, testId: 'offboard-proof',
+    // The owner's offboarding, on a node with community votes off: where the community votes, no vote removes an owner, so
+    // there is no removal of theirs to settle and no Offboard (removal by vote S3).
+    { name: 'Offboard, Confirm & Prune', screen: { tab: 'people', sub: 'directory' }, testId: 'offboard-proof', overrides: VOTES_OFF,
         refuses: (p, m) => m === 'POST' && /\/members\/[^/]+\/offboard$/.test(p),
         press: async (page) => { await offboardReady(page); await press(page, /Confirm & Prune Member/, topOverlay(page)); } },
     { name: 'Member detail, Grant Admin', screen: { tab: 'people', sub: 'directory' }, testId: 'member-role-proof',
@@ -141,8 +144,8 @@ async function refuse(page, flow, k, sent) {
 }
 
 /** The phone's Manage hand-off, opened on a screen: a key session (the stale-hand-off refusal is that viewer's). */
-async function asPhone(browser, origin, screen) {
-    const o = await openSettings(browser, origin, { width: 360, signedIn: false, hash: `#handoff=${'cd'.repeat(16)}`, screen: { tab: screen.tab } });
+async function asPhone(browser, origin, screen, overrides = {}) {
+    const o = await openSettings(browser, origin, { width: 360, signedIn: false, hash: `#handoff=${'cd'.repeat(16)}`, screen: { tab: screen.tab }, overrides });
     await o.page.waitForSelector('main', { timeout: 20000 });
     await settle(o.page);
     await selectSubTab(o.page, screen.sub);
@@ -235,7 +238,8 @@ try {
         await context.close();
     }
     {
-        const { context, page } = await asPhone(browser, origin, { tab: 'people', sub: 'directory' });
+        // Votes off, as the Offboard flow above: the owner's offboarding.
+        const { context, page } = await asPhone(browser, origin, { tab: 'people', sub: 'directory' }, VOTES_OFF);
         const sent = [];
         await page.route(/\/members\/[^/]+\/offboard$/, (route) => {
             sent.push(route.request().postData());

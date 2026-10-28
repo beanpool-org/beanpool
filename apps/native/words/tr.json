@@ -5569,7 +5569,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Topluluğunuz, bu telefondakinden ({version}) daha yeni bir BeanPool sürümüne ihtiyaç duyuyor. {latest} sürümü Google Play'de hazır bekliyor.",
   "Updating keeps your account and everything on this phone.": "Güncelleme, hesabınızı ve bu telefondaki her şeyi korur.",
   "Update BeanPool in the App Store": "BeanPool'u App Store'da Güncelle",
-  "Update BeanPool in Google Play": "BeanPool'u Google Play'de Güncelle",
   "Update\u0004the app": "Güncelle",
   "Can't update? Ask the people who run your community.": "Güncelleyemiyor musunuz? Topluluğunuzu yöneten kişilere sorun.",
   "Use another community": "Başka bir topluluk kullan",
@@ -6122,5 +6121,7 @@
   "Turn on notifications?": "Bildirimleri aç?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Biri size yanıt verdiğinde, mesaj attığında veya katılmak istediğinde haberdar olun. Başka hiçbir şey için değil.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "BeanPool bildirimleri telefonunuzun ayarlarında kapalı. Açmak için Ayarlar'ı açın.",
-  "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:"
+  "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:",
+  "Choose a banner photo, or keep this one": "Bir afiş fotoğrafı seçin veya bunu tutun",
+  "Your picture, until you choose a banner.": "Bir afiş seçene kadar profil resminiz."
 }

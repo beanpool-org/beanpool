@@ -25,7 +25,7 @@ import { t, toolLineText, type ToolLine, type ToolManifest } from '@beanpool/cor
 import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, HomeLink, HomeRow, homeStyles } from '../components/home/HomeParts';
 import { editHomeStyles } from '../components/home/EditHomeSheet';
-import { STORE_URLS } from '../utils/force-update';
+import { openUpdate } from '../utils/update-destination';
 import { reminderOn, readToolDoc, subscribeToolStore, type ToolSettings } from './store';
 import { keepsNodeCopy } from './node-copy';
 import type { PhoneTool } from './index';
@@ -393,9 +393,9 @@ export function ToolHomeBody({ tool, owner, colors, now }: { tool: PhoneTool; ow
 
 // ── A tool or a screen this build doesn't have ───────────────────────────────────────────────────────────────────
 
+/** The store, or on an Android phone with no Google Play, beanpool.org/android (utils/update-destination.ts). */
 function openStore() {
-    const urls = Platform.OS === 'ios' ? STORE_URLS.ios : STORE_URLS.android;
-    Linking.openURL(urls.app).catch(() => { Linking.openURL(urls.web).catch(() => {}); });
+    void openUpdate(Platform.OS, (url) => Linking.openURL(url));
 }
 
 /** A link to a tool (or a screen of one) this version doesn't have, or one it can't open yet: said, never a crash. */

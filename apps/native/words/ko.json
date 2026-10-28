@@ -5343,7 +5343,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "커뮤니티를 이용하려면 현재 기기의 BeanPool({version})보다 최신 버전이 필요해요. Google Play에 {latest} 버전이 준비되어 있어요.",
   "Updating keeps your account and everything on this phone.": "업데이트해도 계정과 기기의 모든 데이터는 안전하게 유지돼요.",
   "Update BeanPool in the App Store": "App Store에서 BeanPool 업데이트",
-  "Update BeanPool in Google Play": "Google Play에서 BeanPool 업데이트",
   "Update\u0004the app": "업데이트",
   "Can't update? Ask the people who run your community.": "업데이트할 수 없나요? 커뮤니티 운영자에게 문의하세요.",
   "Use another community": "다른 커뮤니티 사용",
@@ -5883,5 +5882,7 @@
   "Turn on notifications?": "알림을 켤까요?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "휴대폰 설정에서 BeanPool 알림이 꺼져 있습니다. 켜려면 설정을 여세요.",
-  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:"
+  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:",
+  "Choose a banner photo, or keep this one": "배너 사진을 선택하거나 이 사진을 유지하세요",
+  "Your picture, until you choose a banner.": "배너를 선택할 때까지 표시되는 사진입니다."
 }

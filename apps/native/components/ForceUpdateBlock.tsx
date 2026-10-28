@@ -11,10 +11,11 @@ import { useNodeStatus } from '../app/NodeStatusContext';
 import { useTheme } from '../app/ThemeContext';
 import { bootClockMs } from '../modules/boot-clock';
 import { onCommunitySwitched } from '../utils/community-switch';
-import { checkCommunityForUpdate, createForceUpdateGate, STORE_URLS } from '../utils/force-update';
+import { checkCommunityForUpdate, createForceUpdateGate } from '../utils/force-update';
 import { hasMnemonic } from '../utils/identity';
 import { authenticateUser, doorPrompts, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
+import { openUpdate } from '../utils/update-destination';
 import {
     leaveFromUpdateBlock, otherCommunitiesOnPhone, planLeaveFromUpdateBlock, switchFromUpdateBlock, type BlockLeavePlan,
     type OtherCommunity,
@@ -70,9 +71,9 @@ async function fetchJson(url: string, timeoutMs: number): Promise<unknown> {
     }
 }
 
+/** The store, or on an Android phone with no Google Play, beanpool.org/android (utils/update-destination.ts). */
 function openStore() {
-    const urls = Platform.OS === 'ios' ? STORE_URLS.ios : STORE_URLS.android;
-    Linking.openURL(urls.app).catch(() => { Linking.openURL(urls.web).catch(() => {}); });
+    void openUpdate(Platform.OS, (url) => Linking.openURL(url));
 }
 
 /** What the phone's lock says it is asked for: word() keys, said in the member's language when it is asked. */
@@ -501,7 +502,7 @@ export default function ForceUpdateBlock() {
                 <Pressable
                     onPress={openStore}
                     accessibilityRole="button"
-                    accessibilityLabel={ios ? t('Update BeanPool in the App Store') : t('Update BeanPool in Google Play')}
+                    accessibilityLabel={ios ? t('Update BeanPool in the App Store') : t('Update', undefined, 'the app')}
                     style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.brand.fill : colors.brand.fill }]}
                 >
                     <Text style={[styles.buttonText, { color: colors.text.inverse }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Update', undefined, 'the app')}</Text>

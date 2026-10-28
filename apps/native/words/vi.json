@@ -5343,7 +5343,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Cộng đồng của bạn yêu cầu phiên bản BeanPool mới hơn phiên bản trên điện thoại này ({version}). Phiên bản {latest} đã có sẵn trên Google Play.",
   "Updating keeps your account and everything on this phone.": "Cập nhật sẽ giữ nguyên tài khoản và mọi thứ trên điện thoại này.",
   "Update BeanPool in the App Store": "Cập nhật BeanPool trên App Store",
-  "Update BeanPool in Google Play": "Cập nhật BeanPool trên Google Play",
   "Update\u0004the app": "Cập nhật",
   "Can't update? Ask the people who run your community.": "Không thể cập nhật? Hãy hỏi người điều hành cộng đồng của bạn.",
   "Use another community": "Dùng cộng đồng khác",
@@ -5883,5 +5882,7 @@
   "Turn on notifications?": "Bật thông báo?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Để bạn biết khi ai đó trả lời bạn, nhắn tin cho bạn hoặc yêu cầu tham gia. Không có gì khác.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Thông báo của BeanPool đang tắt trong cài đặt điện thoại của bạn. Mở Cài đặt để bật.",
-  "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:"
+  "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:",
+  "Choose a banner photo, or keep this one": "Chọn ảnh bìa, hoặc giữ lại ảnh này",
+  "Your picture, until you choose a banner.": "Ảnh của bạn, cho đến khi bạn chọn ảnh bìa."
 }

@@ -3637,5 +3637,7 @@
   "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:",
   "🔑 FOUNDING": "🔑 FUNDADOR",
   "To ask {name} to join, open Find a community in the BeanPool app and choose {name}.": "Para pedir unirte a {name}, abre Buscar una comunidad en la app de BeanPool y elige {name}.",
-  "{name} isn't in the list of communities yet. Try again in an hour, or ask one of its members for an invite.": "{name} aún no está en la lista de comunidades. Inténtalo de nuevo en una hora o pide una invitación a uno de sus miembros."
+  "{name} isn't in the list of communities yet. Try again in an hour, or ask one of its members for an invite.": "{name} aún no está en la lista de comunidades. Inténtalo de nuevo en una hora o pide una invitación a uno de sus miembros.",
+  "Choose a banner photo, or keep this one": "Elige una foto de banner o conserva esta",
+  "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner."
 }

@@ -5569,7 +5569,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "உங்கள் சமூகத்திற்கு இந்த போனில் உள்ளதை ({version}) விடப் புதிய BeanPool தேவை. பதிப்பு {latest} Google Play-இல் காத்திருக்கிறது.",
   "Updating keeps your account and everything on this phone.": "புதுப்பிப்பது உங்கள் கணக்கையும் இந்த போனில் உள்ள அனைத்தையும் அப்படியே வைத்திருக்கும்.",
   "Update BeanPool in the App Store": "App Store-இல் BeanPool-ஐப் புதுப்பிக்கவும்",
-  "Update BeanPool in Google Play": "Google Play-இல் BeanPool-ஐப் புதுப்பிக்கவும்",
   "Update\u0004the app": "புதுப்பி",
   "Can't update? Ask the people who run your community.": "புதுப்பிக்க முடியவில்லையா? உங்கள் சமூகத்தை நடத்துபவர்களிடம் கேளுங்கள்.",
   "Use another community": "மற்றொரு சமூகத்தைப் பயன்படுத்து",
@@ -6122,5 +6121,7 @@
   "Turn on notifications?": "அறிவிப்புகளை இயக்கவா?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "யாராவது உங்களுக்குப் பதிலளிக்கும் போது, செய்தி அனுப்பும் போது அல்லது இணையக் கோரும் போது நீங்கள் அறிந்துகொள்ள. வேறு எதுவுமில்லை.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "உங்கள் தொலைபேசி அமைப்புகளில் BeanPool அறிவிப்புகள் முடக்கப்பட்டுள்ளன. அவற்றை இயக்க அமைப்புகளைத் திறக்கவும்.",
-  "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:"
+  "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:",
+  "Choose a banner photo, or keep this one": "பேனர் புகைப்படத்தைத் தேர்வுசெய்க, அல்லது இதையே வைத்திருக்கவும்",
+  "Your picture, until you choose a banner.": "நீங்கள் பேனரைத் தேர்வுசெய்யும் வரை உங்கள் படம்."
 }

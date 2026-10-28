@@ -5979,7 +5979,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Вашему сообществу требуется более новая версия BeanPool, чем установлена ({version}). Версия {latest} уже доступна в Google Play.",
   "Updating keeps your account and everything on this phone.": "Обновление сохранит ваш аккаунт и все данные на этом телефоне.",
   "Update BeanPool in the App Store": "Обновить BeanPool в App Store",
-  "Update BeanPool in Google Play": "Обновить BeanPool в Google Play",
   "Update\u0004the app": "Обновить",
   "Can't update? Ask the people who run your community.": "Не получается обновить? Обратитесь к администраторам сообщества.",
   "Use another community": "Выбрать другое сообщество",
@@ -6600,5 +6599,7 @@
   "Turn on notifications?": "Включить уведомления?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Чтобы вы знали, когда кто-то ответит вам, напишет сообщение или попросит присоединиться. Больше ни для чего.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Уведомления BeanPool выключены в настройках телефона. Откройте настройки, чтобы включить их.",
-  "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:"
+  "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:",
+  "Choose a banner photo, or keep this one": "Выберите фото для баннера или оставьте это",
+  "Your picture, until you choose a banner.": "Ваше изображение, пока вы не выберете баннер."
 }

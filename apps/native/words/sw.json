@@ -5555,7 +5555,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Jumuiya yako inahitaji toleo jipya la BeanPool kuliko lililopo kwenye simu hii ({version}). Toleo {latest} lipo kwenye Google Play.",
   "Updating keeps your account and everything on this phone.": "Kusasisha kunahifadhi akaunti yako na kila kitu kwenye simu hii.",
   "Update BeanPool in the App Store": "Sasisha BeanPool katika App Store",
-  "Update BeanPool in Google Play": "Sasisha BeanPool katika Google Play",
   "Update\u0004the app": "Sasisha",
   "Can't update? Ask the people who run your community.": "Huwezi kusasisha? Waulize watu wanaoendesha jumuiya yako.",
   "Use another community": "Tumia jumuiya nyingine",
@@ -6122,5 +6121,7 @@
   "Turn on notifications?": "Washa arifa?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Ili ujue mtu anapokujibu, anapokutumia ujumbe, au anapoomba kujiunga. Hakuna kingine.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Arifa za BeanPool zimezimwa katika mipangilio ya simu yako. Fungua Mipangilio ili kuziwasha.",
-  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:"
+  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:",
+  "Choose a banner photo, or keep this one": "Chagua picha ya bango, au baki na hii",
+  "Your picture, until you choose a banner.": "Picha yako, hadi utakapochagua bango."
 }

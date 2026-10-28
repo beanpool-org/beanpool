@@ -292,24 +292,52 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(within(opened).getByText('Income & Spend (P&L)')).toBeInTheDocument();
     });
 
-    it("the banner is its shop's photo, drawn across the top; with none, or one that won't load, a quiet block in its kind's emoji", async () => {
+    it("the banner is its shop's photo, drawn across the top; with none, or one that won't load, the default banner from its logo (S3)", async () => {
         const BANNER = `/api/shops/${SHOP_ID}/photo?v=ab12cd34&k=${'K'.repeat(22)}`;
         await open({ detail: membersView({ shop: { ...SHOP, photoUrl: BANNER } }), keeperOf: [] });
         const photo = within(byId('shopfront-banner')!).getByTestId('shopfront-banner-photo');
         expect(photo.getAttribute('src')).toBe(BANNER);
         expect(photo.className).toContain('object-cover');
         expect(byId('shopfront-banner')?.textContent).toBe('');
-        fireEvent.error(photo);
-        expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument();
-        expect(byId('shopfront-banner')?.textContent).toContain('🎨');
-        expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
+
+        // None with bundled logo (default avatar in membersView is null -> bundled preset): monogram with 10 round copies on category's tint.
         cleanup();
-        await open({ detail: membersView(), keeperOf: [] });
+        const initialFetches = fetchMock.mock.calls.length;
+        await open({ detail: membersView({ avatar: 'bundled://leaf', shop: { ...SHOP, photoUrl: null } }), keeperOf: [] });
         expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument();
-        expect(byId('shopfront-banner')?.textContent).toContain('🎨');
-        expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
+        const defaultBanner = within(byId('shopfront-banner')!).getByTestId('default-banner');
+        expect(defaultBanner).toBeInTheDocument();
+        expect(defaultBanner.style.backgroundColor).toContain('var(--bp-tile-arts-tint)');
+        const monogramCopies = within(defaultBanner).getAllByTestId('default-banner-monogram-copy');
+        expect(monogramCopies).toHaveLength(10);
+        for (const copy of monogramCopies) {
+            expect(copy.className).toContain('rounded-full');
+            expect(copy.getAttribute('src')).toBe('/avatars/avatar_leaf.jpg');
+        }
+        // Nothing fetched beyond the avatar (no request to a shop photo URL)
+        const newFetches = fetchMock.mock.calls.slice(initialFetches).map(([u]) => String(u));
+        expect(newFetches.some((url) => url.includes('/photo'))).toBe(false);
+
+        // Echo for a photo logo: one round copy, ground is category's tint.
+        cleanup();
+        await open({ detail: membersView({ avatar: 'https://mullum.example/avatar.jpg', shop: { ...SHOP, photoUrl: null } }), keeperOf: [] });
+        const echoBanner = within(byId('shopfront-banner')!).getByTestId('default-banner');
+        expect(echoBanner).toBeInTheDocument();
+        expect(echoBanner.style.backgroundColor).toContain('var(--bp-tile-arts-tint)');
+        const echoCopy = within(echoBanner).getByTestId('default-banner-echo-copy');
+        expect(echoCopy).toBeInTheDocument();
+        expect(echoCopy.className).toContain('rounded-full');
+        expect(echoCopy.getAttribute('src')).toBe('https://mullum.example/avatar.jpg');
+        expect(within(echoBanner).queryByTestId('default-banner-monogram-copy')).toBeNull();
+
+        // One that fails to load: falls back to the default banner too.
+        cleanup();
+        await open({ detail: membersView({ avatar: 'bundled://leaf', shop: { ...SHOP, photoUrl: 'https://mullum.example/broken.jpg' } }), keeperOf: [] });
+        fireEvent.error(within(byId('shopfront-banner')!).getByTestId('shopfront-banner-photo'));
+        expect(byId('shopfront-banner-photo')).toBeNull();
+        const fallbackBanner = within(byId('shopfront-banner')!).getByTestId('default-banner');
+        expect(fallbackBanner).toBeInTheDocument();
+        expect(within(fallbackBanner).getAllByTestId('default-banner-monogram-copy')).toHaveLength(10);
     });
 
     it("a project's goal card sits above About", async () => {
@@ -434,7 +462,7 @@ describe('from one enterprise to another', () => {
  * Every keeper action the web page had before the console (TreasuryDetailPage.tsx at f6104d01), each with the view of the
  * enterprise it shows for and how a member finds it: its spoken name, or its words on a button.
  */
-type View = 'lead' | 'paused' | 'windingUp' | 'quietProject' | 'quietProjectVote';
+type View = 'lead' | 'paused' | 'windingUp' | 'leadProject' | 'quietProject' | 'quietProjectVote';
 const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string; testID?: string }> = [
     { what: "approve a member's request to keep it", view: 'lead', label: 'Approve Ivo as a keeper' },
     { what: "decline a member's request to keep it", view: 'lead', label: 'Decline Ivo as a keeper' },
@@ -457,7 +485,7 @@ const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string
     { what: 'stop the wind-up', view: 'windingUp', button: '🛑 Stop Wind-Up' },
     { what: 'finalise the wind-up', view: 'windingUp', button: '🏁 Finalise Wind-Up' },
     { what: 'propose a new leader while the leader is quiet', view: 'quietProject', button: 'Propose Leader' },
-    { what: 'cancel an initiative and refund its backers', view: 'quietProject', button: '🛑Cancel Initiative & Refund Escrow' },
+    { what: 'cancel an initiative and refund its backers', view: 'leadProject', button: '🛑Cancel Initiative & Refund Escrow' },
     { what: 'vote yes on a new leader', view: 'quietProjectVote', label: 'Yes, make Zoe leader' },
     { what: 'vote no on a new leader', view: 'quietProjectVote', label: 'No, do not make Zoe leader' },
 ];
@@ -465,6 +493,8 @@ const VIEWS: Record<View, () => Record<string, unknown>> = {
     lead: () => leadsView(),
     paused: () => leadsView({ paused: true, pausedAt: iso(now - 5 * DAY) }),
     windingUp: () => leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpInitiatedAt: iso(now - 8 * DAY), windUpGraceEndsAt: iso(now - 3600_000) }),
+    // A project its leader reads: its cancel is theirs alone, as the node takes it (apps/server db.ts leadsProject).
+    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120 }),
     quietProject: () => quietProject(),
     quietProjectVote: () => quietProject({ succession: { proposals: [PROPOSAL] } }),
 };
@@ -515,6 +545,19 @@ describe("the keepers' Manage tab", () => {
             });
             cleanup();
         }
+    });
+
+    it("a project's cancel is its leader's: a collaborator who doesn't lead it reads none, for the node refuses theirs", async () => {
+        const cancel = ACTIONS.find((a) => a.what === 'cancel an initiative and refund its backers')!;
+        await open({ detail: quietProject() });
+        const quiet = await manage();
+        await waitFor(() => expect(found(ACTIONS.find((a) => a.what === 'propose a new leader while the leader is quiet')!, quiet)).not.toBeNull());
+        expect(found(cancel, quiet)).toBeNull();
+        cleanup();
+
+        await open({ detail: VIEWS.leadProject() });
+        const led = await manage();
+        await waitFor(() => expect(found(cancel, led)).not.toBeNull());
     });
 
     it("its new Offer starts in its shop's category, which the keeper can still change", async () => {
@@ -683,9 +726,8 @@ describe("the keepers' Manage tab", () => {
             await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
             expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } }]);
             fireEvent.click(screen.getByRole('tab', { name: 'Page' }));
-            await waitFor(() => expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument());
-            expect(byId('shopfront-banner')?.textContent).toContain('🎨');
-            expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
+            await waitFor(() => expect(within(byId('shopfront-banner')!).getByTestId('default-banner')).toBeInTheDocument());
+            expect(within(byId('shopfront-banner')!).getAllByTestId('default-banner-monogram-copy')).toHaveLength(10);
             expect(byId('shopfront-banner-photo')).toBeNull();
         });
 

@@ -5555,7 +5555,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Η κοινότητά σου χρειάζεται νεότερη έκδοση BeanPool από αυτή στο τηλέφωνό σου ({version}). Η έκδοση {latest} είναι διαθέσιμη στο Google Play.",
   "Updating keeps your account and everything on this phone.": "Η ενημέρωση διατηρεί τον λογαριασμό σου και τα πάντα σε αυτό το τηλέφωνο.",
   "Update BeanPool in the App Store": "Ενημέρωση του BeanPool στο App Store",
-  "Update BeanPool in Google Play": "Ενημέρωση του BeanPool στο Google Play",
   "Update\u0004the app": "Ενημέρωση",
   "Can't update? Ask the people who run your community.": "Δεν μπορείς να ενημερώσεις; Ρώτησε τους διαχειριστές της κοινότητάς σου.",
   "Use another community": "Χρήση άλλης κοινότητας",
@@ -6122,5 +6121,7 @@
   "Turn on notifications?": "Ενεργοποίηση ειδοποιήσεων;",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Οι ειδοποιήσεις για το BeanPool είναι απενεργοποιημένες στις ρυθμίσεις του τηλεφώνου σας. Ανοίξτε τις Ρυθμίσεις για να τις ενεργοποιήσετε.",
-  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:"
+  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:",
+  "Choose a banner photo, or keep this one": "Επιλέξτε μια φωτογραφία banner ή κρατήστε αυτήν",
+  "Your picture, until you choose a banner.": "Η εικόνα σας, μέχρι να επιλέξετε ένα banner."
 }

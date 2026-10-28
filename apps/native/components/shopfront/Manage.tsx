@@ -31,7 +31,7 @@ import { faceAfterSave, faceFormOf, faceOnRead, faceSaveOf, featuredShelf, leadO
 import { shopPhotoOf } from '../../utils/shopfront';
 import { pickBannerPhoto } from '../../utils/banner-photo';
 import { usePictureCrop } from '../PictureCrop';
-import { useNodeUri } from './Shopfront';
+import { useNodeUri } from '../../utils/node-uri';
 
 /** Its face: one form, one Save. `onSaved` reads the enterprise again once anything was written. */
 export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, onSaved }: {

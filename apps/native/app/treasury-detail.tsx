@@ -696,10 +696,10 @@ export default function TreasuryDetailScreen() {
                                     onPress={handlePickBanner}
                                     style={[styles.addBannerBtn, pickingBanner && { opacity: 0.6 }]}
                                     accessibilityRole="button"
-                                    accessibilityLabel={t('Add a banner photo')}
+                                    accessibilityLabel={t('Choose a banner photo, or keep this one')}
                                     disabled={pickingBanner}
                                 >
-                                    <Text style={styles.addBannerBtnText}>{t('Add a banner photo')}</Text>
+                                    <Text style={styles.addBannerBtnText}>{t('Choose a banner photo, or keep this one')}</Text>
                                 </Pressable>
                                 <Pressable
                                     onPress={handleDismissBanner}

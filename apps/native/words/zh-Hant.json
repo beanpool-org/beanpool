@@ -5343,7 +5343,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "你的社群需要比此手機版本 ({version}) 更最新的 BeanPool。版本 {latest} 已在 Google Play 上架。",
   "Updating keeps your account and everything on this phone.": "更新將保留你的帳號以及此手機上的所有資料。",
   "Update BeanPool in the App Store": "在 App Store 更新 BeanPool",
-  "Update BeanPool in Google Play": "在 Google Play 更新 BeanPool",
   "Update\u0004the app": "更新",
   "Can't update? Ask the people who run your community.": "無法更新？請詢問你的社群營運團隊。",
   "Use another community": "切換至其他社群",
@@ -5883,5 +5882,7 @@
   "Turn on notifications?": "開啟通知？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回覆、發訊息或申請加入時收到提醒。不會用於其他任何用途。",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手機設定中已關閉 BeanPool 的通知。開啟設定即可開啟。",
-  "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者："
+  "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者：",
+  "Choose a banner photo, or keep this one": "選擇橫幅相片，或保留此相片",
+  "Your picture, until you choose a banner.": "您的頭像，直到您選擇橫幅。"
 }

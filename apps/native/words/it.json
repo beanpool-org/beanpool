@@ -5555,7 +5555,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "La tua comunità richiede una versione di BeanPool più recente rispetto a quella su questo telefono ({version}). La versione {latest} è disponibile su Google Play.",
   "Updating keeps your account and everything on this phone.": "L'aggiornamento conserva il tuo account e tutti i dati su questo telefono.",
   "Update BeanPool in the App Store": "Aggiorna BeanPool sull'App Store",
-  "Update BeanPool in Google Play": "Aggiorna BeanPool su Google Play",
   "Update\u0004the app": "Aggiorna",
   "Can't update? Ask the people who run your community.": "Non riesci ad aggiornare? Chiedi a chi gestisce la tua comunità.",
   "Use another community": "Usa un'altra comunità",
@@ -6122,5 +6121,7 @@
   "Turn on notifications?": "Attivare le notifiche?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Per sapere quando qualcuno ti risponde, ti invia un messaggio o chiede di unirsi. Nient'altro.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Le notifiche di BeanPool sono disattivate nelle impostazioni del telefono. Apri Impostazioni per attivarle.",
-  "Nothing here yet. Be the first:": "Ancora niente qui. Sii il primo:"
+  "Nothing here yet. Be the first:": "Ancora niente qui. Sii il primo:",
+  "Choose a banner photo, or keep this one": "Scegli una foto per il banner, oppure mantieni questa",
+  "Your picture, until you choose a banner.": "La tua immagine, finché non scegli un banner."
 }

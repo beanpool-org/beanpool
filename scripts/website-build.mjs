@@ -17,6 +17,7 @@
  *   with no legal translations shipped in this slice.
  * - Relative link rewrites: links to translated pages remain in <lang>/, links to untranslated pages (like legal) link to English.
  * - Asset path rewrites: relative paths (style.css, bean.png, fonts/, main.js) adjust for <lang>/ subdirectories.
+ * - The Android download (beanpool.org/android): version, address, size and digest from apps/website-src/android-apk.json.
  *
  * Modes:
  *   node scripts/website-build.mjs            Builds all pages from apps/website-src/content/ into apps/website/<lang>/
@@ -58,6 +59,7 @@ export const TRANSLATED_PAGES = Object.freeze([
     'index.html',
     'getting-started.html',
     'global.html',
+    'android.html',
     'help.html',
     'post-extraction.html',
     'rules.html',
@@ -163,11 +165,60 @@ export const LEGAL_BANNER_WORDS = Object.freeze({
 });
 
 /**
+ * The Android download on beanpool.org/android (front doors S5): the Google-signed universal APK of one release, which
+ * the director publishes as a GitHub Release asset, tag android-v<version>. One file holds it,
+ * apps/website-src/android-apk.json, and the build writes it into every page in every language, so a release bumps
+ * that file and runs `pnpm website:build`, nothing else. The address and the file's name follow from the version:
+ *   version      "1.2.83"                      the release's versionName
+ *   versionCode  305                           its versionCode (the asset is BeanPool-<version>-<versionCode>.apk)
+ *   bytes        165595593                     the asset's size (`gh release view android-v<version> --json assets`)
+ *   sha256       "ef61…"                       the asset's digest, 64 lowercase hex (the same listing's `digest`)
+ */
+export const APK_RELEASE_FILE = path.join(REPO_ROOT, 'apps', 'website-src', 'android-apk.json');
+
+/** The release in android-apk.json, checked, with the asset's address, file name and size in MB. Throws on a bad file. */
+export function readApkRelease(file = APK_RELEASE_FILE) {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const { version, versionCode, bytes, sha256 } = raw;
+    if (typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`${file}: version must look like 1.2.83, got ${JSON.stringify(version)}`);
+    if (!Number.isInteger(versionCode) || versionCode < 1) throw new Error(`${file}: versionCode must be a whole number, got ${JSON.stringify(versionCode)}`);
+    if (!Number.isInteger(bytes) || bytes < 1) throw new Error(`${file}: bytes must be the asset's size, got ${JSON.stringify(bytes)}`);
+    if (typeof sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sha256)) throw new Error(`${file}: sha256 must be 64 lowercase hex digits, got ${JSON.stringify(sha256)}`);
+    const name = `BeanPool-${version}-${versionCode}.apk`;
+    return {
+        version, versionCode, bytes, sha256, file: name,
+        url: `https://github.com/beanpool-org/beanpool/releases/download/android-v${version}/${name}`,
+        mb: String(Math.round(bytes / 1e6)),
+    };
+}
+
+let apkRelease = null;
+function currentApkRelease() {
+    if (!apkRelease) apkRelease = readApkRelease();
+    return apkRelease;
+}
+
+/**
+ * Writes the release into the elements that carry it: `<a data-apk="url">` gets its href, and a `<span>` or `<code>`
+ * with data-apk="version", "mb", "file" or "sha256" gets that value as its only text.
+ */
+export function applyApkRelease(html, release = currentApkRelease()) {
+    return html
+        .replace(/<a\b[^>]*\bdata-apk="url"[^>]*>/g, (tag) => tag.replace(/\bhref="[^"]*"/, `href="${release.url}"`))
+        .replace(/(<(span|code)\b[^>]*\bdata-apk="(version|mb|file|sha256)"[^>]*>)[^<]*(<\/\2>)/g,
+            (m, open, tag, key, close) => `${open}${release[key]}${close}`);
+}
+
+/** The same elements with no values, so a release, which changes them in every language at once, leaves no page stale. */
+const NO_APK_RELEASE = Object.freeze({ url: '', version: '', mb: '', file: '', sha256: '' });
+
+/**
  * Computes canonical content hash of English HTML (sha256, first 16 hex digits).
- * Ignores dynamic frame elements (hreflang alternate tags, footer languages row, comments, whitespace).
+ * Ignores dynamic frame elements (hreflang alternate tags, footer languages row, comments, whitespace) and the Android
+ * download's per-release values.
  */
 export function pageContentHash(html) {
-    const canonical = html
+    const canonical = applyApkRelease(html, NO_APK_RELEASE)
         .replace(/<link\b[^>]*\/?>/gi, '')
         .replace(/<script\b[^>]*\bsrc=[^>]*\s*(?:\/>|>[\s\S]*?<\/script>)/gi, '')
         .replace(/<div\s+class="footer-languages"[\s\S]*?<\/div>/gi, '')
@@ -335,6 +386,7 @@ export function extractLegalDate(html) {
 export const PAGES_WITH_MAIN_JS = Object.freeze([
     'index.html',
     'getting-started.html',
+    'android.html',
     'help.html',
     'post-extraction.html',
     'rules.html',
@@ -373,6 +425,9 @@ export function formatEnglishPage(page, html) {
     if (PAGES_WITH_MAIN_JS.includes(page) && !out.includes('main.js')) {
         out = out.replace(/<\/body>/i, '    <script src="main.js"></script>\n</body>');
     }
+
+    // 6. The Android download's version, address, size, file name and digest, from android-apk.json
+    out = applyApkRelease(out);
 
     return out;
 }
@@ -496,6 +551,9 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
     if (PAGES_WITH_MAIN_JS.includes(page) && !out.includes('main.js')) {
         out = out.replace(/<\/body>/i, '    <script src="../main.js"></script>\n</body>');
     }
+
+    // 9. The Android download's version, address, size, file name and digest, from android-apk.json
+    out = applyApkRelease(out);
 
     return out;
 }

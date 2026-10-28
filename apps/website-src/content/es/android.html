@@ -1,0 +1,139 @@
+<!-- source-hash: d646156c09a440d3 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool para Android — la descarga directa</title>
+    <meta name="description" content="Descarga BeanPool para Android sin Google Play: la misma app, firmada con la misma clave. La versión actual, cómo instalarla y cómo comprobar que es nuestra.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <style>
+        /* beanpool.org/android: the download, how to install it, and the key to check it by */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The headings land below the fixed bar when a link opens one (#download, #check…) */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content .callout { border-inline-start: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content p strong, .rules-content li strong { color: var(--text-primary); }
+        .rules-content ol { padding-inline-start: 1.75rem; margin-bottom: 1.5rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .rules-content .apk-download a.btn-primary { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+        .rules-content [data-apk="version"] { white-space: nowrap; }
+        /* The key, the command and the file's digest: wrapped anywhere at 320 px, and left to right on every page */
+        .rules-content .apk-code { display: block; padding: 0.75rem 1rem; border-radius: var(--radius-sm); background: var(--code-bg); border: 1px solid var(--border); font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace; font-size: 0.88rem; line-height: 1.6; color: var(--accent-ink); overflow-wrap: anywhere; text-align: left; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Icono de BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cómo funciona</a>
+                <a href="rules.html">Las Reglas</a>
+                <a href="index.html#features">Características</a>
+                <a href="help.html">Ayuda</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriales</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Mira videotutoriales en YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Únete a la comunidad de Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Ver en GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Comenzar</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Abrir menú"><span aria-hidden="true">☰</span> Menú</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Comenzar</a>
+                    <a href="index.html#how-it-works">Cómo funciona</a>
+                    <a href="rules.html">Las Reglas</a>
+                    <a href="index.html#features">Características</a>
+                    <a href="help.html">Ayuda</a>
+                    <a href="guide/index.html">Guía para miembros</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriales en YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool en Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Código en GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>BeanPool para Android, como descarga</h1>
+        <p class="lede">Para teléfonos Android sin Google Play, o donde llegar a Google Play es difícil. La mayoría de la gente debería usar <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a>.</p>
+        <p class="callout"><strong>Es la misma app que en Google Play, firmada con la misma clave.</strong> Se instala sobre el BeanPool que ya tienes en el teléfono, venga de Google Play o de aquí, y conserva tu cuenta.</p>
+
+        <h2 id="download">Descargar</h2>
+        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.83/BeanPool-1.2.83-305.apk"><span class="apk-label">Descargar BeanPool <span data-apk="version">1.2.83</span></span></a></p>
+        <p>Versión <span data-apk="version">1.2.83</span>, un archivo de <span data-apk="mb">166</span> MB: usa wifi si puedes. Viene de las versiones publicadas de BeanPool en <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a>.</p>
+
+        <h2 id="install">Instalarla</h2>
+        <ol>
+            <li>Abre el archivo cuando termine de descargarse: tócalo en la notificación o búscalo en las Descargas del teléfono.</li>
+            <li>La primera vez, Android te pide que permitas a tu navegador instalar apps. Permítelo en los ajustes que se abren y vuelve atrás.</li>
+            <li>Confirma la instalación. Si BeanPool ya está en tu teléfono, Android lo llama actualización. Después abre BeanPool.</li>
+        </ol>
+        <p id="not-installed">Si Android dice que la app no se instaló porque entra en conflicto con la que tienes en el teléfono, mira la versión de tu BeanPool: en los ajustes del teléfono, en Aplicaciones y luego BeanPool. La versión <span data-apk="version">1.2.83</span> o una más nueva no necesita nada de aquí: consérvala. Una más antigua se firmó con otra clave, como una copia de prueba. En ese caso, anota tus 12 palabras (mira <a href="#words">más abajo</a>), desinstala BeanPool e instala este archivo. Abre BeanPool, toca <strong>¿Ya eres miembro? Restaurar cuenta</strong> y luego <strong>Recuperar con 12 palabras</strong>.</p>
+
+        <h2 id="updates">Actualizaciones</h2>
+        <p>Una app descargada aquí no se actualiza sola. BeanPool te avisa cuando sale una versión nueva: vuelve a esta página, descárgala e instálala sobre la que tienes. Tu cuenta y todo lo que hay en la app se quedan.</p>
+
+        <h2 id="words">Guarda bien tus 12 palabras</h2>
+        <p>Tu cuenta es una clave guardada en la app de tu teléfono. Desinstalar BeanPool quita tu cuenta del teléfono, así que instala encima. Desinstala solo cuando el BeanPool de tu teléfono sea más antiguo y esté firmado con otra clave (mira <a href="#not-installed">más arriba</a>), y solo con tus 12 palabras anotadas. Tus 12 palabras recuperan tu cuenta en un teléfono nuevo o en este. En la app, están en <strong>Ajustes</strong>, bajo <strong>CUENTA E IDENTIDAD</strong>, en <strong>Ver frase de recuperación</strong>. Escríbelas y guárdalas bien.</p>
+
+        <h2 id="check">Comprueba que es nuestra</h2>
+        <p>Este archivo está firmado con la misma clave que BeanPool en Google Play. La huella SHA-256 de su certificado es:</p>
+        <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
+        <p>En un ordenador con las herramientas de compilación de Android, ejecuta:</p>
+        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>
+        <p>Debería mostrar la misma huella, escrita como la escribe apksigner:</p>
+        <p><code class="apk-code" id="apk-digest" dir="ltr">Signer #1 certificate SHA-256 digest: 46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81</code></p>
+        <p>Android solo instala una actualización firmada con la misma clave, así que un archivo firmado con cualquier otra clave no puede reemplazar tu BeanPool.</p>
+        <p>El SHA-256 del propio archivo:</p>
+        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">ef6112f14891ad653e7ad0d06cc0aa061fa5a97907c84b9055cfdd6229c06089</code></p>
+
+        <h2 id="other-ways">Las otras formas de conseguir BeanPool</h2>
+        <ul>
+            <li><a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a>, para la mayoría de los teléfonos Android. Mantiene la app al día por ti.</li>
+            <li>La <a href="https://apps.apple.com/app/id6761870086" target="_blank" rel="noopener">App Store</a>, para iPhone y iPad.</li>
+        </ul>
+        <p>¿Sin app? La comunidad global se abre en el navegador de tu teléfono en <a href="https://global.beanpool.org">global.beanpool.org</a>.</p>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Icono de BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Una app gratuita para intercambiar con tus vecinos, en Frijoles.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Centro de ayuda</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Cómo funciona</a>
+                    <a href="getting-started.html">Comenzar</a>
+                    <a href="rules.html">Las Reglas</a>
+                    <a href="safety.html">Seguridad infantil</a>
+                    <a href="privacy.html">Política de privacidad</a>
+                    <a href="terms.html">Términos de servicio</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Código abierto bajo licencia MIT. Hecho con <img src="bean.png" alt="amor" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> por comunidades, para comunidades. Límites de zonas horarias © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -6,6 +6,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { BANNER_PICTURE, t, tn, type ShopCategory } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { usePictureCrop } from '../components/PictureCropDialog';
+import { DefaultBanner } from '../components/DefaultBanner';
+import { resolveAvatarUrl } from '../lib/avatar';
+import { useOwnAvatar } from '../lib/useOwnAvatar';
 import {
     ShopAddOffersDialog, ShopCategoryDialog, ShopCloseDialog, ShopPauseDialog, ShopTextDialog,
     type ShopSheetRefusal, type ShopTextField,
@@ -31,7 +34,7 @@ function refusalOf(e: unknown): ShopSheetRefusal {
 const LIVE = new Set(['active', 'pending', 'paused']);
 
 export interface YourShopPageProps {
-    identity: BeanPoolIdentity;
+    identity: BeanPoolIdentity & { avatar?: string | null };
     onBack: () => void;
     onOpenShop?: (id: string) => void;
     onOpenTools?: () => void;
@@ -48,6 +51,8 @@ export function YourShopPage({
     onOpenDeals,
 }: YourShopPageProps) {
     const me = identity?.publicKey ?? '';
+    const ownAvatar = useOwnAvatar(identity?.publicKey ?? null);
+    const avatar = identity?.avatar ?? ownAvatar;
     const [read, setRead] = useState<MyShopRead | null>(null);
     const [listings, setListings] = useState<ShopListing[] | null | undefined>(undefined);
     const [editing, setEditing] = useState<ShopTextField | null>(null);
@@ -56,6 +61,7 @@ export function YourShopPage({
     const [busy, setBusy] = useState(false);
     const [refusal, setRefusal] = useState<({ where: Where } & ShopSheetRefusal) | null>(null);
     const [closed, setClosed] = useState<{ ended: number | null } | null>(null);
+    const [bannerFailed, setBannerFailed] = useState<string | null>(null);
 
     const cropper = usePictureCrop();
     const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -180,6 +186,7 @@ export function YourShopPage({
 
     const notSet = t('Not written yet');
     const categoryWords = shop?.category ? shopCategoryLabel(shop.category) : null;
+    const bannerSrc = resolveAvatarUrl(shop?.photoUrl);
     const shown = (listings ?? []).filter((l) => LIVE.has(l.status));
 
     return (
@@ -335,23 +342,58 @@ export function YourShopPage({
                                 onClick={() => { setRefusal(null); setEditing('howToDeal'); }}
                                 testId="shop-field-howToDeal"
                             />
-                            <ToolRow
-                                title={t('Banner photo')}
-                                state={shop.photoUrl ? t('Members see it across the top of your shop') : t('Not chosen yet')}
-                                onClick={pickBanner}
-                                testId="shop-field-banner"
-                            />
-                            {shop.photoUrl ? (
-                                <div className="p-3">
+                            <div data-testid="shop-field-banner-container" className="p-3 border-t border-nature-200 dark:border-nature-800">
+                                <div className="text-sm font-bold text-nature-900 dark:text-white mb-2">
+                                    {t('Banner photo')}
+                                </div>
+                                <div
+                                    data-testid="shop-banner-preview"
+                                    className="w-full aspect-[3/1] max-w-[720px] rounded-xl overflow-hidden border border-nature-200 dark:border-nature-800 mb-2"
+                                >
+                                    {bannerSrc && bannerSrc !== bannerFailed ? (
+                                        <img
+                                            src={bannerSrc}
+                                            alt=""
+                                            data-testid="shop-banner-image"
+                                            className="w-full h-full object-cover"
+                                            onError={() => setBannerFailed(bannerSrc)}
+                                        />
+                                    ) : (
+                                        <DefaultBanner
+                                            category={shop.category}
+                                            logoUrl={avatar}
+                                            pubkey={identity?.publicKey}
+                                        />
+                                    )}
+                                </div>
+                                {!shop.photoUrl ? (
+                                    <p className="m-0 mb-3 text-xs text-nature-500 dark:text-nature-400">
+                                        {t('Your picture, until you choose a banner.')}
+                                    </p>
+                                ) : (
+                                    <p className="m-0 mb-3 text-xs text-nature-500 dark:text-nature-400">
+                                        {t('Members see it across the top of your shop')}
+                                    </p>
+                                )}
+                                <div className="flex flex-wrap gap-2">
                                     <ToolButton
                                         disabled={busy}
-                                        onClick={() => { void change({ photo: null }, 'banner'); }}
-                                        testId="shop-banner-remove"
+                                        onClick={pickBanner}
+                                        testId="shop-field-banner"
                                     >
-                                        {t('Remove the banner photo')}
+                                        {shop.photoUrl ? t('Change the banner photo') : t('Choose a banner photo')}
                                     </ToolButton>
+                                    {shop.photoUrl ? (
+                                        <ToolButton
+                                            disabled={busy}
+                                            onClick={() => { void change({ photo: null }, 'banner'); }}
+                                            testId="shop-banner-remove"
+                                        >
+                                            {t('Remove the banner photo')}
+                                        </ToolButton>
+                                    ) : null}
                                 </div>
-                            ) : null}
+                            </div>
                             {refusedAt('banner') ? (
                                 <p data-testid="shop-banner-error" className="m-0 px-3 pb-2 text-sm font-semibold text-bp-ink-danger break-words">
                                     {refusal!.message}

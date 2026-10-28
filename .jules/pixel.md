@@ -207,3 +207,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-16 - Add dynamic accessibilityLabel and busy state to settings profile save button
 **Learning:** Save buttons in settings profile editor whose child text is conditionally replaced by an ActivityIndicator during saving leave screen reader users without feedback unless provided with a dynamic `accessibilityLabel` (`loading ? t('Saving profile...') : t('Save Profile')`) and `accessibilityState={{ disabled: loading, busy: loading }}`.
 **Action:** Always supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` on settings save buttons rendering ActivityIndicator when loading.
+
+## 2027-01-23 - Add dynamic accessibilityLabel and hint to picture crop done button
+**Learning:** Action buttons in media crop flows whose text child is conditionally replaced by an `ActivityIndicator` during image cutting leave screen reader users without accessible text during loading states unless dynamic `accessibilityLabel` (`busy ? t('Cropping picture...') : t('Done')`) and `accessibilityHint` are explicitly provided.
+**Action:** Supply dynamic `accessibilityLabel` and `accessibilityHint` on image cropping submit buttons rendering `ActivityIndicator` when busy.

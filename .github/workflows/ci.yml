@@ -80,6 +80,15 @@ jobs:
         timeout-minutes: 15
         run: pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium
 
+      # Build shared packages (@beanpool/core, @beanpool/engine, @beanpool/signin) before running parallel checks.
+      # Both `turbo run build` and `turbo run test` (via dependsOn: ["^build"]) compile @beanpool/core. Running both
+      # concurrently on a clean checkout causes a race where two tsc processes write to packages/beanpool-core/dist
+      # simultaneously, truncating avatar-presets.d.ts while the PWA's tsc is reading it (seen on PR #2533 run
+      # 40547765597 and PR #2541). Building them once here ensures dist is complete and turbo caches the task before
+      # checks fan out.
+      - name: Build core, engine, and signin
+        run: pnpm turbo run build --filter=@beanpool/core --filter=@beanpool/engine --filter=@beanpool/signin
+
       # A hang fails the step instead of holding the runner for GitHub's 6 h default. patches/vitest@3.2.7.patch drops
       # vitest's 60 s per-call rpc timer, as vitest 4 does: a test file whose import never finishes (a plugin transform
       # that never settles) now waits for this. The slowest green run of the last 59 took 72 min here; the median, 55.

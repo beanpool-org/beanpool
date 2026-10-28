@@ -502,6 +502,31 @@ async function main(): Promise<void> {
     // A layout saved before W0 (no view) still comes back with none: nothing added to a Home that never chose.
     assert(!('view' in ((await read(hal)).body?.['home.layout'] ?? {})), 'a layout that never chose has no view');
 
+    // ── 12. saw_ledger preference (L3) ──
+    console.log('\n— 12. saw_ledger: saved once, idempotent write, served in own read —');
+    const sam = makeMember('Sam');
+    const samBefore = await read(sam);
+    assert(!('saw_ledger' in (samBefore.body ?? {})), 'a member who never visited preview ledger has no saw_ledger preference');
+    const samMemberBefore = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(sam.pk) as { updated_at: string };
+
+    // First save: writes saw_ledger and stamps members.updated_at
+    const savedFirst = await save(sam, { saw_ledger: true });
+    assert(savedFirst.status === 200 && stored(sam.pk, 'saw_ledger') === 'true', 'saving saw_ledger: true writes true');
+    const samAfterFirst = await read(sam);
+    assert(samAfterFirst.body?.saw_ledger === true, 'own read serves saw_ledger: true');
+    const samMemberAfterFirst = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(sam.pk) as { updated_at: string };
+    assert(samMemberAfterFirst.updated_at >= samMemberBefore.updated_at, 'first save stamps member row');
+
+    // Second save: idempotent, writes nothing and does not bump updated_at
+    const savedSecond = await save(sam, { saw_ledger: true });
+    assert(savedSecond.status === 200, 'second save succeeds');
+    const samMemberAfterSecond = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(sam.pk) as { updated_at: string };
+    assert(samMemberAfterSecond.updated_at === samMemberAfterFirst.updated_at, 'idempotent saw_ledger save leaves members.updated_at untouched');
+
+    // Visitor cannot save saw_ledger
+    const visSaw = await save(vis, { saw_ledger: true });
+    assert(visSaw.status !== 200 && stored(vis.pk, 'saw_ledger') === undefined, 'a visitor cannot save saw_ledger');
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Home preferences checks PASSED.');

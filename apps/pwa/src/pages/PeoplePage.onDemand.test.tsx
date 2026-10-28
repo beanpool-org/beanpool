@@ -90,6 +90,17 @@ describe('People on a community with members on demand', () => {
         expect(whole).not.toHaveBeenCalled();
     });
 
+    it('without an area: renders "Set your area" button and clicking opens settings-area (L4)', async () => {
+        area.value = null;
+        const onNavigate = vi.fn();
+        render(<PeoplePage identity={identity} initialView="community" onNavigate={onNavigate} />);
+        await screen.findByTestId('people-no-area');
+        const btn = screen.getByTestId('people-set-area-btn');
+        expect(btn).toHaveTextContent('Set your area');
+        fireEvent.click(btn);
+        expect(onNavigate).toHaveBeenCalledWith('settings-area');
+    });
+
     it("a key the node says isn't a member (a private preview): the node's sentence, never 'set your area', no near read", async () => {
         const PREVIEW = 'This community is in a private preview. Ask its owner for an invite.';
         area.value = { code: 'private_preview', standing: 'not_member', isMember: false, sentence: PREVIEW, message: PREVIEW } as any;

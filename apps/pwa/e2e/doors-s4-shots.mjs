@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+import { createServer } from 'vite';
+import { chromium } from 'playwright';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+process.chdir(PWA_DIR);
+
+const REPO_ROOT = path.resolve(PWA_DIR, '../..');
+const SHOTS_DIR = path.join(REPO_ROOT, 'scratch', 'screenshots', 's4');
+fs.mkdirSync(SHOTS_DIR, { recursive: true });
+
+const server = await createServer({
+    configFile: path.join(PWA_DIR, 'vite.config.ts'),
+    root: PWA_DIR,
+    server: { port: 0 },
+    logLevel: 'error',
+});
+await server.listen();
+const origin = `http://localhost:${server.httpServer.address().port}`;
+const browser = await chromium.launch();
+
+const TEXT_SCALE = 1.3;
+
+for (const theme of ['light', 'dark']) {
+    // 1. Home card
+    {
+        const ctx = await browser.newContext({
+            viewport: { width: 320, height: 700 },
+            colorScheme: theme,
+            deviceScaleFactor: 2,
+        });
+        const page = await ctx.newPage();
+        await page.goto(`${origin}/e2e/doors-s4-shots-harness.html?view=card${theme === 'dark' ? '&dark=1' : ''}`, {
+            waitUntil: 'networkidle',
+        });
+        await page.addStyleTag({
+            content: `html { font-size: ${TEXT_SCALE * 100}% !important; } *, *::before, *::after { transition: none !important; }`,
+        });
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForTimeout(300);
+
+        const outPath = path.join(SHOTS_DIR, `s4-card-320-x1.3-${theme}.png`);
+        await page.screenshot({ path: outPath, fullPage: true });
+        console.log(`Saved screenshot: ${outPath}`);
+        await ctx.close();
+    }
+
+    // 2. Settings rows (collapsed)
+    {
+        const ctx = await browser.newContext({
+            viewport: { width: 320, height: 600 },
+            colorScheme: theme,
+            deviceScaleFactor: 2,
+        });
+        const page = await ctx.newPage();
+        await page.goto(`${origin}/e2e/doors-s4-shots-harness.html?view=settings${theme === 'dark' ? '&dark=1' : ''}`, {
+            waitUntil: 'networkidle',
+        });
+        await page.addStyleTag({
+            content: `html { font-size: ${TEXT_SCALE * 100}% !important; } *, *::before, *::after { transition: none !important; }`,
+        });
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForTimeout(300);
+
+        const outPath = path.join(SHOTS_DIR, `s4-settings-collapsed-320-x1.3-${theme}.png`);
+        await page.screenshot({ path: outPath, fullPage: true });
+        console.log(`Saved screenshot: ${outPath}`);
+        await ctx.close();
+    }
+
+    // 3. Settings rows (expanded)
+    {
+        const ctx = await browser.newContext({
+            viewport: { width: 320, height: 800 },
+            colorScheme: theme,
+            deviceScaleFactor: 2,
+        });
+        const page = await ctx.newPage();
+        await page.goto(`${origin}/e2e/doors-s4-shots-harness.html?view=settings${theme === 'dark' ? '&dark=1' : ''}`, {
+            waitUntil: 'networkidle',
+        });
+        await page.addStyleTag({
+            content: `html { font-size: ${TEXT_SCALE * 100}% !important; } *, *::before, *::after { transition: none !important; }`,
+        });
+        await page.evaluate(() => document.fonts.ready);
+        const usePhoneApp = page.getByTestId('settings-use-phone-app');
+        if (await usePhoneApp.count() > 0) {
+            await usePhoneApp.click();
+            await page.waitForTimeout(300);
+        }
+
+        const outPath = path.join(SHOTS_DIR, `s4-settings-expanded-320-x1.3-${theme}.png`);
+        await page.screenshot({ path: outPath, fullPage: true });
+        console.log(`Saved screenshot: ${outPath}`);
+        await ctx.close();
+    }
+
+    // 4. FAQ answer
+    {
+        const ctx = await browser.newContext({
+            viewport: { width: 320, height: 600 },
+            colorScheme: theme,
+            deviceScaleFactor: 2,
+        });
+        const page = await ctx.newPage();
+        await page.goto(`${origin}/e2e/doors-s4-shots-harness.html?view=faq${theme === 'dark' ? '&dark=1' : ''}`, {
+            waitUntil: 'networkidle',
+        });
+        await page.addStyleTag({
+            content: `html { font-size: ${TEXT_SCALE * 100}% !important; } *, *::before, *::after { transition: none !important; }`,
+        });
+        await page.evaluate(() => document.fonts.ready);
+        await page.waitForTimeout(300);
+
+        const outPath = path.join(SHOTS_DIR, `s4-faq-320-x1.3-${theme}.png`);
+        await page.screenshot({ path: outPath, fullPage: true });
+        console.log(`Saved screenshot: ${outPath}`);
+        await ctx.close();
+    }
+}
+
+await browser.close();
+await server.close();
+console.log('Screenshots complete.');

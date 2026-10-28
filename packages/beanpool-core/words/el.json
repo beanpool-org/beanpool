@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "Πατήστε + ΠΡΟΣΘΗΚΗ ΑΝΑΡΤΗΣΗΣ για να βάλετε μια Προσφορά: ψωμί, μεταφορά, μία ώρα από τον χρόνο σας. Αναρτήστε μια Προσφορά πριν από μια Ανάγκη, ώστε όλοι να συνεισφέρουν.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "Πατήστε + ΠΡΟΣΘΗΚΗ ΑΝΑΡΤΗΣΗΣ για να προσφέρετε κάτι δωρεάν ή για ανταλλαγή. Μια Ανάγκη είναι κάτι που ψάχνετε.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "Τα φασόλια μετρούν τη βοήθεια που δόθηκε και λήφθηκε. Όλοι ξεκινούν από το μηδέν, και το μηδέν είναι μια χαρά: σημαίνει ότι έχετε δώσει όσα έχετε λάβει.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "Δεν υπάρχουν φασόλια στην παγκόσμια κοινότητα. Αναφέρετε στην ανάρτησή σας τι θα θέλατε σε αντάλλαγμα: δωρεάν, ανταλλαγή ή ρωτήστε.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "Ένας ενδεικτικός οδηγός: 40 φασόλια είναι περίπου μία ώρα από τον χρόνο κάποιου. Εσείς και το άλλο άτομο συμφωνείτε στην πραγματική τιμή.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "Οι 12 λέξεις σας είναι το κλειδί του λογαριασμού σας και δεν υπάρχει κωδικός πρόσβασης. Γράψτε τες σε χαρτί και φυλάξτε το ασφαλές: κανείς δεν μπορεί να τις επαναφέρει για εσάς.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "Ο Χάρτης δείχνει τι υπάρχει κοντά σας: οι πράσινες πινέζες είναι Προσφορές, οι πορτοκαλί Ανάγκες, οι μοβ εκδηλώσεις. Η δική σας πινέζα μπορεί να τοποθετηθεί κοντά στο σπίτι σας αντί ακριβώς πάνω σε αυτό.",
@@ -784,5 +783,7 @@
   "Start a project or an enterprise →": "Ξεκινήστε ένα έργο ή εγχείρημα →",
   "Social Circle": "Κοινωνικός κύκλος",
   "Working Group": "Ομάδα εργασίας",
-  "Guild": "Συντεχνία"
+  "Guild": "Συντεχνία",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Δεν υπάρχουν φασόλια στην παγκόσμια κοινότητα. Αναφέρετε στην ανάρτησή σας τι θα θέλατε σε αντάλλαγμα: δωρεάν, ανταλλαγή ή ρωτήστε.",
+  "Your first week": "Η πρώτη σου εβδομάδα"
 }

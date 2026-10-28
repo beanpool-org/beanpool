@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "روی + ثبت پست ضربه بزنید تا پیشنهادی بگذارید: نان، هم‌سفری، یک ساعت وقت. پیش از ثبت نیاز یک پیشنهاد بگذارید تا همه آورده‌ای داشته باشند.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "روی + ثبت پست ضربه بزنید تا موردی رایگان یا برای مبادله بگذارید. نیاز چیزی است که دنبال آن هستید.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "لوبیا کمک‌های داده شده و گرفته شده را می‌شمارد. همه از صفر شروع می‌کنند و صفر جای خوبی است: یعنی به همان اندازه که گرفته‌اید، بخشیده‌اید.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "در جامعه جهانی هیچ لوبیایی وجود ندارد. در پست خود بگویید در ازای آن چه می‌خواهید: رایگان، مبادله، یا توافقی.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "یک راهنمای تقریبی: ۴۰ لوبیا حدود یک ساعت زمان یک نفر است. قیمت واقعی را شما و طرف مقابل توافق می‌کنید.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "۱۲ کلمه شما کلید حسابتان است و رمزی وجود ندارد. آن‌ها را روی کاغذ بنویسید و امن نگه دارید: هیچ‌کس نمی‌تواند آن‌ها را بازنشانی کند.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "نقشه موارد نزدیک شما را نشان می‌دهد: نشانگر سبز پیشنهاد، نارنجی نیاز، و بنفش رویداد است. نشانگر خودتان می‌تواند نزدیک خانه‌تان باشد نه دقیقاً روی آن.",
@@ -784,5 +783,7 @@
   "Start a project or an enterprise →": "شروع یک پروژه یا طرح تجاری →",
   "Social Circle": "حلقه اجتماعی",
   "Working Group": "کارگروه",
-  "Guild": "انجمن صنف"
+  "Guild": "انجمن صنف",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "در جامعه جهانی هیچ لوبیایی وجود ندارد. در پست خود بگویید در ازای آن چه می‌خواهید: رایگان، مبادله، یا توافقی.",
+  "Your first week": "اولین هفته شما"
 }

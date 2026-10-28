@@ -40,7 +40,8 @@ import { helpSheetFor, t, webHelpKey, word, type WordKey } from '@beanpool/core'
 import { HelpDialog } from '../components/HelpDialog';
 import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
 import { MemberGuide } from '../components/MemberGuide';
-import { getBundledGuide, inShownLanguage } from '../lib/guide';
+import { loadBundledGuide, getBundledGuide, inShownLanguage } from '../lib/guide';
+import type { Guide } from '@beanpool/core';
 
 type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
 
@@ -72,8 +73,16 @@ export function GuestLobby({ info, health, onComplete, linkedPostId = null, onLi
     const tabs = modeFor('beans', info) === 'preview' ? [...TABS, LEDGER_TAB] : TABS;
     // The "?" (DESIGN-getting-started-fable.md §4–§5): help for the lobby's tab; its guide opens over the lobby.
     const [helpOpen, setHelpOpen] = useState(false);
+    const [helpGuide, setHelpGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
+    useEffect(() => {
+        if (helpOpen && !helpGuide) {
+            loadBundledGuide().then(setHelpGuide).catch(() => {});
+        }
+    }, [helpOpen, helpGuide]);
     const [guideAt, setGuideAt] = useState<string | null | undefined>(undefined);
-    const helpWords = helpSheetFor(inShownLanguage(getBundledGuide()), webHelpKey({ tab, lobby: true }));
+    const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab, lobby: true }));
     const helpButton = (className: string) => <LobbyHelpButton onClick={() => setHelpOpen(true)} className={className} />;
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);

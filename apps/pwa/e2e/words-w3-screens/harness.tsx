@@ -19,7 +19,7 @@ import { AddCardDialog, CardSettingsDialog } from '../../src/components/AddCardD
 import { EditHomeDialog } from '../../src/components/EditHomeDialog';
 import { HomeCard } from '../../src/components/HomeCard';
 import { TourBar } from '../../src/components/TourBar';
-import { InstallPrompt } from '../../src/components/InstallPrompt';
+import { DesktopInstallSteps } from '../../src/components/InstallPrompt';
 import { NewAccountCard } from '../../src/components/NewAccountCard';
 import { StartCommunityScreen } from '../../src/components/StartCommunityScreen';
 import { SuggestChangeForm } from '../../src/components/SuggestChangeForm';
@@ -71,7 +71,7 @@ const SCREENS: Record<string, () => ReactNode> = {
         return <TourBar steps={steps} index={steps.length - 1} home={{ chips: ['steps', 'market', 'beans'], chipName: (c) => cardName(c), onHome: (c) => c === 'market', addChip: noop, moreCards: noop }} onNext={noop} onSkip={noop} onDone={noop} />;
     },
     'tour-step': () => <TourBar steps={tourSteps('web', { global: false, beans: true })} index={1} home={null} onNext={noop} onSkip={noop} onDone={noop} />,
-    'install': () => <InstallPrompt />,
+    'install': () => <Page><div className="p-4"><DesktopInstallSteps /></div></Page>,
     'new-account': () => <Page><div className="p-4"><NewAccountCard onClose={noop} /></div></Page>,
     'start-community': () => <StartCommunityScreen onClose={noop} onNearYou={noop} />,
     'suggest': () => <Page><div className="p-4"><SuggestChangeForm appVersion="1.2.29" onDone={noop} /></div></Page>,

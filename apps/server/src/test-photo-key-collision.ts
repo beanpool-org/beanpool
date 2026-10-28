@@ -20,7 +20,8 @@
  *     its author's edit takes the photo off it, and Vera's object stays, because her row still names it; so it does when
  *     the row names it in other capitals. Asking is an index lookup. An object no other row names still goes.
  *  4. Headers. A keyed photo: `private, max-age=31536000, immutable`. A board listing's photo where the listings are a
- *     public read: `public, max-age=31536000, immutable`, as before; a group's listing there is still `private`. A
+ *     public read: `public, max-age=31536000, s-maxage=3600, immutable` (a shared cache an hour at most, so a takedown
+ *     reaches the edge); a group's listing there is still `private`. A
  *     message's attachment: `private, no-store`.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-photo-key-collision.ts
@@ -49,6 +50,8 @@ const RED_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd
 /** A third picture (one blue pixel). */
 const BLUE_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 const IMMUTABLE = 'max-age=31536000, immutable';
+/** A photo anyone may see: the browser's year, and an hour at most in a shared cache (review of #2558). */
+const EVERYONES = 'max-age=31536000, s-maxage=3600, immutable';
 
 type Id = { pk: string; privateKey: crypto.KeyObject };
 function newId(): Id {
@@ -255,8 +258,8 @@ async function main(): Promise<void> {
         const club = se.createGroup({ name: 'Jelly club', createdBy: vera.pk });
         const board = await veraPosts('Sloe gin jelly');
         const boardRes = await get(board.url);
-        assert(!/[?&]k=/.test(board.url) && boardRes.cache === `public, ${IMMUTABLE}`,
-            `a board listing's photo on a public-read node is for shared caches too, as before: ${boardRes.cache}`);
+        assert(!/[?&]k=/.test(board.url) && boardRes.cache === `public, ${EVERYONES}`,
+            `a board listing's photo on a public-read node is for shared caches too, an hour at most there: ${boardRes.cache}`);
         const grp = await veraPosts('Bramble jelly for the club', { audienceScope: 'group', targetGroupId: club.id });
         const grpRes = await get(grp.url);
         assert(/[?&]k=/.test(grp.url) && grpRes.cache === `private, ${IMMUTABLE}`,

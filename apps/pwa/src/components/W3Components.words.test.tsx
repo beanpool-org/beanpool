@@ -20,7 +20,7 @@ import { ModerationPauseCard } from './ModerationPauseCard';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { SuggestChangeForm } from './SuggestChangeForm';
 import { RadiusPickerPage } from './RadiusPickerPage';
-import { InstallPrompt } from './InstallPrompt';
+import { InstallPrompt, DesktopInstallSteps } from './InstallPrompt';
 import { HeaderControls, SidebarControls } from './HeaderControls';
 import { CommonsPreview } from './ShowcasePreviews';
 import { GuestLobby } from '../pages/GuestLobby';
@@ -192,14 +192,10 @@ describe('the radius picker, the install prompt, the header pill, the Commons pr
         expect(unwrapped()).toEqual([]);
     });
 
-    it('the install prompt, and its steps for this device', async () => {
-        vi.useFakeTimers();
-        window.matchMedia = vi.fn().mockImplementation((query: string) => ({ matches: false, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }));
+    it('the desktop install steps in the pseudo-locale (front doors S4)', async () => {
         await showIn('xx');
-        render(<InstallPrompt />);
-        act(() => { vi.advanceTimersByTime(2000); });
-        fireEvent.click(screen.getByRole('button', { name: xx('How?') }));
-        expect(screen.getByRole('button', { name: xx('Hide steps') })).toBeInTheDocument();
+        render(<DesktopInstallSteps />);
+        expect(screen.getByTestId('desktop-install-steps')).toBeInTheDocument();
         expect(unwrapped()).toEqual([]);
     });
 

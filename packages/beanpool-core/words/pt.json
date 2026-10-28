@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "Toque em + ADICIONAR PUBLICAÇÃO para colocar uma Oferta: pão, uma carona, uma hora do seu tempo. Publique uma Oferta antes de um Pedido, para que todos contribuam com algo.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "Toque em + ADICIONAR PUBLICAÇÃO para colocar algo grátis ou para troca. Um Pedido é algo que você está procurando.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "Os feijões contabilizam a ajuda dada e recebida. Todo mundo começa no zero, e zero é um ótimo lugar: significa que você doou tanto quanto recebeu.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "Não há feijões na comunidade mundial. Diga na sua publicação o que gostaria em troca: grátis, troca ou a combinar.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "Um guia aproximado: 40 feijões equivalem a cerca de uma hora do tempo de alguém. Você e a outra pessoa combinam o preço real.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "Suas 12 palavras são a chave da sua conta e não há senha. Escreva-as no papel e guarde bem: ninguém pode recuperá-las para você.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "O Mapa mostra o que está perto de você: marcadores verdes são Ofertas, laranjas são Pedidos, roxos são eventos. Seu marcador pode ficar perto da sua casa em vez de em cima dela.",
@@ -784,5 +783,7 @@
   "Start a project or an enterprise →": "Iniciar um projeto ou empreendimento →",
   "Social Circle": "Círculo social",
   "Working Group": "Grupo de trabalho",
-  "Guild": "Guilda"
+  "Guild": "Guilda",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Não há feijões na comunidade global. Diga na sua publicação o que gostaria em troca: grátis, troca ou a combinar.",
+  "Your first week": "Sua primeira semana"
 }

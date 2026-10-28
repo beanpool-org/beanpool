@@ -91,18 +91,19 @@ test('alert: raised at 160/200, not at 159; cleared at 150', async () => {
     const w = await world();
     try {
         let now = Math.floor(T0 / 1000);
-
-        // 1. Not raised at 159/200 (79.5% < 80%)
-        w.cf.paging.dnsTotal = 159;
-        await watchOurServers(w.env);
-        assert.equal(w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get(), undefined, 'not raised at 159/200');
-        assert.equal(w.sqlite.prepare("SELECT count(*) as n FROM alert_outbox WHERE category='health'").get().n, 0);
-
-        // 2. Raised at 160/200 (80% >= 80%) after 1 hour (sweep cadence)
-        now += 3600;
+        // The test's own clock from the first tick: step 1 on the real clock stamped the hourly mark at the real time, so once
+        // the real time passed T0 + 1 h (28 Oct 2026 13:00 UTC) step 2's "an hour later" was before it and the count never ran.
         const realNow = Date.now;
         Date.now = () => now * 1000;
         try {
+            // 1. Not raised at 159/200 (79.5% < 80%)
+            w.cf.paging.dnsTotal = 159;
+            await watchOurServers(w.env);
+            assert.equal(w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get(), undefined, 'not raised at 159/200');
+            assert.equal(w.sqlite.prepare("SELECT count(*) as n FROM alert_outbox WHERE category='health'").get().n, 0);
+
+            // 2. Raised at 160/200 (80% >= 80%) after 1 hour (sweep cadence)
+            now += 3600;
             w.cf.paging.dnsTotal = 160;
             await watchOurServers(w.env);
             const state = w.sqlite.prepare("SELECT * FROM alert_state WHERE key = 'dns-record-cap'").get();

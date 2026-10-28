@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "Gusa + WEKA TANGAZO ili kuweka Ofa: mkate, lifti, saa moja ya wakati wako. Weka Ofa kabla ya Uhitaji, ili kila mtu alete kitu.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "Gusa + WEKA TANGAZO ili kuweka kitu cha bure au cha kubadilishana. Uhitaji ni kitu unachokitafuta.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "Maharagwe huhesabu msaada uliotolewa na kupokelewa. Kila mtu huanzia sifuri, na sifuri ni mahali pazuri: inamaanisha umetoa kiasi sawa na ulichopokea.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "Hakuna maharagwe kwenye jumuiya ya kimataifa. Eleza katika tangazo lako unachotaka kwa malipo: bure, kubadilishana, au omba.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "Mwongozo wa makadirio: Maharagwe 40 ni takriban saa moja ya muda wa mtu. Wewe na mtu mwingine mnakubaliana bei halisi.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "Maneno yako 12 ndio ufunguo wa akaunti yako, na hakuna nenosiri. Yaandike kwenye karatasi na uyaweke salama: hakuna anayeweza kuyarejesha kwa ajili yako.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "Ramani inaonyesha kilicho karibu nawe: pini za kijani ni Ofa, za chungwa ni Mahitaji, za zambarau ni matukio. Pini yako inaweza kuwa karibu na nyumbani badala ya juu yake kabisa.",
@@ -784,5 +783,7 @@
   "Start a project or an enterprise →": "Anzisha mradi au shirika →",
   "Social Circle": "Mzunguko wa Kijamii",
   "Working Group": "Kikundi Kazi",
-  "Guild": "Chama cha Wataalamu"
+  "Guild": "Chama cha Wataalamu",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Hakuna maharagwe kwenye jumuiya ya kimataifa. Eleza katika tangazo lako unachotaka kwa malipo: bure, kubadilishana, au omba.",
+  "Your first week": "Wiki yako ya kwanza"
 }

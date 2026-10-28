@@ -6,6 +6,9 @@
  * A `ws_activity` within 10 s of the last network read of the messages doesn't read at once. That read may already have
  * passed the doorbell's line, so the held doorbell reads once when the 10 s is up, unless a read has started since it
  * rang (review of #2558). Before, the line waited for the backstop: about two minutes with the socket alive.
+ *
+ * Only a read that worked counts (syncMessages says so). One that failed with the socket up, a 503 while the node is full
+ * or a timeout on a weak link, is read again on the next tick, as before slice L0 (review of #2558).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -65,8 +68,9 @@ vi.mock('../tour-store', () => ({
     OPEN_HELP_EVENT: 'open_help', helpContext: () => null, useTour: () => ({ run: null, home: null }),
     closeTour: vi.fn(), moveTour: vi.fn(), startTour: vi.fn(),
 }));
+// Every read works unless a test says one fails (syncMessages answers whether it did).
 vi.mock('../db', () => ({
-    getGlobalUnreadCount: vi.fn(async () => 0), syncMessages: vi.fn(async () => undefined), getPosts: vi.fn(async () => []), getMarketplaceTransactions: vi.fn(async () => []),
+    getGlobalUnreadCount: vi.fn(async () => 0), syncMessages: vi.fn(async () => true), getPosts: vi.fn(async () => []), getMarketplaceTransactions: vi.fn(async () => []),
 }));
 // The member's socket is alive, open since before the first read: the backstop reads only once its last read is 120 s old
 // (@beanpool/core messageBackstopDue). A test drops and reopens it by moving `openedAt` (ws-client.ts isAliveSince).
@@ -182,6 +186,44 @@ describe('the tabs\' unread doorbell, with the socket alive', () => {
         expect(reads()).toBe(2);
         await after(40_000);          // t=81 s: that read started after the socket opened, so the backstop is 120 s again
         expect(reads()).toBe(2);
+    });
+
+    it('a doorbell whose read fails is read again on the next tick, not at the 120 s backstop (review of #2558)', async () => {
+        await after(12_000);
+        vi.mocked(syncMessages).mockResolvedValueOnce(false); // a 503 while the node is full: the socket stays up
+        await ring();                 // t=12 s: read 2 fails
+        expect(reads()).toBe(2);
+        await after(40_000);          // t=52 s: the tick at 24–36 s reads, not one ~105 s after read 2
+        expect(reads()).toBe(3);
+        await after(60_000);          // t=112 s: that read worked, so the backstop is 120 s from it again
+        expect(reads()).toBe(3);
+    });
+
+    it('a failed read is read again on each tick until one works (review of #2558)', async () => {
+        await after(12_000);
+        vi.mocked(syncMessages).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+        await ring();                 // t=12 s: read 2 fails
+        await after(25_000);          // t=37 s: the first tick (24–36 s) read 3, which failed too
+        expect(reads()).toBe(3);
+        await after(36_000);          // t=73 s: the second tick (48–72 s) read 4, which worked
+        expect(reads()).toBe(4);
+        await after(60_000);          // t=133 s: nothing more until 120 s after read 4
+        expect(reads()).toBe(4);
+    });
+
+    it('a held doorbell still reads when the read that started after it rang failed (review of #2558)', async () => {
+        await after(12_000);
+        await ring();                 // t=12 s: read 2
+        await after(2_000);
+        await ring();                 // t=14 s: held
+        await after(1_000);
+        await appGoes('background');
+        await after(1_000);
+        vi.mocked(syncMessages).mockResolvedValueOnce(false);
+        await appGoes('active');      // t=16 s: the return reads (read 3), and it fails
+        expect(reads()).toBe(3);
+        await after(12_000);          // t=28 s: 10 s after read 3 the held doorbell reads (read 4), before the tick at 40–52 s
+        expect(reads()).toBe(4);
     });
 
     it('a held doorbell goes with the tabs', async () => {

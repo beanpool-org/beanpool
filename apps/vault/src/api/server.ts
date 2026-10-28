@@ -946,6 +946,12 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         });
     });
 
+    /**
+     * The member's own copies and open holds. Each copy says `since` (vault rethink VR1, design §3.2 and §5.1): the day,
+     * UTC, the copy kept now was deposited, which the member's "Where your account can be brought back from" shows. It is
+     * the row's `updated_day`: a deposit for the same sign-in account and key ("Connect again") replaces the copy and moves
+     * it; a push token, a release and a re-wrap leave it. `updatedDay` is the same day, kept for any reader from before.
+     */
     route('POST', '/v1/copies/status', 'signed', false, async ctx => {
         const database = await ensureDb();
         const pkIndex = b64Bytes(await index('pk', ctx.key));
@@ -953,7 +959,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const holds = [];
         for (const row of database.copiesByPk(pkIndex)) {
             const meta = await metaOf(row);
-            copies.push({ provider: meta.provider, lastReleasedAt: meta.lastReleasedAt, updatedDay: row.updated_day });
+            copies.push({ provider: meta.provider, lastReleasedAt: meta.lastReleasedAt, updatedDay: row.updated_day, since: row.updated_day });
             const hold = database.openHoldForCopy(row.id);
             if (hold) holds.push({ holdId: hold.id, provider: hold.provider, openedAt: hold.opened_at, releaseAt: hold.release_at });
         }

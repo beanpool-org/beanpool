@@ -192,7 +192,7 @@ function wholly(step: string) {
 const FONT_SCALE = 1.3;
 const glyphEm = (c: string) => (/\p{M}/u.test(c) ? 0 : '️‌‍​'.includes(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
 const widthOf = (text: string, fontSize: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * fontSize * FONT_SCALE, 0);
-const widestPiece = (text: string) => text.split(/[\s~[\]​]+/).reduce((a, w) => (widthOf(w, 1) > widthOf(a, 1) ? w : a), '');
+const widestPiece = (text: string) => text.split(/[\s~[\]\u200B]+/).reduce((a, w) => (widthOf(w, 1) > widthOf(a, 1) ? w : a), '');
 const fontOf = (el: Element | null): number => { for (let e = el; e; e = e.parentElement) { const f = e.getAttribute('data-font'); if (f) return Number(f); } return 16; };
 /**
  * The narrowest line a button's words have: 320 less the scroll's 16 and the card's 16 on each side, the copy's box (12

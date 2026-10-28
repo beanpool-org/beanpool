@@ -511,6 +511,8 @@ export interface SyncCommunitySettings {
         startCommunityUrl?: string | null;
         /** The listing promise's ticked lines and closing day as JSON text, or null for none (apps/server engine/directory-promise.ts). */
         directory_promise?: string | null;
+        /** Where members' copies go: `server` or `none`, or null for BeanPool's key vault, the default (apps/server config/recovery-copies.ts). */
+        recovery_copies?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

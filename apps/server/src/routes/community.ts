@@ -62,6 +62,7 @@ import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
 import { featuresFor } from '../config/features-for.js';
 import { getStartCommunityUrl } from '../config/start-community.js';
+import { recoveryCopies } from '../config/recovery-copies.js';
 import { getGlobalCommunityUrl } from '../config/global-community.js';
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
@@ -844,6 +845,9 @@ router.get('/api/community/info', async (ctx) => {
         // The global community the web app's Settings links on a local community (config/global-community.ts): ours
         // unless the operator names another, absent when they switched it off.
         globalCommunityUrl: getGlobalCommunityUrl() ?? undefined,
+        // Where members' copies go (config/recovery-copies.ts, vault rethink VR2): `vault`, `server` or `none`. The apps
+        // read it where a copy is made; an app from before it ignores it.
+        recoveryCopies: recoveryCopies(),
     };
     // A tag of the reader and the answer, so an app asking again for what it holds gets a 304 (slice L0). Never shared:
     // a signer's answer carries their own count, and nobody's needs an edge (the counts are cached here already). The JSON

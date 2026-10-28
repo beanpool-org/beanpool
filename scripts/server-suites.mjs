@@ -54,6 +54,7 @@ export const SUITES = [
     'test-name-writers',
     'test-message-tombstone',
     'test-recovery-shares',
+    'test-recovery-copies',
     'test-sso',
     'test-sso-unavailable',
     'test-daily-pulse',

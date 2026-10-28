@@ -37,6 +37,8 @@
  *   listed      refused on the global kind (`profile`); on refused while DIRECTORY_UNLISTED holds every push back.
  *   dmRequests, decisions, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail, sharePhone,
  *   shareHealth: no lock.
+ *   recoveryCopies  'vault' | 'server' | 'none' (config/recovery-copies.ts, vault rethink VR2): no lock. Only where new
+ *               copies go; every copy a member already has stays theirs, and the members' sentence says so.
  * The other locks only say why a value is what it is (held back, an auth hatch, members on demand, a standby's Listed):
  * nothing here changes them, and they refuse nothing.
  *
@@ -51,6 +53,7 @@ import { getNodeConfig, updateNodeConfig, noticeToEveryMember, type NodeConfig }
 import { getNodeRole } from './node-role.js';
 import { getConfiguredSwitches, setSwitchOverride, type ProfileSwitch } from './node-profile.js';
 import { setDoor, doorSettingRefusal, type CommunityDoor } from './door.js';
+import { isRecoveryCopies, setRecoveryCopies, type RecoveryCopies } from './recovery-copies.js';
 import { NOTICE_LIMITS } from '../engine/kept-notices.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type KnownFloorPlan } from './known-floor.js';
 import { readShape, configuredJoinOf, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
@@ -100,6 +103,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 const SETTINGS_IN_ORDER = [
     'join', 'wordsDoor', 'knocks', 'beans', 'knownFloor', 'dmRequests', 'decisions', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
+    'recoveryCopies',
 ] as const;
 export type ShapeSettingName = (typeof SETTINGS_IN_ORDER)[number];
 
@@ -119,6 +123,7 @@ const SETTING_NAMES: Record<ShapeSettingName, string> = {
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
     sharePhone: 'Share phone', shareHealth: 'Share health', probation: 'Limits on new accounts',
     autoHide: 'Reported posts hidden automatically', autoMute: 'Repeat offenders muted automatically',
+    recoveryCopies: "Where members' copies go",
 };
 
 // ── What members are told (design §8.2): one whole sentence per change, the owner's note quoted after ─────────────
@@ -147,6 +152,10 @@ const NOTICE = {
     autoHideOff: word("Your community's owners changed how it works: reported posts stay up until a moderator looks."),
     autoMuteOn: word("Your community's owners changed how it works: repeat offenders are muted automatically."),
     autoMuteOff: word("Your community's owners changed how it works: repeat offenders are no longer muted automatically."),
+    // Where members' copies go (config/recovery-copies.ts). Only new copies follow the rule: each says a member's own stay.
+    copiesVault: word("Your community's owners changed how it works: BeanPool's key vault keeps members' sign-in copies now. Any copy you have stays where it is until you move or remove it."),
+    copiesServer: word("Your community's owners changed how it works: this community's server keeps members' sign-in copies now. Any copy you have stays where it is until you move or remove it."),
+    copiesNone: word("Your community's owners changed how it works: this community keeps no copies of members' accounts now, and doesn't use BeanPool's key vault. Any copy you have stays where it is until you remove it."),
     note: word('From the owners: “{note}”'),
 } satisfies Record<string, WordKey>;
 
@@ -165,6 +174,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'probation': return on ? tr(NOTICE.probationOn) : tr(NOTICE.probationOff);
         case 'autoHide': return on ? tr(NOTICE.autoHideOn) : tr(NOTICE.autoHideOff);
         case 'autoMute': return on ? tr(NOTICE.autoMuteOn) : tr(NOTICE.autoMuteOff);
+        case 'recoveryCopies': return change.to === 'none' ? tr(NOTICE.copiesNone) : change.to === 'server' ? tr(NOTICE.copiesServer) : tr(NOTICE.copiesVault);
         default: return null;
     }
 }
@@ -235,6 +245,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
     const share: Partial<NodeConfig> = {};
     let door: CommunityDoor | null = null;
     let floorPlan: KnownFloorPlan | null = null;
+    let copies: RecoveryCopies | null = null;
 
     // Who can join: the door row, and the `invites` override (paused).
     let join: JoinState | undefined;
@@ -373,6 +384,18 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         (share as Record<string, boolean>)[SHARE_FIELD_OF[setting]] = v;
     }
 
+    // Where members' copies go: no lock (config/recovery-copies.ts).
+    if (asked.recoveryCopies !== undefined) {
+        if (!isRecoveryCopies(asked.recoveryCopies)) {
+            bad('recoveryCopies', "recoveryCopies is 'vault' (BeanPool's key vault), 'server' (this server) or 'none' (nowhere).");
+        }
+        const v = asked.recoveryCopies as RecoveryCopies;
+        if (v !== S.recoveryCopies.configured) {
+            planned.push({ setting: 'recoveryCopies', from: S.recoveryCopies.configured, to: v });
+            copies = v;
+        }
+    }
+
     if (planned.length === 0) return { shape: before, told: 'nobody', changed: [] };
 
     // ── Written, all of it or none ──
@@ -384,6 +407,7 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         if (door) setDoor(door);
         if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);
+        if (copies) setRecoveryCopies(copies);
         for (const line of planned) insertLine.run(by.actor, 'owner', line.setting, line.from, line.to, note, at);
     })();
 

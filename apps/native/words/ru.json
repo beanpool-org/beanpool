@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -631,7 +631,6 @@
   "Add a photo to your profile": "Добавьте фото в профиль",
   "Pick a few things you like": "Выберите несколько интересов",
   "Post something free or for swap": "Предложите что-то бесплатно или для обмена",
-  "Ask a community to let you in": "Попросите сообщество принять вас",
   "{n} day|{n} days": {
     "one": "{n} день",
     "few": "{n} дня",
@@ -656,7 +655,6 @@
   "Your credit opens with a first trade.": "Кредит открывается с первой сделкой.",
   "Spending is paused for now. You can still receive and sell.": "Траты временно приостановлены. Вы по-прежнему можете получать и продавать.",
   "{amount} · room to spend {room}": "{amount} · лимит на расходы {room}",
-  "The worldwide community": "Глобальное сообщество",
   "1 member. You're first. Invite someone.": "1 участник. Вы первый. Пригласите кого-нибудь.",
   "1 member. You're first.": "1 участник. Вы первый.",
   "{n} trade this month|{n} trades this month": {
@@ -5379,7 +5377,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Если вы хотите, чтобы доступ был только у вас, используйте исключительно 12 слов.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "Хранилище ключей BeanPool на небольшом сервере в Исландии содержит копию вашего аккаунта, открываемую входом. BeanPool может открывать эти копии: сейчас хранилище ведет основатель BeanPool, и доступ передается трем людям в разных странах, двоим из которых нужно действовать сообща. Хостинг-провайдер может считывать оперативную память при работе. Суд может затребовать раскрытие копии, а завладевший вашим профилем сможет войти.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Привяжите несколько аккаунтов на случай утери. Любой из них восстановит аккаунт на новом телефоне через сервер сообщества, хранящий копию.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Привяжите несколько аккаунтов на случай утери. Любой из них восстановит аккаунт на новом телефоне в каждом сообществе.",
   "🛡️ You're covered on {community}": "🛡️ Вы защищены в {community}",
   "🛡️ You're covered": "🛡️ Вы защищены",
   "Sign-In Recovery Providers (1-of-N)": "Способы восстановления через вход (1 из N)",
@@ -6601,5 +6598,18 @@
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Уведомления BeanPool выключены в настройках телефона. Откройте настройки, чтобы включить их.",
   "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:",
   "Choose a banner photo, or keep this one": "Выберите фото для баннера или оставьте это",
-  "Your picture, until you choose a banner.": "Ваше изображение, пока вы не выберете баннер."
+  "Your picture, until you choose a banner.": "Ваше изображение, пока вы не выберете баннер.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Вы осматриваетесь как гость. Ничего не сохраняется, пока вы не присоединитесь.",
+  "Join to post": "Присоединиться, чтобы публиковать",
+  "Join to message": "Присоединиться, чтобы написать",
+  "The global community": "Глобальное сообщество",
+  "Choose a name": "Выберите имя",
+  "Say roughly where you are": "Укажите примерное местоположение",
+  "Add a picture (a preset counts)": "Добавьте фото (можно стандартное)",
+  "Look at an example Ledger": "Посмотрите пример бухгалтерской книги",
+  "Say hello to someone near you": "Поздоровайтесь с кем-нибудь поблизости",
+  "Tell me when a community starts here, or say you'd help start one": "Сообщить, когда сообщество появится здесь, или помочь его создать",
+  "Nothing within 250 km yet.": "В радиусе 250 км пока ничего нет.",
+  "See what people post elsewhere ›": "Посмотреть публикации из других мест ›",
+  "Set your area": "Укажите свой район"
 }

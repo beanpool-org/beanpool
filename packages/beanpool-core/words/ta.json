@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "+ பகிர்வைச் சேர் என்பதைத் தட்டி ஓர் உதவியை வழங்குங்கள்: உணவு, சவாரி, அல்லது உங்கள் நேரம். தேவைக்கு முன் ஓர் உதவியைப் பகிருங்கள், இதனால் அனைவரும் பங்களிப்பர்.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "+ பகிர்வைச் சேர் என்பதைத் தட்டி இலவசப் பொருளையோ அல்லது பரிமாற்றத்தையோ பகிருங்கள். தேவை என்பது நீங்கள் தேடும் ஒரு விஷயம்.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "பயறுகள் வழங்கப்பட்ட மற்றும் பெறப்பட்ட உதவியைக் கணக்கிடுகின்றன. அனைவரும் பூஜ்ஜியத்தில் தொடங்குகிறார்கள்: நீங்கள் பெற்ற அளவுக்குக் கொடுத்துள்ளீர்கள் என்பதை இது குறிக்கிறது.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "உலகளாவிய சமூகத்தில் பயறுகள் இல்லை. பதிலாக நீங்கள் என்ன விரும்புகிறீர்கள் என்பதைப் பகிர்வில் குறிப்பிடவும்: இலவசம், பரிமாற்றம், அல்லது பேசி முடிவு செய்தல்.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "ஒரு தோராயமான வழிகாட்டல்: 40 பயறுகள் என்பது ஒருவரது ஒரு மணி நேர உழைப்புக்குச் சமம். நீங்களும் மற்றவரும் உண்மையான விலையை முடிவு செய்யலாம்.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "உங்கள் 12 சொற்களே உங்கள் கணக்கின் சாவி, கடவுச்சொல் எதுவும் இல்லை. அவற்றை ஒரு தாளில் எழுதிப் பாதுகாப்பாக வையுங்கள்: யாரும் அவற்றை மீட்டமைக்க முடியாது.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "வரைபடம் உங்கள் அருகில் உள்ளவற்றைக் காட்டுகிறது: பச்சை நிறப் பின்கள் சலுகைகள், ஆரஞ்சு நிறம் தேவைகள், ஊதா நிறம் நிகழ்வுகள். உங்கள் சொந்த இருப்பிடம் துல்லியமாக அமையாமல் அருகிலும் இருக்கலாம்.",
@@ -784,5 +783,7 @@
   "Start a project or an enterprise →": "ஒரு திட்டம் அல்லது கூட்டு முயற்சியைத் தொடங்குங்கள் →",
   "Social Circle": "சமூக வட்டம்",
   "Working Group": "பணிக்குழு",
-  "Guild": "தொழிற்கூட்டம்"
+  "Guild": "தொழிற்கூட்டம்",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "உலகளாவിയ சமூகத்தில் பயறுகள் இல்லை. பதிலாக நீங்கள் என்ன விரும்புகிறீர்கள் என்பதைப் பகிர்வில் குறிப்பிடவும்: இலவசம், பரிமாற்றம், அல்லது பேசி முடிவு செய்தல்.",
+  "Your first week": "உங்கள் முதல் வாரம்"
 }

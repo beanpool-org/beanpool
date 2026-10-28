@@ -78,6 +78,7 @@ export function StepsBody({ lines, note, colors, onStep }: {
                     a11y={l.done ? t('{step}, done', { step: l.text }) : t('{step}, not done yet', { step: l.text })}
                     onPress={l.done ? undefined : () => onStep(l.id)}
                     testID={`home-step-${l.id}`}
+                    lines={4}
                     left={<Text style={[s.trailing, { fontSize: 18, color: l.done ? colors.brand.primary : colors.text.secondary }]} importantForAccessibility="no">{l.done ? '☑' : '☐'}</Text>}
                 />
             ))}

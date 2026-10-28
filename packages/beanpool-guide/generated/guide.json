@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 159,
-  "hash": "712da7b1de51a4aa00a44c776332851c2b221fcec9d85bd2fdc67eeaa4e45020",
+  "version": 160,
+  "hash": "c4321ec2c893697a7bac1f23004e93a9a06c9bc6047cc392339dba19a7684096",
   "sections": [
     {
       "id": "about",
@@ -789,6 +789,22 @@
       "blocks": [
         {
           "type": "h2",
+          "text": "Where your sign-in's copy is kept"
+        },
+        {
+          "type": "p",
+          "text": "On the phone you get these with an up-to-date app; in a web browser, when your community's server is updated."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Said where it is made.** When you link Google, Apple or Facebook in the phone app, or join with one, **Safety Backup** and **Account Protection** now say, under **A sign-in you link**, that BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it, and who can open that copy, with the whole answer under **Who can open it**. See \"Getting your account back\".",
+            "**Your 12 words first.** **Account Protection** lists **Your 12 words** first, then **A sign-in you link**.",
+            "**In a web browser.** **Safety Backup** and Settings say whether the community's server keeps a copy of your account: on the global community it does, for a sign-in you joined with. The web app never uses BeanPool's key vault."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "The global community, near you"
         },
         {
@@ -1273,7 +1289,9 @@
         {
           "type": "ul",
           "items": [
-            "On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. It is always there. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.",
+            "On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. The button is there on Android, and on iPhone from the app's next update. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.",
+            "The app opens the global community first, so you can look around before you join: **Home**, the **Market** and the **Map**, with each listing's photo, title and rough area, but not who posted it. A card at the top says **You're looking around as a visitor. Nothing is saved until you join.** Looking makes no account and asks for nothing: no location, no notifications. **Talk**, people's profiles and **Settings** need an account, so they open the way in instead, and so do **Join to post** and **Join to message**. If you close the app while looking, it opens on the first screen again.",
+            "When you are ready, tap **Join**: at the top, beside the **?**, or on the card. **← Back** takes you back to looking around.",
             "Choose one of the two ways in. **Create an account with 12 secret words** is first. It needs no Google, Apple or Facebook account: your 12 words are the only way back in.",
             "**Or sign in** once with Google, Apple (on an iPhone) or Facebook. That sign-in is also a way back if you lose your phone. BeanPool never sees your password and never posts anything for you.",
             "Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others."
@@ -1281,11 +1299,11 @@
         },
         {
           "type": "p",
-          "text": "**From the website, on a phone.** On beanpool.org/global, **Open in the BeanPool app** opens the app right at this way in: the two ways above on a phone with no account yet, or **Join the global community** with the account the phone already has (see \"Already have an account?\" below). If that account is already a member there, it opens the **BeanPool** sheet instead, where **Global community** under **Your communities** switches to it. If the global community closed that account, the app just opens. On Android, if the app isn't installed, Google Play opens; after installing, the first time you open BeanPool it goes straight to this way in. On an iPhone, the App Store opens; after installing, tap **Explore BeanPool worldwide**. The link only opens a screen: nobody joins until you tap. When it opens the **BeanPool** sheet, the sheet checks, as it always does, whether this phone's account is a member of each community it lists. An invite comes first: if you were sent one, the app opens the invite instead, and if you were halfway through joining, it carries on with that."
+          "text": "**From the website, on a phone.** On beanpool.org/global, **Open in the BeanPool app** opens the app right at this way in: the two ways above on a phone with no account yet, or **Join the global community** with the account the phone already has (see \"Already have an account?\" below). If that account is already a member there, it opens the **BeanPool** sheet instead, where **Global community** under **Your communities** switches to it. If the global community closed that account, the app just opens. On Android, if the app isn't installed, Google Play opens; after installing, the first time you open BeanPool it goes straight to this way in. On an iPhone, the website offers the browser first, and the app's open door comes in its next update. The link only opens a screen: nobody joins until you tap. When it opens the **BeanPool** sheet, the sheet checks, as it always does, whether this phone's account is a member of each community it lists. An invite comes first: if you were sent one, the app opens the invite instead, and if you were halfway through joining, it carries on with that."
         },
         {
           "type": "p",
-          "text": "With 12 words, your phone also does a moment of work to set up the account. It starts as soon as the two ways show (when the website's link opened them, as soon as you tap one), while you read and type your name, so most people never wait for it. If you tap **Join** before it is done, the app says **Setting up your account…** with a bar, and **← Back** still works. When a lot of people are joining from your network, the app says so, with how long it will take on your phone, and you can sign in instead to join at once. A sign-in join is asked for this work only on a very busy network, and the app does it by itself. **Choose another way** stops the waiting and takes you back to the two ways. If you sign in instead, the 12-words setting up stops to save your battery, and **Choose another way** starts it again."
+          "text": "With 12 words, your phone also does a moment of work to set up the account. It starts as soon as the two ways show (when the website's link opened them, as soon as you tap one), while you read and type your name, so most people never wait for it. It never starts while you are only looking around: only when you tap **Join**. If you tap **Join** before it is done, the app says **Setting up your account…** with a bar, and **← Back** still works. When a lot of people are joining from your network, the app says so, with how long it will take on your phone, and you can sign in instead to join at once. A sign-in join is asked for this work only on a very busy network, and the app does it by itself. **Choose another way** stops the waiting and takes you back to the two ways. If you sign in instead, the 12-words setting up stops to save your battery, and **Choose another way** starts it again."
         },
         {
           "type": "p",
@@ -1297,7 +1315,7 @@
         },
         {
           "type": "p",
-          "text": "If you sign in, the community keeps only a scrambled reference to your sign-in account, never your email. That sign-in also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see \"Getting your account back\". After joining you don't sign in to open the app: your account is the key on your phone, like any other."
+          "text": "If you sign in, the community keeps only a scrambled reference to your sign-in account, never your email. That sign-in also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the phone app locks a copy of your account to it at BeanPool's key vault, a small server in Iceland, and **Safety Backup** says so: tap **Who can open it** there to see who can open that copy. In a web browser, the global community's server keeps the copy instead. See \"Getting your account back\". If the copy can't be made just then, you still join, and **Safety Backup** offers **Protect with** instead. After joining you don't sign in to open the app: your account is the key on your phone, like any other."
         },
         {
           "type": "p",
@@ -1325,7 +1343,7 @@
             "**Your Photo:** choose a photo or one of the ready-made pictures, or skip it and add one later from your profile. With a photo, move it and zoom it until the part you want is in the circle, then tap **Done**. Some communities ask for a picture before your first post. People trade more easily with a face or a picture they recognise.",
             "After an invite, **← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others. On the global community there is no **← Back** here: you have already joined.",
             "**Your Area** (in a web browser on the global community, and in the phone app when you join the global community with an account you already have): **Roughly where are you?** The global community shows you what's on offer near you: the nearest 500 listings within 250 km. Tap **Use my location**, or **Type a town or suburb**. Your area is kept to about 10 km, never your exact spot: your phone or browser rounds it before it is sent. Other members see how far away you are, and a poll you make is shown at your area. **Skip for now** sends nothing and asks for nothing; you still get in, and you see the newest listings worldwide until you set it. You can change or clear it any time in **Settings**, under **Your area**.",
-            "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** (in a web browser, **I've written these words down somewhere safe**) is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in in the phone app, this step shows your sign-in protecting your account, and your words are one tap away under **Rather write down 12 words?**. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.",
+            "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** (in a web browser, **I've written these words down somewhere safe**) is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in in the phone app, this step shows your sign-in protecting your account, and your words are one tap away under **Rather write down 12 words?**. Under **A sign-in you link** it says that BeanPool's key vault keeps a locked copy for that sign-in, with **Who can open it** under it. After an invite, the same heading offers **Protect with**, and says where the copy goes before you tap it. If you joined the global community with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too. In a web browser, it says whether the community's server keeps a copy of your account: on the global community it does, for the sign-in you joined with.",
             "**How it Works:** a short tour. At the end, a card asks **Turn on notifications?** with **Turn on** or **Not now**, so you hear when someone answers you, messages you, or asks to join. If you skip it, the card stays on **Home** until you answer, or asks once when you send your first message or request to join. Tap **Let's Begin!** to start."
           ]
         },
@@ -1412,6 +1430,10 @@
           "text": "People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**. Requests are answered in the phone app: the web app doesn't list them."
         },
         {
+          "type": "p",
+          "text": "When someone asks to join, owners and admins receive a notification: **Someone asked to join your community.** A line also appears on **Home** under **Needs you** (**2 people asked to join**). Tapping either opens **Invites** in the phone app. In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if a request waits 3 days with no answer, the count appears on every member's Home screen so someone can welcome them."
+        },
+        {
           "type": "ul",
           "items": [
             "**Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.",
@@ -1481,6 +1503,18 @@
         },
         {
           "type": "h2",
+          "text": "Not answering lately"
+        },
+        {
+          "type": "p",
+          "text": "Each community's server tells the BeanPool directory about itself every few hours. When a community's server hasn't done that for more than a day and a half, the community says **Not answering lately** under its name: in the app, in the web app and on the map at beanpool.org. Its server may just be off for a while. It is still listed, and you can still ask to join: your request reaches it when it answers."
+        },
+        {
+          "type": "p",
+          "text": "A community whose server stays silent for a week is no longer listed, and comes back when its server is in touch again. A community can also take itself off the list at any time. The list shows only communities that give you somewhere to go: a web address, or a way to contact them."
+        },
+        {
+          "type": "h2",
           "text": "Asking to join"
         },
         {
@@ -1498,6 +1532,14 @@
         {
           "type": "p",
           "text": "While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection."
+        },
+        {
+          "type": "p",
+          "text": "If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours."
+        },
+        {
+          "type": "p",
+          "text": "When an admin or member invites you, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open."
         },
         {
           "type": "p",
@@ -1521,7 +1563,7 @@
             "Your account comes with you: the same key and the same 12 words. Your name comes too. If someone there already has it, a number is added, such as \"Sarah2\". You can change it in the next step.",
             "Your posts, chats and trades stay in each community. On the new one you start fresh.",
             "Next you check your name and photo for the new community.",
-            "A sign-in that protects your account is kept by each community. The app asks you to protect your account in the new community too: tap **Protect it**, or **Later**, and do it any time in **Settings**."
+            "A sign-in account you linked to get back into your account works in the new community too: BeanPool keeps one copy for all your communities."
           ]
         },
         {
@@ -1545,7 +1587,11 @@
         },
         {
           "type": "p",
-          "text": "People can ask to join your community from the global community. Tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them."
+          "text": "People can ask to join your community from the global community. When someone asks, owners and admins get a notification (**Someone asked to join your community.**) and a count on **Home** under **Needs you** (**2 people asked to join**). In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if nobody answers within 3 days, the count is shown to every member on **Home** so someone can welcome them."
+        },
+        {
+          "type": "p",
+          "text": "Tapping the line or the notification opens them in the phone app. Or tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them."
         },
         {
           "type": "ul",
@@ -2015,7 +2061,7 @@
         },
         {
           "type": "p",
-          "text": "**Protect with**, lower down in **Account Protection** under **Sign-In Recovery Providers**, also links a sign-in as a way back, but it leaves the 12-words limits and the card as they are. Use **Add a sign-in** for both."
+          "text": "**Protect with**, lower down in **Account Protection** under **A sign-in you link**, also links a sign-in as a way back, but it leaves the 12-words limits and the card as they are. Use **Add a sign-in** for both."
         },
         {
           "type": "h2",
@@ -2023,7 +2069,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account can restore your account on a new phone, through your community's server, which keeps a locked copy for it. The people who run that server can open that copy. See \"Getting your account back\"."
+          "text": "On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account brings your account back on a new phone, in every community: BeanPool's key vault, a small server in Iceland, keeps a locked copy for it. It takes a day, or less if another phone of yours says it's you. The people who look after the vault can open that copy, and so can anyone who gets into your sign-in account: **Who can open it**, under **A sign-in you link** in **Account Protection**, says more. See \"Getting your account back\"."
         },
         {
           "type": "p",
@@ -2035,7 +2081,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community, a sign-in you join with in a browser is kept as a second way back: Settings shows **Sign-in recovery: connected**. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see \"Using BeanPool in a web browser\"). If you join there with 12 words instead, they are your only way back until you add a sign-in: a card called **One way back** says so, with **See my 12 words** and **Add a sign-in**, after you join and in Settings. On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
+          "text": "On the global community, a sign-in you join with in a browser is kept as a second way back: Settings shows **Sign-in recovery: connected**. Its copy is kept on the global community's server, not at BeanPool's key vault, and **Safety Backup** and Settings say so. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see \"Using BeanPool in a web browser\"). If you join there with 12 words instead, they are your only way back until you add a sign-in: a card called **One way back** says so, with **See my 12 words** and **Add a sign-in**, after you join and in Settings. On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
         }
       ]
     },
@@ -2521,7 +2567,28 @@
         },
         {
           "type": "p",
-          "text": "Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**."
+          "text": "Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Tap **Next**, then check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool keeps one copy for all your communities."
+        },
+        {
+          "type": "h2",
+          "text": "Visiting a community's address"
+        },
+        {
+          "type": "p",
+          "text": "A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member: its name, how many members it has and its town or area if the community shares them, and whether it **Takes requests to join** or **Takes new members by invite**. Nothing else: no members' names, no listings, no balances, never an exact place. The website's map links each community's card with **See** and its name."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you join the global community, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**",
+            "**I have an invite**: the form for your invite code.",
+            "**Already a member**: the ways back into your account.",
+            "**Look around the global community**: where the community links to one."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "In the app, a community's address opens its card too. On your own community's card, tap **Open** and its name. On another community's card, tap **Ask to join** and send a few words about yourself: the request goes to that community, as from **Find a community**. With an invite, tap **I have an invite**, then paste it under **Join Another Community**."
         },
         {
           "type": "h2",
@@ -2666,6 +2733,10 @@
         {
           "type": "p",
           "text": "If you add a community without an invite, you are a guest there. A **Join** button shows at the top, beside the **?**. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with their 12 words or a sign-in instead: see \"Joining the global community from your account\" above."
+        },
+        {
+          "type": "p",
+          "text": "On a new phone with no account yet, **Explore BeanPool worldwide** on the first screen opens the global community as a guest too, before there is any account: you see its listings and its map, and nothing about you is made or sent until you tap **Join**. See \"Joining BeanPool\"."
         }
       ]
     },
@@ -2738,7 +2809,7 @@
         },
         {
           "type": "p",
-          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account can open it. The people who run the server can open it too, because their server checks your sign-in, as with a sign-in account linked on the phone app: see \"Getting your account back\". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
+          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. **Safety Backup** says so: the global community's server keeps it, not BeanPool's key vault, which the web app never contacts. That sign-in account can open it. The people who run the server can open it too, because their server checks your sign-in. (The phone app keeps the copy for a sign-in linked there at BeanPool's key vault instead: see \"Getting your account back\".) Settings then shows **Sign-in recovery: connected** and which one, and says the community's server keeps the copy. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**. If it was the community's server that couldn't keep it, **Safety Backup** also says the server keeps no copy of your account. Your 12 words are then your only way back."
         },
         {
           "type": "p",
@@ -3049,12 +3120,12 @@
             "**RECURRING** if it stays open after each deal;",
             "**CASH TOO** if the person also needs some cash, for fuel or materials;",
             "a lock and a group name if only that group can see it;",
-            "who posted it, with their trust badge and stars. A member who has not traded yet shows **FOUNDING**."
+            "who posted it, with their trust badge and stars. A member who has not traded yet shows 🔑 on their author line."
           ]
         },
         {
           "type": "p",
-          "text": "Tap a post to open it."
+          "text": "Tap a post to open it. There is no separate VIEW button; tapping anywhere on the card opens it."
         },
         {
           "type": "h2",
@@ -3218,7 +3289,7 @@
         },
         {
           "type": "p",
-          "text": "If you keep an enterprise, you can change its Offers and Needs the same way: open one and tap **Edit Post**. It stays the enterprise's. See \"Projects and enterprises\"."
+          "text": "If you keep an enterprise, you can change its Offers and Needs the same way, or pause and resume an Offer (**Edit Post**, **Pause Offer**, **Activate Offer**). It stays the enterprise's. See \"Projects and enterprises\"."
         },
         {
           "type": "p",
@@ -3286,7 +3357,7 @@
             "**Category**: one of the Market's categories, the same ones every listing has, such as **Tools**, **Food** or **Tech**. It helps neighbours find you and picks the tools shown. It changes nothing else.",
             "**About**: what it is, in a few words.",
             "**How I deal**: where to pick things up, and when they come back.",
-            "**Banner photo**: one photo across the top of your shop, as members see it, three times as wide as it is tall. Tap it to choose one, or to change it: move the photo and zoom it until the strip you want is in the frame, then tap **Done**. That strip is what members see. **Remove the banner photo** takes it down. With none, the top is a plain block with your shop's category, shown with the same emoji as its listings."
+            "**Banner photo**: one photo across the top of your shop, as members see it, three times as wide as it is tall. Tap it to choose one, or to change it: move the photo and zoom it until the strip you want is in the frame, then tap **Done**. That strip is what members see. **Remove the banner photo** takes it down. Until you choose a banner photo, the top shows your picture, faded and repeated, on your shop's category colour."
           ]
         },
         {
@@ -5744,7 +5815,7 @@
         {
           "type": "ul",
           "items": [
-            "A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, or once its end date is over, it takes no more pledges. When the goal is met, the pledges go into the project's account. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.",
+            "A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, or once its end date is over, it takes no more pledges. When the goal is met, the pledges go into the project's account. If its end date is over and the goal isn't met, the pledges go back to the people who made them a week later. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.",
             "An **enterprise** keeps going and trades: a tool library, the egg flock, a market stall. Its **keepers** run it together and stand behind it. One of them is the **lead keeper**."
           ]
         },
@@ -5771,7 +5842,7 @@
         {
           "type": "ul",
           "items": [
-            "its banner photo across the top, or a plain block with its category's emoji when it has none, then its logo, its name, its category and since when it has been here;",
+            "its banner photo across the top (until you choose a banner photo, the top shows your picture, faded and repeated, on your shop's category colour), then its logo, its name, its category and since when it has been here;",
             "what it is for;",
             "who keeps it (**Kept by**; **Run by** on a project), each with their trust level, stars and how many trades they have done. These badges show what each person has done. They don't decide anything;",
             "a project's goal and its pledge box;",
@@ -5800,7 +5871,7 @@
         {
           "type": "ul",
           "items": [
-            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does a project once its end date is over (on the end date itself its page says **Ends today** and it still takes them; from the day after, **Expired**), or an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it.",
+            "**Pledge beans to a project:** on its page, under the funding box, enter an amount and tap **Pledge Beans**. You can make or change up to 20 pledges in any 24 hours, a keeper's backing included, and a pledge of beans is one of your payments too. Pledges are held in trust until the project reaches its goal, and then they all go to the enterprise. After that it takes no more pledges, and nor does a project once its end date is over (on the end date itself its page says **Ends today** and it still takes them; from the day after, **Expired**), or an enterprise that is winding up or has closed: its page says so where the pledge box was, and your beans stay with you. If a project is cancelled before it reaches its goal, every pledge goes back to the person who made it. If a project's goal isn't met by its end date, every pledge goes back to the person who made it a week after the end date, unless the end date is moved before then. Its page says on which day, and once they have gone back, that they did. You get a notice when your pledge goes back, or if the end date moves in that week. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.",
             "**Trade with it:** its Offers and Needs are in the Market like anyone's.",
             "**Become a keeper:** see \"Keepers\"."
           ]
@@ -5811,16 +5882,16 @@
         },
         {
           "type": "p",
-          "text": "If you keep an enterprise, or help run a project, everything only its keepers do is under **Manage**: at the top of its page on the phone, and in the web app its page has two tabs, **Page** and **Manage**. So its page shows what every member sees. A community admin sees **Manage** too. **Manage** shows only what you can do:"
+          "text": "If you keep an enterprise, or help run a project, everything only its keepers do is under **Manage**: at the top of its page on the phone, and in the web app its page has two tabs, **Page** and **Manage**. So its page shows what every member sees, and to its keepers also its paused Offers (below). A community admin sees **Manage** too. **Manage** shows only what you can do:"
         },
         {
           "type": "ul",
           "items": [
             "requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See \"Keepers\".",
-            "**Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its category and **How we deal**. Its category is one of the Market's categories, the same ones every listing has. Any keeper can change the logo (a photo or one of the ready-made pictures), the banner photo, **About**, the category and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, category or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one (a photo or one of the ready-made pictures), and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the plain block. With a photo, for the logo or the banner, move it and zoom it until the part you want is in the frame (a circle for the logo, a strip three times as wide as it is tall for the banner, as its page shows them), then tap **Done**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.",
+            "**Its shopfront:** its name and what it is for, its logo, its banner photo, **About**, its category and **How we deal**. Its category is one of the Market's categories, the same ones every listing has. Any keeper can change the logo (a photo or one of the ready-made pictures), the banner photo, **About**, the category and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. A community admin who doesn't keep it can change its name, what it is for, its logo and **About**, not its banner photo, category or **How we deal**. The logo and the banner photo are two pictures: the logo is the round one (a photo or one of the ready-made pictures), and the banner photo goes across the top of its page. Under **Banner photo**, tap **Choose a banner photo** (**Change the banner photo** once it has one), or **Remove the banner photo** to go back to the default banner. With a photo, for the logo or the banner, move it and zoom it until the part you want is in the frame (a circle for the logo, a strip three times as wide as it is tall for the banner, as its page shows them), then tap **Done**. Change what you want, then tap **Save** once. In the web app, **Save** sends only what you changed, and if the community says no, it says why.",
             "**Featured** (its keepers only): pick up to six of its Offers to show first on its page. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in. If it has no shop yet, **Open its shop** opens one.",
             "**Operator controls:** **Post Offer** and **Post Need** post in its name (a new Offer starts in its shop's category, which you can change before you post). Every new Offer and Need needs at least one photo (up to five), as for your own: tap the photo button, then **Camera**, **Gallery** (opens on **Albums**), or **Browse files** (on the phone), or pick a photo (in the web app). **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay. In the web app, **Set map pin** puts it on the map.",
-            "**Changing its Offers and Needs:** any keeper can open one of its Offers or Needs and tap **Edit Post**, as for their own: change the words, category, price and photos, then tap **Save**. It is still the enterprise's. See \"Posting an Offer or a Need\".",
+            "**Changing its Offers and Needs:** any keeper can open one of its Offers or Needs and tap **Edit Post**, as for their own: change the words, category, price and photos, then tap **Save**. Keepers can pause and resume its Offers too (**Pause Offer** and **Activate Offer**). A paused Offer is found under **Paused** on its page, which only its keepers see: tap it to open it, then **Activate Offer**. It is still the enterprise's. See \"Posting an Offer or a Need\".",
             "**Decisions:** its keepers' votes.",
             "Removing a keeper, and stepping down.",
             "**Season & lifecycle controls:** pausing and closing it (below).",
@@ -5841,7 +5912,7 @@
         },
         {
           "type": "p",
-          "text": "Before a project reaches its goal, its leader can also cancel it (on the phone, under **Manage**), and every pledge goes back."
+          "text": "Before a project reaches its goal, its leader can also cancel it (on the phone, under **Manage**), and every pledge goes back. If nobody cancels it and the goal isn't met by its end date, every pledge goes back by itself a week after the end date, and its leader gets a notice saying how many backers and how many beans."
         },
         {
           "type": "h2",
@@ -7226,7 +7297,8 @@
             "Switch each kind on or off:",
             "**Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in.",
             "**Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.",
-            "**Held in Trust & System:** beans held, released or in question."
+            "**Held in Trust & System:** beans held, released or in question.",
+            "**Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown."
           ]
         },
         {
@@ -7255,7 +7327,9 @@
             "\"You have a new message.\"",
             "\"There is news on one of your trades.\"",
             "\"An event you're going to starts soon.\"",
-            "\"Your community has a notice for you.\""
+            "\"Your community has a notice for you.\"",
+            "\"Someone asked to join your community.\"",
+            "\"A community answered your request.\""
           ]
         },
         {
@@ -7686,16 +7760,26 @@
         },
         {
           "type": "p",
-          "text": "This works only if you linked one before (see below), and only while your community's server is running."
+          "text": "This works only if you linked one before (see below). BeanPool's key vault keeps the locked copy, and your sign-in finds it: you don't type your name or your community's address."
         },
         {
           "type": "ul",
           "items": [
-            "Type your name in the community. The app may suggest \"Is this you?\".",
-            "Type your community's name or address.",
             "Tap **Recover with** and the account you linked: Google or Facebook, or Apple on an iPhone.",
-            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead."
+            "With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.",
+            "For your safety, getting back in with a sign-in waits a day. The app says when your account comes back. It checks by itself while it is open, and **Check now** asks straight away.",
+            "If you still have another phone with your account on it, open BeanPool there and tap **Yes, it's me** (see \"If someone else tries\"). Your account comes back within a minute.",
+            "When your account is back, choose the community to open it in. The global community is filled in; to use your own, type its name or address, or tap it under **Your communities on this phone**. Tap **Continue**. Your name and photo come back from that community.",
+            "**Use my 12 words instead** works any time, with no wait. **Start again** starts over with a sign-in."
           ]
+        },
+        {
+          "type": "p",
+          "text": "If the app says **Getting back in with a sign-in is paused for a little while**, BeanPool's key vault has restarted and is waiting for the people who look after it to open it again. Nothing is lost: try again later. Your 12 words work any time."
+        },
+        {
+          "type": "p",
+          "text": "If the key vault keeps no copy for that sign-in account, the app says so: your community may still keep one, from before the key vault (see \"Moving a copy your community keeps\"). Type your name in the community and your community's name or address, then sign in once more. That copy works only while your community's server is running."
         },
         {
           "type": "p",
@@ -7706,17 +7790,25 @@
           "text": "Protecting your account now"
         },
         {
+          "type": "p",
+          "text": "**Account Protection** lists your ways back: **Your 12 words** first, then **A sign-in you link**, which says where its copy is kept before you link one. **Who can open it** under it says who can open that copy (see \"Who can open the copy\")."
+        },
+        {
           "type": "ul",
           "items": [
             "Open **Settings** and tap **Account Protection**.",
-            "Under **Sign-In Recovery Providers (1-of-N)**, tap **Protect with** and choose an account.",
+            "Under **A sign-in you link**, tap **Protect with** and choose an account.",
             "Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.",
             "With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool."
           ]
         },
         {
           "type": "p",
-          "text": "This works on a phone with no 12 words too."
+          "text": "**Safety Backup**, when you join a community, says the same, under the same heading: a sign-in you link there, or the one you joined with, keeps its copy at BeanPool's key vault."
+        },
+        {
+          "type": "p",
+          "text": "One linked sign-in account covers all your communities: you don't link it again in each one. This works on a phone with no 12 words too."
         },
         {
           "type": "p",
@@ -7728,11 +7820,27 @@
         },
         {
           "type": "p",
-          "text": "This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community."
+          "text": "This is not a way to log in. Your account is still your own key. The linked account only helps you get it back."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If BeanPool's key vault is paused when you link an account, nothing is linked and the app says so. **Settings** then offers **Link your** (Google, Apple or Facebook) **sign-in** again, with **Link it**.",
+            "A sign-in account protects one BeanPool account. If it was protecting a different one, it protects this one now, and the app says so: that other account then has only its 12 words.",
+            "To remove it, tap **Disconnect**. The key vault deletes its copy at once, and from its backups within 30 days, or later if the vault is paused in that time."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Moving a copy your community keeps"
         },
         {
           "type": "p",
-          "text": "To remove it, tap **Disconnect**."
+          "text": "Before the key vault, each community kept its own copy for the sign-in accounts linked there. If yours still keeps one, **Settings** shows **Move your Google recovery to BeanPool's key vault** (or Facebook, or Apple). Tap **Move it**, pass your phone's lock screen check and sign in once. The key vault gets a fresh copy, made on this phone, and your community's copy is then deleted. **Not now** puts the card away for a week."
+        },
+        {
+          "type": "p",
+          "text": "If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remove it**. Your community's copy is deleted and none is made at the key vault, so that sign-in account no longer brings your account back until you link it again. On a phone with no 12 words, the app warns you first: without them, and without a sign-in account, nothing brings your account back. If your community doesn't answer, the app says **Not removed yet** and tries again the next time you open **Settings**."
         },
         {
           "type": "h2",
@@ -7756,11 +7864,27 @@
         },
         {
           "type": "p",
-          "text": "A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. On the global community, that is BeanPool. A stolen copy of the server's database can't, once the server has been updated for it. Anyone who takes over your sign-in account can get in too: see \"If someone else tries\"."
+          "text": "A linked sign-in account works because a locked copy of your account is kept for it. Where it is kept depends on how you linked it."
         },
         {
           "type": "p",
-          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Disconnecting does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too."
+          "text": "**BeanPool's key vault: a sign-in linked in the phone app.** When you link Google, Apple or Facebook in the phone app, or join with one, your phone locks a copy of your key, with your 12 words if the phone has them, to that sign-in and sends it to BeanPool's key vault: a small server in Iceland that does nothing else. The app says so where you link it, at **Safety Backup** and in **Account Protection**, under **A sign-in you link**. The vault gives the copy back only after Google, Apple or Facebook tells it that it's you. It waits a day first, and tells your other phones, so you can stop it if it wasn't you."
+        },
+        {
+          "type": "p",
+          "text": "BeanPool can open these copies. For now one person, BeanPool's founder, looks after the vault. It is moving to three people in different countries, and then it takes two of them working together. The company that hosts it can read its memory while it runs, as with any rented server. A court could order a copy opened. Anyone who takes over your Google, Apple or Facebook account could get in too: see \"If someone else tries\". Tap **Who can open it** under **A sign-in you link** to read this in the app."
+        },
+        {
+          "type": "p",
+          "text": "**Your community's server: a copy from before the key vault.** A copy your community kept before the key vault stays there until you move it or remove it (see \"Moving a copy your community keeps\"). The first owner of a community, who links a sign-in while setting it up, has that copy kept on the community's own server too, never at the key vault. The people who run that server can open it, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it."
+        },
+        {
+          "type": "p",
+          "text": "**The global community's server: a sign-in you joined with in a web browser.** The web app has no link to the key vault. When you join the global community in a browser with a sign-in, the global community's server keeps the copy, and **Safety Backup** and **Settings** there say so. The people who run that server, BeanPool, can open it. On any other community, the web app makes no copy, and **Settings** there says whether that community's server keeps one."
+        },
+        {
+          "type": "p",
+          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account in the phone app. That deletes the key vault's copy at once, and from its backups within 30 days, or later if the vault is paused in that time. A copy on a community's server goes with **Remove it instead** (above). A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Removing a copy there does not delete the copies already in that server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back from it. The people who run the server can open those too. Your 12 words always work, with or without any copy."
         },
         {
           "type": "h2",
@@ -7768,7 +7892,18 @@
         },
         {
           "type": "p",
-          "text": "If someone starts recovering your account, Settings shows **Someone is recovering your account** while it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. If they get in with your linked sign-in account, you get an alert that your account was just restored on another device, and they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password."
+          "text": "If someone starts getting back into your account with your linked sign-in account, your phones are told, and **Settings** shows **Someone is getting back into your account**, with when it goes through."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If it was you, on another phone, tap **Yes, it's me** and pass your phone's lock screen check. It goes through now, and **Settings** shows **Let through** until your other phone has your account.",
+            "If it wasn't, tap **Stop**. It never goes through, and whoever tried gets nothing. Then make sure that sign-in account has its own strong password."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A copy your community still keeps, from before the key vault, has no day's wait. If someone uses it, **Settings** shows **Someone is recovering your account** while it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. If they get in, you get an alert that your account was just restored on another device, and they may already be in by the time you see it."
         },
         {
           "type": "h2",
@@ -7776,7 +7911,7 @@
         },
         {
           "type": "p",
-          "text": "Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE**, tap **Replace Account** and pass your phone's lock screen check. Tap **Keep**, then the account's name, **go back** to leave everything as it was."
+          "text": "Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once your account is back and you tap **Continue**). Nothing changes until you type **WIPE**, tap **Replace Account** and pass your phone's lock screen check. Tap **Keep**, then the account's name, **go back** to leave everything as it was."
         },
         {
           "type": "p",

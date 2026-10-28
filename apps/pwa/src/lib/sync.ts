@@ -5,7 +5,7 @@
  * Stores latest state in localStorage for offline read-only access.
  */
 
-import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
+import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs } from '@beanpool/core';
 import { loadIdentity } from './identity';
 import { buildSignedWsParams, getNodeWsUrl } from './api';
 import { routeLivePostChange } from './live-posts';
@@ -65,6 +65,8 @@ let memberPubkey: string | null = null;
  * the coordinator. A member's socket never does.
  */
 let visitorSocket = false;
+/** Whether the socket being opened carries the member's signature: only such a socket gets `new_message`. */
+let signedSocket = false;
 const visitorDoorbells = createVisitorDoorbells({ read: () => requestSync() });
 let isConnecting = false;
 /** Bumped by reconnectToAnchor: a connect still reading the identity from before it opens nothing. */
@@ -368,6 +370,7 @@ export function connectToAnchor(url?: string): void {
             if (generation !== connectGeneration) return;
             memberPubkey = ident?.publicKey ?? null;
             visitorSocket = !ident;
+            signedSocket = false;
             const params: string[] = [];
             if (ident && ident.callsign) {
                 params.push(`callsign=${encodeURIComponent(ident.callsign)}`);
@@ -378,6 +381,7 @@ export function connectToAnchor(url?: string): void {
             try {
                 const signed = await buildSignedWsParams(baseWsUrl);
                 if (signed) params.push(signed);
+                signedSocket = !!signed;
             } catch { /* unsigned fallback */ }
             if (generation !== connectGeneration) return;
             // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
@@ -389,6 +393,7 @@ export function connectToAnchor(url?: string): void {
             if (generation !== connectGeneration) return;
             // The identity could not be read, so nobody knows this is a visitor: the doorbells ring as a member's did.
             visitorSocket = false;
+            signedSocket = false;
             establishConnection(baseWsUrl, baseWsUrl);
         })
         .finally(() => {
@@ -538,6 +543,14 @@ export function onSocketOpen(cb: () => void): () => void {
 }
 
 /**
+ * Whether the member's socket brings their new messages as they arrive (@beanpool/core socketAlive): open, signed, and
+ * answered a ping within the watchdog's limit. The open conversation's backstop reads every 120 s while it does, else 30 s.
+ */
+export function socketIsAlive(now: number = Date.now()): boolean {
+    return socketAlive(!!ws && ws.readyState === WebSocket.OPEN, signedSocket, lastPongAt, now, PONG_TIMEOUT_MS);
+}
+
+/**
  * Reset sync module state for isolated unit testing.
  */
 export function resetSyncForTest(): void {
@@ -565,6 +578,7 @@ export function resetSyncForTest(): void {
     noRoomRefusals = 0;
     memberPubkey = null;
     visitorSocket = false;
+    signedSocket = false;
     visitorDoorbells.reset();
     isConnecting = false;
     currentUrl = null;

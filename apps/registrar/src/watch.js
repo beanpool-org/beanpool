@@ -22,6 +22,7 @@
 
 import * as alerts from './alerts.js';
 import * as db from './db.js';
+import { getOrCountDnsRecords, checkDnsRecordCap } from './dns-cap.js';
 import * as settings from './settings.js';
 import { verifyEd25519 } from './sign.js';
 import { writeStatus } from './status.js';
@@ -336,9 +337,16 @@ export async function dailyLine(env, targets, now) {
     const live = await db.countLive(env);
     const waiting = await db.countAwaitingApproval(env);
     lines.push(`${live} ${live === 1 ? 'name' : 'names'} live${waiting ? `, ${waiting} waiting for your approval` : ''}.`);
+    // One settings read serves the DNS cap and the hold line below.
+    const s = await settings.read(env).catch((e) => { console.error('[DAILY_SETTINGS]', e.message || e); return null; });
+    const dns = await getOrCountDnsRecords(env, now, { cap: s?.capacity }).catch((e) => ({ ok: false, error: e.message || String(e), count: null }));
+    if (dns.ok && dns.count !== null) {
+        lines.push(`DNS records: ${dns.count} of ${dns.cap} (${dns.pct}%)`);
+    } else {
+        lines.push(`DNS records: couldn't count (${dns.error || 'error'})`);
+    }
     // "Hold all new names" (index.js claimGate) is said every day it is on: it lets go by itself after 24 h.
     // A read that fails (D1 busy) says so, and the rest of the line still goes.
-    const s = await settings.read(env).catch((e) => { console.error('[DAILY_SETTINGS]', e.message || e); return null; });
     if (!s) lines.push('Hold all new names: its setting could not be read just now; see /admin.');
     else if (settings.holding(s, now)) lines.push(`Hold all new names is on, until ${when(s.hold_until)}: every new name waits for your approval.`);
     const raised = (await env.DB.prepare('SELECT key, detail FROM alert_state ORDER BY since').all()).results || [];
@@ -373,13 +381,17 @@ async function inTurns(items, n, fn) {
 export async function watchOurServers(env) {
     try {
         const targets = watchTargets(env);
+        const now = nowS();
         if (!targets.length) {
             // Nothing to watch (WATCH_TARGETS unset): no looks and no daily line; what was raised before ends.
             const ended = await unwatched(env, targets);
+            try {
+                const dnsCond = await checkDnsRecordCap(env, now);
+                if (dnsCond) ended.push(dnsCond);
+            } catch (e) { console.error('[WATCH]', 'dns-cap', String(e?.message || e).slice(0, 200)); }
             if (ended.length) await alerts.updateConditions(env, ended);
             return [];
         }
-        const now = nowS();
         const nowMs = now * 1000;
         const seen = await inTurns(targets, AT_ONCE, (t) => (t.kind === 'vault' ? lookAtVault(env, t, nowMs) : lookAtNode(t))
             .catch(() => ({ ok: false, status: 'unreachable', ms: null })));
@@ -405,6 +417,10 @@ export async function watchOurServers(env) {
         }
         try { conditions.push(await fleetCondition(env, targets, now)); } catch (e) { console.error('[WATCH]', 'fleet', String(e?.message || e).slice(0, 200)); }
         try { conditions.push(...await unwatched(env, targets)); } catch (e) { console.error('[WATCH]', 'unwatched', String(e?.message || e).slice(0, 200)); }
+        try {
+            const dnsCond = await checkDnsRecordCap(env, now);
+            if (dnsCond) conditions.push(dnsCond);
+        } catch (e) { console.error('[WATCH]', 'dns-cap', String(e?.message || e).slice(0, 200)); }
         await alerts.updateConditions(env, conditions);
         try { await dailyLine(env, targets, now); } catch (e) { console.error('[WATCH]', 'daily', String(e?.message || e).slice(0, 200)); }
         // After the alerts and the daily line, so on a tick past D1's budget what is refused is this (src/status.js).

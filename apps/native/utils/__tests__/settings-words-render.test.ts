@@ -454,6 +454,31 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(bypassing(), 'shown').toEqual([]);
     });
 
+    // Vault rethink VR0 (design §4.5): Account Protection's ways back. With a key vault the 12 words are the first row and
+    // the sign-in row (the panel) follows; a build without a vault draws the panel above the words, as it always did.
+    it("Account Protection's ways back: with a key vault, the 12 words first and the sign-in row after; without one, exactly as before", async () => {
+        const panelAt = () => host.innerHTML.indexOf('data-later-sweep="KeeperProtectionPanel"');
+        params.now = { section: 'protection' };
+        vault.on = true;
+        await renderIn('xx');
+        expect(host.textContent).toContain(pseudoLocalise('🔑 Your 12 words'));
+        expect(host.textContent).toContain(`${pseudoLocalise('Always work, anywhere.')} ${pseudoLocalise('On this phone: keep them private and never share them with anyone.')}`);
+        expect(host.textContent).not.toContain(pseudoLocalise('🔑 12 Recovery Words'));
+        expect(panelAt()).toBeGreaterThan(host.innerHTML.indexOf(pseudoLocalise('🔑 Your 12 words')));
+        expect(bypassing(), 'vault build').toEqual([]);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        vault.on = false;
+        await renderIn('xx');
+        expect(host.textContent).toContain(pseudoLocalise('🔑 12 Recovery Words'));
+        expect(host.textContent).toContain(pseudoLocalise('Your 12 recovery words can restore your account on any device. Keep them private and never share them with anyone.'));
+        expect(host.textContent).not.toContain(pseudoLocalise('🔑 Your 12 words'));
+        expect(host.textContent).not.toContain(pseudoLocalise('Always work, anywhere.'));
+        expect(panelAt()).toBeGreaterThan(-1);
+        expect(panelAt()).toBeLessThan(host.innerHTML.indexOf(pseudoLocalise('🔑 12 Recovery Words')));
+    });
+
     it('View Recovery Phrase: the CONFIRM step and the words; on a phone with none, the add form\'s way to a sign-in', async () => {
         await renderIn('xx');
         await click(row('View Recovery Phrase'), 'View Recovery Phrase');

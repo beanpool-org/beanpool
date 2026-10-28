@@ -17,6 +17,15 @@
  *   4. The member's first sync after that writes the member's view over every row the guest kept (it is a whole read by
  *      area), so a member who looked first never keeps listings without their people.
  *
+ * Then a brand-new phone with no account at all (slice S12, the first screen's Explore BeanPool worldwide;
+ * utils/look-around.ts):
+ *   5. The look: only the door's unsigned read is sent; the phone is on the global community as a guest, and the root
+ *      guard reads it as looking around. No key exists anywhere: not in the phone's key store, not on the node.
+ *   6. The look's sync: every read unsigned and a GET, the visitors' view kept; still no key.
+ *   7. Join: the door makes the key in memory (nothing written), and the one write is just before the join is sent
+ *      (commitJoinKey); the node then holds that one key as a member, and the phone holds exactly that key.
+ *   8. The new member's first sync: the member's view over the visitor's rows, as in 4.
+ *
  * Nothing else is contacted: the phone's fetch is held to this node's address and throws for anything else.
  */
 
@@ -94,7 +103,8 @@ import { buildSignedHeaders } from '../crypto';
 import { closeDB, initDB } from '../db';
 import { visitGlobalAsGuest } from '../global-guest-visit';
 import { accountKeyForDoor, enterOpenDoorCommunity } from '../global-join-existing';
-import { checkNameAtDoor, submitWordsJoin } from '../global-join';
+import { checkNameAtDoor, commitJoinKey, joinKeyForThisPhone, keepJoinedIdentity, submitWordsJoin } from '../global-join';
+import { lookingAroundHere } from '../look-around';
 import { startDoorWork, type DoorWorkRun } from '../door-work';
 import { addSavedNode, clearGuestNode } from '../nodes';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
@@ -289,6 +299,87 @@ describe('guest view first, against a real global-profile node', () => {
     it('4. the member\'s first sync after it: the member\'s view over the guest\'s rows (a whole read by area), never the guest\'s left behind', async () => {
         // The cursor the guest's sync left is still there: this is the app's next cycle, nothing reset by hand.
         expect([...mem.async.keys()].some(k => k.startsWith('pillar_sync_') && k.endsWith('_last-sync'))).toBe(true);
+        sent.length = 0;
+        await sync();
+        const reads = sent.filter(s => s.path === '/api/marketplace/posts');
+        expect(reads.length).toBeGreaterThan(0);
+        expect(reads.every(r => r.status === 200 && r.signed)).toBe(true);
+        expect(authorsOnPhone()).toEqual([
+            { id: 'g-1', author_pubkey: AUTHOR }, { id: 'g-2', author_pubkey: AUTHOR }, { id: 'g-3', author_pubkey: AUTHOR },
+        ]);
+    }, STEP_MS);
+});
+
+describe('look before you join on a brand-new phone (slice S12), against the same node', () => {
+    let joined: BeanPoolIdentity | null = null;
+
+    it('5. the look: the door asked unsigned, on it as a guest, looking around; no key made, stored or named', async () => {
+        noVault();
+        mem.async.clear();
+        mem.secure.clear();
+        me = null;
+        // A new phone's copy is empty: whatever the phone above synced is not this phone's.
+        for (const { name } of sql.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]) {
+            sql.exec(`DELETE FROM "${name}"`);
+        }
+        resetSyncFingerprints();
+        await control('limiters');
+        sent.length = 0;
+
+        expect(await visitGlobalAsGuest(null, URL_BASE)).toEqual({ kind: 'guest' });
+        expect(sent.map(s => `${s.method} ${s.path} ${s.status}${s.signed ? ' signed' : ''}`)).toEqual(['GET /api/community/info 200']);
+        expect(mem.async.get(ANCHOR)).toBe(URL_BASE);
+        expect(JSON.parse(mem.async.get(GUESTS) ?? '[]')).toEqual([URL_BASE]);
+        expect(JSON.parse(mem.async.get(SAVED_NODES_STORE_KEY) ?? '[]').map((n: { url: string }) => n.url)).toEqual([URL_BASE]);
+        // The root guard's read of it (app/_layout.tsx): looking around, from what the phone holds, with no request.
+        sent.length = 0;
+        expect(await lookingAroundHere()).toBe(true);
+        expect(sent).toEqual([]);
+        expect(mem.secure.size).toBe(0);
+        expect(await loadIdentity()).toBeNull();
+    }, STEP_MS);
+
+    it('6. the look\'s sync: every read unsigned, nothing but reads, the visitors\' view kept; still no key', async () => {
+        sent.length = 0;
+        await sync();
+        const reads = sent.filter(s => s.path === '/api/marketplace/posts');
+        expect(reads.length).toBeGreaterThan(0);
+        expect(reads.every(r => r.status === 200)).toBe(true);
+        expect(sent.every(s => s.method === 'GET' && !s.signed)).toBe(true);
+        expect(authorsOnPhone()).toEqual([
+            { id: 'g-1', author_pubkey: 'hidden' }, { id: 'g-2', author_pubkey: 'hidden' }, { id: 'g-3', author_pubkey: 'hidden' },
+        ]);
+        expect(mem.secure.size).toBe(0);
+    }, STEP_MS);
+
+    it('7. Join: the key is made in memory at the door and written once, just before the join; the node holds that one key', async () => {
+        await control('limiters');
+        // The door opening (app/welcome.tsx, `choose`): a key in memory, nothing written.
+        const key = await joinKeyForThisPhone(null);
+        expect(key.createdHere).toBe(true);
+        expect(mem.secure.size).toBe(0);
+        const run = startDoorWork({ url: URL_BASE, identity: key.identity, door: 'words' });
+        runs.push(run);
+        expect(await checkNameAtDoor(URL_BASE, 'Kim', key)).toEqual({ kind: 'free' });
+        expect((await run.solution()).kind).toBe('solved');
+        expect(mem.secure.size).toBe(0);
+        // Join → (handleWordsJoin): the one write, then the join.
+        const identity = await commitJoinKey(key, 'Kim');
+        expect((await loadIdentity())?.publicKey).toBe(key.identity.publicKey);
+        const answer = await submitWordsJoin(URL_BASE, identity, 'Kim', run);
+        expect(answer).toMatchObject({ kind: 'joined', callsign: 'Kim' });
+        joined = await keepJoinedIdentity({ ...identity, callsign: 'Kim' });
+        // The door's finish (finishGlobalJoin): in use, saved, no longer a guest.
+        await clearGuestNode(URL_BASE);
+        expect(JSON.parse(mem.async.get(GUESTS) ?? '[]')).toEqual([]);
+        expect((await control('member', { key: key.identity.publicKey })).member).toMatchObject({ status: 'active', callsign: 'Kim' });
+        // One key on the phone, the one the node holds.
+        expect((await loadIdentity())?.publicKey).toBe(key.identity.publicKey);
+        expect(await lookingAroundHere()).toBe(false);
+    }, STEP_MS);
+
+    it('8. the new member\'s first sync: the member\'s view over the visitor\'s rows', async () => {
+        me = joined;
         sent.length = 0;
         await sync();
         const reads = sent.filter(s => s.path === '/api/marketplace/posts');

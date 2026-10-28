@@ -113,6 +113,8 @@ async function dispatch(router: any, method: string, path: string, ctx: any) {
     (layer.paramNames || []).forEach((p: any, i: number) => { params[p.name] = decodeURIComponent(m?.[i + 1] ?? ''); });
     ctx.params = { ...params, ...(ctx.params || {}) };
     await layer.stack[layer.stack.length - 1](ctx);
+    // A route may send its JSON already made (one string, tagged once: #2558); read it as a client would.
+    if (typeof ctx.body === 'string' && ctx.type === 'application/json') ctx.body = JSON.parse(ctx.body);
     return ctx;
 }
 const ctxFor = (actor: string | undefined, body?: any, query: Record<string, string> = {}): any => ({

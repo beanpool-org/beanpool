@@ -563,6 +563,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 CREATE INDEX IF NOT EXISTS idx_messages_updated_at ON messages(updated_at);
+CREATE INDEX IF NOT EXISTS idx_messages_author_pubkey ON messages(author_pubkey);
 
 -- The old conversation ids each line names (chat consolidation): a line folded into a pair's one DM keeps the id it was
 -- encrypted under in its metadata, as `originalConversationId` or in the list `originalConversationIds`, and a send to an

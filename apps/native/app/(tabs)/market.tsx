@@ -53,6 +53,9 @@ import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedS
 import { readPhoneInterests, saveInterests } from '../../utils/home-store';
 import { anchorUrl } from '../../utils/node-post';
 import { ExampleListings } from '../../components/ExampleListings';
+import { LookAroundCard } from '../../components/LookAroundCard';
+import { openLookDoor } from '../../utils/look-door';
+import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -119,6 +122,7 @@ export default function MarketScreen() {
     const { identity } = useIdentity();
     // The members-only page's way to the global community: in this app, as a guest first (utils/global-guest-visit.ts).
     const guestVisit = useGlobalGuestVisit();
+    const lookingAround = useLookingAround();
 
     // What kind of community this is (utils/node-profile.ts): the phone's copy first, then the node's own answer.
     // On the worldwide community (Beans off) the Market shows no price and no "Beans only" filter, and orders listings
@@ -1303,6 +1307,12 @@ export default function MarketScreen() {
     // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
+            {/* Looking around with no account (slice S12, utils/look-around.ts): nothing is kept until Join. */}
+            {lookingAround && (
+                <View style={{ marginHorizontal: 16 }}>
+                    <LookAroundCard colors={colors} />
+                </View>
+            )}
             {toSave && (
                 <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
                     <SaveSearchButton
@@ -1875,8 +1885,23 @@ export default function MarketScreen() {
                         <View style={{ width: '100%' }}>
                             <View style={{ paddingVertical: 20, alignItems: 'center' }}>
                                 <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
-                                    {t('Nothing here yet. Be the first:')}
+                                    {nodeProfile?.profile === 'global' ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                 </Text>
+                                {nodeProfile?.profile === 'global' && (
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        style={{ minHeight: 48, justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 16, marginBottom: 16 }}
+                                        onPress={() => {
+                                            qr.show();
+                                            searchInputRef.current?.focus();
+                                        }}
+                                        testID="market-see-elsewhere"
+                                    >
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.brand.primary, textAlign: 'center' }}>
+                                            {t('See what people post elsewhere ›')}
+                                        </Text>
+                                    </Pressable>
+                                )}
                                 <View testID="market-empty-tiles" style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                                     {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
                                         <View key={cat} style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden' }}>
@@ -1939,12 +1964,13 @@ export default function MarketScreen() {
                 <ActiveFilterChip label={filterSummary} onPress={showControls} onClear={clearAllFilters} />
             )}
             </View>
-            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}
+            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. A visitor with no
+                account (slice S12): the door, where the key is made, in place of the chooser. */}
             {!categoryPanel.open && (
-            <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
+            <Pressable accessibilityRole="button" style={styles.fab} onPress={() => (identity ? setShowNewPostTypePicker(true) : openLookDoor())} testID="market-add-post">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
-                    <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{t('ADD POST')}</Text>
+                    <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>{identity ? t('ADD POST') : t('Join to post')}</Text>
                 </View>
             </Pressable>
             )}

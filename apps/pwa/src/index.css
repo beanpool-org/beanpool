@@ -257,6 +257,17 @@ html, body, #root {
   #root, .page-overlay { background-image: var(--pattern-image-hidpi); }
 }
 
+/* Reduced data: use 1x pattern when the user prefers reduced data or has Save-Data enabled. */
+@media (prefers-reduced-data: reduce) {
+  #root, .page-overlay {
+    background-image: var(--pattern-image) !important;
+  }
+}
+:root[data-save-data="true"] #root,
+:root[data-save-data="true"] .page-overlay {
+  background-image: var(--pattern-image) !important;
+}
+
 /* Page surfaces: transparent so the wallpaper shows, but their original solid colour again
    when the pattern is off, so "plain background" looks exactly as these pages did before.
    Modal and sheet panels deliberately do NOT use this — they stay opaque. */

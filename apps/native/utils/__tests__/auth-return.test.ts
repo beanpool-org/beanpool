@@ -204,6 +204,60 @@ describe('the root guard while the member is still setting up', () => {
     });
 });
 
+describe('the root guard while a phone with no account looks around the global community (slice S12)', () => {
+    const LOOKING = { hasIdentity: false, pendingOnboarding: false, lookingAround: true };
+    const DOOR = { pathname: '/welcome', params: { join: 'look' } };
+    // The look: Home, the Market and the Map (the example Ledger and Commons where shown), a listing, the guide, the sheet,
+    // Start a community (no key: its ways to run one, the details to copy).
+    const LOOK: string[][] = [
+        ['(tabs)'], ['(tabs)', 'index'], ['(tabs)', 'market'], ['(tabs)', 'map'], ['(tabs)', 'ledger'], ['(tabs)', 'projects'],
+        ['post', '[id]'], ['guide', '[slug]'], ['guide', 'section', '[id]'], ['beanpool'], ['start-community'],
+    ];
+    // Each needs a key: a message, people, Settings, asking a community, a profile, the not-recognised screen, a sign-in return.
+    const NEEDS_A_KEY: string[][] = [
+        ['(tabs)', 'chats'], ['(tabs)', 'people'], ['(tabs)', 'pulse'], ['(tabs)', 'settings'],
+        ['chat', '[id]'], ['new-message'], ['channels'], ['group', '[id]'], ['find-community'], ['profile-setup'],
+        ['public-profile'], ['join-global'], ['join-open-door'], ['node-mismatch'], ['settings-signin'],
+        ...PROVIDERS.map((p) => ['auth', p]),
+    ];
+
+    it('leaves the look\'s screens where they are', () => {
+        for (const segments of LOOK) expect(setupRedirect(segments, LOOKING), segments.join('/')).toBeNull();
+    });
+
+    it('opens the door from the look for every screen that needs a key, never the first screen', () => {
+        for (const segments of NEEDS_A_KEY) expect(setupRedirect(segments, LOOKING), segments.join('/')).toEqual(DOOR);
+    });
+
+    it('keeps the screens a phone with no account always had: welcome, guardian recovery, a re-key code, a claim, a community\'s card', () => {
+        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card']) {
+            expect(setupRedirect([root], LOOKING), root).toBeNull();
+        }
+        // The bare root is the app's start: the first screen, as always (app/index.tsx redirects there too), never the door.
+        expect(setupRedirect([], LOOKING)).toBe('/welcome');
+    });
+
+    it('not looking around: every one of them goes to the first screen, as before', () => {
+        for (const segments of [...LOOK, ...NEEDS_A_KEY]) {
+            expect(setupRedirect(segments, NO_IDENTITY), segments.join('/')).toBe('/welcome');
+        }
+    });
+
+    it('means nothing to a phone with an account or a wizard part way: its rules are as before', () => {
+        for (const segments of [...LOOK, ...NEEDS_A_KEY]) {
+            expect(setupRedirect(segments, { ...SET_UP, lookingAround: true }), segments.join('/')).toBeNull();
+            expect(setupRedirect(segments, { ...WIZARD_PENDING, lookingAround: true }), segments.join('/')).toBe('/welcome');
+        }
+    });
+
+    it('the root layout asks whether the phone is looking around only with no identity, and drops an answer for a screen it has left', () => {
+        const layout = fs.readFileSync(path.join(APP, '_layout.tsx'), 'utf8');
+        expect(layout).toMatch(/const guardTurn = \+\+noKeyGuardTurn\.current;/);
+        expect(layout).toMatch(/lookingAroundHere\(\)\.then\(\(looking\) => \{\s*\/\/[^\n]*\n\s*if \(!isComponentMounted\.current \|\| guardTurn !== noKeyGuardTurn\.current\) return;/);
+        expect(layout).toMatch(/setupRedirect\(segments, \{ hasIdentity: false, pendingOnboarding: false, lookingAround: true \}\)/);
+    });
+});
+
 describe('the invite handler and a sign-in return link', () => {
     const FACEBOOK_CANCEL = 'https://beanpool.org/auth/facebook?error=access_denied&error_code=200&error_description=Permissions+error&error_reason=user_denied&state=n0nce#_=_';
     // An id_token is base64url, so an invite-shaped run of characters can turn up anywhere in it.

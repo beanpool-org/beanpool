@@ -475,7 +475,19 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                     {nearState === 'loading' ? (
                         <p className={`${lineText} p-4 text-center animate-pulse`}>{t("Finding who's near you…")}</p>
                     ) : nearState === 'none' ? (
-                        <p className={lineText} data-testid="people-no-area">{t("Set your area to see who's near you (Settings → Your area). Search works without it.")}</p>
+                        <div className="space-y-3" data-testid="people-no-area">
+                            <p className={lineText}>{t("Set your area to see who's near you (Settings → Your area). Search works without it.")}</p>
+                            {onNavigate && (
+                                <button
+                                    type="button"
+                                    onClick={() => onNavigate('settings-area')}
+                                    className="px-4 py-2 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on rounded-xl text-sm font-semibold shadow-sm transition-colors min-h-[44px]"
+                                    data-testid="people-set-area-btn"
+                                >
+                                    {t('Set your area')}
+                                </button>
+                            )}
+                        </div>
                     ) : nearState === 'failed' ? (
                         <p className={`${lineText} flex flex-wrap items-center gap-x-2`} data-testid="people-near-failed">
                             {/* A spent day says so in the node's words, which say when it lets up: no Try again for it. */}

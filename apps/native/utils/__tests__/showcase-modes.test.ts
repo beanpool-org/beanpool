@@ -85,7 +85,7 @@ describe("Home's first step and the Ledger's sample (design §1 rows 1 and 3)", 
             cards: { steps: { firstPost: false, joinedAt: new Date().toISOString() } },
         } as never;
         const steps = firstSteps(answer, { interests: [], role: 'member', knocked: false } as never);
-        expect(steps.lines.map(l => l.id)).toEqual(['post']);
+        expect(steps.lines.map(l => l.id)).toEqual(['name', 'area', 'photo', 'sawLedger', 'post', 'saidHello', 'watch']);
         expect(steps.lines.map(l => l.text).join(' ')).not.toMatch(/Beans/);
         expect(homeBeansPreview({ features: { beans: false, showcase: true } } as never)).toBe(true);
         expect(homeBeansPreview({ features: { beans: false } } as never)).toBe(false);

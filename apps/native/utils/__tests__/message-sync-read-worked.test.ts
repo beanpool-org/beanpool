@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import Module from 'node:module';
 import * as fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 
 // Whether the phone's message read worked, as syncMessages answers it (slice L0, review of #2558).
 //
 // The tabs' message backstop (app/(tabs)/_layout.tsx) counts a read only once it worked. syncMessages swallows every
 // failure, so it says which it was: true when the conversation list and every chat's page it asked for came back 2xx,
 // false when any did not (a 503 while the node is full, a timeout on a weak link, a dropped request). A read that failed
-// is read again on the next tick, as before slice L0; one that worked puts the next off to the backstop.
+// is read again on the next tick, as before slice L0; one that worked puts the next off to the backstop. A chat the pass
+// leaves out to wait for the next one (the pin store or the DM guard's list unreadable) is a read that did not work too.
 //
 // The phone's real schema and real sync run here over an in-memory SQLite (node:sqlite), as deleted-account-lines.test.ts
 // runs them. The node is a stand-in that answers as routes/messaging.ts does, or refuses where a test says.
@@ -69,8 +71,10 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getDb, getMessages, syncMessages } from '../db';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
+import { dmConversationsSeenStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 
 const ANCHOR = 'https://mullum.beanpool.org';
 const RHEA = 'pk-rhea';
@@ -80,7 +84,8 @@ const CHATS = ['group-chat-1', 'group-chat-2'];
 
 /** What the stand-in does to one read: answer it, refuse it 503 (the node full), or never answer (a timeout, a drop). */
 type Fate = 'answer' | 'refuse' | 'drop';
-const node = { list: 'answer' as Fate, pages: new Map<string, Fate>() };
+/** `dms`: DMs with Rhea the list names after the groups. `asked`: every chat whose page was asked for. */
+const node = { list: 'answer' as Fate, pages: new Map<string, Fate>(), dms: [] as string[], asked: [] as string[] };
 
 function answer(status: number, body: unknown) {
     const text = JSON.stringify(body);
@@ -95,14 +100,22 @@ const fetchMock = vi.fn(async (url: string) => {
     const u = new URL(url);
     if (/^\/api\/messages\/conversations\/[^/]+$/.test(u.pathname)) {
         return fated(node.list, () => ({
-            conversations: CHATS.map((id) => ({ id, type: 'group_thread', name: id, participants: [h.me.publicKey, RHEA], createdBy: RHEA, createdAt: '2026-10-28T00:00:00.000Z' })),
+            conversations: [
+                ...CHATS.map((id) => ({ id, type: 'group_thread', name: id, participants: [h.me.publicKey, RHEA], createdBy: RHEA, createdAt: '2026-10-28T00:00:00.000Z' })),
+                ...node.dms.map((id) => ({ id, type: 'dm', participants: [h.me.publicKey, RHEA], createdBy: RHEA, createdAt: '2026-10-28T00:00:00.000Z' })),
+            ],
             totalUnread: 0,
             deletedAccounts: [],
         }));
     }
     const page = u.pathname.match(/^\/api\/messages\/([^/]+)$/);
+    if (page && node.dms.includes(page[1])) {
+        node.asked.push(page[1]);
+        return answer(200, { conversation: { id: page[1], type: 'dm', participants: [h.me.publicKey, RHEA] }, messages: [] });
+    }
     if (page && CHATS.includes(page[1])) {
         const id = page[1];
+        node.asked.push(id);
         return fated(node.pages.get(id) ?? 'answer', () => ({
             conversation: { id, type: 'group_thread', participants: [h.me.publicKey, RHEA] },
             messages: [{
@@ -130,14 +143,25 @@ async function reads(): Promise<unknown> {
     }
 }
 
+/** Every stored value whose key starts `prefix` can't be read (a storage error) while `fn` runs. */
+async function unreadable<T>(prefix: string, fn: () => Promise<T>): Promise<T> {
+    const getItem = vi.mocked(AsyncStorage.getItem);
+    const real = getItem.getMockImplementation()!;
+    getItem.mockImplementation(async (k: string) => { if (k.startsWith(prefix)) throw new Error('storage unavailable'); return real(k); });
+    try { return await fn(); } finally { getItem.mockImplementation(real); }
+}
+
 beforeEach(async () => {
     h.store.clear();
     h.store.set('beanpool_anchor_url', ANCHOR);
     h.store.set('beanpool_node_profiles', JSON.stringify({ [ANCHOR]: { profile: 'local', features: {}, checkedAt: new Date().toISOString() } }));
     h.store.set('bp_trust_sync_v3', 'true');
     h.store.set(CACHE_NAMES_DONE_KEY, '1');
+    h.me.publicKey = 'pk-bo';
     node.list = 'answer';
     node.pages.clear();
+    node.dms = [];
+    node.asked = [];
     (globalThis as any).fetch = fetchMock;
     const db = await getDb();
     for (const t of ['messages', 'conversation_participants', 'conversations']) await db.execAsync(`DELETE FROM ${t}`);
@@ -177,5 +201,22 @@ describe('syncMessages says whether its read worked', () => {
         expect(await reads()).toBe(false);
         node.list = 'answer';
         expect(await reads()).toBe(true);
+    });
+
+    it('the pin store could not be read, so the DM waited for the next pass: it did not, though the groups\' lines landed; readable again, it works', async () => {
+        h.me.publicKey = `pk-new-${randomUUID()}`;   // an account this run hasn't read the pins of (the pin book keeps what it read)
+        node.dms = ['dm-with-rhea'];
+        expect(await unreadable(dmPeerPinsStoreKey(h.me.publicKey, ''), reads)).toBe(false);
+        expect(node.asked).not.toContain('dm-with-rhea');
+        for (const id of CHATS) expect((await getMessages(id)).map((m: any) => m.text)).toEqual([`Hello from ${id}`]);
+        expect(await reads()).toBe(true);
+        expect(node.asked).toContain('dm-with-rhea');
+    });
+
+    it('the DM guard\'s list could not be read, so the new chats it could not type waited for the next pass: it did not; readable again, it works', async () => {
+        expect(await unreadable(dmConversationsSeenStoreKey(h.me.publicKey, ''), reads)).toBe(false);
+        expect(node.asked).toEqual([]);
+        expect(await reads()).toBe(true);
+        expect([...node.asked].sort()).toEqual([...CHATS].sort());
     });
 });

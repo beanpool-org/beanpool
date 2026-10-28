@@ -22,7 +22,7 @@ import {
     updateNotificationPreferences, getNodeStats, getSignInRecovery, request,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
-import { useCommunityInfo } from '../lib/features';
+import { useCommunityInfo, useReaderFeatures } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines, usePhoneBrowser } from '../lib/global-entry';
 import { isInstalled, useDeferredInstallPrompt, clearDeferredPrompt, DesktopInstallSteps } from '../components/InstallPrompt';
 import { StoreBadges, ApkDownloadLink } from '../components/UsePhoneAppCard';
@@ -246,6 +246,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     // The same account on a phone (DESIGN-global-entry-fable.md §D), in the sign-in card; and on a local community, the
     // global community its node names (§B.3). Nothing of either before the node's info arrives, or when it names none.
     const communityInfo = useCommunityInfo();
+    const readerFeatures = useReaderFeatures(communityInfo);
+    const effectiveShapeFeatures = { ...communityInfo?.features, ...(readerFeatures ?? {}) };
     const pageHost = webAppHost();
     const phoneLater = phoneLaterLines({
         where: 'settings', appsGlobal: isAppsGlobal(communityInfo, pageHost), host: webAppAddress(), hasWords, signIns: signInRecoveryNames,
@@ -1991,7 +1993,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 <CommunityShapeModal
                     isOpen={shapeModalOpen}
                     onClose={() => setShapeModalOpen(false)}
-                    features={communityInfo?.features as any}
+                    features={effectiveShapeFeatures as any}
                     onOpenGuide={() => {
                         setShapeModalOpen(false);
                         setGuidePage('how-this-community-works');

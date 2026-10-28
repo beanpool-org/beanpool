@@ -67,7 +67,7 @@ function ChatMenuModalContent({
                         type="button"
                         onClick={onClose}
                         aria-label={t('Close menu')}
-                        className="min-w-[40px] min-h-[40px] flex items-center justify-center p-1 rounded-lg text-nature-400 hover:text-nature-700 dark:hover:text-white border-none bg-transparent cursor-pointer text-base"
+                        className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center p-1 rounded-xl text-nature-400 hover:text-nature-700 dark:hover:text-white border-none bg-transparent cursor-pointer text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     >
                         ✕
                     </button>
@@ -80,7 +80,7 @@ function ChatMenuModalContent({
                                 key={c.key}
                                 type="button"
                                 onClick={() => onPickMute(c.key)}
-                                className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full text-left min-h-[44px] py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 {t(c.label)}
                             </button>
@@ -95,7 +95,7 @@ function ChatMenuModalContent({
                             <button
                                 type="button"
                                 onClick={() => { onClose(); onInvite(); }}
-                                className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full text-left min-h-[44px] py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 {t('Invite people')}
                             </button>
@@ -109,21 +109,21 @@ function ChatMenuModalContent({
                                     onOpenMute();
                                 }
                             }}
-                            className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            className="w-full text-left min-h-[44px] py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             {isMuted ? t('Unmute') : t('Mute notifications')}
                         </button>
                         <button
                             type="button"
                             onClick={() => { onClose(); onSearch(); }}
-                            className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            className="w-full text-left min-h-[44px] py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             {t('Search this chat')}
                         </button>
                         <button
                             type="button"
                             onClick={() => { onClose(); onGroupInfo(); }}
-                            className="w-full text-left py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            className="w-full text-left min-h-[44px] py-2.5 px-3 rounded-xl text-sm font-semibold text-nature-900 dark:text-white hover:bg-nature-100 dark:hover:bg-nature-800 border-none bg-transparent cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         >
                             {t('Group info')}
                         </button>

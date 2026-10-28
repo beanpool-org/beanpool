@@ -148,14 +148,37 @@ async function main(): Promise<void> {
     assert(bobVisitorListing.authorBannerUrl === undefined,
         `visitor gets no authorBannerUrl on member listing (got ${bobVisitorListing.authorBannerUrl})`);
 
-    // 5. Visitor read (signed non-member): gets none
+    // 5. Visitor read (signed non-member) on the visitors' view: gets the listing, and none (guestPost drops it)
     const stranger = newId('Stranger');
     const strangerRes = await call('GET', stranger, '/api/marketplace/posts');
     assert(strangerRes.status === 200, `stranger GET /api/marketplace/posts returns 200 (got ${strangerRes.status})`);
     const strangerPosts: any[] = Array.isArray(strangerRes.body) ? strangerRes.body : strangerRes.body?.posts;
     const entStrangerListing = strangerPosts.find((p: any) => p.title === 'Enterprise Sourdough');
-    assert(entStrangerListing?.authorBannerUrl === undefined,
-        `signed non-member gets no authorBannerUrl on enterprise listing (got ${entStrangerListing?.authorBannerUrl})`);
+    assert(!!entStrangerListing, 'enterprise listing found in signed non-member feed');
+    assert(!('authorBannerUrl' in entStrangerListing),
+        `signed non-member gets no authorBannerUrl on enterprise listing (got ${entStrangerListing.authorBannerUrl})`);
+
+    // 5b. Without the visitors' view, a non-member who passes the read gate is no guestView, so guestPost never runs and
+    // only the route's `!isMember` strip keeps the banner from them (routes/marketplace.ts). With read auth on, as here,
+    // that reader is a paused member: a 'disabled' row passes the gate (passesReadGate) and reads as a non-member
+    // (readsAsMember). A key with no row never reaches the route.
+    setSwitchOverride('guestListingsOnly', false);
+    const paused = member('Paula');
+    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(paused.pk);
+    const pausedRes = await call('GET', paused, '/api/marketplace/posts');
+    assert(pausedRes.status === 200, `paused member GET /api/marketplace/posts returns 200 without the visitors' view (got ${pausedRes.status})`);
+    assert(pausedRes.text.length > 0 && !pausedRes.text.includes('authorBannerUrl'), 'no listing in the paused member\'s read names a banner');
+    const pausedPosts: any[] = Array.isArray(pausedRes.body) ? pausedRes.body : pausedRes.body?.posts;
+    const entPausedListing = pausedPosts.find((p: any) => p.title === 'Enterprise Sourdough');
+    assert(!!entPausedListing, 'enterprise listing found in the paused member\'s feed');
+    assert(entPausedListing.authorCallsign === 'Community Bakery',
+        `the paused member's read is the members' shape, not guestPost's (author named: ${entPausedListing.authorCallsign})`);
+    assert(!('authorBannerUrl' in entPausedListing),
+        `paused member (a non-member reader) gets no authorBannerUrl on enterprise listing (got ${entPausedListing.authorBannerUrl})`);
+    const strangerNoViewRes = await call('GET', stranger, '/api/marketplace/posts');
+    assert(strangerNoViewRes.status !== 200 && !strangerNoViewRes.text.includes('/api/shops/'),
+        `a key with no row is refused before the route without the visitors' view (got ${strangerNoViewRes.status})`);
+    setSwitchOverride('guestListingsOnly', true);
 
     // 6. Home Market rows: enterprise photoless listing carries bannerUrl, member's carries null, visitor gets null
     const homeMemberRes = await call('GET', alice, '/api/home');

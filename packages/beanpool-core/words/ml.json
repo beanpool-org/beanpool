@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-20",
@@ -137,6 +137,7 @@
   "Someone vouches for each newcomer. Here the door is open, so there are no invites.": "പുതുതായി വരുന്ന ഓരോ വ്യക്തിക്കും ഒരാൾ ഉറപ്പുനൽകുന്നു. ഇവിടെ വാതിൽ തുറന്നിരിക്കുന്നു, അതിനാൽ ക്ഷണങ്ങൾ ആവശ്യമില്ല.",
   "In a local community all of this is live today. Here it switches on, feature by feature, once this community can check who's who.": "ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ ഇവയെല്ലാം ഇന്ന് സജീവമാണ്. കമ്മ്യൂണിറ്റിക്ക് അംഗങ്ങളെ പരിശോധിക്കാൻ കഴിയുമ്പോൾ, ഇവിടെ ഓരോ ഫീച്ചറായി സജീവമാകും.",
   "Start a community": "ഒരു കമ്മ്യൂണിറ്റി ആരംഭിക്കുക",
+  "Not answering lately": "അടുത്തിടെ പ്രതികരിക്കുന്നില്ല",
   "Communities near you": "നിങ്ങളുടെ അടുത്തുള്ള കമ്മ്യൂണിറ്റികൾ",
   "How it works": "ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നു",
   "An example ledger.": "ഒരു മാതൃകാ ലെഡ്ജർ.",

@@ -102,7 +102,7 @@ By default your server tells the BeanPool directory about itself every 12 hours,
 
 The pin you drop on the map here is the community's place, and the area is that pin and how far the community reaches. **Share Location & Radius** decides who else sees it. On (the default), anyone gets the pin rounded to about a kilometre: the directory and the map on beanpool.org, and your server's own public pages to anyone who asks, so people nearby can find you and nobody starts a second community on top of yours. Off, nobody outside the community gets it at all: the directory is told no area, and your server gives the place only to its members (still to about a kilometre, so their maps start in the right place) and to owners and admins (exactly, here). Turned off, the map on beanpool.org loses your pin at your server's next update (**Publish Now** sends it at once); the community stays listed by name.
 
-The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. To stop your server sending anything, an owner switches **Listed in the BeanPool directory** off under **How this community works**: the **Update Schedule** has no **Never** any more, and a server that had it set to Never was switched to not listed, with a 12-hour schedule for later, when it was updated. The directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent.
+The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. To stop your server sending anything, an owner switches **Listed in the BeanPool directory** off under **How this community works**: the **Update Schedule** has no **Never** any more, and a server that had it set to Never was switched to not listed, with a 12-hour schedule for later, when it was updated. The directory keeps the last entry it received, as it was then, until your community leaves it (see "How your community leaves the map", below). Your members' names and posts are never sent.
 
 ### Message requests
 
@@ -119,9 +119,22 @@ Your server sends the directory nothing while either of these is true. **Node Id
 - **The community has no name of its own**: its name is blank, or exactly "BeanPool Community". Type the community's name in **Community Name** and press **Save**. Your server tells the directory at once, with no restart. First-time setup asks for the name too, and won't go on without one.
 - **The server's .env sets DIRECTORY_UNLISTED=1** (or true, yes or on). This is for test and review servers, which should never be a pin on the public map. To be listed, remove that line and run docker compose up -d. A value your server doesn't recognise, such as DIRECTORY_UNLISTED=ture, counts as not set: the community is listed, and the server's log says so when it starts.
 
-While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds is not removed: it stays as it was until your server sends a new one.
+While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds stays as it was until it goes quiet (below), except with DIRECTORY_UNLISTED: then your server removes it once, as it starts.
+
+The directory itself also leaves out an entry that gives people nowhere to go: one with no web address and no contact email or phone. A community with no name of its own, from a server too old to hold it back, is shown under its web address instead, so two of them never look like one. And it refuses entries from BeanPool's own test servers; their logs say so.
 
 To check the name your server sends, from anywhere, open https://YOUR-ADDRESS/api/directory/info. Its communityName must be your community's name: null means it has none yet.
+
+### How your community leaves the map
+
+Your community comes off the directory, the map on beanpool.org and the list on the global community in any of these ways:
+
+- **An owner switches Listed in the BeanPool directory off**, under **How this community works**. Your server asks the directory to remove its entry at once, signed with the server's own key, as its updates are. The map on beanpool.org shows it at its next load, and the global community within the hour. If the directory can't be reached just then, your server asks again each time it starts, for as long as Listed is off. An update that was already on its way when Listed went off is followed by another removal.
+- **The closing day comes.** If an owner set a day the community closes (**Settings → Directory**), your server removes the entry on that day and sends nothing more. **Publish Now** then says why. Clear the day, or set a later one, and the community is listed again at once.
+- **The server starts with DIRECTORY_UNLISTED=1** in its .env after it was listed: it removes the entry once, as it starts.
+- **It stops sending updates**, because the server is off or can't reach the directory. The directory shows only communities that updated it in the last 7 days. After 36 hours without an update, the entry says **Not answering lately** under the community's name, on the map and in both apps, and people can still ask to join (their request waits until your server answers). After 7 days the entry is not shown, and after 30 days it is deleted. When your server updates again, the community is listed again.
+
+A server that was never listed sends nothing. Leaving, like being listed, is something your server does for itself: nothing your members do needs the directory or BeanPool's servers.
 
 ### The listing promise
 

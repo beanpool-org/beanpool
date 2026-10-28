@@ -9,7 +9,8 @@
  *   3. GET /api/global/communities: nearest first from a point (service_radius), name search (accents and case
  *      forgiven), paging with a total, name order without a point; a row without an address is listed with url null
  *      (no link), a bad address or place is dropped rather than guessed, a row with no id is left out; the key is in
- *      no response; ETag and 304, kept across a run that changes nothing; garbage is a 400
+ *      no response; ETag and 304, kept across a run that changes nothing; garbage is a 400; each community carries
+ *      lastSeenAt (its last push), and the directory_listed view's shown_name and last_seen_at are read, still checked
  *   4. a failed mirror keeps the old cache: a 500, a body that isn't an array, broken JSON, nothing listening
  *   5. place watches: stored as the 0.1° cell, never the spot; set, list and remove one's own only; another member's
  *      key in the body is refused by the spoof check; the per-member cap; unsigned, non-member and garbage refused
@@ -337,6 +338,23 @@ async function main(): Promise<void> {
         && evil.memberCount === null && evil.contactEmail === null && evil.contactPhone === null,
         `every bad field dropped, never guessed: control and direction characters out of the name, http, a place off the Earth, a negative count, a non-email (${JSON.stringify(evil)})`);
     assert(!near.text.includes(MIRROR_KEY), 'the registry key is in no response');
+
+    // The directory_listed view's columns (front doors S13): the last push passed on as lastSeenAt; shown_name before
+    // community_name; each still checked, a bad one dropped, a row with no key still left out.
+    assert(mul?.lastSeenAt === '2026-09-20T00:00:00.000Z' && mul?.updatedAt === mul?.lastSeenAt,
+        `the route passes the last push on as lastSeenAt (${mul?.lastSeenAt})`);
+    assert(cas && cas.lastSeenAt === null, `a row that said no time has lastSeenAt null, never a guess (${cas?.lastSeenAt})`);
+    const { normaliseRegistryRow } = await import('./engine/directory-cache.js');
+    const viewRow = normaliseRegistryRow({ node_id: 'peer-gipp', community_name: 'BeanPool Community', shown_name: 'gippsland.beanpool.org',
+        node_url: 'https://gippsland.beanpool.org', last_seen_at: '2026-10-26T01:00:00+00:00', updated_at: '2026-10-20T01:00:00Z' });
+    assert(viewRow?.name === 'gippsland.beanpool.org' && viewRow?.registryUpdatedAt === '2026-10-26T01:00:00.000Z',
+        `a view row: its shown_name is the name, its last_seen_at the time (${JSON.stringify(viewRow && { name: viewRow.name, at: viewRow.registryUpdatedAt })})`);
+    const badView = normaliseRegistryRow({ node_id: 'peer-bad', shown_name: 'Evil‮\u0007 Name', node_url: 'javascript:alert(1)',
+        last_seen_at: 'not a time', contact_email: 'not an email', service_radius: { lat: 123, lng: 500 } });
+    assert(badView !== null && badView.name === 'Evil Name' && badView.url === null && badView.registryUpdatedAt === null
+        && badView.contactEmail === null && badView.lat === null,
+        `a view row is as untrusted as any: control and direction characters out of shown_name, no address, no time, no email, no place (${JSON.stringify(badView)})`);
+    assert(normaliseRegistryRow({ shown_name: 'Nobody', last_seen_at: '2026-10-26T01:00:00Z' }) === null, 'a view row with no key is still left out');
 
     const q1 = await call('GET', null, '/api/global/communities?q=castle');
     assert(same(keys(q1), ['peer-castle']) && q1.body?.total === 1, `q=castle finds Castlemaine by its callsign (${JSON.stringify(keys(q1))})`);

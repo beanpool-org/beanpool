@@ -13,7 +13,7 @@ import { nowS, toHex, world, liveName, makeKey, routing, attestsAs } from './har
 const DAY = 86400;
 const sign = async (key, message) => toHex(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey, new TextEncoder().encode(message)));
 const send = async (w, req) => { const res = await worker.fetch(req, w.env); return { status: res.status, body: await res.json() }; };
-const page = async (w, path) => { const res = await worker.fetch(new Request(`https://beanpool.org${path}`), w.env); return { status: res.status, html: await res.text() }; };
+const page = async (w, path) => { const res = await worker.fetch(new Request(`https://beanpool.org${path}`), w.env); return { status: res.status, html: await res.text(), location: res.headers.get('location') }; };
 const newNonce = () => toHex(crypto.getRandomValues(new Uint8Array(16)));
 
 // A v2 request, as [url, init]: build it into a Request as often as a test sends it (a captured request, replayed).
@@ -33,7 +33,7 @@ const state = (w) => Object.fromEntries(
 
 // ── M2: the switchboard vouches only for a name this registrar holds live ──────────────────────────────────────────
 
-test('M2: /i/<code>?n= refuses any host the registrar does not hold as a live name — never sends the app elsewhere', async () => {
+test('M2: /i/* routes redirect 302 to invite help, refusing to resolve hostnames or send the app elsewhere', async () => {
     const w = await world();
     try {
         const [owner, other] = await Promise.all([makeKey(), makeKey()]);
@@ -45,31 +45,40 @@ test('M2: /i/<code>?n= refuses any host the registrar does not hold as a live na
         assert.equal((await w.admin('stillwater', 'pause')).status, 200);
         w.sqlite.prepare('INSERT INTO invites (code, node_name, created_at) VALUES (?, ?, ?)').run('INV-RIVER', 'riverbend', nowS());
 
+        const targetUrl = 'https://beanpool.org/getting-started#invite';
+
         for (const n of ['evil.example.com', 'mullum-beanpool.org', 'riverbend.evil.example.com', 'riverbend.beanpool.org.evil.com',
             'https://evil.com', 'perth', 'perth.beanpool.org', 'stillwater', 'evil.com/riverbend.beanpool.org', '..', 'riverbend%2eevil.com']) {
             for (const code of ['anything', 'INV-RIVER', 'riverbend']) {
                 const r = await page(w, `/i/${code}?n=${encodeURIComponent(n)}`);
-                assert.equal(r.status, 404, `?n=${n} with code ${code}`);
-                assert.doesNotMatch(r.html, /beanpool:\/\/join|Community node|evil|mullum-beanpool|perth/, `?n=${n}: no join link, no host named`);
+                assert.equal(r.status, 302, `?n=${n} with code ${code}`);
+                assert.equal(r.location, targetUrl);
             }
         }
-        // Released: not held live, so not vouched for either.
+        // Released: not held live, still redirects to invite help.
         assert.equal((await w.release(owner, { name: 'riverbend' })).status, 200);
-        assert.equal((await page(w, '/i/anything?n=riverbend')).status, 404, 'a released name');
+        const rRel = await page(w, '/i/anything?n=riverbend');
+        assert.equal(rRel.status, 302, 'a released name');
+        assert.equal(rRel.location, targetUrl);
         await w.claim(owner, { name: 'riverbend' });   // its own key takes it back, live again
         assert.equal((await w.row('riverbend')).status, 'live');
 
-        // The one thing `?n=` may name: a live name of this registrar, by its label or its hostname.
+        // The one thing ?n= used to name: all ?n= now redirect 302 to invite help.
         for (const n of ['riverbend', 'riverbend.beanpool.org', 'RiverBend', ' riverbend.beanpool.org ']) {
             const r = await page(w, `/i/INV-RIVER?n=${encodeURIComponent(n)}`);
-            assert.equal(r.status, 200, `?n=${n}`);
-            assert.ok(r.html.includes('beanpool://join?node=riverbend.beanpool.org&code=INV-RIVER'), `?n=${n}`);
-            assert.ok(r.html.includes('Community node: riverbend.beanpool.org'), `?n=${n}`);
+            assert.equal(r.status, 302, `?n=${n}`);
+            assert.equal(r.location, targetUrl);
         }
-        // Without `?n=`, codes resolve as before: an invite, or a live (or paused) name.
-        assert.equal((await page(w, '/i/INV-RIVER')).status, 200);
-        assert.equal((await page(w, '/i/stillwater')).status, 200, 'a paused community\'s own code still resolves');
-        assert.equal((await page(w, '/i/nowhere')).status, 404);
+        // Without ?n=, all codes redirect 302 to invite help.
+        const rInv = await page(w, '/i/INV-RIVER');
+        assert.equal(rInv.status, 302);
+        assert.equal(rInv.location, targetUrl);
+        const rStill = await page(w, '/i/stillwater');
+        assert.equal(rStill.status, 302);
+        assert.equal(rStill.location, targetUrl);
+        const rNowhere = await page(w, '/i/nowhere');
+        assert.equal(rNowhere.status, 302);
+        assert.equal(rNowhere.location, targetUrl);
     } finally { w.restore(); }
 });
 

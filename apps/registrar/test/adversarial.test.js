@@ -133,10 +133,10 @@ async function makeSignedRequest(url, method, keyPair, pubHex, bodyObj = null, t
 }
 
 // ==========================================
-// 1. INVITE RESOLUTION (/i/:code) EDGE CASES
+// 1. RETIRED INVITE SWITCHBOARD (/i/:code) -> 302 REDIRECT
 // ==========================================
 
-test('Adversarial /i/:code - Valid invites & node name lookup', async () => {
+test('Adversarial /i/:code - Valid invites & node name lookup redirect 302 to invite help', async () => {
     const d1 = createMockD1();
     const env = mockEnv(d1);
     const { pubHex } = await generateKeypair();
@@ -151,100 +151,60 @@ test('Adversarial /i/:code - Valid invites & node name lookup', async () => {
     });
     await db.insertInvite(env, 'INV-BYRON-2026', 'byron');
 
-    // Case 1: Invite lookup in DB
+    const targetUrl = 'https://beanpool.org/getting-started#invite';
+
+    // Case 1: Invite lookup in DB -> 302
     const resInv = await worker.fetch(new Request('https://beanpool.org/i/INV-BYRON-2026', { method: 'GET' }), env);
-    assert.equal(resInv.status, 200);
-    assert.equal(resInv.headers.get('content-type'), 'text/html; charset=utf-8');
-    const htmlInv = await resInv.text();
-    assert.ok(htmlInv.includes('beanpool://join?node=byron.beanpool.org&code=INV-BYRON-2026'));
+    assert.equal(resInv.status, 302);
+    assert.equal(resInv.headers.get('location'), targetUrl);
 
-    // Case 2: Node name lookup in DB (uppercase in path)
+    // Case 2: Node name lookup in DB (uppercase in path) -> 302
     const resNode = await worker.fetch(new Request('https://beanpool.org/i/BYRON', { method: 'GET' }), env);
-    assert.equal(resNode.status, 200);
-    const htmlNode = await resNode.text();
-    assert.ok(htmlNode.includes('beanpool://join?node=byron.beanpool.org&code=BYRON'));
+    assert.equal(resNode.status, 302);
+    assert.equal(resNode.headers.get('location'), targetUrl);
 });
 
-// Until the 2026-10-01 review (M2) this test asserted that `?n=` sent the app to ANY host — sub.example.com, an
-// unclaimed perth.beanpool.org, a sanitised https://evil.com — under a beanpool.org page: the open redirect itself. It now
-// asserts the fix: `?n=` names only a name this registrar holds live.
-test('Adversarial /i/:code - Query parameter ?n= names only a live name of this registrar', async () => {
+test('Adversarial /i/:code - Query parameter ?n= redirects 302 to invite help for all queries', async () => {
     const env = mockEnv();
-    const { pubHex } = await generateKeypair();
-    await db.insertAllocation(env, {
-        name: 'byron', node_pubkey: pubHex, hostname: 'byron.beanpool.org', mode: 'tunnel', status: 'live',
-        requested_at: Math.floor(Date.now() / 1000),
-    });
+    const targetUrl = 'https://beanpool.org/getting-started#invite';
 
-    // Another host, a name nobody holds, a scheme: refused, never linked.
-    for (const n of ['sub.example.com', 'perth', 'https://evil.com', 'byron.example.com', 'byron-beanpool.org']) {
+    // Refused/foreign host, name nobody holds, scheme, or live name: all 302 to invite help
+    for (const n of ['sub.example.com', 'perth', 'https://evil.com', 'byron.example.com', 'byron-beanpool.org', 'byron', 'byron.beanpool.org']) {
         const res = await worker.fetch(new Request(`https://beanpool.org/i/anycode?n=${encodeURIComponent(n)}`, { method: 'GET' }), env);
-        assert.equal(res.status, 404, n);
-        const html = await res.text();
-        assert.ok(html.includes('Invite code not found'), n);
-        assert.ok(!html.includes('beanpool://join'), n);
-    }
-
-    // A live name, by its label or its hostname.
-    for (const n of ['byron', 'byron.beanpool.org']) {
-        const res = await worker.fetch(new Request(`https://beanpool.org/i/anycode?n=${n}`, { method: 'GET' }), env);
-        assert.equal(res.status, 200, n);
-        const html = await res.text();
-        assert.ok(html.includes('beanpool://join?node=byron.beanpool.org&code=anycode'), n);
-        assert.ok(html.includes('Community node: byron.beanpool.org'), n);
+        assert.equal(res.status, 302, n);
+        assert.equal(res.headers.get('location'), targetUrl, n);
     }
 });
 
-test('Adversarial /i/:code - Unmapped code and revoked allocation lookup', async () => {
+test('Adversarial /i/:code - Unmapped code and revoked allocation lookup redirect 302 to invite help', async () => {
     const d1 = createMockD1();
     const env = mockEnv(d1);
-    const { pubHex } = await generateKeypair();
+    const targetUrl = 'https://beanpool.org/getting-started#invite';
 
-    // Insert revoked allocation
-    await db.insertAllocation(env, {
-        name: 'deadnode',
-        node_pubkey: pubHex,
-        hostname: 'deadnode.beanpool.org',
-        mode: 'tunnel',
-        status: 'revoked',
-        requested_at: Math.floor(Date.now() / 1000)
-    });
-
-    // Lookup unmapped code
+    // Lookup unmapped code -> 302
     const resUnmapped = await worker.fetch(new Request('https://beanpool.org/i/unknown-999', { method: 'GET' }), env);
-    assert.equal(resUnmapped.status, 404);
-    assert.equal(resUnmapped.headers.get('content-type'), 'text/html; charset=utf-8');
-    const htmlUnmapped = await resUnmapped.text();
-    assert.ok(htmlUnmapped.includes('Invite code not found'));
+    assert.equal(resUnmapped.status, 302);
+    assert.equal(resUnmapped.headers.get('location'), targetUrl);
 
-    // Direct lookup of revoked node name -> 404
+    // Direct lookup of revoked node name -> 302
     const resRevoked = await worker.fetch(new Request('https://beanpool.org/i/deadnode', { method: 'GET' }), env);
-    assert.equal(resRevoked.status, 404);
+    assert.equal(resRevoked.status, 302);
+    assert.equal(resRevoked.headers.get('location'), targetUrl);
 
-    // Invite pointing to revoked node name -> 404 (allocation status is revoked)
-    await db.insertInvite(env, 'INV-DEAD', 'deadnode');
+    // Invite pointing to revoked node name -> 302
     const resRevokedInvite = await worker.fetch(new Request('https://beanpool.org/i/INV-DEAD', { method: 'GET' }), env);
-    assert.equal(resRevokedInvite.status, 404);
-    const htmlRevokedInvite = await resRevokedInvite.text();
-    assert.ok(htmlRevokedInvite.includes('Invite code not found'));
+    assert.equal(resRevokedInvite.status, 302);
+    assert.equal(resRevokedInvite.headers.get('location'), targetUrl);
 });
 
-test('Adversarial /i/:code - Malformed code, URL encoding, and HTML escaping', async () => {
+test('Adversarial /i/:code - Malformed code, URL encoding, and HTML escaping redirect 302 to invite help', async () => {
     const env = mockEnv();
-    // `?n=` must name a live name of this registrar (M2): one is held, so the page renders the code.
-    const { pubHex } = await generateKeypair();
-    await db.insertAllocation(env, {
-        name: 'safenode', node_pubkey: pubHex, hostname: 'safenode.beanpool.org', mode: 'tunnel', status: 'live',
-        requested_at: Math.floor(Date.now() / 1000),
-    });
+    const targetUrl = 'https://beanpool.org/getting-started#invite';
 
-    // URL encoded spaces and quotes
+    // URL encoded spaces, quotes, script injection
     const resEnc = await worker.fetch(new Request('https://beanpool.org/i/%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E?n=safenode', { method: 'GET' }), env);
-    assert.equal(resEnc.status, 200);
-    const htmlEnc = await resEnc.text();
-    // Verify script tags are encoded and inside href attribute safely
-    assert.ok(htmlEnc.includes('code=%22%3E%3Cscript%3Ealert(1)%3C%2Fscript%3E'));
-    assert.ok(!htmlEnc.includes('<script>alert(1)</script>'));
+    assert.equal(resEnc.status, 302);
+    assert.equal(resEnc.headers.get('location'), targetUrl);
 });
 
 // ==========================================

@@ -177,3 +177,29 @@ describe('the web find card with no community near', () => {
         await waitFor(() => expect(screen.getByTestId('home-find-start')).toBeInTheDocument());
     });
 });
+
+describe('a community gone quiet on the web find card (front doors S13)', () => {
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+
+    it('says "Not answering lately" under a row past 36 h since its last push, and not before; the row stays a link', async () => {
+        const rows = [
+            { key: 'q', name: 'Sleepy Hollow', url: 'https://sleepy.example.org', memberCount: 6, distanceKm: 8, lastSeenAt: hoursAgo(40) },
+            { key: 'e', name: 'Edge Creek', url: 'https://edge.example.org', memberCount: 3, distanceKm: 12, lastSeenAt: hoursAgo(35) },
+            { key: 'f', name: 'Riverbend', url: null, memberCount: 10, distanceKm: 20, lastSeenAt: hoursAgo(2) },
+        ];
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: rows }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-find-not-answering-q')).toHaveTextContent('Not answering lately');
+        expect(screen.queryByTestId('home-find-not-answering-e')).toBeNull();
+        expect(screen.queryByTestId('home-find-not-answering-f')).toBeNull();
+        expect(screen.getByRole('link', { name: /Sleepy Hollow/ })).toHaveAttribute('href', 'https://sleepy.example.org');
+    });
+
+    it('an older global node that sends no lastSeenAt: no such line', async () => {
+        const near = { key: 'l', name: 'Lismore', url: 'https://lismore.example.org', memberCount: 12, distanceKm: 12 };
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [near] }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-find-body');
+        expect(screen.queryByTestId('home-find-not-answering-l')).toBeNull();
+    });
+});

@@ -1949,6 +1949,8 @@ footer {
     line-height: 1.45;
     margin: 0;
 }
+/* The home page's link to beanpool.org/android: its colour is close to the sentence's, so the underline marks it, and a 48px row to tap */
+.hero-web-note a { display: inline-flex; align-items: center; min-height: 48px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .hero-cta-header p { font-size: 0.92rem; line-height: 1.5; }
 .hero-actions-grid .btn { height: auto; min-height: 48px; }
 

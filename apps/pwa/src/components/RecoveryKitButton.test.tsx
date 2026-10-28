@@ -158,7 +158,7 @@ describe('the kit’s web steps match the web app’s screens (review 4170915901
         expect(restore).toMatch(/Use my 12 words/);
         expect(restore).not.toMatch(/wordsDoor|wordsOpen/);
         // A shut door: WelcomePage opens on the member options, whose words button is "🔑 Recover with 12 Words".
-        expect(welcome).toContain("useState(() => start === 'restore')");
+        expect(welcome).toContain("useState(() => start === 'restore' ||");
         expect(welcome).toMatch(/setShowRecovery\(true\); setError\(null\); \}\}[\s\S]{0,900}🔑 Recover with 12 Words/);
     });
 

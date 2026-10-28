@@ -17,6 +17,8 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 // 4394119880: on the opener's own phone, a line the node withdrew (Cancel request from another app) stayed, drawn as sent.
 // Review 4394120364: the Requests list was kept per member, so it followed them into another community. Review 4394670854:
 // once the preview wrote a request's people, the Talk badge, Home's Needs you and the contact picker's Recents counted it.
+// Review 4395542064: the open chat's poll wrote the node's `request` into a DM before the pins' gate, so with the pins
+// unread a node could hide a chat held here from the list and swap its composer for an Accept card.
 
 const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
@@ -68,8 +70,9 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests, getGlobalUnreadCount, getUnreadByConversation, getRecentChatMembers } from '../db';
-import { messageRequestsStoreKey } from '../storage-keys';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests, getGlobalUnreadCount, getUnreadByConversation, getRecentChatMembers, _resetDmPeerPinsForTests } from '../db';
+import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 
@@ -459,5 +462,44 @@ describe('the Requests list, kept per community (review 4394120364)', () => {
         expect(h.store.get(messageRequestsStoreKey(bo.publicKey, CASTLEMAINE_FILE)) ?? null).toBeNull();
         expect(h.store.get(messageRequestsStoreKey(bo.publicKey, MULLUM_FILE)) ?? null).toBe(before);
         expect(await getMessageRequests(bo.publicKey)).toBeNull();
+    });
+});
+
+describe("the pins' gate on a request the node names (review 4395542064)", () => {
+    /** Bo's pins can't be read while `fn` runs, in a new run of the app (dm-line-binding.test.ts's unreadablePins). */
+    async function unreadablePins<T>(fn: () => Promise<T>): Promise<T> {
+        _resetDmPeerPinsForTests();
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const real = getItem.getMockImplementation()!;
+        getItem.mockImplementation(async (k: string) => { if (k.startsWith(dmPeerPinsStoreKey(bo.publicKey, ''))) throw new Error('storage unavailable'); return real(k); });
+        try { return await fn(); } finally { getItem.mockImplementation(real); }
+    }
+    const requestOf = (id: string) => (sql.prepare('SELECT request FROM conversations WHERE id = ?').get(id) as any)?.request ?? null;
+
+    it('a DM held here: with the pins unread, the request the node names is not written, and the chat stays in the list with its composer', async () => {
+        const kaiChat = node.convs.find((c) => c.id === 'dm-bo-kai')!;
+        kaiChat.request = { state: 'pending', from: kai.publicKey, at: new Date(clock - 500).toISOString() };
+
+        expect(await unreadablePins(() => withScreens(() => syncSingleConversation(kaiChat.id)))).toBe(false);
+        expect(requestOf(kaiChat.id)).toBeNull();
+        expect((await getConversation(kaiChat.id, bo.publicKey))?.request ?? null).toBeNull();
+        expect((await withScreens(() => getConversations(bo.publicKey))).map((c: any) => c.id)).toEqual(['dm-bo-kai']);
+
+        // Control: once the pins read, the same answer is written, so the stand-in does reach the write.
+        expect(await withScreens(() => syncSingleConversation(kaiChat.id))).toBe(true);
+        expect(JSON.parse(requestOf(kaiChat.id))).toMatchObject({ state: 'pending', from: kai.publicKey });
+    });
+
+    it('a DM this phone has no row of: with the pins unread, no row is written for it', async () => {
+        const req: Conv = { id: 'dm-rhea-bo-gate', participants: [rhea.publicKey, bo.publicKey], request: { state: 'pending', from: rhea.publicKey, at: new Date(clock + 500).toISOString() } };
+        node.convs.push(req);
+        write(req, rhea, 'first words from Rhea');
+
+        expect(await unreadablePins(() => withScreens(() => syncSingleConversation(req.id)))).toBe(false);
+        expect(sql.prepare('SELECT id FROM conversations WHERE id = ?').get(req.id) ?? null).toBeNull();
+
+        // Control: once the pins read, it is written with its request.
+        expect(await withScreens(() => syncSingleConversation(req.id))).toBe(true);
+        expect(JSON.parse(requestOf(req.id))).toMatchObject({ state: 'pending', from: rhea.publicKey });
     });
 });

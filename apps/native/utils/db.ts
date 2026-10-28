@@ -4783,29 +4783,6 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
         if (msgData?.conversation && 'mute' in msgData.conversation) {
             rememberChatMute(conversationId, msgData.conversation.mute ?? null);
         }
-        if (msgData?.conversation && 'request' in msgData.conversation) {
-            try {
-                const reqJson = msgData.conversation.request ? JSON.stringify(msgData.conversation.request) : null;
-                const db = await getDb();
-                const conv = msgData.conversation;
-                await db.runAsync(`
-                    INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET request = excluded.request
-                    WHERE request IS NOT excluded.request
-                `, [
-                    conversationId,
-                    conv.type || 'dm',
-                    conv.postId || conv.post_id || null,
-                    conv.name || null,
-                    conv.createdBy || '',
-                    conv.createdAt || new Date().toISOString(),
-                    reqJson
-                ]);
-            } catch (e: any) {
-                console.warn(`[Sync] Could not update conversation request: ${e?.message || e}`);
-            }
-        }
         const messages = msgData.messages;
         if (!Array.isArray(messages)) return false;
 
@@ -4832,6 +4809,31 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
             } catch {
                 if (await isDmHere(database, conversationId, msgData.conversation?.type)) return false;
                 pollPinsUnread = true;
+            }
+        }
+        // The node's word on the chat's request, after the gate and never while the pins are unread: it decides whether the
+        // chat is in the list (isRequestFor) and whether it has a composer (requestModeOf), so a node answering a request on a
+        // DM held here would hide that chat and stop its sends in the very state the gate exists for (review 4395542064).
+        if (!pollPinsUnread && msgData?.conversation && 'request' in msgData.conversation) {
+            try {
+                const reqJson = msgData.conversation.request ? JSON.stringify(msgData.conversation.request) : null;
+                const conv = msgData.conversation;
+                await database.runAsync(`
+                    INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET request = excluded.request
+                    WHERE request IS NOT excluded.request
+                `, [
+                    conversationId,
+                    conv.type || 'dm',
+                    conv.postId || conv.post_id || null,
+                    conv.name || null,
+                    conv.createdBy || '',
+                    conv.createdAt || new Date().toISOString(),
+                    reqJson
+                ]);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not update conversation request: ${e?.message || e}`);
             }
         }
         // A message request for this reader: its people, so its line opens and the chat is named (PR #2540 review

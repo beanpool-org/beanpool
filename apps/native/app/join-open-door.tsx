@@ -596,7 +596,9 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         }
         setSignin(null);
         setRefusal(null);
-        setMessage(account.createdHere && answer.kind === 'already_joined' ? sayNew.alreadyJoined : doorAnswerWords(answer, place));
+        // Said as the screen speaks: to a new account (`keyKind`), the key an invite join took over included, whose restore
+        // phase draws 🔑 Restore my account under this sentence (PR #2564 review).
+        setMessage(keyKind === 'new' && answer.kind === 'already_joined' ? sayNew.alreadyJoined : doorAnswerWords(answer, place));
         setPhase(next === 'restore' ? 'restore' : answer.kind === 'door_closed' ? 'unavailable' : 'closed');
     }
 

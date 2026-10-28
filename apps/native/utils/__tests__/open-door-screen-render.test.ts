@@ -122,7 +122,9 @@ const work = vi.hoisted(() => {
     return { started, hook };
 });
 vi.mock('../use-door-work', () => ({ useDoorWork: () => work.hook }));
-vi.mock('../LocalAuth', () => ({ authenticateUser: async () => false }));
+// The phone's lock, asked before a sign-in links to a key on the phone: refused unless a case passes it.
+const lock = vi.hoisted(() => ({ passes: false }));
+vi.mock('../LocalAuth', () => ({ authenticateUser: async () => lock.passes }));
 vi.mock('../vault', () => ({ vaultCopyKnown: async () => false }));
 vi.mock('../one-way-back', () => ({ startOneWayBack: async () => {} }));
 vi.mock('../global-door-offer', () => ({ rememberGlobalDoor: vi.fn() }));
@@ -182,6 +184,7 @@ beforeEach(() => {
     route.replaced.length = 0;
     said.alerts.length = 0;
     doorSignIn.answer = null;
+    lock.passes = false;
     takeRestoreAt();
     phone.key = KEY;
     vi.mocked(SecureStore.setItemAsync).mockClear();
@@ -496,5 +499,24 @@ describe("another community's door on a phone with no account (S2)", () => {
         expect(takeRestoreAt()).toBe(SELF);
         expect(takeRestoreAt()).toBeNull();
         nothingWritten();
+    });
+
+    it("a key an invite join took over, its sign-in has an account there already: the new account's sentence over 🔑 Restore my account", async () => {
+        store.map.set('beanpool_pending_onboarding', takenOver(KEY.publicKey));
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [SELF]: { ...OPEN, features: { ...OPEN.features, wordsDoor: false } } });
+        doorSignIn.answer = { kind: 'already_joined', message: 'This sign-in already has an account here.' };
+        // The key is on the phone: its lock is asked before the sign-in, as for any key the phone holds.
+        lock.passes = true;
+        await render();
+        expect(text()).toContain('Join Riverbend Open with a new BeanPool account on this phone.');
+        await tap('Continue with Google');
+        // Before the fix the account's sentence ("To join as the account on this phone…") sat over the Restore button.
+        expect(text()).toContain('This sign-in already has a BeanPool account in Riverbend Open. Restore it with your 12 words or your sign-in instead.');
+        expect(text()).not.toContain('To join as the account on this phone, use a different sign-in.');
+        expect(text()).toContain('🔑 Restore my account');
+        // A refusal at the sign-in leaves the key and its record alone.
+        expect(store.map.get('beanpool_pending_onboarding')).toBe(takenOver(KEY.publicKey));
+        expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
     });
 });

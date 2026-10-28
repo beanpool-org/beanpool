@@ -79,8 +79,10 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 const KEY = 'c'.repeat(64);
+const DEFAULT_IDENTITY = { publicKey: KEY, privateKey: 'd'.repeat(64), callsign: 'Damo' };
+let currentIdentity: typeof DEFAULT_IDENTITY | null = DEFAULT_IDENTITY;
 vi.mock('../../app/IdentityContext', () => ({
-    useIdentity: () => ({ identity: { publicKey: 'c'.repeat(64), privateKey: 'd'.repeat(64), callsign: 'Damo' } }),
+    useIdentity: () => ({ identity: currentIdentity }),
 }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({ 'X-Test-Signed': '1' }) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => null }));
@@ -117,6 +119,7 @@ beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
+    currentIdentity = DEFAULT_IDENTITY;
     store.map.clear();
     store.map.set('beanpool_anchor_url', 'https://home.example');
     nav.pushed.length = 0;
@@ -303,5 +306,16 @@ describe('the card is what the server it was read from claims', () => {
         await open();
         expect(name()).toBe('Riverside');
         expect(shownHost()).toBe('riverside.example');
+    });
+});
+
+describe('the card with no account on the phone', () => {
+    it('shows how to ask via global community, and old sentence is gone', async () => {
+        currentIdentity = null;
+        await open();
+        expect(byTestId('community-card-needs-account')?.textContent).toBe('Look around global first, join there to get an account, then find Riverside in Find a community.');
+        expect(host.textContent).not.toContain('Explore BeanPool worldwide');
+        expect(host.textContent).not.toContain('To ask, you need a BeanPool account first');
+        expect(host.textContent).not.toContain('You join the global community first');
     });
 });

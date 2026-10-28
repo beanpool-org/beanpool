@@ -542,7 +542,6 @@
   "Add a photo to your profile": "افزودن عکس به نمایه خود",
   "Pick a few things you like": "چند مورد از علایق خود را انتخاب کنید",
   "Post something free or for swap": "موردی رایگان یا برای مبادله ثبت کنید",
-  "Ask a community to let you in": "درخواست پیوستن به یک جامعه",
   "{n} day|{n} days": {
     "one": "{n} روز",
     "other": "{n} روز"
@@ -561,7 +560,6 @@
   "Your credit opens with a first trade.": "اعتبار شما با اولین معامله باز می‌شود.",
   "Spending is paused for now. You can still receive and sell.": "خرج کردن فعلاً متوقف است. همچنان می‌توانید دریافت کنید و بفروشید.",
   "{amount} · room to spend {room}": "{amount} · سقف خرج کردن {room}",
-  "The worldwide community": "جامعه جهانی",
   "1 member. You're first. Invite someone.": "۱ عضو. شما اولین نفر هستید. کسی را دعوت کنید.",
   "1 member. You're first.": "۱ عضو. شما اولین نفر هستید.",
   "{n} trade this month|{n} trades this month": {
@@ -6125,5 +6123,15 @@
   "Your picture, until you choose a banner.": "تصویر شما، تا زمانی که یک بنر انتخاب کنید.",
   "You're looking around as a visitor. Nothing is saved until you join.": "شما به‌عنوان بازدیدکننده در حال گشت‌وگذار هستید. تا عضو نشوید چیزی ذخیره نمی‌شود.",
   "Join to post": "برای انتشار عضو شوید",
-  "Join to message": "برای پیام دادن عضو شوید"
+  "Join to message": "برای پیام دادن عضو شوید",
+  "The global community": "جامعه جهانی",
+  "Choose a name": "یک نام انتخاب کنید",
+  "Say roughly where you are": "تقریباً بگویید کجا هستید",
+  "Add a picture (a preset counts)": "یک تصویر اضافه کنید (تصاویر پیش‌فرض هم پذیرفته می‌شوند)",
+  "Look at an example Ledger": "یک دفتر کل نمونه را مشاهده کنید",
+  "Say hello to someone near you": "به فردی نزدیک خود سلام کنید",
+  "Tell me when a community starts here, or say you'd help start one": "وقتی جامعه‌ای اینجا شروع شد به من خبر بده، یا بگو برای شروع کمک می‌کنی",
+  "Nothing within 250 km yet.": "هنوز چیزی در فاصله ۲۵۰ کیلومتری نیست.",
+  "See what people post elsewhere ›": "ببینید دیگران در جاهای دیگر چه ارسال می‌کنند ›",
+  "Set your area": "منطقه خود را تنظیم کنید"
 }

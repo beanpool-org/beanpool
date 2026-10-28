@@ -175,7 +175,10 @@ export interface HomeCards {
     needs?: { items: HomeNeedsItem[] };
     safety?: { words: true; signInLinked: false };
     find?: HomeFind;
-    steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
+    steps?: {
+        joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean;
+        invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
+    };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: HomeDealItem[] };
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
     enterprise?: {
@@ -776,7 +779,7 @@ export function marketForward(params: { tab?: string | string[]; dealsTab?: stri
  * A First steps line (§3.1), with what is done. `suggestion`: a line that never holds the card open (the phone can't
  * tick it: a knock is kept on the community knocked on, not here); it goes once the phone remembers a knock.
  */
-export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask'; text: string; done: boolean; suggestion?: true }
+export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch'; text: string; done: boolean; suggestion?: true }
 
 /**
  * `canInvite`: whether the reader can invite here ({@link invitesForReader}). The node sends `invited: false` wherever
@@ -815,15 +818,19 @@ function communityToAsk(find: HomeFind | undefined): boolean {
 }
 
 /**
- * The First steps lines of the global node (§3.1, §7; the web app's, apps/pwa lib/home-cards.ts `stepLines`): a first
- * post, free or for swap (Beans are off there), and, while a community within 250 km has an address and the phone
- * remembers no knock, a suggestion to ask one to let them in, which never holds the card open. The design's "Set your area" is left
- * out, as on the web: no screen on the phone sets the account's area yet, and every line opens a screen.
+ * The first-week card replaces First steps for a global member (§3.2, §6): the seven real steps, ticked by the node's
+ * facts; a done step never un-ticks; the card ends after 14 days or all done.
  */
-export function globalStepLines(steps: NonNullable<HomeCards['steps']>, find: HomeFind | undefined, knocked: boolean): StepLine[] {
-    const lines: StepLine[] = [{ id: 'post', text: t('Post something free or for swap'), done: steps.firstPost }];
-    if (!knocked && communityToAsk(find)) lines.push({ id: 'ask', text: t('Ask a community to let you in'), done: false, suggestion: true });
-    return lines;
+export function globalStepLines(steps: NonNullable<HomeCards['steps']>, _find?: HomeFind | undefined, _knocked?: boolean): StepLine[] {
+    return [
+        { id: 'name', text: t('Choose a name'), done: true },
+        { id: 'area', text: t('Say roughly where you are'), done: !!steps.area },
+        { id: 'photo', text: t('Add a picture (a preset counts)'), done: !!steps.photo },
+        { id: 'sawLedger', text: t('Look at an example Ledger'), done: !!steps.sawLedger },
+        { id: 'post', text: t('Post something free or for swap'), done: !!steps.firstPost },
+        { id: 'saidHello', text: t('Say hello to someone near you'), done: !!steps.saidHello },
+        { id: 'watch', text: t("Tell me when a community starts here, or say you'd help start one"), done: !!steps.watch },
+    ];
 }
 
 /**
@@ -865,15 +872,18 @@ export function firstSteps(
 ): { lines: StepLine[]; note: string | null; show: boolean } {
     const s = answer.cards.steps;
     if (!s) return { lines: [], note: null, show: false };
-    if (answer.profile !== 'global') {
-        const lines = stepLines(s, ctx.interests.length > 0, invitesForReader(answer.features, ctx.role));
-        return { lines, note: null, show: lines.some(l => !l.done) };
-    }
-    const lines = globalStepLines(s, answer.cards.find, !!ctx.knocked);
-    const note = probationSentence(answer.me?.probation);
+    const global = answer.profile === 'global';
+    const lines = global
+        ? globalStepLines(s, answer.cards.find, !!ctx.knocked)
+        : stepLines(s, ctx.interests.length > 0, invitesForReader(answer.features, ctx.role));
+    const note = global ? probationSentence(answer.me?.probation) : null;
     const joined = Date.parse(answer.me?.joinedAt ?? s.joinedAt ?? '');
     const young = Number.isFinite(joined) && (ctx.now ?? Date.now()) - joined < STEPS_NEW_DAYS * DAY_MS;
-    return { lines, note, show: young || lines.some(l => !l.done && !l.suggestion) || note !== null };
+    if (global) {
+        // §3.2, §6: the card ends after 14 days or all done
+        return { lines, note, show: young && lines.some(l => !l.done) };
+    }
+    return { lines, note: null, show: lines.some(l => !l.done) };
 }
 
 /**
@@ -1055,7 +1065,7 @@ export function beansLines(b: NonNullable<HomeCards['beans']>): { main: string; 
 /** The community's card (§3.1): its name and totals, public by rule. */
 export function communityLines(card: HomeCards['community'] | undefined, profile: string, invitesOn: boolean): { title: string; line: string } {
     const global = profile === 'global';
-    const title = global ? t('The worldwide community') : (card?.name?.trim() || cardName('community'));
+    const title = global ? t('The global community') : (card?.name?.trim() || cardName('community'));
     if (!card) return { title, line: '' };
     if (!global && card.members <= 1) {
         return { title, line: invitesOn ? t("1 member. You're first. Invite someone.") : t("1 member. You're first.") };

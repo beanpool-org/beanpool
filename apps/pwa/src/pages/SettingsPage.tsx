@@ -22,7 +22,9 @@ import {
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
 import { useCommunityInfo } from '../lib/features';
-import { globalCommunityLink, isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
+import { globalCommunityLink, isAppsGlobal, phoneLaterLines, usePhoneBrowser } from '../lib/global-entry';
+import { isInstalled, useDeferredInstallPrompt, clearDeferredPrompt, DesktopInstallSteps } from '../components/InstallPrompt';
+import { StoreBadges, ApkDownloadLink } from '../components/UsePhoneAppCard';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
@@ -67,7 +69,7 @@ interface Props {
     onBack: () => void;
     themePreference: ThemePreference;
     onThemePreferenceChange: (preference: ThemePreference) => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area';
     /** With initialMode 'guide': the guide page to open at (Home's Tips card, Read more); absent: its front page. */
     initialGuidePage?: string | null;
     onReRunSetup?: () => void;
@@ -1135,7 +1137,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
                              not this community's node), the website. The same rows as the member app's Settings. ─── */}
-                        <BeanPoolSettingsGroup onHelp={() => setMode('guide')} onSuggest={() => setMode('suggest')} globalCommunity={globalCommunity} />
+                        <BeanPoolSettingsGroup onHelp={() => setMode('guide')} onSuggest={() => setMode('suggest')} globalCommunity={globalCommunity} phoneLater={phoneLater} />
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
@@ -1597,30 +1599,43 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 )}
 
                 {/* ─── MODE: YOUR AREA ─── */}
-                {mode === 'area' && areaLimits && (
-                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800" data-testid="settings-area">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 <>{t(AREA_STEP_WORDS.settingsRow)}</></h3>
-                        <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-3 break-words" data-testid="settings-area-current">{areaLine}</p>
-                        {myArea && (
+                {mode === 'area' && (
+                    areaLimits ? (
+                        <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800" data-testid="settings-area">
+                            <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 <>{t(AREA_STEP_WORDS.settingsRow)}</></h3>
+                            <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-3 break-words" data-testid="settings-area-current">{areaLine}</p>
+                            {myArea && (
+                                <button
+                                    data-testid="settings-area-clear"
+                                    onClick={clearMyArea}
+                                    disabled={areaClearing}
+                                    className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
+                                >
+                                    {areaClearing ? t('Clearing…') : t('Clear')}
+                                </button>
+                            )}
+                            {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
+                            <AreaStep
+                                send={senderForMe}
+                                limits={areaLimits}
+                                hideTitle
+                                skipLabel={t('← Back to Settings')}
+                                onSkip={() => setMode('menu')}
+                                onSaved={(a, placeName) => { rememberAreaPlace(placeName); setAreaRefusal(null); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
+                            />
+                        </div>
+                    ) : (
+                        <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800 text-center">
+                            <p className="text-sm text-nature-600 dark:text-nature-400 mb-4">{t('Checking area settings…')}</p>
                             <button
-                                data-testid="settings-area-clear"
-                                onClick={clearMyArea}
-                                disabled={areaClearing}
-                                className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
+                                type="button"
+                                onClick={() => setMode('menu')}
+                                className="px-4 py-2 bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 rounded-xl font-semibold text-sm cursor-pointer"
                             >
-                                {areaClearing ? t('Clearing…') : t('Clear')}
+                                {t('← Back to Settings')}
                             </button>
-                        )}
-                        {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
-                        <AreaStep
-                            send={senderForMe}
-                            limits={areaLimits}
-                            hideTitle
-                            skipLabel={t('← Back to Settings')}
-                            onSkip={() => setMode('menu')}
-                            onSaved={(a, placeName) => { rememberAreaPlace(placeName); setAreaRefusal(null); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
-                        />
-                    </div>
+                        </div>
+                    )
                 )}
 
                 {/* ─── MODE: NOTIFICATION PREFERENCES ─── */}
@@ -1979,14 +1994,38 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 }
 
 /**
- * Settings → BeanPool: Help & how it works, Suggest a change (hidden while FEEDBACK_LIVE is false), beanpool.org.
+ * Settings → BeanPool: Help & how it works, Suggest a change (hidden while FEEDBACK_LIVE is false), beanpool.org,
+ * Use the phone app (both), Install on this computer (desktop only).
  * The rows come from beanPoolSettingsEntries in @beanpool/core, the same list the member app's Settings uses.
  */
-export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null }: {
+export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null, phoneLater = null }: {
     onHelp: () => void; onSuggest: () => void; feedbackLive?: boolean;
     /** The global community this node names (lib/global-entry.ts globalCommunityLink): a row of its own. Null: none. */
     globalCommunity?: { href: string; host: string } | null;
+    /** How to restore on phone (lib/global-entry.ts phoneLaterLines) */
+    phoneLater?: string[] | null;
 }) {
+    const isPhone = usePhoneBrowser();
+    const installed = isInstalled();
+    const deferredPrompt = useDeferredInstallPrompt();
+    const [showPhoneApp, setShowPhoneApp] = useState(false);
+    const [showInstallSteps, setShowInstallSteps] = useState(false);
+
+    const handleDesktopInstall = async () => {
+        if (deferredPrompt) {
+            try {
+                await deferredPrompt.prompt();
+                await deferredPrompt.userChoice;
+            } catch {
+                // Dismissed or prompt error
+            } finally {
+                clearDeferredPrompt();
+            }
+        } else {
+            setShowInstallSteps(prev => !prev);
+        }
+    };
+
     const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left no-underline';
     return (
         <div>
@@ -2041,6 +2080,63 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         </span>
                         <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                     </a>
+                )}
+                {/* Use the phone app (front doors S4): both phone and computer */}
+                <div>
+                    <button
+                        type="button"
+                        onClick={() => setShowPhoneApp(prev => !prev)}
+                        className={rowClass}
+                        data-testid="settings-use-phone-app"
+                        aria-expanded={showPhoneApp}
+                    >
+                        <span className="text-xl" aria-hidden="true">📲</span>
+                        <span className="flex-1 min-w-0">
+                            <span className="block">{t('Use the phone app')}</span>
+                            <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">{t('Your account comes with you.')}</span>
+                        </span>
+                        <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">{showPhoneApp ? '▾' : '›'}</span>
+                    </button>
+                    {showPhoneApp && (
+                        <div className="p-4 bg-nature-50 dark:bg-nature-950/50" data-testid="settings-use-phone-app-details">
+                            <StoreBadges />
+                            <ApkDownloadLink />
+                            {phoneLater && phoneLater.length > 0 && (
+                                <div className="mt-3 space-y-1 text-xs text-nature-600 dark:text-nature-300">
+                                    {phoneLater.map((line, i) => (
+                                        <p key={i} className="m-0 leading-relaxed">
+                                            <BoldWords text={line} />
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+                {/* Install on this computer (front doors S4): desktop only */}
+                {!isPhone && !installed && (
+                    <div>
+                        <button
+                            type="button"
+                            onClick={handleDesktopInstall}
+                            className={rowClass}
+                            data-testid="settings-install-computer"
+                            aria-expanded={showInstallSteps}
+                        >
+                            <span className="text-xl" aria-hidden="true">💻</span>
+                            <span className="flex-1 min-w-0">
+                                <span className="block">{t('Install on this computer')}</span>
+                            </span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">
+                                {deferredPrompt ? '↗' : (showInstallSteps ? '▾' : '›')}
+                            </span>
+                        </button>
+                        {showInstallSteps && (
+                            <div className="p-4 bg-nature-50 dark:bg-nature-950/50">
+                                <DesktopInstallSteps />
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

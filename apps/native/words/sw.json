@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Weka picha kwenye wasifu wako",
   "Pick a few things you like": "Chagua vitu vichache unavyopenda",
   "Post something free or for swap": "Weka kitu cha bure au cha kubadilishana",
-  "Ask a community to let you in": "Omba jumuiya ikuruhusu kuingia",
   "{n} day|{n} days": {
     "one": "siku {n}",
     "other": "siku {n}"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "Kikomo chako cha mkopo hufunguka na biashara ya kwanza.",
   "Spending is paused for now. You can still receive and sell.": "Matumizi yamesitishwa kwa sasa. Bado unaweza kupokea na kuuza.",
   "{amount} · room to spend {room}": "{amount} · nafasi ya kutumia {room}",
-  "The worldwide community": "Jumuiya ya kimataifa",
   "1 member. You're first. Invite someone.": "Mwanachama 1. Wewe ni wa kwanza. Mwalike mtu.",
   "1 member. You're first.": "Mwanachama 1. Wewe ni wa kwanza.",
   "{n} trade this month|{n} trades this month": {
@@ -6125,5 +6123,15 @@
   "Your picture, until you choose a banner.": "Picha yako, hadi utakapochagua bango.",
   "You're looking around as a visitor. Nothing is saved until you join.": "Unatazama kama mgeni. Hakuna kinachohifadhiwa hadi ujiunge.",
   "Join to post": "Jiunge ili uchapishe",
-  "Join to message": "Jiunge ili utume ujumbe"
+  "Join to message": "Jiunge ili utume ujumbe",
+  "The global community": "Jumuiya ya kimataifa",
+  "Choose a name": "Chagua jina",
+  "Say roughly where you are": "Sema takriban mahali ulipo",
+  "Add a picture (a preset counts)": "Ongeza picha (picha iliyopo inafaa)",
+  "Look at an example Ledger": "Tazama mfano wa leja",
+  "Say hello to someone near you": "Msalimie mtu aliye karibu nawe",
+  "Tell me when a community starts here, or say you'd help start one": "Niarifu jumuiya itakapoanza hapa, au taja kuwa ungesaidia kuianzisha",
+  "Nothing within 250 km yet.": "Hakuna chochote ndani ya kilomita 250 bado.",
+  "See what people post elsewhere ›": "Ona kile watu wanachochapisha kwingineko ›",
+  "Set your area": "Weka eneo lako"
 }

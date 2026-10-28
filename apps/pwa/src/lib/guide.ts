@@ -10,7 +10,6 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import bundledGuide from '@beanpool/guide/generated/guide.json';
 import {
     validateGuide, loadLocalGuide, refreshGuideFromWebsite, guideInLanguage,
     loadCachedLanguageGuide, refreshLanguageGuideFromWebsite,
@@ -21,12 +20,47 @@ import { guideTitlesFor } from './guide-titles';
 import { shownLanguage } from './language';
 import { useLanguage } from './useLanguage';
 
-const BUNDLED = validateGuide(bundledGuide);
+let BUNDLED: Guide | null = null;
+let bundledPromise: Promise<Guide> | null = null;
 
-/** The copy built into this bundle. Works with no connection at all. */
+/** Lazy-load the bundled guide JSON on demand so it does not inflate the first-screen entry chunk. */
+export async function loadBundledGuide(): Promise<Guide> {
+    if (BUNDLED) return BUNDLED;
+    if (!bundledPromise) {
+        bundledPromise = import('@beanpool/guide/generated/guide.json')
+            .then((m) => {
+                const raw = m.default ?? m;
+                const valid = validateGuide(raw);
+                if (!valid) throw new Error("The bundled members' guide is invalid");
+                BUNDLED = valid;
+                return valid;
+            })
+            .catch((err) => {
+                bundledPromise = null;
+                throw err;
+            });
+    }
+    return bundledPromise;
+}
+
+/**
+ * The copy built into this bundle. In the browser, loadBundledGuide() must be awaited first;
+ * in Node, it is resolved synchronously.
+ */
 export function getBundledGuide(): Guide {
-    // The guide package's tests validate this file, and this app's tests validate it with this function.
-    if (!BUNDLED) throw new Error("The bundled members' guide is invalid");
+    if (!BUNDLED) {
+        if (typeof process !== 'undefined' && process.versions?.node) {
+            try {
+                const createReq = (process as any).getBuiltinModule?.('module')?.createRequire;
+                const req = createReq ? createReq(import.meta.url) : (globalThis as any).require;
+                const raw = req?.('@beanpool/guide/generated/guide.json');
+                if (raw) BUNDLED = validateGuide(raw);
+            } catch {
+                // not in node
+            }
+        }
+    }
+    if (!BUNDLED) throw new Error("The bundled members' guide is invalid or not yet loaded");
     return BUNDLED;
 }
 
@@ -64,7 +98,8 @@ function publishLang(lang: string, next: Guide | null) {
 async function startRefresh() {
     if (Date.now() - lastCheckAt < RECHECK_MS) return;
     lastCheckAt = Date.now();
-    const local = await loadLocalGuide(guideStorage, getBundledGuide());
+    const bundled = await loadBundledGuide();
+    const local = await loadLocalGuide(guideStorage, bundled);
     if (!sessionGuide || local.guide.version > sessionGuide.guide.version) publish(local);
     if (typeof fetch !== 'function') return;
     const remote = await refreshGuideFromWebsite(local.guide, guideStorage, (url, init) => fetch(url, init));
@@ -105,7 +140,13 @@ export function inShownLanguage(guide: Guide): Guide {
  * member's language (inShownLanguage). Re-renders when the member picks another language.
  */
 export function useGuide(): LoadedGuide {
-    const [loaded, setLoaded] = useState<LoadedGuide>(() => sessionGuide ?? { guide: getBundledGuide(), source: 'bundled' });
+    const [loaded, setLoaded] = useState<LoadedGuide>(() => {
+        try {
+            return sessionGuide ?? { guide: getBundledGuide(), source: 'bundled' };
+        } catch {
+            return sessionGuide ?? { guide: { version: 0, schema: 1, hash: '', sections: [], guides: [] }, source: 'bundled' };
+        }
+    });
     const [lang] = useLanguage();
     const [, setLangGuideTick] = useState(0);
 
@@ -114,6 +155,11 @@ export function useGuide(): LoadedGuide {
     useEffect(() => {
         listeners.add(setLoaded);
         if (sessionGuide) setLoaded(sessionGuide);
+        else {
+            loadBundledGuide().then((g) => {
+                if (!sessionGuide) setLoaded({ guide: g, source: 'bundled' });
+            }).catch(() => {});
+        }
         startRefresh().catch(() => { /* keep what is on screen */ });
         return () => { listeners.delete(setLoaded); };
     }, []);

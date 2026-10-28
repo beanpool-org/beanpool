@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "+ पोस्ट जोड़ें पर टैप करें: रोटी, सवारी, आपका एक घंटा। ज़रूरत से पहले पेशकश पोस्ट करें, ताकि हर कोई कुछ लाए।",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "मुफ़्त या अदला-बदली के लिए + पोस्ट जोड़ें पर टैप करें। ज़रूरत वह है जिसे आप खोज रहे हैं।",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "फलियाँ दी और ली गई मदद को गिनती हैं। हर कोई शून्य से शुरू करता है, और शून्य एक अच्छी स्थिति है: इसका मतलब है कि आपने जितना लिया उतना दिया है।",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "वैश्विक समुदाय में फलियाँ नहीं हैं। अपनी पोस्ट में बताएं कि आप बदले में क्या चाहते हैं: मुफ़्त, अदला-बदली, या पूछें।",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "एक मोटा अनुमान: 40 फलियाँ किसी के लगभग एक घंटे के समय के बराबर हैं। वास्तविक कीमत आप और दूसरा व्यक्ति तय करते हैं।",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "आपके 12 शब्द आपके खाते की चाबी हैं, और कोई पासवर्ड नहीं है। उन्हें कागज़ पर लिखकर सुरक्षित रखें: कोई उन्हें रीसेट नहीं कर सकता।",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "नक्शा दिखाता है कि आपके निकट क्या है: हरे पिन ऑफ़र हैं, नारंगी ज़रूरतें हैं, बैंगनी कार्यक्रम हैं। आपका पिन आपके घर के ठीक ऊपर के बजाय पास रह सकता है।",
@@ -784,5 +783,7 @@
   "Start a project or an enterprise →": "कोई प्रोजेक्ट या उपक्रम शुरू करें →",
   "Social Circle": "सामाजिक दायरा",
   "Working Group": "कार्य समूह",
-  "Guild": "गिल्ड"
+  "Guild": "गिल्ड",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "वैश्विक समुदाय में फलियाँ नहीं हैं। अपनी पोस्ट में बताएं कि आप बदले में क्या चाहते हैं: मुफ़्त, अदला-बदली, या पूछें।",
+  "Your first week": "आपका पहला सप्ताह"
 }

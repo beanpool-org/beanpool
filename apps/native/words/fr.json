@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Ajoutez une photo à votre profil",
   "Pick a few things you like": "Choisissez quelques centres d'intérêt",
   "Post something free or for swap": "Publiez un don ou un échange",
-  "Ask a community to let you in": "Demandez à une communauté de vous accueillir",
   "{n} day|{n} days": {
     "one": "{n} jour",
     "other": "{n} jours"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "Votre crédit s'ouvre avec votre premier échange.",
   "Spending is paused for now. You can still receive and sell.": "Les dépenses sont suspendues pour l'instant. Vous pouvez toujours recevoir et vendre.",
   "{amount} · room to spend {room}": "{amount} · marge de dépense {room}",
-  "The worldwide community": "La communauté mondiale",
   "1 member. You're first. Invite someone.": "1 membre. Vous êtes le premier. Invitez quelqu'un.",
   "1 member. You're first.": "1 membre. Vous êtes le premier.",
   "{n} trade this month|{n} trades this month": {
@@ -6125,5 +6123,15 @@
   "Your picture, until you choose a banner.": "Votre photo, jusqu'à ce que vous choisissiez une bannière.",
   "You're looking around as a visitor. Nothing is saved until you join.": "Vous faites le tour en tant que visiteur. Rien n'est enregistré tant que vous n'avez pas rejoint.",
   "Join to post": "Rejoindre pour publier",
-  "Join to message": "Rejoindre pour écrire"
+  "Join to message": "Rejoindre pour écrire",
+  "The global community": "La communauté globale",
+  "Choose a name": "Choisissez un nom",
+  "Say roughly where you are": "Indiquez approximativement où vous êtes",
+  "Add a picture (a preset counts)": "Ajoutez une photo (une prédéfinie compte)",
+  "Look at an example Ledger": "Consultez un grand livre d'exemple",
+  "Say hello to someone near you": "Dites bonjour à quelqu'un près de chez vous",
+  "Tell me when a community starts here, or say you'd help start one": "Prévenez-moi quand une communauté démarre ici, ou proposez d'en créer une",
+  "Nothing within 250 km yet.": "Rien dans un rayon de 250 km pour l'instant.",
+  "See what people post elsewhere ›": "Voir ce que les gens publient ailleurs ›",
+  "Set your area": "Définissez votre zone"
 }

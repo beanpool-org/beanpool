@@ -50,3 +50,36 @@ describe('MarketplaceCard with no photo', () => {
         expect(tile).toBeInTheDocument();
     });
 });
+
+describe('MarketplaceCard picture ladder: banner before tile', () => {
+    const postWithBannerOnly = {
+        ...post,
+        photos: [],
+        authorBannerUrl: '/api/shops/s1/photo?v=17&k=KEY0',
+    } as unknown as MarketplacePost;
+
+    it.each(['grid', 'list'] as const)('the %s card renders the enterprise banner before the category tile', (viewMode) => {
+        const { container, queryByTestId } = render(<MarketplaceCard post={postWithBannerOnly} viewMode={viewMode} />);
+        const img = container.querySelector(`img[alt="${postWithBannerOnly.title}"]`);
+        expect(img?.getAttribute('src')).toBe('/api/shops/s1/photo?v=17&k=KEY0');
+        expect(queryByTestId('category-tile')).toBeNull();
+    });
+
+    it('the compact card renders the enterprise banner before the category tile', () => {
+        const { container, queryByTestId } = render(<MarketplaceCard post={postWithBannerOnly} viewMode="compact" />);
+        const img = container.querySelector('img');
+        expect(img?.getAttribute('src')).toBe('/api/shops/s1/photo?v=17&k=KEY0');
+        expect(queryByTestId('category-tile')).toBeNull();
+    });
+
+    it.each(['grid', 'list'] as const)('the %s card prefers own photo over the enterprise banner', (viewMode) => {
+        const postWithBoth = {
+            ...post,
+            photos: PHOTOS,
+            authorBannerUrl: '/api/shops/s1/photo?v=17&k=KEY0',
+        } as unknown as MarketplacePost;
+        const { container } = render(<MarketplaceCard post={postWithBoth} viewMode={viewMode} />);
+        const img = container.querySelector(`img[alt="${post.title}"]`);
+        expect(img?.getAttribute('src')).toBe(`${PHOTOS[0]}&size=thumb`);
+    });
+});

@@ -89,7 +89,7 @@ docker compose version
 
 # Docker live-restore: Docker can then restart or update without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
-# lines after it, so type  sudo -v  and your password before you paste, and this step won't ask.
+# lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
 if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl >/dev/null 2>&1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }

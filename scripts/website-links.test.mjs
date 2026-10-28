@@ -204,6 +204,13 @@ test('the live-restore step reads systemd and Docker first, uses sudo only witho
     assert.ok(/\bsudo -n sh\b/.test(bare), 'and that place is sudo -n sh, which cannot prompt');
     assert.ok(step.split('\n')[1].includes('Not root?') && step.includes('sudo -v'), 'says in plain words what a non-root user does');
 
+    // An interactive zsh (the macOS default) does not skip comment lines unless interactive_comments is set, so it reads
+    // them as commands: a ' (or " or `) opens a quote that runs on through the lines below it and the step never runs, and
+    // a ; & | < > ( ) $ \ would end, chain, redirect or continue the "command".
+    const commentLines = step.split('\n').filter((l) => l.startsWith('#'));
+    assert.ok(commentLines.length > 0, 'the step has comment lines to check');
+    assert.deepEqual(commentLines.filter((l) => /['"`;&|<>()$\\]/.test(l)), [], 'no comment line of the step has a quote or shell operator in it');
+
     // The checks come before anything is written.
     const at = (needle) => commands.indexOf(needle);
     assert.ok(at('command -v systemctl') > 0, 'checks that systemd is there');

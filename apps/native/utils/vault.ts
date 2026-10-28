@@ -394,18 +394,54 @@ export interface VaultHold {
     releaseAt: number;
 }
 
+/**
+ * One copy the vault keeps for this key, as "Where your account can be brought back from" lists it (vault rethink VR1).
+ * The vault keeps one per sign-in account, so a member who linked two Google accounts has two Google copies; it removes
+ * a sign-in's copies together (`/v1/copies/delete` names a provider, or all).
+ */
+export interface VaultCopy {
+    provider: SsoProvider;
+    /**
+     * The day (`YYYY-MM-DD`, UTC) the copy kept now was deposited: the vault's `since`, or on a vault from before VR1 the
+     * same day as `updatedDay`, which every vault's status has carried since V2. Null when the answer says neither.
+     */
+    since: string | null;
+    /** When the copy last brought the account back to a device (the vault's `lastReleasedAt`), or null. */
+    lastReleasedAt: number | null;
+}
+
 export interface VaultStatus {
     /** The sign-ins the vault keeps a copy for, for this key. Only the ones this app offers. */
     providers: SsoProvider[];
+    /** The same copies, one per sign-in account (never folded into one per sign-in), with since when each is kept. */
+    copies: VaultCopy[];
     /** Restores of this account waiting at the vault. */
     holds: VaultHold[];
+}
+
+/** A day as the vault writes one (`YYYY-MM-DD`), and a real one: anything else is no day. */
+function vaultDay(value: unknown): string | null {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+    const at = Date.parse(`${value}T00:00:00Z`);
+    return Number.isFinite(at) && new Date(at).toISOString().startsWith(value) ? value : null;
 }
 
 /** Read the vault's answer to `/v1/copies/status`: anything malformed is left out, never guessed. */
 export function readVaultStatus(body: unknown): VaultStatus {
     const b = (body ?? {}) as { copies?: unknown; holds?: unknown };
-    const copies = Array.isArray(b.copies) ? b.copies : [];
-    const providers = offeredProviders(copies.map(c => (c as { provider?: unknown } | null)?.provider));
+    const listed = Array.isArray(b.copies) ? b.copies : [];
+    const copies: VaultCopy[] = [];
+    for (const c of listed) {
+        const x = (c ?? {}) as Record<string, unknown>;
+        if (!isSsoProvider(x.provider)) continue;
+        const released = x.lastReleasedAt;
+        copies.push({
+            provider: x.provider,
+            since: vaultDay(x.since) ?? vaultDay(x.updatedDay),
+            lastReleasedAt: typeof released === 'number' && Number.isSafeInteger(released) && released > 0 ? released : null,
+        });
+    }
+    const providers = offeredProviders(listed.map(c => (c as { provider?: unknown } | null)?.provider));
     const holds: VaultHold[] = [];
     for (const h of Array.isArray(b.holds) ? b.holds : []) {
         const x = (h ?? {}) as Record<string, unknown>;
@@ -414,7 +450,7 @@ export function readVaultStatus(body: unknown): VaultStatus {
             holds.push({ holdId: x.holdId, provider: x.provider, openedAt: x.openedAt, releaseAt: x.releaseAt });
         }
     }
-    return { providers: [...new Set(providers)], holds };
+    return { providers: [...new Set(providers)], copies, holds };
 }
 
 /**
@@ -487,10 +523,15 @@ export async function forgetVaultCopyKnowledge(publicKey: string): Promise<void>
 /**
  * Disconnect: the vault deletes the copy at once, and from its backups within 30 days (design §1.7), or later if the vault
  * is locked then: a locked vault takes and removes no backups (apps/vault/README.md).
+ *
+ * `all` (Remove everything, Delete account) leaves the vault with no copy of this key, and the phone records that, as a
+ * status read listing none would ({@link noteVaultCopy}): the "one way back" card and the app-open check then know
+ * there is none (vault rethink VR1, design §5.1), instead of believing the deposit they last heard of.
  */
 export async function disconnectFromVault(identity: VaultSigner, provider: SsoProvider | 'all'): Promise<number> {
     const body = await vaultPost('/v1/copies/delete', provider === 'all' ? { all: true } : { provider }, identity, ['deleted']);
     if (typeof body.deleted !== 'number') throw new VaultError('refused', VAULT_MESSAGES.notConfirmed);
+    if (provider === 'all') await noteVaultCopy(identity.publicKey, false);
     return body.deleted;
 }
 

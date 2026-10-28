@@ -1,7 +1,7 @@
 import { render, screen, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { InstallPrompt, isInstalled, DesktopInstallSteps, useDeferredInstallPrompt } from './InstallPrompt';
+import { InstallPrompt, isInstalled, DesktopInstallSteps, useDeferredInstallPrompt, clearDeferredPrompt } from './InstallPrompt';
 
 describe('InstallPrompt (front doors S4)', () => {
     beforeEach(() => {
@@ -70,5 +70,24 @@ describe('InstallPrompt (front doors S4)', () => {
         });
 
         expect(screen.getByTestId('prompt-status')).toHaveTextContent('has-prompt');
+    });
+
+    it('clearDeferredPrompt resets prompt and notifies subscribers', () => {
+        function TestComponent() {
+            const prompt = useDeferredInstallPrompt();
+            return <div data-testid="prompt-status">{prompt ? 'has-prompt' : 'no-prompt'}</div>;
+        }
+
+        render(<TestComponent />);
+        const mockEvent = new Event('beforeinstallprompt');
+        act(() => {
+            window.dispatchEvent(mockEvent);
+        });
+        expect(screen.getByTestId('prompt-status')).toHaveTextContent('has-prompt');
+
+        act(() => {
+            clearDeferredPrompt();
+        });
+        expect(screen.getByTestId('prompt-status')).toHaveTextContent('no-prompt');
     });
 });

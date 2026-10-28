@@ -23,7 +23,7 @@ import {
 import { signInNames } from '../lib/join-recovery';
 import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines, usePhoneBrowser } from '../lib/global-entry';
-import { isInstalled, useDeferredInstallPrompt, DesktopInstallSteps } from '../components/InstallPrompt';
+import { isInstalled, useDeferredInstallPrompt, clearDeferredPrompt, DesktopInstallSteps } from '../components/InstallPrompt';
 import { StoreBadges, ApkDownloadLink } from '../components/UsePhoneAppCard';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
@@ -1990,7 +1990,14 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
 
     const handleDesktopInstall = async () => {
         if (deferredPrompt) {
-            deferredPrompt.prompt();
+            try {
+                await deferredPrompt.prompt();
+                await deferredPrompt.userChoice;
+            } catch {
+                // Dismissed or prompt error
+            } finally {
+                clearDeferredPrompt();
+            }
         } else {
             setShowInstallSteps(prev => !prev);
         }

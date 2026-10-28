@@ -35,6 +35,14 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Clear the deferred install prompt once consumed or dismissed.
+ */
+export function clearDeferredPrompt(): void {
+    globalDeferredPrompt = null;
+    promptListeners.forEach(listener => listener(null));
+}
+
+/**
  * Access the deferred install prompt on desktop.
  */
 export function useDeferredInstallPrompt() {

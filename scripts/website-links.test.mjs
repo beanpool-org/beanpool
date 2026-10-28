@@ -200,7 +200,8 @@ test('the live-restore step reads systemd and Docker first, uses sudo only witho
     // middle of a paste (the lines after it would be typed into the prompt).
     assert.ok(commands.includes('if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi'), 'root runs sh, others run sudo -n sh');
     const bare = commands.replace(/"[^"\n]*"/g, '""'); // what the shell runs, without the words it prints
-    assert.deepEqual(bare.match(/\bsudo\b\s*\S*\s*\S*/g), ['sudo -n sh'], 'the only sudo is sudo -n sh, which cannot prompt');
+    assert.equal(bare.match(/\bsudo\b/g).length, 1, 'sudo is run in one place only');
+    assert.ok(/\bsudo -n sh\b/.test(bare), 'and that place is sudo -n sh, which cannot prompt');
     assert.ok(step.split('\n')[1].includes('Not root?') && step.includes('sudo -v'), 'says in plain words what a non-root user does');
 
     // The checks come before anything is written.

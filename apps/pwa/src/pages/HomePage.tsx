@@ -1209,8 +1209,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             });
     }, [publicKey, keep, holds, landedEpoch]);
 
-    // The cards an answer read with no `cards=` was built for: the node's own choice from the account's list.
-    const builtFor = (a: HomeAnswer): string[] => cardsToAsk(readLayout(a.layout), askPins(a), frameOf(a));
+    // The cards an answer read with no `cards=` was built for: the node's own choice from the account's list, by its own
+    // pin (a member's first 30 days). Not the knocks this browser remembers: the node knows nothing of them, so a read
+    // that was not told to build Find for a waiting request did not, and the follow-up read asks for it (askPins).
+    const builtFor = (a: HomeAnswer): string[] => cardsToAsk(readLayout(a.layout), askPinned(a, Date.now()), frameOf(a));
 
     const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point' | 'layout') => {
         // Signed out, here or in another tab: nothing more is read as that account. Cleared since the page landed: it

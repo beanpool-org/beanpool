@@ -387,11 +387,16 @@ describe('the honest waiting card on the web find card (Lounge L1)', () => {
     });
 });
 
-/** What a global node answers, built only for the cards asked (`cards=`), as the real one does. */
+/**
+ * What a global node answers, built only for the cards asked (`cards=`), as the real one does; asked nothing, it builds the
+ * member's own list and Find only in their first 30 days (routes/home-answer.ts `cardsToBuild`), knowing nothing of the
+ * knocks a browser remembers.
+ */
 function answerFor(asked: readonly string[] | undefined, over: { joinedDaysAgo: number; listed: string[]; find: Partial<HomeFind> }): HomeAnswer {
     const joinedAt = new Date(Date.now() - over.joinedDaysAgo * 86_400_000).toISOString();
     const all: Record<string, unknown> = { find: { ...NONE_NEAR, ...over.find }, market: { items: [], total14d: 0, more: false } };
-    const cards = Object.fromEntries(Object.entries(all).filter(([id]) => !asked || asked.includes(id)));
+    const built = asked ?? [...over.listed, ...(over.joinedDaysAgo < 30 ? ['find'] : [])];
+    const cards = Object.fromEntries(Object.entries(all).filter(([id]) => built.includes(id)));
     return {
         generatedAt: NOW, profile: 'global', welcome: false,
         features: { beans: false, guestListingsOnly: true, invites: false },
@@ -413,12 +418,11 @@ describe('Find your community stays on Home where the list does not hold it (Lou
         })));
     });
 
-    it('a newcomer on day 3 with no wait: Find is asked for and drawn, as on main', async () => {
+    it('a newcomer on day 3 with no wait: Find is drawn first, from a list that does not hold it, with no "…", as on main', async () => {
         joinedDaysAgo = 3;
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
-        expect(await screen.findByTestId('home-card-find')).toBeInTheDocument();
-        expect(asks().flat()).toContain('find');
-        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+        const find = await screen.findByTestId('home-card-find');
+        expect(within(find).queryByTestId('home-card-menu')).toBeNull();
     });
 
     it('past day 30 with no wait it is a card like any other: not asked for, not drawn', async () => {

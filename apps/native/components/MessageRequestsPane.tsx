@@ -398,7 +398,7 @@ export function MessageRequestsPane({ entries, count, identity, qr, onOpen, onAc
             {...(qr ? qr.listProps : {})}
             contentContainerStyle={[styles.container, qr ? { paddingTop: styles.container.paddingTop + qr.listInset } : {}]}
             showsVerticalScrollIndicator={false}
-            accessibilityRole="region"
+            role="region"
             accessibilityLabel={t('Requests')}
             testID="message-requests"
         >

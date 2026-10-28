@@ -10,8 +10,12 @@
  *   5. chat/[id].tsx: failed message bubble with __sendError shows server's words in Alert
  *   6. MessageRequestsPane: a request the node no longer has drops its card; any other refusal says the web's words
  *      (PR #2540 review 4395541944)
+ *   7. MessageRequestsPane and chat/[id].tsx: every accessibilityRole is one Android accepts, so neither screen throws
+ *      when it mounts there (PR #2540 review 4396980215)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import React, { createElement } from 'react';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 
@@ -20,11 +24,12 @@ const alerts = vi.hoisted(() => ({ said: [] as { title: string; body?: string; b
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', region: 'region' };
     const el = (tag: string) => function MockHost(props: any) {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, role, testID } = props;
         const attrs: Record<string, any> = {};
         if (testID) attrs['data-testid'] = testID;
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
+        if (role) attrs.role = role;
         if (onPress && !props.disabled) attrs.onClick = onPress;
         return createElement(tag, attrs, children);
     };
@@ -275,5 +280,32 @@ describe('MessageRequestsPane on phone', () => {
 
         expect(dbMocks.ignoreAllMessageRequests).toHaveBeenCalledTimes(1);
         expect(onChanged).toHaveBeenCalled();
+    });
+});
+
+// Android's BaseViewManager hands accessibilityRole to AccessibilityRole.fromValue, which throws
+// "Invalid accessibility role value" for anything outside this enum (ReactAccessibilityDelegate.kt, RN 0.83.10).
+// The TS type ends in `| string` and react-native-web maps anything, so only a device would catch it.
+// Landmark roles like region and status go on `role=`, which Android reads through its own Role enum.
+describe('accessibility roles Android accepts', () => {
+    const ANDROID_ACCESSIBILITY_ROLES = new Set([
+        'none', 'button', 'dropdownlist', 'togglebutton', 'link', 'search', 'image', 'imagebutton', 'keyboardkey',
+        'text', 'adjustable', 'summary', 'header', 'alert', 'checkbox', 'combobox', 'menu', 'menubar', 'menuitem',
+        'progressbar', 'radio', 'radiogroup', 'scrollbar', 'spinbutton', 'switch', 'tab', 'tablist', 'timer', 'list',
+        'grid', 'pager', 'scrollview', 'horizontalscrollview', 'viewgroup', 'webview', 'drawerlayout',
+        'slidingdrawer', 'iconmenu', 'toolbar',
+    ]);
+    const files = ['components/MessageRequestsPane.tsx', 'app/chat/[id].tsx'];
+
+    it.each(files)('%s gives accessibilityRole only values Android accepts', (rel) => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../..', rel), 'utf-8');
+        const used = [...src.matchAll(/accessibilityRole=\{?["']([^"']+)["']/g)].map(m => m[1]);
+        expect(used.length).toBeGreaterThan(0);
+        expect(used.filter(r => !ANDROID_ACCESSIBILITY_ROLES.has(r.toLowerCase()))).toEqual([]);
+    });
+
+    it('the Requests pane keeps its landmark, on role=', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../components/MessageRequestsPane.tsx'), 'utf-8');
+        expect(src).toMatch(/role="region"\s*\n\s*accessibilityLabel=\{t\('Requests'\)\}/);
     });
 });

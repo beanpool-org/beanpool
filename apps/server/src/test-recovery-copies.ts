@@ -18,7 +18,8 @@
  *      adding a sign-in later does the same.
  *   5. A release's copy is kept 30 days, then emptied (Marty's pick 6): the row stays, as the record of the release, and
  *      reads as the same kind of copy; a release 29 days old, and one in a session still live, keep theirs; the boot's
- *      wrap leaves an emptied one alone; a second run empties nothing; a standby writes nothing.
+ *      wrap leaves an emptied one alone; a second run empties nothing; a standby writes nothing. The device of an old
+ *      completed or expired session whose copy went is answered by the release rules at its routes, its sign-in too.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-recovery-copies.ts
  */
@@ -313,9 +314,9 @@ async function main(): Promise<void> {
     // ── 5. A release's copy: 30 days ──────────────────────────────────────────────────────────
     console.log('\n── 5. released copies are kept 30 days ──');
     const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
-    const session = (id: string, status: string, expiresAt: string) => db.prepare(`INSERT INTO recovery_collections
+    const session = (id: string, status: string, expiresAt: string, requester = crypto.randomBytes(32).toString('hex')) => db.prepare(`INSERT INTO recovery_collections
         (id, owner_pubkey, requester_ephemeral_pubkey, generation, status, created_at, expires_at)
-        VALUES (?, ?, ?, 1, ?, ?, ?)`).run(id, sam.pk, crypto.randomBytes(32).toString('hex'), status, ago(31 * DAY), expiresAt);
+        VALUES (?, ?, ?, 1, ?, ?, ?)`).run(id, sam.pk, requester, status, ago(31 * DAY), expiresAt);
     const SINGLE = JSON.stringify({ alg: core.KEEPER_ALG_SSO_SINGLE });
     const release = (collectionId: string, shareId: number, releasedAt: string) => {
         const sealed = seal.sealRecoveryFields({ encryptedShare: 'c2VjcmV0', shareIv: 'aXY=', shareTag: 'dGFn', kdfParams: SINGLE },
@@ -360,6 +361,32 @@ async function main(): Promise<void> {
     assert(openErr === 'RecoverySealUnopenable', `nothing opens an emptied copy (got ${openErr || 'no error'})`);
     assert(seal.wrapRecoveryRows().releases === 0 && JSON.stringify(rowById(oldId)) === JSON.stringify(old), 'the boot\'s wrap leaves it as it is');
     assert((await rr.forgetOldReleasedCopies()) === 0 && JSON.stringify(rowById(oldId)) === JSON.stringify(old), 'a second run empties nothing');
+
+    // The device that opened a session long gone still reaches its routes: they check the session is its own, and each
+    // release checks it is live. So its sign-in is answered by the release rules, never by a copy that is gone (an
+    // emptied release can't be opened, and "this server cannot open a copy" would blame the server's key).
+    const device = keypair('Device');
+    const oldSessions = [
+        { label: 'completed', id: 'gone-complete', status: 'complete', words: 'That recovery session is already complete.' },
+        { label: 'expired', id: 'gone-expired', status: 'open', words: 'That recovery session has expired. Start a new one.' },
+    ];
+    oldSessions.forEach((s, i) => { session(s.id, s.status, ago(28 * DAY), device.pk); release(s.id, 904 + i, ago(31 * DAY)); });
+    assert((await rr.forgetOldReleasedCopies()) === oldSessions.length, 'a completed and an expired session\'s 31-day releases are emptied');
+    for (const s of oldSessions) {
+        const progress = await call('POST', device, '/api/recovery/collect/status', { collectionId: s.id });
+        assert(progress.status === 200 && progress.body?.live === false && progress.body?.collected === 1 && progress.body?.threshold === 1,
+            `an old ${s.label} session: its status still counts its release (${show(progress)})`);
+        for (const route of ['fragments', 'hub']) {
+            const r = await call('POST', device, `/api/recovery/collect/${route}`, { collectionId: s.id });
+            assert(r.status === 400 && r.body?.error === s.words, `an old ${s.label} session: /collect/${route} → 400, "${s.words}" (${show(r)})`);
+        }
+        const n = await call('POST', device, '/api/recovery/collect/sso-nonce', { collectionId: s.id });
+        const signIn = await call('POST', device, '/api/recovery/collect/sso', {
+            collectionId: s.id, provider: 'google', idToken: googleToken(SAM_SUB, n.body?.nonce), nonce: n.body?.nonce,
+        });
+        assert(n.status === 200 && signIn.status === 400 && signIn.body?.error === s.words && signIn.body?.code === undefined,
+            `an old ${s.label} session: its device's good sign-in → 400, "${s.words}", not the server's key (${show(signIn)})`);
+    }
 
     assert(outsideFetches === 0, `no host but this machine was asked (${outsideFetches})`);
     console.log(`\n${passed}/${run} passed`);

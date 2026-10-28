@@ -527,6 +527,14 @@ function storedReleases(collectionId: string): ReleasedFragment[] {
 }
 
 /**
+ * Which shares a session has released, from the rows as stored: nothing is opened. So it answers before the release
+ * rules have run, for a session long dead whose copies are gone (forgetOldReleasedCopies) as for a live one.
+ */
+export function releasedShareIds(collectionId: string): Set<number> {
+    return new Set(storedReleases(collectionId).map(r => r.shareId));
+}
+
+/**
  * The releases as the recovering device reads them: exactly the bytes the client deposited, unwrapped here. Throws
  * RecoverySealKeyMissing on a server without its key.
  */

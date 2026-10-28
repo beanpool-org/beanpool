@@ -511,12 +511,13 @@ assert(yx1.status === 200 && yx2.status === 403 && yx2.body.code === 'dm_request
 // then on is the same in both: their own request accepted by her line, in their chats, her line in it, pushed and counted
 // as an ordinary line. With an Ignore first, their chat is in their chats at every step: her line never brings the Ignore
 // back (PR #2540 review 4397305910, the probe of the :504 finding). The opener who blocks reads hers as waiting, until she
-// lifts the block. Also: the other blocking her back after reaching out, and her line written while requests are off.
+// lifts the block. Also: the other blocking her back after reaching out, her line written while requests are off, and the
+// other cancelling their own request before she writes.
 const seenAs = (r: any, me: Id, them: Id, at0?: string) => !r ? 'none'
     : [r.state, r.from === me.pk ? 'mine' : r.from === them.pk ? 'theirs' : '?', at0 === undefined ? '' : r.at === at0 ? 'same-at' : 'moved', String(r.nextLineIsRequest ?? '')].join(':');
 const placeOf = (l: any, c: string) => inChats(l, c) ? 'chats' : inRequests(l, c) ? 'requests' : 'neither';
 const listedIn = (l: any, c: string) => (l?.conversations || []).find((x: any) => x.id === c)?.request;
-async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ignoreFirst?: boolean; block: boolean; blockBack?: boolean; off?: boolean }) {
+async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ignoreFirst?: boolean; block: boolean; blockBack?: boolean; off?: boolean; cancelOwn?: boolean }) {
     const op = member(opName);
     const re = member(reName);
     const reSock = await socket(re);
@@ -528,6 +529,7 @@ async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ign
     if (o.block) await call('POST', op, '/api/blocks', { targetPubkey: re.pk });
     const reLine = await sendIn(c, re);
     if (o.blockBack) await call('POST', re, '/api/blocks', { targetPubkey: op.pk });
+    const reCancelsOwn = o.cancelOwn ? (await call('POST', re, '/api/messages/request', { conversationId: c, decision: 'cancel' })).status : undefined;
     const before = await readOf(re, c);
     const placeBefore = placeOf(await listOf(re), c);
     const reHeard = reSock.events.length;
@@ -536,11 +538,15 @@ async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ign
     if (o.off) setSwitchOverride('dmRequests', false);
     const opLine = await sendIn(c, op);
     if (o.off) setSwitchOverride('dmRequests', true);
+    const row = db.prepare('SELECT from_pubkey, state, reached_out_at FROM dm_requests WHERE conversation_id = ?').get(c) as
+        { from_pubkey: string; state: string; reached_out_at: string | null } | undefined;
+    const rowAfter = row ? [row.from_pubkey === op.pk ? 'hers' : 'his', row.state, row.reached_out_at === null ? 'none' : 'set'].join(':') : 'none';
     await new Promise(r => setTimeout(r, 200));
     const reAfter = (await call('GET', re, `/api/messages/${c}`)).body;
     const reList = await listOf(re);
     const seen: Record<string, unknown> = {
         reLine: reLine.status,
+        reCancelsOwn,
         before: seenAs(before, re, op),
         placeBefore,
         after: seenAs(reAfter.conversation?.request, re, op, before?.at),
@@ -580,7 +586,7 @@ async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ign
     }
     reSock.ws.close();
     opSock.ws.close();
-    return { op, re, c, seen, opener };
+    return { op, re, c, seen, opener, rowAfter };
 }
 const plainControl = await reachOutThenOpenerWrites('Abe', 'Bix', { block: false });
 const plainBlocked = await reachOutThenOpenerWrites('Cora', 'Dex', { block: true });
@@ -621,6 +627,18 @@ const offBlocked = await reachOutThenOpenerWrites('Opal', 'Pax', { block: true, 
 assert(offBlocked.seen.after === 'accepted:mine:same-at:' && offBlocked.seen.place === 'chats' && JSON.stringify(offBlocked.seen) === JSON.stringify(offControl.seen)
     && offBlocked.opener.read === 'pending:mine::false',
     `with requests off when Opal writes, Pax reads as Ned does, and Opal hers as waiting (blocked ${JSON.stringify(offBlocked.seen)}; control ${JSON.stringify(offControl.seen)}; ${offBlocked.opener.read})`);
+// He cancels his own request before she writes (PR #2540 review 4399348393): her line is then a request of hers, as it is
+// to one she never blocked, and answers nothing he withdrew. Before the fix it was accepted, in his chats, counted, and
+// rung to him as accepted.
+const cancelControl = await reachOutThenOpenerWrites('Rosa', 'Seth', { block: false, cancelOwn: true });
+const cancelBlocked = await reachOutThenOpenerWrites('Tess', 'Ugo', { block: true, cancelOwn: true });
+assert(cancelBlocked.seen.reCancelsOwn === 200 && cancelBlocked.seen.before === 'pending:mine::true' && cancelBlocked.seen.after === 'pending:theirs:moved:'
+    && cancelBlocked.seen.place === 'requests' && cancelBlocked.seen.unread === 0 && cancelBlocked.rowAfter === 'hers:pending:none',
+    `Ugo cancelled his own request, then Tess, who blocks him, writes: a request of hers again, under his Requests, not an answer to the one he withdrew (${JSON.stringify(cancelBlocked.seen)}, row ${cancelBlocked.rowAfter})`);
+assert(JSON.stringify(cancelBlocked.seen) === JSON.stringify(cancelControl.seen) && cancelBlocked.rowAfter === cancelControl.rowAfter,
+    `and all Ugo reads, hears and is answered is what Seth, not blocked, is (blocked ${JSON.stringify(cancelBlocked.seen)}, row ${cancelBlocked.rowAfter}; control ${JSON.stringify(cancelControl.seen)}, row ${cancelControl.rowAfter})`);
+assert(cancelBlocked.opener.line === 200 && cancelBlocked.opener.read === 'pending:mine::false' && !cancelBlocked.opener.heardAccepted,
+    `Tess reads hers as waiting, as any opener's after their line (${JSON.stringify(cancelBlocked.opener)})`);
 
 vicSock.ws.close();
 natSock.ws.close();

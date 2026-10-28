@@ -1961,6 +1961,8 @@ export function initSchema() {
     // A request of their own the person a withdrawn message request was for made while its opener blocked them
     // (engine/dm-requests.ts reachedOutRow). No table yet on a database from before message requests: schema.sql makes it.
     try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reached_out_at TEXT`).run(); } catch { }
+    // Their cancel of that request of their own (engine/dm-requests.ts cancelReachOut).
+    try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reach_out_withdrawn_at TEXT`).run(); } catch { }
     // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
     try {
         const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;

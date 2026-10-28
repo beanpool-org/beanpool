@@ -2890,6 +2890,10 @@ CREATE TABLE IF NOT EXISTS dm_requests (
     -- accepts the row, the opener's line among them (answerReachOut), so they read the acceptance as of their own. Null
     -- otherwise.
     reached_out_at  TEXT,
+    -- When they cancelled that request of their own (Cancel request, cancelReachOut): withdrawn then, as an opener's cancel
+    -- withdraws theirs (decided_at), so the opener's line answers it no more, and makes one of the opener's own instead.
+    -- Null while it stands, and whenever reached_out_at is.
+    reach_out_withdrawn_at TEXT,
     -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
     updated_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (from_pubkey != to_pubkey)

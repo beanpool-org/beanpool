@@ -37,7 +37,8 @@
  *   4396980737). The opener's own line answers that request of theirs, as it would the row turned round (Marty, 28 Oct
  *   2026: "B: shows as accepted"): they read it accepted, in their chats, and nothing tells them they are blocked, an
  *   Ignore of theirs from before it notwithstanding (review 4397305910); the opener reads the request their line made as
- *   waiting, until they lift the block (answerReachOut).
+ *   waiting, until they lift the block (answerReachOut). Once they cancel theirs, the opener's line is a request of the
+ *   opener's own again, as it is when nobody blocks anyone (cancelReachOut, review 4399348393).
  * - Neither side's read marker reaches the other until it is accepted.
  * - 30 days after it was made, a request nobody accepted is over (expireOldRequests): the opener's next line is a new
  *   request, from then.
@@ -147,6 +148,7 @@ interface RequestRow {
     accepted_by: string | null;
     state_before: 'pending' | 'ignored' | 'expired' | null;
     reached_out_at: string | null;
+    reach_out_withdrawn_at: string | null;
 }
 
 /** A request as one of its two people reads it: its state for them, who opened it, and when it was made. */
@@ -294,7 +296,7 @@ function reachOutAfterWithdrawal(row: RequestRow, who: string, now: number): fal
     }
     assertPlainTablesWritable();
     db.prepare(`UPDATE dm_requests SET from_pubkey = ?, to_pubkey = ?, state = 'pending', requested_at = ?, decided_at = NULL,
-                       accepted_by = NULL, state_before = NULL, reached_out_at = NULL
+                       accepted_by = NULL, state_before = NULL, reached_out_at = NULL, reach_out_withdrawn_at = NULL
                  WHERE conversation_id = ?`).run(who, row.from_pubkey, iso(now), row.conversation_id);
     return 'turned';
 }
@@ -305,17 +307,19 @@ function reachOutAfterWithdrawal(row: RequestRow, who: string, now: number): fal
  * one not blocked reads the row itself. The opener reads the row as they left it. Waiting while the request is still
  * withdrawn; accepted once anything has accepted the row since (the opener's line, answerReachOut; a trade; a role or a
  * friend add letting one of them through), as the row turned round would be: by the opener's act, unless each of them
- * accepted it or a trade did (`accepted_by` null), so one hidden from them reads as such (acceptanceHiddenFrom). Null for
+ * accepted it or a trade did (`accepted_by` null), so one hidden from them reads as such (acceptanceHiddenFrom). Withdrawn
+ * once they cancel it (`reach_out_withdrawn_at`, cancelReachOut), as the row turned round is by their cancel. Null for
  * anyone else, and once the request is no longer withdrawn with nothing having accepted it.
  */
 function reachedOutRow(row: RequestRow, who: string): RequestRow | null {
     if (!row.reached_out_at || who !== row.to_pubkey) return null;
     const turned: RequestRow = {
-        ...row, from_pubkey: row.to_pubkey, to_pubkey: row.from_pubkey, requested_at: row.reached_out_at, state_before: null, reached_out_at: null,
+        ...row, from_pubkey: row.to_pubkey, to_pubkey: row.from_pubkey, requested_at: row.reached_out_at, state_before: null,
+        reached_out_at: null, reach_out_withdrawn_at: null,
     };
     if (row.state === 'accepted') return { ...turned, accepted_by: row.accepted_by === null ? null : row.from_pubkey };
     if (!withdrawn(row)) return null;
-    return { ...turned, state: 'pending', decided_at: null, accepted_by: null };
+    return { ...turned, state: 'pending', decided_at: row.reach_out_withdrawn_at, accepted_by: null };
 }
 
 /**
@@ -332,7 +336,8 @@ function reachedOutRow(row: RequestRow, who: string): RequestRow | null {
  */
 function answerReachOut(row: RequestRow, now: number): void {
     assertPlainTablesWritable();
-    db.prepare(`UPDATE dm_requests SET state = 'accepted', requested_at = ?, decided_at = ?, accepted_by = to_pubkey, state_before = state
+    db.prepare(`UPDATE dm_requests SET state = 'accepted', requested_at = ?, decided_at = ?, accepted_by = to_pubkey, state_before = state,
+                       reach_out_withdrawn_at = NULL
                  WHERE conversation_id = ?`).run(iso(now), iso(now), row.conversation_id);
     afterTransactionCommit(() => ringAccepted(row.conversation_id, [row.to_pubkey, row.from_pubkey], now));
 }
@@ -524,8 +529,12 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     }
     // The other reached out after the opener withdrew it, while the opener blocked them (reachedOutRow): this line answers
     // them, and to them it is an ordinary line, whatever the opener reads (answerReachOut). Before any branch below, an
-    // Ignore of theirs from before the reach-out among them (PR #2540 review 4397305910).
-    if (!hidden && reachedOutRow(row, row.to_pubkey)) {
+    // Ignore of theirs from before the reach-out among them (PR #2540 review 4397305910). Not once they cancelled it
+    // (cancelReachOut): the line is a request of the opener's own then, from now, as it is when it turns round a request
+    // withdrawn by one nobody blocks (reachOutAfterWithdrawal), so it is made below, their Ignore from before notwithstanding
+    // (review 4399348393).
+    const theirs = !hidden && !!reachedOutRow(row, row.to_pubkey);
+    if (theirs && !row.reach_out_withdrawn_at) {
         answerReachOut(row, now);
         return DIRECT;
     }
@@ -536,7 +545,7 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     // after the other reached out keeps `reached_out_at`, which is what that person reads (reachedOutRow).
     const made = hidden || hasBlocked(row.to_pubkey, author)
         ? 'UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?'
-        : "UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL, reached_out_at = NULL WHERE conversation_id = ?";
+        : "UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL, reached_out_at = NULL, reach_out_withdrawn_at = NULL WHERE conversation_id = ?";
     if (over(row, now)) {
         assertPlainTablesWritable();
         db.prepare(made).run(iso(now), row.conversation_id);
@@ -548,8 +557,8 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     // kept during a block does, so the opener's answers stay a waiting request's, and its push is done and dropped, as a
     // folded one's is (PR #2540 review 4393642102). Cancelling and writing again never undoes an Ignore; the person reaching
     // out since does (answered above). One ignored before a block lifted since has the line kept during it, and is a new
-    // request with this one, as above.
-    if (row.state === 'ignored' && keptLinesSince(row) === 0) {
+    // request with this one, as above. One the person reached out in since, and cancelled, is no Ignore of theirs (above).
+    if (row.state === 'ignored' && keptLinesSince(row) === 0 && !theirs) {
         if (!standbyWritesNothing()) db.prepare('UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
         return { kind: 'request', to: row.to_pubkey, ignored: true };
     }
@@ -564,14 +573,17 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
 /**
  * A line in a request of their own that the person a withdrawn request was for made while its opener blocks them
  * (reachedOutRow), answered as a line in the row turned round is (lineThroughRequest, the opener's): the first, or the first
- * after its 30 days, is its line and makes it from then; any other is refused. The line is kept for them alone
- * (engine/withheld-lines.ts), so only the time of their own request moves, and nothing the opener reads.
+ * after its 30 days, is its line and makes it from then, one they cancelled again too (cancelReachOut); any other is
+ * refused. The line is kept for them alone (engine/withheld-lines.ts), so only the time of their own request moves, and
+ * nothing the opener reads.
  */
 function lineOfReachOut(row: RequestRow, author: string, now: number): LineThroughRequest {
     const mine = reachedOutRow(row, author)!;
     if (over(mine, now)) assertPlainTablesWritable();
     else if (openerLinesSince(mine) > 0) return { kind: 'refused', message: waitingFor(row.from_pubkey, 'write') };
-    if (!standbyWritesNothing()) db.prepare('UPDATE dm_requests SET reached_out_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
+    if (!standbyWritesNothing()) {
+        db.prepare('UPDATE dm_requests SET reached_out_at = ?, reach_out_withdrawn_at = NULL WHERE conversation_id = ?').run(iso(now), row.conversation_id);
+    }
     return { kind: 'request', to: row.from_pubkey };
 }
 
@@ -619,7 +631,7 @@ function lineWhileOff(row: RequestRow, author: string, now: number): void {
     if (author === row.to_pubkey) accept(row, now, author);
     else if (author === row.from_pubkey && row.state !== 'accepted' && reachedOutRow(row, row.to_pubkey)) answerReachOut(row, now);
     else if (author === row.from_pubkey && row.state === 'ignored' && !hasBlocked(row.to_pubkey, author)) {
-        db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL, reached_out_at = NULL WHERE conversation_id = ?")
+        db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL, reached_out_at = NULL, reach_out_withdrawn_at = NULL WHERE conversation_id = ?")
             .run(iso(now), row.conversation_id);
     }
 }
@@ -821,7 +833,7 @@ export function decideRequest(conversationId: string, actor: string, decision: '
         withdrawOpenerLines(row);
         // The opener's decision: what marks it withdrawn (withdrawn), so nothing of the other's accepts it. Its state, which
         // the opener's own view never reads, stays; an acceptance hidden from them keeps the time it was made.
-        if (row.state !== 'accepted') db.prepare('UPDATE dm_requests SET decided_at = ?, reached_out_at = NULL WHERE conversation_id = ?').run(iso(now), row.conversation_id);
+        if (row.state !== 'accepted') db.prepare('UPDATE dm_requests SET decided_at = ?, reached_out_at = NULL, reach_out_withdrawn_at = NULL WHERE conversation_id = ?').run(iso(now), row.conversation_id);
         const isReal = !!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(row.conversation_id);
         const openerView = viewOf(row, actor, now);
         const recipientHears = isReal && !hasBlocked(row.to_pubkey, actor) && row.state !== 'ignored';
@@ -864,8 +876,10 @@ export function decideRequest(conversationId: string, actor: string, decision: '
 /**
  * The cancel of a request of their own that the person a withdrawn request was for made while its opener blocked them
  * (`mine`, reachedOutRow), answered as an opener's is: their lines in it, kept for them alone, go, and it stays theirs, their
- * next line its line. The row stays as its opener left it, and only the actor hears. One they read as accepted (the opener
- * answered it, answerReachOut) is no pending request (409), as for any opener.
+ * next line its line. It is withdrawn (`reach_out_withdrawn_at`), as an opener's cancel stamps theirs, so the opener's line
+ * no longer answers it (lineThroughRequest; PR #2540 review 4399348393). The row stays as its opener left it otherwise, and
+ * only the actor hears. One they read as accepted (the opener answered it, answerReachOut) is no pending request (409), as
+ * for any opener.
  */
 function cancelReachOut(row: RequestRow, mine: RequestRow, actor: string, now: number): RequestView {
     if ((mine.state === 'accepted' && !acceptanceHiddenFrom(mine, actor)) || over(mine, now) || openerLinesSince(mine) === 0) {
@@ -873,7 +887,10 @@ function cancelReachOut(row: RequestRow, mine: RequestRow, actor: string, now: n
     }
     assertPlainTablesWritable();
     withdrawOpenerLines(mine);
-    const view = viewOf(row, actor, now);
+    if (mine.state !== 'accepted') {
+        db.prepare('UPDATE dm_requests SET reach_out_withdrawn_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
+    }
+    const view = viewOf(rowOf(row.conversation_id)!, actor, now);
     ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request: view }, [actor]);
     return view;
 }

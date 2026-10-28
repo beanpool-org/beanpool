@@ -687,6 +687,10 @@ ${TOOL_DOCS_TABLE}
         // does, but nothing held is cleared. The cursors go before the column comes: an open cut off between the two finds
         // the column still missing and forgets them again. A fresh copy has the column and no cursor to forget.
         if (!(await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).some(c => c.name === 'carried_banner')) {
+            // A sync cycle already under way read its cursor before this open (Android's background sync after an app
+            // update): a new copy generation makes it store nothing, so it cannot put back the cursor forgotten below
+            // (review of #2565 at f72b4204, as clearDB does).
+            newCopyGeneration();
             try {
                 const file = dbFileOf.get(database);
                 const { syncCursorKeysOf } = await import('../services/pillar-sync');
@@ -695,6 +699,11 @@ ${TOOL_DOCS_TABLE}
                 console.warn('[SQLite] Could not forget the sync cursors of a copy from before carried_banner:', e);
             }
             try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_banner TEXT;`); } catch (e) {}
+            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
+            try {
+                const { requestSync } = require('../services/pillar-sync');
+                requestSync().catch(() => {});
+            } catch (e) {}
         }
         // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
         // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.

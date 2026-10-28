@@ -30,6 +30,9 @@ import { signedDelete, signedPost } from './node-post';
 import { offeredProviders, type SsoProvider } from './sso-providers';
 import { vaultMoveLaterStoreKey, vaultMoveUnfinishedStoreKey } from './storage-keys';
 import { connectWanted, hasVault, vaultStatus } from './vault';
+import { sameCommunity } from './ways-back-state';
+
+export { sameCommunity };
 
 /** How long "Not now" puts the card away (design §5.1: weekly until the date). */
 export const MOVE_AGAIN_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
@@ -153,12 +156,6 @@ interface UnfinishedMove {
 export interface PendingRemoval {
     url: string;
     provider: SsoProvider;
-}
-
-/** Two addresses of one community, as the phone saves them (case and a trailing slash aside). */
-export function sameCommunity(a: string, b: string): boolean {
-    const plain = (u: string) => u.trim().replace(/\/+$/, '').toLowerCase();
-    return plain(a) === plain(b);
 }
 
 const sameRemoval = (a: PendingRemoval, b: PendingRemoval) => a.provider === b.provider && sameCommunity(a.url, b.url);

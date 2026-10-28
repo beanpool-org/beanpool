@@ -13,6 +13,12 @@
  * global door with a sign-in (covered), Account Protection with no sign-in and with Google connected, a phone with no
  * 12 words, and a build without a vault (Safety Backup after an invite, as it always read).
  *
+ * And "Where your account can be brought back from" (vault rethink VR1, §5.1): components/WaysBackList.tsx inside
+ * app/ways-back.tsx's page and card (16dp, 16dp) under its header bar (drawn here from the screen's own styles; the
+ * screen itself needs the app around it), in its states: every kind of copy at once, the last copy, a vault that couldn't
+ * say, a build without a vault, the words-only line with and without the 12 words on the phone, and Remove everything's
+ * result lines.
+ *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
  * 44dp tall (the panel's own floor); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
  * Not counted: an emoji on its own (drawn in its own colours, whatever the text colour says), and Facebook's own button,
@@ -87,6 +93,8 @@ import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'cons
 import { KeeperProtectionPanel } from ${JSON.stringify(path.join(NATIVE, 'components/KeeperProtectionPanel'))};
 import { protectionFrom } from ${JSON.stringify(path.join(NATIVE, 'utils/protection-state'))};
 import { NO_WORDS_VIEW_LINE } from ${JSON.stringify(path.join(NATIVE, 'utils/no-words-copy'))};
+import { WaysBackList } from ${JSON.stringify(path.join(NATIVE, 'components/WaysBackList'))};
+import { onboardingColors } from ${JSON.stringify(path.join(NATIVE, 'utils/onboarding-colors'))};
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
@@ -111,8 +119,65 @@ const WordsRow = () => (
     </View>
 );
 
+/** "Where your account can be brought back from": what utils/ways-back.ts finds, in each state drawn. */
+const MULLUM = 'https://mullumbimby.beanpool.org';
+const GLOBAL = 'https://global.beanpool.org';
+const WAYS = {
+    full: {
+        vault: { kind: 'listed', copies: [
+            { provider: 'google', since: '2026-10-03', lastReleasedAt: Date.UTC(2026, 9, 12, 9) },
+            { provider: 'facebook', since: '2026-10-20', lastReleasedAt: null },
+        ] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', status: { providers: ['google', 'apple'], generation: 3 } },
+            { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
+            { url: 'https://bellingen.beanpool.org', name: 'Bellingen', status: null },
+        ],
+        pending: [{ url: MULLUM, provider: 'apple' }],
+    },
+    last: { vault: { kind: 'listed', copies: [{ provider: 'google', since: '2026-10-03', lastReleasedAt: null }] }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }], pending: [] },
+    paused: { vault: { kind: 'unknown', why: 'paused' }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: ['google'], generation: 2 } }], pending: [] },
+    novault: { vault: { kind: 'no-vault' }, communities: [{ url: MULLUM, name: 'Mullumbimby', status: { providers: ['google'], generation: 1 } }], pending: [] },
+    none: { vault: { kind: 'listed', copies: [] }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }], pending: [] },
+};
+/** Remove everything's result lines, as app/ways-back.tsx words them (a vault that was paused, a community that didn't answer). */
+const RESULT = [
+    t("Not removed: BeanPool's key vault is paused for a little while. Try again later."),
+    t("Not removed yet: {community} didn't answer. The app tries again each time it opens.", { community: 'Mullumbimby' }),
+    t("{community} didn't answer, so nothing kept there was removed. Open this screen again later.", { community: 'Bellingen' }),
+];
+
+/** app/ways-back.tsx's page: its header bar (from the screen's styles; the icon drawn as an arrow) and its card. */
+const WaysPage = () => {
+    const { colors: oc, dark } = onboardingColors(scheme);
+    const state = q.get('state') || 'full';
+    return (
+        <View style={{ backgroundColor: oc.surface.page }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: oc.border.default, backgroundColor: dark ? oc.surface.card : oc.text.heading }}>
+                <View style={{ width: 48, height: 48, justifyContent: 'center', alignItems: 'center' }}><Text style={{ fontSize: 22, color: oc.text.inverse }}>←</Text></View>
+                <Text numberOfLines={1} style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: oc.brand.primary, letterSpacing: 0.5 }}>{t('Ways back')}</Text>
+                <View style={{ width: 48 }} />
+            </View>
+            <View style={{ padding: 16 }}>
+                <View style={{ backgroundColor: oc.surface.card, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                    <WaysBackList
+                        ways={WAYS[state === 'result' ? 'full' : state]}
+                        hasWords={hasWords}
+                        writtenDown={q.get('written') === 'yes'}
+                        busy={false}
+                        result={state === 'result' ? RESULT : []}
+                        colors={oc}
+                        onWrittenDown={noop} onShowWords={noop} onRemove={noop} onRemoveEverything={noop} onLinkSignIn={noop}
+                    />
+                </View>
+            </View>
+        </View>
+    );
+};
+
 const Page = () => {
     const place = q.get('place');
+    if (place === 'ways') return <WaysPage />;
     if (place === 'backup') return (
         <View style={{ backgroundColor: colors.surface.page, padding: 24 }}>
             <View style={{ backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default }}>
@@ -262,6 +327,24 @@ try {
         await page.getByText('Sign-In Recovery Providers (1-of-N)').waitFor();
         if (await page.getByText(/key vault|Iceland|A sign-in you link|Who can open it/).count()) problems.push(`${scheme} · a build without a vault: VR0's words drawn`);
         await measure(`${scheme} · Safety Backup, a build without a key vault, after an invite`);
+
+        // "Where your account can be brought back from" (VR1).
+        const WAYS_CASES = [
+            ['state=full', 'Ways back, every kind of copy'],
+            ['state=full&words=none', 'Ways back, every kind of copy, no 12 words on the phone'],
+            ['state=last&written=yes', 'Ways back, the last copy, written down ticked'],
+            ['state=paused', 'Ways back, the key vault paused'],
+            ['state=novault', 'Ways back, a build without a key vault'],
+            ['state=none', 'Ways back, nothing kept anywhere'],
+            ['state=none&words=none', 'Ways back, nothing kept anywhere, no 12 words on the phone'],
+            ['state=result', 'Ways back, after Remove everything'],
+        ];
+        for (const [query, label] of WAYS_CASES) {
+            await open(`place=ways&${query}&scheme=${scheme}`);
+            await page.getByText('Where your account can be brought back from').first().waitFor();
+            if (query.includes('novault') && await page.getByText(/key vault|Iceland/).count()) problems.push(`${scheme} · ${label}: the vault named in a build without one`);
+            await measure(`${scheme} · ${label}`);
+        }
     }
     for (const e of errors) problems.push(`page error: ${e}`);
 } finally {

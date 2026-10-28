@@ -35,44 +35,14 @@ import { getSavedNodes } from './nodes';
 import { readOneWayBack } from './one-way-back';
 import type { SsoProvider } from './sso-providers';
 import { wordsWrittenDownStoreKey } from './storage-keys';
-import { disconnectFromVault, hasVault, vaultStatus, VaultError, type VaultCopy } from './vault';
-import {
-    communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, retryCommunityRemovals, sameCommunity,
-    type CommunityCopyStatus, type PendingRemoval,
-} from './vault-move';
+import { disconnectFromVault, hasVault, vaultStatus, VaultError } from './vault';
+import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, retryCommunityRemovals } from './vault-move';
+import { sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
 
-/** Why a keeper couldn't say, or didn't remove: paused (the vault, locked), no answer, or one that didn't check out. */
-export type NotAnswered = 'paused' | 'unreachable' | 'unverified';
-
-export type VaultPart =
-    /** This build keeps no copies at BeanPool's key vault: nothing is asked there, and nothing is said about it. */
-    | { kind: 'no-vault' }
-    | { kind: 'listed'; copies: VaultCopy[] }
-    /** The vault couldn't say. Its copies, if it keeps any, are neither listed nor said to be gone. */
-    | { kind: 'unknown'; why: NotAnswered };
-
-export interface CommunityPart {
-    url: string;
-    /** The name this phone saved it under, or its address. */
-    name: string;
-    /** Its answer about this key's copies, or null when it gave none: never read as "none". */
-    status: CommunityCopyStatus | null;
-}
-
-export interface WaysBack {
-    vault: VaultPart;
-    communities: CommunityPart[];
-    /** Deletes this phone was asked for that haven't landed yet. */
-    pending: PendingRemoval[];
-}
-
-/** One copy to remove: a sign-in's at the vault, or a sign-in's at a community. */
-export type CopyAt =
-    | { at: 'vault'; provider: SsoProvider }
-    | { at: 'community'; url: string; provider: SsoProvider };
-
-/** What a removal did. `remembered`: a community's delete that didn't land, kept and tried again. */
-export type Removal = { removed: true } | { removed: false; why: NotAnswered | 'refused' | 'remembered' };
+export {
+    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, wordsOnly,
+    type BeforeRemoving, type CommunityPart, type CopyAt, type NotAnswered, type Removal, type VaultPart, type WaysBack,
+} from './ways-back-state';
 
 /** The vault's failure, as the member's list says it. */
 function notAnswered(e: unknown): NotAnswered | 'refused' {
@@ -120,50 +90,6 @@ async function askVault(identity: BeanPoolIdentity): Promise<VaultPart> {
         const why = notAnswered(e);
         return { kind: 'unknown', why: why === 'refused' ? 'unreachable' : why };
     }
-}
-
-/** Whether `copy` is waiting to be removed (its delete didn't land yet). */
-function isPending(w: WaysBack, url: string, provider: SsoProvider): boolean {
-    return w.pending.some(p => p.provider === provider && sameCommunity(p.url, url));
-}
-
-/** Every copy this phone knows is kept now, not counting ones waiting to be removed. */
-export function knownCopies(w: WaysBack): CopyAt[] {
-    const out: CopyAt[] = [];
-    if (w.vault.kind === 'listed') for (const c of w.vault.copies) out.push({ at: 'vault', provider: c.provider });
-    for (const c of w.communities) {
-        for (const provider of c.status?.providers ?? []) {
-            if (!isPending(w, c.url, provider)) out.push({ at: 'community', url: c.url, provider });
-        }
-    }
-    return out;
-}
-
-const sameCopy = (a: CopyAt, b: CopyAt) => a.at === b.at && a.provider === b.provider
-    && (a.at === 'vault' || (b.at === 'community' && sameCommunity(a.url, b.url)));
-
-/** Whether every keeper answered: the vault (when the build has one) and every saved community. */
-export function everyoneAnswered(w: WaysBack): boolean {
-    return w.vault.kind !== 'unknown' && w.communities.every(c => c.status !== null);
-}
-
-/**
- * Nothing kept anywhere this phone can ask: every keeper answered, none keeps a copy, and no delete is waiting. The
- * member's 12 words are then their way back (with an admin's re-key, to a new key, when they are lost too).
- */
-export function wordsOnly(w: WaysBack): boolean {
-    return everyoneAnswered(w) && knownCopies(w).length === 0 && w.pending.length === 0;
-}
-
-/** What to ask before a removal (see the file's note): an ordinary confirm, or the 12 words first. */
-export type BeforeRemoving = 'confirm' | 'show-words-first' | 'no-words-on-phone';
-
-export function beforeRemoving(
-    w: WaysBack, removing: CopyAt | 'everything', phone: { hasWords: boolean; writtenDown: boolean },
-): BeforeRemoving {
-    const left = removing === 'everything' ? [] : knownCopies(w).filter(c => !sameCopy(c, removing));
-    if (left.length > 0 || phone.writtenDown) return 'confirm';
-    return phone.hasWords ? 'show-words-first' : 'no-words-on-phone';
 }
 
 /** Remove the vault's copy for one sign-in: removed only on the vault's signed answer. */

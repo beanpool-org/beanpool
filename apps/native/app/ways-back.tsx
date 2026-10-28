@@ -30,10 +30,9 @@ import { WAYS_BACK_LINES, WaysBackList } from '../components/WaysBackList';
 import { hasMnemonic } from '../utils/identity';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import {
-    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeCommunityCopyFrom, removeEverything, removeVaultCopy,
+    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeCommunityCopyFrom, removeEverything, removeVaultCopy, sameCommunity,
     wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
 } from '../utils/ways-back';
-import { sameCommunity } from '../utils/vault-move';
 
 export { ErrorBoundary };
 

@@ -14,8 +14,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { formatDate, t, word } from '@beanpool/core';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
-import { sameCommunity } from '../utils/vault-move';
-import { everyoneAnswered, knownCopies, wordsOnly, type CopyAt, type NotAnswered, type WaysBack } from '../utils/ways-back';
+import { everyoneAnswered, knownCopies, sameCommunity, wordsOnly, type CopyAt, type NotAnswered, type WaysBack } from '../utils/ways-back-state';
 
 /** The screen's sentences said in more than one place (the list, its dialogs, the results): marked here, t() where shown. */
 export const WAYS_BACK_LINES = {

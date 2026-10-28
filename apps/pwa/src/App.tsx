@@ -48,7 +48,7 @@ import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey,
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
-import { loadBundledGuide, inShownLanguage } from './lib/guide';
+import { getBundledGuide, loadBundledGuide, inShownLanguage } from './lib/guide';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
@@ -212,7 +212,9 @@ export function App() {
         setActiveTab('home');
     };
     const [helpOpen, setHelpOpen] = useState(false);
-    const [helpGuide, setHelpGuide] = useState<Guide | null>(null);
+    const [helpGuide, setHelpGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
     useEffect(() => {
         const open = () => setHelpOpen(true);
         window.addEventListener(OPEN_HELP_EVENT, open);

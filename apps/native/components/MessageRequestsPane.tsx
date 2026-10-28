@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert, Animated } from 'react-native';
 import { t, tn } from '@beanpool/core';
 import { decideMessageRequest, ignoreAllMessageRequests, getMessages, syncSingleConversation } from '../utils/db';
-import { blockUser } from '../utils/blocklist';
+import { blockUser, isUserBlocked } from '../utils/blocklist';
 import { requestDecisionFailureWords, requestIsGone } from '../utils/chat-actions';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
@@ -82,7 +82,10 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                     onPress: async () => {
                         setBusy(true);
                         try {
-                            await blockUser(peer, myPubkey, 'Blocked from a message request');
+                            const blocked = await blockUser(peer, myPubkey, 'Blocked from a message request');
+                            // blockUser says false rather than throwing (no account on the phone, the list not written): the
+                            // list is read back, so a block that didn't happen keeps the card and says so.
+                            if (!blocked && !(await isUserBlocked(peer))) throw new Error('Not blocked');
                             onChanged();
                         } catch {
                             Alert.alert(t('That did not go through. Please try again.'));

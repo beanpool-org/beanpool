@@ -12,6 +12,8 @@
  *      (PR #2540 review 4395541944)
  *   7. MessageRequestsPane and chat/[id].tsx: every accessibilityRole is one Android accepts, so neither screen throws
  *      when it mounts there (PR #2540 review 4396980215)
+ *   8. MessageRequestsPane: Block drops the card only when the sender is on the list after it; a block that didn't happen
+ *      says so and the card stays (PR #2540 review 4399651364)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -70,8 +72,14 @@ vi.mock('../../components/MemberAvatar', () => ({
     MemberAvatar: ({ callsign }: any) => createElement('span', { 'data-testid': 'avatar' }, callsign),
 }));
 
+const blockMocks = vi.hoisted(() => ({
+    blockUser: vi.fn(async () => true),
+    isUserBlocked: vi.fn(async () => false),
+} as Record<string, any>));
+
 vi.mock('../blocklist', () => ({
-    blockUser: vi.fn(),
+    blockUser: (...args: any[]) => blockMocks.blockUser(...args),
+    isUserBlocked: (...args: any[]) => blockMocks.isUserBlocked(...args),
 }));
 
 const dbMocks = vi.hoisted(() => ({
@@ -242,6 +250,49 @@ describe('MessageRequestsPane on phone', () => {
         fireEvent.click(screen.getByTestId('request-ignore'));
         await waitFor(() => expect(alerts.said.length).toBe(2));
         expect(alerts.said[1].title).toBe('Connect to your community to accept or ignore.');
+    });
+
+    // Review 4399651364: blockUser answers false rather than throwing (no account on the phone, the list not written, the
+    // sender already on it), and the card ignored the answer: a Block that didn't happen looked like one that did.
+    const confirmBlock = async () => {
+        fireEvent.click(screen.getByTestId('request-block'));
+        const block = alerts.said[0].buttons?.find(b => b.style === 'destructive');
+        expect(block).toBeDefined();
+        await block.onPress();
+    };
+
+    it('Block: the sender on the list drops the card, and says nothing more', async () => {
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+
+        await confirmBlock();
+        expect(blockMocks.blockUser).toHaveBeenCalledWith('bob-pubkey', 'me-pubkey', 'Blocked from a message request');
+        expect(onChanged).toHaveBeenCalledTimes(1);
+        expect(alerts.said.length).toBe(1);
+    });
+
+    it("Block that didn't happen: says so, and the card stays", async () => {
+        blockMocks.blockUser.mockResolvedValueOnce(false);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(false);
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+
+        await confirmBlock();
+        expect(blockMocks.isUserBlocked).toHaveBeenCalledWith('bob-pubkey');
+        expect(alerts.said.length).toBe(2);
+        expect(alerts.said[1].title).toBe('That did not go through. Please try again.');
+        expect(onChanged).not.toHaveBeenCalled();
+    });
+
+    it('Block of a sender already on the list: the card drops, as for a new block', async () => {
+        blockMocks.blockUser.mockResolvedValueOnce(false);
+        blockMocks.isUserBlocked.mockResolvedValueOnce(true);
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+
+        await confirmBlock();
+        expect(onChanged).toHaveBeenCalledTimes(1);
+        expect(alerts.said.length).toBe(1);
     });
 
     it('offers Ignore all when count >= 6 and calls ignoreAllMessageRequests on confirm', async () => {

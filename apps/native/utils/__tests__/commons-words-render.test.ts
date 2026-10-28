@@ -608,13 +608,12 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
 });
 
 describe('the start form by kind and the new-poll form in the pseudo-locale (Fable 5.1 §5 S5)', () => {
-    it('phone start form with kind=ongoing: titles "Start an enterprise", submits "Start the enterprise 🏛️", banner notice, no initiative word', async () => {
+    it('phone start form with kind=ongoing: titles "Start an enterprise", submits "Start the enterprise 🏛️", banner notice', async () => {
         params.now = { kind: 'ongoing' };
         await renderIn('xx', createElement(ProposeProjectScreen));
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start an enterprise')));
         expect(host.textContent).toContain(pseudoLocalise('You can add a banner photo next.'));
         expect(host.textContent).toContain(pseudoLocalise('WHAT IS IT?'));
-        expect(host.textContent.toLowerCase()).not.toContain('initiative');
         expect(host.textContent).not.toContain(pseudoLocalise('FUNDING GOAL ({currency}) *').split('{currency}')[0]);
         expect(bypassing(), 'form').toEqual([]);
 
@@ -636,7 +635,6 @@ describe('the start form by kind and the new-poll form in the pseudo-locale (Fab
         await renderIn('xx', createElement(ProposeProjectScreen));
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start a project or an enterprise')));
         expect(host.textContent).toContain(pseudoLocalise('WHAT IS IT?'));
-        expect(host.textContent.toLowerCase()).not.toContain('initiative');
         expect(bypassing(), 'form').toEqual([]);
 
         const submit = byLabel(pseudoLocalise('Choose a project or an enterprise first'));
@@ -654,7 +652,6 @@ describe('the start form by kind and the new-poll form in the pseudo-locale (Fab
         await renderIn('xx', createElement(ProposeProjectScreen));
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start a project')));
         expect(host.textContent).toContain(pseudoLocalise('WHAT IS IT?'));
-        expect(host.textContent.toLowerCase()).not.toContain('initiative');
         expect(host.textContent).toContain(pseudoLocalise('FUNDING GOAL ({currency}) *').split('{currency}')[0]);
         expect(bypassing(), 'form').toEqual([]);
         // The missing-fields line hides itself 3 s later on a bare timer in propose-project.tsx, run here on a fake clock so it

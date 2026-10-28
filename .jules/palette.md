@@ -272,3 +272,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-28 - ChatMenuModal Touch Target Sizing & Focus Ring Indicators
 **Learning:** `ChatMenuModal.tsx` close button had size `min-w-[40px] min-h-[40px]` failing 44px minimum touch target requirements and lacked explicit `focus-visible:ring-2` ring indicators, while menu action buttons lacked `min-h-[44px]` touch target height.
 **Action:** Updated close button to `min-w-[44px] min-h-[44px] w-11 h-11` touch target sizing with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`, added `min-h-[44px]` to menu action buttons, and created `ChatMenuModal.test.tsx`.
+
+## 2026-11-01 - AddressSearch Focus Ring Styling
+**Learning:** `AddressSearch.tsx` rendered search input element using `focus:outline-none focus:ring-2 focus:ring-violet-300`, showing focus rings on click and lacking explicit `focus-visible` ring styling for keyboard navigation.
+**Action:** Replaced focus styles with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500` and created `AddressSearch.test.tsx`.

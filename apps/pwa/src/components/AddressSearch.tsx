@@ -95,7 +95,7 @@ export function AddressSearch({ onPick, words = eventWords() }: AddressSearchPro
                             setSelectedIndex(-1);
                         }
                     }}
-                    className="w-full py-3 pl-4 pr-10 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all border-nature-200 dark:border-nature-700"
+                    className="w-full py-3 pl-4 pr-10 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 shadow-sm transition-all border-nature-200 dark:border-nature-700"
                 />
                 {state.status === 'searching' && (
                     <span aria-hidden="true" className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-violet-300 border-t-violet-600 animate-spin" />

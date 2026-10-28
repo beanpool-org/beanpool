@@ -32,7 +32,7 @@ Set up a BeanPool community server for me.
 
 ### Docker and live-restore
 
-Docker can restart or update itself without stopping your community when live-restore is enabled. On a server installed before this change, turn it on by adding `{"live-restore": true}` to `/etc/docker/daemon.json` (if the file already exists, merge the key in so other settings are kept), reloading Docker with `systemctl reload docker` (never a restart), and checking that `docker info --format '{{.LiveRestoreEnabled}}'` prints `true`.
+Docker can restart or update itself without stopping your community when live-restore is enabled. On a server installed before this change, turn it on by adding {"live-restore": true} to /etc/docker/daemon.json (if the file already exists, merge the key in so other settings are kept), reloading Docker with systemctl reload docker (never a restart), and checking that docker info --format '{{.LiveRestoreEnabled}}' prints true.
 
 If beanpool claim prints a warning that phones will not connect, or that the QR code carries no address, it says why: with --ip, most often port 80 or 443 closed in the server's firewall. Fix that and run it again, or use a name. The claim code waits until a phone uses it.
 

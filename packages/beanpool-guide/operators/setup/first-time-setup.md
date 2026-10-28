@@ -15,7 +15,7 @@ On its first start the server makes the claim code and puts it in a file, data/c
 
 ### Docker and live-restore
 
-Docker can restart or update itself without stopping your community when live-restore is enabled. A new server gets this by default during install. On a server installed before this change, turn it on by adding `{"live-restore": true}` to `/etc/docker/daemon.json` (if the file already exists, merge the key in, keeping every other key), running `systemctl reload docker` (never a restart), and checking that `docker info --format '{{.LiveRestoreEnabled}}'` prints `true`.
+Docker can restart or update itself without stopping your community when live-restore is enabled. A new server gets this by default during install. On a server installed before this change, turn it on by adding {"live-restore": true} to /etc/docker/daemon.json (if the file already exists, merge the key in, keeping every other key), running systemctl reload docker (never a restart), and checking that docker info --format '{{.LiveRestoreEnabled}}' prints true.
 
 ### Servers that still have a password
 

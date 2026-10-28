@@ -5343,7 +5343,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "커뮤니티를 이용하려면 현재 기기의 BeanPool({version})보다 최신 버전이 필요해요. Google Play에 {latest} 버전이 준비되어 있어요.",
   "Updating keeps your account and everything on this phone.": "업데이트해도 계정과 기기의 모든 데이터는 안전하게 유지돼요.",
   "Update BeanPool in the App Store": "App Store에서 BeanPool 업데이트",
-  "Update BeanPool in Google Play": "Google Play에서 BeanPool 업데이트",
   "Update\u0004the app": "업데이트",
   "Can't update? Ask the people who run your community.": "업데이트할 수 없나요? 커뮤니티 운영자에게 문의하세요.",
   "Use another community": "다른 커뮤니티 사용",

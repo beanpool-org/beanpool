@@ -97,7 +97,6 @@ vi.mock('../community-switch', () => ({ onCommunitySwitched: () => () => {}, com
 vi.mock('../force-update', () => ({
     createForceUpdateGate: ({ show }: { show: (b: { version: string }) => void }) => ({ start: async () => { show({ version: '1.3.0' }); }, appStateChanged: async () => {}, communitySwitched: async () => {} }),
     checkCommunityForUpdate: async () => null,
-    STORE_URLS: { ios: { app: 'itms-apps://x', web: 'https://x' }, android: { app: 'market://x', web: 'https://x' } },
     appVersionHeaderValue: () => '1.2.70',
 }));
 vi.mock('../identity', () => ({ hasMnemonic: () => who.words }));
@@ -230,7 +229,9 @@ describe('"Update required" in the pseudo-locale: every page, every word through
         await settle();
         expect(host.textContent).toContain(xx('Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.')
             .replace('{version}', appConfig.expo.version).replace('{latest}', '1.3.0'));
-        expect(byLabel(xx('Update BeanPool in Google Play'))).not.toBeNull();
+        // Update can open beanpool.org/android, not Google Play (utils/update-destination.ts): the button says only "Update".
+        expect(byLabel(xx('Update'))).not.toBeNull();
+        expect(byLabel(xx('Update BeanPool in Google Play'))).toBeNull();
         expect(bypassing(host, WRITTEN, alerts.said)).toEqual([]);
     });
 

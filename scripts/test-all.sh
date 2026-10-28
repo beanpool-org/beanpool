@@ -399,6 +399,18 @@ run_check "website_status" run_website_status
 # beanpool.org/global, the link to the global community: every link on it is https and ours, the Play referrer reads
 # global=1, its script sends each kind of visitor where the global-entry design says, and the iPhone app claims it. Instant.
 run_check "website_global_link" node --test scripts/website-global-link.test.mjs
+# beanpool.org/android, the direct APK download (front doors S5): one release from apps/website-src/android-apk.json on
+# every language's page, the signing key the site already names for App Links, no translation made stale by a release,
+# the home page's and /global's lines to it; drawn at 320 px with text at 130 %, light and dark. Its Chromium is the one
+# website_contrast installs, so it starts once that has finished. Seconds.
+run_website_android() {
+  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  node --test scripts/website-android.test.mjs
+}
+run_check "website_android" run_website_android
+# Every internal link on the website reaches a page in the tree (S0: no link to beanpool.org/android before its page),
+# and every domain name in an English page's words is a link. Instant.
+run_check "website_links" node --test scripts/website-links.test.mjs scripts/website-domain-links.test.mjs
 
 # website-s6: every page in the 24 languages, hreflang, footer row, read in banner, RTL, check
 run_website_lang() {

@@ -68,7 +68,7 @@ interface Props {
     onBack: () => void;
     themePreference: ThemePreference;
     onThemePreferenceChange: (preference: ThemePreference) => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area';
     /** With initialMode 'guide': the guide page to open at (Home's Tips card, Read more); absent: its front page. */
     initialGuidePage?: string | null;
     onReRunSetup?: () => void;
@@ -1589,30 +1589,43 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 )}
 
                 {/* ─── MODE: YOUR AREA ─── */}
-                {mode === 'area' && areaLimits && (
-                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800" data-testid="settings-area">
-                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 <>{t(AREA_STEP_WORDS.settingsRow)}</></h3>
-                        <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-3 break-words" data-testid="settings-area-current">{areaLine}</p>
-                        {myArea && (
+                {mode === 'area' && (
+                    areaLimits ? (
+                        <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800" data-testid="settings-area">
+                            <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 <>{t(AREA_STEP_WORDS.settingsRow)}</></h3>
+                            <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-3 break-words" data-testid="settings-area-current">{areaLine}</p>
+                            {myArea && (
+                                <button
+                                    data-testid="settings-area-clear"
+                                    onClick={clearMyArea}
+                                    disabled={areaClearing}
+                                    className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
+                                >
+                                    {areaClearing ? t('Clearing…') : t('Clear')}
+                                </button>
+                            )}
+                            {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
+                            <AreaStep
+                                send={senderForMe}
+                                limits={areaLimits}
+                                hideTitle
+                                skipLabel={t('← Back to Settings')}
+                                onSkip={() => setMode('menu')}
+                                onSaved={(a, placeName) => { rememberAreaPlace(placeName); setAreaRefusal(null); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
+                            />
+                        </div>
+                    ) : (
+                        <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800 text-center">
+                            <p className="text-sm text-nature-600 dark:text-nature-400 mb-4">{t('Checking area settings…')}</p>
                             <button
-                                data-testid="settings-area-clear"
-                                onClick={clearMyArea}
-                                disabled={areaClearing}
-                                className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
+                                type="button"
+                                onClick={() => setMode('menu')}
+                                className="px-4 py-2 bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 rounded-xl font-semibold text-sm cursor-pointer"
                             >
-                                {areaClearing ? t('Clearing…') : t('Clear')}
+                                {t('← Back to Settings')}
                             </button>
-                        )}
-                        {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
-                        <AreaStep
-                            send={senderForMe}
-                            limits={areaLimits}
-                            hideTitle
-                            skipLabel={t('← Back to Settings')}
-                            onSkip={() => setMode('menu')}
-                            onSaved={(a, placeName) => { rememberAreaPlace(placeName); setAreaRefusal(null); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
-                        />
-                    </div>
+                        </div>
+                    )
                 )}
 
                 {/* ─── MODE: NOTIFICATION PREFERENCES ─── */}

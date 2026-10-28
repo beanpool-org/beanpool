@@ -541,7 +541,6 @@
   "Add a photo to your profile": "আপনার প্রোফাইলে একটি ছবি যোগ করুন",
   "Pick a few things you like": "আপনার পছন্দের কয়েকটি বিষয় বেছে নিন",
   "Post something free or for swap": "বিনামূল্যে বা বিনিময়ের জন্য কিছু পোস্ট করুন",
-  "Ask a community to let you in": "একটি সম্প্রদায়ে যোগদানের অনুরোধ করুন",
   "{n} day|{n} days": {
     "one": "{n} দিন",
     "other": "{n} দিন"
@@ -560,7 +559,6 @@
   "Your credit opens with a first trade.": "প্রথম বাণিজ্যের সাথে আপনার ক্রেডিট খোলে।",
   "Spending is paused for now. You can still receive and sell.": "ব্যয় আপাতত স্থগিত। আপনি এখনও গ্রহণ ও বিক্রি করতে পারবেন।",
   "{amount} · room to spend {room}": "{amount} · ব্যয়ের সীমা {room}",
-  "The worldwide community": "বিশ্বব্যাপী সম্প্রদায়",
   "1 member. You're first. Invite someone.": "১ সদস্য। আপনি প্রথম। কাউকে আমন্ত্রণ জানান।",
   "1 member. You're first.": "১ সদস্য। আপনি প্রথম।",
   "{n} trade this month|{n} trades this month": {
@@ -6126,5 +6124,15 @@
   "Your picture, until you choose a banner.": "আপনার ছবি, যতক্ষণ না আপনি একটি ব্যানার বেছে নিচ্ছেন।",
   "You're looking around as a visitor. Nothing is saved until you join.": "আপনি অতিথি হিসেবে ঘুরে দেখছেন। যোগ না দেওয়া পর্যন্ত কিছুই সংরক্ষিত হয় না।",
   "Join to post": "পোস্ট করতে যোগ দিন",
-  "Join to message": "বার্তা পাঠাতে যোগ দিন"
+  "Join to message": "বার্তা পাঠাতে যোগ দিন",
+  "The global community": "বিশ্বব্যাপী সম্প্রদায়",
+  "Choose a name": "একটি নাম চয়ন করুন",
+  "Say roughly where you are": "মোটামুটি আপনি কোথায় আছেন তা বলুন",
+  "Add a picture (a preset counts)": "একটি ছবি যোগ করুন (প্রিসেটও গ্রহণযোগ্য)",
+  "Look at an example Ledger": "একটি উদাহরণ লেজার দেখুন",
+  "Say hello to someone near you": "আপনার কাছের কাউকে হ্যালো বলুন",
+  "Tell me when a community starts here, or say you'd help start one": "এখানে কোনো সম্প্রদায় শুরু হলে আমাকে জানান, বা শুরু করতে সাহায্য করুন",
+  "Nothing within 250 km yet.": "এখনও ২৫০ কিলোমিটারের মধ্যে কিছু নেই।",
+  "See what people post elsewhere ›": "অন্যত্র মানুষ কী পোস্ট করে তা দেখুন ›",
+  "Set your area": "আপনার এলাকা সেট করুন"
 }

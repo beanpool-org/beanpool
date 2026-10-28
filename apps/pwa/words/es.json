@@ -3618,5 +3618,16 @@
   "To ask {name} to join, open Find a community in the BeanPool app and choose {name}.": "Para pedir unirte a {name}, abre Buscar una comunidad en la app de BeanPool y elige {name}.",
   "{name} isn't in the list of communities yet. Try again in an hour, or ask one of its members for an invite.": "{name} aún no está en la lista de comunidades. Inténtalo de nuevo en una hora o pide una invitación a uno de sus miembros.",
   "Choose a banner photo, or keep this one": "Elige una foto de banner o conserva esta",
-  "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner."
+  "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner.",
+  "The global community": "La comunidad global",
+  "Your first week": "Tu primera semana",
+  "Choose a name": "Elige un nombre",
+  "Say roughly where you are": "Indica aproximadamente dónde estás",
+  "Add a picture (a preset counts)": "Añade una foto (una predeterminada cuenta)",
+  "Look at an example Ledger": "Mira un libro de cuentas de ejemplo",
+  "Say hello to someone near you": "Saluda a alguien cerca de ti",
+  "Tell me when a community starts here, or say you'd help start one": "Avísame cuando empiece una comunidad aquí o indica que ayudarías a empezar una",
+  "Nothing within 250 km yet.": "Todavía no hay nada en un radio de 250 km.",
+  "See what people post elsewhere ›": "Mira lo que publica la gente en otros lugares ›",
+  "Set your area": "Define tu zona"
 }

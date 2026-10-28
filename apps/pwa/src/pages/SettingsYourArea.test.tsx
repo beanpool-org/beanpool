@@ -156,4 +156,11 @@ describe('Settings → Your area (S4)', () => {
         expect(screen.getByTestId('settings-area-current')).toHaveTextContent(shown);
         expect(screen.queryByTestId('settings-area-clear')).toBeNull();
     });
+
+    it('initialMode="area": opens directly into the area form (L4)', async () => {
+        render(<SettingsPage identity={identity} onIdentityUpdated={() => {}} onBack={() => {}} themePreference="system" onThemePreferenceChange={() => {}} initialMode="area" />);
+        const areaPanel = await screen.findByTestId('settings-area');
+        expect(areaPanel).not.toBeNull();
+        expect(screen.getByTestId('settings-area-current')).not.toBeNull();
+    });
 });

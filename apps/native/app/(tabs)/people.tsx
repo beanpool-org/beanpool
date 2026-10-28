@@ -16,7 +16,7 @@ import { useTabRetapScrollTop } from '../../components/PageTitle';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { normaliseInviteCode, redeemTargetUrl } from '../../utils/invite-parser';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
@@ -303,6 +303,17 @@ export default function PeopleScreen() {
             // debounced effect's run 400 ms later for the same empty search.
             onDemandOpened.current = membersOnDemand;
         }
+    }, [view]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (view === 'community' && listNote === 'noArea') {
+                loadMembers('', sortOption);
+            }
+        }, [view, listNote, sortOption, membersOnDemand])
+    );
+
+    useEffect(() => {
         if (view === 'invites') {
             checkOnlineStatus();
         }
@@ -1007,6 +1018,29 @@ export default function PeopleScreen() {
                                 <Text style={{ color: colors.text.secondary, fontSize: 15, fontWeight: '500', textAlign: 'center' }}>
                                     {communityListEmpty(listNote, searchQuery)}
                                 </Text>
+                                {listNote === 'noArea' && (
+                                    <Pressable
+                                        onPress={() => router.push('/your-area' as any)}
+                                        style={{
+                                            marginTop: 16,
+                                            paddingVertical: 10,
+                                            paddingHorizontal: 20,
+                                            borderRadius: 10,
+                                            backgroundColor: colors.brand.fill,
+                                            minHeight: 48,
+                                            minWidth: 48,
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                        }}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Set your area')}
+                                        testID="people-community-set-area"
+                                    >
+                                        <Text style={{ color: colors.text.inverse, fontSize: 15, fontWeight: '600' }}>
+                                            {t('Set your area')}
+                                        </Text>
+                                    </Pressable>
+                                )}
                             </View>
                         }
                         renderItem={({ item, index }) => {

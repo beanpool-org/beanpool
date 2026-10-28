@@ -586,7 +586,6 @@
   "Add a photo to your profile": "为个人资料添加照片",
   "Pick a few things you like": "选择一些你喜欢的类别",
   "Post something free or for swap": "发布免费赠送或置换的闲置物品",
-  "Ask a community to let you in": "申请加入一个社区",
   "{n} day|{n} days": {
     "other": "{n} 天"
   },
@@ -602,7 +601,6 @@
   "Your credit opens with a first trade.": "完成首笔交易即可开启信用额度。",
   "Spending is paused for now. You can still receive and sell.": "支出功能暂时暂停。你仍可正常接收豆子和出售物品。",
   "{amount} · room to spend {room}": "{amount} · 可透支额度 {room}",
-  "The worldwide community": "全球社区",
   "1 member. You're first. Invite someone.": "1 位成员。你是第一位。快去邀请新伙伴吧。",
   "1 member. You're first.": "1 位成员。你是第一位。",
   "{n} trade this month|{n} trades this month": {
@@ -5887,5 +5885,15 @@
   "Your picture, until you choose a banner.": "您的头像，直到您选择横幅。",
   "You're looking around as a visitor. Nothing is saved until you join.": "你正在以访客身份浏览。加入之前不会保存任何内容。",
   "Join to post": "加入后发布",
-  "Join to message": "加入后发消息"
+  "Join to message": "加入后发消息",
+  "The global community": "全球社区",
+  "Choose a name": "选择一个名字",
+  "Say roughly where you are": "说明你的大致位置",
+  "Add a picture (a preset counts)": "添加一张照片（预设照片亦可）",
+  "Look at an example Ledger": "查看示例账本",
+  "Say hello to someone near you": "向附近的邻居打个招呼",
+  "Tell me when a community starts here, or say you'd help start one": "在此处建立社区时通知我，或表示愿意协助创建",
+  "Nothing within 250 km yet.": "250 公里内暂无内容。",
+  "See what people post elsewhere ›": "查看其他地方的内容 ›",
+  "Set your area": "设置你的地区"
 }

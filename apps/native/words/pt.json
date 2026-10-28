@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Adicione uma foto ao perfil",
   "Pick a few things you like": "Escolha algumas coisas que curte",
   "Post something free or for swap": "Publique algo grátis ou para troca",
-  "Ask a community to let you in": "Peça para uma comunidade aceitar você",
   "{n} day|{n} days": {
     "one": "{n} dia",
     "other": "{n} dias"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "Seu crédito se abre com uma primeira troca.",
   "Spending is paused for now. You can still receive and sell.": "Gastos estão pausados por enquanto. Você ainda pode receber e vender.",
   "{amount} · room to spend {room}": "{amount} · limite para gastar {room}",
-  "The worldwide community": "A comunidade mundial",
   "1 member. You're first. Invite someone.": "1 membro. Você é o primeiro. Convide alguém.",
   "1 member. You're first.": "1 membro. Você é o primeiro.",
   "{n} trade this month|{n} trades this month": {
@@ -6126,5 +6124,15 @@
   "Your picture, until you choose a banner.": "Sua foto, até você escolher um banner.",
   "You're looking around as a visitor. Nothing is saved until you join.": "Você está dando uma olhada como visitante. Nada é salvo até você entrar.",
   "Join to post": "Entre para publicar",
-  "Join to message": "Entre para mandar mensagem"
+  "Join to message": "Entre para mandar mensagem",
+  "The global community": "A comunidade global",
+  "Choose a name": "Escolha um nome",
+  "Say roughly where you are": "Diga aproximadamente onde você está",
+  "Add a picture (a preset counts)": "Adicione uma foto (uma predefinida conta)",
+  "Look at an example Ledger": "Veja um livro-razão de exemplo",
+  "Say hello to someone near you": "Diga oi para alguém perto de você",
+  "Tell me when a community starts here, or say you'd help start one": "Avise-me quando uma comunidade começar aqui ou diga que ajudaria a começar uma",
+  "Nothing within 250 km yet.": "Nada em um raio de 250 km ainda.",
+  "See what people post elsewhere ›": "Veja o que as pessoas publicam em outros lugares ›",
+  "Set your area": "Defina sua região"
 }

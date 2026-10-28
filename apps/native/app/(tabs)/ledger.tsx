@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useIdentity } from '../IdentityContext';
-import { getBalance, getTransactions, getMemberProfile, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal } from '../../utils/db';
+import { getBalance, getTransactions, getMemberProfile, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -449,6 +449,20 @@ export default function LedgerScreen() {
         if (preview || beansMode === undefined) return;
         getAllCommunityMembers().then(m => setMembers(m.filter(mm => mm.publicKey !== identity?.publicKey))).catch(console.error);
     };
+
+    const sawLedgerSent = React.useRef(false);
+
+    React.useEffect(() => {
+        if (identity?.publicKey && preview && !sawLedgerSent.current) {
+            sawLedgerSent.current = true;
+            signedRequest('/api/members/preferences', {
+                publicKey: identity.publicKey,
+                preferences: { saw_ledger: true },
+            }).catch(() => {
+                sawLedgerSent.current = false;
+            });
+        }
+    }, [identity?.publicKey, preview]);
 
     useFocusEffect(
         React.useCallback(() => {

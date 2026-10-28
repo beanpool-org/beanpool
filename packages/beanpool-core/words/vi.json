@@ -214,7 +214,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "Nhấn + ĐĂNG TIN để đăng Lời đề nghị: ổ bánh mì, cho đi nhờ xe, một giờ giúp việc. Hãy đăng Lời đề nghị trước Nhu cầu để ai cũng đóng góp.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "Nhấn + ĐĂNG TIN để đăng đồ miễn phí hoặc trao đổi. Nhu cầu là thứ bạn đang tìm kiếm.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "Đậu ghi nhận sự giúp đỡ đã cho và nhận. Ai cũng bắt đầu từ số 0, và số 0 là rất tốt: nó có nghĩa bạn đã cho đi tương đương những gì nhận được.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "Không có đậu trên cộng đồng toàn cầu. Hãy ghi rõ trong bài đăng điều bạn mong muốn: miễn phí, trao đổi hoặc thương lượng.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "Ước tính chung: 40 đậu tương đương khoảng một giờ thời gian của ai đó. Bạn và người kia sẽ tự thỏa thuận mức giá thực tế.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "12 từ khóa là chìa khóa tài khoản của bạn, không có mật khẩu. Hãy chép ra giấy và giữ an toàn: không ai có thể đặt lại giúp bạn.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "Bản đồ hiển thị những gì gần bạn: ghim xanh lá là Lời đề nghị, ghim cam là Nhu cầu, ghim tím là sự kiện. Ghim của bạn sẽ ở gần nhà chứ không hiện chính xác vị trí.",
@@ -747,5 +746,7 @@
   "Start a project or an enterprise →": "Bắt đầu dự án hoặc dự án cộng đồng →",
   "Social Circle": "Nhóm giao lưu",
   "Working Group": "Nhóm làm việc",
-  "Guild": "Hội nghề"
+  "Guild": "Hội nghề",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Không có đậu trên cộng đồng toàn cầu. Hãy ghi rõ trong bài đăng điều bạn mong muốn: miễn phí, trao đổi hoặc thương lượng.",
+  "Your first week": "Tuần đầu tiên của bạn"
 }

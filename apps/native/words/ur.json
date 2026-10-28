@@ -601,7 +601,6 @@
   "Add a photo to your profile": "اپنے پروفائل پر تصویر لگائیں",
   "Pick a few things you like": "اپنی پسندیدہ چند چیزیں منتخب کریں",
   "Post something free or for swap": "کوئی مفت یا تبادلے کی چیز پوسٹ کریں",
-  "Ask a community to let you in": "کسی کمیونٹی میں شامل ہونے کی درخواست کریں",
   "{n} day|{n} days": {
     "one": "{n} دن",
     "other": "{n} دن"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "آپ کا کریڈٹ پہلے تبادلے سے کھلتا ہے۔",
   "Spending is paused for now. You can still receive and sell.": "خرچ کرنا فی الحال موقوف ہے۔ آپ اب بھی وصول اور فروخت کر سکتے ہیں۔",
   "{amount} · room to spend {room}": "{amount} · خرچ کرنے کی گنجائش: {room}",
-  "The worldwide community": "عالمی کمیونٹی",
   "1 member. You're first. Invite someone.": "1 رکن۔ آپ پہلے ہیں۔ کسی کو مدعو کریں۔",
   "1 member. You're first.": "1 رکن۔ آپ پہلے ہیں۔",
   "{n} trade this month|{n} trades this month": {
@@ -6126,5 +6124,15 @@
   "Your picture, until you choose a banner.": "آپ کی تصویر، جب تک آپ بینر منتخب نہ کریں۔",
   "You're looking around as a visitor. Nothing is saved until you join.": "آپ مہمان کے طور پر دیکھ رہے ہیں۔ شامل ہونے تک کچھ بھی محفوظ نہیں ہوتا۔",
   "Join to post": "پوسٹ کرنے کے لیے شامل ہوں",
-  "Join to message": "پیغام بھیجنے کے لیے شامل ہوں"
+  "Join to message": "پیغام بھیجنے کے لیے شامل ہوں",
+  "The global community": "عالمی کمیونٹی",
+  "Choose a name": "ایک نام منتخب کریں",
+  "Say roughly where you are": "بتائیں کہ آپ تقریباً کہاں ہیں",
+  "Add a picture (a preset counts)": "ایک تصویر شامل کریں (پری سیٹ بھی شمار ہوتا ہے)",
+  "Look at an example Ledger": "ایک نمونہ بہی کھاتہ دیکھیں",
+  "Say hello to someone near you": "اپنے قریبی کسی کو ہیلو کہیں",
+  "Tell me when a community starts here, or say you'd help start one": "یہاں کوئی کمیونٹی شروع ہو تو مجھے بتائیں، یا ایک شروع کرنے میں مدد کی بات کہیں",
+  "Nothing within 250 km yet.": "ابھی 250 کلومیٹر کے اندر کچھ نہیں ہے۔",
+  "See what people post elsewhere ›": "دیکھیں لوگ دوسری جگہوں پر کیا پوسٹ کرتے ہیں ›",
+  "Set your area": "اپنا علاقہ سیٹ کریں"
 }

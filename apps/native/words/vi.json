@@ -586,7 +586,6 @@
   "Add a photo to your profile": "Thêm ảnh vào hồ sơ của bạn",
   "Pick a few things you like": "Chọn một số điều bạn thích",
   "Post something free or for swap": "Đăng thứ gì đó miễn phí hoặc để trao đổi",
-  "Ask a community to let you in": "Xin gia nhập một cộng đồng",
   "{n} day|{n} days": {
     "other": "{n} ngày"
   },
@@ -602,7 +601,6 @@
   "Your credit opens with a first trade.": "Hạn mức tín dụng sẽ mở sau giao dịch đầu tiên.",
   "Spending is paused for now. You can still receive and sell.": "Chi tiêu tạm thời bị tạm dừng. Bạn vẫn có thể nhận và bán.",
   "{amount} · room to spend {room}": "{amount} · hạn mức chi tiêu {room}",
-  "The worldwide community": "Cộng đồng toàn cầu",
   "1 member. You're first. Invite someone.": "1 thành viên. Bạn là người đầu tiên. Hãy mời thêm ai đó.",
   "1 member. You're first.": "1 thành viên. Bạn là người đầu tiên.",
   "{n} trade this month|{n} trades this month": {
@@ -5887,5 +5885,15 @@
   "Your picture, until you choose a banner.": "Ảnh của bạn, cho đến khi bạn chọn ảnh bìa.",
   "You're looking around as a visitor. Nothing is saved until you join.": "Bạn đang xem với tư cách khách. Không có gì được lưu cho đến khi bạn tham gia.",
   "Join to post": "Tham gia để đăng bài",
-  "Join to message": "Tham gia để nhắn tin"
+  "Join to message": "Tham gia để nhắn tin",
+  "The global community": "Cộng đồng toàn cầu",
+  "Choose a name": "Chọn một tên",
+  "Say roughly where you are": "Cho biết đại khái vị trí của bạn",
+  "Add a picture (a preset counts)": "Thêm ảnh (ảnh có sẵn cũng được tính)",
+  "Look at an example Ledger": "Xem sổ cái ví dụ",
+  "Say hello to someone near you": "Gửi lời chào tới người ở gần bạn",
+  "Tell me when a community starts here, or say you'd help start one": "Báo cho tôi khi có cộng đồng bắt đầu ở đây, hoặc ngỏ ý giúp bắt đầu một cộng đồng",
+  "Nothing within 250 km yet.": "Chưa có gì trong phạm vi 250 km.",
+  "See what people post elsewhere ›": "Xem mọi người đăng gì ở nơi khác ›",
+  "Set your area": "Thiết lập khu vực của bạn"
 }

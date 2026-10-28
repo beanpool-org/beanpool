@@ -586,7 +586,6 @@
   "Add a photo to your profile": "프로필에 사진 추가하기",
   "Pick a few things you like": "관심 있는 분야 몇 가지 고르기",
   "Post something free or for swap": "나눔이나 교환할 물건 올리기",
-  "Ask a community to let you in": "커뮤니티에 가입 요청하기",
   "{n} day|{n} days": {
     "other": "{n}일"
   },
@@ -602,7 +601,6 @@
   "Your credit opens with a first trade.": "첫 거래를 마치면 신용 한도가 생겨요.",
   "Spending is paused for now. You can still receive and sell.": "현재 사용이 일시 중지되었어요. 받기와 판매는 계속 가능해요.",
   "{amount} · room to spend {room}": "{amount} · 쓸 수 있는 여유 한도 {room}",
-  "The worldwide community": "전 세계 커뮤니티",
   "1 member. You're first. Invite someone.": "멤버 1명. 첫 번째 멤버예요. 이웃을 초대해 보세요.",
   "1 member. You're first.": "멤버 1명. 첫 번째 멤버예요.",
   "{n} trade this month|{n} trades this month": {
@@ -5887,5 +5885,15 @@
   "Your picture, until you choose a banner.": "배너를 선택할 때까지 표시되는 사진입니다.",
   "You're looking around as a visitor. Nothing is saved until you join.": "방문자로 둘러보는 중이에요. 참여하기 전에는 아무것도 저장되지 않아요.",
   "Join to post": "참여하고 게시하기",
-  "Join to message": "참여하고 메시지 보내기"
+  "Join to message": "참여하고 메시지 보내기",
+  "The global community": "글로벌 커뮤니티",
+  "Choose a name": "이름 선택하기",
+  "Say roughly where you are": "대략적인 위치 설정하기",
+  "Add a picture (a preset counts)": "사진 추가하기 (프리셋도 가능)",
+  "Look at an example Ledger": "원장 예시 살펴보기",
+  "Say hello to someone near you": "가까운 이웃에게 인사하기",
+  "Tell me when a community starts here, or say you'd help start one": "여기서 커뮤니티가 시작되면 알림 받기 또는 시작 돕기",
+  "Nothing within 250 km yet.": "아직 250km 이내에 등록된 항목이 없어요.",
+  "See what people post elsewhere ›": "다른 지역 게시물 보기 ›",
+  "Set your area": "내 지역 설정"
 }

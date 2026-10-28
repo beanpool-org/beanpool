@@ -602,7 +602,6 @@
   "Add a photo to your profile": "உங்கள் சுயவிவரத்தில் புகைப்படத்தைச் சேர்க்கவும்",
   "Pick a few things you like": "உங்களுக்குப் பிடித்த சிலவற்றைத் தேர்ந்தெடுக்கவும்",
   "Post something free or for swap": "இலவசமாகவோ அல்லது பரிமாற்றத்திற்கோ எதையாவது பகிருங்கள்",
-  "Ask a community to let you in": "ஒரு சமூகத்தில் உங்களை இணைக்கக் கேளுங்கள்",
   "{n} day|{n} days": {
     "one": "{n} நாள்",
     "other": "{n} நாட்கள்"
@@ -621,7 +620,6 @@
   "Your credit opens with a first trade.": "முதல் பரிமாற்றத்துடன் உங்கள் கடன் வரம்பு தொடங்குகிறது.",
   "Spending is paused for now. You can still receive and sell.": "செலவழிப்பது தற்போது இடைநிறுத்தப்பட்டுள்ளது. நீங்கள் இன்னும் பெறவும் விற்கவும் முடியும்.",
   "{amount} · room to spend {room}": "{amount} · செலவழிக்கும் வரம்பு {room}",
-  "The worldwide community": "உலகளாவிய சமூகம்",
   "1 member. You're first. Invite someone.": "1 உறுப்பினர். நீங்கள் முதலாமவர். ஒருவரை அழைக்கவும்.",
   "1 member. You're first.": "1 உறுப்பினர். நீங்கள் முதலாமவர்.",
   "{n} trade this month|{n} trades this month": {
@@ -6126,5 +6124,15 @@
   "Your picture, until you choose a banner.": "நீங்கள் பேனரைத் தேர்வுசெய்யும் வரை உங்கள் படம்.",
   "You're looking around as a visitor. Nothing is saved until you join.": "நீங்கள் பார்வையாளராகச் சுற்றிப் பார்க்கிறீர்கள். நீங்கள் இணையும் வரை எதுவும் சேமிக்கப்படாது.",
   "Join to post": "இடுகையிட இணையவும்",
-  "Join to message": "செய்தி அனுப்ப இணையவும்"
+  "Join to message": "செய்தி அனுப்ப இணையவும்",
+  "The global community": "உலகளாவிய சமூகம்",
+  "Choose a name": "ஒரு பெயரைத் தேர்வுசெய்க",
+  "Say roughly where you are": "நீங்கள் தோராயமாக எங்கு இருக்கிறீர்கள் என்று சொல்லுங்கள்",
+  "Add a picture (a preset counts)": "ஒரு படத்தைச் சேர்க்கவும் (முன்னமைக்கப்பட்டதும் அடங்கும்)",
+  "Look at an example Ledger": "ஒரு மாதிரி பேரேட்டைப் பாருங்கள்",
+  "Say hello to someone near you": "உங்களுக்கு அருகில் உள்ள ஒருவருக்கு வணக்கம் சொல்லுங்கள்",
+  "Tell me when a community starts here, or say you'd help start one": "இங்கு ஒரு சமூகம் தொடங்கும் போது தெரிவிக்கவும், அல்லது ஒன்றைத் தொடங்க உதവவும்",
+  "Nothing within 250 km yet.": "இன்னும் 250 கி.மீ-க்குள் எதுவும் இல்லை.",
+  "See what people post elsewhere ›": "மற்ற இடங்களில் மக்கள் என்ன இடுகையிடுகிறார்கள் என்று பாருங்கள் ›",
+  "Set your area": "உங்கள் பகுதியை அமைக்கவும்"
 }

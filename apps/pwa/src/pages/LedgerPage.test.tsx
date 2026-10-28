@@ -7,7 +7,7 @@ beforeEach(() => forgetRecentLookups());
 import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getBalance, getMembers, getMemberCards, getTransactions, sendTransfer } from '../lib/api';
+import { getBalance, getMembers, getMemberCards, getTransactions, sendTransfer, saveHomePreferences } from '../lib/api';
 import { addDateWords, setLanguage } from '@beanpool/core';
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import { onSyncActivity } from '../lib/sync';
@@ -32,6 +32,7 @@ vi.mock('../lib/api', () => ({
     getMembers: vi.fn(async () => []),
     getMemberCards: vi.fn(async () => []),
     sendTransfer: vi.fn(),
+    saveHomePreferences: vi.fn(async () => ({ success: true })),
     // The reader's own set (GET /api/community/me): none unless a test says (BeanID's verified member: Beans live).
     getCommunityMe: vi.fn(async () => ({ features: reader.value })),
 }));
@@ -410,6 +411,34 @@ describe('the Ledger in preview (a node that previews Beans): Example Valley, an
         fireEvent.click(screen.getByRole('button', { name: /Wallet/ }));
         expect(screen.queryByText('My own line')).toBeNull();
         expect(screen.getByText('A loaf of bread')).toBeInTheDocument();
+    });
+
+    it('saves saw_ledger preference once when member visits preview ledger, and not for guests or local ledger', async () => {
+        // Guest visiting preview: no saw_ledger save
+        vi.mocked(saveHomePreferences).mockClear();
+        const { rerender } = render(<LedgerPage identity={identity} isMember={false} preview />);
+        expect(saveHomePreferences).not.toHaveBeenCalled();
+
+        // Local ledger for member: no saw_ledger save
+        vi.mocked(saveHomePreferences).mockClear();
+        await act(async () => {
+            rerender(<LedgerPage identity={identity} isMember={true} preview={false} />);
+        });
+        expect(saveHomePreferences).not.toHaveBeenCalled();
+
+        // Member visiting preview: saved exactly once
+        vi.mocked(saveHomePreferences).mockClear();
+        await act(async () => {
+            rerender(<LedgerPage identity={identity} isMember={true} preview />);
+        });
+        expect(saveHomePreferences).toHaveBeenCalledTimes(1);
+        expect(saveHomePreferences).toHaveBeenCalledWith('viewer-pubkey', { saw_ledger: true });
+
+        // Rerender does not write again
+        await act(async () => {
+            rerender(<LedgerPage identity={identity} isMember={true} preview />);
+        });
+        expect(saveHomePreferences).toHaveBeenCalledTimes(1);
     });
 });
 

@@ -2987,7 +2987,7 @@ export interface SavedHomePreferences { success: boolean; 'home.layout'?: unknow
  * card frame refuses a version-2 layout with a 400 (the error carries `status`): pages/HomePage.tsx keeps the cards in
  * this browser then, and sends them again at the next landing.
  */
-export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord }): Promise<SavedHomePreferences> {
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord; saw_ledger?: boolean }): Promise<SavedHomePreferences> {
     return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 

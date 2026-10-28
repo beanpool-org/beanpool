@@ -70,7 +70,9 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
-import { askNodeRole } from '../../utils/node-admin';
+import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
+import { howThisCommunityWorksLabelWords, howThisCommunityWorksSubtitleWords } from '../../components/settings/settings-lines';
+import { askNodeRole, canManageNode } from '../../utils/node-admin';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { ChatMemoryCard } from '../../components/ChatMemoryCard';
 import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
@@ -337,6 +339,8 @@ export default function SettingsScreen() {
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
     const [copiedWords, setCopiedWords] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
+    const [hasRole, setHasRole] = useState(false);
+    const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     // The pricing guide is estimates in Beans: not offered on a community with Beans off (the worldwide one).
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
@@ -1879,9 +1883,30 @@ export default function SettingsScreen() {
                 {/* A sign-in copy a community still keeps, moved to BeanPool's key vault with one sign-in (utils/vault-move.ts). */}
                 <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                 {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
-                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} />
+                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} onRoleChange={(r) => setHasRole(!!r && canManageNode(r))} />
                 {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
                 <OwnerWordsCard styles={styles} />
+                {!hasRole && (
+                    <>
+                        <Text style={styles.sectionHeader}>{t("COMMUNITY")}</Text>
+                        <View style={styles.menuGroup}>
+                            <Pressable
+                                style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
+                                onPress={() => setShapeSheetOpen(true)}
+                                accessibilityRole="button"
+                                accessibilityLabel={howThisCommunityWorksLabelWords()}
+                                testID="settings-how-this-community-works"
+                            >
+                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🧭</Text></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.menuText}>{howThisCommunityWorksLabelWords()}</Text>
+                                    <Text style={styles.menuSub}>{howThisCommunityWorksSubtitleWords()}</Text>
+                                </View>
+                                <Text style={styles.menuChevron}>›</Text>
+                            </Pressable>
+                        </View>
+                    </>
+                )}
                 <Text style={styles.sectionHeader}>{t("ACCOUNT & IDENTITY")}</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">
@@ -3484,6 +3509,12 @@ export default function SettingsScreen() {
             <PricingGuideModal
                 isOpen={showPricingGuide}
                 onClose={() => setShowPricingGuide(false)}
+            />
+
+            <CommunityShapeSheet
+                features={nodeProfile?.features}
+                visible={shapeSheetOpen}
+                onClose={() => setShapeSheetOpen(false)}
             />
         </KeyboardAwareScrollView>
     );

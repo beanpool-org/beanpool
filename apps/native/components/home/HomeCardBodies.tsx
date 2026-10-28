@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, type SkyToday, type TipsView } from '@beanpool/core';
+import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -649,15 +649,18 @@ export function InviteBody({ colors }: { colors: AppColors }) {
  * The community's card, last on Home, with the frame's two ways in (CARD-FRAME §1.1): "Add a card ›" and "Edit home ›",
  * each its own 48 dp target in a row that wraps (at 320 dp with text at 1.3× they stand on two rows, right-aligned).
  */
-export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit }: {
+export function CommunityBody({ card, profile, invitesOn, features, colors, onOpenShape, onAdd, onEdit }: {
     card: HomeCards['community'] | undefined;
     profile: string;
     invitesOn: boolean;
+    features?: CommunityShapeFeatures | null;
     colors: AppColors;
+    onOpenShape?: () => void;
     /** Absent for a visitor, who tailors nothing here (utils/home-cards.ts `canTailor`). */
     onAdd?: () => void;
     onEdit?: () => void;
 }) {
+    const shapeSummary = communityShapeSummary(features);
     const isFirstMember = profile !== 'global' && (card?.members ?? 0) <= 1;
     const hasNarrowSlice = !isFirstMember && card && (card.joined7d !== undefined || card.commonsPot !== undefined || card.eventsSoon !== undefined || (profile === 'global' && card.listings !== undefined));
     if (hasNarrowSlice) {
@@ -697,6 +700,7 @@ export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit 
                 <HomeRow colors={colors} text={row1Text} a11y={row1Text} lines={2} testID="home-community-row-members" />
                 {row2Text && <HomeRow colors={colors} text={row2Text} a11y={row2Text} lines={2} testID="home-community-row-trades" />}
                 {row3Text && <HomeRow colors={colors} text={row3Text} a11y={row3Text} lines={2} testID="home-community-row-listings" />}
+                {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
                 {(onAdd || onEdit) && (
                     <View style={communityLinksStyle}>
                         {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}
@@ -710,6 +714,7 @@ export function CommunityBody({ card, profile, invitesOn, colors, onAdd, onEdit 
     return (
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
+            {shapeSummary && <HomeRow colors={colors} text={`${shapeSummary} ›`} a11y={shapeSummary} lines={4} onPress={onOpenShape} testID="home-community-shape-summary" />}
             {(onAdd || onEdit) && (
                 <View style={communityLinksStyle}>
                     {onAdd && <HomeLink id="community:add" colors={colors} text={t('Add a card')} a11y={t('Add a card to Home')} onPress={onAdd} testID="home-add-card" />}

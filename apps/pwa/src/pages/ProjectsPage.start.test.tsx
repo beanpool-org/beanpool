@@ -309,7 +309,7 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         alertSpy.mockRestore();
     });
 
-    it('empty-state "+ Propose a Project" button resets lifecycle to bounded even after bridge set it to empty', async () => {
+    it('empty-state "Start a project" button sets the kind to bounded even after the bridge left it unset', async () => {
         render(<ProjectsPage identity={mockIdentity} />);
         await waitFor(() => expect(getTreasuries).toHaveBeenCalled());
 
@@ -341,6 +341,17 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         expect(within(proposeModal).getByRole('button', { name: /Choose a logo/i })).toBeInTheDocument();
         fireEvent.click(within(proposeModal).getByRole('button', { name: /Select Green Bean avatar/i }));
         expect(within(proposeModal).getByRole('button', { name: /Start the project 🌱/i })).toBeInTheDocument();
+    });
+
+    it("opened from Talk's group form (initialStart): the dialog is up and the page tells its caller once, so a later visit does not reopen it", async () => {
+        const onStartOpened = vi.fn();
+        const { rerender } = render(<ProjectsPage identity={mockIdentity} initialStart onStartOpened={onStartOpened} />);
+        expect(await screen.findByRole('dialog', { name: /Start something/i })).toBeInTheDocument();
+        expect(onStartOpened).toHaveBeenCalledTimes(1);
+
+        // The caller dropped the ask (App sets it false); the page does not tell it again.
+        rerender(<ProjectsPage identity={mockIdentity} initialStart={false} onStartOpened={onStartOpened} />);
+        expect(onStartOpened).toHaveBeenCalledTimes(1);
     });
 
     it('decision refusal alert: indicates trade when beans on', async () => {

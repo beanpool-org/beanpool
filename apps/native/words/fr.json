@@ -2662,7 +2662,7 @@
   "NAME / TITLE *": "NOM / TITRE *",
   "Enterprise name or project title": "Nom de l'entreprise ou titre du projet",
   "e.g. Community Tool Shed": "ex. Atelier d'outillage communautaire",
-  "PURPOSE STATEMENT *": "OBJECTIF DE L'INITIATIVE *",
+  "PURPOSE STATEMENT *": "DESCRIPTION DE L'OBJECTIF *",
   "Purpose statement": "Description de l'objectif",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Expliquez clairement la raison d'être de cette entreprise (ex. « Nous construisons et entretenons une serre commune d'ici novembre »).",
   "FUNDING GOAL ({currency}) *": "OBJECTIF DE FINANCEMENT ({currency}) *",

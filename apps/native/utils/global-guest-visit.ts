@@ -30,6 +30,11 @@
  * global community hears of no key at all. Every other answer moves nothing (`door`), and the first screen opens the door
  * as before, which says why. The key is made at Join, by the door, never here.
  *
+ * Asked, then written: the asks can take a while (the door's read is bounded at node-profile.ts FETCH_TIMEOUT_MS), and the
+ * screen that asked may have moved on by the answer (the first screen's Join with an invite works all the while). A
+ * caller's `proceed` is asked once the answers are in and before the first write; false, and nothing moves (`left`), so
+ * a visit nobody is waiting for never marks, saves or switches behind the screen now in use (PR #2559 review).
+ *
  * No-domain-lock-in: only the global community's own row and links call this; nothing else on the phone waits on it.
  */
 
@@ -46,7 +51,9 @@ export type GuestVisit =
     /** Nothing moved: the door can't be used from here right now, or the key's standing got no answer. The door's page says. */
     | { kind: 'door' }
     /** Nothing moved: the global community closed this key's account. */
-    | { kind: 'closed' };
+    | { kind: 'closed' }
+    /** Nothing moved: whoever asked had moved on by the answer (`proceed` said no). */
+    | { kind: 'left' };
 
 export interface GuestVisitDeps {
     checkDoor(url: string): Promise<GlobalDoorCheck>;
@@ -56,6 +63,8 @@ export interface GuestVisitDeps {
     addSavedNode(url: string, alias?: string): Promise<void>;
     /** Make `url` the phone's community: its own database, the anchor, the update screen told. */
     switchTo(url: string): Promise<unknown>;
+    /** Asked once the answers are in, just before the first write: false when whoever asked has moved on. None: always on. */
+    proceed?(): boolean;
 }
 
 async function defaultDeps(): Promise<GuestVisitDeps> {
@@ -91,6 +100,7 @@ export async function visitGlobalAsGuest(
     if (!identity) {
         // Nothing to sign with, and nothing to sign: a visitor with no key reads only what the node shows visitors.
         if (!showsVisitorsView(door.profile)) return { kind: 'door' };
+        if (deps.proceed && !deps.proceed()) return { kind: 'left' };
         await deps.markGuestNode(url);
         await deps.addSavedNode(url, 'Global community').catch(() => {});
         await deps.switchTo(url);
@@ -99,6 +109,7 @@ export async function visitGlobalAsGuest(
     const asked = await deps.askStanding(identity, url).catch((): AskedStanding => ({ standing: 'unknown', closed: false, answered: false }));
     if (!asked.answered) return { kind: 'door' };
     if (asked.closed) return { kind: 'closed' };
+    if (deps.proceed && !deps.proceed()) return { kind: 'left' };
     if (asked.standing === 'member') {
         await deps.clearGuestNode(url).catch(() => {});
         await deps.addSavedNode(url, 'Global community').catch(() => {});

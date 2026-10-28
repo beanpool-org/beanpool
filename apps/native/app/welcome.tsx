@@ -1590,8 +1590,11 @@ export default function WelcomeScreen() {
             // same: the door, whose Join refuses to write over it, as before the look (identity.ts readStoredIdentity).
             const keyHeld = await readStoredIdentity().then(Boolean, () => true);
             const pending = keyHeld ? null : await getPendingOnboarding().catch(() => null);
-            const answer = keyHeld || pending ? null : await visitGlobalAsGuest(null).catch(() => null);
-            if (!screenMountedRef.current || modeRef.current !== 'home') return;
+            // Asked again just before the visit writes anything: a screen that left home while the door was asked (Join with an
+            // invite works all the while) keeps the phone where it was, no guest mark, no saved row, no switch behind it.
+            const stillHome = () => screenMountedRef.current && modeRef.current === 'home';
+            const answer = keyHeld || pending ? null : await visitGlobalAsGuest(null, GLOBAL_NODE_URL, { proceed: stillHome }).catch(() => null);
+            if (!stillHome()) return;
             if (answer?.kind === 'guest') {
                 // The sync reads the visitors' view unsigned; the root guard lets a visitor stay on the look's screens.
                 import('../services/pillar-sync').then(({ requestSync }) => requestSync()).catch(() => {});

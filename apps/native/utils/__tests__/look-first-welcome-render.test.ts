@@ -16,6 +16,9 @@
  * 5. The phone's back button at the look's door is the door's own Back: shut while the sign-in is out.
  * 6. A phone whose key can't be read (no account in the context: loadIdentity answers null) is an account all the same,
  *    read through identity.ts readStoredIdentity: Explore opens the door as before, and the phone is not looking around.
+ * 7. Join with an invite tapped while Explore is asking (it works all the while): the visit, answering after, is told the
+ *    first screen has moved on (its `proceed`), so nothing is marked, saved or switched behind the invite form (PR #2559
+ *    review).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -290,10 +293,18 @@ vi.mock('../use-door-work', () => ({
         stop() {}, state: () => null, busy: null, runFor: () => null,
     }),
 }));
-// The look (utils/global-guest-visit.ts): what the visit answers, and who it was asked for.
-const look = vi.hoisted(() => ({ answer: { kind: 'guest' } as { kind: string }, askedFor: [] as unknown[] }));
+// The look (utils/global-guest-visit.ts): what the visit answers, who it was asked for, and what the screen's `proceed`
+// said when the answer came (the real visit asks it just before its first write; `gate` holds the answer back meanwhile).
+const look = vi.hoisted(() => ({ answer: { kind: 'guest' } as { kind: string }, askedFor: [] as unknown[], proceeded: [] as boolean[], gate: null as Promise<void> | null }));
 vi.mock('../global-guest-visit', () => ({
-    visitGlobalAsGuest: async (identity: unknown) => { look.askedFor.push(identity); return look.answer; },
+    visitGlobalAsGuest: async (identity: unknown, _url?: string, injected?: { proceed?: () => boolean }) => {
+        look.askedFor.push(identity);
+        if (look.gate) await look.gate;
+        if (look.answer.kind !== 'guest' || !injected?.proceed) return look.answer;
+        const go = injected.proceed();
+        look.proceeded.push(go);
+        return go ? look.answer : { kind: 'left' };
+    },
 }));
 vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => ({}) }));
 vi.mock('../sso-signin', async (importOriginal) => {
@@ -360,7 +371,7 @@ beforeEach(() => {
     backs.handlers.clear();
     nav.replaced.length = 0; nav.pushed.length = 0;
     work.started.length = 0; work.keysDrafted = 0;
-    look.answer = { kind: 'guest' }; look.askedFor.length = 0;
+    look.answer = { kind: 'guest' }; look.askedFor.length = 0; look.proceeded.length = 0; look.gate = null;
     clip.has = false; clip.text = '';
     phone.stored = null; phone.pending = null;
     keyItem.value = null; keyItem.throws = false;
@@ -431,6 +442,7 @@ describe('look before you join on a new phone (slice S12)', () => {
         expect(doorOpen()).toBe(false);
         await press('Explore BeanPool worldwide');
         expect(look.askedFor).toEqual([null]);
+        expect(look.proceeded).toEqual([true]);
         expect(nav.replaced).toEqual(['/(tabs)/market']);
         expect(doorOpen()).toBe(false);
         expect(work.keysDrafted).toBe(0);
@@ -522,6 +534,26 @@ describe('look before you join on a new phone (slice S12)', () => {
             act(() => root?.unmount());
             host?.remove();
         }
+    });
+
+    it('7. Join with an invite while Explore is asking: the visit is told the first screen moved on, and nothing moves behind the form', async () => {
+        let answered!: () => void;
+        look.gate = new Promise<void>((resolve) => { answered = resolve; });
+        await mount();
+        await press('Explore BeanPool worldwide');
+        expect(look.askedFor).toEqual([null]);
+        expect(all('span').some((s) => s.textContent === 'Connecting to the global community…')).toBe(true);
+        await press('Join with an invite');
+        expect(all('input').some((i) => i.getAttribute('aria-label') === 'Invite link or code')).toBe(true);
+        answered();
+        await settle();
+        // Asked once the answer came: the screen had left home, so the visit wrote nothing (its `left`).
+        expect(look.proceeded).toEqual([false]);
+        expect(nav.replaced).toEqual([]);
+        expect(doorOpen()).toBe(false);
+        expect(work.keysDrafted).toBe(0);
+        expect(work.started).toEqual([]);
+        expect(all('input').some((i) => i.getAttribute('aria-label') === 'Invite link or code')).toBe(true);
     });
 
     it('6b. a key the phone can\'t read, with guest marks of its own: not looking around, so its community fills the field as before', async () => {

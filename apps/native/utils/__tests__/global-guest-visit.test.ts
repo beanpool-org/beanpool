@@ -133,4 +133,49 @@ describe('visitGlobalAsGuest with no account on the phone (the first screen\'s E
         await expect(visitGlobalAsGuest(null, GLOBAL, d)).rejects.toThrow('disk full');
         expect(calls.at(-1)).toBe(`switch ${GLOBAL}`);
     });
+
+    it('the screen that asked moved on while the door was asked (PR #2559 review): nothing marked, saved or switched; left', async () => {
+        const { d, calls } = deps(VISITORS, stranger);
+        // The first screen's Join with an invite, tapped while the door's read is out: `proceed` is asked once it answers.
+        let movedOn = false;
+        const checkDoor = d.checkDoor;
+        d.checkDoor = async (url) => { const answer = await checkDoor(url); movedOn = true; return answer; };
+        const proceeds: boolean[] = [];
+        d.proceed = () => { proceeds.push(!movedOn); return !movedOn; };
+        expect(await visitGlobalAsGuest(null, GLOBAL, d)).toEqual({ kind: 'left' });
+        expect(calls).toEqual([`door ${GLOBAL}`]);
+        expect(proceeds).toEqual([false]);
+    });
+
+    it('still waited for: `proceed` is asked once, after the door and before the mark, and the visit goes on', async () => {
+        const { d, calls } = deps(VISITORS, stranger);
+        d.proceed = () => { calls.push('proceed'); return true; };
+        expect(await visitGlobalAsGuest(null, GLOBAL, d)).toEqual({ kind: 'guest' });
+        expect(calls).toEqual([`door ${GLOBAL}`, 'proceed', `mark ${GLOBAL}`, `save ${GLOBAL} Global community`, `switch ${GLOBAL}`]);
+    });
+
+    it('a door that lets nobody look: `proceed` is never asked (nothing would be written)', async () => {
+        const { d, calls } = deps({ ok: false, reason: 'unreachable' }, stranger);
+        d.proceed = () => { calls.push('proceed'); return true; };
+        expect(await visitGlobalAsGuest(null, GLOBAL, d)).toEqual({ kind: 'door' });
+        expect(calls).toEqual([`door ${GLOBAL}`]);
+    });
+});
+
+describe('visitGlobalAsGuest with a `proceed` and an account (the same rule: asked once the answers are in, before any write)', () => {
+    for (const [name, standing] of [['a stranger', stranger], ['a member', member]] as const) {
+        it(`${name}, the caller moved on: nothing cleared, marked, saved or switched; left`, async () => {
+            const { d, calls } = deps(OPEN, standing);
+            d.proceed = () => { calls.push('proceed'); return false; };
+            expect(await visitGlobalAsGuest(ME, GLOBAL, d)).toEqual({ kind: 'left' });
+            expect(calls).toEqual([`door ${GLOBAL}`, `ask ${GLOBAL}`, 'proceed']);
+        });
+    }
+
+    it('a closed account: `proceed` is never asked (nothing would be written)', async () => {
+        const { d, calls } = deps(OPEN, { standing: 'stranger', closed: true, answered: true });
+        d.proceed = () => { calls.push('proceed'); return true; };
+        expect(await visitGlobalAsGuest(ME, GLOBAL, d)).toEqual({ kind: 'closed' });
+        expect(calls).toEqual([`door ${GLOBAL}`, `ask ${GLOBAL}`]);
+    });
 });

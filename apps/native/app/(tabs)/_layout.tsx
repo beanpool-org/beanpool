@@ -251,7 +251,7 @@ export default function TabLayout() {
                 iv = setInterval(() => checkUnread(false), withJitter(5000));
                 netIv = setInterval(() => {
                     const lastRead = lastReadOkAtRef.current;
-                    const failedSince = lastReadFailedAtRef.current > lastRead;
+                    const failedSince = lastReadFailedAtRef.current >= lastRead; // started together: read again
                     if (messageBackstopDue(lastRead, Date.now(), !failedSince && webSocketAliveSince(lastRead))) checkUnread(true);
                 }, withJitter(MESSAGE_BACKSTOP_TICK_MS));
             }

@@ -1,5 +1,5 @@
 import { render, screen, act, waitFor, fireEvent, createEvent, cleanup, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import React from 'react';
 import { brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
 import { MessagesPage } from './MessagesPage';
@@ -421,6 +421,93 @@ describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
             await vi.advanceTimersByTimeAsync(3 * 24_000);
         });
         expect(reads()).toBe(opened + 1);
+    });
+
+    /** Bob's line, on the node; the open DM shows it once a read of it works. */
+    const BOBS_LINE = 'Read again on the next tick';
+    const bobWrites = () => {
+        mockMessagesByConv['conv-1'] = [
+            ...mockMessagesByConv['conv-1'],
+            { id: 'msg-retry', conversationId: 'conv-1', authorPubkey: 'peer-pubkey', ciphertext: BOBS_LINE, nonce: '00000', timestamp: '2026-09-14T00:00:40.000Z' },
+        ];
+    };
+    /**
+     * A read the node refuses: a 503 while it is full, or a request the network dropped. The socket stays up. A refusal
+     * the test didn't use goes with it (the describe's beforeEach puts the reads back).
+     */
+    const nextReadFails = () => {
+        vi.mocked(getConversationMessages).mockRejectedValueOnce(new Error('This community is busy right now.'));
+        onTestFinished(() => { vi.mocked(getConversationMessages).mockReset(); });
+    };
+    /** The doorbell, under fake time: the page's read needs the clock to move (its IndexedDB answers on a timer). */
+    const ring = () => act(async () => {
+        const rang = Promise.all(syncActivityListeners.map((listener) => listener()));
+        await vi.advanceTimersByTimeAsync(100);
+        await rang;
+    });
+
+    it('3d. a doorbell whose read fails is read again on the next tick, not at the 120 s backstop (review of #2558)', async () => {
+        vi.useFakeTimers();
+        socketAliveNow = true;
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        expect(screen.getByText('Hello Alice!')).toBeInTheDocument();
+        const reads = () => vi.mocked(getConversationMessages).mock.calls.filter(([id]) => id === 'conv-1').length;
+        const opened = reads();
+
+        bobWrites();
+        nextReadFails();
+        await ring();
+        expect(reads()).toBe(opened + 1);
+        expect(screen.queryByText(BOBS_LINE)).not.toBeInTheDocument();
+
+        // The next tick of the 30 s backstop (36 s at most, jittered) reads again and finds it.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(36_000);
+        });
+        expect(reads()).toBe(opened + 2);
+        expect(screen.getByText(BOBS_LINE)).toBeInTheDocument();
+
+        // That read worked: with the socket alive, back to 120 s.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3 * 24_000);
+        });
+        expect(reads()).toBe(opened + 2);
+    });
+
+    it('3e. a read that fails is read again on each tick until one works (review of #2558)', async () => {
+        vi.useFakeTimers();
+        socketAliveNow = true;
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        const reads = () => vi.mocked(getConversationMessages).mock.calls.filter(([id]) => id === 'conv-1').length;
+        const opened = reads();
+
+        bobWrites();
+        nextReadFails();
+        nextReadFails();
+        await ring();
+        // t≈37 s: the first tick (24–36 s) read, and failed too.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(37_000);
+        });
+        expect(reads()).toBe(opened + 2);
+        expect(screen.queryByText(BOBS_LINE)).not.toBeInTheDocument();
+        // t≈73 s: the second tick (48–72 s) read, and it worked.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(36_000);
+        });
+        expect(reads()).toBe(opened + 3);
+        expect(screen.getByText(BOBS_LINE)).toBeInTheDocument();
+        // t≈133 s: nothing more until 120 s after it.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(60_000);
+        });
+        expect(reads()).toBe(opened + 3);
     });
 
     it('4. unread counts update for a conversation that is not open', async () => {

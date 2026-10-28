@@ -578,16 +578,25 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // Poll for new messages as a backstop, paused when tab is hidden: every 120 s while the member's socket is
             // alive (its doorbell below brings each new line, edit and reaction at once), every 30 s while it is not
             // (@beanpool/core messageBackstopDue, slice L0). The doorbell never brings the other person's read, so while
-            // the member's newest line waits for it (awaitingPeerReadRef), every 30 s too.
+            // the member's newest line waits for it (awaitingPeerReadRef), every 30 s too. Only a read that worked counts:
+            // after one that failed with the socket up (a 503 while the node is full, a dropped request) the next tick
+            // reads, as before slice L0 (review of #2558). When the last read that worked started, and the last that failed:
             let lastReadAt = 0;
+            let lastFailedAt = 0;
+            const read = () => {
+                const startedAt = Date.now();
+                return loadMessages(activeConv.id).then((worked) => {
+                    if (worked) lastReadAt = Math.max(lastReadAt, startedAt);
+                    else lastFailedAt = Math.max(lastFailedAt, startedAt);
+                });
+            };
             const startPolling = () => {
                 if (!pollRef.current) {
-                    lastReadAt = Date.now();
-                    loadMessages(activeConv.id);
+                    read();
                     pollRef.current = window.setInterval(() => {
-                        if (!messageBackstopDue(lastReadAt, Date.now(), socketIsAlive() && !awaitingPeerReadRef.current)) return;
-                        lastReadAt = Date.now();
-                        loadMessages(activeConv.id);
+                        const failedSince = lastFailedAt >= lastReadAt; // started together: read again
+                        if (!messageBackstopDue(lastReadAt, Date.now(), socketIsAlive() && !awaitingPeerReadRef.current && !failedSince)) return;
+                        read();
                     }, withJitter(MESSAGE_BACKSTOP_TICK_MS));
                 }
             };
@@ -617,8 +626,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // immediately, instead of waiting for the next poll tick.
             const unsubscribe = onSyncActivity(() => {
                 if (document.hidden) return;
-                lastReadAt = Date.now();
-                return loadMessages(activeConv.id);
+                return read();
             });
             return () => {
                 stopPolling();
@@ -786,7 +794,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
      * epoch on), its sealed lines opened and named here, and the roster the screen shows handed to the keyring (only
      * members in it are ever wrapped to). Keys missing for other members are handed over once per page.
      */
-    async function loadGroupChat(convId: string, requestId: number): Promise<'dm' | void> {
+    async function loadGroupChat(convId: string, requestId: number): Promise<'dm' | boolean> {
         let answer: GroupChatAnswer | null = null;
         let error: unknown = null;
         try {
@@ -794,12 +802,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         } catch (e) {
             error = e;
         }
-        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        // Whether the read worked, for the backstop (loadMessages), whatever this screen then makes of it.
+        const read = answer !== null;
+        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return read;
         // The DM guard's line check runs over these lines before the group route takes them: a DM this browser knows, or
         // one whose lines are encrypted, stays a DM whatever the node calls it; a group held locked here still wins
         // (review of #1816, finding 1; lib/group-hold.ts).
         const kept = holdConversation({ id: convId, type: 'group_thread' }, await lockedGroupsOrNull(identity.publicKey), answer?.messages);
-        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return read;
         if (kept.type === 'dm') {
             setGroupChat(null);
             setActiveConv(prev => (prev && prev.id === convId ? { ...prev, type: 'dm' } : prev));
@@ -830,7 +840,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     (pk) => membersByPublicKeyRef.current.get(pk)?.callsign ?? null).catch(() => null);
             }
         }
-        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+        if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return read;
         const seen = new Set<string>();
         setMessages((answer?.messages ?? []).filter((m) => {
             if (!m.id || seen.has(m.id)) return false;
@@ -847,17 +857,23 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             servedMissingRef.current.add(convId);
             ring.serveMissing().catch(() => 0);
         }
+        return read;
     }
 
-    async function loadMessages(convId: string) {
+    /**
+     * Read the open conversation's lines. Failures are swallowed (offline), so it says whether the read worked: the
+     * backstop counts only one that did, and reads again on the next tick after one that didn't (review of #2558).
+     */
+    async function loadMessages(convId: string): Promise<boolean> {
         const requestId = ++messageRequestIdRef.current;
         if (activeConvRef.current?.id === convId && activeConvRef.current.type === 'group_thread') {
             // A DM the node calls a group's chat goes on by the DM path below.
-            if (await loadGroupChat(convId, requestId) !== 'dm') return;
+            const read = await loadGroupChat(convId, requestId);
+            if (read !== 'dm') return read;
         }
         try {
             const result = await getConversationMessages(convId);
-            if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+            if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return true;
             // Deduplicate by message ID so the same message can never render twice
             const seen = new Set<string>();
             const uniqueMessages = (result.messages || []).filter((m: ApiMessage) => {
@@ -873,7 +889,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
             // A DM stays a DM: one seen as one here, or whose lines are encrypted (lib/dm-guard.ts).
             const locked = result.conversation ? await lockedGroupsOrNull(identity.publicKey) : null;
-            if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return;
+            if (activeConvIdRef.current !== convId || requestId !== messageRequestIdRef.current) return true;
             const heldConv = result.conversation ? holdConversation(result.conversation, locked, uniqueMessages) : null;
             if (heldConv) {
                 const isDm = heldConv.type === 'dm';
@@ -892,7 +908,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     };
                 });
             }
-        } catch { /* offline */ }
+            return true;
+        } catch { /* offline */ return false; }
     }
 
     function handleStartReply(msg: ApiMessage) {

@@ -2966,15 +2966,35 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
 }
 
 /**
- * Whether `pubkey` leads the project: the one rule its edit (updateCrowdfundProject) and its cancel (deleteCrowdfundProject)
- * both ask. Its lead is getCrowdfundProject's creator_pubkey, its lead keeper (treasury_operators, role 'lead'), never the
- * projects row's own creator_pubkey: that column keeps whoever made it, and the lead changes after (a keepers' vote, or a
- * lead who stepped down or closed their account and a keeper promoted in their place). Asked of that column, the maker who
- * no longer led it could still cancel it, refunding every backer and deleting it, and the new lead could not (review of #2525).
+ * Whether `pubkey` leads the project: the rule its edit (updateCrowdfundProject) asks, and its cancel (mayCancelProject)
+ * starts from. Its lead is getCrowdfundProject's creator_pubkey: its lead keeper (treasury_operators, role 'lead'); with no
+ * lead row, its first keeper; with no keepers at all, the projects row's own creator_pubkey. That column keeps whoever made
+ * it, and the lead changes after (a keepers' vote, or a lead who stepped down or closed their account and a keeper promoted
+ * in their place). Asked of that column first, the maker who no longer led it could still cancel it, refunding every backer
+ * and deleting it, and the new lead could not (review of #2525).
  */
 export function leadsProject(projectId: string, pubkey: string): boolean {
     const lead = getCrowdfundProject(projectId)?.creator_pubkey;
     return !!lead && lead === pubkey;
+}
+
+/**
+ * May `pubkey` cancel the project (deleteCrowdfundProject), refunding every backer and deleting it? Its lead (leadsProject),
+ * and only a lead who may act now. The cancel is its wind-up (docs/the-commons.md: its lead keeper starts one) and can't be
+ * undone, so it takes neither of the edit's softer readings (review of #2554):
+ * - Not the first keeper when no keeper leads it. Nobody leads it when its lead left and no keeper was active with operator
+ *   access to take over (promoteOrPauseAfterLeadLeft paused it), so that keeper is one the engine just passed over. Its maker
+ *   stands in only when it has no keepers at all.
+ * - Not a lead whose account isn't active, or whose operator access an admin switched off: such a keeper acts for no
+ *   enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up (isLeadOrSoleKeeperOrAdmin) ask.
+ */
+export function mayCancelProject(projectId: string, pubkey: string): boolean {
+    if (!leadsProject(projectId, pubkey)) return false;
+    const keeps = db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
+        .get(projectId, pubkey) as { role: string } | undefined;
+    const hasKeepers = !!db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? LIMIT 1').get(projectId);
+    if (hasKeepers && keeps?.role !== 'lead') return false;
+    return isMemberActive(pubkey) && !isOperatorSwitchedOff(pubkey);
 }
 
 /**
@@ -3410,8 +3430,8 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     // Never a person's row (namesNoProject): a projects row under a member's key pruned that member.
     if (!project || namesNoProject(projectId)) throw new Error("Project not found");
-    // Its lead's, as its edit is (leadsProject): this row's creator_pubkey is whoever made it.
-    if (!leadsProject(projectId, requesterPubkey)) throw new Error("Unauthorized to delete this project");
+    // Its lead's, and only a lead who may act now (mayCancelProject): this row's creator_pubkey is whoever made it.
+    if (!mayCancelProject(projectId, requesterPubkey)) throw new Error("Unauthorized to delete this project");
 
     // Guard against deleting funded/completed projects
     if (project.status !== 'ACTIVE') {

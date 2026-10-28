@@ -348,8 +348,20 @@ describe('KeeperProtectionPanel, VR0: the sign-in row names the key vault where 
         expect(text).toContain('Protect with Google');
     });
 
-    it('waysBack changes nothing else: covered, and a phone with no 12 words, read as at Safety Backup', () => {
-        expect(textOf(panel(COVERED, true, vi.fn(), true))).toBe(textOf(panel(COVERED, true)));
+    // Review 4397050625: the copy Account Protection finds may be one sealed on an earlier version, without the words.
+    it('Account Protection (waysBack), a sign-in connected, words on the phone: the key alone, and the words note says the rest', () => {
+        const text = textOf(panel(COVERED, true, vi.fn(), true));
+        expect(text.split('\n')).toContain(`${SIGN_IN_ROW.vaultKeepsKey} ${SIGN_IN_ROW.whoCanOpen}`);
+        expect(text).not.toContain(SIGN_IN_ROW.vaultKeeps);
+        expect(text).toContain(SSO_WORDS_NOTE);
+        expect(text.indexOf(SIGN_IN_ROW.vaultKeepsKey)).toBeLessThan(text.indexOf(SSO_WORDS_NOTE));
+        expect(text).toContain('Connect again');
+    });
+
+    it('waysBack changes nothing else: covered (but for that one sentence), and a phone with no 12 words, read as at Safety Backup', () => {
+        const atSafetyBackup = textOf(panel(COVERED, true));
+        expect(atSafetyBackup.split(SIGN_IN_ROW.vaultKeeps)).toHaveLength(2);
+        expect(textOf(panel(COVERED, true, vi.fn(), true))).toBe(atSafetyBackup.replace(SIGN_IN_ROW.vaultKeeps, SIGN_IN_ROW.vaultKeepsKey));
         expect(textOf(panel(WORDS_ONLY, false, vi.fn(), true))).toBe(textOf(panel(WORDS_ONLY, false)));
         expect(textOf(panel(WORDS_ONLY, false, vi.fn(), true))).toContain(NO_WORDS_WAY_BACK);
     });

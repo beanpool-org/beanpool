@@ -57,8 +57,11 @@ export const COMMUNITY_SSO_GROUP_NOTE =
  * 27 Oct, picks 10 and 14: he signs these off on the 320 dp shots). It says where the copy goes before **Protect with**
  * is tapped, at Safety Backup and in Account Protection, and VAULT_COPY_OPENERS is one tap away under it ("Who can open
  * it ›"). Each sentence its own Text. Apple is named only where it is offered (an iPhone). On a phone with no 12 words
- * the copy carries none, so the vault's sentence names the key alone. Under a sign-in already connected the covered
- * footnote says the first and the last (it brings the account back; a day's wait), so only the middle two are drawn.
+ * the copy carries none, so the vault's sentence names the key alone. So does Account Protection under a sign-in already
+ * connected: that copy may be one sealed on an earlier version, without the words (the vault's status names the sign-ins
+ * only), and SSO_WORDS_NOTE under the row says so (review 4397050625). At Safety Backup the copy was made a moment ago,
+ * with them. Under a sign-in already connected the covered footnote says the first and the last (it brings the account
+ * back; a day's wait), so only the middle two are drawn.
  */
 export const SIGN_IN_ROW = {
     title: word('A sign-in you link'),
@@ -152,6 +155,8 @@ export function KeeperProtectionPanel({
     const covered = protection.state === 'covered';
     // Account Protection's sign-in row on its own: the words row above it already says what the words are.
     const rowOnly = waysBack && atVault && !covered && hasWords;
+    // Whether the row may say the vault's copy holds the 12 words (SIGN_IN_ROW): not of a copy Account Protection finds.
+    const copyHasWords = hasWords && !(covered && waysBack);
     const openersLine = (
         <Text style={styles.copyOpeners}>
             <Text>{copyOpeners}</Text>
@@ -169,7 +174,7 @@ export function KeeperProtectionPanel({
                         <Text style={styles.ssoGroupTitle} accessibilityRole="header">{t(SIGN_IN_ROW.title)}</Text>
                         <Text style={styles.signInRowLine}>
                             {!covered && <><Text>{Platform.OS === 'ios' ? t(SIGN_IN_ROW.bringsBackIos) : t(SIGN_IN_ROW.bringsBack)}</Text>{' '}</>}
-                            <Text>{hasWords ? t(SIGN_IN_ROW.vaultKeeps) : t(SIGN_IN_ROW.vaultKeepsKey)}</Text>
+                            <Text>{copyHasWords ? t(SIGN_IN_ROW.vaultKeeps) : t(SIGN_IN_ROW.vaultKeepsKey)}</Text>
                             {' '}<Text>{t(SIGN_IN_ROW.whoCanOpen)}</Text>
                             {!covered && <>{' '}<Text>{t(SIGN_IN_ROW.wait)}</Text></>}
                         </Text>

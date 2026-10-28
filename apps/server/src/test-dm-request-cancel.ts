@@ -21,7 +21,9 @@
  *  11. a blocked member who reached out sees their request accepted when the blocker writes; nothing tells them they are
  *      blocked (Marty, 28 Oct 2026, "B"): what they read, hear and are answered after the opener's line equals what an
  *      unblocked member is, with an Ignore before the cancel too (PR #2540 review 4397305910: their chat never leaves their
- *      chats), when they block the opener back, and with requests off at her line; the opener reads hers as waiting
+ *      chats), when they block the opener back, with requests off at her line, when they cancel their own request first,
+ *      and when they block her back and cancel it (PR #2540 review 4400797748: their chat stays in their chats, their own,
+ *      cancelled); the opener reads hers as waiting
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-dm-request-cancel.ts
  */
@@ -511,13 +513,13 @@ assert(yx1.status === 200 && yx2.status === 403 && yx2.body.code === 'dm_request
 // then on is the same in both: their own request accepted by her line, in their chats, her line in it, pushed and counted
 // as an ordinary line. With an Ignore first, their chat is in their chats at every step: her line never brings the Ignore
 // back (PR #2540 review 4397305910, the probe of the :504 finding). The opener who blocks reads hers as waiting, until she
-// lifts the block. Also: the other blocking her back after reaching out, her line written while requests are off, and the
-// other cancelling their own request before she writes.
+// lifts the block. Also: the other blocking her back after reaching out, her line written while requests are off, the
+// other cancelling their own request before she writes, and the other doing both.
 const seenAs = (r: any, me: Id, them: Id, at0?: string) => !r ? 'none'
     : [r.state, r.from === me.pk ? 'mine' : r.from === them.pk ? 'theirs' : '?', at0 === undefined ? '' : r.at === at0 ? 'same-at' : 'moved', String(r.nextLineIsRequest ?? '')].join(':');
 const placeOf = (l: any, c: string) => inChats(l, c) ? 'chats' : inRequests(l, c) ? 'requests' : 'neither';
 const listedIn = (l: any, c: string) => (l?.conversations || []).find((x: any) => x.id === c)?.request;
-async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ignoreFirst?: boolean; block: boolean; blockBack?: boolean; off?: boolean; cancelOwn?: boolean }) {
+async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ignoreFirst?: boolean; block: boolean; blockBack?: boolean; off?: boolean; cancelOwn?: boolean; opCancels?: boolean }) {
     const op = member(opName);
     const re = member(reName);
     const reSock = await socket(re);
@@ -538,6 +540,8 @@ async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ign
     if (o.off) setSwitchOverride('dmRequests', false);
     const opLine = await sendIn(c, op);
     if (o.off) setSwitchOverride('dmRequests', true);
+    // She cancels what her line made before he reads anything (Cancel request in her chat).
+    const opCancels = o.opCancels ? (await call('POST', op, '/api/messages/request', { conversationId: c, decision: 'cancel' })).status : undefined;
     const row = db.prepare('SELECT from_pubkey, state, reached_out_at FROM dm_requests WHERE conversation_id = ?').get(c) as
         { from_pubkey: string; state: string; reached_out_at: string | null } | undefined;
     const rowAfter = row ? [row.from_pubkey === op.pk ? 'hers' : 'his', row.state, row.reached_out_at === null ? 'none' : 'set'].join(':') : 'none';
@@ -566,6 +570,7 @@ async function reachOutThenOpenerWrites(opName: string, reName: string, o: { ign
         heardAccepted: opSock.events.slice(opHeard).some(e => e.conversationId === c && e.type === 'dm_request_updated' && e.request?.state === 'accepted'),
         second: '',
         reacts: '',
+        cancels: opCancels,
     };
     const opSecond = await sendIn(c, op);
     const opReacts = await call('POST', op, '/api/messages/react', { messageId: opLine.body.message?.id, authorPubkey: op.pk, emoji: '👍' });
@@ -639,6 +644,27 @@ assert(JSON.stringify(cancelBlocked.seen) === JSON.stringify(cancelControl.seen)
     `and all Ugo reads, hears and is answered is what Seth, not blocked, is (blocked ${JSON.stringify(cancelBlocked.seen)}, row ${cancelBlocked.rowAfter}; control ${JSON.stringify(cancelControl.seen)}, row ${cancelControl.rowAfter})`);
 assert(cancelBlocked.opener.line === 200 && cancelBlocked.opener.read === 'pending:mine::false' && !cancelBlocked.opener.heardAccepted,
     `Tess reads hers as waiting, as any opener's after their line (${JSON.stringify(cancelBlocked.opener)})`);
+// He blocks her back AND cancels his own request before she writes (PR #2540 review 4400797748): her line is kept for her
+// alone, so it changes nothing he reads, as it changes nothing for one she never blocked: his own request, cancelled, in
+// his chats. Before the fix her line took his chat out of both his lists and his request read as hers, which told him she
+// wrote and that she blocks him.
+const backCancelControl = await reachOutThenOpenerWrites('Vida', 'Wade', { block: false, blockBack: true, cancelOwn: true });
+const backCancelBlocked = await reachOutThenOpenerWrites('Yara', 'Zeke', { block: true, blockBack: true, cancelOwn: true });
+assert(backCancelBlocked.seen.reCancelsOwn === 200 && backCancelBlocked.seen.after === 'pending:mine:same-at:true' && backCancelBlocked.seen.place === 'chats'
+    && backCancelBlocked.seen.listed === 'pending:mine:same-at:true' && backCancelBlocked.seen.seesHerLine === false && backCancelBlocked.seen.placeAtEnd === 'chats',
+    `Zeke blocked Yara back and cancelled his own request, then she writes: he reads his own, cancelled, in his chats, and never her line (${JSON.stringify(backCancelBlocked.seen)})`);
+assert(JSON.stringify(backCancelBlocked.seen) === JSON.stringify(backCancelControl.seen),
+    `and all Zeke reads, hears and is answered is what Wade, whom Vida never blocked, is (blocked ${JSON.stringify(backCancelBlocked.seen)}; control ${JSON.stringify(backCancelControl.seen)})`);
+assert(backCancelBlocked.opener.line === 200 && backCancelBlocked.opener.read === 'pending:mine::false' && backCancelBlocked.opener.second === '403 dm_request_pending'
+    && !backCancelBlocked.opener.heardAccepted,
+    `Yara's answers are a waiting request's: 200, then 403 (${JSON.stringify(backCancelBlocked.opener)})`);
+// And she cancels what her line made before he reads it: neither the line nor its cancel ever reached him, so his own,
+// cancelled, stays as he left it. Without the fix her cancel cleared his, and his chat left both his lists.
+const opCancelsControl = await reachOutThenOpenerWrites('Fay', 'Gus', { block: false, blockBack: true, cancelOwn: true, opCancels: true });
+const opCancelsBlocked = await reachOutThenOpenerWrites('Hana', 'Ike', { block: true, blockBack: true, cancelOwn: true, opCancels: true });
+assert(opCancelsBlocked.opener.cancels === 200 && opCancelsBlocked.seen.after === 'pending:mine:same-at:true' && opCancelsBlocked.seen.place === 'chats'
+    && JSON.stringify(opCancelsBlocked.seen.heard) === '[]' && JSON.stringify(opCancelsBlocked.seen) === JSON.stringify(opCancelsControl.seen),
+    `Hana cancels the line she wrote after Ike blocked her back and cancelled his: he reads, hears and is answered as Gus is (blocked ${JSON.stringify(opCancelsBlocked.seen)}; control ${JSON.stringify(opCancelsControl.seen)})`);
 
 vicSock.ws.close();
 natSock.ws.close();

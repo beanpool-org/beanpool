@@ -56,7 +56,7 @@ import { newListingCategory } from '../engine/shops.js';
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
-import { setReadCaching } from '../guest-cache.js';
+import { setReadCaching, PHOTO_EDGE_MAX_S } from '../guest-cache.js';
 import { word } from '@beanpool/core';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -216,8 +216,14 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // member removed. A shared cache's copy would outlive that for the year (review FABLE-sec-images, MEDIUM). `private`
     // keeps it cached as long in the browser or app that fetched it, which has already been shown those bytes. No Vary:
     // the bytes a URL is answered with differ by who asks only for a hidden or taken-off listing's, which no cache keeps.
+    //
+    // And a shared cache keeps even an everyone's photo an hour at most (s-maxage), not the year: once a moderator takes
+    // the listing down, or reports hide it, this route answers 404, and an edge holding the bytes for the year would go on
+    // serving them to anyone with the URL (review of #2558). The browser or app that fetched them keeps its year. An
+    // operator who needs a photo gone sooner purges its URL at the edge (operators/server/global-limits.md).
     const lifetime = thumbNotServed ? 'max-age=300' : 'max-age=31536000, immutable';
-    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? `private, ${lifetime}` : `public, ${lifetime}`);
+    const forEveryone = thumbNotServed ? lifetime : `max-age=31536000, s-maxage=${PHOTO_EDGE_MAX_S}, immutable`;
+    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? `private, ${lifetime}` : `public, ${forEveryone}`);
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;

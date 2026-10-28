@@ -188,8 +188,9 @@ async function main(): Promise<void> {
     for (const [what, id] of [['the live listing', live], ['the listing paused by its author', paused], ['the traded listing', traded]] as const) {
         for (const [who, reader] of [...readers, ['Alice', alice] as [string, Id]]) {
             // A board listing's photo here is public to an unsigned read, as an <img> makes; a signed read's answer is never
-            // one a shared cache may keep, whatever the route says (guest-cache.ts, slice L0), so the reader's own only.
-            const cache = plainBoardUrl && !reader ? 'public, max-age=31536000, immutable' : 'private, max-age=31536000, immutable';
+            // one a shared cache may keep, whatever the route says (guest-cache.ts, slice L0), so the reader's own only. A shared
+            // cache keeps the public one an hour at most, so a takedown (§2 on) reaches the edge (review of #2558).
+            const cache = plainBoardUrl && !reader ? 'public, max-age=31536000, s-maxage=3600, immutable' : 'private, max-age=31536000, immutable';
             const r = await get(url[id], reader);
             assert(r.status === 200 && r.type === 'image/png' && r.cache === cache,
                 `${what}: ${who} gets the photo (got ${r.status} ${r.type} "${r.cache}")`);

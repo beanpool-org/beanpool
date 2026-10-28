@@ -31,6 +31,12 @@ import type Koa from 'koa';
 export const GUEST_CACHE_CONTROL = 'public, max-age=0, s-maxage=60';
 /** Anyone else's read: theirs alone, asked again every time. */
 export const READER_CACHE_CONTROL = 'private, max-age=0, must-revalidate';
+/**
+ * The longest a shared cache may keep a listing photo anyone may see (routes/marketplace.ts, its `s-maxage`), in seconds.
+ * The photo's URL changes with the photo, so the browser keeps it a year; but a takedown answers 404 from then on, and an
+ * edge must ask again within this.
+ */
+export const PHOTO_EDGE_MAX_S = 3600;
 
 /**
  * The request headers that make a read someone's: the member's signature (any part of it, verified or not: an old app's

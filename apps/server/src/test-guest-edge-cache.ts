@@ -194,6 +194,10 @@ async function main() {
     const PHOTO = '/api/marketplace/posts/gec-post-0/photos/0';
     const photoUnsigned = await get(PHOTO);
     assert(photoUnsigned.status === 200 && /public/.test(photoUnsigned.cc ?? ''), `a public listing's photo, unsigned as an <img> asks, is public as before (${photoUnsigned.cc})`);
+    // …but a shared cache keeps it an hour at most, not the browser's year: a takedown answers 404 from then on, and an edge
+    // must ask again to see it (review of #2558).
+    assert(photoUnsigned.cc === 'public, max-age=31536000, s-maxage=3600, immutable',
+        `…an hour at most in a shared cache, so a takedown reaches the edge (${photoUnsigned.cc})`);
     const photoSigned = await get(PHOTO, { as: alice });
     assert(photoSigned.status === 200 && !sharable(photoSigned.cc) && /max-age=31536000/.test(photoSigned.cc ?? '') && /private/.test(photoSigned.cc ?? ''),
         `the same photo signed: whatever its route says, for the reader's own cache only (${photoSigned.cc})`);
@@ -269,6 +273,7 @@ async function main() {
     if (privateOnly) {
         for (const [said, own] of [
             ['public, max-age=31536000, immutable', 'private, max-age=31536000, immutable'],
+            ['public, max-age=31536000, s-maxage=3600, immutable', 'private, max-age=31536000, immutable'],
             [GUEST, 'private, max-age=0'],
             ['public, max-age=0, must-revalidate', 'private, max-age=0, must-revalidate'],
             ['s-maxage=60, proxy-revalidate', 'private'],

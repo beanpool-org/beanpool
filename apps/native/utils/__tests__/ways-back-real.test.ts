@@ -45,13 +45,17 @@ vi.mock('expo-secure-store', () => ({
 }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 
-const h = vi.hoisted(() => ({ mint: null as null | ((provider: string, sub: string, nonce: string) => string) }));
+const h = vi.hoisted(() => ({
+    mint: null as null | ((provider: string, sub: string, nonce: string) => string),
+    /** Another account of the same sign-in, as the member picks in Google's account chooser; null: the usual one. */
+    sub: null as string | null,
+}));
 vi.mock('../sso-signin', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-signin')>();
     return {
         ...real,
         signInWithProvider: vi.fn(async (provider: 'google' | 'apple' | 'facebook', nonce: string) => (
-            { provider, idToken: h.mint!(provider, `${provider}-sub-e2e`, nonce), nonce }
+            { provider, idToken: h.mint!(provider, h.sub ?? `${provider}-sub-e2e`, nonce), nonce }
         )),
     };
 });
@@ -62,7 +66,7 @@ import { oneWayBackFromNode, oneWayBackPlace } from '../one-way-back';
 import { connectAndDeposit } from '../sso-sheet-connect';
 import { SAVED_NODES_STORE_KEY } from '../storage-keys';
 import { vaultCopyKnowledge, vaultCopyKnown } from '../vault';
-import { beforeRemoving, listWaysBack, removeEverything, wordsOnly, wordsWrittenDown } from '../ways-back';
+import { beforeRemoving, listWaysBack, removeEverything, removeVaultCopy, wordsOnly, wordsWrittenDown } from '../ways-back';
 
 /** apps/vault's harness (src/__tests__/harness.ts), loaded at run time: the phone's typecheck never reads the vault's sources. */
 interface VaultUnderTest {
@@ -217,5 +221,31 @@ describe('connect, see where the copies are, remove everything, and the way back
         expect(ways.vault).toEqual({ kind: 'listed', copies: [{ provider: 'google', since: today, lastReleasedAt: null }] });
         expect(wordsOnly(ways)).toBe(false);
         expect(await vaultCopyKnown(member.publicKey)).toBe(true);
+    });
+
+    it('a second Google account: the vault keeps a copy for each, the list shows both, and Remove takes both', async () => {
+        // "Connect again" signs out of Google and shows its account chooser; the member picks another account. The copy
+        // from the test above stays: the vault keeps one per sign-in account.
+        h.sub = 'google-sub-another-account';
+        try {
+            expect((await connect('google')).error).toBeUndefined();
+        } finally {
+            h.sub = null;
+        }
+        const today = new Date().toISOString().slice(0, 10);
+        const ways = await listWaysBack(member);
+        // Both, from the vault's own signed status: on PR #2570 before its review fix, the phone listed one.
+        expect(ways.vault).toEqual({ kind: 'listed', copies: [
+            { provider: 'google', since: today, lastReleasedAt: null },
+            { provider: 'google', since: today, lastReleasedAt: null },
+        ] });
+        expect(lastSignedStatus()).toMatchObject({ copies: [{ provider: 'google', since: today }, { provider: 'google', since: today }] });
+
+        // The vault removes a sign-in's copies together: one Remove, and it signs that it deleted both.
+        expect(await removeVaultCopy(member, 'google')).toEqual({ removed: true });
+        const del = exchanges.filter(e => e.path === '/v1/copies/delete').at(-1)!;
+        expect(checkVaultAnswer(del.answer?.signed, { ticketKeys: [ticketKey], kinds: ['deleted'], key: member.publicKey, challenge: del.challenge as string }))
+            .toMatchObject({ ok: true, answer: { deleted: 2 } });
+        expect((await listWaysBack(member)).vault).toEqual({ kind: 'listed', copies: [] });
     });
 });

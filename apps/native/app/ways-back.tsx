@@ -21,7 +21,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary, router, useFocusEffect } from 'expo-router';
-import { t } from '@beanpool/core';
+import { t, tn } from '@beanpool/core';
 import { useIdentity } from './IdentityContext';
 import { useOnboardingColors } from './ThemeContext';
 import type { AppColors } from '../constants/colors';
@@ -132,10 +132,18 @@ export default function WaysBackScreen() {
         const name = SSO_PROVIDER_NAMES[copy.provider];
         const community = copy.at === 'community' ? ways.communities.find(c => sameCommunity(c.url, copy.url)) : undefined;
         if (copy.at === 'community' && !community) return;
-        const body = copy.at === 'vault'
-            ? VAULT_DELETES()
-            : t("{community}'s server deletes it. Copies already in that server's backups stay there.", { community: community!.name });
-        confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), t('Remove your {provider} copy?', { provider: name }), body, () => {
+        // The vault keeps a copy per sign-in account and removes a sign-in's copies together: two accounts, both go, and the
+        // member is told so (PR #2570 review).
+        const atVault = copy.at === 'vault' && ways.vault.kind === 'listed' ? ways.vault.copies.filter(c => c.provider === copy.provider).length : 1;
+        const body = copy.at === 'community'
+            ? t("{community}'s server deletes it. Copies already in that server's backups stay there.", { community: community!.name })
+            : atVault > 1
+                ? t("BeanPool's key vault keeps one for each {provider} account you linked, and removes them together. It deletes them at once, and from its backups within 30 days, or later if the vault is paused in that time.", { provider: name })
+                : VAULT_DELETES();
+        const title = atVault > 1
+            ? tn(atVault, 'Remove your {n} {provider} copy?', 'Remove your {n} {provider} copies?', { provider: name })
+            : t('Remove your {provider} copy?', { provider: name });
+        confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), title, body, () => {
             void (async () => {
                 setBusy(true);
                 try {

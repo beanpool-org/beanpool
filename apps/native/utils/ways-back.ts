@@ -40,7 +40,7 @@ import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, retryC
 import { sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
 
 export {
-    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, wordsOnly,
+    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, vaultCopiesBySignIn, wordsOnly,
     type BeforeRemoving, type CommunityPart, type CopyAt, type NotAnswered, type Removal, type VaultPart, type WaysBack,
 } from './ways-back-state';
 

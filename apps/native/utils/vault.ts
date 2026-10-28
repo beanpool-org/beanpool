@@ -394,7 +394,11 @@ export interface VaultHold {
     releaseAt: number;
 }
 
-/** One copy the vault keeps for this key, as "Where your account can be brought back from" lists it (vault rethink VR1). */
+/**
+ * One copy the vault keeps for this key, as "Where your account can be brought back from" lists it (vault rethink VR1).
+ * The vault keeps one per sign-in account, so a member who linked two Google accounts has two Google copies; it removes
+ * a sign-in's copies together (`/v1/copies/delete` names a provider, or all).
+ */
 export interface VaultCopy {
     provider: SsoProvider;
     /**
@@ -409,7 +413,7 @@ export interface VaultCopy {
 export interface VaultStatus {
     /** The sign-ins the vault keeps a copy for, for this key. Only the ones this app offers. */
     providers: SsoProvider[];
-    /** The same copies, one per sign-in, with since when each is kept. */
+    /** The same copies, one per sign-in account (never folded into one per sign-in), with since when each is kept. */
     copies: VaultCopy[];
     /** Restores of this account waiting at the vault. */
     holds: VaultHold[];
@@ -429,7 +433,7 @@ export function readVaultStatus(body: unknown): VaultStatus {
     const copies: VaultCopy[] = [];
     for (const c of listed) {
         const x = (c ?? {}) as Record<string, unknown>;
-        if (!isSsoProvider(x.provider) || copies.some(k => k.provider === x.provider)) continue;
+        if (!isSsoProvider(x.provider)) continue;
         const released = x.lastReleasedAt;
         copies.push({
             provider: x.provider,

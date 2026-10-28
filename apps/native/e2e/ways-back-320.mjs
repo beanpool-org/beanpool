@@ -15,9 +15,9 @@
  *
  * And "Where your account can be brought back from" (vault rethink VR1, §5.1): components/WaysBackList.tsx inside
  * app/ways-back.tsx's page and card (16dp, 16dp) under its header bar (drawn here from the screen's own styles; the
- * screen itself needs the app around it), in its states: every kind of copy at once, the last copy, a vault that couldn't
- * say, a build without a vault, the words-only line with and without the 12 words on the phone, and Remove everything's
- * result lines.
+ * screen itself needs the app around it), in its states: every kind of copy at once, the last copy, two accounts of one
+ * sign-in at the vault, a vault that couldn't say, a build without a vault, the words-only line with and without the 12
+ * words on the phone, and Remove everything's result lines.
  *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
  * 44dp tall (the panel's own floor); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
@@ -139,6 +139,16 @@ const WAYS = {
     paused: { vault: { kind: 'unknown', why: 'paused' }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: ['google'], generation: 2 } }], pending: [] },
     novault: { vault: { kind: 'no-vault' }, communities: [{ url: MULLUM, name: 'Mullumbimby', status: { providers: ['google'], generation: 1 } }], pending: [] },
     none: { vault: { kind: 'listed', copies: [] }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }], pending: [] },
+    // Two Google accounts linked: the vault keeps a copy for each, both listed above the one Remove that takes both.
+    twogoogle: {
+        vault: { kind: 'listed', copies: [
+            { provider: 'google', since: '2026-10-04', lastReleasedAt: Date.UTC(2026, 9, 12, 9) },
+            { provider: 'google', since: '2026-10-01', lastReleasedAt: null },
+            { provider: 'facebook', since: '2026-10-20', lastReleasedAt: null },
+        ] },
+        communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }],
+        pending: [],
+    },
 };
 /** Remove everything's result lines, as app/ways-back.tsx words them (a vault that was paused, a community that didn't answer). */
 const RESULT = [
@@ -333,6 +343,7 @@ try {
             ['state=full', 'Ways back, every kind of copy'],
             ['state=full&words=none', 'Ways back, every kind of copy, no 12 words on the phone'],
             ['state=last&written=yes', 'Ways back, the last copy, written down ticked'],
+            ['state=twogoogle', 'Ways back, two Google accounts at the key vault'],
             ['state=paused', 'Ways back, the key vault paused'],
             ['state=novault', 'Ways back, a build without a key vault'],
             ['state=none', 'Ways back, nothing kept anywhere'],

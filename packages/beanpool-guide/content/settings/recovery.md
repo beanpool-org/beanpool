@@ -71,7 +71,7 @@ If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remo
 In the phone app, open **Settings**, **Account Protection**, then **Where your account can be brought back from**. It lists every place a copy of your account is kept, as far as your phone can ask:
 
 - **Your 12 words**: whether this phone has them, and **I have them written down**, which you tick yourself. The app never checks it.
-- **BeanPool's key vault**: each sign-in account it keeps a copy for, and **Kept since**, the day that copy was made. Linking the same account again makes a new copy, with a new day. If the vault is paused or doesn't answer, the screen says so and lists nothing there.
+- **BeanPool's key vault**: each sign-in account it keeps a copy for, and **Kept since**, the day that copy was made. Linking the same account again makes a new copy, with a new day. If you linked more than one account of the same sign-in (two Google accounts, say), each copy is listed under that sign-in, and its **Remove** takes them all: the key vault removes a sign-in's copies together. If the vault is paused or doesn't answer, the screen says so and lists nothing there.
 - **Your communities' servers**: each community on this phone, and the sign-in accounts its server keeps a copy for, from before the key vault, from the web app, or as a community's first owner. A community that doesn't answer is shown as not answering, and nothing there is listed.
 
 Tap **Remove** next to a copy, or **Remove everything** under them all. A copy shows as removed only once the key vault or the community says it is gone:

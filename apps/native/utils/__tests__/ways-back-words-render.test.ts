@@ -134,6 +134,16 @@ const LAST: WaysBack = {
     pending: [],
 };
 const NOTHING: WaysBack = { vault: { kind: 'listed', copies: [] }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }], pending: [] };
+/** Two Google accounts linked: the vault keeps a copy for each (one brought the account back), and removes them together. */
+const TWO_GOOGLE: WaysBack = {
+    vault: { kind: 'listed', copies: [
+        { provider: 'google', since: '2026-10-04', lastReleasedAt: Date.UTC(2026, 9, 12, 9) },
+        { provider: 'google', since: '2026-10-01', lastReleasedAt: null },
+        { provider: 'facebook', since: '2026-10-20', lastReleasedAt: null },
+    ] },
+    communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }],
+    pending: [],
+};
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -246,6 +256,15 @@ describe('every sentence through t(), in every state and every confirm (pseudo-l
         wholly('the confirms and the results');
         expect(alerts.shown).toHaveLength(2);
     });
+
+    it('two accounts of one sign-in at the vault: the list, and the confirm that says both go', async () => {
+        fx.ways = TWO_GOOGLE;
+        await mount('xx');
+        await click(all('button').find(b => (b.getAttribute('aria-label') ?? '').includes('Google')), 'Remove the Google copies');
+        wholly('two Google accounts');
+        buttonsFit('two Google accounts');
+        expect(alerts.shown).toHaveLength(1);
+    });
 });
 
 describe('what each confirm offers, and what a result says (English)', () => {
@@ -259,6 +278,25 @@ describe('what each confirm offers, and what a result says (English)', () => {
         await press('Remove');
         expect(fx.removed).toEqual([['vault', 'google']]);
         expect(host!.textContent).toContain("Removed from BeanPool's key vault.");
+    });
+
+    it('two Google accounts at the vault: each copy listed with its own dates, and one Remove whose confirm says it takes both', async () => {
+        fx.ways = TWO_GOOGLE;
+        await mount('en');
+        const text = host!.textContent!;
+        expect(text).toContain('A copy for each of 2 Google accounts.');
+        expect(text).toContain('Kept since 4 Oct 2026');
+        expect(text).toContain('Kept since 1 Oct 2026');
+        expect(text).toContain('Last brought your account back on 12 Oct 2026');
+        // One Remove for Google, not one per account: the vault removes a sign-in's copies together.
+        expect(all('button').filter(b => (b.getAttribute('aria-label') ?? '').includes('Google'))).toHaveLength(1);
+        await click(buttonNamed("Remove the 2 Google copies at BeanPool's key vault"), 'Remove the Google copies');
+        const a = alerts.shown.at(-1)!;
+        expect(a.title).toBe('Remove your 2 Google copies?');
+        expect(a.body).toBe("BeanPool's key vault keeps one for each Google account you linked, and removes them together. It deletes them at once, and from its backups within 30 days, or later if the vault is paused in that time.");
+        expect(a.buttons.map(b => b.text)).toEqual(['Cancel', 'Remove']);
+        await press('Remove');
+        expect(fx.removed).toEqual([['vault', 'google']]);
     });
 
     it('the last copy, words on the phone, not written down: "Show my 12 words first?"; Show opens them and removes nothing', async () => {

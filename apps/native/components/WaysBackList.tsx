@@ -2,8 +2,10 @@
  * "Where your account can be brought back from" (vault rethink VR1, DESIGN-vault-rethink-fable.md §5.1), drawn from what
  * utils/ways-back.ts found: the 12 words (on this phone or not, and the member's say-so that they are written down),
  * each copy at BeanPool's key vault with since when it is kept, each copy at each community saved on this phone, the
- * deletes still waiting, and Remove beside each copy and Remove everything under them. app/ways-back.tsx asks, removes
- * and confirms; this only draws, so the words render test and the 320 dp shots draw exactly what the screen does.
+ * deletes still waiting, and Remove beside each copy and Remove everything under them. The vault keeps a copy per
+ * sign-in account and removes a sign-in's copies together, so a sign-in with two accounts linked shows both copies, each
+ * with its own dates, above one Remove that says it takes both. app/ways-back.tsx asks, removes and confirms; this only
+ * draws, so the words render test and the 320 dp shots draw exactly what the screen does.
  *
  * Every sentence is its own Text and goes through t(). Nothing here says a copy is gone or kept on a guess: a keeper that
  * couldn't be asked says so, and a delete that hasn't landed reads "Not removed yet". Words wrap at any width (no
@@ -11,10 +13,12 @@
  */
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { formatDate, t, word } from '@beanpool/core';
+import { formatDate, t, tn, word } from '@beanpool/core';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
-import { everyoneAnswered, knownCopies, sameCommunity, wordsOnly, type CopyAt, type NotAnswered, type WaysBack } from '../utils/ways-back-state';
+import {
+    everyoneAnswered, knownCopies, sameCommunity, vaultCopiesBySignIn, wordsOnly, type CopyAt, type NotAnswered, type WaysBack,
+} from '../utils/ways-back-state';
 
 /** The screen's sentences said in more than one place (the list, its dialogs, the results): marked here, t() where shown. */
 export const WAYS_BACK_LINES = {
@@ -121,16 +125,26 @@ export function WaysBackList({
                                 <Text style={s.line}>{vaultUnknownWords(ways.vault.why)}</Text>
                             ) : ways.vault.copies.length === 0 ? (
                                 <Text style={s.line}>{t(WAYS_BACK_LINES.keepsNone)}</Text>
-                            ) : ways.vault.copies.map(c => {
-                                const name = SSO_PROVIDER_NAMES[c.provider];
+                            ) : vaultCopiesBySignIn(ways.vault.copies).map(({ provider, copies }) => {
+                                const name = SSO_PROVIDER_NAMES[provider];
+                                const several = copies.length > 1;
                                 return (
-                                    <View key={c.provider} style={s.copy}>
+                                    <View key={provider} style={s.copy}>
                                         <Text style={s.copyName}>{name}</Text>
-                                        {c.since && <Text style={s.small}>{t('Kept since {date}', { date: dayWords(c.since) })}</Text>}
-                                        {c.lastReleasedAt !== null && (
-                                            <Text style={s.small}>{t('Last brought your account back on {date}', { date: formatDate(new Date(c.lastReleasedAt), 'day-month-year') })}</Text>
+                                        {several && (
+                                            <Text style={s.small}>{tn(copies.length, 'A copy for {n} {provider} account.', 'A copy for each of {n} {provider} accounts.', { provider: name })}</Text>
                                         )}
-                                        {removeButton({ at: 'vault', provider: c.provider }, t("Remove the {provider} copy at BeanPool's key vault", { provider: name }))}
+                                        {copies.map((c, i) => (
+                                            <View key={i} style={several ? s.account : undefined}>
+                                                {c.since && <Text style={s.small}>{t('Kept since {date}', { date: dayWords(c.since) })}</Text>}
+                                                {c.lastReleasedAt !== null && (
+                                                    <Text style={s.small}>{t('Last brought your account back on {date}', { date: formatDate(new Date(c.lastReleasedAt), 'day-month-year') })}</Text>
+                                                )}
+                                            </View>
+                                        ))}
+                                        {removeButton({ at: 'vault', provider }, several
+                                            ? tn(copies.length, "Remove the {n} {provider} copy at BeanPool's key vault", "Remove the {n} {provider} copies at BeanPool's key vault", { provider: name })
+                                            : t("Remove the {provider} copy at BeanPool's key vault", { provider: name }))}
                                     </View>
                                 );
                             })}
@@ -230,6 +244,8 @@ const make = (colors: AppColors) => StyleSheet.create({
     communityName: { fontSize: 15, fontWeight: '700', color: colors.text.heading, marginBottom: 4 },
     copy: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, padding: 12, marginBottom: 8 },
     copyName: { fontSize: 15, fontWeight: '600', color: colors.text.heading, marginBottom: 4 },
+    // One account's copy among several of a sign-in: its dates kept together, apart from the next account's.
+    account: { borderLeftWidth: 2, borderLeftColor: colors.border.strong, paddingLeft: 8, marginBottom: 4 },
     remove: {
         alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 8, borderWidth: 1,
         borderColor: colors.feedback.danger.border, marginTop: 2,

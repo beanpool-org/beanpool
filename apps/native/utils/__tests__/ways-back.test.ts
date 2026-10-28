@@ -47,7 +47,7 @@ import { vaultCopyKnowledge, vaultCopyKnown } from '../vault';
 import { retryCommunityRemovals, vaultMoveOffer } from '../vault-move';
 import {
     beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, removeCommunityCopyFrom, removeEverything,
-    removeVaultCopy, wordsOnly, wordsWrittenDown, type WaysBack,
+    removeVaultCopy, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
 } from '../ways-back';
 import { FakeVault, OTHER_KEY, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 import { boundSignatureValid } from './server-signature-check';
@@ -249,6 +249,33 @@ describe('Remove one copy: removed only on the keeper\'s own answer', () => {
         expect(net.vault.copiesOf(OTHER_KEY)).toHaveLength(1);
         const ways = await listWaysBack(kim);
         expect(ways.vault.kind === 'listed' && ways.vault.copies.map(c => c.provider)).toEqual(['apple']);
+    });
+
+    it('two Google accounts at the vault: both listed, each with its own since; Remove takes both, and the 12 words are asked about first', async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.vault.copies.delete('apple:kim-apple');
+        net.communities[MULLUM].copies.clear();
+        // "Connect again" signs out of Google first and shows its account chooser: picking another account is an ordinary
+        // way to a second Google copy for the same key.
+        net.vault.keep('google', 'kim-google-work', kim.publicKey, SOME_COPY, '2026-10-01');
+
+        const ways = await listWaysBack(kim);
+        expect(ways.vault).toEqual({
+            kind: 'listed',
+            copies: [{ provider: 'google', since: '2026-10-03', lastReleasedAt: null }, { provider: 'google', since: '2026-10-01', lastReleasedAt: null }],
+        });
+        expect(vaultCopiesBySignIn(ways.vault.kind === 'listed' ? ways.vault.copies : [])).toEqual([
+            { provider: 'google', copies: [{ provider: 'google', since: '2026-10-03', lastReleasedAt: null }, { provider: 'google', since: '2026-10-01', lastReleasedAt: null }] },
+        ]);
+        expect(knownCopies(ways)).toHaveLength(2);
+        // Removing Google leaves no copy the phone knows of: neither account's.
+        expect(beforeRemoving(ways, { at: 'vault', provider: 'google' }, { hasWords: true, writtenDown: false })).toBe('show-words-first');
+
+        expect(await removeVaultCopy(kim, 'google')).toEqual({ removed: true });
+        expect(net.vault.copiesOf(kim.publicKey)).toEqual([]);
+        expect(net.vault.copiesOf(OTHER_KEY)).toHaveLength(1);
+        expect((await listWaysBack(kim)).vault).toEqual({ kind: 'listed', copies: [] });
     });
 
     it("an answer the phone can't check is \"not removed\", even from a server that did delete it", async () => {

@@ -111,6 +111,9 @@ describe("the vault's status, read with since", () => {
                 { provider: 'apple', since: '2026-10-20', lastReleasedAt: null },
                 // A day that isn't one, and a time that isn't a number: no date, never a guess.
                 { provider: 'facebook', since: null, lastReleasedAt: null },
+                // A second Google account's copy: the vault keeps one per sign-in account, and each is listed with its own
+                // since, never folded into the first (PR #2570 review: folded, the screen hid it and its Remove deleted it).
+                { provider: 'google', since: '2026-10-09', lastReleasedAt: null },
             ],
             holds: [],
         });

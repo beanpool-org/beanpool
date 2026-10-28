@@ -46,6 +46,20 @@ export function sameCommunity(a: string, b: string): boolean {
     return plain(a) === plain(b);
 }
 
+/**
+ * The vault's copies by sign-in, in the order it lists them. It keeps one for each sign-in account, so a member who linked
+ * two Google accounts has two under Google, and its Remove takes both: the vault removes a sign-in's copies together.
+ */
+export function vaultCopiesBySignIn(copies: VaultCopy[]): { provider: SsoProvider; copies: VaultCopy[] }[] {
+    const out: { provider: SsoProvider; copies: VaultCopy[] }[] = [];
+    for (const c of copies) {
+        const same = out.find(g => g.provider === c.provider);
+        if (same) same.copies.push(c);
+        else out.push({ provider: c.provider, copies: [c] });
+    }
+    return out;
+}
+
 /** Whether a community's copy for `provider` is waiting to be removed (its delete didn't land yet). */
 export function isPending(w: WaysBack, url: string, provider: SsoProvider): boolean {
     return w.pending.some(p => p.provider === provider && sameCommunity(p.url, url));

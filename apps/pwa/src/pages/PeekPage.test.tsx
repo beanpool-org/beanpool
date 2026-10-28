@@ -30,7 +30,7 @@ vi.mock('../lib/api', async (orig) => ({ ...(await orig<typeof import('../lib/ap
 vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(async () => ({ features: { beans: true, shareOutside: true } })), joinInFlight: vi.fn(async () => false) }));
 
 import { PeekPage } from './PeekPage';
-import { readPeekParam, takePeekParam, peekAppDoors, getPeekPost } from '../lib/peek';
+import { readPeekParam, takePeekParam, peekAppDoors, getPeekPost, keepPeek, keptPeek, forgetKeptPeek, peekAtLoad, PEEK_STORAGE_KEY } from '../lib/peek';
 
 const DESKTOP = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36';
 const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36';
@@ -145,6 +145,39 @@ describe('the address', () => {
         expect(takePeekParam(win)).toEqual({ postId: POST_ID, ticket: T });
         expect(replaceState).toHaveBeenCalledWith(null, '', `/app?post=${POST_ID}&door=x`);
         expect(readPeekParam({ location: { pathname: '/app', search: `?post=${POST_ID}&peek=bad` } } as any)).toBeNull();
+    });
+
+    it('a peek kept for this tab: read back only at an address with nothing in it, and only one with its shapes', () => {
+        sessionStorage.clear();
+        const at = (search: string) => ({ location: { pathname: '/app', search, hash: '' } }) as Pick<Window, 'location'>;
+        expect(peekAtLoad(at(''))).toBeNull();
+        keepPeek({ postId: POST_ID, ticket: T });
+        expect(keptPeek()).toEqual({ postId: POST_ID, ticket: T });
+        expect(peekAtLoad(at(''))).toEqual({ postId: POST_ID, ticket: T });
+        // Another link is that link.
+        expect(peekAtLoad(at('?invite=INV-1'))).toBeNull();
+        expect(peekAtLoad(at(`?post=p-other&peek=${T}`))).toEqual({ postId: 'p-other', ticket: T });
+        forgetKeptPeek();
+        expect(keptPeek()).toBeNull();
+
+        // Nothing that isn't a post id and a ticket is kept, or read back.
+        keepPeek({ postId: '../api/x', ticket: T });
+        keepPeek({ postId: POST_ID, ticket: 'short' });
+        expect(sessionStorage.getItem(PEEK_STORAGE_KEY)).toBeNull();
+        for (const raw of ['not json', 'null', JSON.stringify({ postId: POST_ID }), JSON.stringify({ postId: 'a b', ticket: T })]) {
+            sessionStorage.setItem(PEEK_STORAGE_KEY, raw);
+            expect(keptPeek()).toBeNull();
+        }
+        sessionStorage.clear();
+    });
+
+    it('a storage that refuses keeps nothing and reads nothing, and never throws', () => {
+        const refuse = () => { throw new Error('SecurityError'); };
+        vi.stubGlobal('sessionStorage', { getItem: refuse, setItem: refuse, removeItem: refuse });
+        expect(() => keepPeek({ postId: POST_ID, ticket: T })).not.toThrow();
+        expect(keptPeek()).toBeNull();
+        expect(() => forgetKeptPeek()).not.toThrow();
+        expect(peekAtLoad({ location: { pathname: '/app', search: '', hash: '' } } as Pick<Window, 'location'>)).toBeNull();
     });
 
     it('the phone doors per device', () => {

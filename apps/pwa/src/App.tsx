@@ -64,7 +64,7 @@ import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
-import { readPeekParam, takePeekParam } from './lib/peek';
+import { forgetKeptPeek, keepPeek, peekAtLoad, takePeekParam } from './lib/peek';
 import { YourShopPage } from './pages/YourShopPage';
 import { ShopDetailPage } from './pages/ShopDetailPage';
 import { takeShopParam } from './lib/shop';
@@ -518,9 +518,17 @@ export function App() {
     // `/?post=<id>&peek=<ticket>`: a post a member shared outside the community (front doors S6). Read before the post
     // param is taken, and the ticket taken out of the address: a stranger here reads that one post (pages/PeekPage.tsx);
     // a member opens it as any shared post, through `post` below.
-    // Read in the initializer (which may run twice), taken out of the address in the effect.
-    const [peekParam, setPeekParam] = useState(() => (typeof window !== 'undefined' ? readPeekParam() : null));
-    useEffect(() => { takePeekParam(); setLinkedPost(takePostParam()); }, []);
+    // Read in the initializer (which may run twice), taken out of the address in the effect, and kept for this tab so a
+    // stranger who reloads is still on that post (lib/peek.ts keepPeek). A link with another query forgets it; so does an
+    // account here, below, and taking a door.
+    const [peekParam, setPeekParam] = useState(() => (typeof window !== 'undefined' ? peekAtLoad() : null));
+    useEffect(() => {
+        if (peekParam) keepPeek(peekParam);
+        else if (window.location.search) forgetKeptPeek();
+        takePeekParam();
+        setLinkedPost(takePostParam());
+    }, []); // once, at load: what the address carried then
+    useEffect(() => { if (identity) forgetKeptPeek(); }, [identity]);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
     // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
@@ -829,6 +837,7 @@ export function App() {
         // form and its ways back are the welcome page's, which reads where to start from `?door=` (lib/community-card.ts).
         if (peekParam) {
             const toWelcome = (door: 'invite' | 'signin') => {
+                forgetKeptPeek();
                 try { window.history.replaceState(window.history.state, '', `${window.location.pathname}?door=${door}`); } catch { /* the page opens at its start */ }
                 setPeekParam(null);
             };

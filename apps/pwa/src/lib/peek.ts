@@ -8,7 +8,7 @@
  *   - a stranger who opens the link in a browser (See it in your browser, on the node's share page) reads that one post
  *     here, unsigned (`GET /api/marketplace/posts/:id?peek=`), in the one-post peek (pages/PeekPage.tsx).
  */
-import { peekFromLink, peekLink, readPeekShares, type PeekShare } from '@beanpool/core';
+import { isPeekPostId, isPeekTicket, peekFromLink, peekLink, readPeekShares, type PeekShare } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 import { getNodeApiUrl, request } from './api';
 
@@ -73,6 +73,47 @@ export function peekAppDoors(postId: string, ticket: string, origin: string, ua:
     }
     if (/\b(iPhone|iPad|iPod)\b/i.test(ua)) return { app: `beanpool://peek?${appQuery}`, store: APP_STORE_URL };
     return null;
+}
+
+/**
+ * The peek a stranger is on, kept in this tab: App takes `?post=` and `?peek=` out of the address as the page loads, so a
+ * reload (pull to refresh, Reload, or Android bringing back a tab it dropped while they were in the chat app) would land
+ * on the welcome page with no post and nothing said. This tab's sessionStorage outlasts that. Only the post id and the
+ * ticket, each checked; forgotten once there is an account here, once the stranger takes a door, or at another link.
+ */
+export const PEEK_STORAGE_KEY = 'beanpool_peek';
+
+/** Keep `peek` for this tab. A storage that refuses keeps nothing: a reload then lands on the welcome page, as before. */
+export function keepPeek(peek: { postId: string; ticket: string }): void {
+    if (!isPeekPostId(peek.postId) || !isPeekTicket(peek.ticket)) return;
+    try {
+        sessionStorage.setItem(PEEK_STORAGE_KEY, JSON.stringify({ postId: peek.postId, ticket: peek.ticket }));
+    } catch { /* a private window */ }
+}
+
+/** The peek kept for this tab, read (not taken: every reload needs it), or null where none is kept or it isn't one. */
+export function keptPeek(): { postId: string; ticket: string } | null {
+    try {
+        const raw = sessionStorage.getItem(PEEK_STORAGE_KEY);
+        if (raw === null) return null;
+        const kept = JSON.parse(raw) as { postId?: unknown; ticket?: unknown } | null;
+        return kept && isPeekPostId(kept.postId) && isPeekTicket(kept.ticket) ? { postId: kept.postId, ticket: kept.ticket } : null;
+    } catch {
+        return null;
+    }
+}
+
+export function forgetKeptPeek(): void {
+    try { sessionStorage.removeItem(PEEK_STORAGE_KEY); } catch { /* nothing kept */ }
+}
+
+/**
+ * The peek this page opens on: the address's; or, at an address with no query at all (the page reloaded after App took
+ * the link out of it), the one kept for this tab. An address with any other query is another link, and the kept peek
+ * is not its.
+ */
+export function peekAtLoad(win: Pick<Window, 'location'> = window): { postId: string; ticket: string } | null {
+    return readPeekParam(win) ?? (win.location.search ? null : keptPeek());
 }
 
 /**

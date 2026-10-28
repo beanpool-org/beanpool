@@ -20,7 +20,7 @@ import { getPublicKey } from '@noble/ed25519';
 import { bytesToHex } from '../crypto';
 import {
     communityOrigin, readCommunity, readGlobalHome, fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace,
-    findCommunityCardCopy, communityFacts, communityLabel, DIRECTORY_MESSAGES, type GlobalHome, type Fetched,
+    findCommunityCardCopy, communityFacts, communityLabel, notAnsweringLine, DIRECTORY_MESSAGES, type GlobalHome, type Fetched,
 } from '../community-directory';
 import { GLOBAL_NODE_URL } from '../node-profile';
 import type { BeanPoolIdentity } from '../identity';
@@ -73,6 +73,27 @@ describe('a community’s address', () => {
         });
         expect(readCommunity(row({ key: '' }))).toBeNull();
         expect(readCommunity('nope')).toBeNull();
+    });
+});
+
+describe('a community gone quiet (front doors S13)', () => {
+    const NOW = Date.parse('2026-10-28T12:00:00.000Z');
+    const hoursAgo = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
+
+    it('keeps the node\'s lastSeenAt, and drops one that is no time', () => {
+        expect(readCommunity(row({ lastSeenAt: '2026-10-26T01:00:00.000Z' }))?.lastSeenAt).toBe('2026-10-26T01:00:00.000Z');
+        for (const bad of ['yesterday', 42, null, undefined, {}, `2026-10-26T01:00:00.000Z${' '.repeat(80)}`]) {
+            expect(readCommunity(row({ lastSeenAt: bad }))?.lastSeenAt).toBeNull();
+        }
+    });
+
+    it('says "Not answering lately" past 36 h since the last push, and not before', () => {
+        expect(notAnsweringLine({ lastSeenAt: hoursAgo(40) }, NOW)).toBe('Not answering lately');
+        expect(notAnsweringLine({ lastSeenAt: hoursAgo(36.5) }, NOW)).toBe('Not answering lately');
+        expect(notAnsweringLine({ lastSeenAt: hoursAgo(35) }, NOW)).toBeNull();
+        expect(notAnsweringLine({ lastSeenAt: hoursAgo(1) }, NOW)).toBeNull();
+        expect(notAnsweringLine({ lastSeenAt: null }, NOW)).toBeNull();
+        expect(notAnsweringLine({}, NOW)).toBeNull();
     });
 });
 

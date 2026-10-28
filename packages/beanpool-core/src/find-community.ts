@@ -90,7 +90,29 @@ export const FIND_COMMUNITY_WORDS = {
     farLine: (n: number): string => t('{none} {lead}', { none: t(FIND_COMMUNITY_WORDS.noneNear), lead: FIND_COMMUNITY_WORDS.farLead(n) }),
     /** The control beside `none` and `far`: it opens the Start a community screen. */
     start: word('Start a community'),
+    /**
+     * Under a listed community's name when its last push to the directory is more than {@link NOT_ANSWERING_AFTER_HOURS}
+     * ago (front doors S13): it is still listed, and asking to join still works (the knock waits until it answers).
+     */
+    notAnswering: word('Not answering lately'),
 } as const;
+
+/**
+ * How long after a community's last push to the directory a row says "Not answering lately" (design §2.3): a node pushes
+ * every 12 hours by default, so 36 hours is three missed pushes. The directory stops showing a row after 7 days.
+ */
+export const NOT_ANSWERING_AFTER_HOURS = 36;
+
+/**
+ * Whether a listed community has not pushed for more than {@link NOT_ANSWERING_AFTER_HOURS} (its `lastSeenAt`, an ISO
+ * time, as global's /api/global/communities sends it). Unknown (absent, not a time, or in the future) is never "not
+ * answering": the line is only said when the directory says so.
+ */
+export function notAnsweringLately(lastSeenAt: unknown, now: number = Date.now()): boolean {
+    if (typeof lastSeenAt !== 'string' || lastSeenAt.length > 64) return false;
+    const t = Date.parse(lastSeenAt);
+    return Number.isFinite(t) && now - t > NOT_ANSWERING_AFTER_HOURS * 3_600_000;
+}
 
 /** The node's code when a member already watches as many places as it allows (409, with its `limit`). */
 export const PLACE_WATCH_LIMIT_CODE = 'watch_limit';

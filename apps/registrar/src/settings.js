@@ -17,7 +17,7 @@ export const SETTINGS = {
     new_names_per_day: { def: 50, min: 1, max: 100000, env: 'NEW_NAMES_PER_DAY', words: 'New auto names across all nodes in 24 hours; past it they are held for your approval' },
     // M1 of the 2026-10-01 review (index.js claimLimit): a node uses one name; a rename keeps the old one held for it.
     claim_limit_per_key: { def: 3, min: 1, max: 1000, env: 'CLAIM_LIMIT_PER_KEY', words: 'Names one node key may hold at once (a further claim is refused 403)' },
-    // Probation (§4.3.2): a new name is routed, but off the switchboard and the directory, until both hold.
+    // Probation (§4.3.2): a new name is routed, but out of the directory, until both hold.
     probation_sweeps: { def: 3, min: 1, max: 288, words: 'Ok sweeps in a row before a new name leaves probation' },
     probation_s: { def: 3600, min: 0, max: 30 * 86400, words: 'Seconds a new name is live before it can leave probation' },
     // The attestation sweep's strikes (index.js applyVerdict).

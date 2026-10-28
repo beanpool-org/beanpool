@@ -567,4 +567,73 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         refuseForRoom(socket);
         expect(await waitForNewSocket(socket, 3_600_000)).toBe(300_000);
     });
+
+    // ── The message backstop (slice L0): 120 s while this is alive, 30 s while it is not ──────────────────
+
+    it('is alive for the message backstop only signed by the member, open and answering pings', async () => {
+        const { loadIdentity } = await import('../identity');
+        const { buildSignedWsParams } = await import('../crypto');
+        vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+        vi.mocked(buildSignedWsParams).mockResolvedValueOnce('pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
+        const socket = await startAndConnect();
+        // Open and signed, but the node has not answered a ping: a socket let in and closed for want of room never does.
+        expect(client.isAlive()).toBe(false);
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        expect(client.isAlive()).toBe(true);
+        expect(client.isAlive(Date.now() + WebSocketSyncClient.PONG_TIMEOUT_MS)).toBe(false);
+        // Dropped: the watchdog closes it, and until a new socket is answered the backstop is the 30 s one.
+        socket.close();
+        expect(client.isAlive()).toBe(false);
+    });
+
+    it('a socket that could not be signed brings no new_message, so it never counts as alive', async () => {
+        const { loadIdentity } = await import('../identity');
+        const { buildSignedWsParams } = await import('../crypto');
+        vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+        vi.mocked(buildSignedWsParams).mockRejectedValueOnce(new Error('no key'));
+        const socket = await startAndConnect();
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        expect(client.isAlive()).toBe(false);
+    });
+
+    it('counts for the message backstop only since a read that started after it opened, again after a drop (review of #2558)', async () => {
+        const { loadIdentity } = await import('../identity');
+        const { buildSignedWsParams } = await import('../crypto');
+        const me = { publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any;
+        const sig = 'pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2';
+        // Signed both times: the first socket and the one the retry opens.
+        vi.mocked(loadIdentity).mockResolvedValueOnce(me).mockResolvedValueOnce(me);
+        vi.mocked(buildSignedWsParams).mockResolvedValueOnce(sig).mockResolvedValueOnce(sig);
+        vi.spyOn(Math, 'random').mockReturnValue(0.5);
+        const readBeforeOpen = Date.now() - 1;
+        const socket = await startAndConnect();
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        expect(client.isAlive()).toBe(true);
+        // A line sent before the socket opened rang nothing, so a read from before then doesn't count.
+        expect(client.isAliveSince(readBeforeOpen)).toBe(false);
+        expect(client.isAliveSince(Date.now())).toBe(true);
+        // A read, then the socket drops and the retry opens another: that read started before the drop.
+        await vi.advanceTimersByTimeAsync(20_000);
+        const readBeforeDrop = Date.now();
+        await vi.advanceTimersByTimeAsync(1_000);
+        socket.close();
+        expect(client.isAliveSince(readBeforeDrop)).toBe(false);
+        await waitForNewSocket(socket, 60_000);
+        const reopened = wsInstance;
+        expect(reopened).not.toBe(socket);
+        reopened.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        expect(client.isAlive()).toBe(true);
+        expect(client.isAliveSince(readBeforeDrop)).toBe(false);
+        // The next read starts after it opened: the 120 s backstop again.
+        expect(client.isAliveSince(Date.now())).toBe(true);
+        // disconnect() (the app going to the background) forgets it.
+        client.stop();
+        expect(client.isAliveSince(Date.now())).toBe(false);
+    });
+
+    it("a visitor's socket, opened with no identity, never counts as alive", async () => {
+        const socket = await startAndConnect();
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        expect(client.isAlive()).toBe(false);
+    });
 });

@@ -93,6 +93,33 @@ describe('Settings: sign-in recovery', () => {
         expect(screen.getByText('only', { selector: 'strong' })).toBeInTheDocument();
     });
 
+    // Vault rethink VR0: where the copy is, from the server's own list (the web app has no key vault client, so a copy the
+    // phone app put at the vault is never on it, and the line never names the vault).
+    it("connected: this community's server keeps the copy; not connected: it keeps none; both under the way back", async () => {
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
+        renderSettings();
+        const line = await screen.findByTestId('signin-recovery');
+        const where = screen.getByTestId('signin-recovery-where');
+        expect(where.textContent).toBe("This community's server keeps the copy of your account that your sign-in opens.");
+        expect(line).toContainElement(where);
+        expect(where.compareDocumentPosition(screen.getByTestId('signin-recovery-way-back')) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+        expect(where.compareDocumentPosition(screen.getByTestId('signin-recovery-openers')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(line).not.toHaveTextContent(/key vault|Iceland/);
+        cleanup();
+
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings(noWordsIdentity);
+        await screen.findByTestId('signin-recovery');
+        expect(screen.getByTestId('signin-recovery-where').textContent).toBe("This community's server keeps no copy of your account that a sign-in opens.");
+        cleanup();
+
+        // A list naming only a sign-in the app no longer offers (an old GitHub copy): never "keeps no copy".
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['github']);
+        renderSettings();
+        await screen.findByTestId('signin-recovery');
+        expect(screen.queryByTestId('signin-recovery-where')).toBeNull();
+    });
+
     it('the node could not be asked: no line at all, and the banner as it was', async () => {
         vi.mocked(api.getSignInRecovery).mockResolvedValue(null);
         renderSettings();

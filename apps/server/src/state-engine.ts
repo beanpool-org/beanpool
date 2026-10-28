@@ -643,6 +643,12 @@ export interface CommunityProject {
 
 export interface NodeConfig {
     serviceRadius?: { lat: number; lng: number; radiusKm: number };
+    /**
+     * The town or area the community serves, in its owner's words ("Castlemaine and around"): the line a stranger's card
+     * shows for the area (routes/community-card.ts), never a point. Shown only while "Share Location & Radius"
+     * (`publishLocation`) is on, as the place is. Null or unset: the card names no area.
+     */
+    areaName?: string | null;
     publishLocation?: boolean;
     publishMembers?: boolean;
     /**
@@ -845,15 +851,14 @@ export function initStateEngine(): void {
     // nothing, silently. Moved to index.ts step 8.05, immediately after the connector manager. See the note
     // there — it is the sixth instance of this feature shipping code that nothing ever executed.
 
-    // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
+    // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes, where Beans are on:
+    // decayFlushTick)
     //
     // ONE commit, not two (review finding). These used to be separate autocommits under separate catches,
     // so a crash — or just the first one succeeding and the second throwing — left the decay debits durable
     // with their matching Commons credit missing, which boot then rebuilds from as the truth. The pair is
     // the unit; half of it is worse than none of it.
-    setInterval(() => {
-        try { persistDecayAndCommons(); } catch (e) { console.warn('[Ledger] Failed to persist the demurrage flush:', e); }
-    }, 5 * 60 * 1000);
+    setInterval(decayFlushTick, 5 * 60 * 1000);
 
     // Pledges a project took after reaching its goal, stuck in its escrow for good until pledges stopped at the goal
     // (db.ts pledgeToProject), go back to their backers: exactly what each pledged, through transfer() inside
@@ -1469,6 +1474,7 @@ import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVers
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
+import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr, tn: trn } = wordsFor('en');
@@ -9080,6 +9086,7 @@ export function getNodeConfig(): NodeConfig {
 
     const finalConfig: NodeConfig = {
         serviceRadius: config.serviceRadius,
+        areaName: typeof config.areaName === 'string' ? cleanLabel(config.areaName, AREA_NAME_MAX) ?? null : null,
         publishLocation: config.publishLocation !== false,
         publishMembers: config.publishMembers !== false,
         publishContactEmail: config.publishContactEmail === true,
@@ -9530,6 +9537,23 @@ export function persistDecayEvents(): void {
  */
 export function persistDecayAndCommons(): void {
     persistDecayAndCommonsEngine();
+}
+
+/**
+ * The 5-minute demurrage flush (initStateEngine's timer): persistDecayAndCommons, where Beans are on. Where they are off
+ * nothing can decay (the switch can only be off on a ledger that never moved, config/node-profile.ts), so the tick writes
+ * nothing and costs the one core nothing (DESIGN-global-lounge-fable.md §5.2 item 5, slice L0). The switch is read on
+ * every tick: Beans switched back on are flushed from the next one. Whether it flushed.
+ */
+export function decayFlushTick(): boolean {
+    if (!getProfileSwitches().beans) return false;
+    try {
+        persistDecayAndCommons();
+        return true;
+    } catch (e) {
+        console.warn('[Ledger] Failed to persist the demurrage flush:', e);
+        return false;
+    }
 }
 
 /**

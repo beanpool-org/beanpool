@@ -19,7 +19,7 @@
 
 import { readSearchSettings, readSkySettings, skyPlaceFor, skyToday, type SkyToday } from '@beanpool/core';
 import { readTourRecord, tourEnded } from '@beanpool/core';
-import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, t, type FindCommunityState } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, communitiesNear, findCommunityState, isNearKm, knownCommunityCount, notAnsweringLately, t, type FindCommunityState } from '@beanpool/core';
 import { formatCount, formatDate, formatNumber, tn, word, type WordKey } from '@beanpool/core';
 import { deviceLocalClock, eventWhenParts, repeatCaption, type RepeatPattern } from '@beanpool/core';
 import { STARTER_LAYOUT, cardOnNode, cardOrder, pinnedCards, type HomeCardInstance, type HomeLayoutV2 } from './home-layout';
@@ -112,7 +112,11 @@ export interface HomeMe {
     tour?: unknown;
 }
 
-export interface HomeCommunity { key: string; name: string | null; url: string | null; memberCount: number | null; distanceKm: number | null }
+export interface HomeCommunity {
+    key: string; name: string | null; url: string | null; memberCount: number | null; distanceKm: number | null;
+    /** Its last push to the directory (front doors S13); absent from an older global node. */
+    lastSeenAt?: string | null;
+}
 export interface HomeFind {
     point: 'request' | 'area' | null;
     communities: HomeCommunity[];
@@ -604,6 +608,15 @@ export function communityFacts(c: Pick<HomeCommunity, 'distanceKm' | 'memberCoun
 }
 
 /**
+ * "Not answering lately", in the member's language, under a listed community whose last push to the directory is more
+ * than 36 h ago (core notAnsweringLately), or null: still listed, still worth a try. The phone's find screen says the
+ * same (apps/native/utils/community-directory.ts notAnsweringLine).
+ */
+export function notAnsweringLine(c: Pick<HomeCommunity, 'lastSeenAt'>, now: number = Date.now()): string | null {
+    return notAnsweringLately(c.lastSeenAt, now) ? t(FIND_COMMUNITY_WORDS.notAnswering) : null;
+}
+
+/**
  * The find card's headline, from what the node said (the phone's findCommunityCardCopy, but for the web's card, which
  * lists the communities themselves right under it, each a link to its own page, so the sentence doesn't name one).
  * Which one is @beanpool/core's findCommunityState: "none" only once the directory has loaded, and "near" only within
@@ -791,4 +804,26 @@ export const SKY_NO_PLACE_LINE = word('Nothing to show now: no place is known.')
 export function skyOf(answer: Pick<HomeAnswer, 'me' | 'cards'>, inst: Pick<HomeCardInstance, 'settings'>, now: number = Date.now()): SkyToday | null {
     const place = skyPlaceFor(readSkySettings(inst.settings), { community: answer.cards.community?.place, member: answer.me?.area });
     return place ? skyToday(place, now) : null;
+}
+
+/**
+ * Whether the "Use the phone app" card is due on Home (front doors S4):
+ * shown after the first post or a week (when the one-way-back card already comes back),
+ * until dismissed by the member.
+ */
+export function usePhoneAppCardDue({
+    dismissed,
+    keptPosts,
+    weekOverAt,
+    now = Date.now(),
+}: {
+    dismissed: boolean;
+    keptPosts: number;
+    weekOverAt: number | null;
+    now?: number;
+}): boolean {
+    if (dismissed) return false;
+    if (keptPosts >= 1) return true;
+    if (weekOverAt !== null && now >= weekOverAt) return true;
+    return false;
 }

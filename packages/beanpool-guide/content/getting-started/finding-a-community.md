@@ -26,6 +26,12 @@ Not in the global community yet? Tap the bean at the top left and, under **Your 
 
 A community that hasn't published its address is listed, but it can't be asked from here yet.
 
+## Not answering lately
+
+Each community's server tells the BeanPool directory about itself every few hours. When a community's server hasn't done that for more than a day and a half, the community says **Not answering lately** under its name: in the app, in the web app and on the map at beanpool.org. Its server may just be off for a while. It is still listed, and you can still ask to join: your request reaches it when it answers.
+
+A community whose server stays silent for a week is no longer listed, and comes back when its server is in touch again. A community can also take itself off the list at any time. The list shows only communities that give you somewhere to go: a web address, or a way to contact them.
+
 ## Asking to join
 
 - Tap **Ask to join** on a community.
@@ -51,7 +57,7 @@ The card says **A member invited you**. Tap **Join** with the community's name.
 - Your account comes with you: the same key and the same 12 words. Your name comes too. If someone there already has it, a number is added, such as "Sarah2". You can change it in the next step.
 - Your posts, chats and trades stay in each community. On the new one you start fresh.
 - Next you check your name and photo for the new community.
-- A sign-in that protects your account is kept by each community. The app asks you to protect your account in the new community too: tap **Protect it**, or **Later**, and do it any time in **Settings**.
+- A sign-in account you linked to get back into your account works in the new community too: BeanPool keeps one copy for all your communities.
 
 You stay a member of the global community, and can switch between them: see "More than one community".
 

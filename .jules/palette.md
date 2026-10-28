@@ -268,3 +268,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-27 - NeedsSheet Close Button Touch Target & Focus Rings
 **Learning:** `NeedsSheet` in `NeedsYouIcons.tsx` rendered its modal close button without minimum 44px touch target dimensions (`p-1` around 20px SVG) or explicit `type="button"`, and lacked visible focus-visible ring indicators (`focus-visible:ring-2 focus-visible:ring-bp-gold-fill`) for keyboard users.
 **Action:** Added `type="button"`, `min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center`, and `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill` styling to the close button and sheet option buttons, and created `NeedsYouIcons.test.tsx`.
+
+## 2026-10-28 - ChatMenuModal Touch Target Sizing & Focus Ring Indicators
+**Learning:** `ChatMenuModal.tsx` close button had size `min-w-[40px] min-h-[40px]` failing 44px minimum touch target requirements and lacked explicit `focus-visible:ring-2` ring indicators, while menu action buttons lacked `min-h-[44px]` touch target height.
+**Action:** Updated close button to `min-w-[44px] min-h-[44px] w-11 h-11` touch target sizing with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`, added `min-h-[44px]` to menu action buttons, and created `ChatMenuModal.test.tsx`.

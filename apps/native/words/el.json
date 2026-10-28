@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -4995,7 +4995,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Αν προτιμάτε να μην μπορεί να έχει πρόσβαση κανείς εκτός από εσάς, χρησιμοποιήστε μόνο τις 12 λέξεις σας.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "Το θησαυροφυλάκιο κλειδιών του BeanPool (ένας μικρός διακομιστής στην Ισλανδία) διατηρεί το αντίγραφο του λογαριασμού σας. Το BeanPool μπορεί να ανοίξει αυτά τα αντίγραφα: προς το παρόν υπεύθυνος είναι ο ιδρυτής, ενώ μεταβαίνει σε τρία άτομα σε διαφορετικές χώρες. Η εταιρεία φιλοξενίας μπορεί να διαβάσει τη μνήμη εν λειτουργία. Δικαστική εντολή ή παραβίαση της σύνδεσής σας θα μπορούσε να δώσει πρόσβαση.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Συνδέστε περισσότερους από έναν, σε περίπτωση που χάσετε κάποιον. Οποιοσδήποτε από αυτούς επαναφέρει τον λογαριασμό σας σε νέο τηλέφωνο, μέσω του διακομιστή της κοινότητάς σας.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Συνδέστε περισσότερους από έναν, σε περίπτωση που χάσετε κάποιον. Οποιοσδήποτε από αυτούς επαναφέρει τον λογαριασμό σας σε νέο τηλέφωνο, σε κάθε κοινότητα.",
   "🛡️ You're covered on {community}": "🛡️ Είστε καλυμμένοι στο {community}",
   "🛡️ You're covered": "🛡️ Είστε καλυμμένοι",
   "Sign-In Recovery Providers (1-of-N)": "Πάροχοι ανάκτησης μέσω σύνδεσης (1-από-N)",
@@ -5555,7 +5554,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Η κοινότητά σου χρειάζεται νεότερη έκδοση BeanPool από αυτή στο τηλέφωνό σου ({version}). Η έκδοση {latest} είναι διαθέσιμη στο Google Play.",
   "Updating keeps your account and everything on this phone.": "Η ενημέρωση διατηρεί τον λογαριασμό σου και τα πάντα σε αυτό το τηλέφωνο.",
   "Update BeanPool in the App Store": "Ενημέρωση του BeanPool στο App Store",
-  "Update BeanPool in Google Play": "Ενημέρωση του BeanPool στο Google Play",
   "Update\u0004the app": "Ενημέρωση",
   "Can't update? Ask the people who run your community.": "Δεν μπορείς να ενημερώσεις; Ρώτησε τους διαχειριστές της κοινότητάς σου.",
   "Use another community": "Χρήση άλλης κοινότητας",
@@ -6123,5 +6121,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Οι ειδοποιήσεις για το BeanPool είναι απενεργοποιημένες στις ρυθμίσεις του τηλεφώνου σας. Ανοίξτε τις Ρυθμίσεις για να τις ενεργοποιήσετε.",
   "Cancel request": "Ακύρωση αιτήματος",
-  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:"
+  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:",
+  "Choose a banner photo, or keep this one": "Επιλέξτε μια φωτογραφία banner ή κρατήστε αυτήν",
+  "Your picture, until you choose a banner.": "Η εικόνα σας, μέχρι να επιλέξετε ένα banner.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Περιηγείστε ως επισκέπτης. Τίποτα δεν αποθηκεύεται μέχρι να γίνετε μέλος.",
+  "Join to post": "Γίνετε μέλος για να δημοσιεύσετε",
+  "Join to message": "Γίνετε μέλος για να στείλετε μήνυμα"
 }

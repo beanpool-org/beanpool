@@ -13,7 +13,7 @@ import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction, type Group } from './lib/api';
+import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
 import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
@@ -24,7 +24,8 @@ import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
-import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
+import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
+import { setAccountHint } from './lib/community-card';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { readsOwn, useFeatureMode } from './lib/features';
@@ -43,11 +44,11 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
-import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
-import { getBundledGuide, inShownLanguage } from './lib/guide';
+import { getBundledGuide, loadBundledGuide, inShownLanguage } from './lib/guide';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
@@ -128,6 +129,7 @@ interface NodeHealthState {
     online: boolean;
     version?: string;
     minAppVersion?: string;
+    appVersions?: AppStoreVersions;
     nodeName?: string;
     callsign?: string;
     memberCount?: number;
@@ -142,6 +144,11 @@ export function App() {
     const fitNavLabels = useFitNavLabels(lang);
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
+    // The hint the node reads at its bare address (front doors S15, lib/community-card.ts): with an account here `/`
+    // opens this app as before; without one it shows a stranger the community's card. Said once the identity has loaded.
+    useEffect(() => {
+        if (!loading) setAccountHint(!!identity);
+    }, [loading, identity]);
     /*
      * With no identity: the global lobby (G9b) when the node shows visitors its listings and nothing is part way through
      * a join in this browser; otherwise the welcome page, as always. Decided once, from the node's own word; a node
@@ -205,12 +212,20 @@ export function App() {
         setActiveTab('home');
     };
     const [helpOpen, setHelpOpen] = useState(false);
+    const [helpGuide, setHelpGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
     useEffect(() => {
         const open = () => setHelpOpen(true);
         window.addEventListener(OPEN_HELP_EVENT, open);
         return () => window.removeEventListener(OPEN_HELP_EVENT, open);
     }, []);
-    const helpWords = helpSheetFor(inShownLanguage(getBundledGuide()), webHelpKey({ tab: activeTab, settings: showSettings }));
+    useEffect(() => {
+        if (helpOpen && !helpGuide) {
+            loadBundledGuide().then(setHelpGuide).catch(() => {});
+        }
+    }, [helpOpen, helpGuide]);
+    const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
@@ -496,6 +511,24 @@ export function App() {
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
+    // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
+    // join, as it keeps a shared listing; a member lands on Home with the Find card on that community (above the cards
+    // where Home draws no Find card).
+    const [askParam] = useState(() => takeAskParam());
+    const [askedCommunity, setAskedCommunity] = useState<string | null>(null);
+    // Once per page, at the first identity: the identity object is replaced later (a profile saved), and that is no ask.
+    const askTaken = useRef(false);
+    useEffect(() => {
+        if (!identity || askTaken.current) return;
+        askTaken.current = true;
+        const kept = takeKeptAskedCommunity();
+        const asked = askParam ?? kept;
+        if (!asked) return;
+        setActiveTab('home');
+        setAskedCommunity(asked);
+    }, [identity, askParam]);
+    const clearAskedCommunity = useCallback(() => setAskedCommunity(null), []);
+
     // `/?shop=<id>` — a shared shop link.
     const [linkedShop, setLinkedShop] = useState<string | null>(null);
     useEffect(() => { setLinkedShop(takeShopParam()); }, []);
@@ -778,7 +811,7 @@ export function App() {
             setIdentity(signedIn);
         };
         if (visitorView.kind === 'lobby') {
-            return <GuestLobby info={visitorView.info} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
+            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
@@ -1078,6 +1111,8 @@ export function App() {
                                     onAddCardTaken={clearAddHomeCard}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
+                                    askedCommunity={askedCommunity}
+                                    onAskedCommunitySeen={clearAskedCommunity}
                                 />
                             )}
                             {activeTab === 'marketplace' && (

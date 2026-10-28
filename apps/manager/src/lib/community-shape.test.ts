@@ -291,7 +291,7 @@ describe('community-shape lib', () => {
             const shape = createMockShape({});
             expect(getConsequenceSentence('dmRequests', true, shape)).toContain("A member's first message");
             expect(getConsequenceSentence('decisions', false, shape)).toContain('Nothing can be proposed or voted on');
-            expect(getConsequenceSentence('listed', false, shape)).toContain('The directory keeps the entry it has');
+            expect(getConsequenceSentence('listed', false, shape)).toContain('comes off the directory and the map on beanpool.org at once');
             expect(getConsequenceSentence('shareLocation', true, shape)).toContain('Anyone will be able to see roughly where');
             expect(getConsequenceSentence('shareMemberCount', false, shape)).toContain('The directory will no longer show');
             expect(getConsequenceSentence('shareEmail', true, shape)).toContain('Your contact email will be listed');

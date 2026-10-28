@@ -281,7 +281,7 @@ export function getConsequenceSentence(
                 : t('Members who have completed a trade, and admins, propose; members vote.');
         case 'listed':
             return targetValue === false
-                ? t('The directory keeps the entry it has until BeanPool removes it; nothing new is sent.')
+                ? t('This community comes off the directory and the map on beanpool.org at once; nothing new is sent.')
                 : t('People nearby can find this community on beanpool.org and in the app.');
         case 'shareLocation':
             return targetValue === false

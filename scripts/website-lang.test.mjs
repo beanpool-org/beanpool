@@ -387,7 +387,7 @@ test('main.js WORDS dictionary translates strings by document.documentElement.la
     // Verify all 25 languages exist in WORDS and have every key
     const wordsTable = domEn.window.WORDS;
     const REQUIRED_KEYS = [
-        'noneNear', 'notLoaded', 'members', 'radius', 'visit',
+        'noneNear', 'notLoaded', 'members', 'radius', 'see',
         'subscribing', 'alreadySubscribed', 'checkInbox', 'somethingWrong',
         'subscribe', 'readIn'
     ];
@@ -398,10 +398,29 @@ test('main.js WORDS dictionary translates strings by document.documentElement.la
         }
         assert.equal(typeof wordsTable[lang].members, 'function', `WORDS[${lang}].members must be a function`);
         assert.equal(typeof wordsTable[lang].radius, 'function', `WORDS[${lang}].radius must be a function`);
-        assert.equal(typeof wordsTable[lang].visit, 'function', `WORDS[${lang}].visit must be a function`);
+        assert.equal(typeof wordsTable[lang].see, 'function', `WORDS[${lang}].see must be a function`);
         assert.equal(typeof wordsTable[lang].readIn, 'function', `WORDS[${lang}].readIn must be a function`);
     }
     assert.equal(wordsTable.id.readIn('Bahasa Indonesia'), 'Baca ini dalam Bahasa Indonesia →', 'Indonesian readIn avoids redundant "bahasa"');
+    // A directory row's link is "See {name}" (front doors S15), its name in every language.
+    for (const lang of LANGS) assert.ok(wordsTable[lang].see('Riverbend Commons').includes('Riverbend Commons'), `WORDS[${lang}].see names the community`);
+});
+
+test("a directory row's popup links the community's address as \"See {name}\" (front doors S15)", () => {
+    const mainJsText = fs.readFileSync(path.join(WEBSITE_DIR, 'main.js'), 'utf8');
+    const dom = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="nodes-map"></div></body></html>`, { runScripts: 'dangerously' });
+    dom.window.eval(mainJsText);
+    const popup = (node) => dom.window.eval('directoryPopup')(dom.window.eval('readRow')(node));
+    const named = popup({ community_name: 'Castlemaine BeanPool', node_url: 'https://castlemaine.beanpool.org', member_count: 9 });
+    const link = named.querySelector('a[href="https://castlemaine.beanpool.org"]');
+    assert.ok(link, 'the link goes to the community\'s own address, as before');
+    assert.equal(link.textContent, 'See Castlemaine BeanPool');
+    const unnamed = popup({ community_name: 'BeanPool Community', node_url: 'https://gippsland.beanpool.org' });
+    assert.equal(unnamed.querySelector('a[href="https://gippsland.beanpool.org"]').textContent, 'See gippsland.beanpool.org', 'a default name is shown as the host');
+    const es = new JSDOM(`<!DOCTYPE html><html lang="es"><body><div id="nodes-map"></div></body></html>`, { runScripts: 'dangerously' });
+    es.window.eval(mainJsText);
+    const esPopup = es.window.eval('directoryPopup')(es.window.eval('readRow')({ community_name: 'Castlemaine BeanPool', node_url: 'https://castlemaine.beanpool.org' }));
+    assert.equal(esPopup.querySelector('a').textContent, 'Ver Castlemaine BeanPool');
 });
 
 test('main.js on English page presents "Read this in <language>" banner when navigator.language matches without choice cookie', () => {

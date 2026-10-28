@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, native tools top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct native)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, native tools top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct native); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -5009,7 +5009,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Sizden başka hiç kimsenin erişememesini tercih ediyorsanız yalnızca 12 kelimenizi kullanın.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "BeanPool'un İzlanda'daki küçük bir sunucu olan anahtar kasası, oturumunuzun açtığı kopyayı saklar. BeanPool bu kopyaları açabilir: Şimdilik kasaya BeanPool'un kurucusu bakmaktadır ve sistem ikisi birlikte hareket etmek zorunda olan farklı ülkelerdeki üç kişiye devredilmektedir. Barındıran şirket çalışırken belleğini okuyabilir. Bir mahkeme kopyanın açılmasını emredebilir ve oturum açma hesabınızı ele geçiren herkes içeri girebilir.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Birini kaybetme ihtimaline karşı birden fazla bağlayın. Kopyayı saklayan topluluk sunucunuz aracılığıyla bunlardan herhangi biri hesabınızı yeni bir telefonda geri getirir.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Birini kaybetme ihtimaline karşı birden fazla bağlayın. Bunlardan herhangi biri hesabınızı her toplulukta yeni bir telefonda geri getirir.",
   "🛡️ You're covered on {community}": "🛡️ {community} üzerinde güvendesiniz",
   "🛡️ You're covered": "🛡️ Güvendesiniz",
   "Sign-In Recovery Providers (1-of-N)": "Oturum Açma Kurtarma Sağlayıcıları (N'de 1)",
@@ -5569,7 +5568,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Topluluğunuz, bu telefondakinden ({version}) daha yeni bir BeanPool sürümüne ihtiyaç duyuyor. {latest} sürümü Google Play'de hazır bekliyor.",
   "Updating keeps your account and everything on this phone.": "Güncelleme, hesabınızı ve bu telefondaki her şeyi korur.",
   "Update BeanPool in the App Store": "BeanPool'u App Store'da Güncelle",
-  "Update BeanPool in Google Play": "BeanPool'u Google Play'de Güncelle",
   "Update\u0004the app": "Güncelle",
   "Can't update? Ask the people who run your community.": "Güncelleyemiyor musunuz? Topluluğunuzu yöneten kişilere sorun.",
   "Use another community": "Başka bir topluluk kullan",
@@ -6123,5 +6121,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Biri size yanıt verdiğinde, mesaj attığında veya katılmak istediğinde haberdar olun. Başka hiçbir şey için değil.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "BeanPool bildirimleri telefonunuzun ayarlarında kapalı. Açmak için Ayarlar'ı açın.",
   "Cancel request": "İsteği iptal et",
-  "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:"
+  "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:",
+  "Choose a banner photo, or keep this one": "Bir afiş fotoğrafı seçin veya bunu tutun",
+  "Your picture, until you choose a banner.": "Bir afiş seçene kadar profil resminiz.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Ziyaretçi olarak göz atıyorsunuz. Katılana kadar hiçbir şey kaydedilmez.",
+  "Join to post": "Paylaşmak için katıl",
+  "Join to message": "Mesaj göndermek için katıl"
 }

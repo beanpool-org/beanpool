@@ -98,7 +98,7 @@ export function fakeCloudflare() {
     const calls = [];
     const tunnels = new Map();   // id → { id, name, created_at, deleted_at, ingress }
     const dns = new Map();       // id → { id, type, name (fqdn), content, proxied }
-    const fail = { createTunnel: false, deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false };
+    const fail = { createTunnel: false, deleteTunnel: false, ingress: false, deleteDns: false, patchDns: false, postDns: false, countDns: false };
     const hooks = [];
     const paging = { max: 1000 };
     let seq = 0;
@@ -152,8 +152,19 @@ export function fakeCloudflare() {
             t.ingress = body.config.ingress;
             return ok({});
         }
-        if (p === '/zones/zone/dns_records' && method === 'GET')
-            return ok([...dns.values()].filter((r) => r.name === url.searchParams.get('name')));
+        if (p === '/zones/zone/dns_records' && method === 'GET') {
+            if (fail.countDns) return err(500, 1000, 'internal error');
+            const name = url.searchParams.get('name');
+            if (name) return ok([...dns.values()].filter((r) => r.name === name));
+            const all = [...dns.values()];
+            const total = paging.dnsTotal !== undefined ? paging.dnsTotal : all.length;
+            const per = Number(url.searchParams.get('per_page')) || 20;
+            const page = Number(url.searchParams.get('page')) || 1;
+            const result = all.slice((page - 1) * per, page * per);
+            const info = { page, per_page: per, count: result.length, total_count: total, total_pages: Math.max(1, Math.ceil(total / per)) };
+            const shown = paging.dnsInfo ? paging.dnsInfo(info) : info;
+            return Response.json({ success: true, result, ...(shown === undefined ? {} : { result_info: shown }) });
+        }
         if (p === '/zones/zone/dns_records' && method === 'POST') {
             if (fail.postDns) return err(500, 1000, 'internal error');
             const fqdn = `${body.name}.beanpool.org`;
@@ -286,7 +297,12 @@ export async function world({ migrations, env: extra, serve = {} } = {}) {
         available: async (name) => call(new Request(`https://beanpool.org/api/registrar/available?name=${name}`)),
         // `body`: the action's JSON body, when it takes one (release: { free_now: true }).
         admin: async (name, action, body) => call(adminRequest(name, action, body)),
-        invite: async (code) => (await worker.fetch(new Request(`https://beanpool.org/i/${code}`), env)).status,
+        invite: async (code = '') => {
+            const p = String(code).startsWith('/') ? code : `/i/${code}`;
+            const url = String(code).startsWith('http') ? code : `https://beanpool.org${p}`;
+            const res = await worker.fetch(new Request(url), env);
+            return { status: res.status, location: res.headers.get('location') };
+        },
         backdate: async (name, fields) => db.updateAllocation(env, name, fields),
         // A live name's probation over (migration 0011), as enough ok sweeps would end it: for a test about something else.
         verify: async (name) => db.updateAllocation(env, name, { verified_at: nowS() }),

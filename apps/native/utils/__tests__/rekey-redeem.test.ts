@@ -171,6 +171,20 @@ describe('finishing', () => {
         expect(w.slot).toBeNull();
     });
 
+    it('bound onto a phone that looked around the global community first (slice S12): the look\'s guest mark goes just before the key, never with an account there', async () => {
+        const w = world({ answers: [bound] });
+        w.deps.forgetLook = async () => { w.log.push('forget look'); };
+        const slot = await beginRekey(MULLUM, CODE, w.deps);
+        await finishRekey(slot, { callsign: 'MiaMember' }, w.deps);
+        expect(w.log.slice(-3)).toEqual(['forget look', 'import', 'slot.clear']);
+
+        const mine = { ...id('a'), callsign: 'MyName' };
+        const kept = world({ phone: mine, answers: [bound] });
+        kept.deps.forgetLook = async () => { kept.log.push('forget look'); };
+        await finishRekey(await beginRekey(MULLUM, CODE, kept.deps), { callsign: 'MiaMember' }, kept.deps);
+        expect(kept.log).not.toContain('forget look');
+    });
+
     it('bound with the phone\'s own key: the account on the phone is left exactly as it was', async () => {
         const mine = { ...id('a'), callsign: 'MyName' };
         const w = world({ phone: mine, answers: [bound] });

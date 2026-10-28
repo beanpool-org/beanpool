@@ -23,7 +23,7 @@ vi.mock('../../components/SsoButton', () => {
 });
 
 import {
-    COMMUNITY_SSO_GROUP_NOTE, KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY,
+    COMMUNITY_SSO_GROUP_NOTE, KeeperProtectionPanel, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SIGN_IN_ROW,
 } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { protectionFrom } from '../protection-state';
@@ -225,6 +225,26 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
         const text = textOf(panel(two, true));
         expect(text).toContain("Protected by 2 sign-in accounts. Any one of them brings your account back, through your community's server, which keeps the copy.");
         expect(text).not.toMatch(/hub/i);
+    });
+});
+
+// Vault rethink VR0: a build with no vault configured reads exactly as before. Account Protection's waysBack too.
+// The row's own sentences, but moreThanOne: that one opens a build without a vault's group note too (COMMUNITY_SSO_GROUP_NOTE).
+const VAULT_ONLY = Object.entries(SIGN_IN_ROW).filter(([k]) => k !== 'moreThanOne').map(([, v]) => v);
+
+describe('KeeperProtectionPanel, VR0: a build without a key vault draws none of the vault sign-in row', () => {
+    it('no row, no "Who can open it", and the sign-in group as it was, with waysBack or without', () => {
+        for (const protection of [WORDS_ONLY, COVERED]) {
+            for (const hasWords of [true, false]) {
+                const plain = textOf(panel(protection, hasWords));
+                const waysBack = textOf(render(React.createElement(KeeperProtectionPanel, { protection, hasWords, onProtectSso: vi.fn(), onDisconnectSso: vi.fn(), waysBack: true })));
+                expect(waysBack).toBe(plain);
+                for (const line of VAULT_ONLY) expect(plain).not.toContain(line);
+                expect(plain).toContain('Sign-In Recovery Providers (1-of-N)');
+                expect(plain).toContain(COMMUNITY_SSO_GROUP_NOTE);
+                expect(plain).not.toMatch(/key vault|Iceland/);
+            }
+        }
     });
 });
 

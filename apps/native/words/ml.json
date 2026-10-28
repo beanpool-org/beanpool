@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -4995,7 +4995,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "നിങ്ങളല്ലാതെ മറ്റാരും പ്രവേശിക്കരുതെന്ന് ആഗ്രഹിക്കുന്നുവെങ്കിൽ, നിങ്ങളുടെ 12 വാക്കുകൾ മാത്രം ഉപയോഗിക്കുക.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "ഐസ്‌ലാൻഡിലെ ഒരു ചെറിയ സെർവറായ BeanPool-ന്റെ കീ വോൾട്ട് നിങ്ങളുടെ അക്കൗണ്ട് പകർപ്പ് സൂക്ഷിക്കുന്നു. BeanPool-ന് ഈ പകർപ്പുകൾ തുറക്കാനാകും. നിലവിൽ സ്ഥാപകൻ മാത്രമാണ് ഇത് കൈകാര്യം ചെയ്യുന്നത്, ഇത് മൂന്ന് വ്യത്യസ്ത രാജ്യങ്ങളിലെ ആളുകളിലേക്ക് മാറ്റുകയാണ്. ഹോസ്റ്റ് ചെയ്യുന്ന കമ്പനിക്ക് മെമ്മറി പരിശോധിക്കാം, കോടതി ഉത്തരവിട്ടാലും പകർപ്പ് തുറക്കാം.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "ഒന്ന് നഷ്ടപ്പെട്ടാൽ ഉപയോഗിക്കാൻ ഒന്നിലധികം കണക്റ്റ് ചെയ്യുക. പകർപ്പ് സൂക്ഷിക്കുന്ന നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവർ വഴി ഒരു പുതിയ ഫോണിൽ അക്കൗണ്ട് തിരികെ കൊണ്ടുവരാൻ ഇവയിലൊന്ന് മതിയാകും.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "ഒന്ന് നഷ്ടപ്പെട്ടാൽ ഉപയോഗിക്കാൻ ഒന്നിലധികം ബന്ധിപ്പിക്കുക. ഏത് കമ്മ്യൂണിറ്റിയിലും പുതിയ ഫോണിൽ അക്കൗണ്ട് തിരികെ കൊണ്ടുവരാൻ ഇവയിലൊന്ന് മതിയാകും.",
   "🛡️ You're covered on {community}": "🛡️ {community}-ൽ നിങ്ങൾ സുരക്ഷിതനാണ്",
   "🛡️ You're covered": "🛡️ നിങ്ങൾ സുരക്ഷിതനാണ്",
   "Sign-In Recovery Providers (1-of-N)": "സൈൻ-ഇൻ വീണ്ടെടുക്കൽ ദാതാക്കൾ (1-of-N)",
@@ -5555,7 +5554,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റിക്ക് ഈ ഫോണിലുള്ളതിനേക്കാൾ ({version}) പുതിയ പതിപ്പിലുള്ള BeanPool ആവശ്യമാണ്. പതിപ്പ് {latest} ഗൂഗിൾ പ്ലേയിൽ ലഭ്യമാണ്.",
   "Updating keeps your account and everything on this phone.": "അപ്‌ഡേറ്റ് ചെയ്യുന്നത് നിങ്ങളുടെ അക്കൗണ്ടും ഈ ഫോണിലെ മറ്റെല്ലാം സുരക്ഷിതമായി നിലനിർത്തും.",
   "Update BeanPool in the App Store": "ആപ്പ് സ്റ്റോറിൽ BeanPool അപ്‌ഡേറ്റ് ചെയ്യുക",
-  "Update BeanPool in Google Play": "ഗൂഗിൾ പ്ലേയിൽ BeanPool അപ്‌ഡേറ്റ് ചെയ്യുക",
   "Update\u0004the app": "അപ്‌ഡേറ്റ് ചെയ്യുക",
   "Can't update? Ask the people who run your community.": "അപ്‌ഡേറ്റ് ചെയ്യാനാകുന്നില്ലേ? നിങ്ങളുടെ കമ്മ്യൂണിറ്റി നടത്തുന്നവരോട് ചോദിക്കുക.",
   "Use another community": "മറ്റൊരു കമ്മ്യൂണിറ്റി ഉപയോഗിക്കുക",
@@ -6123,5 +6121,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ആരെങ്കിലും മറുപടി നൽകുമ്പോഴോ സന്ദേശമയയ്ക്കുമ്പോഴോ ചേരാൻ അഭ്യർത്ഥിക്കുമ്പോഴോ അറിയാൻ. മറ്റൊന്നിനുമല്ല.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "നിങ്ങളുടെ ഫോണിന്റെ ക്രമീകരണങ്ങളിൽ BeanPool-ന്റെ അറിയിപ്പുകൾ ഓഫാണ്. അവ ഓണാക്കാൻ ക്രമീകരണങ്ങൾ തുറക്കുക.",
   "Cancel request": "അഭ്യർത്ഥന റദ്ദാക്കുക",
-  "Nothing here yet. Be the first:": "ഇവിടെ ഇതുവരെ ഒന്നുമില്ല. ആദ്യത്തെയാളാകൂ:"
+  "Nothing here yet. Be the first:": "ഇവിടെ ഇതുവരെ ഒന്നുമില്ല. ആദ്യത്തെയാളാകൂ:",
+  "Choose a banner photo, or keep this one": "ഒരു ബാനർ ഫോട്ടോ തിരഞ്ഞെടുക്കുക, അല്ലെങ്കിൽ ഇത് നിലനിർത്തുക",
+  "Your picture, until you choose a banner.": "ഒരു ബാനർ തിരഞ്ഞെടുക്കുന്നതുവരെ നിങ്ങളുടെ ചിത്രം.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "നിങ്ങൾ ഒരു സന്ദർശകനായി ചുറ്റും നോക്കുകയാണ്. ചേരുന്നതുവരെ ഒന്നും സംരക്ഷിക്കപ്പെടില്ല.",
+  "Join to post": "പോസ്റ്റ് ചെയ്യാൻ ചേരുക",
+  "Join to message": "സന്ദേശം അയക്കാൻ ചേരുക"
 }

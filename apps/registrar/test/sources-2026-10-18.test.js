@@ -271,7 +271,7 @@ test('a held batch keeps its source past 24 h: still grouped, and Reject all hel
     } finally { w.restore(); }
 });
 
-test('probation: a new name is live but "not found" on /i/ and the directory waits, until 3 ok sweeps and an hour', async () => {
+test('probation: a new name is live and the directory waits, until 3 ok sweeps and an hour', async () => {
     const w = await sourceWorld();
     try {
         const key = await makeKey(), other = await makeKey();
@@ -283,12 +283,12 @@ test('probation: a new name is live but "not found" on /i/ and the directory wai
         w.sqlite.prepare("UPDATE name_allocations SET verified_at = 1 WHERE name = 'oldtown'").run();
         w.nodes['oldtown.beanpool.org'] = attestsAs(other);
         const onProbation = async () => {
-            assert.equal(await page(w, '/i/anything?n=newtown'), 404);
-            assert.equal(await page(w, '/i/newtown'), 404);
+            assert.equal(await page(w, '/i/anything?n=newtown'), 302);
+            assert.equal(await page(w, '/i/newtown'), 302);
             assert.equal((await w.status(key)).body.probation, true);
         };
         await onProbation();
-        assert.equal(await page(w, '/i/anything?n=oldtown'), 200, 'a verified name is answered');
+        assert.equal(await page(w, '/i/anything?n=oldtown'), 302, 'a verified name also redirects');
         assert.equal((await w.status(other)).body.probation, undefined);
         // No "New community" at the claim.
         assert.deepEqual(told(w, 'New communit%'), []);
@@ -307,8 +307,8 @@ test('probation: a new name is live but "not found" on /i/ and the directory wai
         await onProbation();
         await attestSweep(w.env);
         assert.ok(row(w, 'newtown').verified_at > 0, 'verified on the third ok sweep in a row');
-        assert.equal(await page(w, '/i/anything?n=newtown'), 200);
-        assert.equal(await page(w, '/i/newtown'), 200);
+        assert.equal(await page(w, '/i/anything?n=newtown'), 302);
+        assert.equal(await page(w, '/i/newtown'), 302);
         assert.equal((await w.status(key)).body.probation, undefined, 'its node lists itself now');
         assert.ok(w.events('newtown').some((e) => e.event === 'verified'));
         // The "New community" alert, at verification, once.

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-22",
@@ -4803,7 +4803,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Nếu bạn muốn không ai khác ngoài bạn có thể truy cập, hãy chỉ sử dụng 12 từ của mình.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "Kho khóa của BeanPool, một máy chủ nhỏ ở Iceland, lưu giữ bản sao tài khoản mở bằng đăng nhập của bạn. BeanPool có thể mở các bản sao này: hiện tại một người, người sáng lập BeanPool, trông coi kho khóa, và quyền quản lý đang chuyển giao cho ba người ở các quốc gia khác nhau (cần ít nhất hai người cùng thực hiện). Công ty máy chủ lưu trữ có thể đọc bộ nhớ khi máy chủ chạy. Tòa án có thể yêu cầu mở bản sao và bất kỳ ai chiếm quyền đăng nhập đều có thể truy cập.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Hãy kết nối nhiều phương thức, đề phòng trường hợp mất một tài khoản. Bất kỳ tài khoản nào cũng có thể khôi phục tài khoản trên điện thoại mới thông qua máy chủ cộng đồng.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Hãy kết nối nhiều phương thức phòng khi mất một cái. Bất kỳ tài khoản nào cũng có thể khôi phục tài khoản của bạn trên điện thoại mới ở mọi cộng đồng.",
   "🛡️ You're covered on {community}": "🛡️ Bạn đã được bảo vệ trên {community}",
   "🛡️ You're covered": "🛡️ Bạn đã được bảo vệ",
   "Sign-In Recovery Providers (1-of-N)": "Nhà cung cấp khôi phục đăng nhập (1 trong N)",
@@ -5343,7 +5342,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Cộng đồng của bạn yêu cầu phiên bản BeanPool mới hơn phiên bản trên điện thoại này ({version}). Phiên bản {latest} đã có sẵn trên Google Play.",
   "Updating keeps your account and everything on this phone.": "Cập nhật sẽ giữ nguyên tài khoản và mọi thứ trên điện thoại này.",
   "Update BeanPool in the App Store": "Cập nhật BeanPool trên App Store",
-  "Update BeanPool in Google Play": "Cập nhật BeanPool trên Google Play",
   "Update\u0004the app": "Cập nhật",
   "Can't update? Ask the people who run your community.": "Không thể cập nhật? Hãy hỏi người điều hành cộng đồng của bạn.",
   "Use another community": "Dùng cộng đồng khác",
@@ -5884,5 +5882,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Để bạn biết khi ai đó trả lời bạn, nhắn tin cho bạn hoặc yêu cầu tham gia. Không có gì khác.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Thông báo của BeanPool đang tắt trong cài đặt điện thoại của bạn. Mở Cài đặt để bật.",
   "Cancel request": "Hủy yêu cầu",
-  "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:"
+  "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:",
+  "Choose a banner photo, or keep this one": "Chọn ảnh bìa, hoặc giữ lại ảnh này",
+  "Your picture, until you choose a banner.": "Ảnh của bạn, cho đến khi bạn chọn ảnh bìa.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Bạn đang xem với tư cách khách. Không có gì được lưu cho đến khi bạn tham gia.",
+  "Join to post": "Tham gia để đăng bài",
+  "Join to message": "Tham gia để nhắn tin"
 }

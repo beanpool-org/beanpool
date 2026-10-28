@@ -10,7 +10,7 @@
  * The words and the small rules here; what decides whether the lobby is shown is lib/visitor-lobby-gate.ts.
  */
 
-import { t, tn, word } from '@beanpool/core';
+import { askHost, t, tn, word } from '@beanpool/core';
 import type { CommunityInfo, MarketplacePost } from './api';
 
 /** Under the first card of the lobby's list, once (not per card). The lobby's fixed lines are word() keys (VISITOR_WORDS). */
@@ -118,6 +118,58 @@ export function takeKeptLinkedPost(now: number = Date.now()): string | null {
         if (typeof id !== 'string' || !POST_ID.test(id) || typeof at !== 'number' || !Number.isFinite(at)) return null;
         if (at > now || now - at > LINKED_POST_KEPT_MS) return null;
         return id;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * A community a stranger came to ask to join (`/?ask=<host>`, from that community's card: front doors S15, apps/server
+ * routes/community-card.ts), kept in this tab as the shared listing is, so the global community's Find card opens on it
+ * once they have joined, even by a sign-in that leaves the page. One key, one use, and only the host: core's askHost.
+ */
+export const ASKED_COMMUNITY_STORAGE_KEY = 'beanpool_lobby_asked_community';
+
+/** `?ask=<host>` in this page's address, taken out of it: the host, or null for none or one that is no host. */
+export function takeAskParam(win: Pick<Window, 'location' | 'history'> = window): string | null {
+    const params = new URLSearchParams(win.location.search || '');
+    if (!params.has('ask')) return null;
+    const host = askHost(params.get('ask'));
+    try {
+        params.delete('ask');
+        const qs = params.toString();
+        win.history.replaceState(win.history.state, '', `${win.location.pathname}${qs ? `?${qs}` : ''}${win.location.hash || ''}`);
+    } catch { /* the Find card still opens on it; the parameter just stays in the address bar */ }
+    return host;
+}
+
+/** The lobby was opened to ask `host`: keep it for after the join. A storage that refuses keeps nothing. */
+export function keepAskedCommunity(host: string, now: number = Date.now()): void {
+    const clean = askHost(host);
+    if (!clean) return;
+    try {
+        sessionStorage.setItem(ASKED_COMMUNITY_STORAGE_KEY, JSON.stringify({ host: clean, at: now }));
+    } catch { /* a private window: the member lands on Home */ }
+}
+
+/** The community kept by the lobby, taken out: its host once, then never again; nothing when stale or not a host. */
+export function takeKeptAskedCommunity(now: number = Date.now()): string | null {
+    let raw: string | null;
+    try {
+        raw = sessionStorage.getItem(ASKED_COMMUNITY_STORAGE_KEY);
+        if (raw === null) return null;
+        sessionStorage.removeItem(ASKED_COMMUNITY_STORAGE_KEY);
+    } catch {
+        return null;
+    }
+    try {
+        const kept = JSON.parse(raw) as unknown;
+        if (!kept || typeof kept !== 'object') return null;
+        const { host, at } = kept as { host?: unknown; at?: unknown };
+        const clean = askHost(host);
+        if (!clean || typeof at !== 'number' || !Number.isFinite(at)) return null;
+        if (at > now || now - at > LINKED_POST_KEPT_MS) return null;
+        return clean;
     } catch {
         return null;
     }

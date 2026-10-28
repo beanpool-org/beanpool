@@ -32,7 +32,7 @@ If you came from a link someone shared to a listing or an event, it opens first.
 
 **Joining with a sign-in.** The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once.
 
-The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account can open it. The people who run the server can open it too, because their server checks your sign-in, as with a sign-in account linked on the phone app: see "Getting your account back". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back.
+The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. **Safety Backup** says so: the global community's server keeps it, not BeanPool's key vault, which the web app never contacts. That sign-in account can open it. The people who run the server can open it too, because their server checks your sign-in. (The phone app keeps the copy for a sign-in linked there at BeanPool's key vault instead: see "Getting your account back".) Settings then shows **Sign-in recovery: connected** and which one, and says the community's server keeps the copy. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**. If it was the community's server that couldn't keep it, **Safety Backup** also says the server keeps no copy of your account. Your 12 words are then your only way back.
 
 If you would rather the community did not keep that copy, the web app can't remove it yet. The phone app can, if your account is on your phone too: with the global community open, go to **Settings**, tap **Account Protection**, then **Disconnect** next to the sign-in. Either way, keep your 12 words safe: they are the way back that is yours alone.
 
@@ -109,7 +109,7 @@ If you joined the global community with 12 words, they are your only way back. A
 
 ## Putting your web account on a phone
 
-If you joined in a browser, bring the same account to the phone app. Don't join again on the phone: that makes a second account, and two accounts can never be joined into one. **Safety Backup**, next to your 12 words, and the **Sign-in recovery** card in Settings say how:
+If you joined in a browser, bring the same account to the phone app. Don't join again on the phone: that makes a second account, and two accounts can never be joined into one. Settings has a **Use the phone app** row, and a card appears on Home after your first post or a week, with links to the App Store, Google Play and a direct Android download. **Safety Backup**, next to your 12 words, and the **Sign-in recovery** card in Settings say how:
 
 - Install the BeanPool app and open it.
 - Tap **Already a Member? Restore Account**, then **Recover with 12 Words**.
@@ -128,7 +128,7 @@ Screen 1 of joining in a browser says the same the other way round: if you are a
 
 ## Installing it
 
-The web app may offer **Install BeanPool** so it opens from your home screen like an app. If your browser cannot do that, tap **How?** for steps.
+On a computer, you can install BeanPool so it opens in its own window from your desktop or dock: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, supports notifications, and avoids creating a second account or icon.
 
 ## Keep your 12 words
 

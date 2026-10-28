@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -4803,7 +4803,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "오직 본인만 접속할 수 있기를 원한다면 12개 복구 단어만 사용하세요.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "아이슬란드에 있는 작은 서버인 BeanPool 키 금고에서 로그인이 여는 계정 사본을 보관해요. BeanPool은 이 사본을 열 수 있어요. 현재는 설립자 1명이 금고를 관리하지만, 앞으로 서로 다른 국가의 3명이 공동 관리하며 그중 2명이 함께 행동해야 열 수 있도록 이전할 예정이에요. 호스팅 회사는 서버 실행 중 메모리를 읽을 수 있어요. 법원 명령으로 사본 열람이 명령될 수 있으며, 로그인 계정을 탈취한 사람도 접속할 수 있어요.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "하나를 분실할 경우에 대비해 여러 개를 연결해 두세요. 사본을 보관하는 커뮤니티 서버를 통해 어느 것으로든 새 휴대폰에서 계정을 복구할 수 있어요.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "하나를 분실할 경우에 대비해 여러 개를 연결해 두세요. 어느 것으로든 모든 커뮤니티에서 새 휴대폰으로 계정을 복구할 수 있어요.",
   "🛡️ You're covered on {community}": "🛡️ {community}에서 보호받고 있어요",
   "🛡️ You're covered": "🛡️ 보호받고 있어요",
   "Sign-In Recovery Providers (1-of-N)": "로그인 복구 제공자 (N개 중 1개)",
@@ -5343,7 +5342,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "커뮤니티를 이용하려면 현재 기기의 BeanPool({version})보다 최신 버전이 필요해요. Google Play에 {latest} 버전이 준비되어 있어요.",
   "Updating keeps your account and everything on this phone.": "업데이트해도 계정과 기기의 모든 데이터는 안전하게 유지돼요.",
   "Update BeanPool in the App Store": "App Store에서 BeanPool 업데이트",
-  "Update BeanPool in Google Play": "Google Play에서 BeanPool 업데이트",
   "Update\u0004the app": "업데이트",
   "Can't update? Ask the people who run your community.": "업데이트할 수 없나요? 커뮤니티 운영자에게 문의하세요.",
   "Use another community": "다른 커뮤니티 사용",
@@ -5884,5 +5882,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "휴대폰 설정에서 BeanPool 알림이 꺼져 있습니다. 켜려면 설정을 여세요.",
   "Cancel request": "요청 취소",
-  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:"
+  "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:",
+  "Choose a banner photo, or keep this one": "배너 사진을 선택하거나 이 사진을 유지하세요",
+  "Your picture, until you choose a banner.": "배너를 선택할 때까지 표시되는 사진입니다.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "방문자로 둘러보는 중이에요. 참여하기 전에는 아무것도 저장되지 않아요.",
+  "Join to post": "참여하고 게시하기",
+  "Join to message": "참여하고 메시지 보내기"
 }

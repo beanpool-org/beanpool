@@ -451,6 +451,22 @@ describe('NodeIdentityPanel Component', () => {
         }
     });
 
+    it('saves the town or area a stranger\'s card names with the service area, trimmed (front doors S15)', async () => {
+        await act(async () => {
+            render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+        });
+        const town = screen.getByLabelText(/Town or area/i) as HTMLInputElement;
+        expect(town.maxLength).toBe(60);
+        await act(async () => {
+            fireEvent.change(town, { target: { value: '  Mullumbimby and around ' } });
+        });
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+        });
+        const configCall = (global.fetch as any).mock.calls.find((call: any[]) => String(call[0]).includes('/api/local/admin/node/config'));
+        expect(JSON.parse(configCall[1].body).areaName).toBe('Mullumbimby and around');
+    });
+
     it('saves identity and node config with full payload parity when submitting form', async () => {
         const onRefreshDiag = vi.fn();
         await act(async () => {
@@ -509,6 +525,8 @@ describe('NodeIdentityPanel Component', () => {
                     password: mockProfile.adminPassword,
                     directoryPushIntervalHours: 24,
                     serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 50 },
+                    // The town or area a stranger's card names (front doors S15): none typed, none sent as a name.
+                    areaName: null,
                 }),
             })
         );

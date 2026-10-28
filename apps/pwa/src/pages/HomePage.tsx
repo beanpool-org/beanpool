@@ -39,11 +39,12 @@ import {
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
+import { AskedCommunity } from '../components/AskedCommunity';
 import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, isHomeCardId,
-    joinedLine, monthSummaryLine, nearbyLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
-    starredFirst, stepLines, tierWords, toggleInterest, SKY_NO_PLACE_LINE,
+    joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
+    starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import {
@@ -63,7 +64,8 @@ import { loadRadiusSettings } from '../lib/geo';
 import { sentCentre } from '../lib/listings-near';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
-import { getBundledGuide } from '../lib/guide';
+import { getBundledGuide, loadBundledGuide } from '../lib/guide';
+import type { Guide } from '@beanpool/core';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -81,6 +83,7 @@ import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../com
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
+import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
@@ -272,6 +275,13 @@ interface Props {
     onNavigate: (tab: string, contextId?: string) => void;
     /** The safety card's "See my 12 words". */
     onSeeWords?: () => void;
+    /**
+     * A community the member came to ask to join (`/?ask=<host>`, front doors S15): the Find card opens on it, or, where
+     * Home draws no Find card, it stands above the cards.
+     */
+    askedCommunity?: string | null;
+    /** Its ✕: the Find card as usual. */
+    onAskedCommunitySeen?: () => void;
     /**
      * The Market's "Save this search to Home" (Marty, 7 Oct): once Home knows the member's list, the saved search's dialog
      * opens with it filled in (Add to Home its last button), or Home says why not; then `onSaveSearchTaken`.
@@ -927,7 +937,7 @@ function CommunityBody({
     );
 }
 
-export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken }: Props) {
+export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken, addCardType, onAddCardTaken, askedCommunity = null, onAskedCommunitySeen }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
     // Moves on when a clear (here or in another tab) has this page land again: the community may have changed with it.
     const [landing, setLanding] = useState(0);
@@ -947,6 +957,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [interestsOpen, setInterestsOpen] = useState(false);
     // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
     const [safetyDrawn, setSafetyDrawn] = useState(false);
+    const [tipsGuide, setTipsGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
     const [editOpen, setEditOpen] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     // A card's Settings… (from its "…" or Edit home).
@@ -963,6 +976,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // (the screen the 🏘️ sheet opens), or be told.
     const [startOpen, setStartOpen] = useState(false);
     const [watched, setWatched] = useState(false);
+    const [phoneAppDismissed, setPhoneAppDismissed] = useState(() => publicKey ? isUsePhoneAppDismissed(publicKey) : false);
+    useEffect(() => {
+        if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
+    }, [publicKey]);
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
@@ -1429,6 +1446,20 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         writeTips(publicKey, tipsLanded);
     }, [tipsLanding, tipsLanded]);
     const tipsView = tips && answer?.me && !visitor ? tipNow(tips, tipsList, localDay()).view : null;
+    const tipsSlug = tipsView?.tip.guide;
+    useEffect(() => {
+        let active = true;
+        if (tipsSlug && !tipsGuide) {
+            loadBundledGuide()
+                .then((guide) => {
+                    if (active) setTipsGuide(guide);
+                })
+                .catch(() => {});
+        }
+        return () => {
+            active = false;
+        };
+    }, [tipsSlug, tipsGuide]);
 
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
@@ -1885,13 +1916,21 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const nearby = nearbyLine(f);
                 return (
                     <HomeCard key={id} {...common}>
+                        {askedCommunity && identity && <AskedCommunity host={askedCommunity} onClose={() => onAskedCommunitySeen?.()} />}
                         <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-body">{findBody(f)}</p>
                         {more.map(cm => {
                             const facts = communityFacts(cm);
                             const text = `${cm.name ?? t('A community')}${facts ? ` · ${facts}` : ''}`;
-                            return cm.url
-                                ? <HomeLine key={cm.key} href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
-                                : <p key={cm.key} className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>;
+                            // Gone quiet for more than 36 h: said under the row, which stays a link (front doors S13).
+                            const quiet = notAnsweringLine(cm);
+                            return (
+                                <Fragment key={cm.key}>
+                                    {cm.url
+                                        ? <HomeLine href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
+                                        : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
+                                    {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
+                                </Fragment>
+                            );
                         })}
                         {/* Nothing listed within 250 km, and the list has loaded (findOffersStart): Start leads, as on the
                             phone, and a member can be told when one starts here. Never before the list loads, never while near. */}
@@ -2005,7 +2044,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const v = tipsView;
                 if (!v) return null;
                 const slug = v.tip.guide;
-                const page = slug ? findGuidePage(getBundledGuide(), slug) : null;
+                const page = slug && tipsGuide ? findGuidePage(tipsGuide, slug) : null;
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (
                     <HomeCard key={id} {...common} title={tipsCaption(v)}>
@@ -2333,6 +2372,29 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     </p>
                 )}
                 {!notesUnderFirst && firstNotes(false)}
+                {/* The "Use the phone app" card (front doors S4): after the first post or a week */}
+                {(() => {
+                    const p = a.me?.probation;
+                    const weekEnds = a.me?.joinedAt ? Date.parse(a.me.joinedAt) + 7 * 86_400_000 : null;
+                    const keptPosts = Math.max(Number(p?.keptPosts) || 0, a.me?.firstOffer || a.cards?.steps?.firstPost ? 1 : 0);
+                    const due = publicKey && !visitor && !phoneAppDismissed && usePhoneAppCardDue({
+                        dismissed: phoneAppDismissed,
+                        keptPosts,
+                        weekOverAt: Number.isFinite(weekEnds) ? weekEnds : null,
+                        now,
+                    });
+                    return due ? (
+                        <UsePhoneAppCard
+                            publicKey={publicKey}
+                            onDismiss={() => setPhoneAppDismissed(true)}
+                        />
+                    ) : null;
+                })()}
+                {/* The community the member came to ask to join, where Home draws no Find card to hold it: Find is held on Home
+                    only for a global member's first 30 days, and a member may take it off (PR #2551 review). */}
+                {askedCommunity && identity && answer && !shown.some(c => c.type === 'find') && (
+                    <AskedCommunity host={askedCommunity} onClose={() => onAskedCommunitySeen?.()} />
+                )}
                 {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
                     own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
                     Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}

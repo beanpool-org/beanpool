@@ -1016,7 +1016,8 @@ export default function TreasuryManageScreen() {
                                     : t("Post the enterprise's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.")}
                             </Text>
 
-                            {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                            {/* Its leader's alone, as the node takes it (apps/server db.ts leadsProject): to any other collaborator it was a door the node refused. */}
+                            {iAmLead && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
                                 <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 }}>
                                     <Pressable
                                         style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.solid }}

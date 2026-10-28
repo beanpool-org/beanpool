@@ -19,8 +19,11 @@
  *   - the place is `service_radius {lat, lng, radiusKm}` (an object, or its JSON text), else top-level `lat`/`lng`: a
  *     point off the Earth, or exactly 0,0, is no place, a place is kept to two decimals (~1 km), and a radius that isn't
  *     a positive distance is none;
- *   - the name is `community_name`, else `callsign`, else `name`, with control and direction-changing characters taken
- *     out and at most 80 characters: it is shown in other people's notifications;
+ *   - the name is `shown_name` (the directory_listed view's: the community's own name, or its address's host when it has
+ *     none of its own, front doors S13), else `community_name`, else `callsign`, else `name`, with control and
+ *     direction-changing characters taken out and at most 80 characters: it is shown in other people's notifications;
+ *   - when it last pushed is `last_seen_at` (the view's), else `updated_at`: a time, or none. It is `lastSeenAt` on the
+ *     way out, and both apps say "Not answering lately" past 36 hours;
  *   - a member count is a whole number from 0; contacts are an email and a phone number or nothing;
  *   - the listing promise (`promise`, engine/directory-promise.ts) is exactly its five fields: `v` 1, `owners` a whole
  *     number from 2, and `backups`, `reports` and `notice` each `true`. Anything else in it (a name, a key, a list, a
@@ -95,6 +98,11 @@ export interface Community {
     contactPhone: string | null;
     /** When the community last published itself to the registry, as the registry said. */
     updatedAt: string | null;
+    /**
+     * The same moment under the name the readers use (front doors S13): the registry's `last_seen_at`, its last signed
+     * push. Past 36 hours both apps say "Not answering lately" under the name (core notAnsweringLately).
+     */
+    lastSeenAt: string | null;
     distanceKm: number | null;
     /** The listing promise it keeps, or null (the card reads "New listing"). */
     promise: ListingPromise | null;
@@ -274,13 +282,13 @@ export function normaliseRegistryRow(raw: unknown): DirectoryRow | null {
     const where = place(r);
     return {
         key,
-        name: cleanText(r.community_name, MAX_NAME_CHARS) ?? cleanText(r.callsign, MAX_NAME_CHARS) ?? cleanText(r.name, MAX_NAME_CHARS),
+        name: cleanText(r.shown_name, MAX_NAME_CHARS) ?? cleanText(r.community_name, MAX_NAME_CHARS) ?? cleanText(r.callsign, MAX_NAME_CHARS) ?? cleanText(r.name, MAX_NAME_CHARS),
         url: communityUrl(r.node_url ?? r.nodeUrl ?? r.public_url ?? r.publicUrl),
         ...where,
         memberCount: memberCount(r.member_count ?? r.memberCount),
         contactEmail: email(r.contact_email ?? r.contactEmail),
         contactPhone: phone(r.contact_phone ?? r.contactPhone),
-        registryUpdatedAt: isoTime(r.updated_at ?? r.updatedAt ?? r.last_seen_at),
+        registryUpdatedAt: isoTime(r.last_seen_at ?? r.updated_at ?? r.updatedAt),
         promise: listingPromise(r.promise),
         acceptingKnocks: knocks(r.accepting_knocks ?? r.acceptingKnocks),
         closingOn: closingDay(r.closing_on ?? r.closingOn),
@@ -483,6 +491,7 @@ function toCommunity(r: DirectoryRow, distanceKm: number | null): Community {
         contactEmail: r.contactEmail,
         contactPhone: r.contactPhone,
         updatedAt: r.registryUpdatedAt,
+        lastSeenAt: r.registryUpdatedAt,
         distanceKm,
         promise: r.promise,
         acceptingKnocks: r.acceptingKnocks,
@@ -495,6 +504,11 @@ export interface CommunityQuery {
     point?: { lat: number; lng: number } | null;
     /** A name search, as the reader typed it. */
     q?: string | null;
+    /**
+     * One community by the host of its address (core askHost: lowercased, port kept), as a community's card names it in
+     * `?ask=<host>` (front doors S15): the lobby opens its Find card on that community.
+     */
+    host?: string | null;
     limit?: number;
     offset?: number;
     /**
@@ -528,6 +542,16 @@ function tieRank(order: number, key: string): number {
     return h >>> 0;
 }
 
+/** The host of a row's https origin, lowercased with its port, or null. */
+function urlHost(url: string | null): string | null {
+    if (!url) return null;
+    try {
+        return new URL(url).host.toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
 /**
  * The listed communities. From a point (design §1.2): nearest first by the centre of each one's service radius, in
  * bands of {@link DISTANCE_BAND_KM} km; within a band, the communities that keep the listing promise and take requests
@@ -543,6 +567,7 @@ export function listCommunities(query: CommunityQuery): { communities: Community
     const order = query.order ?? newDirectoryOrder();
     const rows = listed()
         .filter(x => !needle || (x.folded !== null && x.folded.includes(needle)))
+        .filter(x => !query.host || urlHost(x.row.url) === query.host)
         .map(({ row: r, folded }) => {
             const d = query.point && r.lat !== null && r.lng !== null ? haversineKm(query.point.lat, query.point.lng, r.lat, r.lng) : null;
             return {

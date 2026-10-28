@@ -46,6 +46,13 @@ fi
 # find module ..." from tsc, vitest and the server suites, which reads like broken code; this names the real problem.
 node scripts/check-deps-installed.mjs || exit 1
 
+# Build shared packages (@beanpool/core, @beanpool/engine, @beanpool/signin) before parallel checks fan out.
+# Their dist is shared across packages (pwa, server, native, engine). Building them once here prevents
+# concurrent tsc executions from racing on dist when build and test run side by side.
+if [ -d "packages/beanpool-core" ]; then
+  pnpm turbo run build --filter=@beanpool/core --filter=@beanpool/engine --filter=@beanpool/signin
+fi
+
 # The commit under test, and whether the tree is exactly that commit, for the green record at the end.
 [ $ALL_REQUESTED -eq 1 ] && green_run_start
 
@@ -362,6 +369,12 @@ run_check "balance_writes" node scripts/check-balance-writes.mjs
 # to it reaches only new databases. New numbered files only. Instant; skipped where there is no origin/main.
 run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 
+# The public directory (front doors S13): the directory-register Edge Function rules (supabase/functions/directory-register/
+# rules.ts: our test servers refused with the 403 sentence, the signed unlist and its two fields, the 5-minute window) and
+# the directory_listed view and the 30-day purge, read from their SQL. Instant. tsx loads rules.ts, so the command is in
+# its own script: the merge gate's harness (scripts/test-all-continue.sh) has no node_modules and stubs every script.sh.
+run_check "directory_register" bash scripts/test-directory-register.sh
+
 # Every GitHub workflow pins its actions to a full commit SHA, says what its token may do, and gates the job that moves
 # the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
 # the repository's workflows and each edit the check exists to catch. Instant.
@@ -393,6 +406,18 @@ run_check "website_status" run_website_status
 # beanpool.org/global, the link to the global community: every link on it is https and ours, the Play referrer reads
 # global=1, its script sends each kind of visitor where the global-entry design says, and the iPhone app claims it. Instant.
 run_check "website_global_link" node --test scripts/website-global-link.test.mjs
+# beanpool.org/android, the direct APK download (front doors S5): one release from apps/website-src/android-apk.json on
+# every language's page, the signing key the site already names for App Links, no translation made stale by a release,
+# the home page's and /global's lines to it; drawn at 320 px with text at 130 %, light and dark. Its Chromium is the one
+# website_contrast installs, so it starts once that has finished. Seconds.
+run_website_android() {
+  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  node --test scripts/website-android.test.mjs
+}
+run_check "website_android" run_website_android
+# Every internal link on the website reaches a page in the tree (S0: no link to beanpool.org/android before its page),
+# and every domain name in an English page's words is a link. Instant.
+run_check "website_links" node --test scripts/website-links.test.mjs scripts/website-domain-links.test.mjs
 
 # website-s6: every page in the 24 languages, hreflang, footer row, read in banner, RTL, check
 run_website_lang() {

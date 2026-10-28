@@ -54,7 +54,7 @@ import { setDoor, doorSettingRefusal, type CommunityDoor } from './door.js';
 import { NOTICE_LIMITS } from '../engine/kept-notices.js';
 import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type KnownFloorPlan } from './known-floor.js';
 import { readShape, configuredJoinOf, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
-import { directoryUnlistedByEnv, initDirectoryPublisher } from '../services/directory-publisher.js';
+import { directoryUnlistedByEnv, initDirectoryPublisher, listedSwitchedOff } from '../services/directory-publisher.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 
 const { t: tr } = wordsFor('en');
@@ -390,6 +390,9 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
     // ── Then the node, the owners and the members ──
     const changedSettings = [...new Set(planned.map((c) => c.setting.split('.')[0] as ShapeSettingName))];
     if (changedSettings.includes('listed')) initDirectoryPublisher();
+    // Listed switched off: the community's row leaves the public directory now, not when it goes stale in 7 days (front
+    // doors S13). One signed withdraw, only if this server has pushed; not awaited (services/directory-publisher.ts).
+    if (switches.some(([name, on]) => name === 'publishToDirectory' && on === false)) listedSwitchedOff();
     const shape = readShape();
     console.log(`🧭 How this community works: ${planned.map((c) => `${c.setting} ${c.from} → ${c.to}`).join(', ')}, set by ${by.actor}.`);
     noteSecurityEvent({

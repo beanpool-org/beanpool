@@ -22,7 +22,7 @@ import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
 import {
-    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, placeWatchLimitLine, roundPointToArea, t, tn,
+    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, notAnsweringLately, placeWatchLimitLine, roundPointToArea, t, tn,
 } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
@@ -48,6 +48,11 @@ export interface DirectoryCommunity {
     contactPhone: string | null;
     /** Kilometres from the point asked about (0.1 km), or null with no point or no place. */
     distanceKm: number | null;
+    /**
+     * Its last push to the directory (an ISO time), or null when the node didn't say (an older global node). Past 36 h
+     * the row says "Not answering lately" (notAnsweringLine; front doors S13).
+     */
+    lastSeenAt?: string | null;
 }
 
 export interface PlaceWatch { id: string; lat: number; lng: number; radiusKm: number; createdAt: string }
@@ -111,6 +116,7 @@ export function readCommunity(raw: unknown): DirectoryCommunity | null {
         contactEmail: text(r.contactEmail, 200),
         contactPhone: text(r.contactPhone, 60),
         distanceKm: finite(r.distanceKm) && (r.distanceKm as number) >= 0 ? (r.distanceKm as number) : null,
+        lastSeenAt: typeof r.lastSeenAt === 'string' && r.lastSeenAt.length <= 64 && Number.isFinite(Date.parse(r.lastSeenAt)) ? r.lastSeenAt : null,
     };
 }
 
@@ -256,6 +262,15 @@ export function communityLabel(c: Pick<DirectoryCommunity, 'name'>): string {
     return c.name ?? t('A community');
 }
 
+/**
+ * "Not answering lately", in the member's language, under a community whose last push to the directory is more than 36 h
+ * ago (core notAnsweringLately), or null. It is still listed, and Ask to join still works: the knock waits until it
+ * answers. The web's find rows say the same (apps/pwa/src/lib/home-cards.ts).
+ */
+export function notAnsweringLine(c: Pick<DirectoryCommunity, 'lastSeenAt'>, now: number = Date.now()): string | null {
+    return notAnsweringLately(c.lastSeenAt, now) ? t(FIND_COMMUNITY_WORDS.notAnswering) : null;
+}
+
 /** A distance of 1 km or more as the lines write it: "3.4", "12", "12,000" (one decimal under 10 km). */
 const kmText = (km: number) => (km < 10 ? formatNumber(km, 1) : formatCount(Math.round(km)));
 
@@ -276,6 +291,20 @@ export function nearbyPostsLine(home: Pick<GlobalHome, 'nearbyPosts'>): string |
 }
 
 /**
+ * The community the card's headline names (findCommunityCardCopy): the nearest while one is near, the nearest listed
+ * with a distance while all are far, else none. The card says "Not answering lately" under it (notAnsweringLine), as
+ * the web's card does under its first row.
+ */
+export function findCardNamed(home: GlobalHome): DirectoryCommunity | null {
+    const { communities } = home;
+    switch (findCommunityState(home)) {
+        case 'near': return communities[0];
+        case 'far': return communities.find(c => c.distanceKm !== null) ?? communities[0];
+        default: return null;
+    }
+}
+
+/**
  * The card's headline, from what the node said (or couldn't). The rule is @beanpool/core's, shared with the web: "No
  * community near you yet." is the one "none" sentence, said only once the directory has loaded; a community 12,000 km
  * away is named with its distance under it, never as near you. The card's buttons (Start a community, Tell me when
@@ -288,7 +317,7 @@ export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint
     const { communities } = home.value;
     switch (findCommunityState(home.value)) {
         case 'near': {
-            const nearest = communities[0];
+            const nearest = findCardNamed(home.value)!;
             const name = communityLabel(nearest);
             const km = nearest.distanceKm;
             // "More nearby" counts only those within 250 km: never one 12,000 km away.
@@ -296,7 +325,7 @@ export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint
             return { title, body: nearSentence(name, km, more) };
         }
         case 'far': {
-            const nearest = communities.find(c => c.distanceKm !== null) ?? communities[0];
+            const nearest = findCardNamed(home.value)!;
             const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null });
             return { title, body: t('{none} The nearest listed is {name}, {where}.', { none: t(FIND_COMMUNITY_WORDS.noneNear), name: communityLabel(nearest), where }) };
         }

@@ -4348,10 +4348,16 @@ async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys
     return blanked.length;
 }
 
-export async function syncMessages(publicKey: string) {
+/**
+ * The member's conversations and each one's newest lines, from the node into this phone. Failures are swallowed, so it
+ * says whether the read worked: true when the list and every chat's page it asked for came back 2xx, false when any
+ * didn't (a 503 while the node is full, a timeout on a weak link). The tabs' backstop counts only a read that worked, and
+ * reads again on the next tick after one that didn't (app/(tabs)/_layout.tsx, review of #2558).
+ */
+export async function syncMessages(publicKey: string): Promise<boolean> {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-        if (!anchorUrl) return;
+        if (!anchorUrl) return false;
         
         await communityCachesRenamed();
         const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
@@ -4388,7 +4394,7 @@ export async function syncMessages(publicKey: string) {
         } catch (e) {
             console.warn('[DB] conversations fetch failed:', e);
             clearTimeout(timeout1);
-            return;
+            return false;
         }
         clearTimeout(timeout1);
 
@@ -4431,10 +4437,10 @@ export async function syncMessages(publicKey: string) {
             if (isMembersOnDemandRefusal(dirRes.status, refusal)) await noteMembersOnDemand(anchorUrl);
         }
 
-        if (!convRes.ok) return;
-        
+        if (!convRes.ok) return false;
+
         const convData = await convRes.json();
-        if (!convData.conversations) return;
+        if (!convData.conversations) return false;
 
         // Identity, so we can attribute the peer's read cursor (read receipts).
         const myIdentity = await loadIdentity();
@@ -4504,13 +4510,16 @@ export async function syncMessages(publicKey: string) {
         if (myIdentity?.publicKey && await stillOnCommunity(anchorUrl)) {
             await saveMessageRequests(myIdentity.publicKey, expectedDbName, convData.requests ?? null);
         }
+        // Whether every chat's page this pass asked for came back: one that didn't may hold the line a doorbell rang for. A
+        // chat left out of the pass to wait for the next one counts as not read too, so the next tick reads it.
+        let everyPageRead = true;
         for (const conv of convData.conversations) {
             // Decide WITHOUT the lock whether this conversation row actually needs
             // writing. This loop runs on every full message-sync (badge backstop,
             // inbox focus, WS nudges); unconditionally rewriting every conv row was
             // one of the writers starving the sync lock (2026-07-18 on-device logs).
             // The gate: with the pins unread, nothing of the node's goes into a DM here this pass (its rows, lines, cursors).
-            if (pinsUnread && await isDmHere(database, conv.id, conv.type)) continue;
+            if (pinsUnread && await isDmHere(database, conv.id, conv.type)) { everyPageRead = false; continue; }
             const pinned = pinsNow && typeof conv.id === 'string' ? dmPinFor(pinsNow, conv.id) : null;
             const people: string[] | null = !Array.isArray(conv.participants) ? null : pinned && myIdentity?.publicKey ? [myIdentity.publicKey, pinned.peer] : conv.participants;
             const listedPeer = Array.isArray(conv.participants) ? conv.participants.find((p: string) => p && p !== myIdentity?.publicKey) : undefined;
@@ -4573,6 +4582,7 @@ export async function syncMessages(publicKey: string) {
                 heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey, true) : (conv.type || 'dm');
             } catch (e) {
                 console.warn(`[DM guard] Could not tell whether ${String(conv.id).slice(0, 8)} is a DM: it waits for the next pass`, e);
+                everyPageRead = false;
                 continue;
             }
             if (needsConvWrite) {
@@ -4647,10 +4657,11 @@ export async function syncMessages(publicKey: string) {
                 msgRes = await signedGet(`/api/messages/${conv.id}`, { signal: controller2.signal });
             } catch (err) {
                 clearTimeout(timeout2);
+                everyPageRead = false;
                 continue;
             }
             clearTimeout(timeout2);
-            if (!msgRes.ok) continue;
+            if (!msgRes.ok) { everyPageRead = false; continue; }
             
             const msgData = await msgRes.json();
             const messages = msgData.messages;
@@ -4728,8 +4739,10 @@ export async function syncMessages(publicKey: string) {
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
+        return everyPageRead;
     } catch (err) {
         console.log('[Sync] Failed to pull messages natively', err);
+        return false;
     }
 }
 

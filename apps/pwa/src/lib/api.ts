@@ -5,8 +5,8 @@
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
-import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
-import { t } from '@beanpool/core';
+import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord, CommunityCard } from '@beanpool/core';
+import { readCommunityCard, t } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -25,7 +25,7 @@ import {
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
 import { wrapLng } from './listings-near';
-import { NOTICES_SEEN_EVENT, type HomeAnswer } from './home-cards';
+import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeCommunity } from './home-cards';
 import { ringProfileSaved } from './profile-saved';
 import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
@@ -411,6 +411,31 @@ export async function getCommunityInfo(): Promise<CommunityInfo> {
     return request('GET', '/api/community/info');
 }
 
+/**
+ * This community's public card (front doors S15, the node's GET /api/community/card): what a stranger at its address
+ * reads. Null from a node too old to have one, or an answer that isn't one (core readCommunityCard).
+ */
+export async function getCommunityCard(): Promise<CommunityCard | null> {
+    return readCommunityCard(await request('GET', '/api/community/card'));
+}
+
+/**
+ * One community in the global community's list by its address's host (`?ask=<host>`, front doors S15), or null where the
+ * list has none at that host. The global node's GET /api/global/communities?host=.
+ */
+export async function getListedCommunityByHost(host: string): Promise<HomeCommunity | null> {
+    const body = await request<{ communities?: unknown }>('GET', `/api/global/communities?host=${encodeURIComponent(host)}&limit=1`);
+    const row = Array.isArray(body?.communities) ? body.communities[0] as Record<string, unknown> | undefined : undefined;
+    if (!row || typeof row.key !== 'string') return null;
+    return {
+        key: row.key,
+        name: typeof row.name === 'string' ? row.name : null,
+        url: typeof row.url === 'string' ? row.url : null,
+        memberCount: typeof row.memberCount === 'number' ? row.memberCount : null,
+        distanceKm: null,
+    };
+}
+
 export async function getMembers(): Promise<Member[]> {
     return request('GET', '/api/community/members');
 }
@@ -551,7 +576,22 @@ export async function getInviteTree(root?: string): Promise<any[]> {
     return request('GET', root ? `/api/invite/tree?root=${encodeURIComponent(root)}` : '/api/invite/tree');
 }
 
-export async function getCommunityHealth(): Promise<any> {
+export interface AppStoreVersions {
+    android?: string | null;
+    ios?: string | null;
+    checkedAt?: string | null;
+}
+
+export interface CommunityHealth {
+    nodeName?: string;
+    version?: string;
+    minAppVersion?: string;
+    minAppVersionFrom?: string | null;
+    appVersions?: AppStoreVersions;
+    [key: string]: unknown;
+}
+
+export async function getCommunityHealth(): Promise<CommunityHealth> {
     return request('GET', '/api/community/health');
 }
 

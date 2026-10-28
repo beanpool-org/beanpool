@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -4995,7 +4995,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Kung mas gusto mong walang sinuman maliban sa iyo ang makakapasok, gamitin lang ang iyong 12 salita.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "Ang key vault ng BeanPool, isang maliit na server sa Iceland, ang nagtatabi ng kopya ng iyong account na binubuksan ng iyong sign-in. Maaaring buksan ng BeanPool ang mga kopyang ito: sa ngayon, isang tao, ang tagapagtatag ng BeanPool, ang nag-aalaga sa vault, at ililipat ito sa tatlong tao sa magkakaibang bansa, kung saan dalawa sa kanila ang dapat magkasamang kumilos. Mababasa ng kumpanyang nagho-host nito ang memory nito habang tumatakbo. Maaaring mag-utos ang korte na buksan ang isang kopya, at ang sinumang makakuha ng iyong sign-in account ay makakapasok.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Magkonekta ng higit sa isa, kung sakaling mawala ang isa. Alinman sa mga ito ay magbabalik ng account mo sa bagong telepono, sa pamamagitan ng server ng iyong komunidad, na nagtatago ng kopya.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Magkonekta ng higit sa isa, kung sakaling mawala ang isa. Alinman sa mga ito ay magbabalik ng account mo sa bagong telepono, sa bawat komunidad.",
   "🛡️ You're covered on {community}": "🛡️ Protektado ka sa {community}",
   "🛡️ You're covered": "🛡️ Protektado ka",
   "Sign-In Recovery Providers (1-of-N)": "Mga Sign-In Recovery Provider (1-of-N)",
@@ -5555,7 +5554,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Kailangan ng iyong komunidad ng mas bagong BeanPool kaysa sa nasa teleponong ito ({version}). Naghihintay ang Bersyon {latest} sa Google Play.",
   "Updating keeps your account and everything on this phone.": "Pinapanatili ng pag-update ang iyong account at lahat ng nasa teleponong ito.",
   "Update BeanPool in the App Store": "I-update ang BeanPool sa App Store",
-  "Update BeanPool in Google Play": "I-update ang BeanPool sa Google Play",
   "Update\u0004the app": "I-update ang app",
   "Can't update? Ask the people who run your community.": "Hindi makapag-update? Magtanong sa mga nagpapatakbo ng iyong komunidad.",
   "Use another community": "Gumamit ng ibang komunidad",
@@ -6123,5 +6121,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para marinig mo kapag may sumagot sa iyo, nagpadala ng mensahe, o humiling na sumali. Wala nang iba.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Naka-off ang mga notification ng BeanPool sa settings ng iyong telepono. Buksan ang Settings para i-on ang mga ito.",
   "Cancel request": "Kanselahin ang kahilingan",
-  "Nothing here yet. Be the first:": "Wala pa rito. Mauna ka na:"
+  "Nothing here yet. Be the first:": "Wala pa rito. Mauna ka na:",
+  "Choose a banner photo, or keep this one": "Pumili ng larawan ng banner, o panatilihin ito",
+  "Your picture, until you choose a banner.": "Ang iyong larawan, hanggang sa pumili ka ng banner.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Tumitingin-tingin ka bilang bisita. Walang nase-save hangga't hindi ka sumasali.",
+  "Join to post": "Sumali para mag-post",
+  "Join to message": "Sumali para magmensahe"
 }

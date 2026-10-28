@@ -9,7 +9,7 @@ import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLa
 import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, dealTitleLine, decideLine, enterpriseLatestLine, findBody, findListed, findOffersStart, joinedLine, monthSummaryLine, probationSentence, searchCardFor, shownFrame, skyOf,
-    starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
+    starredFirst, stepLines, stepsSaySomething, toggleInterest, usePhoneAppCardDue, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
 
@@ -431,5 +431,26 @@ describe('month summary line: partial month indication when more is set', () => 
 
     it('shows partial indicator when more is true', () => {
         expect(monthSummaryLine({ trades: 200, in: 500, out: 300, more: true })).toBe('This month (partial): 200 trades · +500 in · −300 out');
+    });
+});
+
+describe('usePhoneAppCardDue (front doors S4)', () => {
+    it('is not due when dismissed', () => {
+        expect(usePhoneAppCardDue({ dismissed: true, keptPosts: 2, weekOverAt: 1000, now: 2000 })).toBe(false);
+    });
+
+    it('is not due before first post and before week is over', () => {
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 2000, now: 1000 })).toBe(false);
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: null, now: 1000 })).toBe(false);
+    });
+
+    it('is due after first post', () => {
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 1, weekOverAt: 2000, now: 1000 })).toBe(true);
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 5, weekOverAt: null, now: 1000 })).toBe(true);
+    });
+
+    it('is due after first week is over', () => {
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 1000, now: 1000 })).toBe(true);
+        expect(usePhoneAppCardDue({ dismissed: false, keptPosts: 0, weekOverAt: 1000, now: 2000 })).toBe(true);
     });
 });

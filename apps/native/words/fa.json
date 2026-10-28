@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-22",
@@ -5009,7 +5009,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "اگر ترجیح می‌دهید هیچ‌کس جز شما نتواند وارد شود، فقط از ۱۲ کلمه خود استفاده کنید.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "مخزن کلید BeanPool (سروری کوچک در ایسلند) نسخه حسابتان را نگه می‌دارد. BeanPool می‌تواند آن را باز کند: فعلاً یک نفر (بنیان‌گذار) از آن مراقبت می‌کند و در حال انتقال به سه نفر در کشورهای مختلف است. دستور دادگاه یا تصاحب حساب ورود شما می‌تواند امکان دسترسی ایجاد کند.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "بیش از یک حساب ورود وصل کنید تا در صورت از دست دادن یکی، دیگری باشد. هر کدام از آن‌ها می‌تواند حسابتان را در تلفن جدید برگرداند.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "بیش از یک حساب وصل کنید تا حسابتان را در تلفن جدید در هر جامعه‌ای برگرداند.",
   "🛡️ You're covered on {community}": "🛡️ در {community} تحت پوشش هستید",
   "🛡️ You're covered": "🛡️ تحت پوشش هستید",
   "Sign-In Recovery Providers (1-of-N)": "ارائه‌دهندگان بازیابی با ورود (۱ از چند)",
@@ -5569,7 +5568,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "جامعه شما به نسخه جدیدتری از BeanPool نسبت به نسخه فعلی این تلفن ({version}) نیاز دارد. نسخه {latest} در Google Play منتظر شماست.",
   "Updating keeps your account and everything on this phone.": "به‌روزرسانی، حساب و همه چیز شما را در این تلفن حفظ می‌کند.",
   "Update BeanPool in the App Store": "به‌روزرسانی BeanPool در App Store",
-  "Update BeanPool in Google Play": "به‌روزرسانی BeanPool در Google Play",
   "Update\u0004the app": "به‌روزرسانی",
   "Can't update? Ask the people who run your community.": "نمی‌توانید به‌روزرسانی کنید؟ از گردانندگان جامعه خود بپرسید.",
   "Use another community": "استفاده از یک جامعه دیگر",
@@ -6123,5 +6121,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "اعلان‌های BeanPool در تنظیمات تلفن شما خاموش است. برای روشن کردن آن‌ها، تنظیمات را باز کنید.",
   "Cancel request": "لغو درخواست",
-  "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:"
+  "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:",
+  "Choose a banner photo, or keep this one": "یک عکس بنر انتخاب کنید، یا همین را نگه دارید",
+  "Your picture, until you choose a banner.": "تصویر شما، تا زمانی که یک بنر انتخاب کنید.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "شما به‌عنوان بازدیدکننده در حال گشت‌وگذار هستید. تا عضو نشوید چیزی ذخیره نمی‌شود.",
+  "Join to post": "برای انتشار عضو شوید",
+  "Join to message": "برای پیام دادن عضو شوید"
 }

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-22",
@@ -5009,7 +5009,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "अगर आप चाहते हैं कि आपके सिवा कोई और अंदर न आ सके, तो सिर्फ़ अपने 12 शब्दों का उपयोग करें।",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "BeanPool का की-वॉल्ट, जो आइसलैंड में एक छोटा सर्वर है, आपके खाते की वह प्रति रखता है जिसे आपका साइन-इन खोलता है। BeanPool इन प्रतियों को खोल सकता है: अभी के लिए एक व्यक्ति, BeanPool के संस्थापक, वॉल्ट की देखभाल करते हैं, और इसे अलग-अलग देशों के तीन लोगों के पास ले जाया जा रहा है, जिनमें से दो को मिलकर काम करना होगा। इसे होस्ट करने वाली कंपनी इसके चलने के दौरान इसकी मेमोरी पढ़ सकती है। कोई अदालत प्रति खोलने का आदेश दे सकती है, और जो कोई भी आपके साइन-इन खाते पर नियंत्रण कर ले, वह अंदर आ सकता है।",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "एक से ज़्यादा कनेक्ट करें, ताकि कोई एक खो जाए तो काम आए। उनमें से कोई भी आपके समुदाय के सर्वर के ज़रिए नए फ़ोन पर आपका खाता वापस ला सकता है, जो इसकी प्रति रखता है।",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "एक से ज़्यादा कनेक्ट करें, ताकि कोई एक खो जाए तो काम आए। उनमें से कोई भी हर समुदाय में, नए फ़ोन पर आपका खाता वापस ला सकता है।",
   "🛡️ You're covered on {community}": "🛡️ {community} पर आप सुरक्षित हैं",
   "🛡️ You're covered": "🛡️ आप सुरक्षित हैं",
   "Sign-In Recovery Providers (1-of-N)": "साइन-इन रिकवरी प्रदाता (1-of-N)",
@@ -5569,7 +5568,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "आपके समुदाय को इस फ़ोन पर मौजूद संस्करण ({version}) से नए BeanPool की आवश्यकता है। संस्करण {latest} Google Play में उपलब्ध है।",
   "Updating keeps your account and everything on this phone.": "अपडेट करने से आपका खाता और इस फ़ोन पर मौजूद सभी चीज़ें सुरक्षित रहती हैं।",
   "Update BeanPool in the App Store": "App Store में BeanPool को अपडेट करें",
-  "Update BeanPool in Google Play": "Google Play में BeanPool को अपडेट करें",
   "Update\u0004the app": "अपडेट करें",
   "Can't update? Ask the people who run your community.": "अपडेट नहीं कर सकते? उन लोगों से पूछें जो आपका समुदाय चलाते हैं।",
   "Use another community": "किसी अन्य समुदाय का उपयोग करें",
@@ -6123,5 +6121,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ताकि जब कोई आपको उत्तर दे, संदेश भेजे, या जुड़ने का अनुरोध करे तो आपको पता चले। और कुछ नहीं।",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "आपके फ़ोन की सेटिंग में BeanPool की सूचनाएँ बंद हैं। उन्हें चालू करने के लिए सेटिंग खोलें।",
   "Cancel request": "अनुरोध रद्द करें",
-  "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:"
+  "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:",
+  "Choose a banner photo, or keep this one": "बैनर फ़ोटो चुनें, या इसे ही रहने दें",
+  "Your picture, until you choose a banner.": "आपकी तस्वीर, जब तक कि आप कोई बैनर न चुन लें।",
+  "You're looking around as a visitor. Nothing is saved until you join.": "आप मेहमान के रूप में देख रहे हैं। शामिल होने तक कुछ भी सहेजा नहीं जाता।",
+  "Join to post": "पोस्ट करने के लिए शामिल हों",
+  "Join to message": "संदेश भेजने के लिए शामिल हों"
 }

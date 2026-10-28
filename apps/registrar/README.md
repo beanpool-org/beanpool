@@ -50,10 +50,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   keyed-hash id), and a live one `probation` while it is on it. The page's tables fit their card at every width: the
   registrar tests pin its CSS, and `node apps/registrar/scripts/check-admin-layout.mjs [<shots dir>]` measures it in a
   browser at 320–1280 px (by hand: CI's test job has no browser)
-- **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only, and never one still on
-  probation (below). `?n=<name>` (or `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name
-  this registrar holds **live** and verified; anything else is the "not found" page, never a link to another host
-  (before 2026-10-01 any host was linked)
+- **`/i/*` (retired switchboard, front doors S16, 27 Oct 2026):** every GET or HEAD on `/i` or `/i/…` answers a bare
+  302 to `https://beanpool.org/getting-started#invite`, whatever the code or query; nothing is looked up. The old page
+  linked store ids that don't exist, and no invite has used it since nodes build their own links.
 - **Cron:** attestation sweep every 5 min, in two phases. Phase 1 challenges every live name
   (`/api/attest`) and writes nothing; each reply is `ok`, `impostor` (a valid signature by a
   *different* node key) or `unverifiable` (down, 5xx, not an attest, or a signature we can't verify —
@@ -157,6 +156,7 @@ The Worker tells its admin, through one [ntfy](https://ntfy.sh) topic, what only
 | A heal refused, a name repaired by the registrar | low | names |
 | The sweep suspended itself (canary, mass, unverifiable, settings unread) — raised, still every 24 h, cleared | urgent | health |
 | Deletions Cloudflare has refused for over a day; the nonce table missing — raised, still, cleared | default | health |
+| DNS zone near record cap (≥ 80% of the `capacity` setting) — raised, still every 24 h, cleared | high | health |
 | Your own approve, pause, resume, block, release | low | admin |
 
 A message says a name, the community name its operator published, and counts — **never the `contact` column** (a
@@ -197,7 +197,7 @@ signed `/v1/report`.
 | `<server> now runs …` | the version or commit changed since the last look; told once | default (the vault: high) |
 | `<server> restarted by its watchdog` | its health's `watchdog.recoveries` rose; told once | high |
 | `Our nodes run different releases` | our nodes (not the vault) on different versions for over a day; then daily while it lasts | default |
-| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, what is raised, and every event the digest held since the last one. A message of its own, never batched and never muted by the hourly cap; the held events it carries are marked sent only once it is sent (a failed send is tried again with the rest, 5 minutes on; with no `NTFY_URL` they stay held and `/admin` says so). A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
+| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, DNS records against the plan's cap (DNS records: N of CAP (P%), CAP = the `capacity` setting), what is raised, and every event the digest held since the last one. A message of its own, never batched and never muted by the hourly cap; the held events it carries are marked sent only once it is sent (a failed send is tried again with the rest, 5 minutes on; with no `NTFY_URL` they stay held and `/admin` says so). A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
 
 The vault's report is believed only under `VAULT_TICKET_KEYS` (a var, not a secret: the ticket PUBLIC key(s) the apps
 are built with, 64 hex each, newest first, two at most), with strict Ed25519 (RFC 8032; a ZIP-215-only signature is
@@ -243,10 +243,12 @@ refuse; "open code, private settings"; the DNS cap). Migration 0011.
 - **The DNS cap.** The zone's record cap (`capacity`; Cloudflare's Free plan gives a zone made after 1 Sep 2024 200
   records, our own hand records included) has two lines: past the alert line the admin is told once a day ("Names near
   the DNS cap"), past the hold line every new auto name is held — the last places are the admin's to give. Both lines
-  follow the capacity unless set (60% and 80% of it).
+  follow the capacity unless set (60% and 80% of it). In addition, the Worker counts every record in the zone (website,
+  static tunnels, mail and community nodes) at most once per hour from Cloudflare: the daily digest reports "DNS records: N of CAP (P%)"
+  (CAP = the `capacity` setting above, default 200; P rounded down), and an alert is raised at ≥ 80% (Marty, 28 Oct: Pro at 160 of 200): "beanpool.org has N of CAP DNS records (P%). Time to move the zone to Cloudflare Pro, or free unused names." Cleared below the threshold.
 - **Probation.** A new tenure (another key's claim; a key's own release taken back keeps what it had) is live but on
   probation (`verified_at` NULL) until it has attested `ok` in enough sweeps in a row and been live long enough. Until
-  then the switchboard answers "not found" for it, its node is told `probation: true` by `/status` (and the claim and
+  then its node is told `probation: true` by `/status` (and the claim and
   heal answers) and its directory listing waits, and the "New community" alert waits: it is sent at verification —
   one message for every name a sweep verifies — never at the claim, so a bot's burst never rings the phone once a
   name. Any answer but its own node's in an applied sweep starts the count again; a suspended sweep neither counts nor
@@ -703,7 +705,7 @@ settles what is owed, with Cloudflare refusing writes for a while. After Cloudfl
 but the owner is routed, a paused, blocked, released or pending name routes nothing, a live name routes exactly what
 its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix (about 35,000 cases, 3½ minutes);
 `FUZZ_CASE='…'` replays one case and prints its trace. `test/review-2026-10-01.test.js` covers the 2026-10-01 review's
-fixes: the switchboard's `?n=`, the field caps, the per-key limit (and its races), v2's nonce and replay refusal (and
+fixes: the field caps, the per-key limit (and its races), v2's nonce and replay refusal (and
 v1 nodes still working), and no Cloudflare ids or error bodies in an answer to a keyholder. `test/m3-2026-10-02.test.js`
 covers its M3: a content swap paused after its limit of applied sweeps in a row and not before, what ends a run and what a
 suspended sweep leaves alone, the mass breaker counting swaps, two connectors on one tunnel (another key, or a page,
@@ -712,7 +714,7 @@ failing it, and the admin's pause landing during it). `test/alerts.test.js` cove
 a fake ntfy and a stepped clock: the headers, the words (never the contact), raised / still at 24 h / cleared, a 503
 retried in one message, the hourly cap, no channel set, the category toggles, `/admin#<name>`, and no secret in any
 log line. `test/sources-2026-10-18.test.js` covers S3: a source past its limit held (never refused) and approved, Block
-all and Reject all held, a network blocked by hand, probation (the switchboard, `/status`, the alert at verification,
+all and Reject all held, a network blocked by hand, probation (`/status`, the alert at verification,
 a burst told once), the hold switch, the DNS cap's alert and hold, the settings beating the env and the defaults, no
 address stored anywhere, and one Block all request inside D1's budget. `test/notices-2026-10-18.test.js` covers S2: a
 notice carried once per `/status` until `seen` (a `seen` outside its signature acknowledges nothing), none to a `/status`

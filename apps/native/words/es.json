@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, shops and probes)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, shops and probes); claude-opus-5-5 (machine draft, front doors S15: the community card); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -4995,7 +4995,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Si prefieres que nadie excepto tú pueda entrar, usa únicamente tus 12 palabras.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "La bóveda de claves de BeanPool, un pequeño servidor en Islandia, guarda la copia de tu cuenta que abre tu inicio de sesión. BeanPool puede abrir estas copias: por ahora una persona, el fundador de BeanPool, cuida de la bóveda, y está en proceso de pasar a tres personas en diferentes países, dos de las cuales deben actuar juntas. La empresa de alojamiento puede leer su memoria mientras está en ejecución. Una orden judicial podría ordenar abrir una copia, y cualquiera que tome el control de tu cuenta de inicio de sesión podría entrar.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Conecta más de uno, por si pierdes alguno. Cualquiera de ellos recupera tu cuenta en un teléfono nuevo, a través del servidor de tu comunidad, que guarda la copia.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Conecta más de uno, por si pierdes alguno. Cualquiera de ellos recupera tu cuenta en un teléfono nuevo, en todas las comunidades.",
   "🛡️ You're covered on {community}": "🛡️ Tienes cobertura en {community}",
   "🛡️ You're covered": "🛡️ Tienes cobertura",
   "Sign-In Recovery Providers (1-of-N)": "Proveedores de recuperación por inicio de sesión (1 de N)",
@@ -5555,7 +5554,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Tu comunidad necesita una versión de BeanPool más reciente que la de este teléfono ({version}). La versión {latest} te espera en Google Play.",
   "Updating keeps your account and everything on this phone.": "Al actualizar mantienes tu cuenta y todo en este teléfono.",
   "Update BeanPool in the App Store": "Actualizar BeanPool en la App Store",
-  "Update BeanPool in Google Play": "Actualizar BeanPool en Google Play",
   "Update\u0004the app": "Actualizar la app",
   "Can't update? Ask the people who run your community.": "¿No puedes actualizar? Pregunta a las personas que gestionan tu comunidad.",
   "Use another community": "Usar otra comunidad",
@@ -6123,5 +6121,15 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para que te enteres cuando alguien te responda, te envíe un mensaje o pida unirse. Nada más.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Las notificaciones de BeanPool están desactivadas en los ajustes de tu teléfono. Abre Ajustes para activarlas.",
   "Cancel request": "Cancelar solicitud",
-  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:"
+  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:",
+  "COMMUNITY": "COMUNIDAD",
+  "You're a member of {name}.": "Eres miembro de {name}.",
+  "Open {name}": "Abrir {name}",
+  "To ask, you need a BeanPool account first: tap Explore BeanPool worldwide on the first screen, then find {name} in Find a community.": "Para pedirlo, primero necesitas una cuenta de BeanPool: toca Explorar BeanPool en todo el mundo en la primera pantalla y luego busca {name} en Buscar una comunidad.",
+  "This link doesn't name a community this app can open.": "Este enlace no indica una comunidad que esta app pueda abrir.",
+  "Choose a banner photo, or keep this one": "Elige una foto de banner o conserva esta",
+  "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Estás echando un vistazo como visitante. No se guarda nada hasta que te unas.",
+  "Join to post": "Únete para publicar",
+  "Join to message": "Únete para enviar un mensaje"
 }

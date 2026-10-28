@@ -20,6 +20,20 @@ Each setting goes in the server's .env, then run docker compose up -d. Unset, it
 
 There is no setting for the photo cap: the apps offer five photo slots, so a lower number would meet five slots in the apps.
 
+## What a cache in front may keep
+
+A visitor who hasn't joined sees the same thing as every other visitor: the Market and the map, Home, the communities near a place and the Find your community card. When such a read carries no signature, no admin password or session and comes from no other website, the server's answer says a shared cache in front of it may keep it for 60 seconds (Cache-Control: public, max-age=0, s-maxage=60). On a busy day that turns hundreds of visitors into about one read a minute for each address. A member's read, a signed read of the same address, another website's request, every refusal and every error are private, and no shared cache may keep them. A few unsigned reads were public before and still are: a listing photo anyone may see, members' pictures where pictures need no key, and Pulse thumbnails. The server needs no cache: without one, phones and browsers ask it every time, as before.
+
+A listing photo's address changes when the photo does, so a browser keeps it for a year. A shared cache may keep it for an hour at most (s-maxage=3600). When a moderator takes a listing down, or reports hide it, the server stops giving its photos at once. A cache in front still has a copy, and stops giving it within the hour. To have a photo gone sooner, purge its address in the cache. On Cloudflare: Caching, then Configuration, then Purge Cache, Custom Purge, with the photo's address.
+
+A cache that honours the Vary header (nginx, Varnish) never gives a member, or another website, the visitors' copy. Cloudflare ignores Vary unless told otherwise, so on Cloudflare it takes three Cache Rules, in this order:
+
+- First, listing photos: a GET whose path starts /api/marketplace/posts/ and contains /photos/ is eligible for cache, using the Cache-Control the server sends.
+- Second, the visitors' reads: a GET to /api/marketplace/posts, /api/home, or a path starting /api/global/, is eligible for cache, using the Cache-Control the server sends.
+- Last, bypass the cache for any request that carries an X-Signature, X-Public-Key, Authorization or Origin header, or k= in its address. It must be last, so it wins over the two above.
+
+To check them, ask twice within a minute for the same Market address with nothing signed, for example curl -sI "https://your-address/api/marketplace/posts?types=offer,need&limit=50". The second answer's cf-cache-status header says HIT. Ask again with any X-Signature header added (curl -sI -H "X-Signature: test" and the same address): it says BYPASS, and so does every read a member's app makes.
+
 ## The 90-day archive
 
 A switch, **retention**, turns it on: on for a global community, off for a local one. At start the log says "Retention is on" with the number of days.

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -137,6 +137,7 @@
   "Someone vouches for each newcomer. Here the door is open, so there are no invites.": "புதிதாக வருபவர் ஒவ்வொருவருக்கும் ஒருவர் உறுதியளிக்கிறார். இங்கே கதவு எப்போதும் திறந்திருக்கும், எனவே அழைப்புகள் தேவையில்லை.",
   "In a local community all of this is live today. Here it switches on, feature by feature, once this community can check who's who.": "ஓர் உள்ளூர் சமூகத்தில் இவை அனைத்தும் இன்றே செயல்பாட்டில் உள்ளன. இந்தச் சமூகம் நபர்களைச் சரிபார்க்க முடிந்ததும், இங்கே ஒவ்வொரு அம்சமாகச் செயல்படத் தொடங்கும்.",
   "Start a community": "ஒரு சமூகத்தைத் தொடங்குங்கள்",
+  "Not answering lately": "சமீபத்தில் பதிலளிக்கவில்லை",
   "Communities near you": "உங்கள் அருகிலுள்ள சமூகங்கள்",
   "How it works": "இது எவ்வாறு இயங்குகிறது",
   "An example ledger.": "ஓர் எடுத்துக்காட்டுப் பேரேடு.",

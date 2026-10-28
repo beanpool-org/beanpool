@@ -517,10 +517,11 @@ test('the daily line: at 08:00 Brisbane (22:00 UTC, winter and summer alike — 
         assert.equal(body[1], 'global 1.2.30 (aaaaaaa) · mullum 1.2.30 (aaaaaaa)');
         assert.equal(body[2], 'vault: open, release rel-1111aaaa, report fine.');
         assert.equal(body[3], '0 names live.');
-        assert.equal(body[4], 'Nothing raised.');
-        assert.equal(body[5], 'Held for this summary (2):');
-        assert.match(body[6], /^- 2026-10-10 12:00 UTC: You approved sydney\.beanpool\.org\.$/);
-        assert.match(body[7], /^- 2026-10-10 12:00 UTC: You paused sydney\.beanpool\.org\.$/);
+        assert.equal(body[4], 'DNS records: 0 of 200 (0%)');
+        assert.equal(body[5], 'Nothing raised.');
+        assert.equal(body[6], 'Held for this summary (2):');
+        assert.match(body[7], /^- 2026-10-10 12:00 UTC: You approved sydney\.beanpool\.org\.$/);
+        assert.match(body[8], /^- 2026-10-10 12:00 UTC: You paused sydney\.beanpool\.org\.$/);
         assert.ok(!m.body.includes('ops@sydney'), 'never the contact');
         const st = (await r.admin('alerts')).body;
         assert.equal(st.held_for_digest, 0, 'what it carried is no longer held');
@@ -628,7 +629,7 @@ test('the daily line says what is down, what is raised, and that the vault repor
         await r.tick();   // 22:00 UTC
         const m = r.sent.at(-1);
         assert.equal(m.headers.title, 'Daily: 2 of 3 servers answer, 0 names live');
-        assert.match(m.body, /^Our servers: 2 of 3 answer\.\nglobal 1\.2\.30 \(aaaaaaa\) · mullum down \(HTTP 503\)\nvault: open, release rel-1111aaaa, report not checked \(VAULT_TICKET_KEYS is not set\)\.\n0 names live\.\nRaised now \(1\): mullum \(mullum\.watch\.test\) does not answer from outside: HTTP 503, \d looks in a row 5 minutes apart\.$/);
+        assert.match(m.body, /^Our servers: 2 of 3 answer\.\nglobal 1\.2\.30 \(aaaaaaa\) · mullum down \(HTTP 503\)\nvault: open, release rel-1111aaaa, report not checked \(VAULT_TICKET_KEYS is not set\)\.\n0 names live\.\nDNS records: 0 of 200 \(0%\)\nRaised now \(1\): mullum \(mullum\.watch\.test\) does not answer from outside: HTTP 503, \d looks in a row 5 minutes apart\.$/);
     } finally { r.done(); }
 });
 

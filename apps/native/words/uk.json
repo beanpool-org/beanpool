@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -5379,7 +5379,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Якщо ви хочете, щоб ніхто, крім вас, не міг увійти, використовуйте лише 12 слів.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "Сховище ключів BeanPool — це невеликий сервер в Ісландії, що зберігає копію вашого акаунта для входу. BeanPool може відкривати ці копії: наразі сховищем опікується засновник BeanPool, і контроль передається трьом особам у різних країнах, двоє з яких мають діяти разом. Хостинг-провайдер може зчитувати пам'ять сервера під час роботи. Суд може зобов'язати відкрити копію, і кожен, хто заволодіє вашим входом, отримає доступ.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Підключіть кілька на випадок втрати одного. Будь-який із них поверне ваш акаунт на новому телефоні через сервер вашої спільноти, який зберігає копію.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Підключіть кілька на випадок втрати одного. Будь-який із них поверне ваш акаунт на новому телефоні в кожній спільноті.",
   "🛡️ You're covered on {community}": "🛡️ Ви захищені в {community}",
   "🛡️ You're covered": "🛡️ Ви захищені",
   "Sign-In Recovery Providers (1-of-N)": "Служби відновлення входу (1 із N)",
@@ -5979,7 +5978,6 @@
   "Your community needs a newer BeanPool than the one on this phone ({version}). Version {latest} is waiting in Google Play.": "Вашій спільноті потрібна новіша версія BeanPool, ніж на цьому телефоні ({version}). Версія {latest} доступна в Google Play.",
   "Updating keeps your account and everything on this phone.": "Оновлення збереже ваш обліковий запис і всі дані на цьому телефоні.",
   "Update BeanPool in the App Store": "Оновити BeanPool в App Store",
-  "Update BeanPool in Google Play": "Оновити BeanPool у Google Play",
   "Update\u0004the app": "Оновити",
   "Can't update? Ask the people who run your community.": "Не вдається оновити? Зверніться до тих, хто керує вашою спільнотою.",
   "Use another community": "Використати іншу спільноту",
@@ -6601,5 +6599,10 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Щоб дізнаватися, коли хтось відповідає вам, пише повідомлення або просить приєднатися. Більше нічого.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Сповіщення BeanPool вимкнено в налаштуваннях телефона. Відкрийте налаштування, щоб увімкнути їх.",
   "Cancel request": "Скасувати запит",
-  "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:"
+  "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:",
+  "Choose a banner photo, or keep this one": "Виберіть фото для банера або залиште це",
+  "Your picture, until you choose a banner.": "Ваше зображення, доки ви не виберете банер.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Ви роззираєтеся як гість. Нічого не зберігається, доки ви не приєднаєтеся.",
+  "Join to post": "Приєднатися, щоб публікувати",
+  "Join to message": "Приєднатися, щоб написати"
 }

@@ -110,11 +110,15 @@ test('every internal href in apps/website/**/*.html resolves to a file in the tr
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The Docker live-restore step of the "Start a community" install block.
+// The Docker live-restore step of "Start a community".
 //
 // Self-hosters copy this step onto their own servers, so it has to work for root and for a user with sudo, check that
 // systemd and Docker are there, never damage an existing /etc/docker/daemon.json, and be the same text everywhere it
-// appears: the README quickstart, the server README, the website block and its 24 translations (sources and built pages).
+// appears: the README, the server README, the website and its 24 translations (sources and built pages).
+//
+// It is an OPTIONAL step in a block of its own, below the one-paste quickstart (Marty, 29 Oct 2026): the quickstart stays
+// short for newcomers, and says nothing about live-restore. An AI assistant doing the install always does the step, and
+// the step points it to the install-with-AI page.
 // ---------------------------------------------------------------------------------------------------------------------
 
 const STEP_FIRST_LINE = '# Docker live-restore:';
@@ -136,26 +140,80 @@ function extractStep(text, where) {
     return lines.slice(first, last + 1).join('\n');
 }
 
-/** Every copy of the step in the tree, by file. */
-function stepCopies() {
-    const copies = new Map();
-    const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-    const quickstart = readme.match(/## Run a community[\s\S]*?```bash\n([\s\S]*?)```/);
-    assert.ok(quickstart, 'README has a bash code block under "## Run a community"');
-    copies.set('README.md', extractStep(quickstart[1], 'README.md'));
-    copies.set('apps/server/README.md', extractStep(fs.readFileSync(path.join(ROOT, 'apps/server/README.md'), 'utf8'), 'apps/server/README.md'));
+/** What the quickstart must never carry: the live-restore step, or anything it runs. */
+const LIVE_RESTORE_WORDS = /live-restore|LiveRestore|daemon\.json|systemctl|\bsudo\b|python3|<<'?EOF/i;
 
+/** The English home page, and the home page of each of the 24 languages as a source and as a built page: [name, file]. */
+function websitePages() {
     const pages = [['apps/website/index.html', path.join(SITE, 'index.html')]];
     for (const lang of SOURCE_LANGS) {
         pages.push([`apps/website-src/content/${lang}/index.html`, path.join(ROOT, 'apps/website-src/content', lang, 'index.html')]);
         pages.push([`apps/website/${lang}/index.html`, path.join(SITE, lang, 'index.html')]);
     }
-    for (const [name, file] of pages) {
+    return pages;
+}
+
+/** The one-paste quickstart alone (the first copyable block of "Start a community"), by file, whatever else the page holds. */
+function quickstartBlocks() {
+    const found = new Map();
+    const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+    const section = readme.match(/\n## Run a community\n([\s\S]*?)\n---\n/);
+    assert.ok(section, 'README has "## Run a community"');
+    const fence = section[1].match(/```bash\n([\s\S]*?)```/);
+    assert.ok(fence, 'README has the quickstart block under "## Run a community"');
+    found.set('README.md', fence[1].trim());
+    for (const [name, file] of websitePages()) {
         assert.ok(fs.existsSync(file), `${name} exists`);
         const block = fs.readFileSync(file, 'utf8').match(/<code class="cta-block">([\s\S]*?)<\/code>/);
         assert.ok(block, `${name} has <code class="cta-block">`);
-        copies.set(name, extractStep(decodeHtml(block[1]), name));
+        found.set(name, decodeHtml(block[1]).trim());
     }
+    return found;
+}
+
+/**
+ * The two copyable blocks of "Start a community" in the README and in the website pages (English, 24 sources, 24 built):
+ * the one-paste `quickstart`, and below it the `stepBlock` with the optional live-restore `step` in it. `lead` is the words
+ * just above the step's block: its heading and sentences.
+ */
+function pasteBlocks() {
+    const found = new Map();
+    const entry = (name, quickstart, stepBlock, lead) => ({ quickstart: quickstart.trim(), stepBlock, step: extractStep(stepBlock, name), lead });
+
+    const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+    const section = readme.match(/\n## Run a community\n([\s\S]*?)\n---\n/);
+    assert.ok(section, 'README has "## Run a community"');
+    const fences = [...section[1].matchAll(/```bash\n([\s\S]*?)```/g)];
+    assert.equal(fences.length, 2, 'README: "## Run a community" has two bash blocks, the quickstart and the optional step');
+    const above = section[1].slice(fences[0].index + fences[0][0].length, fences[1].index).trim().split(/\n\s*\n/).pop();
+    found.set('README.md', entry('README.md', fences[0][1], fences[1][1], above));
+
+    for (const [name, file] of websitePages()) {
+        assert.ok(fs.existsSync(file), `${name} exists`);
+        const html = fs.readFileSync(file, 'utf8');
+        const blocks = [...html.matchAll(/<code class="cta-block">([\s\S]*?)<\/code>/g)];
+        assert.equal(blocks.length, 2, `${name} has two <code class="cta-block">, the quickstart and the optional step`);
+        const between = html.slice(blocks[0].index + blocks[0][0].length, blocks[1].index);
+        assert.ok(between.includes('<h3'), `${name}: the optional step has a heading of its own`);
+        found.set(name, entry(name, decodeHtml(blocks[0][1]), decodeHtml(blocks[1][1]), between.slice(between.lastIndexOf('<h3'))));
+    }
+    return found;
+}
+
+/** The step in the server README (a step-by-step setup, not a one-paste block): its block, and the paragraph above it. */
+function serverReadmeStep() {
+    const text = fs.readFileSync(path.join(ROOT, 'apps/server/README.md'), 'utf8');
+    const fences = [...text.matchAll(/```bash\n([\s\S]*?)```/g)].filter((f) => f[1].includes(STEP_FIRST_LINE));
+    assert.equal(fences.length, 1, 'apps/server/README.md has the live-restore step in one bash block');
+    const above = text.slice(0, fences[0].index).trim().split(/\n\s*\n/).pop();
+    return { stepBlock: fences[0][1], step: extractStep(fences[0][1], 'apps/server/README.md'), lead: above };
+}
+
+/** Every copy of the step in the tree, by file. */
+function stepCopies() {
+    const copies = new Map();
+    for (const [name, found] of pasteBlocks()) copies.set(name, found.step);
+    copies.set('apps/server/README.md', serverReadmeStep().step);
     return copies;
 }
 
@@ -180,13 +238,50 @@ function scriptOf(step, daemonJson) {
 
 const sandbox = () => fs.mkdtempSync(path.join(os.tmpdir(), 'live-restore-test-'));
 
-test('the live-restore step is the same text in the README, the server README, the website block and all 24 translations', () => {
+test('the live-restore step is the same text in the README, the server README, the website and all 24 translations', () => {
     const copies = stepCopies();
     assert.equal(SOURCE_LANGS.length, 24, 'there are 24 translation sources');
     assert.equal(copies.size, 2 + 1 + 24 + 24, 'README, server README, English page, 24 sources and 24 built pages');
     const canonical = copies.get('README.md');
     const different = [...copies].filter(([, step]) => step !== canonical).map(([name]) => name);
-    assert.deepEqual(different, [], `these copies differ from the README quickstart: ${different.join(', ')}`);
+    assert.deepEqual(different, [], `these copies differ from the README step: ${different.join(', ')}`);
+});
+
+test('the one-paste block has no live-restore line: the same short block in the README, the website and all 24 translations', () => {
+    const blocks = quickstartBlocks();
+    assert.equal(blocks.size, 1 + 1 + 24 + 24, 'README, English page, 24 sources and 24 built pages');
+    const canonical = blocks.get('README.md');
+    assert.ok(canonical.startsWith('git clone https://github.com/beanpool-org/beanpool.git && cd beanpool\ndocker network create beanpool-shared\n'), 'it starts with the clone and the network');
+    assert.ok(canonical.endsWith('\ndocker compose exec beanpool-node beanpool claim'), 'and ends with the claim');
+    assert.ok(canonical.split('\n').length <= 10, 'and is a short block');
+    for (const [name, quickstart] of blocks) {
+        assert.deepEqual(quickstart.split('\n').filter((l) => LIVE_RESTORE_WORDS.test(l)), [], `${name}: no line of the one-paste block is about live-restore`);
+        assert.equal(quickstart, canonical, `${name}: the one-paste block is the README's`);
+    }
+});
+
+test('the live-restore step is optional: below the one-paste block, in a block of its own, headed in plain words, and linked to the install-with-AI page', () => {
+    const blocks = pasteBlocks();
+    for (const [name, { stepBlock, step, lead }] of blocks) {
+        assert.equal(stepBlock.trim(), step, `${name}: the step's block holds the step and nothing else, so one copy button copies all of it`);
+        assert.ok(lead.includes('install-with-ai.md'), `${name}: the words above the step link it to the install-with-AI page`);
+    }
+    for (const name of ['README.md', 'apps/website/index.html']) {
+        const { lead } = blocks.get(name);
+        for (const words of [
+            'Recommended: keep your community running when Docker updates',
+            'Docker can restart, or take a patch update, without stopping your community',
+            'needs root or',
+            'safe to skip',
+            // Agents read the README and the website too: they must find out that the step is theirs to do.
+            'An AI assistant doing the install always does this step',
+        ]) {
+            assert.ok(lead.includes(words), `${name}: the step is introduced with "${words}"`);
+        }
+    }
+    const server = serverReadmeStep();
+    assert.equal(server.stepBlock.trim(), server.step, 'apps/server/README.md: the step is in a block of its own');
+    assert.ok(server.lead.includes('install-with-ai.md') && server.lead.includes('safe to skip') && server.lead.includes('An AI assistant doing the install always does this step'), 'apps/server/README.md: the paragraph above the step says the same');
 });
 
 test('the live-restore step reads systemd and Docker first, uses sudo only without a password prompt, and reloads, never restarts', () => {
@@ -490,7 +585,7 @@ test('the whole live-restore step works as root and as a user with sudo, and a s
             r = run({ FAKE_SUDO_PASSWORD: '1' });
             assert.equal(r.status, 0, r.out);
             assert.match(r.out, /a password is required/);
-            assert.match(r.out, /Docker live-restore is still off\. The install below carries on without it\. If sudo wanted a password, type: sudo -v/);
+            assert.match(r.out, /Docker live-restore is still off\. Your community runs without it\. If sudo wanted a password, type: sudo -v/);
             assert.match(r.out, /AFTER-THE-STEP/, 'the lines after the step still run');
             assert.ok(!fs.existsSync(file), 'nothing is written');
         }
@@ -532,6 +627,10 @@ test('each operator page says the same thing about live-restore, in one paragrap
         '--live-restore flag',
         'leave daemon.json alone',
         'a second copy',
+        // It is an optional step below the install block, not part of it, and an AI assistant always does it.
+        'optional step below the install block',
+        'safe to skip',
+        'an AI assistant doing the install always does it',
     ];
     for (const page of pages) {
         const text = fs.readFileSync(path.join(ROOT, 'packages/beanpool-guide/operators', page), 'utf8');
@@ -547,11 +646,12 @@ test('each operator page says the same thing about live-restore, in one paragrap
             assert.ok(paragraphs[0].includes(phrase), `${page}: the live-restore paragraph says "${phrase}"`);
         }
         assert.ok(!/restart or update/.test(text), `${page} does not say any update leaves the community running`);
+        assert.ok(!/gets this from the install block/.test(text), `${page} does not say the install block does it: the block no longer carries the step`);
     }
     const assistant = fs.readFileSync(path.join(ROOT, 'packages/beanpool-guide/operators/setup/install-with-ai.md'), 'utf8')
         .split('\n').find((l) => l.startsWith('- Turn on Docker live-restore'));
     assert.ok(assistant, 'the assistant is told to turn on live-restore');
-    for (const phrase of ['sudo', 'command -v systemctl', 'Docker is not running', '/etc/docker/daemon.json', 'every other key', 'cp -p', 'valid JSON', 'systemctl reload docker', 'never a restart', "docker info --format '{{.LiveRestoreEnabled}}'", 'patch update', 'already says true', '--live-restore flag', 'a second copy']) {
+    for (const phrase of ['sudo', 'command -v systemctl', 'Docker is not running', '/etc/docker/daemon.json', 'every other key', 'cp -p', 'valid JSON', 'systemctl reload docker', 'never a restart', "docker info --format '{{.LiveRestoreEnabled}}'", 'patch update', 'already says true', '--live-restore flag', 'a second copy', 'optional step below the block', 'an assistant always does it']) {
         assert.ok(assistant.includes(phrase), `the assistant's instruction says "${phrase}"`);
     }
 });

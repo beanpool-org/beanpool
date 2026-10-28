@@ -108,11 +108,64 @@ describe('the Commons page in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: ['Mushroom Growers', 'Fungi'] })).toEqual([]);
     });
 
+    it('the propose modal by kind and without initiative word (Fable 5.1 §5 S5)', async () => {
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as never);
+        await showIn('xx');
+        render(<ProjectsPage identity={ME} initialStart />);
+
+        // StartSomethingDialog is opened by initialStart
+        const startDialog = await screen.findByRole('dialog', { name: (n) => n.includes(xx('Start something')) });
+        expect(startDialog).toBeInTheDocument();
+
+        // Project row opens propose modal with Project selected
+        fireEvent.click(within(startDialog).getByRole('button', { name: (n) => n.includes(xx('Project')) }));
+        const dialog = screen.getByRole('dialog');
+        expect(within(dialog).getByRole('heading').textContent).toBe(xx('Start a project'));
+        expect(within(dialog).getByText(xx('WHAT IS IT?'))).toBeInTheDocument();
+        expect(within(dialog).queryByText(xx('Initiative Type'))).toBeNull();
+        expect(within(dialog).getByRole('button', { name: xx('Close dialog') })).toBeInTheDocument();
+        expect(within(dialog).getByPlaceholderText(xx('e.g. {amount}').replace('{amount}', '500'))).toBeInTheDocument();
+        expect(bypassing(dialog)).toEqual([]);
+
+        const send = async () => { await act(async () => { fireEvent.submit(dialog.querySelector('form')!); }); };
+        await send();
+        expect(within(dialog).getByText(xx('Title is required'))).toBeInTheDocument();
+        fireEvent.change(within(dialog).getByPlaceholderText(xx('e.g. Community Tool Shed or Shade House')), { target: { value: 'Shade House' } });
+        await send();
+        expect(within(dialog).getByText(xx('Purpose statement is required (docs/the-commons.md §2.1)'))).toBeInTheDocument();
+        fireEvent.change(dialog.querySelector('textarea')!, { target: { value: 'Shade for seedlings' } });
+        await send();
+        expect(within(dialog).getByText(xx('A project needs a goal in Beans'))).toBeInTheDocument();
+        expect(bypassing(dialog)).toEqual([]);
+
+        // Switching to Enterprise updates title and submit text
+        fireEvent.click(within(dialog).getByText(xx('🏛️ Enterprise')));
+        expect(within(dialog).getByRole('heading').textContent).toBe(xx('Start an enterprise'));
+        expect(within(dialog).queryByText(xx('Goal Amount (🫘 Beans)'))).toBeNull();
+        expect(within(dialog).getByRole('button', { name: xx('Choose a logo') })).toBeInTheDocument();
+        fireEvent.click(within(dialog).getByRole('button', { name: (n) => n.includes(xx('Select Green Bean avatar')) }));
+        expect(within(dialog).getByRole('button', { name: xx('Start the enterprise 🏛️') })).toBeInTheDocument();
+        expect(bypassing(dialog)).toEqual([]);
+    });
+
+    it('the voice credits card words match the phone (Fable 5.1 §4.3, §5 S6)', async () => {
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as never);
+        await showIn('xx');
+        render(<ProjectsPage identity={ME} />);
+
+        const voiceCard = await screen.findByTestId('voice-credits-card');
+        expect(within(voiceCard).getByText(xx('Voice credits'))).toBeInTheDocument();
+        expect(within(voiceCard).queryByText(xx('Voice credits for money votes'))).toBeNull();
+        expect(within(voiceCard).getByText(xx('For money votes · from completed trades · N votes cost N×N'))).toBeInTheDocument();
+    });
+
     it('the form that proposes a project or an enterprise, and each refusal', async () => {
         vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] } as never);
         await showIn('xx');
         render(<ProjectsPage identity={ME} />);
-        fireEvent.click(await screen.findByRole('button', { name: xx('+ Propose a Project') }));
+        // Empty state on Projects chip has Start a project
+        fireEvent.click(screen.getByRole('button', { name: xx('🌱 Projects') }));
+        fireEvent.click(await screen.findByRole('button', { name: xx('Start a project') }));
         const dialog = screen.getByRole('dialog');
         expect(within(dialog).getByRole('heading').textContent).toBe(xx('Start a project'));
         expect(within(dialog).getByRole('button', { name: xx('Close dialog') })).toBeInTheDocument();

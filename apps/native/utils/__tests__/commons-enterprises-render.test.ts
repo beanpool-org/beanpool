@@ -233,6 +233,9 @@ describe("the Commons tab's enterprises (#2200)", () => {
         expect(host.querySelectorAll('[data-testid="category-tile"]').length).toBe(0);
         // One list, as on the web: no second panel of the same enterprises over it.
         expect(host.textContent).not.toContain("THE COMMONS' ENTERPRISES");
+        // Phone enterprise card balance label is BALANCE, matching the web (Fable 5.1 §4.3, §5 S6)
+        expect(host.textContent).toContain('BALANCE');
+        expect(host.textContent).not.toContain('ENTERPRISE BALANCE');
         expect(node.getTreasuries).toHaveBeenCalledTimes(1);
     });
 

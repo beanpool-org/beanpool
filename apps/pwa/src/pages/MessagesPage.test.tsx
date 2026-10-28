@@ -829,6 +829,21 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         await waitFor(() => expect(getGroupChat).toHaveBeenCalledWith('grp-new'));
         expect(screen.getByText('Bike fixers')).toBeInTheDocument();
     });
+
+    it("Talk's Create a Group modal includes the bridge to Commons, and clicking it navigates to projects with start (Fable 5.1 §5 S6)", async () => {
+        const onNavigate = vi.fn();
+        mockConversations = [];
+        render(<MessagesPage identity={mockIdentity} onNavigate={onNavigate} />);
+        fireEvent.click(await chip('Groups'));
+
+        fireEvent.click(within(screen.getByTestId('groups-empty')).getByRole('button', { name: /New group/ }));
+        const dialog = await screen.findByRole('dialog');
+        const bridge = within(dialog).getByText(/With Beans involved\? Start a project or an enterprise →/i);
+        expect(bridge).toBeInTheDocument();
+        fireEvent.click(bridge);
+        expect(onNavigate).toHaveBeenCalledWith('projects', 'start');
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
 });
 
 describe('MessagesPage: event chat (docs/events-on-the-map.md §2.2, §3)', () => {

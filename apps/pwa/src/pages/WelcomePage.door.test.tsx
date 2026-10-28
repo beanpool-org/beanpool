@@ -211,6 +211,53 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
         expect(screen.getByTestId('backup-no-copy').textContent).toBe("This community's server keeps no copy of your account.");
         expect(document.body.textContent).not.toMatch(/key vault|Iceland/);
     });
+
+    // Review 4397050530: the join carried the copy, and the member was let in without the join's own answer about it.
+    // The node may have stored it in that same request, so "keeps no copy" is not said (Settings reads the node's list).
+    async function toTheWordsWithoutTheAnswer(handlers: Record<string, Handler>) {
+        await savePendingJoin({ identity, provider: 'google', nonce: 'n1', startedAt: Date.now(), expiresAt: Date.now() + PENDING_JOIN_TTL_MS, restored: false });
+        const token = `${b64url('{"alg":"RS256"}')}.${b64url(JSON.stringify({ sub: 'g1', nonce: 'n1' }))}.c2ln`;
+        window.history.replaceState(null, '', `/app/auth/google#state=n1&id_token=${token}`);
+        const calls = stubNode(GLOBAL_OPEN, { '/api/join/work': () => json(404, {}), ...handlers });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByText(/Your Safety Backup/);
+        return calls;
+    }
+
+    it('the answer lost, and the node then says a member: neither "keeps no copy" nor the sign-in line', async () => {
+        const calls = await toTheWordsWithoutTheAnswer({
+            '/api/join': () => json(502, {}),
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+        });
+        expect(calls.find((c) => c.path === '/api/join')?.body.recovery.shares).toHaveLength(1);
+        expect(calls.some((c) => c.path.startsWith('/api/community/membership/'))).toBe(true);
+        expect(screen.queryByTestId('backup-no-copy')).toBeNull();
+        expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/keeps no copy/);
+    });
+
+    it('already a member: neither "keeps no copy" nor the sign-in line', async () => {
+        const calls = await toTheWordsWithoutTheAnswer({ '/api/join': () => json(409, { code: 'already_member' }) });
+        expect(calls.find((c) => c.path === '/api/join')?.body.recovery.shares).toHaveLength(1);
+        expect(screen.queryByTestId('backup-no-copy')).toBeNull();
+        expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/keeps no copy/);
+    });
+
+    it('joined with 12 words, which carry no copy: keeps no copy', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('backup-words-only');
+        expect(screen.getByTestId('backup-no-copy').textContent).toBe("This community's server keeps no copy of your account.");
+    });
 });
 
 /*

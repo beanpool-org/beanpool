@@ -26,15 +26,20 @@ export interface WelcomeDoorsStyles {
  *
  * One line in English at 320dp and 1.3x text, shrinking rather than wrapping; a longer language (ru, fr, ar, the
  * pseudo-locale) may take a second line rather than shrink past 0.6 (utils/__tests__/language-switch-render.test.ts).
+ *
+ * `exploring`: the second door is asking whether this phone may look around first (slice S12, app/welcome.tsx
+ * exploreWorldwide). The line under it says so, and a second tap waits; the invite button works all the while.
  */
-export function WelcomeDoors({ door, joinWithInvite, openGlobalDoor, styles }: {
+export function WelcomeDoors({ door, joinWithInvite, openGlobalDoor, exploring = false, styles }: {
     door: GlobalDoorState;
     joinWithInvite(): void;
     openGlobalDoor(): void;
+    exploring?: boolean;
     styles: WelcomeDoorsStyles;
 }) {
     const { t } = useWords();
-    const line = door === 'unreachable' ? t("Can't reach the global community right now. Try again, or join with an invite.")
+    const line = exploring ? t('Connecting to the global community…')
+        : door === 'unreachable' ? t("Can't reach the global community right now. Try again, or join with an invite.")
         : door === 'closed' ? t('Not taking new members right now.')
         : door === 'preview' ? t('This community is in a private preview. Ask its owner for an invite.')
         : null;
@@ -43,7 +48,7 @@ export function WelcomeDoors({ door, joinWithInvite, openGlobalDoor, styles }: {
             <Pressable style={styles.memberBtn} onPress={joinWithInvite} accessibilityRole="button" accessibilityLabel={t('Join with an invite')}>
                 <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🎟️ Join with an invite')}</Text>
             </Pressable>
-            <Pressable style={styles.memberBtn} onPress={openGlobalDoor} accessibilityRole="button" accessibilityLabel={t('Explore BeanPool worldwide')} accessibilityHint={line ?? undefined}>
+            <Pressable style={styles.memberBtn} onPress={openGlobalDoor} disabled={exploring} accessibilityRole="button" accessibilityLabel={t('Explore BeanPool worldwide')} accessibilityHint={line ?? undefined} accessibilityState={{ busy: exploring, disabled: exploring }}>
                 <Text style={styles.memberBtnText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6}>{t('🌍 Explore BeanPool worldwide')}</Text>
             </Pressable>
             {line && <Text style={styles.doorLine} accessibilityLiveRegion="polite">{line}</Text>}

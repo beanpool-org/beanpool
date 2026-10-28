@@ -29,6 +29,7 @@ import { clearPendingOnboarding } from './onboarding-state';
 import { assertPlainNodeAddress } from './node-url';
 import { communitiesOnThisPhone, forgetCommunities, releaseAccountFromPhone } from './account-leaves-phone';
 import { communitySwitched } from './community-switch';
+import { forgetTheLook } from './look-around';
 
 /**
  * Asked before a restore writes another account over the one this phone holds: the "Replace this phone's account?"
@@ -123,6 +124,9 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
         if (replacesAnother) {
             await releaseAccountFromPhone(await leavingAccount(identity));
             await wipeIdentityScopedStorage(AsyncStorage);
+        } else {
+            // Onto a phone with no account that looked around first (slice S12): that look's guest mark is not this account's.
+            await forgetTheLook();
         }
         await AsyncStorage.setItem('beanpool_anchor_url', anchorUrl);
         // The update screen asks the community now in use (utils/community-switch.ts).

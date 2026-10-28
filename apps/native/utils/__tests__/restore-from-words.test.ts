@@ -274,6 +274,23 @@ describe('a 12-word restore with nothing to replace', () => {
         expect(asyncStorage()).toMatchObject(accountStorage(keys.publicKeyHex));
     });
 
+    it('no account on the phone, after looking around the global community (slice S12): the look\'s guest mark goes with no account to keep it', async () => {
+        // What the first screen's Explore BeanPool worldwide leaves (utils/global-guest-visit.ts with no identity).
+        const GLOBAL = 'https://global.beanpool.org';
+        mem.async.set(ANCHOR, GLOBAL);
+        mem.async.set('beanpool_guest_nodes', JSON.stringify([GLOBAL]));
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: GLOBAL, alias: 'Global community' }]));
+
+        await restoreFromWords(WORDS, GLOBAL, { nameOnNode: async () => 'Marty' });
+
+        expect(await loadIdentity()).toMatchObject({ publicKey: restoredPub });
+        expect(mem.async.get(ANCHOR)).toBe(GLOBAL);
+        // Not a guest there: the sync sends it the account's blocks and keeps only a member's view of the listings.
+        expect(mem.async.has('beanpool_guest_nodes')).toBe(false);
+        // The community it looked at stays in its list, as any saved community.
+        expect(JSON.parse(mem.async.get(SAVED_NODES_STORE_KEY) ?? '[]')).toEqual([{ url: GLOBAL, alias: 'Global community' }]);
+    });
+
     it('no account on the phone: restores as it always did, never asking; a node that can\'t say leaves the name empty', async () => {
         const confirmReplace = vi.fn(async (_outgoing: BeanPoolIdentity) => false);
 

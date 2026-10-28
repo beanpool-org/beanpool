@@ -110,3 +110,13 @@ export const patchDnsRecord = (env, id, rec) =>
 
 export const deleteDnsRecord = (env, id) =>
     cf(env, 'DELETE', `/zones/${env.CF_ZONE_ID}/dns_records/${id}`);
+
+// Total DNS records in the zone (all types, registrar and non-registrar alike).
+export async function countDnsRecords(env) {
+    const data = await cfAnswer(env, 'GET', `/zones/${env.CF_ZONE_ID}/dns_records?per_page=1`);
+    const total = data.result_info?.total_count;
+    if (typeof total !== 'number' || !Number.isFinite(total)) {
+        throw new Error(`CF GET /zones/${env.CF_ZONE_ID}/dns_records?per_page=1 gave no total_count`);
+    }
+    return total;
+}

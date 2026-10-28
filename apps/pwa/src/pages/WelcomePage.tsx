@@ -374,6 +374,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
     // The sign-in the door join also enrolled as this account's way back (G11-c), when the node stored the copy.
     const [signInRecovery, setSignInRecovery] = useState<JoinProvider | null>(null);
+    // A sign-in door join the node let in without its own answer about the copy the join carried (the member was found
+    // afterwards, or was one already): it may have stored it, so Safety Backup says nothing about a copy (review 4397050530).
+    const [copyNotSaid, setCopyNotSaid] = useState(false);
     // Joined with 12 words alone: the account has one way back, and the Safety Backup step says so (two-doors §2.5).
     const [joinedByWords, setJoinedByWords] = useState(false);
     // That member chose "Add a sign-in as a second way back" at Safety Backup: offered at the end of the tour, and the page
@@ -1285,6 +1288,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         setJoinedByDoor(true);
         setJoinedByWords(joined.door === 'words');
         setSignInRecovery(joined.recovery?.enrolled ? joined.recovery.provider : null);
+        setCopyNotSaid(joined.door !== 'words' && !joined.recovery);
         setInviteRedeemed(true);
         setJoinedAsNote(joined.earlierJoinKept
             // A key was brought here, but the join this browser sent earlier had landed: that one is the account.
@@ -2083,10 +2087,20 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         : <> <BoldWords text={t('This is the **only** way to recover your identity if you lose this device.')} /></>}
                                 </p>
                             )}
-                            {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words. */}
-                            {signInRecovery && (
+                            {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words, with
+                                where its copy is, at the moment it is made (vault rethink VR0, design §1.2): on this
+                                community's server, which said it keeps it (`recovery.enrolled`). The web app has no key
+                                vault client, so never the vault. "Keeps no copy" only where the page knows: a join that
+                                sent none (an invite, 12 words), or one the node answered it did not store. */}
+                            {signInRecovery ? (
                                 <p data-testid="backup-signin-recovery" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
                                     {t('Signing in with {provider} also brings this account back.', { provider: providerLabel(signInRecovery) })}
+                                    <> {t("This community's server keeps a locked copy of your key and 12 words for it.")}</>
+                                    <> {t('The people who run it can open that copy, and so can anyone who gets into your sign-in account.')}</>
+                                </p>
+                            ) : !copyNotSaid && (
+                                <p data-testid="backup-no-copy" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    {t("This community's server keeps no copy of your account.")}
                                 </p>
                             )}
 

@@ -425,17 +425,68 @@ describe('the web waiting card tells the truth about what the community now answ
 
     it('a cancel the community answers "not_found" stops offering Cancel, and the card says what it now answers', async () => {
         await askedOf(BYRON);
-        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
-        vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' });
+        // The community holds the request until the cancel is refused, and nothing after: the card reads it again to say so.
+        let held = true;
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async () => ({ ok: true, value: { status: held ? 'pending' : 'none' } }));
+        vi.spyOn(knockModule, 'cancelKnock').mockImplementation(async () => {
+            held = false;
+            return { ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' };
+        });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('Your request arrived.'));
+        const readsBefore = readSpy.mock.calls.length;
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        expect(await screen.findByTestId(`home-cancel-error-${BYRON.url}`)).toHaveTextContent('There is no open request from you here.');
+        expect(readSpy.mock.calls.length).toBe(readsBefore + 1);
+        expect(arrivedOf(BYRON.url)).toHaveTextContent('No answer came. You can ask again.');
+        expect(cancelOf(BYRON.url)).toBeNull();
+    });
+
+    it('a cancel that meets a "yes" (404 not_found, then the community says approved) shows the invite, never "No answer came"', async () => {
+        await askedOf(BYRON);
+        let said: 'pending' | 'approved' = 'pending';
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async () => (said === 'pending'
+            ? { ok: true, value: { status: 'pending' } }
+            : { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }));
+        vi.spyOn(knockModule, 'cancelKnock').mockImplementation(async () => {
+            said = 'approved';
+            return { ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' };
+        });
         vi.spyOn(window, 'confirm').mockReturnValue(true);
 
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('Your request arrived.'));
         fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
 
-        expect(await screen.findByTestId(`home-cancel-error-${BYRON.url}`)).toHaveTextContent('There is no open request from you here.');
-        expect(arrivedOf(BYRON.url)).toHaveTextContent('No answer came. You can ask again.');
+        expect(await screen.findByTestId(`home-find-invited-${BYRON.url}`)).toHaveTextContent('said yes');
+        expect(screen.queryByTestId(`home-waiting-card-${BYRON.url}`)).toBeNull();
         expect(cancelOf(BYRON.url)).toBeNull();
+        expect(document.body.textContent).not.toContain('No answer came');
+        expect(document.body.textContent).not.toContain('no open request');
+    });
+
+    it('a cancel that gets a 404 whose re-read cannot be made says why, with no Cancel and never "No answer came"', async () => {
+        await askedOf(BYRON);
+        let down = false;
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async () => (down
+            ? { ok: false, kind: 'unreachable', message: "Couldn't reach this community. Check your connection and try again." }
+            : { ok: true, value: { status: 'pending' } }));
+        vi.spyOn(knockModule, 'cancelKnock').mockImplementation(async () => {
+            down = true;
+            return { ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' };
+        });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('Your request arrived.'));
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent("Couldn't reach this community. Check your connection and try again."));
+        expect(cancelOf(BYRON.url)).toBeNull();
+        expect(document.body.textContent).not.toContain('No answer came');
     });
 
     it('two cancels out at once: each button stays its own (the first finishing does not free the second, a press on a busy one sends nothing)', async () => {

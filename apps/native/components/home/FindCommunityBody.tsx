@@ -80,17 +80,19 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                         setCancellingUrls(was => new Set(was).add(k.url));
                         setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
                         const res = await cancelKnock(k.url, identity);
+                        // `not_found` is the node's answer to every standing but an open request: it lapsed, it was cancelled
+                        // elsewhere, or a member said yes after this card read it. The node is asked what it holds now, never
+                        // told, and the button stays busy meanwhile.
+                        const reread = !res.ok && res.status === 404 && res.code === 'not_found'
+                            ? await readKnockStatus(k.url, identity)
+                            : null;
                         setCancellingUrls(was => { const left = new Set(was); left.delete(k.url); return left; });
                         if (res.ok) {
                             const next = latestKnocks.current.filter(item => item.url !== k.url);
                             showKnocks(next);
                             onKnocksChange?.(next as RememberedKnock[]);
                         } else {
-                            // The community holds nothing open from this key (it lapsed, or was cancelled elsewhere): the
-                            // card says what it now answers and stops offering Cancel.
-                            if (res.status === 404 && res.code === 'not_found') {
-                                setStatuses(was => ({ ...was, [k.url]: { ok: true, value: { status: 'none' } } }));
-                            }
+                            if (reread) setStatuses(was => ({ ...was, [k.url]: reread }));
                             setCancelErrors(was => ({ ...was, [k.url]: res.message }));
                         }
                     },

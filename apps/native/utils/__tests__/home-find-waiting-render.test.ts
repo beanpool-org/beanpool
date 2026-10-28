@@ -309,7 +309,10 @@ describe('FindCommunityBody tells the truth about what the community now answers
     });
 
     it('a cancel the community answers "not_found" stops offering Cancel, and the card says what it now answers', async () => {
-        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'pending' } });
+        // The first read is the card's own; the second is the one the 404 makes, and the community holds nothing.
+        readKnockStatusMock
+            .mockResolvedValueOnce({ ok: true, value: { status: 'pending' } })
+            .mockResolvedValueOnce({ ok: true, value: { status: 'none' } });
         cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' });
         const host = await render([knock]);
         await act(async () => { await Promise.resolve(); });
@@ -317,9 +320,62 @@ describe('FindCommunityBody tells the truth about what the community now answers
 
         await confirmCancel(host, byron, 0);
 
+        expect(readKnockStatusMock).toHaveBeenCalledTimes(2);
         expect(cancelButton(host)).toBeNull();
         expect(arrived(host)).toBe('No answer came. You can ask again.');
         expect(host.querySelector(`[data-testid="home-find-cancel-error-${byron}"]`)?.textContent).toBe('There is no open request from you here.');
+    });
+
+    it('a cancel that meets a "yes" (404 not_found, then the community says approved) shows the invite, never "No answer came"', async () => {
+        readKnockStatusMock
+            .mockResolvedValueOnce({ ok: true, value: { status: 'pending' } })
+            .mockResolvedValueOnce({ ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+        expect(arrived(host)).toBe('Your request arrived.');
+
+        await confirmCancel(host, byron, 0);
+
+        expect(host.querySelector(`[data-testid="home-find-invited-${byron}"]`)).not.toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).toBeNull();
+        expect(cancelButton(host)).toBeNull();
+        expect(host.textContent).not.toContain('No answer came');
+        expect(host.textContent).not.toContain('no open request');
+    });
+
+    it('a cancel that meets a 404 whose re-read cannot be made says why, with no Cancel and never "No answer came"', async () => {
+        readKnockStatusMock
+            .mockResolvedValueOnce({ ok: true, value: { status: 'pending' } })
+            .mockResolvedValueOnce({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable });
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        await confirmCancel(host, byron, 0);
+
+        expect(arrived(host)).toBe(KNOCK_MESSAGES.unreachable);
+        expect(cancelButton(host)).toBeNull();
+        expect(host.textContent).not.toContain('No answer came');
+    });
+
+    it('a cancel that gets a 404 keeps its button busy until the re-read answers, and a second press does nothing', async () => {
+        let finishRead: (r: unknown) => void = () => {};
+        readKnockStatusMock
+            .mockResolvedValueOnce({ ok: true, value: { status: 'pending' } })
+            .mockReturnValueOnce(new Promise(resolve => { finishRead = resolve; }));
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        const { pending } = await confirmCancel(host, byron, 0);
+        expect(cancelButton(host)!.getAttribute('aria-busy')).toBe('true');
+        await act(async () => { cancelButton(host)!.click(); });
+        expect(alertMock).toHaveBeenCalledTimes(1);
+
+        await act(async () => { finishRead({ ok: true, value: { status: 'none' } }); await pending; });
+        expect(arrived(host)).toBe('No answer came. You can ask again.');
+        expect(cancelButton(host)).toBeNull();
     });
 
     it('two requests cancelled one after the other: the first does not come back, and each button is its own', async () => {

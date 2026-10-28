@@ -203,7 +203,8 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
  * "Cancel my request" on `communityUrl`. Done, the phone remembers when (`cancelledAt`), so the card says so and offers no
  * "Ask to join" until the node would take one ({@link KNOCK_CANCEL_BLOCK_HOURS}). A community that has nothing open from
  * this key (it lapsed, or a member said yes meanwhile) answers 404 `not_found` in its own words, shown as they are; the
- * refusal carries its `status` and `code` so a card can stop offering Cancel for it.
+ * refusal carries its `status` and `code` so a card can read the status again and say what the community now holds (a
+ * yes is one of the cases, so a card never says "No answer came" from the 404 alone).
  */
 export async function cancelKnock(communityUrl: string | null, identity: BeanPoolIdentity, now: Date = new Date()): Promise<{ ok: true } | { ok: false; message: string; status?: number; code?: string | null }> {
     const origin = communityOrigin(communityUrl);

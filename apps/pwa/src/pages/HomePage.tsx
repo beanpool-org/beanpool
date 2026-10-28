@@ -1021,15 +1021,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         setCancellingKnocks(was => new Set(was).add(k.url));
         setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
         const res = await cancelKnock(k.url, identity);
+        // `not_found` is the node's answer to every standing but an open request: it lapsed, it was cancelled elsewhere, or a
+        // member said yes after this card read it. The node is asked what it holds now, never told, and the button stays busy
+        // meanwhile.
+        const reread = !res.ok && res.status === 404 && res.code === 'not_found'
+            ? await readKnockStatus(k.url, identity)
+            : null;
         setCancellingKnocks(was => { const left = new Set(was); left.delete(k.url); return left; });
         if (res.ok) {
             setKnocks(was => was.filter(item => item.url !== k.url));
         } else {
-            // The community holds nothing open from this key (it lapsed, or was cancelled elsewhere): the card says what it
-            // now answers and stops offering Cancel.
-            if (res.status === 404 && res.code === 'not_found') {
-                setKnockStatuses(was => ({ ...was, [k.url]: { ok: true, value: { status: 'none' } } }));
-            }
+            if (reread) setKnockStatuses(was => ({ ...was, [k.url]: reread }));
             setCancelErrors(was => ({ ...was, [k.url]: res.message }));
         }
     };

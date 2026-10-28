@@ -7,5 +7,8 @@
     "updated": "2026-10-15",
     "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
   },
-  "Add a photo first": "Ajoutez d'abord une photo"
+  "Add a photo first": "Ajoutez d'abord une photo",
+  "Only a pending message request can be cancelled.": "Seule une demande de message en attente peut être annulée.",
+  "Only the person who sent a message request can cancel it.": "Seule la personne qui a envoyé une demande de message peut l'annuler.",
+  "Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.": "Envoyez conversationId, le chat, et decision, 'accept', 'ignore' ou 'cancel'."
 }

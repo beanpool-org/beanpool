@@ -17,6 +17,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { db, memberPhotoNotMovedYet } from '../db/db.js';
 import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl, isBundledAvatar, word, wordsFor } from '@beanpool/core';
 import { isStorableImageValue, stripImageMetadata, tooManyPixels } from '../storage/image-metadata.js';
@@ -312,19 +313,29 @@ export class AvatarCache {
     }
 }
 
-function findBundledAvatarFile(name: string): string | null {
+export function findBundledAvatarFile(name: string): { filePath: string; mimeType: string } | null {
     // `name` comes from a member-supplied avatar ("bundled://<name>", member_photos), so it must not be
     // allowed to walk out of the avatars directory via path separators or "..".
     if (!/^[a-z0-9_-]{1,64}$/i.test(name)) return null;
-    const filename = `avatar_${name.replace(/-/g, '_')}.jpg`;
+    const base = `avatar_${name.replace(/-/g, '_')}`;
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const repoRoot = path.resolve(here, '../../../..'); // src/engine or dist/engine: four up is the repo root
     const candidates = [
-        path.resolve('public', 'avatars', filename),
-        path.join(process.cwd(), 'public', 'avatars', filename),
-        path.join(process.cwd(), 'apps', 'server', 'public', 'avatars', filename),
-        path.join(process.cwd(), 'apps', 'pwa', 'public', 'avatars', filename),
+        path.resolve('public', 'avatars'),
+        path.join(process.cwd(), 'public', 'avatars'),
+        path.join(process.cwd(), 'apps', 'server', 'public', 'avatars'),
+        path.join(process.cwd(), 'apps', 'pwa', 'public', 'avatars'),
+        path.join(process.cwd(), 'apps', 'manager', 'public', 'avatars'),
+        path.join(process.cwd(), '..', 'pwa', 'public', 'avatars'),
+        path.join(process.cwd(), '..', 'manager', 'public', 'avatars'),
+        path.join(repoRoot, 'apps', 'pwa', 'public', 'avatars'),
+        path.join(repoRoot, 'apps', 'manager', 'public', 'avatars'),
     ];
-    for (const c of candidates) {
-        if (fs.existsSync(c)) return c;
+    for (const dir of candidates) {
+        const webpPath = path.join(dir, `${base}.webp`);
+        if (fs.existsSync(webpPath)) return { filePath: webpPath, mimeType: 'image/webp' };
+        const jpgPath = path.join(dir, `${base}.jpg`);
+        if (fs.existsSync(jpgPath)) return { filePath: jpgPath, mimeType: 'image/jpeg' };
     }
     return null;
 }
@@ -426,13 +437,13 @@ export class AvatarService {
 
         if (rawUrl.startsWith('bundled://')) {
             const bundledId = rawUrl.replace('bundled://', '').split('?')[0];
-            const filePath = findBundledAvatarFile(bundledId);
-            if (!filePath) {
+            const bundled = findBundledAvatarFile(bundledId);
+            if (!bundled) {
                 return { status: 404, error: `Bundled avatar ${bundledId} not found on disk` };
             }
             try {
-                fullBuffer = await fs.promises.readFile(filePath);
-                mimeType = 'image/jpeg';
+                fullBuffer = await fs.promises.readFile(bundled.filePath);
+                mimeType = bundled.mimeType;
             } catch {
                 return { status: 500, error: 'Failed to read bundled avatar file' };
             }

@@ -485,9 +485,9 @@ router.post('/api/messages/request', async (ctx) => {
     const actor = requestDecider(ctx);
     if (!actor) return;
     const { conversationId, decision } = (ctx as any).requestBody || {};
-    if (typeof conversationId !== 'string' || !conversationId || (decision !== 'accept' && decision !== 'ignore')) {
+    if (typeof conversationId !== 'string' || !conversationId || (decision !== 'accept' && decision !== 'ignore' && decision !== 'cancel')) {
         ctx.status = 400;
-        ctx.body = { error: word("Send conversationId, the chat, and decision, 'accept' or 'ignore'.") };
+        ctx.body = { error: word("Send conversationId, the chat, and decision, 'accept', 'ignore' or 'cancel'.") };
         return;
     }
     try {

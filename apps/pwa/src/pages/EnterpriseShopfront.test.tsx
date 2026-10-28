@@ -312,7 +312,7 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(monogramCopies).toHaveLength(10);
         for (const copy of monogramCopies) {
             expect(copy.className).toContain('rounded-full');
-            expect(copy.getAttribute('src')).toBe('/avatars/avatar_leaf.jpg');
+            expect(copy.getAttribute('src')).toBe('/avatars/avatar_leaf.webp');
         }
         // Nothing fetched beyond the avatar (no request to a shop photo URL)
         const newFetches = fetchMock.mock.calls.slice(initialFetches).map(([u]) => String(u));

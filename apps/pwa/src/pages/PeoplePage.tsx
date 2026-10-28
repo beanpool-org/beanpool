@@ -65,7 +65,7 @@ function relativeDate(dateStr: string): string {
 /** Avatar circle with image or deterministic preset (no bare initials, Pictures S4) */
 function Avatar({ callsign, avatarUrl, pubkey, size = 40 }: { callsign: string; avatarUrl?: string | null; pubkey?: string | null; size?: number }) {
     const sizeStyle = { width: size, height: size, minWidth: size };
-    const resolved = resolveAvatarUrl(avatarUrl, pubkey || callsign) || '/avatars/avatar_bean_green.jpg';
+    const resolved = resolveAvatarUrl(avatarUrl, pubkey || callsign) || '/avatars/avatar_bean_green.webp';
 
     return (
         <img 

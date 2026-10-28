@@ -599,7 +599,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         expect(monogramCopies).toHaveLength(10);
         for (const copy of monogramCopies) {
             expect(copy.className).toContain('rounded-full');
-            expect(copy.getAttribute('src')).toBe('/avatars/avatar_leaf.jpg');
+            expect(copy.getAttribute('src')).toBe('/avatars/avatar_leaf.webp');
         }
         expect(screen.getByText('Your picture, until you choose a banner.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Choose a banner photo' })).toBeInTheDocument();
@@ -684,7 +684,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         expect(copies).toHaveLength(10);
         for (const copy of copies) {
             expect(copy.className).toContain('rounded-full');
-            expect(copy.getAttribute('src')).toBe('/avatars/avatar_sunflower.jpg');
+            expect(copy.getAttribute('src')).toBe('/avatars/avatar_sunflower.webp');
         }
         // Nothing fetched beyond avatar
         expect(fetchedUrls.some((u) => u.includes('/photo'))).toBe(false);

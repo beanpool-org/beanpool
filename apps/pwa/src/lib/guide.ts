@@ -43,7 +43,10 @@ export async function loadBundledGuide(): Promise<Guide> {
     return bundledPromise;
 }
 
-/** The copy built into this bundle. Works with no connection at all. */
+/**
+ * The copy built into this bundle. In the browser, loadBundledGuide() must be awaited first;
+ * in Node, it is resolved synchronously.
+ */
 export function getBundledGuide(): Guide {
     if (!BUNDLED) {
         if (typeof process !== 'undefined' && process.versions?.node) {

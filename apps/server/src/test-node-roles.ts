@@ -46,6 +46,7 @@ import {
     adminSendMessage,
 } from './state-engine.js';
 import { db, seedNodeRolesFromGenesis } from './db/db.js';
+import { setSwitchOverride } from './config/node-profile.js';
 import Koa from 'koa';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
@@ -575,7 +576,11 @@ async function main() {
         seedMember('pruned_target', 'PrunedMember');
         grantNodeRole('pruned_target', 'admin', 'gen_alice');
         assert(nodeRoleOf('pruned_target') === 'admin', 'Target is admin before prune');
+        // Where the community votes nobody removes an admin outright (removal by vote S3): an owner does where community
+        // votes are switched off.
+        setSwitchOverride('decisions', false);
         adminPruneUser('pruned_target', 'owner:password');
+        setSwitchOverride('decisions', true);
         assert(nodeRoleOf('pruned_target') === null, 'Pruned member has nodeRoleOf = null');
         assert(isNodeAdmin('pruned_target') === false, 'Pruned member has isNodeAdmin = false');
         assert(isNodeOwner('pruned_target') === false, 'Pruned member has isNodeOwner = false');

@@ -47,7 +47,8 @@ import { createCommonsRoutes } from './routes/commons.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { db } from './db/db.js';
-import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.js';
+import { setSwitchOverride } from './config/node-profile.js';
+import { removalInGraceFromBefore, removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { setCommonsBalance } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { RouteDeps } from './routes/types.js';
@@ -371,7 +372,8 @@ async function run() {
     assert(tallyDecision(kDecision.id).electorate === 12, 'a member who joined after it opened is not in its electorate (they cannot vote on it)');
     assert(getActiveMembersCount30d() === 13, 'though they count for a later Decision');
     void lateActive;
-    const removal = createDecision({ authorPubkey: signedOnly[2], title: 'Remove KSubject', description: 'Removal turnout test', touches: 'member', effect: 'remove_member', subject: kSubject });
+    // A removal a member proposed before removal by vote S3 (since then only an admin's pause opens one), still open.
+    const removal = removalProposedFromBefore({ authorPubkey: signedOnly[2], title: 'Remove KSubject', description: 'Removal turnout test', subject: kSubject });
     const rTally = tallyDecision(removal.id);
     assert(rTally.quorumRatio === 0.25 && rTally.quorumRequired === 3, `removal stays at 25% (ceil(0.25 x 12) = 3; got ${rTally.quorumRequired})`);
     quietEveryone();
@@ -585,14 +587,16 @@ async function run() {
     const reinstated = makeMember('Reinstated');
     grantNodeRole(reinstated, 'moderator', owner);
     const reinstatedRole = roleRow(reinstated);
-    const removeMod = createDecision({ authorPubkey: owner, title: 'Remove Reinstated', description: 'Reinstatement role test', touches: 'member', effect: 'remove_member', subject: reinstated });
+    const removeMod = removalProposedFromBefore({ authorPubkey: owner, title: 'Remove Reinstated', description: 'Reinstatement role test', subject: reinstated });
     decisionsEngine.executeDecision(removeMod.id);
     const reinstate = createDecision({ authorPubkey: owner, title: 'Reinstate', description: 'Community changes its mind', touches: 'member', effect: 'reinstate_member', subject: reinstated });
     decisionsEngine.executeDecision(reinstate.id);
     assert(getDecision(removeMod.id)!.status === 'failed' && statusOf(reinstated) === 'active' && sameRole(reinstatedRole, roleRow(reinstated)),
         `reinstatement cancels the removal and gives the role back (got ${getDecision(removeMod.id)!.status}, ${JSON.stringify(roleRow(reinstated))})`);
 
-    // Pruning: only an owner may prune an owner or admin (a suspended one's held role counts).
+    // Pruning: only an owner may prune an owner or admin (a suspended one's held role counts). Pruning outright happens only
+    // where community votes are switched off (removal by vote S3; test-removal-doors has the votes-on refusals).
+    setSwitchOverride('decisions', false);
     const pruneCoOwner = makeMember('PruneCoOwner');
     grantNodeRole(pruneCoOwner, 'owner', owner);
     const prunePlain = await callRouter(admin, 'POST', `/api/local/admin/users/${pruneCoOwner}/prune`, { actor: keyAdmin });
@@ -617,6 +621,7 @@ async function run() {
     assert(pruneHeldOwner.status === 200 && statusOf(heldAdmin) === 'pruned'
         && !(db.prepare('SELECT 1 FROM suspended_node_roles WHERE member_pubkey = ?').get(heldAdmin)),
         'an owner may prune the suspended admin, and the held role goes with them');
+    setSwitchOverride('decisions', true);
 
     // The only owner cannot be suspended.
     db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = 'owner'").run(secondOwner);

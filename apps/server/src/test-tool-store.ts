@@ -61,7 +61,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
+    initStateEngine, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
     reconcileLedgerFromDb,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -540,7 +540,7 @@ async function main(): Promise<void> {
     assert(rowOf(cyShop, 'stock') !== undefined, "the enterprise she kept keeps its own copies (they are the enterprise's)");
     await put(dee, own('things'), { v: 1 });
     const deeRows = rowsOf(dee.pk);
-    attempt(() => adminPruneUser(dee.pk, 'owner:password'));
+    attempt(() => adminPruneUser(dee.pk, COMMUNITY_DECISION_ACTOR));
     assert(deeRows.length === 1 && rowsOf(dee.pk).length === 0 && deeRows.every(r => (tombOf(dee.pk, r.tool) ?? '') >= r.updated_at),
         `a removal takes Dee's copies, tombstoned (${deeRows.length} → ${rowsOf(dee.pk).length})`);
     const deeAfter = [await call('GET', dee, own('things')), await put(dee, own('things'), { v: 2 })];

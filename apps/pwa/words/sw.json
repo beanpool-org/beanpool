@@ -1737,7 +1737,6 @@
   "A quick look at this community economy.": "Muhtasari wa uchumi wa jumuiya hii.",
   "Done ✓": "Imekamilika ✓",
   "Member\u0004what a Decision touches": "Mwanachama",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Kufukuzwa kwenye nodi hii (wengi maalum 66%, akidi 25%, muda wa neema wa siku 7)",
   "Temporary freeze of trading and messaging": "Kugandishwa kwa muda kwa biashara na utumaji ujumbe",
   "Restore member to active standing (simple majority)": "Rejesha mwanachama kwenye hadhi amilifu (wingi wa kawaida)",
   "Cancel pending removal and restore account (simple majority)": "Ghairi uondoaji unaosubiri na urejeshe akaunti (wingi wa kawaida)",
@@ -1762,10 +1761,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Tafadhali weka jina la utambulisho au ufunguo wa umma wa msimamizi mkuu au kiongozi.",
   "The lead keeper or leader to remove: callsign or public key": "Msimamizi mkuu au kiongozi wa kuondolewa: jina la utambulisho au ufunguo wa umma",
   "Enter the lead keeper or leader's callsign or pubkey...": "Weka jina la utambulisho au ufunguo wa umma wa msimamizi mkuu au kiongozi...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Salio ni la faragha: huwezi kuona la {name}. Kura hii inapofunguliwa, jumuiya hurekodi salio lao na deni lolote, na huwaonyesha wote wanaoweza kupiga kura. Wakiondolewa, deni hutozwa kwenye Hazina ya Pamoja, ambayo kwa sasa inashikilia maharagwe {n}.",
-    "other": "Salio ni la faragha: huwezi kuona la {name}. Kura hii inapofunguliwa, jumuiya hurekodi salio lao na deni lolote, na huwaonyesha wote wanaoweza kupiga kura. Wakiondolewa, deni hutozwa kwenye Hazina ya Pamoja, ambayo kwa sasa inashikilia maharagwe {n}."
-  },
   "Please pick the project or enterprise, or enter its public key.": "Tafadhali chagua mradi au shirika, au weka ufunguo wake wa umma.",
   "Failed to propose decision": "Imeshindwa kupendekeza uamuzi",
   "Propose a Community Decision": "Pendekeza Uamuzi wa Jumuiya",

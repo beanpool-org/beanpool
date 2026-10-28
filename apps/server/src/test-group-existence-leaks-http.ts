@@ -48,7 +48,7 @@ import { initTls } from './services/tls.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
     initStateEngine, transfer, createPost as rawCreatePost, createGroup, joinGroup, inviteGroupMember, removeGroupMember, seedGenesisMember,
-    rsvpEvent, createConversation, sendMessage, adminPruneUser,
+    rsvpEvent, createConversation, sendMessage, adminPruneUser, COMMUNITY_DECISION_ACTOR,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { postEventThreadMessage } from './engine/event-thread.js';
@@ -434,7 +434,7 @@ async function main(): Promise<void> {
 
         removeGroupMember(hidden.id, convenor.pk, ousted.pk);
         removeGroupMember(hidden.id, leaver.pk, leaver.pk);
-        adminPruneUser(closed.pk, 'owner:password');
+        adminPruneUser(closed.pk, COMMUNITY_DECISION_ACTOR);
         const status = (pk: string) => (db.prepare('SELECT status FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(hidden.id, pk) as any)?.status ?? null;
         assert(status(ousted.pk) === 'removed' && status(leaver.pk) === null && status(stayer.pk) === 'active',
             `setup: one removed (row kept), one left (row gone), one still in (${status(ousted.pk)}, ${status(leaver.pk)}, ${status(stayer.pk)})`);

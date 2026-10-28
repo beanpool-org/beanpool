@@ -2972,7 +2972,6 @@
   "Post\u0004button: publish": "انتشار",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 از برگه {ledger} برای ارسال فوری اعتبار به همسایگان استفاده کنید.",
   "Member\u0004what a Decision touches": "عضو",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "اخراج از این سرور (اکثریت ویژه ۶۶٪، حد نصاب ۲۵٪، دوره مهلت ۷ روزه)",
   "Temporary freeze of trading and messaging": "مسدودسازی موقت دادوستد و پیام‌رسانی",
   "Restore member to active standing (simple majority)": "بازگرداندن عضو به وضعیت فعال (اکثریت ساده)",
   "Cancel pending removal and restore account (simple majority)": "لغو حذف در انتظار و بازیابی حساب (اکثریت ساده)",
@@ -3000,10 +2999,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "لطفاً شناسه یا کلید عمومی مدیر ارشد یا رهبر را وارد کنید.",
   "The lead keeper or leader to remove: callsign or public key": "مدیر ارشد یا رهبر مورد نظر برای برکناری: شناسه یا کلید عمومی",
   "Enter the lead keeper or leader's callsign or pubkey...": "شناسه یا کلید عمومی مدیر ارشد یا رهبر را وارد کنید...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "موجودی‌ها خصوصی هستند: شما نمی‌توانید موجودی {name} را ببینید. با شروع این رأی‌گیری، جامعه موجودی و هرگونه بدهی آن‌ها را ثبت کرده و به همه کسانی که می‌توانند رأی دهند نشان می‌دهد. اگر آن‌ها حذف شوند، بدهی به صندوق مشترک که اکنون {n} لوبیا دارد تحمیل می‌شود.",
-    "other": "موجودی‌ها خصوصی هستند: شما نمی‌توانید موجودی {name} را ببینید. با شروع این رأی‌گیری، جامعه موجودی و هرگونه بدهی آن‌ها را ثبت کرده و به همه کسانی که می‌توانند رأی دهند نشان می‌دهد. اگر آن‌ها حذف شوند، بدهی به صندوق مشترک که اکنون {n} لوبیا دارد تحمیل می‌شود."
-  },
   "Missing Title": "عنوان وارد نشده است",
   "Please enter a clear, concise title for this decision.": "لطفاً یک عنوان واضح و کوتاه برای این تصمیم وارد کنید.",
   "Missing Description": "توضیحات وارد نشده است",

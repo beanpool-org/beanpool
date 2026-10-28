@@ -1870,7 +1870,6 @@
   "A quick look at this community economy.": "এই কমিউনিটির অর্থনীতির ওপর এক নজর।",
   "Done ✓": "সম্পন্ন ✓",
   "Member\u0004what a Decision touches": "সদস্য",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "এই সার্ভার থেকে বহিষ্কার (৬৬% বিশেষ সংখ্যাগরিষ্ঠতা, ২৫% কোরাম, ৭ দিনের বিবেচনা সময়)",
   "Temporary freeze of trading and messaging": "লেনদেন ও বার্তাপ্রেরণে সাময়িক স্থগিতাদেশ",
   "Restore member to active standing (simple majority)": "সদস্যকে পুনরায় সক্রিয় মর্যাদায় ফিরিয়ে আনা (সাধারণ সংখ্যাগরিষ্ঠতা)",
   "Cancel pending removal and restore account (simple majority)": "মুলতুবি বহিষ্কার বাতিল করা ও অ্যাকাউন্ট ফিরিয়ে আনা (সাধারণ সংখ্যাগরিষ্ঠতা)",
@@ -1895,10 +1894,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "অনুগ্রহ করে প্রধান কিপার বা দলপ্রধানের কলসাইন বা পাবলিক কী লিখুন।",
   "The lead keeper or leader to remove: callsign or public key": "যাঁকে সরানো হবে সেই প্রধান কিপার বা দলপ্রধান: কলসাইন বা পাবলিক কী",
   "Enter the lead keeper or leader's callsign or pubkey...": "প্রধান কিপার বা দলপ্রধানের কলসাইন বা pubkey লিখুন...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "ব্যালেন্স ব্যক্তিগত: আপনি {name}-এর ব্যালেন্স দেখতে পারবেন না। এই ভোট শুরু হলে কমিউনিটি তাঁর ব্যালেন্স ও যেকোনো ঋণ রেকর্ড করে এবং যাঁরা ভোট দিতে পারবেন তাঁদের সবাইকে দেখায়। তাঁকে সরিয়ে দেওয়া হলে যৌথ তহবিলের ওপর ঋণ ধার্য করা হয়, যেখানে এখন {n}টি শিম রয়েছে।",
-    "other": "ব্যালেন্স ব্যক্তিগত: আপনি {name}-এর ব্যালেন্স দেখতে পারবেন না। এই ভোট শুরু হলে কমিউনিটি তাঁর ব্যালেন্স ও যেকোনো ঋণ রেকর্ড করে এবং যাঁরা ভোট দিতে পারবেন তাঁদের সবাইকে দেখায়। তাঁকে সরিয়ে দেওয়া হলে যৌথ তহবিলের ওপর ঋণ ধার্য করা হয়, যেখানে এখন {n}টি শিম রয়েছে।"
-  },
   "Please enter a clear title for this decision.": "অনুগ্রহ করে এই সিদ্ধান্তের জন্য একটি স্পষ্ট শিরোনাম লিখুন।",
   "Please provide a description and rationale.": "অনুগ্রহ করে একটি বিবরণ ও যৌক্তিক কারণ প্রদান করুন।",
   "Please enter a valid member callsign or 64-character public key.": "অনুগ্রহ করে একটি বৈধ সদস্য কলসাইন বা ৬৪-অক্ষরের পাবলিক কী লিখুন।",

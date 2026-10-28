@@ -69,7 +69,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, transfer, createPost, acceptPost, requestPost, completePostTransaction,
-    createGroup, joinGroup, rsvpEvent, postEventThreadMessage, adminPruneUser, seedGenesisMember,
+    createGroup, joinGroup, rsvpEvent, postEventThreadMessage, adminPruneUser, COMMUNITY_DECISION_ACTOR, seedGenesisMember,
     postGroupThreadMessage, vouchMember, createConversation, sendMessage, getBalance, proposeGroupConvenor,
     purgeMemberSelf, pausePost, resumePost, updatePost,
 } from './state-engine.js';
@@ -345,7 +345,7 @@ async function main(): Promise<void> {
         .run(phoneless.pubKeyHex);
     joinGroup(liveGroup.id, phoneless.pubKeyHex);
 
-    adminPruneUser(pruney.pubKeyHex, 'owner:password');
+    adminPruneUser(pruney.pubKeyHex, COMMUNITY_DECISION_ACTOR);
     issueRekeyCode(rekeyee.pubKeyHex, operator.pubKeyHex);
     const phonelessRekey = issueRekeyCode(phoneless.pubKeyHex, operator.pubKeyHex);
     assert((db.prepare('SELECT status FROM members WHERE public_key = ?').get(pruney.pubKeyHex) as any)?.status === 'pruned',
@@ -518,7 +518,7 @@ async function main(): Promise<void> {
             `an admin's invite still redeems (got ${seed.status}, ${adminRedeem.status})`);
 
         // The admin's invite hangs off the genesis member. Pruned, the node picks a live member instead.
-        adminPruneUser(founder.pubKeyHex, 'owner:password');
+        adminPruneUser(founder.pubKeyHex, COMMUNITY_DECISION_ACTOR);
         const seed2 = await unsigned('POST', '/api/admin/seed-invite', ownerPassword());
         const viaAdmin2 = keypair('ViaAdminTwoNM');
         const adminRedeem2 = await signedFetch('POST', '/api/invite/redeem', viaAdmin2,
@@ -736,7 +736,7 @@ async function main(): Promise<void> {
         const GONE = 'This account was deleted or removed from this community, so it can’t be moved to a new key.';
         const ends: Array<[string, (pk: string) => void]> = [
             ['deleted by its owner', pk => { purgeMemberSelf(pk); }],
-            ['pruned by an admin', pk => adminPruneUser(pk, 'owner:password')],
+            ['removed by the community', pk => adminPruneUser(pk, COMMUNITY_DECISION_ACTOR)],
         ];
         for (const [how, end] of ends) {
             const member = makeMember(how.startsWith('deleted') ? 'DeleterNM' : 'RemovedNM');
@@ -826,7 +826,7 @@ async function main(): Promise<void> {
         const escrowed = offer(removed.m, 'RemovedTwoNM walnuts');
         const escrowTx = acceptPost(escrowed.id, carol.pubKeyHex);
 
-        adminPruneUser(removed.m.pubKeyHex, 'owner:password');
+        adminPruneUser(removed.m.pubKeyHex, COMMUNITY_DECISION_ACTOR);
         const purge = await signedFetch('POST', '/api/member/purge', deleter.m, {});
         assert(purge.status === 200 && accountOf(deleter.m.pubKeyHex)?.status === 'pruned',
             `a member deletes their own account over HTTP (got ${purge.status} ${JSON.stringify(purge.body)})`);

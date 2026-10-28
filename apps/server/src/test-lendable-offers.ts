@@ -45,7 +45,7 @@ import { db } from './db/db.js';
 import { wrapCreatePost, TEST_PHOTOS } from './post-test-helper.js';
 import {
     initStateEngine, transfer, createPost as rawCreatePost, runLedgerAudit, getCommonsBalanceExact, registerPushToken, getBalance, hasLiveOffer,
-    runMarketplaceHygiene, adminPruneUser, exportSyncState, importRemoteState, setNodeRole, signSyncPayload, getPosts,
+    runMarketplaceHygiene, adminPruneUser, COMMUNITY_DECISION_ACTOR, exportSyncState, importRemoteState, setNodeRole, signSyncPayload, getPosts,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer } from './https-server.js';
@@ -484,7 +484,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE posts SET repeatable = 1 WHERE id = ?').run(trailer);
 
     const eveOut1 = await lend(eve, alice, eveLadder, 2);
-    adminPruneUser(eve.pk, 'owner:password');
+    adminPruneUser(eve.pk, COMMUNITY_DECISION_ACTOR);
     assert(postRow(eveLadder).status === 'cancelled' && postRow(eveLadder).active === 0, 'Eve is pruned: her lent ladder is taken down under the loan');
     const off1 = await callOff(alice, eveOut1);
     assert(off1.status === 200 && postRow(eveLadder).status === 'cancelled' && postRow(eveLadder).active === 0,

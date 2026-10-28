@@ -71,7 +71,8 @@ export function howItWorksSubtitle(features: NodeFeatures | null | undefined): s
  * Proposing a community Decision (components/ProposeDecisionModal.tsx).
  * Where Beans are off, the Commons has nothing to grant or write off (decisions-engine.ts:440),
  * so the pool touch is omitted, credit and enterprise-keeper actions are dropped, and the
- * title placeholder carries a neutral example.
+ * title placeholder carries a neutral example. Removing a member is never offered: since
+ * removal by vote S3 that vote opens only when an admin pauses someone.
  */
 
 /** The decision touches offered on this node. */
@@ -86,7 +87,6 @@ export function decisionEffectsFor(touch: DecisionTouch, features: NodeFeatures 
     }
     if (beansShown(features)) {
         return [
-            'remove_member',
             'suspend_member',
             'unsuspend_member',
             'reinstate_member',
@@ -98,7 +98,6 @@ export function decisionEffectsFor(touch: DecisionTouch, features: NodeFeatures 
         ];
     }
     return [
-        'remove_member',
         'suspend_member',
         'unsuspend_member',
         'reinstate_member',

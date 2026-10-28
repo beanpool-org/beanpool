@@ -32,6 +32,7 @@ import {
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, pushServiceRefusals,
     hideBurst, undoBurst,
+    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
@@ -96,6 +97,7 @@ import {
     getRekeyStatus,
     getOffboardPreview,
     executeOffboard,
+    offboardRefusalFirst,
     type OffboardOptions,
 } from '../engine/member-wizards.js';
 import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
@@ -1911,10 +1913,18 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
     }
 });
 
+// Remove a member at once. Where the community votes, only its vote removes a member (removal by vote S3: state-engine
+// removalVoteRefusal): refused in words that say to pause them instead, before an owner's fresh proof is spent on it.
 router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    const refusal = removalVoteRefusal(ctx.params.pubkey, actor);
+    if (refusal) {
+        ctx.status = 400;
+        ctx.body = { error: refusal, code: REMOVAL_IS_THE_VOTE_CODE };
+        return;
+    }
     if (!(await ownerRemovalProof(ctx, 'prune', ctx.params.pubkey, actor))) return;
     try {
         const heldRole = heldNodeRoleOf(ctx.params.pubkey);
@@ -1936,6 +1946,14 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    // Where the community votes, a branch of one (a member who invited nobody) is a direct removal (state-engine
+    // branchPruneDoor): refused in words, as Prune is, before an owner's fresh proof is spent on it.
+    const refusal = branchRemovalRefusal(ctx.params.pubkey, actor);
+    if (refusal) {
+        ctx.status = 400;
+        ctx.body = { error: refusal, code: REMOVAL_IS_THE_VOTE_CODE };
+        return;
+    }
     if (!(await ownerRemovalProof(ctx, 'prune-branch', ctx.params.pubkey, actor))) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
@@ -1943,7 +1961,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = e?.status || 400;
-        ctx.body = { error: e?.message || 'Failed to prune branch' };
+        ctx.body = { error: e?.message || 'Failed to prune branch', code: e?.code };
     }
 });
 
@@ -2819,7 +2837,8 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';
         ctx.status = msg.includes('not found') ? 404 : 400;
-        ctx.body = { error: msg };
+        // Where the community votes and has not voted to remove them, the refusal's code too (member-wizards removalToSettle).
+        ctx.body = { error: msg, ...(e?.code ? { code: e.code } : {}) };
     }
 });
 
@@ -2845,12 +2864,22 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         };
         return;
     }
+    // Where the community votes, offboarding only settles a removal it voted for, in its grace window (removal by vote S3:
+    // member-wizards removalToSettle): refused in words before an owner's fresh proof is spent on it.
+    const notASettlement: any = offboardRefusalFirst(String(pubkey));
+    if (notASettlement) {
+        ctx.status = notASettlement.status || 400;
+        ctx.body = { error: notASettlement.message, code: notASettlement.code };
+        return;
+    }
     // Spelt as executeOffboard spells them (member-wizards cleanPub, cleanOperator).
     if (!(await ownerRemovalProof(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase()))) return;
 
     try {
         const heldRole = heldNodeRoleOf(String(pubkey).trim().toLowerCase());
-        const counts = removalCounts(ctx, String(pubkey).trim().toLowerCase());
+        // Where the community votes, the offboarding settles a removal the community voted for: the community removed them,
+        // not the admin, so it is no admin's removal to count, as Accelerate's is not.
+        const counts = !decisionsOn() && removalCounts(ctx, String(pubkey).trim().toLowerCase());
         const result = executeOffboard(
             pubkey,
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },

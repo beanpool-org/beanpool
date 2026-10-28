@@ -34,6 +34,7 @@ import { db } from './db/db.js';
 import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getBalance, getMember, payFromCommons } from './state-engine.js';
 import { runLedgerAudit } from './engine/audit.js';
 import { REKEY_ACCOUNT_GONE } from './engine/member-wizards.js';
+import { setSwitchOverride } from './config/node-profile.js';
 import { REKEY_CODE_NOT_VALID } from './engine/rekey-redeem.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
@@ -176,7 +177,10 @@ async function runTests() {
         const sumBefore = sumOfAccounts();
         const code = await issue('A', pat.pubKeyHex);
 
+        // An owner removes a member outright only where community votes are switched off (removal by vote S3).
+        setSwitchOverride('decisions', false);
         const prune = await admin('POST', `/api/local/admin/users/${pat.pubKeyHex}/prune`);
+        setSwitchOverride('decisions', true);
         assert(prune.status === 200, `A: the owner removes Pat while the re-key is pending (${prune.status} ${prune.json.error ?? ''})`);
         assert(getMember(pat.pubKeyHex)?.status === 'pruned' && getBalance(pat.pubKeyHex).balance === 0, 'A: Pat is pruned, the 40 Beans gone to the Commons');
 
@@ -195,7 +199,9 @@ async function runTests() {
         const sumBefore = sumOfAccounts();
         const code = await issue('B', sam.pubKeyHex);
 
+        setSwitchOverride('decisions', false);
         const prune = await admin('POST', `/api/local/admin/users/${sam.pubKeyHex}/prune`);
+        setSwitchOverride('decisions', true);
         assert(prune.status === 200, `B: the owner removes Sam (${prune.status})`);
         const purge = await signed(sam, '/api/member/purge', { action: 'purge_account' });
         console.log(`  (B: Sam's old key deleting the closed account answered ${purge.status} ${JSON.stringify(purge.json)})`);

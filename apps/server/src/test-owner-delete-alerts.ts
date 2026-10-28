@@ -139,6 +139,7 @@ async function main(): Promise<void> {
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
+    const { setSwitchOverride } = await import('./config/node-profile.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
@@ -472,6 +473,9 @@ async function main(): Promise<void> {
 
     // ── 6. sec.members counts ──────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 6. sec.members —');
+    // An admin's removals, on a community whose community votes are switched off: where they are on, only the community's
+    // vote removes a member and an admin removes nobody outright (removal by vote S3; test-removal-doors).
+    setSwitchOverride('decisions', false);
     const p1 = await call(`/api/local/admin/users/${plainA}/prune`, asAdmin);
     const p2 = await call(`/api/local/admin/users/${plainB}/prune`, asAdmin);
     let m = lines('sec.members');
@@ -611,6 +615,7 @@ async function main(): Promise<void> {
         `6k. one more 25 h after the first: a new day's line; the first day's 6 stays in the history and the channel's queue (${JSON.stringify({ day2, queued })})`);
     assert((setChannel('owners') as any).ok === true, '6k. the owners\' channel set again');
     fresh();
+    setSwitchOverride('decisions', true);
 
     // ── 7. sec.settings ────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 7. sec.settings —');

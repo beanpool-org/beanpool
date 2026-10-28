@@ -524,13 +524,16 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(bypassing(), 'filters').toEqual([]);
     });
 
-    it('the propose-a-Decision form: touches, effects, the lead to remove, the debt disclosure, its questions', async () => {
+    it('the propose-a-Decision form: touches, effects, the lead to remove, how to ask for a removal, its questions', async () => {
         node.decisions = [];
         await renderIn('xx');
         await click(byLabel(pseudoLocalise('Decide Section')), 'Decide');
         await click(button('+ Propose a Decision'), 'Propose');
         expect(host.textContent).toContain(pseudoLocalise('Propose a Community Decision'));
-        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Mandatory Debt Disclosure (§3.8)')));
+        // Removal by vote S3: no removal is proposed (a pause opens that vote), so no debt disclosure for one; the form says
+        // how a member asks for one instead.
+        expect(host.textContent).not.toContain(inCapitalsOf(pseudoLocalise('Mandatory Debt Disclosure (§3.8)')));
+        expect(host.textContent).toContain(pseudoLocalise("A vote on removing a member opens only when an admin pauses them. To ask for one, tell your community's moderators: blocking someone reports them, as reporting one of their posts does."));
         expect(bypassing(), 'form').toEqual([]);
         await click(byLabel(pseudoLocalise('Submit Community Decision')), 'Submit');
         expect(alerts.said).toContain(pseudoLocalise('Missing Title'));

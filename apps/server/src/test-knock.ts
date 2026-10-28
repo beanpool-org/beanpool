@@ -67,7 +67,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, broadcast, seedGenesisMember, adminPruneUser, adminSetUserStatus, purgeMemberSelf,
+    initStateEngine, broadcast, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, adminSetUserStatus, purgeMemberSelf,
     exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -204,7 +204,7 @@ async function main(): Promise<void> {
     const rekeyed = newId('Rekeyed');
     const rekeyedNew = newId('RekeyedNew');
     for (const m of [max, gone, quiet, leaver, rekeyed]) makeMember(m, mia.pk);
-    adminPruneUser(gone.pk, 'owner:password');
+    adminPruneUser(gone.pk, COMMUNITY_DECISION_ACTOR);
     adminSetUserStatus(quiet.pk, 'disabled');
     purgeMemberSelf(leaver.pk);
     completeRekey(rekeyed.pk, rekeyedNew.pk, issueRekeyCode(rekeyed.pk, 'owner:password').code, 'owner:password');
@@ -668,7 +668,7 @@ async function main(): Promise<void> {
     const beforeRekeys: any = await exportSyncState(nodeId);
     assert(reKey(lia, liaNew) && reKey(ned, nedNew), 'both lose their phones and are re-keyed');
     const liaDeleted = purgeMemberSelf(liaNew.pk);
-    adminPruneUser(nedNew.pk, 'owner:password');
+    adminPruneUser(nedNew.pk, COMMUNITY_DECISION_ACTOR);
     const wiped = (r: any, pk: string) => r?.pubkey === pk && r?.callsign === 'Deleted Member' && r?.message === '' && r?.avatar === null && r?.from_node === null;
     const theirWords = () => (db.prepare(`SELECT COUNT(*) AS n FROM join_requests
         WHERE pubkey IN (?, ?) OR callsign IN ('Lia', 'Ned') OR message LIKE '%Smith St%' OR message LIKE '%Jones Rd%'`).get(lia.pk, ned.pk) as { n: number }).n;

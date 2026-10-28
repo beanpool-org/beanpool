@@ -1779,7 +1779,6 @@
   "A quick look at this community economy.": "이 커뮤니티 경제를 한눈에 둘러보세요.",
   "Done ✓": "완료 ✓",
   "Member\u0004what a Decision touches": "멤버",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "이 서버에서 제명(66% 특별다수, 25% 정족수, 7일 유예 기간)",
   "Temporary freeze of trading and messaging": "거래 및 메시지 전송 일시 동결",
   "Restore member to active standing (simple majority)": "멤버 활동 자격 복원(일반과반수)",
   "Cancel pending removal and restore account (simple majority)": "예정된 제명 취소 및 계정 복원(일반과반수)",
@@ -1804,9 +1803,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "대표 관리자 또는 리더의 호출 부호나 공개키를 입력해 주세요.",
   "The lead keeper or leader to remove: callsign or public key": "해임할 대표 관리자 또는 리더: 호출 부호 또는 공개키",
   "Enter the lead keeper or leader's callsign or pubkey...": "대표 관리자 또는 리더의 호출 부호나 공개키 입력...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "other": "잔액은 비공개예요: {name}님의 잔액을 볼 수 없어요. 이 투표가 시작되면 커뮤니티는 해당 멤버의 잔액과 부채를 기록하여 투표권이 있는 모든 멤버에게 공개해요. 제명될 경우, 현재 콩 {n}개를 보유한 공유 풀에 부채가 청구돼요."
-  },
   "Please enter a clear title for this decision.": "의사결정 제목을 명확히 입력해 주세요.",
   "Please provide a description and rationale.": "설명과 제안 이유를 입력해 주세요.",
   "Please enter a valid member callsign or 64-character public key.": "유효한 멤버 닉네임 또는 64자리 공개키를 입력해 주세요.",

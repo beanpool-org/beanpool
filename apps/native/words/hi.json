@@ -2972,7 +2972,6 @@
   "Post\u0004button: publish": "पोस्ट करें",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 पड़ोसियों को तुरंत क्रेडिट भेजने के लिए {ledger} टैब का उपयोग करें।",
   "Member\u0004what a Decision touches": "सदस्य",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "इस नोड से निष्कासन (66% विशेष बहुमत, 25% कोरम, 7-दिवसीय छूट अवधि)",
   "Temporary freeze of trading and messaging": "व्यापार और संदेश सेवा पर अस्थायी रोक",
   "Restore member to active standing (simple majority)": "सदस्य को पुनः सक्रिय स्थिति में बहाल करें (साधारण बहुमत)",
   "Cancel pending removal and restore account (simple majority)": "लंबित निष्कासन रद्द करें और खाता बहाल करें (साधारण बहुमत)",
@@ -3000,10 +2999,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "कृपया मुख्य व्यवस्थापक या प्रमुख का कॉलसाइन या सार्वजनिक कुंजी दर्ज करें।",
   "The lead keeper or leader to remove: callsign or public key": "हटाए जाने वाले मुख्य व्यवस्थापक या प्रमुख: कॉलसाइन या सार्वजनिक कुंजी",
   "Enter the lead keeper or leader's callsign or pubkey...": "मुख्य व्यवस्थापक या प्रमुख का कॉलसाइन या pubkey दर्ज करें...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "शेष राशियाँ निजी हैं: आप {name} का शेष नहीं देख सकते। जब यह वोट शुरू होता है, तो समुदाय उनके शेष और किसी भी ऋण को रिकॉर्ड करता है, और इसे उन सभी को दिखाता है जो इसमें वोट कर सकते हैं। यदि उन्हें हटा दिया जाता है, तो कॉमन्स पूल पर ऋण लगाया जाता है, जिसमें अभी {n} फली है।",
-    "other": "शेष राशियाँ निजी हैं: आप {name} का शेष नहीं देख सकते। जब यह वोट शुरू होता है, तो समुदाय उनके शेष और किसी भी ऋण को रिकॉर्ड करता है, और इसे उन सभी को दिखाता है जो इसमें वोट कर सकते हैं। यदि उन्हें हटा दिया जाता है, तो कॉमन्स पूल पर ऋण लगाया जाता है, जिसमें अभी {n} फलियाँ हैं।"
-  },
   "Missing Title": "शीर्षक दर्ज नहीं है",
   "Please enter a clear, concise title for this decision.": "कृपया इस निर्णय के लिए एक स्पष्ट, संक्षिप्त शीर्षक दर्ज करें।",
   "Missing Description": "विवरण दर्ज नहीं है",

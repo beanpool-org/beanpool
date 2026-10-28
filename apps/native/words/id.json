@@ -2849,7 +2849,6 @@
   "Post\u0004button: publish": "Pasang",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Gunakan tab {ledger} untuk mengirim kredit ke tetangga secara instan.",
   "Member\u0004what a Decision touches": "Anggota",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Pengeluaran dari node ini (mayoritas mutlak 66%, kuorum 25%, masa tenggang 7 hari)",
   "Temporary freeze of trading and messaging": "Pembekuan sementara transaksi dan perpesanan",
   "Restore member to active standing (simple majority)": "Pulihkan status aktif anggota (mayoritas sederhana)",
   "Cancel pending removal and restore account (simple majority)": "Batalkan penghapusan tertunda dan pulihkan akun (mayoritas sederhana)",
@@ -2877,9 +2876,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Masukkan callsign atau kunci publik pengurus utama atau pemimpin.",
   "The lead keeper or leader to remove: callsign or public key": "Pengurus utama atau pemimpin yang akan dihapus: callsign atau kunci publik",
   "Enter the lead keeper or leader's callsign or pubkey...": "Masukkan callsign atau pubkey pengurus utama atau pemimpin...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "other": "Saldo bersifat pribadi: kamu tidak dapat melihat saldo {name}. Saat pemungutan suara ini dimulai, komunitas mencatat saldo dan utang mereka, lalu menampilkannya kepada semua orang yang berhak memilih. Jika mereka dikeluarkan, utang tersebut akan dibebankan ke Pool Bersama, yang saat ini memiliki {n} kacang."
-  },
   "Missing Title": "Judul Belum Diisi",
   "Please enter a clear, concise title for this decision.": "Masukkan judul yang jelas dan ringkas untuk keputusan ini.",
   "Missing Description": "Deskripsi Belum Diisi",

@@ -39,7 +39,7 @@ import path from 'node:path';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, createPost as rawCreatePost, removePost, createGroup, getPosts,
-    exportSyncState, importRemoteState, setNodeRole, adminPruneUser, bumpPostsVersion,
+    exportSyncState, importRemoteState, setNodeRole, adminPruneUser, COMMUNITY_DECISION_ACTOR, bumpPostsVersion,
 } from './state-engine.js';
 import { wrapCreatePost } from './post-test-helper.js';
 
@@ -487,9 +487,9 @@ async function main(): Promise<void> {
     const gusRow = areaOf(gus);
     assert(purged.status === 200 && gusRow?.area_lat === null && gusRow?.area_lng === null && gusRow?.area_updated_at === null,
         `a member who deletes their account leaves no area behind (${purged.status})`);
-    attempt(() => adminPruneUser(hal.pk, owner.pk));
+    attempt(() => adminPruneUser(hal.pk, COMMUNITY_DECISION_ACTOR));
     const halRow = areaOf(hal);
-    assert(halRow?.area_lat === null && halRow?.area_lng === null && halRow?.area_updated_at === null, 'nor does a member an owner prunes');
+    assert(halRow?.area_lat === null && halRow?.area_lng === null && halRow?.area_updated_at === null, 'nor does a member the community removes');
     const halAgain = await setArea(hal, { lat: 30.3, lng: 40.4 });
     const gusAgain = await setArea(gus, { lat: 10.1, lng: 20.2 });
     assert(halAgain.status === 403 && gusAgain.status === 403 && areaOf(hal)?.area_lat === null && areaOf(gus)?.area_lat === null,

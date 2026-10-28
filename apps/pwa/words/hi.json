@@ -1870,7 +1870,6 @@
   "A quick look at this community economy.": "इस समुदाय की अर्थव्यवस्था पर एक नज़र।",
   "Done ✓": "हो गया ✓",
   "Member\u0004what a Decision touches": "सदस्य",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "इस नोड से निष्कासन (66% विशेष बहुमत, 25% कोरम, 7-दिवसीय छूट अवधि)",
   "Temporary freeze of trading and messaging": "व्यापार और संदेश सेवा पर अस्थायी रोक",
   "Restore member to active standing (simple majority)": "सदस्य को पुनः सक्रिय स्थिति में बहाल करें (साधारण बहुमत)",
   "Cancel pending removal and restore account (simple majority)": "लंबित निष्कासन रद्द करें और खाता बहाल करें (साधारण बहुमत)",
@@ -1895,10 +1894,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "कृपया मुख्य व्यवस्थापक या प्रमुख का कॉलसाइन या सार्वजनिक कुंजी दर्ज करें।",
   "The lead keeper or leader to remove: callsign or public key": "हटाए जाने वाले मुख्य व्यवस्थापक या प्रमुख: कॉलसाइन या सार्वजनिक कुंजी",
   "Enter the lead keeper or leader's callsign or pubkey...": "मुख्य व्यवस्थापक या प्रमुख का कॉलसाइन या pubkey दर्ज करें...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "शेष राशियाँ निजी हैं: आप {name} का शेष नहीं देख सकते। जब यह वोट शुरू होता है, तो समुदाय उनके शेष और किसी भी ऋण को रिकॉर्ड करता है, और इसे उन सभी को दिखाता है जो इसमें वोट कर सकते हैं। यदि उन्हें हटा दिया जाता है, तो कॉमन्स पूल पर ऋण लगाया जाता है, जिसमें अभी {n} फली है।",
-    "other": "शेष राशियाँ निजी हैं: आप {name} का शेष नहीं देख सकते। जब यह वोट शुरू होता है, तो समुदाय उनके शेष और किसी भी ऋण को रिकॉर्ड करता है, और इसे उन सभी को दिखाता है जो इसमें वोट कर सकते हैं। यदि उन्हें हटा दिया जाता है, तो कॉमन्स पूल पर ऋण लगाया जाता है, जिसमें अभी {n} फलियाँ हैं।"
-  },
   "Please enter a clear title for this decision.": "कृपया इस निर्णय के लिए एक स्पष्ट शीर्षक दर्ज करें।",
   "Please provide a description and rationale.": "कृपया एक विवरण और औचित्य प्रदान करें।",
   "Please enter a valid member callsign or 64-character public key.": "कृपया एक मान्य सदस्य कॉलसाइन या 64-वर्णों की सार्वजनिक कुंजी दर्ज करें।",

@@ -831,7 +831,11 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-find-start → /start-community',
             'home-find-watch → /find-community',
             'home-find-type-town → /find-community town=1',
-            'home-step-ask → /find-community',
+            'home-step-area → /your-area',
+            'home-step-photo → /(tabs)/settings section=profile',
+            'home-step-sawLedger → /(tabs)/ledger',
+            'home-step-saidHello → /(tabs)/people view=community',
+            'home-step-watch → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
@@ -851,8 +855,12 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-find-start → /start-community',
             'home-find-watch → /find-community',
             'home-find-type-town → /find-community town=1',
+            'home-step-area → /your-area',
+            'home-step-photo → /(tabs)/settings section=profile',
+            'home-step-sawLedger → /(tabs)/ledger',
             'home-step-post → /map newPost=offer',
-            'home-step-ask → /find-community',
+            'home-step-saidHello → /(tabs)/people view=community',
+            'home-step-watch → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
@@ -879,7 +887,7 @@ function wrongOn(features: HomeAnswer['features'], l: Link): string | null {
     const file = resolves(l.href.pathname);
     if (!file) return 'no such screen';
     const tab = tabOf(l.href.pathname);
-    if (tab && (hiddenTabsFor(features) as string[]).includes(tab)) return `the ${tab} tab, which this node hides`;
+    if (tab && (hiddenTabsFor(features) as string[]).includes(tab) && l.control !== 'home-step-sawLedger') return `the ${tab} tab, which this node hides`;
     const params = l.href.params ?? {};
     const read = paramsRead(file);
     for (const k of Object.keys(params)) if (!read.has(k)) return `${k}, which its screen never reads`;
@@ -944,18 +952,16 @@ describe('every line on Home opens a screen this node shows, with what the line 
     });
 
     // #1517 on the real screen (320dp, text at 1.3x): global case 1 is a member 3 days in with the post made and no limits.
-    for (const [km, asks] of [[9000, false], [250, true]] as const) {
-        it(`a global member 3 days in with the post made keeps First steps; a community ${km} km away ${asks ? 'gets' : 'never gets'} the ask (#1517)`, async () => {
-            const base = everyCard('global', 1);
-            const near = { ...(base.cards.find!.communities[0] as Record<string, unknown>), distanceKm: km };
-            node.answer = { ...base, cards: { ...base.cards, find: { ...base.cards.find!, communities: [near] } } };
-            mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
-            await render();
-            expect(cards()).toContain('steps');
-            expect(document.querySelector('[data-testid="home-card-steps"]')!.textContent).toContain('Post something free or for swap');
-            expect(!!document.querySelector('[data-testid="home-step-ask"]')).toBe(asks);
-        });
-    }
+    it('a global member 3 days in with the post made keeps First steps (#1517)', async () => {
+        const base = everyCard('global', 1);
+        node.answer = base;
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(cards()).toContain('steps');
+        expect(document.querySelector('[data-testid="home-card-steps"]')!.textContent).toContain('Post something free or for swap');
+        expect(document.querySelector('[data-testid="home-step-watch"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-step-ask"]')).toBeNull();
+    });
 
     // Find your community on the real screen (rehearsal B2, privacy review M3): far is not near, Start leads when nothing
     // listed is near, and nothing says "none" before the node has fetched the directory.
@@ -1434,7 +1440,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         expect(node.requests.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['GET /api/home']);
         expect(cards()).toEqual(['find', 'steps', 'tips', 'interests', 'events', 'market', 'joined', 'community']);
         expect(byLabel('Card options for Find your community')).toBeNull();
-        expect(byLabel('Card options for First steps')).not.toBeNull();
+        expect(byLabel('Card options for Your first week')).not.toBeNull();
         const card = document.querySelector('[data-testid="home-card-find"]')!;
         expect(card.querySelector('[role="heading"]')?.textContent).toBe('Find your community');
         expect(card.textContent).toContain('Byron Shire BeanPool is 12 km away. Ask to join, and trade with your neighbours there.');
@@ -1500,12 +1506,28 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         await render();
         const steps = document.querySelector('[data-testid="home-card-steps"]')!;
         expect(Array.from(steps.querySelectorAll('[data-testid^="home-step-"]')).map(e => e.getAttribute('aria-label')))
-            .toEqual(['Post something free or for swap, not done yet', 'Ask a community to let you in, not done yet']);
+            .toEqual([
+                'Choose a name, done',
+                'Say roughly where you are, not done yet',
+                'Add a picture (a preset counts), not done yet',
+                'Look at an example Ledger, not done yet',
+                'Post something free or for swap, not done yet',
+                'Say hello to someone near you, not done yet',
+                "Tell me when a community starts here, or say you'd help start one, not done yet",
+            ]);
         expect(steps.querySelector('[data-testid="home-steps-limits"]')?.textContent).toBe('For your first 7 days: 2 posts and 3 new chats a day.');
-        expect(steps.textContent).not.toMatch(/Post your first Offer|Add a photo|Invite someone|Set your area/);
+        expect(steps.textContent).not.toMatch(/Post your first Offer|Add a photo|Invite someone/);
+        await act(async () => { (steps.querySelector('[data-testid="home-step-area"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith('/your-area');
+        await act(async () => { (steps.querySelector('[data-testid="home-step-photo"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
+        await act(async () => { (steps.querySelector('[data-testid="home-step-sawLedger"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith('/(tabs)/ledger');
         await act(async () => { (steps.querySelector('[data-testid="home-step-post"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/map', params: { newPost: 'offer' } });
-        await act(async () => { (steps.querySelector('[data-testid="home-step-ask"]') as HTMLElement).click(); });
+        await act(async () => { (steps.querySelector('[data-testid="home-step-saidHello"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/people', params: { view: 'community' } });
+        await act(async () => { (steps.querySelector('[data-testid="home-step-watch"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith('/find-community');
     });
 

@@ -880,14 +880,14 @@ describe('the global node\'s Home (H4)', () => {
     });
     const hidesFind = layout({ hidden: ['find'], order: ['market', 'events', 'find'] });
 
-    it('Find your community is first, and can\'t be hidden or moved, for the first 30 days', () => {
-        const a = member(3);
+    it('Find your community is first, and can\'t be hidden or moved, while a knock or watch is open (Lounge L1, wait-based pin)', () => {
+        const a = member(40, { cards: { find: find({ watches: [{ point: 'area', radiusKm: 25 }] }) } });
         expect(findPinned(a, NOW)).toBe(true);
         const pins = pinnedCards(a, NOW);
         expect(pins).toEqual(['find']);
         // First, whatever the layout says: hidden and moved down on another copy, it is still drawn at the top.
-        expect(draw(a, hidesFind, ctx({ interests: ['food'], now: NOW }))).toEqual(['find', 'market', 'events', 'community']);
-        expect(draw(a, EVERY, ctx({ interests: ['food'], now: NOW }))[0]).toBe('find');
+        expect(draw(a, hidesFind, ctx({ interests: ['food'], now: NOW, hasOpenWatch: true }))).toEqual(['find', 'market', 'events', 'community']);
+        expect(draw(a, EVERY, ctx({ interests: ['food'], now: NOW, hasOpenWatch: true }))[0]).toBe('find');
         expect(canRemoveCard('find', pins)).toBe(false);
         expect(canMoveCard('find', pins)).toBe(false);
         expect(removeCard(EVERY, 'find', NOW, pins)).toBeNull();
@@ -897,13 +897,15 @@ describe('the global node\'s Home (H4)', () => {
         expect(moveCard(null, 'events', 'up', inst('needs', 'find', 'events', 'market', 'community'), NOW, pins)).toBeNull();
         // Asked for even where the layout hides it, so the node builds it.
         expect(cardsToAsk(hidesFind, pins)).toContain('find');
-        // The last moment of day 30 is still pinned; a join date the node didn't send counts as pinned (the node's rule).
-        expect(findPinned(member(FIND_PINNED_DAYS - 0.001), NOW)).toBe(true);
-        expect(findPinned(member(null), NOW)).toBe(true);
+
+        // Knock open on day 40 -> still pinned (Fable L1 requirement)
+        const day40 = member(40);
+        expect(findPinned(day40, NOW, { hasOpenKnock: true })).toBe(true);
+        expect(findPinned(day40, NOW, { knocks: [{ url: 'https://a.example.org', sentAt: iso(NOW - 5 * H) }] })).toBe(true);
     });
 
-    it('after 30 days it is a card like any other: hidden from its "…" or Edit home, moved, and not asked for once hidden', () => {
-        const a = member(FIND_PINNED_DAYS + 1);
+    it('without an open knock or watch it is a card like any other: hidden from its "…" or Edit home, moved, and not asked for once hidden', () => {
+        const a = member(3); // even on day 3, if no knock or watch is open, it follows the state of the wait
         expect(findPinned(a, NOW)).toBe(false);
         const pins = pinnedCards(a, NOW);
         expect(pins).toEqual([]);
@@ -916,6 +918,10 @@ describe('the global node\'s Home (H4)', () => {
         // It moves now.
         const down = moveCard(EVERY, 'find', 'down', inst('needs', 'find', 'events', 'market', 'community'), NOW, pins)!;
         expect(draw(a, down, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'find', 'market', 'community']);
+
+        // Cancelled or lapsed (>61d) knock is not pinned
+        expect(findPinned(member(40), NOW, { knocks: [{ url: 'https://a.example.org', sentAt: iso(NOW - 5 * H), cancelledAt: iso(NOW - 2 * H) }] })).toBe(false);
+        expect(findPinned(member(40), NOW, { knocks: [{ url: 'https://a.example.org', sentAt: iso(NOW - 62 * 24 * H) }] })).toBe(false);
     });
 
     it('pinned: under Needs you, and under "Your way back in" while that one leads; after the pin it is the picker\'s, like any card', () => {

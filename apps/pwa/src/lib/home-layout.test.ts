@@ -231,8 +231,12 @@ describe('what is drawn and asked', () => {
     });
 
     it('a pinned Find your community stands under Needs you, and under "Your way back in" while that one leads', () => {
-        const answer = { profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) } };
+        const answer = { profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) }, cards: { find: { watches: [{ place: 'byron' }] } } };
         expect(pinnedCards(answer, NOW)).toEqual(['find']);
+        // Knock open on day 40 -> still pinned (Fable L1 requirement)
+        expect(pinnedCards({ profile: 'global', me: { joinedAt: iso(NOW - 40 * 24 * H) } }, NOW, { hasOpenKnock: true })).toEqual(['find']);
+        // Without knock or watch, Find is not pinned
+        expect(pinnedCards({ profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) } }, NOW)).toEqual([]);
         expect(cardOrder(starterLayout(), ['find']).map(c => c.id).slice(0, 3)).toEqual(['needs', 'safety', 'find']);
         // A newcomer's Home (Getting started alone): the pin under Needs you, then the card.
         expect(cardOrder(null, ['find']).map(c => c.id)).toEqual(['needs', 'find', 'start', 'community']);

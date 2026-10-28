@@ -122,6 +122,18 @@ export function communityAnswersLine(answers?: 'week' | 'slow' | 'none' | null):
 }
 
 /**
+ * How long after a knock its community could still say yes: the node keeps it open 30 days and an invite made for
+ * it lasts 30 days, so no status read can say approved after that; and a day for the clocks.
+ */
+export const KNOCK_ANSWERABLE_DAYS = 61;
+
+/** Whether a remembered knock could still be answered at `now` (sent within {@link KNOCK_ANSWERABLE_DAYS}). */
+export function knockStillAnswerable(k: { sentAt?: unknown }, now: number = Date.now()): boolean {
+    const at = typeof k.sentAt === 'string' ? Date.parse(k.sentAt) : NaN;
+    return Number.isFinite(at) && now - at < KNOCK_ANSWERABLE_DAYS * 86_400_000;
+}
+
+/**
  * How long after a community's last push to the directory a row says "Not answering lately" (design §2.3): a node pushes
  * every 12 hours by default, so 36 hours is three missed pushes. The directory stops showing a row after 7 days.
  */

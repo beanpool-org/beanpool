@@ -54,7 +54,7 @@ import {
     writePhoneOnlySent, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
-import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
+import { rememberedKnocks, knockStillAnswerable, type RememberedKnock } from '../../utils/knock';
 import { getCachedNodeProfile, hiddenTabsFor } from '../../utils/node-profile';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
@@ -207,11 +207,19 @@ export default function HomeScreen() {
     /** On the global node: the place the last read was measured from (the phone's, where allowed), and this phone's knocks. */
     const [place, setPlace] = useState<HomePoint | null>(null);
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
+    const knocksRef = useRef<RememberedKnock[]>([]);
+    knocksRef.current = knocks;
     /** The Tips card's record for this account (@beanpool/core home-tips.ts); null: not read yet, so no card. */
     const [tips, setTips] = useState<TipsRecord | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
     const roleRef = useRef<HomeRole>(undefined);
     roleRef.current = role;
+
+    const currentPins = useCallback((ans: HomeAnswer | null | undefined, at: number = Date.now()) => {
+        const hasOpenKnock = knocksRef.current.some(k => !k.cancelledAt && knockStillAnswerable(k, at));
+        const hasOpenWatch = (ans?.cards?.find?.watches?.length ?? 0) > 0;
+        return pinnedCards(ans, at, { hasOpenKnock, hasOpenWatch });
+    }, []);
 
     const identityRef = useRef(identity);
     identityRef.current = identity;
@@ -648,9 +656,9 @@ export default function HomeScreen() {
         if (!id) return;
         keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
         setHint(false);
-        changeLayout(removeCard(layoutRef.current, 'tips', Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        changeLayout(removeCard(layoutRef.current, 'tips', Date.now(), currentPins(storedRef.current?.answer)));
         AccessibilityInfo.announceForAccessibility(removedLine(cardName('tips')));
-    }, [keepTips, changeLayout]);
+    }, [keepTips, changeLayout, currentPins]);
     // Tips added from the picker, or Reset to defaults while they were off: the tips start over from the first one.
     const onTipsOn = useCallback(() => {
         const id = identityRef.current;
@@ -671,7 +679,7 @@ export default function HomeScreen() {
     }, []);
     const addNow = useCallback((type: string, settings?: Record<string, unknown>) => {
         const ans = storedRef.current?.answer;
-        const added = addCard(layoutRef.current, type, Date.now(), { settings, pinned: pinnedCards(ans, Date.now()) });
+        const added = addCard(layoutRef.current, type, Date.now(), { settings, pinned: currentPins(ans) });
         setAddOpen(false);
         setSettingsFor(null);
         if (!added.ok) {
@@ -686,7 +694,7 @@ export default function HomeScreen() {
         changeLayout(added.layout, { reread: type !== 'sky' });
         scrollRef.current?.scrollTo({ y: 0, animated: true });
         AccessibilityInfo.announceForAccessibility(addedLine(cardLabelName({ type, settings }, ans?.profile)));
-    }, [changeLayout, onTipsOn, noteSaveSearch]);
+    }, [changeLayout, onTipsOn, noteSaveSearch, currentPins]);
     const onPick = useCallback((row: PickerRow) => {
         if (!row.hasSettings) { addNow(row.type); return; }
         setAddOpen(false);
@@ -695,9 +703,9 @@ export default function HomeScreen() {
     const onRemoveCard = useCallback((c: HomeCardInstance) => {
         if (c.type === 'tips') { onTipsDontShow(); return; }
         setHint(false);
-        changeLayout(removeCard(layoutRef.current, c.id, Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        changeLayout(removeCard(layoutRef.current, c.id, Date.now(), currentPins(storedRef.current?.answer)));
         AccessibilityInfo.announceForAccessibility(removedLine(cardLabelName(c, storedRef.current?.answer.profile)));
-    }, [changeLayout, onTipsDontShow]);
+    }, [changeLayout, onTipsDontShow, currentPins]);
     // "Save this search to Home" on the Market (Marty, 7 Oct): the search comes as the `saveSearch` param. Once Home knows
     // the member's list, the saved search's sheet opens with it filled in, Add to Home its last button; or Home says why
     // not (the same search there, five there, Home full). Read once, then the param is cleared.
@@ -803,13 +811,15 @@ export default function HomeScreen() {
     const answer = stored?.answer ?? null;
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
-    const knocked = knocks.length > 0;
+    const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
+    const hasOpenWatch = (answer?.cards?.find?.watches?.length ?? 0) > 0;
+    const knocked = hasOpenKnock;
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
     const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView, place, tourOver }) : [];
-    // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
-    const pins = pinnedCards(answer, now);
+    // Find your community's pin (the global node, while a knock or watch is open): no "…", no move, at the top.
+    const pins = currentPins(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
     useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);
     const word = answer && stored ? safetyWord(answer, stored.asked.split(',')) : null;
@@ -838,7 +848,7 @@ export default function HomeScreen() {
         setTourOver(true);
         setTourProgress(null);
         const ans = storedRef.current?.answer;
-        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current, { pinned: pinnedCards(ans, Date.now()) }), { reread: true });
+        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current, { pinned: currentPins(ans) }), { reread: true });
         if (kind === 'done') {
             setHint(false);
             void markSeenOnce(whose, 'hint');
@@ -847,7 +857,7 @@ export default function HomeScreen() {
             void markSeenOnce(whose, 'hint');
         }
         if (u && stillOnPhone(whose)) void saveTourRecord(u, id, tourRecord(kind));
-    }, [url, changeLayout]);
+    }, [url, changeLayout, currentPins]);
     const tourRestart = useCallback(() => {
         const id = identityRef.current;
         const u = storedRef.current?.url ?? url;
@@ -856,17 +866,17 @@ export default function HomeScreen() {
         // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
         const ans = storedRef.current?.answer;
         if (canTailor(ans) && layoutRef.current) {
-            const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+            const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: currentPins(ans) });
             if (added.ok) changeLayout(added.layout);
         }
         if (u) void saveTourRecord(u, id, tourRecord('open'));
         startTour(id.publicKey, 0);
-    }, [url, changeLayout]);
+    }, [url, changeLayout, currentPins]);
     const tourAddChip = useCallback((type: string) => {
         const ans = storedRef.current?.answer;
-        const added = addCard(layoutRef.current, type, Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+        const added = addCard(layoutRef.current, type, Date.now(), { pinned: currentPins(ans) });
         if (added.ok) changeLayout(added.layout, { reread: true });
-    }, [changeLayout]);
+    }, [changeLayout, currentPins]);
     const chipsKey = chips.join(',');
     useEffect(() => {
         if (!answer?.me || !tailor) { lendTourHome(null); return; }

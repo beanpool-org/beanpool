@@ -21,6 +21,7 @@
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards, t, word,
+    knockStillAnswerable,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
 import { drawnToolCardTypes } from '../tools/cards';
@@ -242,21 +243,42 @@ export function readMarkSent(raw: unknown): MarkSent[] {
     return out.slice(-MARK_SENT_MAX);
 }
 
-/** Whether `find` is pinned for this member: on the global node, in their first 30 days (or while their join date is unknown). */
-export function findPinned(answer: Pick<FrameAnswer, 'profile' | 'me'>, now: number): boolean {
+/**
+ * Whether `find` is pinned for this member: on the global node, while a knock or place watch is open,
+ * not by the calendar (Lounge L1, DESIGN-global-lounge-fable.md §0.3, §6 L1: "follows the state of the wait, not the calendar").
+ */
+export function findPinned(
+    answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'>,
+    now: number,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+): boolean {
     if (answer.profile !== 'global') return false;
-    const joined = answer.me?.joinedAt ? Date.parse(answer.me.joinedAt) : NaN;
-    return !Number.isFinite(joined) || now - joined < FIND_PINNED_DAYS * DAY_MS;
+    const hasOpenKnock = typeof ctx === 'boolean'
+        ? ctx
+        : Boolean(ctx?.hasOpenKnock ?? ctx?.knocked ?? (ctx?.knocks ? ctx.knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now)) : false));
+    const findCard = answer.cards?.find as { watches?: unknown[] | null } | undefined;
+    const hasOpenWatch = typeof ctx === 'object' && typeof ctx?.hasOpenWatch === 'boolean'
+        ? ctx.hasOpenWatch
+        : Boolean(findCard?.watches && findCard.watches.length > 0);
+    return hasOpenKnock || hasOpenWatch;
 }
 
 /** The cards pinned for this reader now: they can't be removed or moved, and stand at the top (only `find` has a pin). */
-export function pinnedCards(answer: Pick<FrameAnswer, 'profile' | 'me'> | null | undefined, now: number): string[] {
-    return answer && findPinned(answer, now) ? ['find'] : [];
+export function pinnedCards(
+    answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined,
+    now: number,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+): string[] {
+    return answer && findPinned(answer, now, ctx) ? ['find'] : [];
 }
 
 /** The pins to ask by: the answer's; with none yet, `find` counts as pinned, so it is asked until an answer says. */
-export function askPinned(answer: Pick<FrameAnswer, 'profile' | 'me'> | null | undefined, now: number): string[] {
-    return answer ? pinnedCards(answer, now) : ['find'];
+export function askPinned(
+    answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined,
+    now: number,
+    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+): string[] {
+    return answer ? pinnedCards(answer, now, ctx) : ['find'];
 }
 
 /** The starter set as a Home never saved (DESIGN-getting-started-fable.md §1): after the tour, for a visitor, after Reset. */

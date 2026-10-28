@@ -1,6 +1,6 @@
 /**
  * The peek ticket (front doors S6, scratch/fable-design/DESIGN-entry-points-fable.md §2.5 C and §3.4, Marty's "all of
- * Fable's picks", 27 Oct 2026): a member shares ONE listing, event or Pulse post outside the community, and whoever holds
+ * Fable's picks", 27 Oct 2026): a member shares ONE listing or event outside the community, and whoever holds
  * the link reads that one post under the visitors' rules for seven days.
  *
  * ## What a ticket holder reads, and nothing else

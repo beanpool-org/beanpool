@@ -1,6 +1,6 @@
 /**
  * The peek ticket (front doors S6, scratch/fable-design/DESIGN-entry-points-fable.md §2.5 C, §3.4): a member shares ONE
- * listing, event or Pulse post outside their community, and whoever holds the link reads that one post under the
+ * listing or event outside their community, and whoever holds the link reads that one post under the
  * visitors' rules (the engine's guestPost: the listing and its rough area, nobody in it) for seven days, or until the
  * member stops sharing it or the community turns outside sharing off.
  *

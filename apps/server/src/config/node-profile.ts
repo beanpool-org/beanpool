@@ -184,7 +184,7 @@ export interface ProfileSwitches {
      *  runs on members writing to each other, so a direct message arrives as before. The operator's switch in Settings
      *  (`dmRequests`) is this switch's override. Off again, a request still waiting is an ordinary chat. */
     dmRequests: boolean;
-    /** A member may share one listing, event or Pulse post outside the community: a link that opens that post, under the
+    /** A member may share one listing or event outside the community: a link that opens that post, under the
      *  visitors' rules (the engine's guestPost), to whoever holds it, for seven days or until the member stops it
      *  (engine/peek-tickets.ts; front doors S6, DESIGN-entry-points-fable.md §3.4, Marty 2026-10-27). On (a local
      *  community): the owners may turn it off under How this community works ("Members may share listings outside the

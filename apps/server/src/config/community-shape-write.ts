@@ -146,7 +146,7 @@ const NOTICE = {
     dmOff: word("Your community's owners changed how it works: every message now arrives straight away."),
     decisionsOn: word("Your community's owners changed how it works: community votes are on."),
     decisionsOff: word("Your community's owners changed how it works: community votes are off; the moderators look after things."),
-    shareOutsideOn: word("Your community's owners changed how it works: you can share a listing, event or Pulse post outside the community for 7 days."),
+    shareOutsideOn: word("Your community's owners changed how it works: you can share a listing or an event outside the community for 7 days."),
     shareOutsideOff: word("Your community's owners changed how it works: posts are no longer shared outside the community, and every link shared outside has stopped."),
     probationOn: word("Your community's owners changed how it works: new accounts have limits for their first days."),
     probationOff: word("Your community's owners changed how it works: new accounts no longer have limits for their first days."),

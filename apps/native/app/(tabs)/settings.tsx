@@ -2383,6 +2383,17 @@ export default function SettingsScreen() {
                         {/* The sign-in row, second, once the key vault has answered (the words above never wait for it). */}
                         {waysBack && !protectionLoading && protectionPanel}
 
+                        {/* Every place a copy of this key is kept, as far as this phone can ask, since when, and removing
+                            them (vault rethink VR1, design §5.1): app/ways-back.tsx. In every build: a community's copies
+                            are listed there too. */}
+                        <Pressable style={[styles.menuBtn, { borderBottomWidth: 0, minHeight: 48 }]} onPress={() => router.push('/ways-back')} accessibilityRole="button">
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>{t('Where your account can be brought back from')}</Text>
+                                <Text style={styles.menuSub}>{t('Every copy, since when, and removing them')}</Text>
+                            </View>
+                            <Text style={styles.menuChevron} accessibilityElementsHidden importantForAccessibility="no">›</Text>
+                        </Pressable>
+
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>
                                 <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20 }}>

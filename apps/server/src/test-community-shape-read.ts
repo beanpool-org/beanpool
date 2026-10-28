@@ -18,8 +18,9 @@
  *      a backups token, a member and nobody can't; the answer is readShape's and is never cached; and in five states the
  *      real routes (a member's invite, a stranger's request to join, a visitor's Market) do what the shape says.
  *   5. The answers the design names are unchanged: GET /api/node/config, /api/community/info, /api/community/me, /api/home
- *      and /api/local/admin/known-floor answer the same before and after the shape is read, and the members' features
- *      carry nothing new (`knownFloor` waits on Marty's answer to the design's Q7).
+ *      and /api/local/admin/known-floor answer the same before and after the shape is read, and a member's features
+ *      carry `knownFloor` and nothing else new. Only a reader who reads as a member is told it: a visitor, a signed
+ *      non-member, a suspended member and a disabled account are not (5b), on /api/community/me and /api/home.
  *   6. A standby answers from its copy of the main server's settings, never its own rows, and says it is a standby; with
  *      no copy yet it says so and reads its own, which is what a promotion would run with.
  *
@@ -616,6 +617,61 @@ async function main(): Promise<void> {
         assert(isDeepStrictEqual(Object.keys(after.homeFeatures ?? {}).sort(), want), `${label}: and so do Home's`);
         assert(after.nodeConfig?.acceptKnocks === np.getProfileSwitches().knocks && after.nodeConfig?.door === getDoor(),
             `${label}: node/config still answers acceptKnocks and door (${after.nodeConfig?.acceptKnocks}, ${after.nodeConfig?.door})`);
+    }
+    clearState();
+
+    // ── 5b. Who is told the known floor ────────────────────────────────────────────────────────
+    // featuresFor adds `knownFloor` for a reader who READS as a member (readsAsMember), never for isNodeMember's looser
+    // test, which a suspended or disabled account passes: the same reads, as each kind of reader, in a community that
+    // refuses an unsigned Home and in one that shows visitors the listings.
+    console.log('\n── 5b. knownFloor reaches a member who reads as one, and nobody else, on /api/community/me and /api/home ──');
+    const suspended = makeMember('Suspended');
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(suspended.pk);
+    const disabled = makeMember('Disabled');
+    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(disabled.pk);
+    const FLOOR_VIEWS: [string, State['overrides']][] = [
+        ['a community that refuses an unsigned Home', {}],
+        ['a community that shows visitors the listings', { guestListingsOnly: true }],
+    ];
+    for (const [view, overrides] of FLOOR_VIEWS) {
+        setState({ profile: 'local', overrides, rows: 'none', preview: false, heldBack: 'named', hatch: '', ledger: false });
+        const guestView = overrides.guestListingsOnly === true;
+        const nodeKeys = Object.keys({ ...np.getNodeFeatures(), door: getDoor() }).sort();
+        assert(np.getNodeFeatures().beans && confirmationDialOn(db) && knownFloor(db) === 1000, `${view}: Beans and the dial are on, so a member has a floor to be told`);
+
+        // A reader who reads as a member: the floor, and the node's own features beside it.
+        for (const path of ['/api/community/me', '/api/home']) {
+            const r = await call('GET', sam, path);
+            assert(r.status === 200 && r.body?.features?.knownFloor === 1000
+                && isDeepStrictEqual(Object.keys(r.body.features).sort(), [...nodeKeys, 'knownFloor'].sort()),
+                `${view}: an active member's ${path} carries knownFloor 1000 beside the node's features (${show(r)})`);
+        }
+
+        // A reader who does not: no knownFloor, and no member-only field of any kind (the node's own keys, the visitors' own set).
+        const readers: [string, Id | null, number, number][] = [
+            // [who, key, /api/community/me's status, /api/home's status]
+            ['a visitor with no key', null, 401, guestView ? 200 : 401],
+            ['a signed non-member', stranger, 403, guestView ? 200 : 403],
+            ['a suspended member', suspended, 200, 200],
+            ['a disabled account', disabled, 200, 200],
+        ];
+        for (const [who, id, meStatus, homeStatus] of readers) {
+            const me = await call('GET', id, '/api/community/me');
+            const home = await call('GET', id, '/api/home');
+            assert(me.status === meStatus && home.status === homeStatus, `${view}: ${who}: /api/community/me answers ${meStatus} and /api/home ${homeStatus} (${me.status}, ${home.status})`);
+            for (const [path, r] of [['/api/community/me', me], ['/api/home', home]] as const) {
+                const features = r.body?.features;
+                if (r.status !== 200) {
+                    assert(features === undefined, `${view}: ${who}: a refused ${path} carries no features (${show(r)})`);
+                } else {
+                    assert(features && !('knownFloor' in features) && isDeepStrictEqual(Object.keys(features).sort(), nodeKeys),
+                        `${view}: ${who}: ${path} carries the node's features and no knownFloor (${Object.keys(features ?? {}).sort().join(', ')})`);
+                }
+            }
+            if (home.status === 200 && id && (who === 'a suspended member' || who === 'a disabled account')) {
+                assert(home.body?.me?.standing === 'suspended', `${view}: ${who}: Home calls them suspended, the visitors' cards (${home.body?.me?.standing})`);
+            }
+        }
     }
     clearState();
 

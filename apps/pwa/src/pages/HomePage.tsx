@@ -944,7 +944,7 @@ function CommunityBody({
                 <button
                     type="button"
                     onClick={onOpenShape}
-                    className="w-full text-left p-0 mb-3 bg-transparent border-none cursor-pointer flex items-center justify-between gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+                    className="w-full min-h-[44px] text-left p-0 mb-3 bg-transparent border-none cursor-pointer flex items-center justify-between gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
                     data-testid="home-community-shape-summary"
                 >
                     <span className="break-words">{shapeSummary}</span>

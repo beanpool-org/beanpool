@@ -3491,6 +3491,146 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         expect(asideText.className).toContain('break-words');
         expect(asideText.className).toContain('text-right');
     });
+
+    describe('Use the phone app card gating (front doors S4)', () => {
+        it('local profile: a new member does not see the card on day one; member past a week does; member with a post does', async () => {
+            const oneDayAgo = new Date(Date.now() - 1 * 86_400_000).toISOString();
+            const localNewMember = answer({
+                profile: 'local',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: null,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(localNewMember));
+            const { unmount: unmount1 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            unmount1();
+
+            const localPostedMember = answer({
+                profile: 'local',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: null,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: true,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(localPostedMember));
+            const { unmount: unmount2 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+            unmount2();
+
+            const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000).toISOString();
+            const localWeekOldMember = answer({
+                profile: 'local',
+                me: {
+                    joinedAt: eightDaysAgo,
+                    isKeeper: false,
+                    probation: null,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(localWeekOldMember));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+        });
+
+        it('global profile: a new member does not see the card on day one; member past a week does; member with a post does', async () => {
+            const oneDayAgo = new Date(Date.now() - 1 * 86_400_000).toISOString();
+            const globalNewMember = answer({
+                profile: 'global',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: {
+                        rules: 'ordinary',
+                        keptPosts: 0,
+                        keptPostsNeeded: 3,
+                        ageEndsAt: null,
+                        endsWhen: { hours: 72, keptPosts: 3 },
+                    } as any,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalNewMember));
+            const { unmount: unmount1 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.queryByTestId('use-phone-app-card')).toBeNull();
+            unmount1();
+
+            const globalPostedMember = answer({
+                profile: 'global',
+                me: {
+                    joinedAt: oneDayAgo,
+                    isKeeper: false,
+                    probation: {
+                        rules: 'ordinary',
+                        keptPosts: 1,
+                        keptPostsNeeded: 3,
+                        ageEndsAt: null,
+                        endsWhen: { hours: 72, keptPosts: 3 },
+                    } as any,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalPostedMember));
+            const { unmount: unmount2 } = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+            unmount2();
+
+            const eightDaysAgo = new Date(Date.now() - 8 * 86_400_000).toISOString();
+            const globalWeekOldMember = answer({
+                profile: 'global',
+                me: {
+                    joinedAt: eightDaysAgo,
+                    isKeeper: false,
+                    probation: {
+                        rules: 'ordinary',
+                        keptPosts: 0,
+                        keptPostsNeeded: 3,
+                        ageEndsAt: null,
+                        endsWhen: { hours: 72, keptPosts: 3 },
+                    } as any,
+                    interests: ['arts'],
+                    area: null,
+                    firstOffer: false,
+                    standing: 'member',
+                    tour: TOUR_ENDED,
+                },
+            });
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalWeekOldMember));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(screen.getByTestId('use-phone-app-card')).toBeInTheDocument();
+        });
+    });
 });
 
 

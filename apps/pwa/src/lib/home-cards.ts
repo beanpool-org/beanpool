@@ -805,3 +805,25 @@ export function skyOf(answer: Pick<HomeAnswer, 'me' | 'cards'>, inst: Pick<HomeC
     const place = skyPlaceFor(readSkySettings(inst.settings), { community: answer.cards.community?.place, member: answer.me?.area });
     return place ? skyToday(place, now) : null;
 }
+
+/**
+ * Whether the "Use the phone app" card is due on Home (front doors S4):
+ * shown after the first post or a week (when the one-way-back card already comes back),
+ * until dismissed by the member.
+ */
+export function usePhoneAppCardDue({
+    dismissed,
+    keptPosts,
+    weekOverAt,
+    now = Date.now(),
+}: {
+    dismissed: boolean;
+    keptPosts: number;
+    weekOverAt: number | null;
+    now?: number;
+}): boolean {
+    if (dismissed) return false;
+    if (keptPosts >= 1) return true;
+    if (weekOverAt !== null && now >= weekOverAt) return true;
+    return false;
+}

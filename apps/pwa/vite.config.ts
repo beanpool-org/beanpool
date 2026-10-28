@@ -77,13 +77,18 @@ export default defineConfig({
             selfDestroying: true, // Disable service worker until offline caching is properly configured
             includeAssets: ['favicon.svg'],
             manifest: {
-                name: 'BeanPool — Federated Mesh',
+                name: 'BeanPool',
                 short_name: 'BeanPool',
                 description: 'Local-first independent community marketplace',
                 theme_color: '#0a0a0a',
                 background_color: '#0a0a0a',
                 display: 'standalone',
                 start_url: '/',
+                related_applications: [
+                    { platform: 'play', id: 'org.beanpool.pillar' },
+                    { platform: 'itunes', id: '6761870086' },
+                ],
+                prefer_related_applications: false,
                 icons: [
                     {
                         src: '/icon-192x192.png',

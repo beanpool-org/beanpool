@@ -32,6 +32,9 @@
         root.classList.add('light-theme');
     }
     root.style.colorScheme = theme;
+    if (typeof navigator !== 'undefined' && navigator.connection && navigator.connection.saveData) {
+        root.setAttribute('data-save-data', 'true');
+    }
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', theme === 'dark' ? '#1d231d' : '#fbfaf8');
 })();

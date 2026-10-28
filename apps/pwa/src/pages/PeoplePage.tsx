@@ -481,7 +481,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                 <button
                                     type="button"
                                     onClick={() => onNavigate('settings-area')}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-colors min-h-[44px]"
+                                    className="px-4 py-2 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on rounded-xl text-sm font-semibold shadow-sm transition-colors min-h-[44px]"
                                     data-testid="people-set-area-btn"
                                 >
                                     {t('Set your area')}

@@ -1027,7 +1027,7 @@ export default function PeopleScreen() {
                                                 paddingVertical: 10,
                                                 paddingHorizontal: 20,
                                                 borderRadius: 10,
-                                                backgroundColor: colors.brand.primary,
+                                                backgroundColor: colors.brand.fill,
                                                 opacity: pressed ? 0.8 : 1,
                                                 minHeight: 48,
                                                 minWidth: 48,
@@ -1039,7 +1039,7 @@ export default function PeopleScreen() {
                                         accessibilityLabel={t('Set your area')}
                                         testID="people-community-set-area"
                                     >
-                                        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+                                        <Text style={{ color: colors.text.inverse, fontSize: 15, fontWeight: '600' }}>
                                             {t('Set your area')}
                                         </Text>
                                     </Pressable>

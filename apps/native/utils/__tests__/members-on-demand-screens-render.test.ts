@@ -563,6 +563,7 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).not.toContain('Loading');
                 const setAreaBtn = host.querySelector('[data-testid="people-community-set-area"]');
                 expect(setAreaBtn).not.toBeNull();
+                expect(contrastOf('Set your area', colors)).toBeGreaterThanOrEqual(4.5);
                 await press(setAreaBtn!);
                 expect(nav.pushed).toContain('/your-area');
                 await fits([OWN]);

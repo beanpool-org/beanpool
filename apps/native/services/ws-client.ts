@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
-import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
+import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
 import { requestSync, applyLivePostChange } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
@@ -25,6 +25,8 @@ class WebSocketSyncClient {
     private reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
     /** The member this socket signed in as, so a pushed change about their own listing takes the full sync. */
     private memberPubkey: string | null = null;
+    /** Whether the socket being opened carries the member's signature: only such a socket gets `new_message`. */
+    private signed = false;
     /** Pushed listing changes are written one at a time, in the order the node sent them. */
     private liveQueue: Promise<void> = Promise.resolve();
     private dataUpdatedTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -44,6 +46,8 @@ class WebSocketSyncClient {
     public static readonly PONG_TIMEOUT_MS = 75_000;
 
     private lastPongAt: number | null = null;
+    /** When the socket now open opened; null while there is none. A line sent before then never rang its doorbell. */
+    private openedAt: number | null = null;
     private watchdogArmed = false;
     private watchdogTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -124,6 +128,7 @@ class WebSocketSyncClient {
 
             this.currentUrl = anchorUrl;
             this.memberPubkey = identity?.publicKey ?? null;
+            this.signed = false;
             let wsUrl = anchorUrl.replace(/^http/, 'ws');
             if (!wsUrl.endsWith('/ws')) {
                 wsUrl = wsUrl.replace(/\/$/, '') + '/ws';
@@ -139,6 +144,7 @@ class WebSocketSyncClient {
                 try {
                     // Signed over the URL the socket opens: its host (request binding) and its path.
                     params.push(await buildSignedWsParams(wsUrl, identity.privateKey, identity.publicKey));
+                    this.signed = true;
                 } catch (err) {
                     // An address that isn't plain (node-url.ts) reaches another host than it names on iOS: no socket
                     // at all, signed or not.
@@ -187,6 +193,7 @@ class WebSocketSyncClient {
                 this.reconnectAttempt = 0;
                 this.watchdogArmed = false;
                 this.lastPongAt = null;
+                this.openedAt = Date.now();
                 if (this.watchdogTimeoutId) {
                     clearTimeout(this.watchdogTimeoutId);
                     this.watchdogTimeoutId = null;
@@ -243,6 +250,7 @@ class WebSocketSyncClient {
                     this.stopHeartbeat();
                     this.watchdogArmed = false;
                     this.lastPongAt = null;
+                    this.openedAt = null;
                     // A full node: wait what it asked (5 minutes, growing) instead of coming back within 30 s. The
                     // catch-up sync each try opens with keeps the screens current over HTTP meanwhile.
                     const askedSec = wsNoRoomRetrySec(e?.code, e?.reason);
@@ -328,7 +336,8 @@ class WebSocketSyncClient {
         this.stopHeartbeat();
         this.watchdogArmed = false;
         this.lastPongAt = null;
-        
+        this.openedAt = null;
+
         if (this.ws) {
             const socket = this.ws;
             this.ws = null; // Unbind immediately to avoid handling the imminent close event
@@ -404,6 +413,25 @@ class WebSocketSyncClient {
         }
     }
 
+    /**
+     * Whether this socket brings the member's new messages as they arrive (@beanpool/core socketAlive): open, signed, and
+     * answered a ping within the watchdog's limit. The tabs' message backstop reads every 120 s while it does, else 30 s.
+     */
+    public isAlive(now: number = Date.now()): boolean {
+        const socket = this.ws;
+        return socketAlive(!!socket && socket.readyState === WebSocket.OPEN, this.signed, this.lastPongAt, now, WebSocketSyncClient.PONG_TIMEOUT_MS);
+    }
+
+    /**
+     * Whether this socket's doorbell has brought every new message since a read of them that started at `readAt`: alive,
+     * and open since before that read. A line sent while the socket was down never rang, and a reopening reads no
+     * messages (its requestSync is the pillar sync), so the tabs' backstop counts the socket only once a read has started
+     * since it opened: the first tick after a drop reads, as every tick did before slice L0 (review of #2558).
+     */
+    public isAliveSince(readAt: number, now: number = Date.now()): boolean {
+        return this.openedAt !== null && this.openedAt <= readAt && this.isAlive(now);
+    }
+
     public getWatchdogArmedForTest(): boolean {
         return this.watchdogArmed;
     }
@@ -434,4 +462,6 @@ class WebSocketSyncClient {
 const clientInstance = new WebSocketSyncClient();
 export function startWebSocketSync() { clientInstance.start(); }
 export function stopWebSocketSync() { clientInstance.stop(); }
+/** Whether the member's socket is alive now and has been open since the read at `readAt` (WebSocketSyncClient.isAliveSince). */
+export function webSocketAliveSince(readAt: number): boolean { return clientInstance.isAliveSince(readAt); }
 export { WebSocketSyncClient };

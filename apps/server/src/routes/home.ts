@@ -26,7 +26,8 @@
  *
  * `W/"home-<hash>"`, a hash of the reader, of the newest line in the reader's chats where the answer read them (the chat
  * stamp, W3: a line no card shows still moves it) and of the answer itself (without `generatedAt`), `Cache-Control: private,
- * max-age=0, must-revalidate`, and a 304 when the app's copy is still the answer (as routes/activity.ts answers). Not a
+ * max-age=0, must-revalidate` (an unsigned visitor's, on a node with the visitors' view, `public, max-age=0, s-maxage=60`:
+ * guest-cache.ts), and a 304 when the app's copy is still the answer (as routes/activity.ts answers). Not a
  * tag made of the version counters alone, as the design first proposed (§5.2): most of what Home shows has no counter to
  * bump (a message read or unread, a kept notice, a vote cast, a mute, a probation limit coming back, the layout and
  * interests, a Pulse item, the time words of a vote closing), and a tag that misses a change pins the app to the old
@@ -40,6 +41,7 @@ import { parsePoint } from './distance-query.js';
 import { buildHome, homeReaderStanding, parseAskedCards, parseLands } from './home-answer.js';
 import { VIEW_HEADER } from './viewer.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { setReadCaching } from '../guest-cache.js';
 import type { RouteDeps } from './types.js';
 import { word } from '@beanpool/core';
 
@@ -81,7 +83,9 @@ export function createHomeRoutes(_deps: RouteDeps): Router {
         const etag = homeEtag(actor, body, chatStamp);
         ctx.set('ETag', etag);
         // `private`: the answer is the reader's own, so no shared cache (a CDN or proxy in front of the node) may store it.
-        ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+        // But for an unsigned visitor's on a node with the visitors' view: the visitors' subset, read for nobody, the same
+        // for every unsigned reader of the URL, which an edge in front may keep for a minute (guest-cache.ts, slice L0).
+        setReadCaching(ctx, !actor && getProfileSwitches().guestListingsOnly);
         // A node with two views says which this is, as the listing does (viewer.ts VIEW_HEADER). Elsewhere nothing is said.
         // A suspended member's community cards are the visitors' view, though they get no `welcome` (home-answer.ts).
         if (getProfileSwitches().guestListingsOnly) ctx.set(VIEW_HEADER, body.me?.standing === 'member' ? 'member' : 'guest');

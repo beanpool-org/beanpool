@@ -184,7 +184,8 @@ export function communityShapeSummary(features: CommunityShapeFeatures | null | 
     }
 
     const beansText = features?.beans === false ? t('Beans off') : t('Beans on');
-    const votesText = features?.decisions === false ? t('votes off') : t('votes on');
+    const votesOn = features?.decisions === true || (features?.decisions === undefined && !features?.openJoin && features?.door !== 'open');
+    const votesText = votesOn ? t('votes on') : t('votes off');
     const knocksText = features?.knocks === false ? t('requests to join off') : t('requests to join on');
 
     return t('How it works: {join} · {beans} · {votes} · {knocks}', {

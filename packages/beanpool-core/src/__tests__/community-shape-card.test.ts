@@ -245,5 +245,14 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             };
             expect(communityShapeSummary(f)).toBe('How it works: anyone joins · Beans off · votes off · requests to join off');
         });
+
+        it('open door community without explicit decisions defaults votes to votes off', () => {
+            const f: CommunityShapeFeatures = {
+                door: 'open',
+                knocks: false,
+                beans: false,
+            };
+            expect(communityShapeSummary(f)).toBe('How it works: anyone joins · Beans off · votes off · requests to join off');
+        });
     });
 });

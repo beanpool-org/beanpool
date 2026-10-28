@@ -72,6 +72,8 @@ import { hasVault, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { holdEndsWords } from '../components/RecoveryAlertBanner';
 import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
+import { visitGlobalAsGuest } from '../utils/global-guest-visit';
+import { LOOK_JOIN, LOOK_LANDING } from '../utils/look-around';
 import { MemberAvatar } from '../components/MemberAvatar';
 import {
     declineNotifications, readNotificationPermissionRecord, readOsNotificationPermission,
@@ -161,7 +163,7 @@ export default function WelcomeScreen() {
     if (latestLink !== inviteLink) setInviteLink(latestLink);
     /** Invites already applied on this screen, so a focus change or a re-render never applies one again. */
     const appliedInvites = useRef(new Set<string>());
-    const { setIdentity } = useIdentity();
+    const { identity: accountOnPhone, setIdentity } = useIdentity();
     const { recheck: recheckNodeStatus } = useNodeStatus();
     const initialMode = (params?.mode && ['home', 'member', 'create', 'recover', 'ssoRecover', 'profileSetup', 'seedBackup', 'onboardingGuide', 'confirmReplace'].includes(params.mode as string))
         ? (params.mode as any)
@@ -395,6 +397,14 @@ export default function WelcomeScreen() {
     /** Join tapped before the work was done: "Setting up your account…" while it finishes (the member can still leave). */
     const [workWaiting, setWorkWaiting] = useState(false);
     const [joinDoor, setJoinDoor] = useState<'words' | null>(null);
+    /**
+     * Look before you join (slice S12, utils/look-around.ts): `exploring` while the first screen's Explore BeanPool worldwide
+     * asks the door whether a phone with no account may look around; `doorFromLook` when the door was opened from the look
+     * (Join, or a screen that needs a key), whose Back returns to it.
+     */
+    const [exploring, setExploring] = useState(false);
+    const exploringRef = useRef(false);
+    const [doorFromLook, setDoorFromLook] = useState(false);
     /** Safety Backup's "Add a sign-in as a second way back" (utils/join-link.ts), and what it added. */
     const [showLinkSheet, setShowLinkSheet] = useState(false);
     const [linked, setLinked] = useState<Extract<LinkAnswer, { kind: 'linked' }> | null>(null);
@@ -802,6 +812,32 @@ export default function WelcomeScreen() {
         router.setParams({ door: '' });
         void openDoorFromLink();
     }, [params?.door, params?.at]);
+
+    // The door opened from the look (utils/look-around.ts LOOK_DOOR): the visitor tapped Join, or a screen that needs a
+    // key. A tap, so the door's work starts now, at Join. Consumed, as the door link is.
+    useEffect(() => {
+        if (params?.join !== LOOK_JOIN) return;
+        router.setParams({ join: '' });
+        if (accountOnPhone) return;
+        setDoorFromLook(true);
+        openGlobalDoor();
+    }, [params?.join]);
+
+    // Anywhere but the door, the look's way back is gone: the first screen's Back is its own.
+    useEffect(() => {
+        if (mode !== 'globalJoin') setDoorFromLook(false);
+    }, [mode]);
+
+    // The phone's back button at the door opened from the look: back to the look, as the door's own Back.
+    useEffect(() => {
+        if (mode !== 'globalJoin' || !doorFromLook) return;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (globalPhase === 'joining') return true;
+            leaveGlobalDoor();
+            return true;
+        });
+        return () => sub.remove();
+    }, [mode, doorFromLook, globalPhase]);
 
     // A re-key ask the app was closed in the middle of (utils/rekey-redeem.ts): back to its screen, which asks once more.
     useEffect(() => {
@@ -1519,7 +1555,42 @@ export default function WelcomeScreen() {
         setWorkWaiting(false);
         setDoorSignIn(null);
         setCallsignSuggestions([]);
+        // Opened from the look: back to it, still a visitor. The door was the only screen (utils/look-around.ts LOOK_DOOR).
+        if (doorFromLook && !accountOnPhone) {
+            setDoorFromLook(false);
+            router.replace(LOOK_LANDING);
+            return;
+        }
         goBack();
+    }
+
+    /**
+     * The first screen's Explore BeanPool worldwide (DESIGN-entry-points-fable.md §3.3, slice S12). On a phone with no
+     * account, the global community opens as a visitor first (utils/global-guest-visit.ts with no identity): its listings,
+     * Home's visitor cards and the map, with Join at the top. No key is made and no door's work starts: that is Join's. The
+     * door opens as before, and says why, wherever looking can't happen: the door shut, in a preview or unreachable (an
+     * offline first open), no visitors' view, an account already on the phone, or a join wizard part way.
+     */
+    async function exploreWorldwide() {
+        if (exploringRef.current) return;
+        if (accountOnPhone) { openGlobalDoor(); return; }
+        exploringRef.current = true;
+        setExploring(true);
+        try {
+            const pending = await getPendingOnboarding().catch(() => null);
+            const answer = pending ? null : await visitGlobalAsGuest(null).catch(() => null);
+            if (!screenMountedRef.current || modeRef.current !== 'home') return;
+            if (answer?.kind === 'guest') {
+                // The sync reads the visitors' view unsigned; the root guard lets a visitor stay on the look's screens.
+                import('../services/pillar-sync').then(({ requestSync }) => requestSync()).catch(() => {});
+                router.replace(LOOK_LANDING);
+                return;
+            }
+            openGlobalDoor();
+        } finally {
+            exploringRef.current = false;
+            if (screenMountedRef.current) setExploring(false);
+        }
     }
 
     /**
@@ -3071,8 +3142,8 @@ export default function WelcomeScreen() {
                             )}
 
                             {globalPhase !== 'joining' && (
-                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={!doorWays.back} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
-                                    <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
+                                <Pressable style={styles.backBtn} onPress={leaveGlobalDoor} disabled={!doorWays.back} accessibilityRole="button" accessibilityLabel={doorFromLook ? t('Back') : t('Back to Home')}>
+                                    <Text style={styles.backBtnText}>{doorFromLook ? t('← Back') : t('← Back to Home')}</Text>
                                 </Pressable>
                             )}
 
@@ -3688,7 +3759,7 @@ export default function WelcomeScreen() {
                     <LanguageSwitch />
                     <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
 
-                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={openGlobalDoor} styles={styles} />
+                    <WelcomeDoors door={globalDoor} joinWithInvite={() => setMode('create')} openGlobalDoor={() => { void exploreWorldwide(); }} exploring={exploring} styles={styles} />
 
                     <Text style={styles.homeAbout}>
                         {t('Trade skills, goods and favours with your local community — no bank, no fees. Your account lives safely on this device: no passwords, no emails, nothing to remember.')}

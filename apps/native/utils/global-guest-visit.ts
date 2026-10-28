@@ -24,10 +24,17 @@
  * holds and writes nothing of the account: the guest mark, the saved list, the community in use and the probe's kept
  * answer, nothing else. Joining afterwards is the door's, as the same account (#1402).
  *
+ * A phone with no account yet (`identity` null: the first screen's Explore BeanPool worldwide, slice S12,
+ * utils/look-around.ts) looks the same way with nothing to sign: the door is asked, and only a door that is open AND shows
+ * visitors its view (`guestListingsOnly`, look-around.ts showsVisitorsView) lets it in as a guest; no probe is sent, so the
+ * global community hears of no key at all. Every other answer moves nothing (`door`), and the first screen opens the door
+ * as before, which says why. The key is made at Join, by the door, never here.
+ *
  * No-domain-lock-in: only the global community's own row and links call this; nothing else on the phone waits on it.
  */
 
 import { GLOBAL_NODE_URL } from './global-node-url';
+import { showsVisitorsView } from './look-around';
 import type { AskedStanding } from './global-entry';
 import type { GlobalDoorCheck } from './node-profile';
 
@@ -68,10 +75,12 @@ async function defaultDeps(): Promise<GuestVisitDeps> {
 
 /**
  * Open the global community (`url`, the phone's saved spelling of it where it has one) as a guest, or as a member where
- * it says the key is one. Throws only when the switch itself fails (the phone then stays where it was, as any switch).
+ * it says the key is one. With no identity (`null`: a phone with no account yet), as a guest or not at all: nothing is
+ * signed or sent but the door's own unsigned read. Throws only when the switch itself fails (the phone then stays where
+ * it was, as any switch).
  */
 export async function visitGlobalAsGuest(
-    identity: { publicKey: string; privateKey: string },
+    identity: { publicKey: string; privateKey: string } | null,
     url: string = GLOBAL_NODE_URL,
     injected?: Partial<GuestVisitDeps>,
 ): Promise<GuestVisit> {
@@ -79,6 +88,14 @@ export async function visitGlobalAsGuest(
     const deps: GuestVisitDeps = keys.every(k => injected?.[k]) ? injected as GuestVisitDeps : { ...(await defaultDeps()), ...injected };
     const door = await deps.checkDoor(url).catch((): GlobalDoorCheck => ({ ok: false, reason: 'unreachable' }));
     if (!door.ok) return { kind: 'door' };
+    if (!identity) {
+        // Nothing to sign with, and nothing to sign: a visitor with no key reads only what the node shows visitors.
+        if (!showsVisitorsView(door.profile)) return { kind: 'door' };
+        await deps.markGuestNode(url);
+        await deps.addSavedNode(url, 'Global community').catch(() => {});
+        await deps.switchTo(url);
+        return { kind: 'guest' };
+    }
     const asked = await deps.askStanding(identity, url).catch((): AskedStanding => ({ standing: 'unknown', closed: false, answered: false }));
     if (!asked.answered) return { kind: 'door' };
     if (asked.closed) return { kind: 'closed' };

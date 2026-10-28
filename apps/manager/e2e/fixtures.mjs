@@ -497,6 +497,46 @@ const DECISIONS = [
     },
 ];
 
+// ---------------------------------------------------------------------------
+// Removal by vote S3: this node's /api/community/info says nothing, so the manager reads its community as voting, where
+// removing a member is the community's vote: no Prune, and Offboard only settles a removal the community voted for, in
+// its 7-day grace window. The two edits below (openSettings `overrides`) show the other doors.
+// ---------------------------------------------------------------------------
+
+/** Community votes switched off (the global node, or the operator's switch): the admins remove members, as before (Q11). */
+export const VOTES_OFF = {
+    '/api/community/info': (json) => ({ ...json, features: { ...(json?.features ?? {}), decisions: false } }),
+};
+
+/**
+ * Stevo (suspended, his credit frozen) in a passed removal's grace window: a member proposed it before this version, the
+ * community voted Yes, and Offboard settles his Beans and completes it now. No owner or admin is ever here: no vote
+ * removes one (the server's §3.8 refusal), so their Offboard is a votes-off door (VOTES_OFF).
+ */
+const REMOVAL_IN_GRACE = {
+    id: 'dec-remove-stevo',
+    title: 'Remove stevo_frozen',
+    description: 'Three no-shows on confirmed trades since August, each reported by the seller, and no reply to the moderators.',
+    effect: 'remove_member',
+    touches: 'member',
+    status: 'execution_pending_grace',
+    subject: MEMBERS[3].publicKey,
+    subjectName: 'Stevo',
+    params: { memberName: 'Stevo' },
+    opensAt: '2026-09-10T00:00:00.000Z',
+    closesAt: '2026-09-17T00:00:00.000Z',
+    gracePeriodEndsAt: '2026-09-24T00:00:00.000Z',
+    tally: { totalVoters: 6, electorate: 8, quorumRequired: 3, quorumMet: true, yesWeight: 5, noWeight: 1, supportRatio: 0.833, thresholdRequired: 0.66 },
+};
+/** The start of Stevo's key, in the members filter: it opens his detail rather than the owner's (the first Inspect). */
+export const IN_GRACE_FILTER = MEMBERS[3].publicKey.slice(0, 16);
+export const IN_A_REMOVALS_GRACE = {
+    '/api/local/admin/decisions': (json) => ({ ...json, decisions: [...(json?.decisions ?? []), REMOVAL_IN_GRACE] }),
+    [`/api/local/admin/members/${MEMBERS[3].publicKey}/offboard/preview`]: (json) => ({
+        ...json, settlesRemoval: { decisionId: REMOVAL_IN_GRACE.id, gracePeriodEndsAt: REMOVAL_IN_GRACE.gracePeriodEndsAt },
+    }),
+};
+
 const DISPUTES = [
     {
         id: 'tx_escrow_101',

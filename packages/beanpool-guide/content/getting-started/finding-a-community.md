@@ -61,6 +61,12 @@ The card says **A member invited you**. Tap **Join** with the community's name.
 
 You stay a member of the global community, and can switch between them: see "More than one community".
 
+## A post someone shared with you
+
+A member of a community can share one of its posts with you outside BeanPool: a link in a chat or a message. It opens that one post, in the app if you have it and in your web browser if not. It shows what the post is, its photos, its price and roughly where it is, and says that a member of that community shared it with you. Names and faces appear only once you join that community.
+
+From there you can **Ask to join** that community, **Get the app**, or **Look around the global community**. If the link says **This link has stopped working**, the person who shared it stopped it, it ran out after 7 days, or the post is gone: ask them for a new one.
+
 ## Nothing near you
 
 - **Tell me when one starts here:** you get a notification when a community starts near where you are. Only the area is kept, about 10 km across, never where you are exactly. You can watch up to 3 places, and stop watching one with **Stop**.

@@ -2994,7 +2994,7 @@ export async function emergencySuspendMember(
     adminPassword?: string,
     tfaToken?: string,
     code?: string
-): Promise<{ success: boolean; decision?: { id: string; closesAt: string; effect?: string; params?: { noVote?: boolean } } }> {
+): Promise<{ success: boolean; decision?: { id: string; closesAt: string; effect?: string; params?: { noVote?: boolean; serverRole?: 'owner' | 'admin' } } }> {
     return postAdmin(nodeUrl, `/api/local/admin/users/${encodeURIComponent(pubkey)}/suspend`, { reason, ...proofField(code) }, adminPassword, tfaToken);
 }
 
@@ -3110,6 +3110,11 @@ export interface OffboardPreviewResponse {
         publicKey: string;
         callsign: string;
     }>;
+    /**
+     * Where the community votes, the removal it voted for that this offboarding settles and completes (removal by vote S3);
+     * the node refuses the preview for anyone without one. Null where votes are off, and absent from a node before S3.
+     */
+    settlesRemoval?: { decisionId: string; gracePeriodEndsAt: string | null } | null;
 }
 
 export interface OffboardResponse {

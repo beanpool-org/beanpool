@@ -438,8 +438,9 @@ async function main(): Promise<void> {
         // An admin, as in 3: a trust badge is no standing to propose, and a node with Beans off has no trades.
         const proposer = member('DoorbellProposer');
         se.grantNodeRole(proposer.pk, 'admin', 'owner:password');
-        const removal = createDecision({ authorPubkey: proposer.pk, title: 'Remove Dora', description: 'A doorbell test of a community removal', touches: 'member',
-            effect: 'remove_member', subject: dora.pk });
+        // One proposed before removal by vote S3 (since then only an admin's pause opens one).
+        const { removalProposedFromBefore } = await import('./decisions-from-before-test-fixture.js');
+        const removal = removalProposedFromBefore({ authorPubkey: proposer.pk, title: 'Remove Dora', description: 'A doorbell test of a community removal', subject: dora.pk });
         assert((await board()).includes(doraOffer), `setup: ${READER} reads Dora's offer`);
         await sleep(100);
         clear();
@@ -463,7 +464,7 @@ async function main(): Promise<void> {
         const erinOffers = [await offer(erin, 'Doorbell Erin offer 1'), await offer(erin, 'Doorbell Erin offer 2')];
         await sleep(100);
         clear();
-        se.adminPruneUser(erin.pk, 'owner:password');
+        se.adminPruneUser(erin.pk, se.COMMUNITY_DECISION_ACTOR);
         await rings('an admin prune', 'post_removed', ['profile_updated', 'user_pruned']);
         const afterPrune = await board();
         assert(erinOffers.every(id => !afterPrune.includes(id)), `an admin prune: ${READER} reads neither of her offers`);

@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 FINANCIADO",
   "🌱 PROJECT": "🌱 PROYECTO",
   "🏛️ ENTERPRISE": "🏛️ EMPRENDIMIENTO",
-  "Enterprise Balance": "Saldo del emprendimiento",
   "in deficit (keepers eat last)": "en déficit (los encargados comen al final)",
   "Pledge Beans": "Aportar frijoles",
   "Word {n}: {word}": "Palabra {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "DECLARACIÓN DE PROPÓSITO *",
   "Purpose statement": "Declaración de propósito",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Indica claramente para qué existe este emprendimiento (p. ej., «Construimos y mantenemos un sombreadero comunitario para noviembre»).",
-  "The purpose statement is what the community judges the initiative against.": "La declaración de propósito es la base con la que la comunidad evalúa la iniciativa.",
   "FUNDING GOAL ({currency}) *": "META DE FINANCIAMIENTO ({currency}) *",
   "Funding goal amount": "Monto de la meta de financiamiento",
   "Pledges are held safely in the enterprise account.": "Los aportes se guardan de forma segura en la cuenta del emprendimiento.",
@@ -2970,7 +2968,6 @@
   "Post\u0004button: publish": "Publicar",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Usa la pestaña {ledger} para enviar créditos a los vecinos al instante.",
   "Member\u0004what a Decision touches": "Miembro",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Expulsión de este nodo (supermayoría del 66%, cuórum del 25%, plazo de gracia de 7 días)",
   "Temporary freeze of trading and messaging": "Congelamiento temporal de intercambios y mensajería",
   "Restore member to active standing (simple majority)": "Restablecer al miembro a estado activo (mayoría simple)",
   "Cancel pending removal and restore account (simple majority)": "Cancelar remoción pendiente y restablecer cuenta (mayoría simple)",
@@ -2998,10 +2995,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Introduce el nombre de llamada o clave pública del encargado principal o líder.",
   "The lead keeper or leader to remove: callsign or public key": "Encargado principal o líder a remover: nombre de llamada o clave pública",
   "Enter the lead keeper or leader's callsign or pubkey...": "Introduce el nombre de llamada o clave pública del encargado principal o líder...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Las cuentas son privadas: no puedes ver la de {name}. Cuando se abre esta votación, la comunidad registra su saldo y cualquier deuda, y los muestra a todos los que pueden votar en ella. Si se le remueve, la deuda se carga al fondo común, que ahora tiene {n} frijol.",
-    "other": "Las cuentas son privadas: no puedes ver la de {name}. Cuando se abre esta votación, la comunidad registra su saldo y cualquier deuda, y los muestra a todos los que pueden votar en ella. Si se le remueve, la deuda se carga al fondo común, que ahora tiene {n} frijoles."
-  },
   "Missing Title": "Falta el título",
   "Please enter a clear, concise title for this decision.": "Introduce un título claro y conciso para esta decisión.",
   "Missing Description": "Falta la descripción",
@@ -6118,11 +6111,11 @@
   "Turn on notifications?": "¿Activar notificaciones?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para que te enteres cuando alguien te responda, te envíe un mensaje o pida unirse. Nada más.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Las notificaciones de BeanPool están desactivadas en los ajustes de tu teléfono. Abre Ajustes para activarlas.",
+  "Cancel request": "Cancelar solicitud",
   "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:",
   "COMMUNITY": "COMUNIDAD",
   "You're a member of {name}.": "Eres miembro de {name}.",
   "Open {name}": "Abrir {name}",
-  "To ask, you need a BeanPool account first: tap Explore BeanPool worldwide on the first screen, then find {name} in Find a community.": "Para pedirlo, primero necesitas una cuenta de BeanPool: toca Explorar BeanPool en todo el mundo en la primera pantalla y luego busca {name} en Buscar una comunidad.",
   "This link doesn't name a community this app can open.": "Este enlace no indica una comunidad que esta app pueda abrir.",
   "Choose a banner photo, or keep this one": "Elige una foto de banner o conserva esta",
   "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner.",
@@ -6138,5 +6131,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Avísame cuando empiece una comunidad aquí o indica que ayudarías a empezar una",
   "Nothing within 250 km yet.": "Todavía no hay nada en un radio de 250 km.",
   "See what people post elsewhere ›": "Mira lo que publica la gente en otros lugares ›",
-  "Set your area": "Define tu zona"
+  "Set your area": "Define tu zona",
+  "The purpose statement is what the community judges the project or enterprise against.": "La declaración de propósito es la base con la que la comunidad evalúa el proyecto o emprendimiento."
 }

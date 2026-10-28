@@ -7,12 +7,43 @@
  * node that ran the older code can still be there, and the guards that answer for it — the owner-only halt and
  * accelerate, a held role handed from an emergency suspension to the removal — stay tested through this fixture rather
  * than through a proposal that can no longer be made. It writes exactly what the older executeDecision wrote.
+ *
+ * And a removal a member proposed, as a node running the code from before removal by vote S3 could hold one open
+ * (removalProposedFromBefore): since then only an admin's pause opens a vote on removing someone.
  */
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
-import { setUserStatusRow } from './state-engine.js';
+import { broadcast, setUserStatusRow } from './state-engine.js';
+import { getDecision, publicDecision, removalBalanceParams, type Decision } from './decisions-engine.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A vote on removing a member that a member (or an admin) proposed, as a node running the code from before removal by vote
+ * S3 could hold one open. Since then a removal vote opens only when an admin pauses the member (decisions-engine
+ * pauseMember; Amendment A of scratch/fable-design/DESIGN-removal-by-vote-fable.md, point 1), and proposing one is
+ * refused. One open at the upgrade still ends as any Decision does: tallied when it closes, a grace window if it passes,
+ * and the member removed at its end. It writes exactly what the older createDecision wrote once its checks passed: the
+ * member's name, balance and debt and the pot recorded for its voters, none of the node's pause marks, and the same
+ * doorbell. Returns the Decision.
+ */
+export function removalProposedFromBefore(opts: {
+    authorPubkey: string; title: string; description: string; subject: string; params?: Record<string, unknown>; closesAt?: string;
+}): Decision {
+    const id = crypto.randomUUID();
+    const opensAt = new Date().toISOString();
+    const closesAt = opts.closesAt || new Date(Date.now() + 7 * DAY_MS).toISOString();
+    const params: Record<string, unknown> = { ...opts.params, ...removalBalanceParams(opts.subject, opts.params?.memberName) };
+    for (const mark of ['rule', 'pausedBy', 'pausedAt']) delete params[mark];
+    db.prepare(`
+        INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params,
+            franchise, status, opens_at, closes_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'member', 'remove_member', ?, ?, '1m1v', 'open', ?, ?, ?, ?)
+    `).run(id, opts.authorPubkey, opts.title, opts.description, opts.subject, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
+    const decision = getDecision(id)!;
+    broadcast({ type: 'decision_created', decision: publicDecision(decision) });
+    return decision;
+}
 
 /**
  * A removal of `subject` that passed and is in its 7-day grace window, as the older executeDecision left it: the node

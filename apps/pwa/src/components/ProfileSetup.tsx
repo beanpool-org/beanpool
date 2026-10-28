@@ -167,7 +167,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                         <div className="text-center mb-6">
                             <div
                                 className="w-24 h-24 rounded-full flex items-center justify-center mx-auto text-4xl shadow-md border-4 border-terra-300 dark:border-terra-600 bg-oat-100 dark:bg-nature-800 overflow-hidden"
-                                style={{ background: `url("${resolvedAvatar || resolveAvatarUrl(null, identity.publicKey) || '/avatars/avatar_bean_green.jpg'}") center/cover` }}
+                                style={{ background: `url("${resolvedAvatar || resolveAvatarUrl(null, identity.publicKey) || '/avatars/avatar_bean_green.webp'}") center/cover` }}
                             >
                             </div>
                             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />

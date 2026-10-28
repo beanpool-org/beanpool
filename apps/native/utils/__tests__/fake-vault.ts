@@ -100,7 +100,12 @@ interface Copy {
     clientCopy: SealedShare;
     pushTokens: string[];
     lastReleasedAt: number | null;
+    /** The day (UTC) the copy was deposited: the row's `updated_day`, said as `since` (vault rethink VR1). */
+    day: string;
 }
+
+/** Today, as the vault writes a day. */
+const today = () => new Date(Date.now()).toISOString().slice(0, 10);
 
 interface Hold {
     holdId: string;
@@ -159,13 +164,15 @@ export class FakeVault {
     answersOn: string[] | null = null;
     /** False: a deposit is answered as kept, and not kept (a server at the vault's address that isn't the vault). */
     keepsDeposits = true;
+    /** What its status says of a copy's day: `since` and `updatedDay` (VR1); `updatedDay` only (every vault before VR1); neither. */
+    statusDays: 'since' | 'updatedDay' | 'none' = 'since';
     readonly copies = new Map<string, Copy>();
     readonly holds = new Map<string, Hold>();
     readonly spent = new Set<string>();
 
-    /** A copy the vault keeps already: `clientCopy` sealed to `provider:sub`, for `pubkey`. */
-    keep(provider: string, sub: string, pubkey: string, clientCopy: SealedShare): void {
-        this.copies.set(`${provider}:${sub}`, { provider, sub, pubkey, clientCopy, pushTokens: [], lastReleasedAt: null });
+    /** A copy the vault keeps already: `clientCopy` sealed to `provider:sub`, for `pubkey`, deposited on `day`. */
+    keep(provider: string, sub: string, pubkey: string, clientCopy: SealedShare, day = '2026-10-01'): void {
+        this.copies.set(`${provider}:${sub}`, { provider, sub, pubkey, clientCopy, pushTokens: [], lastReleasedAt: null, day });
     }
 
     copiesOf(pubkey: string): Copy[] {
@@ -246,7 +253,7 @@ export class FakeVault {
                 if (this.keepsDeposits) {
                     this.copies.set(id, {
                         provider: s.provider, sub: s.sub, pubkey: signer, clientCopy: contents.clientCopy,
-                        pushTokens: contents.pushToken ? [contents.pushToken] : [], lastReleasedAt: null,
+                        pushTokens: contents.pushToken ? [contents.pushToken] : [], lastReleasedAt: null, day: today(),
                     });
                 }
                 return {
@@ -262,8 +269,10 @@ export class FakeVault {
                 const holds = [...this.holds.values()]
                     .filter(h => !h.cancelled && !h.released && mine.some(c => `${c.provider}:${c.sub}` === h.copy))
                     .map(h => ({ holdId: h.holdId, provider: h.provider, openedAt: h.openedAt, releaseAt: h.releaseAt }));
+                const days = (c: Copy) => (this.statusDays === 'since' ? { updatedDay: c.day, since: c.day }
+                    : this.statusDays === 'updatedDay' ? { updatedDay: c.day } : {});
                 return reply(200, {
-                    copies: mine.map(c => ({ provider: c.provider, lastReleasedAt: c.lastReleasedAt, updatedDay: '2026-10-01' })),
+                    copies: mine.map(c => ({ provider: c.provider, lastReleasedAt: c.lastReleasedAt, ...days(c) })),
                     holds,
                 });
             }

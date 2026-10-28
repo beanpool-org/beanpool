@@ -418,7 +418,6 @@
   "🎉 FUNDED": "🎉 펀딩 완료",
   "🌱 PROJECT": "🌱 프로젝트",
   "🏛️ ENTERPRISE": "🏛️ 공동체 사업",
-  "Enterprise Balance": "사업 잔액",
   "in deficit (keepers eat last)": "적자 상태 (운영자가 마지막에 정산)",
   "Pledge Beans": "콩 약정하기",
   "Word {n}: {word}": "단어 {n}: {word}",
@@ -2556,7 +2555,6 @@
   "PURPOSE STATEMENT *": "설립 목적 *",
   "Purpose statement": "설립 목적",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "이 기업이 무엇을 위해 존재하는지 명확히 적어주세요 (예: '11월까지 마을 공동 그늘막을 짓고 유지보수합니다').",
-  "The purpose statement is what the community judges the initiative against.": "설립 목적은 커뮤니티가 이 이니셔티브를 평가하는 기준이 돼요.",
   "FUNDING GOAL ({currency}) *": "모금 목표 ({currency}) *",
   "Funding goal amount": "모금 목표 금액",
   "Pledges are held safely in the enterprise account.": "후원금은 기업 계정에 안전하게 보관돼요.",
@@ -2847,7 +2845,6 @@
   "Post\u0004button: publish": "등록",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 {ledger} 탭에서 이웃에게 크레딧을 즉시 송금할 수 있어요.",
   "Member\u0004what a Decision touches": "멤버",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "이 서버에서 제명(66% 특별다수, 25% 정족수, 7일 유예 기간)",
   "Temporary freeze of trading and messaging": "거래 및 메시지 전송 일시 동결",
   "Restore member to active standing (simple majority)": "멤버 활동 자격 복원(일반과반수)",
   "Cancel pending removal and restore account (simple majority)": "예정된 제명 취소 및 계정 복원(일반과반수)",
@@ -2875,9 +2872,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "대표 관리자 또는 리더의 호출 부호나 공개키를 입력해 주세요.",
   "The lead keeper or leader to remove: callsign or public key": "해임할 대표 관리자 또는 리더: 호출 부호 또는 공개키",
   "Enter the lead keeper or leader's callsign or pubkey...": "대표 관리자 또는 리더의 호출 부호나 공개키 입력...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "other": "잔액은 비공개예요: {name}님의 잔액을 볼 수 없어요. 이 투표가 시작되면 커뮤니티는 해당 멤버의 잔액과 부채를 기록하여 투표권이 있는 모든 멤버에게 공개해요. 제명될 경우, 현재 콩 {n}개를 보유한 공유 풀에 부채가 청구돼요."
-  },
   "Missing Title": "제목 누락",
   "Please enter a clear, concise title for this decision.": "이 결정에 대한 명확하고 간결한 제목을 입력해 주세요.",
   "Missing Description": "설명 누락",
@@ -5879,6 +5873,7 @@
   "Turn on notifications?": "알림을 켤까요?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "휴대폰 설정에서 BeanPool 알림이 꺼져 있습니다. 켜려면 설정을 여세요.",
+  "Cancel request": "요청 취소",
   "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:",
   "Choose a banner photo, or keep this one": "배너 사진을 선택하거나 이 사진을 유지하세요",
   "Your picture, until you choose a banner.": "배너를 선택할 때까지 표시되는 사진입니다.",
@@ -5894,5 +5889,6 @@
   "Tell me when a community starts here, or say you'd help start one": "여기서 커뮤니티가 시작되면 알림 받기 또는 시작 돕기",
   "Nothing within 250 km yet.": "아직 250km 이내에 등록된 항목이 없어요.",
   "See what people post elsewhere ›": "다른 지역 게시물 보기 ›",
-  "Set your area": "내 지역 설정"
+  "Set your area": "내 지역 설정",
+  "The purpose statement is what the community judges the project or enterprise against.": "설립 목적은 커뮤니티가 이 프로젝트나 기업을 평가하는 기준이 돼요."
 }

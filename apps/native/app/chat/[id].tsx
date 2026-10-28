@@ -3,7 +3,7 @@ import { askPhotoSource } from '../../utils/post-photo';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { t, tn } from '@beanpool/core';
+import { t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { chatPhotoDataUri } from '../../utils/chat-photo';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, type DmKeyChange } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat, getDmKeyChange, acceptOfferedPeer, decideMessageRequest, type DmKeyChange } from '../../utils/db';
 import { isDmPinStoreError } from '../../utils/dm-peer-pins';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { dmKeyBannerMaxHeight } from '../../utils/dm-key-change';
@@ -39,7 +39,7 @@ import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode
 import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_LOCK_WORDS } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, messageTime, tombstoneText,
-    shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
+    shouldFollowNewMessages, shouldShowChatLoadError, requestDecisionFailureWords, requestIsGone, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
@@ -233,6 +233,16 @@ function ChatScreen({ id }: { id: string }) {
     // (screen squeezed into the top half). So: fully dismiss the keyboard BEFORE any
     // modal is allowed to mount.
     const [reviewModalReady, setReviewModalReady] = useState(false);
+    const [convRow, setConvRow] = useState<any>(null);
+    const [cancellingRequest, setCancellingRequest] = useState(false);
+    const [decidingRequest, setDecidingRequest] = useState(false);
+    // The node has answered this chat's poll since it opened (syncSingleConversation): until then what this phone holds
+    // may not be the node's word on a message request (PR #2540 review 4393642152).
+    const [nodeAnswered, setNodeAnswered] = useState(false);
+    useEffect(() => { setNodeAnswered(false); }, [id]);
+    // The request's line sent from here (insertMessage's id) until the node has taken it or refused it: the chat reads as
+    // waiting only once the node has taken it, as the web waits for the 200 (review 4393642166).
+    const [requestLineId, setRequestLineId] = useState<string | null>(null);
     useEffect(() => {
         if (promptReviewForTx) {
             KeyboardController.dismiss().then(() => setReviewModalReady(true));
@@ -294,6 +304,98 @@ function ChatScreen({ id }: { id: string }) {
         inlineActionCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 },
         blockedNotice: { padding: 14, alignItems: 'center', marginHorizontal: 12, borderRadius: 12, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
         blockedNoticeText: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' },
+        waitingContainer: {
+            padding: 12,
+            marginHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray50,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+        },
+        waitingText: {
+            flex: 1,
+            minWidth: 160,
+            fontSize: 13,
+            color: colors.text.secondary,
+            lineHeight: 18,
+        },
+        cancelRequestBtn: {
+            minHeight: 44,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.surface.card,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        cancelRequestBtnText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.text.body,
+        },
+        toMeContainer: {
+            padding: 12,
+            marginHorizontal: 12,
+            borderRadius: 12,
+            backgroundColor: colors.surface.card,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            gap: 6,
+        },
+        toMeTitle: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text.body,
+        },
+        toMeSubtitle: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            marginBottom: 4,
+        },
+        toMeButtons: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        toMeAcceptBtn: {
+            flex: 1,
+            minWidth: 100,
+            minHeight: 44,
+            backgroundColor: colors.brand.fill,
+            borderRadius: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+        },
+        toMeAcceptBtnText: {
+            color: colors.text.inverse,
+            fontWeight: '800',
+            fontSize: 13,
+        },
+        toMeIgnoreBtn: {
+            flex: 1,
+            minWidth: 100,
+            minHeight: 44,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray100,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            borderRadius: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+        },
+        toMeIgnoreBtnText: {
+            color: colors.text.body,
+            fontWeight: '700',
+            fontSize: 13,
+        },
     }));
 
     const promptedRef = useRef(false);
@@ -357,6 +459,7 @@ function ChatScreen({ id }: { id: string }) {
         if (id && identity?.publicKey) {
             const res = await getConversation(id as string, identity.publicKey);
             if (res) {
+                setConvRow(res);
                 setPeerName(res.name || res.otherCallsign || String(id).slice(0, 8));
                 if (res.otherPubkey) setPeerPubkey(res.otherPubkey);
                 setIsEncrypted(res.type === 'dm' && !!res.otherPubkey);
@@ -464,12 +567,12 @@ function ChatScreen({ id }: { id: string }) {
                     });
                 });
 
-                // Background Poll
+                // Background Poll. The chat is the node's word once its answer is read back here (nodeAnswered).
                 const pollSingle = () => {
-                    syncSingleConversation(id as string).then(() => {
-                        loadConversationData();
-                        loadMessages(true);
+                    syncSingleConversation(id as string).then(async (answered) => {
                         loadDeals();
+                        await Promise.all([loadConversationData(), loadMessages(true)]);
+                        if (answered !== false) setNodeAnswered(true);
                     });
                 };
 
@@ -514,10 +617,10 @@ function ChatScreen({ id }: { id: string }) {
                 // to finish and emit 'sync_data_updated'.
                 wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
                     if (AppState.currentState === 'active') {
-                        syncSingleConversation(id as string).then(() => {
-                            loadConversationData();
-                            loadMessages(true);
+                        syncSingleConversation(id as string).then(async (answered) => {
                             loadDeals();
+                            await Promise.all([loadConversationData(), loadMessages(true)]);
+                            if (answered !== false) setNodeAnswered(true);
                         });
                     }
                 });
@@ -593,12 +696,64 @@ function ChatScreen({ id }: { id: string }) {
         await loadMessages(true).catch(() => {});
     };
 
+    // Before the node has answered, a request for this reader is decided as one whose lines aren't read yet (the Accept card,
+    // no composer), and a chat this phone holds no request on waits for the node, unless the reader opened it or has a line
+    // in it the node took, which no request for them allows without accepting it (PR #2540 review 4393642152), or the node's
+    // list named it among their chats, where no request waiting for them is: a DM someone else opened answers offline too
+    // (review 4394120110). A local read is never the node's: the line may not be here yet, or be one its opener withdrew since.
+    const me = identity?.publicKey ?? '';
+    const heldRequest = convRow?.request ?? null;
+    const requestKnown = nodeAnswered || (!!heldRequest && heldRequest.from === me)
+        || (!!convRow && !heldRequest && (convRow.listed === 1 || convRow.createdBy === me || messages.some((m: any) => m.senderId === me && !m.sendState)));
+    const modeFromRows = requestModeOf(convRow ? { ...convRow, id: String(id) } : null, me, firstLoadDone && requestKnown ? messages : null);
+    const requestMode = modeFromRows === 'none' && !requestKnown && heldRequest?.state !== 'accepted' ? 'mine-loading' : modeFromRows;
+    // The request's line sent from here: taken by the node, the chat waits for the other's answer; refused, or never
+    // delivered, it stays unsent, the composer with it, and the line's mark says it didn't go (review 4393642166).
+    useEffect(() => {
+        if (!requestLineId) return;
+        const line = messages.find((m: any) => m.id === requestLineId);
+        if (!line || line.sendState === 'sending') return;
+        setRequestLineId(null);
+        if (line.sendState === 'failed' || !identity?.publicKey) return;
+        setConvRow((prev: any) => prev ? { ...prev, request: requestAfterOwnLine(prev.request, identity.publicKey) } : prev);
+    }, [messages, requestLineId, identity?.publicKey]);
+
+    const handleCancelRequest = async () => {
+        if (cancellingRequest) return;
+        setCancellingRequest(true);
+        try {
+            const answer = await decideMessageRequest(String(id), 'cancel');
+            const nextRequest = answer.request ?? { ...convRow?.request, nextLineIsRequest: true };
+            setConvRow((prev: any) => prev ? { ...prev, request: nextRequest } : prev);
+            if (messages.length > 0) {
+                for (const m of messages) {
+                    await deleteLocalMessage(m.id).catch(() => {});
+                }
+            }
+            await loadMessages(true);
+            void syncSingleConversation(String(id));
+        } catch (e: any) {
+            Alert.alert(t('Could not cancel request'), e.message ? chatLineWords(e.message) : t('That did not go through. Please try again.'));
+        } finally {
+            setCancellingRequest(false);
+        }
+    };
+
+    // A request holds every send until it is decided, or the node has answered; the opener's, once their line is in, until
+    // the other accepts. Not an edit of that line, which the node and the web allow (PR #2540 review 4394827275).
+    const requestHoldsSends = requestMode === 'to-me' || requestMode === 'mine-loading' || (requestMode === 'mine-waiting' && !editingMessage);
     // Asked before the composer empties the box, so a refused send keeps what was typed.
-    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current;
+    const canSendNow = () => !!identity?.publicKey && !isPeerBlocked && !keyChangePending && !sendingRef.current && !requestLineId && !requestHoldsSends;
+
+    // An Edit fills the box once it is drawn: while the opener's request waits, the composer only appears with the edit
+    // (review 4394827275), so it isn't there yet when Edit is tapped.
+    useEffect(() => {
+        if (editingMessage) composerRef.current?.setText(editingMessage.text || '');
+    }, [editingMessage]);
 
     // The composer owns the box and hands over the text it has already cleared and put under its sweep.
     const handleSend = async (currentDraft: string) => {
-        if (!currentDraft || !canSendNow() || !identity?.publicKey) return;
+        if (!currentDraft || !canSendNow() || !identity?.publicKey || requestHoldsSends) return;
 
         sendingRef.current = true;
         const wasEditing = editingMessage;
@@ -612,8 +767,10 @@ function ChatScreen({ id }: { id: string }) {
                 if (replyToMessage) {
                     metadata = JSON.stringify({ replyToId: replyToMessage.id });
                 }
-                await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, t('Sending is taking too long — please try again.'));
+                const sentId = await withTimeout(insertMessage(id as string, identity.publicKey, currentDraft, metadata), 15_000, t('Sending is taking too long — please try again.'));
                 setReplyToMessage(null);
+                // Written here and on its way: the chat waits only once the node has taken it (the effect above).
+                if (requestMode === 'mine-unsent' && typeof sentId === 'string') setRequestLineId(sentId);
                 loadMessages();
             }
             setLockNotice(null);
@@ -678,7 +835,10 @@ function ChatScreen({ id }: { id: string }) {
     // A failed optimistic send renders a red "!" — tapping the bubble lands here.
     const handleFailedMessagePress = async (item: any) => {
         await KeyboardController.dismiss(); // Alert = separate window; see phantom-keyboard note above
-        Alert.alert(t('Message not delivered'), t('This message could not be sent.'), [
+        const errorText = (typeof item.metadata?.__sendError === 'string' && item.metadata.__sendError.trim())
+            ? item.metadata.__sendError
+            : t('This message could not be sent.');
+        Alert.alert(t('Message not delivered'), errorText, [
             { text: t('Discard'), style: 'destructive', onPress: async () => {
                 await deleteLocalMessage(item.id).catch(() => {});
                 loadMessages(true);
@@ -687,6 +847,7 @@ function ChatScreen({ id }: { id: string }) {
                 if (!identity?.publicKey) return;
                 const meta = { ...(item.metadata || {}) };
                 delete meta.__sendState;
+                delete meta.__sendError;
                 const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : undefined;
                 try {
                     // Reuse the failed row's id: if the original POST actually landed
@@ -694,7 +855,8 @@ function ChatScreen({ id }: { id: string }) {
                     // of a duplicate the peer sees twice. insertMessage replaces the
                     // failed row only once the words are locked, so a resend that
                     // can't be locked leaves it here to try again.
-                    await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
+                    const sentId = await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
+                    if (requestMode === 'mine-unsent' && typeof sentId === 'string') setRequestLineId(sentId);
                     setLockNotice(null);
                 } catch (e: any) {
                     const refused = refusedSendNotice(e, peerPubkey ? peerName : null);
@@ -709,6 +871,7 @@ function ChatScreen({ id }: { id: string }) {
 
     const pickAndSendImage = async () => {
         if (!identity?.publicKey || sendingRef.current) return;
+        if (!requestTakesPhoto(requestMode) || requestLineId) return;
         // Same phantom-keyboard hazard as the review modal: the source-picker Alert and
         // the image-picker Activity are separate windows — hide the keyboard first.
         await KeyboardController.dismiss();
@@ -725,6 +888,7 @@ function ChatScreen({ id }: { id: string }) {
                 // the timeout keeps a dead network from latching sendingRef forever.
                 await withTimeout(sendImageMessage(id as string, dataUri, '', metadata), 60_000, t('Sending the image is taking too long — please try again.'));
                 setReplyToMessage(null);
+                setConvRow((prev: any) => prev ? { ...prev, request: requestAfterOwnLine(prev.request, identity.publicKey) } : prev);
                 setLockNotice(null);
                 hapticSuccess();
                 loadMessages();
@@ -1085,11 +1249,16 @@ function ChatScreen({ id }: { id: string }) {
 
         const isMe = identity?.publicKey ? item.senderId === identity.publicKey : false;
         const showActions = activeMessageActionsId === item.id;
-        const showEmojiPicker = activeEmojiPickerId === item.id;
-        const actions = messageActions(item, viewer);
+        // A chat that is still a request offers no Reply and no React, as the web (MessagesPage `inRequest`): the person it
+        // is for decides first, and their reaction would reach the opener while it still reads waiting; the opener's are
+        // refused until it is accepted (PR #2540 review 4394827119). Their own line still edits and deletes.
+        const inRequest = requestMode !== 'none';
+        const showEmojiPicker = !inRequest && activeEmojiPickerId === item.id;
+        const allowed = messageActions(item, viewer);
+        const actions = inRequest ? { ...allowed, reply: false, react: false } : allowed;
 
         const handleEmojiSelect = async (emoji: string) => {
-            if (!identity?.publicKey) return;
+            if (!identity?.publicKey || inRequest) return;
             try {
                 await toggleMessageReactionApi(item.id, identity.publicKey, emoji);
                 hapticSuccess();
@@ -1130,9 +1299,9 @@ function ChatScreen({ id }: { id: string }) {
         };
 
         const handleEditPress = () => {
+            // The box takes the line's words from the effect on editingMessage, once the composer is drawn.
             setEditingMessage(item);
             setReplyToMessage(null);
-            composerRef.current?.setText(item.text || '');
             setActiveMessageActionsId(null);
             setActiveEmojiPickerId(null);
         };
@@ -1188,9 +1357,15 @@ function ChatScreen({ id }: { id: string }) {
                 onPickEmoji={handleEmojiSelect}
                 onPressUrl={openUrl}
                 quote={quote}
-                attachment={item.type === 'image' ? (
+                attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
+                    // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
+                    // (design §4.6, as the web; PR #2540 review 4393642129). Its caption is words, and reads.
+                    <Text testID="request-photo-closed" style={{ color: colors.text.muted, fontStyle: 'italic', padding: 8 }}>
+                        <Text aria-hidden={true} importantForAccessibility="no">🖼️ </Text>{t('Photo: shown when you accept')}
+                    </Text>
+                ) : (
                     <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
-                ) : null}
+                )) : null}
                 status={status}
                 footer={(item.type === 'image' && !item.text) || item.integrityNote ? (
                     <>
@@ -1475,6 +1650,85 @@ function ChatScreen({ id }: { id: string }) {
                             <Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>{t('You have blocked this user. Messaging is disabled.')}
                         </Text>
                     </View>
+                ) : requestMode === 'to-me' ? (
+                    <View
+                        role="region"
+                        accessibilityLabel={t('{name} wants to message you', { name: peerName })}
+                        style={[styles.toMeContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
+                    >
+                        <Text style={styles.toMeTitle}>
+                            {t('{name} wants to message you', { name: peerName })}
+                        </Text>
+                        <Text style={styles.toMeSubtitle}>
+                            {t('Accept to reply. If you ignore it, they are not told.')}
+                        </Text>
+                        <View style={styles.toMeButtons}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Accept', undefined, 'button: accept a message request')}
+                                style={[styles.toMeAcceptBtn, decidingRequest && { opacity: 0.7 }]}
+                                disabled={decidingRequest}
+                                onPress={async () => {
+                                    if (decidingRequest) return;
+                                    setDecidingRequest(true);
+                                    try {
+                                        const answer = await decideMessageRequest(String(id), 'accept');
+                                        setConvRow((prev: any) => prev ? { ...prev, request: answer.request } : prev);
+                                        void syncSingleConversation(String(id));
+                                    } catch (e: any) {
+                                        // Gone from the node (its opener cancelled it): back to Talk, as Ignore goes.
+                                        if (requestIsGone(e)) { router.navigate('/(tabs)/chats'); return; }
+                                        Alert.alert(requestDecisionFailureWords(e));
+                                    } finally {
+                                        setDecidingRequest(false);
+                                    }
+                                }}
+                            >
+                                <Text style={styles.toMeAcceptBtnText}>{t('Accept', undefined, 'button: accept a message request')}</Text>
+                            </Pressable>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Ignore', undefined, 'button: ignore a message request')}
+                                style={[styles.toMeIgnoreBtn, decidingRequest && { opacity: 0.7 }]}
+                                disabled={decidingRequest}
+                                onPress={async () => {
+                                    if (decidingRequest) return;
+                                    setDecidingRequest(true);
+                                    try {
+                                        await decideMessageRequest(String(id), 'ignore');
+                                        router.navigate('/(tabs)/chats');
+                                    } catch (e: any) {
+                                        if (requestIsGone(e)) { router.navigate('/(tabs)/chats'); return; }
+                                        Alert.alert(requestDecisionFailureWords(e));
+                                    } finally {
+                                        setDecidingRequest(false);
+                                    }
+                                }}
+                            >
+                                <Text style={styles.toMeIgnoreBtnText}>{t('Ignore', undefined, 'button: ignore a message request')}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                ) : requestMode === 'mine-waiting' && !editingMessage ? (
+                    <View
+                        role="status"
+                        testID="request-waiting"
+                        style={[styles.waitingContainer, { marginBottom: Math.max(insets.bottom, 12) }]}
+                    >
+                        <Text style={styles.waitingText}>
+                            {t('Sent as a request. {name} will see it under Requests. You can write more once they accept.', { name: peerName })}
+                        </Text>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Cancel request')}
+                            testID="request-cancel"
+                            style={[styles.cancelRequestBtn, cancellingRequest && { opacity: 0.7 }]}
+                            disabled={cancellingRequest}
+                            onPress={handleCancelRequest}
+                        >
+                            <Text style={styles.cancelRequestBtnText}>{t('Cancel request')}</Text>
+                        </Pressable>
+                    </View>
                 ) : (
                     <ChatComposer
                         ref={composerRef}
@@ -1482,7 +1736,8 @@ function ChatScreen({ id }: { id: string }) {
                         onSend={handleSend}
                         canSend={canSendNow}
                         disabled={keyChangePending}
-                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : null}
+                        busy={requestMode === 'mine-loading' || !!requestLineId}
+                        notice={unplaced ? t(DM_LOCK_WORDS.unplaced) : keyChangePending ? dmKeyChangedLine(keyChange?.name) : lockNotice ? chatLineWords(lockNotice) : (requestMode === 'mine-unsent' && !requestLineId ? t('Your first message goes to {name} as a request. You can write more once they accept.', { name: peerName }) : requestMode === 'mine-loading' ? t('Loading the chat') : null)}
                         placeholder={t('Message...')}
                         accessibilityLabel={t('Message', undefined, 'message box')}
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

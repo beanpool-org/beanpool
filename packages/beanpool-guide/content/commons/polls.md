@@ -18,8 +18,7 @@ While a poll is open it says nothing about this. If it did, someone checking the
 
 ## Starting a poll
 
-- Tap **+ ADD POST** on the Market tab or the Map.
-- Choose **Community Poll**.
+- On **Commons**, tap **Start something** (on the phone, the round **+** button) and pick **Poll**. Or tap **+ ADD POST** on the Market tab or the Map, and choose **Community Poll**.
 - Write the **Question**.
 - Add **Context / Notes** if it helps. This is optional.
 - Write 2 to 4 **Options**. Tap **+ Add Option** for more.

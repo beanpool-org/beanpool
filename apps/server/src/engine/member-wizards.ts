@@ -40,7 +40,12 @@ import {
     reconcileLedgerFromDb,
     countOpenTrades,
     dispatchPushNotification,
+    removalInGraceOf,
+    COMMUNITY_DECISION_ACTOR,
+    REMOVAL_IS_THE_VOTE_CODE,
 } from '../state-engine.js';
+import { getProfileSwitches } from '../config/node-profile.js';
+import { announceDecisionUpdated, closeRemovalSettledEarly } from '../decisions-engine.js';
 import { ledger } from './ledger.js';
 import { isMemberKeySpelling } from './member-key.js';
 import { logger, sanitizeMessage } from '../logger.js';
@@ -106,6 +111,8 @@ export interface OffboardPreview {
         publicKey: string;
         callsign: string;
     }>;
+    /** Where the community votes, the removal it voted for that this offboarding settles (removalToSettle); null where votes are off. */
+    settlesRemoval: { decisionId: string; gracePeriodEndsAt: string | null } | null;
 }
 
 export interface OffboardOptions {
@@ -730,6 +737,53 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
 
 // ===================== OFFBOARDING FLOW =====================
 
+/** Why an offboarding is refused where the community votes and has not voted to remove the member (removalToSettle). */
+export const OFFBOARD_SETTLES_A_REMOVAL = "Offboarding settles a removal the community voted for, in its 7-day grace window, "
+    + "and no removal of this member has passed. Removing a member is the community's vote here: pause them instead, and that opens the vote.";
+/** The same refusal for an owner or an admin, whom no vote removes (state-engine REMOVAL_OF_A_ROLE_HOLDER; review 4397436971). */
+export const OFFBOARD_A_ROLE_HOLDER = "Offboarding settles a removal the community voted for, in its 7-day grace window, "
+    + "and no vote removes an owner or admin of this community's server. An owner can take that role away first; after that, they are a member like any other, and pausing them opens the vote.";
+
+/**
+ * The removal this offboarding settles (removal by vote S3: scratch/fable-design/DESIGN-removal-by-vote-fable.md §2 row 5,
+ * §10 Q6). Where the community votes, the wizard is the last step of a removal it voted for, run in that removal's grace
+ * window: the admin answers the Beans question there, and the removal completes now, as Accelerate completes one. It is
+ * never a removal of its own there: refused 400 in words when no removal of the member waits out its grace window. Null
+ * where votes are off, where the offboarding is the admins' own removal, as before (Q11).
+ */
+export function removalToSettle(publicKey: string): { id: string; gracePeriodEndsAt: string | null } | null {
+    if (!getProfileSwitches().decisions) return null;
+    const removal = removalInGraceOf(publicKey);
+    if (removal) return removal;
+    const err: any = new Error(heldPrivilegedRole(publicKey) ? OFFBOARD_A_ROLE_HOLDER : OFFBOARD_SETTLES_A_REMOVAL);
+    err.status = 400;
+    err.statusCode = 400;
+    err.code = REMOVAL_IS_THE_VOTE_CODE;
+    throw err;
+}
+
+/**
+ * The refusal executeOffboard would give for this member because the community votes and has voted no removal of them
+ * (removalToSettle), or null: the route asks it before an owner's fresh proof is spent. Everything executeOffboard answers
+ * before that, in its order, is left to it: a row under another spelling of a key, a key with no member here, one already
+ * removed (a retry after a lost answer, given its first result), the only owner.
+ */
+export function offboardRefusalFirst(publicKey: string): Error | null {
+    try {
+        assertNotMisspeltRow(publicKey);
+    } catch {
+        return null;
+    }
+    const member = getMember(publicKey.trim().toLowerCase());
+    if (!member || member.status === 'pruned' || isSoleOwner(member.publicKey)) return null;
+    try {
+        removalToSettle(member.publicKey);
+        return null;
+    } catch (e) {
+        return e as Error;
+    }
+}
+
 /**
  * Computes preview data for offboarding a member:
  * - Current balance
@@ -738,6 +792,8 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
  * - Projected Commons pool after write-off or donation
  * - Active members for gifting
  * - Check for pending escrows
+ * - Where the community votes, the removal it settles: refused (removalToSettle) for a member with none, before their
+ *   balance is read, so the route logs no look at it
  */
 export function getOffboardPreview(publicKey: string): OffboardPreview {
     assertNotMisspeltRow(publicKey);
@@ -746,6 +802,7 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
     if (!member) {
         throw new Error('Member not found');
     }
+    const settles = removalToSettle(cleanPub);
 
     const balanceInfo = getBalance(cleanPub);
     const balance = balanceInfo.balance;
@@ -783,6 +840,7 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
         pendingEscrowsCount: pendingEscrows,
         isSoleOwner: isOwner,
         activeMembers,
+        settlesRemoval: settles ? { decisionId: settles.id, gracePeriodEndsAt: settles.gracePeriodEndsAt } : null,
     };
 }
 
@@ -827,6 +885,8 @@ function getPreviousOffboardResult(
 
 /**
  * Executes member offboarding:
+ * - Where the community votes, only in a removal it voted for, waiting out its grace window (removalToSettle): the prune
+ *   is that vote's (COMMUNITY_DECISION_ACTOR) and its Decision closes, as Accelerate closes one
  * - Positive balance: Donate to Commons OR Gift to active member
  *   * Two-person rule: Actor cannot gift to themselves
  * - Negative balance: Formally write off against Commons using adminPruneUser
@@ -852,8 +912,10 @@ export function executeOffboard(
     if (isSoleOwner(cleanPub)) {
         throw new Error('Cannot offboard the sole node owner; appoint another owner first');
     }
-    // Before any money moves: only an owner may offboard an owner or admin (403 otherwise).
-    assertMayPrune(cleanPub, cleanOperator);
+    // Before any money moves: where the community votes, the removal it voted for that this settles (400 in words when
+    // there is none); and only an owner may offboard an owner or admin (403 otherwise).
+    const settles = removalToSettle(cleanPub);
+    assertMayPrune(cleanPub, cleanOperator, settles ? 'settles-removal' : 'direct');
 
     // Guard against pending escrows or open trade requests before pruning
     const openTrades = countOpenTrades(cleanPub);
@@ -955,8 +1017,15 @@ export function executeOffboard(
             // Handled inside adminPruneUser below via payFromCommons(..., allowDeficit: true)
         }
 
-        // Execute the formal prune path (scrubs roles, channels, cancels posts, sets status pruned)
-        adminPruneUser(cleanPub, cleanOperator);
+        // Execute the formal prune path (scrubs roles, channels, cancels posts, sets status pruned). Settling a removal the
+        // community voted for, it is that vote's, and the vote's Decision closes with it.
+        const nowIso = new Date().toISOString();
+        if (settles) {
+            adminPruneUser(cleanPub, COMMUNITY_DECISION_ACTOR);
+            closeRemovalSettledEarly(settles.id, nowIso);
+        } else {
+            adminPruneUser(cleanPub, cleanOperator);
+        }
 
         // Purge device push tokens to prevent leaked notifications, with a tombstone each so a standby drops them too
         // (a plain table, design G4)
@@ -967,7 +1036,6 @@ export function executeOffboard(
         }
 
         // Full audit record in system_logs
-        const nowIso = new Date().toISOString();
         db.prepare(`
             INSERT INTO system_logs (timestamp, level, category, message, metadata)
             VALUES (?, 'INFO', 'ADMIN', ?, ?)
@@ -992,6 +1060,8 @@ export function executeOffboard(
     }
 
     logger.info('ADMIN', `[Offboard] Offboarded member ${member.callsign} (${cleanPub}) with resolution ${resolution}`);
+    // The removal it settled closed with it: told once it has committed, as Accelerate tells its own.
+    if (settles) announceDecisionUpdated(settles.id);
 
     return {
         success: true,

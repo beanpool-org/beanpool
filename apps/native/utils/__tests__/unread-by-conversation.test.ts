@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 // schema has, so the count, the read cut-off and the peer name are checked rather than assumed.
 const sql = new DatabaseSync(':memory:');
 sql.exec(`
-    CREATE TABLE conversations (id TEXT PRIMARY KEY, type TEXT NOT NULL, post_id TEXT, name TEXT);
+    CREATE TABLE conversations (id TEXT PRIMARY KEY, type TEXT NOT NULL, post_id TEXT, name TEXT, request TEXT);
     CREATE TABLE conversation_participants (conversation_id TEXT, public_key TEXT, last_read_at DATETIME, PRIMARY KEY (conversation_id, public_key));
     CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, author_pubkey TEXT, ciphertext TEXT, nonce TEXT, timestamp TEXT);
     CREATE TABLE members (public_key TEXT PRIMARY KEY, callsign TEXT);
@@ -62,6 +62,10 @@ function seed() {
     // An enterprise thread is left out, as in getGlobalUnreadCount.
     conv.run('e1', 'enterprise_thread', 'Bakery'); part.run('e1', 'me', null);
     msg.run('e-1', 'e1', 'bo', 'x', 'plaintext', '2026-09-19T08:00:00Z');
+    // A message request waiting for me, its people and line on the phone from its card's preview: under Requests only.
+    sql.prepare('INSERT INTO conversations (id, type, name, request) VALUES (?, ?, ?, ?)').run('r1', 'dm', null, JSON.stringify({ state: 'pending', from: 'bo', at: '2026-09-19T07:00:00Z' }));
+    part.run('r1', 'me', null); part.run('r1', 'bo', null);
+    msg.run('r-1', 'r1', 'bo', 'x', 'v2enc', '2026-09-19T08:00:00Z');
     // A conversation I'm not in.
     conv.run('x1', 'dm', null); part.run('x1', 'ana', null); part.run('x1', 'bo', null);
     msg.run('x-1', 'x1', 'bo', 'x', 'v2enc', '2026-09-19T08:00:00Z');

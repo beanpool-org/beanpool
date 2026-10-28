@@ -29,6 +29,7 @@ import {
 import { t, tn } from '@beanpool/core';
 import { EVENT_ACCENT } from './EventCard';
 import { Sentence } from './Sentence';
+import { ShareOutsideButton } from './SharePost';
 import { reminderBeforeWords } from './settings/settings-lines';
 import { eventLineWords } from './event-lines';
 
@@ -114,13 +115,17 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     };
 
     return (
-        <View style={styles.row}>
-            <Pressable onPress={share} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Share this event')}>
-                <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🔗 Share')}</Text>
-            </Pressable>
-            <Pressable onPress={addToCalendar} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Add this event to your calendar')}>
-                <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📅 Add to calendar')}</Text>
-            </Pressable>
+        <View>
+            <View style={styles.row}>
+                <Pressable onPress={share} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Share this event')}>
+                    <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🔗 Share')}</Text>
+                </Pressable>
+                <Pressable onPress={addToCalendar} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Add this event to your calendar')}>
+                    <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📅 Add to calendar')}</Text>
+                </Pressable>
+            </View>
+            {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
+            <ShareOutsideButton post={post} />
         </View>
     );
 }

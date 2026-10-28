@@ -443,7 +443,6 @@
   "🎉 FUNDED": "🎉 تم التمويل",
   "🌱 PROJECT": "🌱 مشروع",
   "🏛️ ENTERPRISE": "🏛️ مؤسسة",
-  "Enterprise Balance": "رصيد المؤسسة",
   "in deficit (keepers eat last)": "في حالة عجز (يتحمل الرعاة المسؤولية أخيرًا)",
   "Pledge Beans": "تعهد بـ فاصوليا",
   "Word {n}: {word}": "الكلمة {n}: {word}",
@@ -3106,7 +3105,6 @@
   "PURPOSE STATEMENT *": "بيان الغرض *",
   "Purpose statement": "بيان الغرض",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "وضّح بوضوح الغرض من وجود هذه المؤسسة (مثال: 'نبني ونحافظ على بيت ظل مشترك بحلول نوفمبر').",
-  "The purpose statement is what the community judges the initiative against.": "بيان الغرض هو المعيار الذي يقيم المجتمع المبادرة على أساسه.",
   "FUNDING GOAL ({currency}) *": "هدف التمويل ({currency}) *",
   "Funding goal amount": "مبلغ هدف التمويل",
   "Pledges are held safely in the enterprise account.": "تُحفظ التعهدات بأمان في حساب المؤسسة.",
@@ -3462,7 +3460,6 @@
   "Post\u0004button: publish": "نشر",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 استخدم علامة تبويب {ledger} لإرسال الأرصدة إلى الجيران فورًا.",
   "Member\u0004what a Decision touches": "عضو",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "طرد من هذا الخادم (أغلبية معززة 66%، نصاب 25%، فترة سماح مدتها 7 أيام)",
   "Temporary freeze of trading and messaging": "تجميد مؤقت للتداول والمراسلة",
   "Restore member to active standing (simple majority)": "إعادة العضو إلى الوضع النشط (أغلبية بسيطة)",
   "Cancel pending removal and restore account (simple majority)": "إلغاء الإزالة المعلقة واستعادة الحساب (أغلبية بسيطة)",
@@ -3490,14 +3487,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "يرجى إدخال الاسم التعريفي أو المفتاح العام للمسؤول الرئيسي أو القائد.",
   "The lead keeper or leader to remove: callsign or public key": "المسؤول الرئيسي أو القائد المراد إزالته: الاسم التعريفي أو المفتاح العام",
   "Enter the lead keeper or leader's callsign or pubkey...": "أدخل الاسم التعريفي أو المفتاح العام للمسؤول الرئيسي أو القائد...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "zero": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "one": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "two": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "few": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "many": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن.",
-    "other": "الأرصدة خاصة: لا يمكنك رؤية رصيد {name}. عند بدء هذا التصويت، يسجل المجتمع رصيدهم وأي دين، ويعرضهما لكل من يحق له التصويت فيه. إذا تمت إزالتهم، يُحمَّل الدين على الصندوق المشترك، الذي يحتوي على {n} فاصوليا الآن."
-  },
   "Missing Title": "العنوان مفقود",
   "Please enter a clear, concise title for this decision.": "يرجى إدخال عنوان واضح وموجز لهذا القرار.",
   "Missing Description": "الوصف مفقود",
@@ -7074,6 +7063,7 @@
   "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها.",
+  "Cancel request": "إلغاء الطلب",
   "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:",
   "Choose a banner photo, or keep this one": "اختر صورة بانر، أو احتفظ بهذه الصورة",
   "Your picture, until you choose a banner.": "صورتك، حتى تختار بانر.",
@@ -7089,5 +7079,6 @@
   "Tell me when a community starts here, or say you'd help start one": "أخبرني عندما يبدأ مجتمع هنا، أو ساهم في بدء واحد",
   "Nothing within 250 km yet.": "لا يوجد شيء في نطاق 250 كم بعد.",
   "See what people post elsewhere ›": "شاهد ما ينشره الآخرون في أماكن أخرى ›",
-  "Set your area": "حدد منطقتك"
+  "Set your area": "حدد منطقتك",
+  "The purpose statement is what the community judges the project or enterprise against.": "بيان الغرض هو المعيار الذي يقيم المجتمع المشروع أو المؤسسة على أساسه."
 }

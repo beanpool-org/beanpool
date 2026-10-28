@@ -335,7 +335,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         expect(within(tabs).queryByText('Enterprises')).toBeNull();
         expect(within(tabs).getByText('Groups')).toBeInTheDocument();
 
-        for (const text of ['Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
+        for (const text of ['Commons', 'Commons Pool', 'Voice credits', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
     });
@@ -346,7 +346,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         // qualifiedTradeValue 9.6 from the Decisions list, floored; earnedCredit (12) is a different number.
         await waitFor(() => expect(within(card).getByText('9')).toBeInTheDocument());
         expect(within(card).queryByText('12')).toBeNull();
-        expect(within(card).getByText('From completed trades · N votes cost N×N')).toBeInTheDocument();
+        expect(within(card).getByText('For money votes · from completed trades · N votes cost N×N')).toBeInTheDocument();
     });
 
     it('gates Propose on the node\'s rule: a node admin with no earned credit may propose', async () => {
@@ -741,22 +741,44 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
 
     // Rehearsal 14 Oct, S2: on global "+ Propose a Project" opened a Beans form the node answers 404 "Enterprises are
     // switched off on this node."
-    it('Beans off and no enterprises: no "No enterprises found" and no "+ Propose a Project"', async () => {
+    it('Beans off and no enterprises: no empty-state title (any chip) and no "+ Propose a Project"', async () => {
         vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
         vi.mocked(communityInfoOnce).mockResolvedValue(globalInfo);
         render(<ProjectsPage identity={backerIdentity} />);
         await waitFor(() => expect(screen.queryByTestId('commons-section-tabs')).toBeNull());
         await act(async () => { await new Promise(r => setTimeout(r, 0)); });
         expect(screen.queryByText('No enterprises found')).toBeNull();
+        for (const title of ['No others yet', 'No projects to back yet', 'No enterprises yet']) expect(screen.queryByText(title)).toBeNull();
         expect(screen.queryByRole('button', { name: '+ Propose a Project' })).toBeNull();
     });
 
-    it('Beans on and no enterprises: the empty state still offers "+ Propose a Project"', async () => {
+    it('Beans on and no enterprises: the Projects chip empty state offers "Start a project" (Fable 5.1 §3.1, §5 S5)', async () => {
         vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
         vi.mocked(communityInfoOnce).mockResolvedValue({ ...globalInfo, profile: 'local' as never, features: { ...globalInfo.features, beans: true } });
         render(<ProjectsPage identity={backerIdentity} />);
-        expect(await screen.findByText('No enterprises found')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '+ Propose a Project' })).toBeInTheDocument();
+        // The title says what the chip lists; the old "No enterprises found" is gone from every chip
+        expect(await screen.findByText('No others yet')).toBeInTheDocument();
+        expect(screen.queryByText('No enterprises found')).toBeNull();
+        // On 'all', the "+" is the action and no button is drawn
+        expect(screen.queryByRole('button', { name: '+ Propose a Project' })).toBeNull();
+        expect(screen.getByText('Start one with +: a chat group, a project or an enterprise.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Start a project' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Start an enterprise' })).toBeNull();
+        // On 'projects', "Start a project" is offered, and the line says what a project is for
+        fireEvent.click(screen.getByRole('button', { name: '🌱 Projects' }));
+        expect(screen.getByText('No projects to back yet')).toBeInTheDocument();
+        expect(screen.queryByText('No enterprises found')).toBeNull();
+        expect(screen.queryByText('No others yet')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Start a project' })).toBeInTheDocument();
+        expect(screen.getByText('Got an idea that needs Beans? Start a project.')).toBeInTheDocument();
+        // On 'enterprises', "Start an enterprise"
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Enterprises' }));
+        expect(screen.getByText('No enterprises yet')).toBeInTheDocument();
+        expect(screen.queryByText('No projects to back yet')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Start an enterprise' })).toBeInTheDocument();
+        expect(screen.getByText('Something that keeps going and trades? Start an enterprise.')).toBeInTheDocument();
+        // Nowhere does the old "propose a project" line come back
+        expect(screen.queryByText(/propose a project/i)).toBeNull();
     });
 
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
@@ -771,7 +793,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} />);
         const card = await screen.findByTestId('voice-credits-card');
         await waitFor(() => expect(within(card).getByText('9')).toBeInTheDocument());
-        expect(within(card).getByText('From completed trades · N votes cost N×N')).toBeInTheDocument();
+        expect(within(card).getByText('For money votes · from completed trades · N votes cost N×N')).toBeInTheDocument();
     });
 });
 

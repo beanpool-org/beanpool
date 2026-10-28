@@ -50,6 +50,7 @@ vi.mock('react-native', () => {
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
+        if (disabled || props.accessibilityState?.disabled) attrs['aria-disabled'] = 'true';
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (placeholder) attrs.placeholder = placeholder;
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
@@ -524,13 +525,16 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(bypassing(), 'filters').toEqual([]);
     });
 
-    it('the propose-a-Decision form: touches, effects, the lead to remove, the debt disclosure, its questions', async () => {
+    it('the propose-a-Decision form: touches, effects, the lead to remove, how to ask for a removal, its questions', async () => {
         node.decisions = [];
         await renderIn('xx');
         await click(byLabel(pseudoLocalise('Decide Section')), 'Decide');
         await click(button('+ Propose a Decision'), 'Propose');
         expect(host.textContent).toContain(pseudoLocalise('Propose a Community Decision'));
-        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Mandatory Debt Disclosure (§3.8)')));
+        // Removal by vote S3: no removal is proposed (a pause opens that vote), so no debt disclosure for one; the form says
+        // how a member asks for one instead.
+        expect(host.textContent).not.toContain(inCapitalsOf(pseudoLocalise('Mandatory Debt Disclosure (§3.8)')));
+        expect(host.textContent).toContain(pseudoLocalise("A vote on removing a member opens only when an admin pauses them. To ask for one, tell your community's moderators: blocking someone reports them, as reporting one of their posts does."));
         expect(bypassing(), 'form').toEqual([]);
         await click(byLabel(pseudoLocalise('Submit Community Decision')), 'Submit');
         expect(alerts.said).toContain(pseudoLocalise('Missing Title'));
@@ -606,11 +610,51 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
     });
 });
 
-describe('the start-a-project form and the new-poll form in the pseudo-locale', () => {
-    it('Start an Enterprise / Project: every field, the missing-fields line, a deadline picked, the answer', async () => {
+describe('the start form by kind and the new-poll form in the pseudo-locale (Fable 5.1 §5 S5)', () => {
+    it('phone start form with kind=ongoing: titles "Start an enterprise", submits "Start the enterprise 🏛️", banner notice', async () => {
+        params.now = { kind: 'ongoing' };
+        await renderIn('xx', createElement(ProposeProjectScreen));
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start an enterprise')));
+        expect(host.textContent).toContain(pseudoLocalise('You can add a banner photo next.'));
+        expect(host.textContent).toContain(pseudoLocalise('WHAT IS IT?'));
+        expect(host.textContent).not.toContain(pseudoLocalise('FUNDING GOAL ({currency}) *').split('{currency}')[0]);
+        expect(bypassing(), 'form').toEqual([]);
+
+        // A logo first: without one, button says "Choose a logo"
+        expect(byLabel(pseudoLocalise('Start the enterprise 🏛️')), 'no Start before a logo').toBeNull();
+        expect(byLabel(pseudoLocalise('Choose a logo'))).toBeTruthy();
+        await click(byLabel(pseudoLocalise('Choose a logo')), 'the logo');
+        const preset = new RegExp(`^${pseudoLocalise('Select {name} avatar').split('{name}').map(escape).join('.+')}$`);
+        await click(Array.from(host.querySelectorAll('[aria-label]')).find((el) => preset.test(el.getAttribute('aria-label') ?? '')), 'a ready-made picture');
+        await click(Array.from(host.querySelectorAll('button')).filter((b) => (b.textContent ?? '').includes(pseudoLocalise('Use Selected Avatar'))).pop(), 'Use Selected Avatar');
+        expect(bypassing(), 'the picture sheet').toEqual([]);
+
+        const start = byLabel(pseudoLocalise('Start the enterprise 🏛️'));
+        expect(start, 'Start the enterprise button').toBeTruthy();
+    });
+
+    it('phone start form with kind=undefined: titles "Start a project or an enterprise", submit disabled with "Choose a project or an enterprise first"', async () => {
+        params.now = {};
+        await renderIn('xx', createElement(ProposeProjectScreen));
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start a project or an enterprise')));
+        expect(host.textContent).toContain(pseudoLocalise('WHAT IS IT?'));
+        expect(bypassing(), 'form').toEqual([]);
+
+        const submit = byLabel(pseudoLocalise('Choose a project or an enterprise first'));
+        expect(submit, 'submit button when unselected').toBeTruthy();
+        expect(submit?.getAttribute('aria-disabled'), 'submit is disabled').toBe('true');
+
+        // Picking Project updates header and submit button
+        await click(byLabel(pseudoLocalise('Project: a leader, a goal, an end date')), 'pick project');
+        expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start a project')));
+        expect(byLabel(pseudoLocalise('Choose a logo'))).toBeTruthy();
+    });
+
+    it('phone start form with kind=bounded: every field, the missing-fields line, a deadline picked, the answer', async () => {
         params.now = { kind: 'bounded' };
         await renderIn('xx', createElement(ProposeProjectScreen));
         expect(host.textContent).toContain(inCapitalsOf(pseudoLocalise('Start a project')));
+        expect(host.textContent).toContain(pseudoLocalise('WHAT IS IT?'));
         expect(host.textContent).toContain(pseudoLocalise('FUNDING GOAL ({currency}) *').split('{currency}')[0]);
         expect(bypassing(), 'form').toEqual([]);
         // The missing-fields line hides itself 3 s later on a bare timer in propose-project.tsx, run here on a fake clock so it

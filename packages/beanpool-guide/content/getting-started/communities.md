@@ -22,7 +22,7 @@ Your key, your 12 words and your name come with you. Your posts, chats and trade
 
 A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member: its name, how many members it has and its town or area if the community shares them, and whether it **Takes requests to join** or **Takes new members by invite**. Nothing else: no members' names, no listings, no balances, never an exact place. The website's map links each community's card with **See** and its name.
 
-- **Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you join the global community, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**
+- **Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you look around global first, join there to get an account, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**
 - **I have an invite**: the form for your invite code.
 - **Already a member**: the ways back into your account.
 - **Look around the global community**: where the community links to one.

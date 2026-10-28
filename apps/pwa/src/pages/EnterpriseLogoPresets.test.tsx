@@ -28,7 +28,7 @@ async function chooseTheCrop() {
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url: string | null | undefined) => {
         if (!url) return null;
-        if (url.startsWith('bundled://')) return `/avatars/avatar_${url.replace('bundled://', '')}.jpg`;
+        if (url.startsWith('bundled://')) return `/avatars/avatar_${url.replace('bundled://', '')}.webp`;
         return url;
     }),
     resolveImageUrl: vi.fn((url: string | null | undefined) => url ?? null),

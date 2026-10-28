@@ -56,7 +56,7 @@ export const DefaultBanner: React.FC<DefaultBannerProps> = ({
         tileKey = KNOWN_TILES.has(normalized) ? normalized : 'general';
     }
 
-    const resolvedLogo = resolveAvatarUrl(logoUrl, pubkey) || '/avatars/avatar_bean_green.jpg';
+    const resolvedLogo = resolveAvatarUrl(logoUrl, pubkey) || '/avatars/avatar_bean_green.webp';
     const isBundled = isBundledAvatar(logoUrl ?? '') || resolvedLogo.startsWith('/avatars/');
 
     const testIdProp = dataTestId || testID || 'default-banner';

@@ -2,7 +2,7 @@
  * Bundled avatar registry for BeanPool on the phone.
  *
  * Sourced from `@beanpool/core`'s universal AVATAR_PRESETS, mapped to local
- * require'd 512x512 JPEG image assets.
+ * require'd 512x512 WebP image assets.
  *
  * For ledger storage, we store the `id` as a reference (e.g., "bundled://bean-green")
  * to avoid bloating the ledger with redundant image data.
@@ -10,35 +10,46 @@
 import { ImageSourcePropType } from 'react-native';
 import { AVATAR_PRESETS, type AvatarPreset, word, type WordKey } from '@beanpool/core';
 
+// Ensure Node test runners (Vitest) can require .webp without failing on unknown extension
+if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+        const Module = require('node:module');
+        const Loader = Module.getBuiltinModule ? Module.getBuiltinModule('node:module') : Module;
+        if (Loader?._extensions && !Loader._extensions['.webp']) {
+            Loader._extensions['.webp'] = (m: { exports: unknown }) => { m.exports = 1; };
+        }
+    } catch {}
+}
+
 export interface BundledAvatar extends AvatarPreset {
     source: ImageSourcePropType;
 }
 
 const SOURCES: Record<string, ImageSourcePropType> = {
-    'bean-green':  require('../assets/images/avatars/avatar_bean_green.jpg'),
-    'bean-purple': require('../assets/images/avatars/avatar_bean_purple.jpg'),
-    'leaf':        require('../assets/images/avatars/avatar_leaf.jpg'),
-    'sprout':      require('../assets/images/avatars/avatar_sprout.jpg'),
-    'sun':         require('../assets/images/avatars/avatar_sun.jpg'),
-    'moon':        require('../assets/images/avatars/avatar_moon.jpg'),
-    'wave':        require('../assets/images/avatars/avatar_wave.jpg'),
-    'mountain':    require('../assets/images/avatars/avatar_mountain.jpg'),
-    'fire':        require('../assets/images/avatars/avatar_fire.jpg'),
-    'crystal':     require('../assets/images/avatars/avatar_crystal.jpg'),
-    'sunflower':   require('../assets/images/avatars/avatar_sunflower.jpg'),
-    'mushroom':    require('../assets/images/avatars/avatar_mushroom.jpg'),
-    'honeybee':    require('../assets/images/avatars/avatar_honeybee.jpg'),
-    'butterfly':   require('../assets/images/avatars/avatar_butterfly.jpg'),
-    'wind':        require('../assets/images/avatars/avatar_wind.jpg'),
-    'rocket':      require('../assets/images/avatars/avatar_rocket.jpg'),
-    'atom':        require('../assets/images/avatars/avatar_atom.jpg'),
-    'planet':      require('../assets/images/avatars/avatar_planet.jpg'),
-    'robot':       require('../assets/images/avatars/avatar_robot.jpg'),
-    'bolt':        require('../assets/images/avatars/avatar_bolt.jpg'),
-    'satellite':   require('../assets/images/avatars/avatar_satellite.jpg'),
-    'solartree':   require('../assets/images/avatars/avatar_solartree.jpg'),
-    'portal':      require('../assets/images/avatars/avatar_portal.jpg'),
-    'cybereye':    require('../assets/images/avatars/avatar_cybereye.jpg'),
+    'bean-green':  require('../assets/images/avatars/avatar_bean_green.webp'),
+    'bean-purple': require('../assets/images/avatars/avatar_bean_purple.webp'),
+    'leaf':        require('../assets/images/avatars/avatar_leaf.webp'),
+    'sprout':      require('../assets/images/avatars/avatar_sprout.webp'),
+    'sun':         require('../assets/images/avatars/avatar_sun.webp'),
+    'moon':        require('../assets/images/avatars/avatar_moon.webp'),
+    'wave':        require('../assets/images/avatars/avatar_wave.webp'),
+    'mountain':    require('../assets/images/avatars/avatar_mountain.webp'),
+    'fire':        require('../assets/images/avatars/avatar_fire.webp'),
+    'crystal':     require('../assets/images/avatars/avatar_crystal.webp'),
+    'sunflower':   require('../assets/images/avatars/avatar_sunflower.webp'),
+    'mushroom':    require('../assets/images/avatars/avatar_mushroom.webp'),
+    'honeybee':    require('../assets/images/avatars/avatar_honeybee.webp'),
+    'butterfly':   require('../assets/images/avatars/avatar_butterfly.webp'),
+    'wind':        require('../assets/images/avatars/avatar_wind.webp'),
+    'rocket':      require('../assets/images/avatars/avatar_rocket.webp'),
+    'atom':        require('../assets/images/avatars/avatar_atom.webp'),
+    'planet':      require('../assets/images/avatars/avatar_planet.webp'),
+    'robot':       require('../assets/images/avatars/avatar_robot.webp'),
+    'bolt':        require('../assets/images/avatars/avatar_bolt.webp'),
+    'satellite':   require('../assets/images/avatars/avatar_satellite.webp'),
+    'solartree':   require('../assets/images/avatars/avatar_solartree.webp'),
+    'portal':      require('../assets/images/avatars/avatar_portal.webp'),
+    'cybereye':    require('../assets/images/avatars/avatar_cybereye.webp'),
 };
 
 /** Sourced from core's AVATAR_PRESETS, with native word() keys satisfying native words catalog. */

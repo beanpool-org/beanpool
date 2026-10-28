@@ -438,7 +438,7 @@ export type VaultAnswerKind =
     | 'receipt'
     /** A copy handed out: `provider`, `pubkey` (the account's key) and `box` (the release sealed to `key`). */
     | 'release'
-    /** `/v1/copies/status`: `copies` and `holds`. */
+    /** `/v1/copies/status`: `copies` (each `provider`, `lastReleasedAt`, `since`, and the same day as `updatedDay`) and `holds`. */
     | 'status'
     /** `/v1/copies/delete`: `deleted`, how many copies went. */
     | 'deleted'

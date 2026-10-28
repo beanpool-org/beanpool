@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, decisionFailureWords, requestPendingRefusal } from './dm-requests';
+import { type DmRequestCore, requestModeOf, requestAfterRead, requestAfterOwnLine, requestTakesPhoto, decisionFailureWords, requestPendingRefusal } from './dm-requests';
 
 // The rules lib/dm-requests.ts reads from the node's answers (PR #2392 at 7d20c62d; shapes as its routes give them).
 
@@ -19,7 +19,28 @@ describe('requestModeOf', () => {
     });
 
     it('someone else\'s request is the reader\'s to decide, whatever state it names', () => {
-        for (const state of ['pending', 'ignored', 'expired']) expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [])).toBe('to-me');
+        for (const state of ['pending', 'ignored', 'expired']) {
+            expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [lineBy(PEER, AT)])).toBe('to-me');
+            expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [])).toBe('to-me');
+        }
+    });
+
+    it('after Cancel request, the person it was for cannot accept it, by Accept or by writing', () => {
+        // Marty, 28 Oct 2026 (PR #2540): the node's state is the authority. Its opener withdrew every line, and the node still
+        // names the request: the reader gets the Accept card (whose Accept the node answers 404, which drops it), never a
+        // composer whose line would accept it, nor a photo.
+        const withdrawn = dm({ state: 'pending', from: PEER, at: AT });
+        expect(requestModeOf(withdrawn, ME, [])).toBe('to-me');
+        expect(requestModeOf(withdrawn, ME, [lineBy(ME, '2026-10-22T09:00:00.000Z')])).toBe('to-me');   // the reader's own, from before
+        expect(requestModeOf(withdrawn, ME, [lineBy(PEER, AT, 'system')])).toBe('to-me');               // a node notice
+        expect(requestTakesPhoto(requestModeOf(withdrawn, ME, []))).toBe(false);
+    });
+
+    it('supports native message row shapes (senderId, rawTimestamp)', () => {
+        const nativeLine = { senderId: PEER, rawTimestamp: AT, timestamp: '10:30 AM', type: 'text' };
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, [nativeLine])).toBe('to-me');
+        const nativeMine = { senderId: ME, rawTimestamp: AT, timestamp: '10:30 AM', type: 'text' };
+        expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT }), ME, [nativeMine])).toBe('mine-waiting');
     });
 
     it('the reader\'s own: waiting once their line is in it, at or after the request was made', () => {
@@ -43,6 +64,7 @@ describe('requestModeOf', () => {
         // Not known until this chat's lines are read, as before; and the rest never depend on it.
         expect(requestModeOf(lifted, ME, null)).toBe('mine-loading');
         expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT, nextLineIsRequest: true }), ME, [])).toBe('none');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [lineBy(PEER, AT)])).toBe('to-me');
         expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [])).toBe('to-me');
     });
 
@@ -55,22 +77,23 @@ describe('requestModeOf', () => {
         // The rest never depend on the lines.
         expect(requestModeOf(dm({ state: 'expired', from: ME, at: AT }), ME, null)).toBe('mine-unsent');
         expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, null)).toBe('to-me');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, [lineBy(PEER, AT)])).toBe('to-me');
         expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT }), ME, null)).toBe('none');
         expect(requestModeOf(dm(null), ME, null)).toBe('none');
     });
 });
 
 describe('requestAfterRead', () => {
-    const accepted = { state: 'accepted' as const, from: PEER, at: AT };
+    const accepted: DmRequestCore = { state: 'accepted', from: PEER, at: AT };
     it('takes the node\'s read, and none when it names none (requests off)', () => {
-        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT }, { request: accepted })).toEqual(accepted);
-        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT }, {})).toBeNull();
+        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT } as DmRequestCore, { request: accepted })).toEqual(accepted);
+        expect(requestAfterRead({ state: 'pending', from: PEER, at: AT } as DmRequestCore, {})).toBeNull();
         expect(requestAfterRead(accepted, { request: null })).toBeNull();
     });
     it('an acceptance isn\'t undone by a read of the same request still naming it waiting', () => {
-        expect(requestAfterRead(accepted, { request: { state: 'pending', from: PEER, at: AT } })).toEqual(accepted);
+        expect(requestAfterRead(accepted, { request: { state: 'pending', from: PEER, at: AT } as DmRequestCore })).toEqual(accepted);
         // Another request (another time): the node's.
-        const fresh = { state: 'pending' as const, from: PEER, at: '2026-11-30T00:00:00.000Z' };
+        const fresh: DmRequestCore = { state: 'pending', from: PEER, at: '2026-11-30T00:00:00.000Z' };
         expect(requestAfterRead(accepted, { request: fresh })).toEqual(fresh);
     });
 });

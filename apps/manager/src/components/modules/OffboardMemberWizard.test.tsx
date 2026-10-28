@@ -420,4 +420,39 @@ describe('OffboardMemberWizard', () => {
             expect(screen.getByText('Member Offboarded')).toBeDefined();
         });
     });
+
+    // Removal by vote S3: where the community votes, the wizard settles a removal it voted for, and says so.
+    it('names the removal it settles, where the community voted for one', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'disabled', joinedAt: '2026-01-01' },
+            balance: 20,
+            commonsBalance: 500,
+            costToCommunity: 0,
+            projectedCommonsBalance: 520,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [{ publicKey: 'b'.repeat(64), callsign: 'bob' }],
+            settlesRemoval: { decisionId: 'dec-grace', gracePeriodEndsAt: '2026-11-04T00:00:00.000Z' },
+        });
+        render(<OffboardMemberWizard member={mockMember} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        const line = await screen.findByTestId('offboard-settles-removal');
+        expect(line.textContent).toMatch(/^The community voted to remove @dave\. Offboarding settles their Beans and completes the removal now, before its grace window ends on .+\.$/);
+    });
+
+    it('says nothing of a removal where the community has no vote', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'active', joinedAt: '2026-01-01' },
+            balance: 20,
+            commonsBalance: 500,
+            costToCommunity: 0,
+            projectedCommonsBalance: 520,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [{ publicKey: 'b'.repeat(64), callsign: 'bob' }],
+            settlesRemoval: null,
+        });
+        render(<OffboardMemberWizard member={mockMember} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        await waitFor(() => expect(screen.getByText('+20.00 Beans')).toBeDefined());
+        expect(screen.queryByTestId('offboard-settles-removal')).toBeNull();
+    });
 });

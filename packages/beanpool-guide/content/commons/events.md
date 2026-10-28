@@ -47,6 +47,8 @@ Open the event and tap **Share**. Your phone's usual share sheet opens with the 
 
 Anyone who taps that link opens the event — in the app if they have it, in the web app otherwise. Someone who is not in your community lands on its join page. In a web browser, the global community shows them the event first, as a visitor sees it, and opens it again once they have joined.
 
+Where your community allows it, the event also has **Share outside the community**: a link that shows someone who isn't a member this one event for 7 days, without anyone's name or face, and without the place you typed or the private note: only roughly where it is and when. See "Browsing the Market" for what it shows and how to stop it.
+
 ## Putting it in your calendar
 
 Open the event and tap **Add to calendar**.
@@ -59,7 +61,7 @@ The entry carries the name, the time, the place and the link back to the event. 
 
 ## Creating an event
 
-- Tap **+ ADD POST** on the Market tab or the Map, then **Event**.
+- On **Commons**, tap **Start something** (on the phone, the round **+** button) and pick **Event**. Or tap **+ ADD POST** on the Market tab or the Map, then **Event**.
 - **Title**, and when it **Starts**. **Ends** is optional; it is 2 hours later unless you change it.
 - Times are in the event's own time zone, taken from the pin. When that is not your own zone, a line under the times names it. Tap **Change** beside it if it is wrong.
 - **Repeats:** choose how often it comes round, such as every week on that day or once a month, or leave it at **Does not repeat**. **Until** is optional: leave it blank and the event repeats until you cancel it.

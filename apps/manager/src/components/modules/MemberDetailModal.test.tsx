@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemberDetailModal, MemberModalItem, MemberFlag } from './MemberDetailModal';
 import * as nodeClient from '../../lib/node-client';
 
@@ -14,6 +14,13 @@ describe('MemberDetailModal', () => {
         joinedAt: '2026-01-01T00:00:00Z',
         lastActiveAt: '2026-08-20T12:00:00Z',
     };
+
+    // Removal by vote S3: the modal asks the node whether its community votes, and which removals wait out their grace
+    // window. Unless a test says otherwise, it votes and none does.
+    beforeEach(() => {
+        vi.spyOn(nodeClient, 'fetchNodeDecisionsOn').mockResolvedValue(true);
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([]);
+    });
 
     it('renders member details and platform badge', () => {
         render(
@@ -85,6 +92,8 @@ describe('MemberDetailModal', () => {
     });
 
     it('handles prune confirmation flow', async () => {
+        // Prune is there only where the community has no vote (removal by vote S3).
+        vi.spyOn(nodeClient, 'fetchNodeDecisionsOn').mockResolvedValue(false);
         const handlePrune = vi.fn();
         render(
             <MemberDetailModal
@@ -93,10 +102,11 @@ describe('MemberDetailModal', () => {
                 onToggleFreeze={vi.fn()}
                 onPrune={handlePrune}
                 onClose={vi.fn()}
+                nodeUrl="https://test-node.local"
             />
         );
 
-        await userEvent.click(screen.getByText('🗑️ Prune Account'));
+        await userEvent.click(await screen.findByText('🗑️ Prune Account'));
         expect(screen.getByText('⚠️ Confirm Permanent Prune / Delete')).toBeInTheDocument();
 
         await userEvent.click(screen.getByText('Yes, Prune Account'));
@@ -385,6 +395,8 @@ describe('MemberDetailModal', () => {
     });
 
     it('opens OffboardMemberWizard when Offboard button is clicked', async () => {
+        // Offboard is there where the community has no vote, or inside a removal it voted for (removal by vote S3).
+        vi.spyOn(nodeClient, 'fetchNodeDecisionsOn').mockResolvedValue(false);
         vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
             member: {
                 publicKey: mockMember.publicKey || 'pubkey-1234567890-abcdef',
@@ -407,10 +419,11 @@ describe('MemberDetailModal', () => {
                 isFrozen={false}
                 onToggleFreeze={vi.fn()}
                 onClose={vi.fn()}
+                nodeUrl="https://test-node.local"
             />
         );
 
-        const offboardBtn = screen.getByText('🚪 Offboard');
+        const offboardBtn = await screen.findByText('🚪 Offboard');
         expect(offboardBtn).toBeInTheDocument();
         await userEvent.click(offboardBtn);
 
@@ -475,6 +488,7 @@ describe('MemberDetailModal', () => {
     });
 
     it('on a node with no formal votes (global), the suspension says when it lifts and mentions no vote', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeDecisionsOn').mockResolvedValue(false);
         vi.spyOn(nodeClient, 'emergencySuspendMember').mockResolvedValue({
             success: true,
             decision: { id: 'dec-2', closesAt: '2026-09-26T00:00:00.000Z', params: { noVote: true } },
@@ -514,5 +528,145 @@ describe('MemberDetailModal', () => {
         await userEvent.click(screen.getByText('Lift suspension'));
         expect(lift).toHaveBeenCalledWith('https://test-node.local', 'pubkey-1234567890-abcdef', 'pw', undefined);
         expect(await screen.findByText(/Suspension lifted/)).toBeInTheDocument();
+    });
+
+    // Removal by vote S3 (scratch/fable-design/DESIGN-removal-by-vote-fable.md §2 rows 1, 5 and 7): where the community votes,
+    // removing a member is its vote. The modal offers the suspension (the pause that opens the vote) and never Prune;
+    // Offboard only inside a removal the community voted for; the owner's Prune Branch until the branch vote.
+    describe('where the community votes', () => {
+        const KEY = 'a'.repeat(64);
+        const active = { ...mockMember, publicKey: KEY, status: 'active' };
+        const removalInGrace = (subject: string): nodeClient.AdminDecisionItem => ({
+            id: 'dec-grace', authorPubkey: 'SYSTEM', title: 'Remove alice?', description: 'An admin paused alice.', effect: 'remove_member',
+            touches: 'member', status: 'execution_pending_grace', subject, subjectName: 'alice', params: { rule: 2 },
+            opensAt: '2026-10-01T00:00:00.000Z', closesAt: '2026-10-08T00:00:00.000Z', gracePeriodEndsAt: '2026-10-15T00:00:00.000Z',
+            tally: { totalVoters: 5, electorate: 9, quorumRequired: 3, quorumMet: true, yesWeight: 5, noWeight: 0, supportRatio: 1, thresholdRequired: 0.66 },
+        });
+        const draw = (extra: Partial<React.ComponentProps<typeof MemberDetailModal>> = {}) => render(
+            <MemberDetailModal
+                member={active}
+                isFrozen={false}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+                nodeUrl="https://test-node.local"
+                adminPassword="pw"
+                onPrune={vi.fn()}
+                {...extra}
+            />
+        );
+
+        it('offers no Prune and no Offboard, says the community decides, and keeps the suspension', async () => {
+            draw();
+            expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/community's vote/);
+            expect(screen.queryByText('🗑️ Prune Account')).toBeNull();
+            expect(screen.queryByText('🚪 Offboard')).toBeNull();
+            expect(screen.getByText('⏸️ Suspend')).toBeInTheDocument();
+        });
+
+        // No vote removes an owner or an admin (the server's §3.8 refusal): suspending one only parks them until its vote closes,
+        // so the note says what does work instead (review 4397436971).
+        it('for an owner or an admin, says no vote removes one and that an owner takes the role away first', async () => {
+            for (const role of ['owner', 'admin'] as const) {
+                const { unmount } = draw({ nodeRole: role });
+                const note = await screen.findByTestId('removal-is-the-vote');
+                expect(note).toHaveTextContent(/no vote removes an owner or admin/);
+                expect(note).toHaveTextContent(/An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote\.$/);
+                unmount();
+            }
+        });
+
+        it("and the suspension's words for them say the vote can't remove them: it lifts when the vote closes", async () => {
+            vi.spyOn(nodeClient, 'emergencySuspendMember').mockResolvedValue({
+                success: true,
+                decision: { id: 'dec-4', closesAt: '2026-09-26T00:00:00.000Z', effect: 'remove_member', params: { serverRole: 'admin' } },
+            });
+            draw({ nodeRole: 'admin' });
+            await screen.findByTestId('removal-is-the-vote');
+            expect(screen.getByText(/^Suspend now: members then vote, but no vote removes an owner or admin, so it lifts when the vote closes\.$/)).toBeInTheDocument();
+            await userEvent.click(screen.getByText('⏸️ Suspend'));
+            expect(screen.getByText(/Members then vote for 7 days, but no vote removes an owner or admin: the suspension lifts when the vote closes, whatever it decides\.$/))
+                .toBeInTheDocument();
+            await userEvent.type(screen.getByLabelText('Reason (members will see this)'), 'threats at the market, twice');
+            await userEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
+            expect(await screen.findByText(/^Suspended until .+\. Members vote on removing them, but no vote removes an owner or admin: the suspension lifts when the vote closes, whatever it decides\.$/))
+                .toBeInTheDocument();
+            expect(screen.queryByText(/if the vote doesn't pass/)).toBeNull();
+        });
+
+        // A pause holds an owner's or admin's role aside, so the members list gives a paused one no role (nodeRole null) while the
+        // server still counts it: the page of an admin you paused, opened again, must not promise that the open vote removes
+        // them (review 4398466214). The role is in the pause's own vote, which the modal already fetches (params.serverRole).
+        describe('for an owner or an admin who is paused', () => {
+            const pauseOf = (subject: string, serverRole?: 'owner' | 'admin'): nodeClient.AdminDecisionItem => ({
+                ...removalInGrace(subject), id: 'dec-pause', status: 'open', gracePeriodEndsAt: null,
+                params: { rule: 2, pausedAt: '2026-10-01T00:00:00.000Z', ...(serverRole ? { serverRole } : {}) },
+            });
+            const paused = { ...active, status: 'disabled' };
+
+            it('says no vote removes one, as it does for a live owner or admin, and never that suspending them opens it', async () => {
+                for (const role of ['owner', 'admin'] as const) {
+                    vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseOf(KEY, role)]);
+                    const { unmount } = draw({ member: paused, nodeRole: null });
+                    const note = await screen.findByTestId('removal-is-the-vote');
+                    expect(note).toHaveTextContent(/no vote removes an owner or admin/);
+                    expect(note).toHaveTextContent(/An owner can take that role away first/);
+                    expect(note).not.toHaveTextContent(/Suspending them opens it/);
+                    expect(screen.getByText(/Suspended/)).toBeInTheDocument();
+                    unmount();
+                }
+            });
+
+            it("reads the role from this member's own pause, not another member's", async () => {
+                vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseOf('someone-else-pubkey', 'admin')]);
+                draw({ member: paused, nodeRole: null });
+                expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+            });
+
+            it('a paused member who holds no such role keeps the plain note', async () => {
+                vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseOf(KEY)]);
+                draw({ member: paused, nodeRole: null });
+                expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+            });
+        });
+
+        it('for a moderator, a member with a job whom a vote can remove, the suspension opens the vote', async () => {
+            draw({ nodeRole: 'moderator' });
+            expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+            expect(screen.getByText(/^Suspend now: the community then votes on removing them\.$/)).toBeInTheDocument();
+        });
+
+        it('offers Offboard inside a removal the community voted for, and still no Prune', async () => {
+            vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([removalInGrace(KEY)]);
+            draw();
+            expect(await screen.findByText('🚪 Offboard')).toBeInTheDocument();
+            expect(screen.queryByText('🗑️ Prune Account')).toBeNull();
+        });
+
+        it("someone else's removal in its grace window offers no Offboard here", async () => {
+            vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([removalInGrace('someone-else-pubkey')]);
+            draw();
+            await screen.findByTestId('removal-is-the-vote');
+            expect(screen.queryByText('🚪 Offboard')).toBeNull();
+        });
+
+        it("keeps the owner's Prune Branch until the branch vote", async () => {
+            draw({ members: [active, { publicKey: 'b'.repeat(64), invitedBy: KEY }], onPruneBranch: vi.fn() });
+            await screen.findByTestId('removal-is-the-vote');
+            expect(screen.getByText('🗑️ Prune Branch')).toBeInTheDocument();
+        });
+
+        it('a row under another spelling of a key, no member\'s account, keeps Prune to tidy it away', async () => {
+            draw({ member: { ...active, publicKey: KEY.toUpperCase() } });
+            expect(await screen.findByText('🗑️ Prune Account')).toBeInTheDocument();
+            expect(screen.queryByTestId('removal-is-the-vote')).toBeNull();
+        });
+
+        it('with votes off, Prune and Offboard are there as before, and no word of a vote', async () => {
+            vi.spyOn(nodeClient, 'fetchNodeDecisionsOn').mockResolvedValue(false);
+            draw();
+            expect(await screen.findByText('🗑️ Prune Account')).toBeInTheDocument();
+            expect(screen.getByText('🚪 Offboard')).toBeInTheDocument();
+            expect(screen.queryByTestId('removal-is-the-vote')).toBeNull();
+        });
     });
 });

@@ -26,6 +26,10 @@
  *   profile), adding the opener as a friend, or a trade between the two opening, each accepts it too. Accepting makes
  *   nobody a friend. A visitor's row it is for (a key a member messaged, or a member of another community reached over the
  *   relay) decides it as a member does, and nothing else new (the director's option b on PR #2392 review 4355750376).
+ * - The opener can cancel it (Cancel request): their lines in it go, and it is withdrawn. Nothing of the other person's
+ *   accepts a withdrawn request (Marty, 28 Oct 2026, PR #2540: the node's state is the authority): their Accept and Ignore
+ *   find none (404), and their line or their asking for the chat is a request of their own to the opener, unless the rule
+ *   lets them through on their own; their adding the opener lets the opener's next line through, and nothing of theirs.
  * - Neither side's read marker reaches the other until it is accepted.
  * - 30 days after it was made, a request nobody accepted is over (expireOldRequests): the opener's next line is a new
  *   request, from then.
@@ -220,9 +224,11 @@ function throughOnTheirOwn(from: string, to: string): boolean {
 /**
  * Whether a direct conversation `from` opens with `to` is a request (the header's "Who goes straight through"). Read as
  * the rule is at the open, and again at each of the opener's lines while it waits, so a role granted or a trade begun since
- * lets them through.
+ * lets them through. Read for the request in `conversationId`, that conversation's own open is no chat `to` opened with
+ * them: it is `to`'s withdrawn request's, which `from` asking for the chat or writing in it turned into theirs
+ * (reachOutAfterWithdrawal).
  */
-export function requestNeeded(from: string, to: string): boolean {
+export function requestNeeded(from: string, to: string, conversationId?: string): boolean {
     if (throughOnTheirOwn(from, to)) return false;
     return !db.prepare(`
         SELECT 1 WHERE
@@ -231,9 +237,40 @@ export function requestNeeded(from: string, to: string): boolean {
                       JOIN conversations c ON c.id = theirs.conversation_id AND c.type = 'dm'
                       JOIN conversation_participants mine ON mine.conversation_id = c.id AND mine.public_key = @from
                      WHERE theirs.public_key = @to
-                       AND (c.created_by = @to OR EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.author_pubkey = @to)))
+                       AND ((c.created_by = @to AND c.id IS NOT @conv)
+                            OR EXISTS (SELECT 1 FROM messages m WHERE m.conversation_id = c.id AND m.author_pubkey = @to)))
          OR EXISTS (SELECT 1 FROM withheld_conversations w WHERE w.owner_pubkey = @to AND w.other_pubkey = @from)
-    `).get({ from, to });
+    `).get({ from, to, conv: conversationId ?? null });
+}
+
+/**
+ * A request its opener withdrew (Cancel request, which stamps `decided_at`), or one ignored or run out, with no line of
+ * theirs left in it, stored or kept for them alone. It asks the person it was for nothing, and nothing of theirs accepts it
+ * (Marty, 28 Oct 2026, PR #2540: the node's state is the authority): not their Accept (decideRequest's 404, as for an open
+ * with nothing written in it), their line, their asking for the chat, nor their adding the opener. An open its opener
+ * hasn't written in yet was never decided (`decided_at` null), and isn't one: their act accepts that, as the header says.
+ */
+function withdrawn(row: RequestRow): boolean {
+    if (row.state === 'accepted' || row.decided_at === null) return false;
+    return !db.prepare(`SELECT 1 FROM dm_requests r WHERE r.conversation_id = ? AND ${OPENER_WROTE}`).get(row.conversation_id)
+        && keptLinesSince(row) === 0;
+}
+
+/**
+ * The person a withdrawn request was for (`who`) reaching out to its opener themselves, by their line or their asking for
+ * the chat: a request of their own, in the one conversation the two have, where the rule holds them (requestNeeded, apart
+ * from the opener's open of it). It is made from now, as an open makes one, so their next line is its line
+ * (lineThroughRequest), and until then it asks the opener nothing. True when it was made; false where the rule lets them
+ * through on their own (the opener added them, a line of the opener's from before, a role, a trade), and their act accepts
+ * the request as before. A standby refuses it, as it refuses an open that would make one.
+ */
+function reachOutAfterWithdrawal(row: RequestRow, who: string, now: number): boolean {
+    if (!requestNeeded(who, row.from_pubkey, row.conversation_id)) return false;
+    assertPlainTablesWritable();
+    db.prepare(`UPDATE dm_requests SET from_pubkey = ?, to_pubkey = ?, state = 'pending', requested_at = ?, decided_at = NULL,
+                       accepted_by = NULL, state_before = NULL
+                 WHERE conversation_id = ?`).run(who, row.from_pubkey, iso(now), row.conversation_id);
+    return true;
 }
 
 /**
@@ -310,6 +347,8 @@ export function acceptOnOpen(conversationId: string, who: string, now: number = 
     const row = rowOf(conversationId);
     if (!acceptable(row, who) || row.to_pubkey !== who) return;
     if (!requestsOn() && standbyWritesNothing()) return;
+    // One its opener withdrew is no request of theirs to accept: asking for the chat is reaching out anew.
+    if (requestsOn() && withdrawn(row) && reachOutAfterWithdrawal(row, who, now)) return;
     accept(row, now, who);
 }
 
@@ -393,11 +432,14 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     const hidden = acceptanceHiddenFrom(row, author);
     if (row.state === 'accepted' && !hidden) return DIRECT;
     if (author === row.to_pubkey) {
+        // A request its opener withdrew is never accepted by the line of the person it was for: the line is a request of
+        // their own (reachOutAfterWithdrawal), answered as any opener's line is, and nothing reaches the opener's chats.
+        if (withdrawn(row) && reachOutAfterWithdrawal(row, author, now)) return lineThroughRequest(conversationId, author, now);
         accept(row, now, author);
         return DIRECT;
     }
     if (author !== row.from_pubkey) return DIRECT;
-    if (hidden ? throughOnTheirOwn(row.from_pubkey, row.to_pubkey) : !requestNeeded(row.from_pubkey, row.to_pubkey)) {
+    if (hidden ? throughOnTheirOwn(row.from_pubkey, row.to_pubkey) : !requestNeeded(row.from_pubkey, row.to_pubkey, row.conversation_id)) {
         accept(row, now, author);
         return DIRECT;
     }
@@ -473,7 +515,7 @@ export function reactionRefusal(conversationId: string, author: string, now: num
     if (!row || author !== row.from_pubkey) return null;
     const hidden = acceptanceHiddenFrom(row, author);
     if (row.state === 'accepted' && !hidden) return null;
-    if (hidden ? throughOnTheirOwn(row.from_pubkey, row.to_pubkey) : !requestNeeded(row.from_pubkey, row.to_pubkey)) {
+    if (hidden ? throughOnTheirOwn(row.from_pubkey, row.to_pubkey) : !requestNeeded(row.from_pubkey, row.to_pubkey, row.conversation_id)) {
         accept(row, now, author);
         return null;
     }
@@ -490,7 +532,9 @@ export function reactionRefusal(conversationId: string, author: string, now: num
 export function acceptOnFriendAdd(owner: string, friend: string, now: number = Date.now()): void {
     if (standbyWritesNothing()) return;
     const rows = db.prepare("SELECT * FROM dm_requests WHERE from_pubkey = ? AND to_pubkey = ? AND state != 'accepted'").all(friend, owner) as RequestRow[];
-    for (const row of rows) if (acceptable(row, owner)) accept(row, now, owner);
+    // One `friend` withdrew stays theirs: the add lets their next line through (requestNeeded), and lets nothing of
+    // `owner`'s reach them.
+    for (const row of rows) if (acceptable(row, owner) && !withdrawn(row)) accept(row, now, owner);
 }
 
 /**
@@ -649,6 +693,9 @@ export function decideRequest(conversationId: string, actor: string, decision: '
         }
         assertPlainTablesWritable();
         withdrawOpenerLines(row);
+        // The opener's decision: what marks it withdrawn (withdrawn), so nothing of the other's accepts it. Its state, which
+        // the opener's own view never reads, stays; an acceptance hidden from them keeps the time it was made.
+        if (row.state !== 'accepted') db.prepare('UPDATE dm_requests SET decided_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
         const isReal = !!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(row.conversation_id);
         const openerView = viewOf(row, actor, now);
         const recipientHears = isReal && !hasBlocked(row.to_pubkey, actor) && row.state !== 'ignored';

@@ -10,6 +10,9 @@
  *   6. an ignored request stays ignored through a cancel and a new line: no Requests entry, no push, no fold push
  *   7. the cancel withdraws only the opener's lines: the recipient's own line (kept for them) stays
  *   8. a withdrawn line leaves a `messages` tombstone, and its photo row, stored object and overlays go with it
+ *  10. after a cancel, the person it was for cannot accept it (Marty, 28 Oct 2026): Accept and Ignore 404, and their line,
+ *      their asking for the chat or their adding the opener accepts nothing; their line or asking is a request of their own
+ *      to the opener. An open with nothing written in it yet (never withdrawn) is accepted by their asking, as before
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-dm-request-cancel.ts
  */
@@ -324,6 +327,91 @@ const overlaysAfter = (db.prepare('SELECT COUNT(*) AS n FROM withheld_overlays W
 assert(lm1.status === 200 && maeBlocks.status === 200 && louEdits.status === 200 && overlaysBefore === 1 && louCancels.status === 200 && overlaysAfter === 0,
     `Lou's edit kept for him alone goes with his cancel (${lm1.status}, ${louEdits.status}, overlays ${overlaysBefore} → ${overlaysAfter}, ${louCancels.status})`);
 
+// ── 10. After Cancel request, the person it was for cannot accept it, by Accept or by writing (Marty, 28 Oct 2026) ──
+// The node's state is the authority: Nat's request stays his, withdrawn, and nothing of Ola's accepts it: not her Accept or
+// Ignore (404), her line, her asking for the chat (Message on his profile) or her adding him. Her line, or her asking, is a
+// request of her own, which waits for him under his Requests. An open with nothing written in it yet was never withdrawn:
+// asking for the chat accepts it, as before.
+const reqRow = (c: string) => db.prepare('SELECT from_pubkey, to_pubkey, state FROM dm_requests WHERE conversation_id = ?').get(c) as
+    { from_pubkey: string; to_pubkey: string; state: string } | undefined;
+const listOf = async (id: Id) => (await call('GET', id, `/api/messages/conversations/${id.pk}`)).body;
+const inChats = (l: any, c: string) => (l?.conversations || []).some((x: any) => x.id === c);
+const inRequests = (l: any, c: string) => (l?.requests?.conversations || []).some((x: any) => x.id === c);
+const noticesTo = (id: Id) => (db.prepare('SELECT body FROM push_notices WHERE recipient = ? ORDER BY sent_at, rowid').all(id.pk) as { body: string }[]).map(r => r.body);
+const openWith = async (a: Id, b: Id) => call('POST', a, '/api/messages/conversation', { type: 'dm', participants: [a.pk, b.pk], createdBy: a.pk });
+const sendIn = async (c: string, id: Id) => call('POST', id, '/api/messages/send', { conversationId: c, authorPubkey: id.pk, ...lockedDm() });
+const nat = member('Nat');
+const ola = member('Ola');
+const natSock = await socket(nat);
+const noConv: string = (await openWith(nat, ola)).body.conversation.id;
+const no1 = await sendIn(noConv, nat);
+const natCancels = await call('POST', nat, '/api/messages/request', { conversationId: noConv, decision: 'cancel' });
+const olaAccepts = await call('POST', ola, '/api/messages/request', { conversationId: noConv, decision: 'accept' });
+const olaIgnores = await call('POST', ola, '/api/messages/request', { conversationId: noConv, decision: 'ignore' });
+const olaRead = await call('GET', ola, `/api/messages/${noConv}`);
+assert(no1.status === 200 && natCancels.status === 200 && olaAccepts.status === 404 && olaAccepts.body.code === 'request_not_found'
+    && olaIgnores.status === 404 && olaIgnores.body.code === 'request_not_found'
+    && reqRow(noConv)?.state === 'pending' && reqRow(noConv)?.from_pubkey === nat.pk,
+    `after Nat's cancel, Ola's Accept and Ignore find no request (404), and the node keeps his, waiting (${olaAccepts.status} ${olaAccepts.body.code}, ${olaIgnores.status}, ${JSON.stringify(reqRow(noConv))})`);
+assert(olaRead.body.conversation?.request?.state === 'pending' && olaRead.body.conversation?.request?.from === nat.pk && olaRead.body.messages?.length === 0,
+    `Ola reads his request as the node holds it, with no line in it (${JSON.stringify(olaRead.body.conversation?.request)}, ${olaRead.body.messages?.length} lines)`);
+const natHeard = natSock.events.length;
+const natNotices = noticesTo(nat).length;
+const ol1 = await sendIn(noConv, ola);
+await new Promise(r => setTimeout(r, 200));
+const natList = await listOf(nat);
+assert(ol1.status === 200 && reqRow(noConv)?.state === 'pending' && reqRow(noConv)?.from_pubkey === ola.pk && reqRow(noConv)?.to_pubkey === nat.pk,
+    `Ola's line accepts nothing: it is a request of her own, waiting for Nat (${ol1.status}, ${JSON.stringify(reqRow(noConv))})`);
+assert(!inChats(natList, noConv) && inRequests(natList, noConv) && natList?.totalUnread === 0,
+    `it is under Nat's Requests, not in his chats or his unread count (chats ${inChats(natList, noConv)}, requests ${inRequests(natList, noConv)}, unread ${natList?.totalUnread})`);
+assert(noticesTo(nat).length === natNotices + 1 && noticesTo(nat).at(-1) === 'Ola wants to message you'
+    && !natSock.events.slice(natHeard).some(e => e.type === 'dm_request_updated' && e.request?.state === 'accepted'),
+    `Nat is pushed "${noticesTo(nat).at(-1)}", and hears no acceptance (${noticesTo(nat).length - natNotices} pushes)`);
+const ol2 = await sendIn(noConv, ola);
+const olaReads = await call('GET', ola, `/api/messages/${noConv}`);
+assert(ol2.status === 403 && ol2.body.code === 'dm_request_pending' && olaReads.body.conversation?.request?.from === ola.pk
+    && olaReads.body.conversation?.request?.nextLineIsRequest === false,
+    `her second line is refused as any waiting opener's, and she reads her own request (${ol2.status} ${ol2.body.code}, ${JSON.stringify(olaReads.body.conversation?.request)})`);
+const no2 = await sendIn(noConv, nat);
+assert(no2.status === 200 && reqRow(noConv)?.state === 'accepted', `Nat's reply accepts Ola's request, as a reply to any request does (${no2.status}, ${reqRow(noConv)?.state})`);
+// Quin asks for the chat with Pia (Message on her profile) after her cancel: a request of his own, his next line its line.
+const pia = member('Pia');
+const quin = member('Quin');
+const pqConv: string = (await openWith(pia, quin)).body.conversation.id;
+await sendIn(pqConv, pia);
+const piaCancels = await call('POST', pia, '/api/messages/request', { conversationId: pqConv, decision: 'cancel' });
+const quinAsks = await openWith(quin, pia);
+const piaList = await listOf(pia);
+assert(piaCancels.status === 200 && quinAsks.status === 200 && quinAsks.body.conversation?.id === pqConv
+    && quinAsks.body.conversation?.request?.state === 'pending' && quinAsks.body.conversation?.request?.from === quin.pk
+    && quinAsks.body.conversation?.request?.nextLineIsRequest === true && reqRow(pqConv)?.state === 'pending',
+    `Quin asking for the chat accepts nothing: it is a request of his own, his next line its line (${quinAsks.status}, ${JSON.stringify(quinAsks.body.conversation?.request)})`);
+assert(!inChats(piaList, pqConv) && !inRequests(piaList, pqConv),
+    `until he writes, it asks Pia nothing (chats ${inChats(piaList, pqConv)}, requests ${inRequests(piaList, pqConv)})`);
+const qp1 = await sendIn(pqConv, quin);
+const piaList2 = await listOf(pia);
+assert(qp1.status === 200 && reqRow(pqConv)?.from_pubkey === quin.pk && reqRow(pqConv)?.state === 'pending' && inRequests(piaList2, pqConv) && !inChats(piaList2, pqConv),
+    `his line is the request, under Pia's Requests (${qp1.status}, ${JSON.stringify(reqRow(pqConv))})`);
+// Uma adding Tia after her cancel accepts nothing either; it lets Tia's next line through, as the rule does for anyone Uma added.
+const tia = member('Tia');
+const uma = member('Uma');
+const tuConv: string = (await openWith(tia, uma)).body.conversation.id;
+await sendIn(tuConv, tia);
+const tiaCancels = await call('POST', tia, '/api/messages/request', { conversationId: tuConv, decision: 'cancel' });
+const umaAdds = await call('POST', uma, '/api/friends/add', { friendPubkey: tia.pk });
+const tuAfterAdd = reqRow(tuConv)?.state;
+const tu2 = await sendIn(tuConv, tia);
+assert(tiaCancels.status === 200 && umaAdds.status === 200 && tuAfterAdd === 'pending' && tu2.status === 200 && reqRow(tuConv)?.state === 'accepted',
+    `Uma adding Tia leaves Tia's withdrawn request (${tuAfterAdd}); Tia's next line goes straight through (${tu2.status}, ${reqRow(tuConv)?.state})`);
+// An open with nothing written in it yet, never withdrawn: Sid asking for the chat accepts Ray's, as before.
+const ray = member('Ray');
+const sid = member('Sid');
+const rsConv: string = (await openWith(ray, sid)).body.conversation.id;
+const sidAsks = await openWith(sid, ray);
+assert(sidAsks.status === 200 && sidAsks.body.conversation?.id === rsConv && sidAsks.body.conversation?.request?.state === 'accepted' && reqRow(rsConv)?.from_pubkey === ray.pk,
+    `Ray's open with nothing in it is accepted by Sid asking for the chat, as before (${sidAsks.status}, ${JSON.stringify(sidAsks.body.conversation?.request)})`);
+
+natSock.ws.close();
 ginaSock.ws.close();
 bobSock.ws.close();
 aliceSock.ws.close();

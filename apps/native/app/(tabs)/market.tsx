@@ -1881,7 +1881,7 @@ export default function MarketScreen() {
                                 {nodeProfile?.profile === 'global' && (
                                     <Pressable
                                         accessibilityRole="button"
-                                        style={{ paddingVertical: 8, paddingHorizontal: 16, marginBottom: 16 }}
+                                        style={{ minHeight: 48, justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 16, marginBottom: 16 }}
                                         onPress={() => {
                                             qr.show();
                                             searchInputRef.current?.focus();

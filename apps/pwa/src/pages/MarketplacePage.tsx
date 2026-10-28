@@ -3471,7 +3471,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     type="button"
                                                     onClick={() => setEverywhere(true)}
                                                     data-testid="market-see-elsewhere"
-                                                    className="text-sm font-bold text-nature-800 dark:text-nature-100 underline cursor-pointer"
+                                                    className="inline-flex items-center min-h-[44px] text-sm font-bold text-nature-800 dark:text-nature-100 underline cursor-pointer"
                                                 >
                                                     {t('See what people post elsewhere ›')}
                                                 </button>

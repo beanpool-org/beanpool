@@ -62,4 +62,8 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
             expect(data['⏳ PENDING'].length).toBeGreaterThan(0);
         }
     });
+
+    it('market-see-elsewhere button has at least 48 dp minHeight for accessibility', () => {
+        expect(marketSrc).toMatch(/testID="market-see-elsewhere"[\s\S]*?minHeight:\s*48|minHeight:\s*48[\s\S]*?testID="market-see-elsewhere"/);
+    });
 });

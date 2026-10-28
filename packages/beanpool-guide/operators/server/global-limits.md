@@ -26,7 +26,7 @@ A visitor who hasn't joined sees the same thing as every other visitor: the Mark
 
 A listing photo's address changes when the photo does, so a browser keeps it for a year. A shared cache may keep it for an hour at most (s-maxage=3600). When a moderator takes a listing down, or reports hide it, the server stops giving its photos at once. A cache in front still has a copy, and stops giving it within the hour. To have a photo gone sooner, purge its address in the cache. On Cloudflare: Caching, then Configuration, then Purge Cache, Custom Purge, with the photo's address.
 
-A cache that honours the Vary header (nginx, Varnish) never gives a member the visitors' copy. Cloudflare ignores Vary unless told otherwise, so on Cloudflare it takes three Cache Rules, in this order:
+A cache that honours the Vary header (nginx, Varnish) never gives a member, or another website, the visitors' copy. Cloudflare ignores Vary unless told otherwise, so on Cloudflare it takes three Cache Rules, in this order:
 
 - First, listing photos: a GET whose path starts /api/marketplace/posts/ and contains /photos/ is eligible for cache, using the Cache-Control the server sends.
 - Second, the visitors' reads: a GET to /api/marketplace/posts, /api/home, or a path starting /api/global/, is eligible for cache, using the Cache-Control the server sends.

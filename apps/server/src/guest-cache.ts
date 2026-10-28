@@ -18,8 +18,10 @@
  * that is not anonymous, and a refusal or a fault (400 and up), never leaves saying `public` or `s-maxage`. So a route
  * that marks itself public by mistake can never put a member's answer, or one minute's 503, in a shared cache.
  *
- * Every guest answer varies on the signature's headers and Authorization, so a cache that honours Vary (nginx, Varnish,
- * a browser) never hands the guests' copy to a signed request. Cloudflare ignores Vary but for Accept-Encoding unless
+ * Every guest answer varies on the signature's headers, Authorization and Origin, so a cache that honours Vary (nginx,
+ * Varnish, a browser) never hands the guests' copy to a signed request, nor to another website's, whose answer carries
+ * that origin's CORS headers and, for a peer, a body of its own (routes/marketplace.ts isPeerRequest). A same-origin GET
+ * sends no Origin, so the visitors' copy is still one per URL. Cloudflare ignores Vary but for Accept-Encoding unless
  * told otherwise; there the operator's bypass rule does it (operators/server/global-limits.md).
  *
  * No CDN is needed for any of this (no-domain-lock-in). With nothing in front, nothing changes for a phone or a browser:
@@ -48,8 +50,8 @@ export const CREDENTIAL_HEADERS: readonly string[] = [
 ];
 /** The one cookie that names anyone to this node: an admin's session (admin-key-auth.ts ADMIN_SESSION_COOKIE). */
 export const CREDENTIAL_COOKIES: readonly string[] = ['admin_session'];
-/** What a guest answer varies on: the headers every signed request carries, and Authorization. */
-export const GUEST_VARY: readonly string[] = ['X-Public-Key', 'X-Signature', 'Authorization'];
+/** What a guest answer varies on: the headers every signed request carries, Authorization, and another website's Origin. */
+export const GUEST_VARY: readonly string[] = ['X-Public-Key', 'X-Signature', 'Authorization', 'Origin'];
 
 type ReadCtx = Pick<Koa.Context, 'method' | 'state' | 'set'> & Partial<Pick<Koa.Context, 'get' | 'vary' | 'cookies' | 'headers'>>;
 

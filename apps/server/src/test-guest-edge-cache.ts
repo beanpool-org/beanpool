@@ -4,7 +4,7 @@
  *
  * Boots the real server on the global profile and reads through the real middleware over plain HTTP, as the tunnel
  * hands requests to it:
- *   1. the board and the map: an unsigned read is `public, max-age=0, s-maxage=60` and varies on the signature's headers.
+ *   1. the board and the map: an unsigned read is `public, max-age=0, s-maxage=60` and varies on the signature's headers and Origin.
  *      The same URL signed by a member is `private`, its body and view a member's; signed by a key that is no member,
  *      `private` though its body is the visitors'; with one signature header alone, an admin's credential, an admin's
  *      session cookie or another web origin's request, `private`. A sync and a delta are `private`; a refusal (403, 400)
@@ -108,7 +108,7 @@ async function main() {
             view: res.headers.get('x-beanpool-view'), etag: res.headers.get('etag'), body: await res.text(),
         };
     }
-    const varies = (g: Got) => ['x-public-key', 'x-signature', 'authorization'].every(h => g.vary.split(',').map(s => s.trim()).includes(h));
+    const varies = (g: Got) => ['x-public-key', 'x-signature', 'authorization', 'origin'].every(h => g.vary.split(',').map(s => s.trim()).includes(h));
 
     // ── 1. the board and the map ─────────────────────────────────────────────────────────────────────────────────────
     console.log('--- 1. the board and the map ---');
@@ -117,7 +117,7 @@ async function main() {
     for (const url of [BOARD, MAP, '/api/marketplace/posts?types=offer,need&q=Lemons', '/api/marketplace/posts?id=gec-post-0']) {
         const guest = await get(url);
         assert(guest.status === 200 && guest.cc === GUEST, `an unsigned ${url} is ${GUEST} (got ${guest.status} ${guest.cc})`);
-        assert(varies(guest), `and varies on X-Public-Key, X-Signature and Authorization (Vary: ${guest.vary})`);
+        assert(varies(guest), `and varies on X-Public-Key, X-Signature, Authorization and Origin (Vary: ${guest.vary})`);
     }
     const guestBoard = await get(BOARD);
     const memberBoard = await get(BOARD, { as: alice });

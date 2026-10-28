@@ -44,7 +44,7 @@ export function StoreBadges() {
                 className="inline-block hover:opacity-90 transition-opacity min-h-[44px] flex items-center"
                 aria-label={t('Download on the App Store')}
             >
-                <img src={APP_STORE_BADGE} alt="" width={135} height={40} className="h-10 w-[135px]" />
+                <img src={APP_STORE_BADGE} alt="" width={135} height={40} loading="lazy" className="h-10 w-[135px]" />
             </a>
 
             {/* Google Play Badge */}
@@ -55,7 +55,7 @@ export function StoreBadges() {
                 className="inline-block hover:opacity-90 transition-opacity min-h-[44px] flex items-center"
                 aria-label={t('Get it on Google Play')}
             >
-                <img src={GOOGLE_PLAY_BADGE} alt="" width={135} height={40} className="h-10 w-[135px]" />
+                <img src={GOOGLE_PLAY_BADGE} alt="" width={135} height={40} loading="lazy" className="h-10 w-[135px]" />
             </a>
         </div>
     );

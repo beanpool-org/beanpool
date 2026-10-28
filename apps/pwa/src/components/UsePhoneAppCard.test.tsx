@@ -41,6 +41,9 @@ describe('UsePhoneAppCard & S4 Settings rows', () => {
                 'href',
                 'https://beanpool.org/android'
             );
+            const badgeImgs = screen.getByTestId('store-badges').querySelectorAll('img');
+            expect(badgeImgs).toHaveLength(2);
+            badgeImgs.forEach(img => expect(img).toHaveAttribute('loading', 'lazy'));
         });
 
         it('dismisses card and marks localStorage', () => {

@@ -95,7 +95,31 @@ export const FIND_COMMUNITY_WORDS = {
      * ago (front doors S13): it is still listed, and asking to join still works (the knock waits until it answers).
      */
     notAnswering: word('Not answering lately'),
+    /** The honest waiting card (Lounge L1, entry S1): measured response lines from the directory. */
+    answersWeek: word('Usually answers within a week'),
+    answersSlow: word("Hasn't answered requests lately"),
+    answersNone: word('Not taking requests right now'),
+    /** Honest waiting card status and cancellation words. */
+    requestArrived: word('Your request arrived.'),
+    cancelRequest: word('Cancel my request'),
+    cancelling: word('Cancelling…'),
+    keepIt: word('Keep it'),
+    cancelConfirmBody: word('You can ask again after 24 hours.'),
+    cancelConfirmText: word('Cancel your request to join {name}? You can ask again after 24 hours.'),
 } as const;
+
+/**
+ * Entry S1's measured line for how promptly a community answers requests to join (from directory push answers).
+ * Returns the line in the member's language, or null when not measured or fewer than 3 knocks seen.
+ */
+export function communityAnswersLine(answers?: 'week' | 'slow' | 'none' | null): string | null {
+    switch (answers) {
+        case 'week': return t(FIND_COMMUNITY_WORDS.answersWeek);
+        case 'slow': return t(FIND_COMMUNITY_WORDS.answersSlow);
+        case 'none': return t(FIND_COMMUNITY_WORDS.answersNone);
+        default: return null;
+    }
+}
 
 /**
  * How long after a community's last push to the directory a row says "Not answering lately" (design §2.3): a node pushes

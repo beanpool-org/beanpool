@@ -116,6 +116,8 @@ export interface HomeCommunity {
     key: string; name: string | null; url: string | null; memberCount: number | null; distanceKm: number | null;
     /** Its last push to the directory (front doors S13); absent from an older global node. */
     lastSeenAt?: string | null;
+    /** How quickly it answers requests to join (Lounge L1, entry S1: 'week' | 'slow' | 'none' | null). */
+    answers?: 'week' | 'slow' | 'none' | null;
 }
 export interface HomeFind {
     point: 'request' | 'area' | null;

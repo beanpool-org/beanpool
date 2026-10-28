@@ -49,6 +49,16 @@ describe('InstallPrompt (front doors S4)', () => {
         expect(isInstalled()).toBe(true);
     });
 
+    it('isInstalled handles environment where matchMedia is undefined', () => {
+        const originalMatchMedia = window.matchMedia;
+        try {
+            delete (window as any).matchMedia;
+            expect(isInstalled()).toBe(false);
+        } finally {
+            window.matchMedia = originalMatchMedia;
+        }
+    });
+
     it('DesktopInstallSteps renders instructions with icon part', () => {
         render(<DesktopInstallSteps />);
         expect(screen.getByTestId('desktop-install-steps')).toBeInTheDocument();

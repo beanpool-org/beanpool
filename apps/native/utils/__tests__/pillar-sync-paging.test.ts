@@ -308,6 +308,9 @@ describe('a copy from before the posts kept their enterprise\'s banner (Pictures
     const FILE = 'beanpool_test.beanpool.org.db';
     const BANNER = '/api/shops/shop-1/photo?v=ref1&k=Yqpu8qmgAGQ';
     const banner = (id: string) => (sql.prepare('SELECT carried_banner FROM posts WHERE id = ?').get(id) as any)?.carried_banner ?? null;
+    // A phone long past the trust columns' one-time read (db.ts bp_trust_sync_v3), as every phone is: here the store is
+    // cleared before each test, and that read would otherwise forget the last-sync keys on the reopen below too.
+    beforeEach(() => { store.set('bp_trust_sync_v3', 'true'); });
 
     it("is read whole once as the upgraded build opens it, so a listing the node won't send again gets its banner", async () => {
         await phoneWithACursor();

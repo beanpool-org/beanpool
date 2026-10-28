@@ -96,6 +96,24 @@ describe('rememberedKnocks & storage on web', () => {
         fetchSpy.mockRestore();
     });
 
+    it('a cancel the community refuses carries its status and code, so the card can tell "nothing open" from a failure', async () => {
+        await rememberKnock(PUB, { url: 'https://n.example.org', name: 'Nothing open' }, new Date('2026-10-10T00:00:00Z'));
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ error: 'No open request from you.', code: 'not_found' }), { status: 404 }));
+
+        const res = await cancelKnock('https://n.example.org', IDENTITY, new Date('2026-10-11T00:00:00Z'));
+        expect(res).toEqual({ ok: false, message: 'No open request from you.', status: 404, code: 'not_found' });
+
+        // A network failure has no status or code: it is not "nothing open".
+        fetchSpy.mockRejectedValueOnce(new Error('offline'));
+        const offline = await cancelKnock('https://n.example.org', IDENTITY, new Date('2026-10-11T00:00:00Z'));
+        expect(offline.ok).toBe(false);
+        expect(offline).not.toHaveProperty('status');
+        expect(offline).not.toHaveProperty('code');
+
+        fetchSpy.mockRestore();
+    });
+
     it('formats cardKnockLines for approved and pending knocks', () => {
         const knocks: RememberedKnock[] = [
             { url: 'https://approved.example.org', name: 'Approved Town', key: 'approved', sentAt: '2026-10-10T00:00:00Z' },

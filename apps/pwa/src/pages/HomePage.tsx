@@ -37,7 +37,7 @@ import {
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { cancelKnock, cardKnockLines, communityOrigin, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { AskedCommunity } from '../components/AskedCommunity';
@@ -984,7 +984,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
     const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
-    const [cancellingKnock, setCancellingKnock] = useState<string | null>(null);
+    /** Every cancel still out (by URL): two waiting cards are normal, and each one's button is its own. */
+    const [cancellingKnocks, setCancellingKnocks] = useState<ReadonlySet<string>>(() => new Set());
     /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
     const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
 
@@ -1017,13 +1018,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
         const ok = window.confirm(t(FIND_COMMUNITY_WORDS.cancelConfirmText, { name }));
         if (!ok) return;
-        setCancellingKnock(k.url);
+        setCancellingKnocks(was => new Set(was).add(k.url));
         setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
         const res = await cancelKnock(k.url, identity);
-        setCancellingKnock(null);
+        setCancellingKnocks(was => { const left = new Set(was); left.delete(k.url); return left; });
         if (res.ok) {
             setKnocks(was => was.filter(item => item.url !== k.url));
         } else {
+            // The community holds nothing open from this key (it lapsed, or was cancelled elsewhere): the card says what it
+            // now answers and stops offering Cancel.
+            if (res.status === 404 && res.code === 'not_found') {
+                setKnockStatuses(was => ({ ...was, [k.url]: { ok: true, value: { status: 'none' } } }));
+            }
             setCancelErrors(was => ({ ...was, [k.url]: res.message }));
         }
     };
@@ -2014,7 +2020,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                             const st = knockStatuses[k.url];
                             const answersLine = communityAnswersLine(comm?.answers);
-                            const isCancelling = cancellingKnock === k.url;
+                            const isCancelling = cancellingKnocks.has(k.url);
 
                             if (st?.ok && st.value.status === 'approved') {
                                 const approved = cardKnockLines([k], knockStatuses)[0];
@@ -2025,14 +2031,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                 );
                             }
 
+                            // What the community now says (the phone's knockCardState): only a pending request arrived and can be
+                            // taken back. Nothing open there (`none`: lapsed, cancelled elsewhere, an invite that expired), or an
+                            // answer that could not be read, is said as it is, with no Cancel. lib/knock words its own sentences.
+                            const pending = !!st?.ok && st.value.status === 'pending';
                             let arrivedLine: string;
-                            if (st === undefined || st === null) {
-                                arrivedLine = t('Checking…');
-                            } else if (st.ok) {
-                                arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
-                            } else {
-                                arrivedLine = st.message;
-                            }
+                            if (st === undefined || st === null) arrivedLine = t('Checking…');
+                            else if (!st.ok) arrivedLine = st.message;
+                            else if (pending) arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
+                            else arrivedLine = t(KNOCK_MESSAGES.none);
 
                             return (
                                 <div key={k.url} data-testid={`home-waiting-card-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
@@ -2047,17 +2054,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                             {answersLine}
                                         </p>
                                     )}
-                                    <div className="mt-2">
-                                        <button
-                                            type="button"
-                                            disabled={isCancelling}
-                                            onClick={() => void handleCancelKnock(k)}
-                                            data-testid={`home-cancel-knock-${k.url}`}
-                                            className="min-h-[44px] px-3 py-2 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 bg-transparent text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                                        >
-                                            {isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
-                                        </button>
-                                    </div>
+                                    {pending && (
+                                        <div className="mt-2">
+                                            <button
+                                                type="button"
+                                                disabled={isCancelling}
+                                                onClick={() => void handleCancelKnock(k)}
+                                                data-testid={`home-cancel-knock-${k.url}`}
+                                                className="min-h-[44px] px-3 py-2 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 bg-transparent text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                            >
+                                                {isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                            </button>
+                                        </div>
+                                    )}
                                     {cancelErrors[k.url] && (
                                         <p role="alert" dir="auto" className="m-0 mt-1 text-xs text-red-600 dark:text-red-400 break-words" data-testid={`home-cancel-error-${k.url}`}>
                                             {cancelErrors[k.url]}

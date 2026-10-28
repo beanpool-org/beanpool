@@ -10,7 +10,7 @@
  * (PR #2551 review: before, nothing was drawn, and the "no Find card" tests here fail there).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { HomeAnswer, HomeFind } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -384,6 +384,92 @@ describe('the honest waiting card on the web find card (Lounge L1)', () => {
         }
 
         readSpy.mockRestore();
+    });
+});
+
+describe('the web waiting card tells the truth about what the community now answers (Lounge L1, review of #2573)', () => {
+    const BYRON = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+    const LISMORE = { key: 'lismore', name: 'Lismore BeanPool', url: 'https://lismore.example.org', memberCount: 30, distanceKm: 40 };
+    const arrivedOf = (url: string) => within(screen.getByTestId(`home-waiting-card-${url}`)).getByTestId(`home-waiting-arrived-${url}`);
+    const cancelOf = (url: string) => screen.queryByTestId(`home-cancel-knock-${url}`);
+
+    async function askedOf(...comms: Array<typeof BYRON>) {
+        for (const [i, c] of comms.entries()) await rememberKnock(ME.publicKey, c, new Date(Date.now() - (5 - i) * 3_600_000));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: comms }, true)));
+    }
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('a community with nothing open (lapsed, cancelled elsewhere) says "No answer came", with no Cancel under it', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'none' } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://byron.example.org');
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('No answer came. You can ask again.'));
+        expect(arrivedOf(BYRON.url)).not.toHaveTextContent('Your request arrived.');
+        expect(cancelOf(BYRON.url)).toBeNull();
+    });
+
+    it('a read that could not be made, or a refusal, is said as it is, with no Cancel', async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+            ? { ok: false, kind: 'unreachable', message: "Couldn't reach this community. Check your connection and try again." }
+            : { ok: false, kind: 'refused', status: 500, code: null, message: 'Back in an hour.' }));
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent("Couldn't reach this community. Check your connection and try again."));
+        await waitFor(() => expect(arrivedOf(LISMORE.url)).toHaveTextContent('Back in an hour.'));
+        expect(cancelOf(BYRON.url)).toBeNull();
+        expect(cancelOf(LISMORE.url)).toBeNull();
+    });
+
+    it('a cancel the community answers "not_found" stops offering Cancel, and the card says what it now answers', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('Your request arrived.'));
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        expect(await screen.findByTestId(`home-cancel-error-${BYRON.url}`)).toHaveTextContent('There is no open request from you here.');
+        expect(arrivedOf(BYRON.url)).toHaveTextContent('No answer came. You can ask again.');
+        expect(cancelOf(BYRON.url)).toBeNull();
+    });
+
+    it('two cancels out at once: each button stays its own (the first finishing does not free the second, a press on a busy one sends nothing)', async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        let finishA: (r: { ok: true }) => void = () => {};
+        let finishB: (r: { ok: true }) => void = () => {};
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock')
+            .mockReturnValueOnce(new Promise(resolve => { finishA = resolve; }))
+            .mockReturnValueOnce(new Promise(resolve => { finishB = resolve; }));
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const a = await screen.findByTestId(`home-cancel-knock-${BYRON.url}`);
+        const b = await screen.findByTestId(`home-cancel-knock-${LISMORE.url}`);
+        fireEvent.click(a);
+        await waitFor(() => expect(a).toBeDisabled());
+        fireEvent.click(b);
+        await waitFor(() => expect(b).toBeDisabled());
+
+        // B started while A is out: A's button is still busy, and a press on it sends nothing.
+        expect(a).toBeDisabled();
+        fireEvent.click(a);
+        expect(cancelSpy).toHaveBeenCalledTimes(2);
+        expect(confirmSpy).toHaveBeenCalledTimes(2);
+
+        // A finishes: it goes; B's button is still busy.
+        await act(async () => { finishA({ ok: true }); });
+        await waitFor(() => expect(screen.queryByTestId(`home-waiting-card-${BYRON.url}`)).toBeNull());
+        expect(screen.getByTestId(`home-cancel-knock-${LISMORE.url}`)).toBeDisabled();
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        await act(async () => { finishB({ ok: true }); });
+        await waitFor(() => expect(screen.queryByTestId(`home-waiting-card-${LISMORE.url}`)).toBeNull());
     });
 });
 

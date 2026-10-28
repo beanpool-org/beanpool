@@ -194,7 +194,7 @@ export async function cancelKnock(
     communityUrl: string | null,
     identity: BeanPoolIdentity,
     now: Date = new Date(),
-): Promise<{ ok: true } | { ok: false; message: string }> {
+): Promise<{ ok: true } | { ok: false; message: string; status?: number; code?: string | null }> {
     const origin = communityOrigin(communityUrl);
     if (!origin) return { ok: false, message: t(KNOCK_MESSAGES.noAddress) };
     const target = `${origin}${KNOCK_CANCEL_PATH}`;
@@ -218,8 +218,8 @@ export async function cancelKnock(
         return { ok: false, message: t(KNOCK_MESSAGES.unreachable) };
     }
     if (!res.ok) {
-        const { message } = await readError(res);
-        return { ok: false, message: message ?? t(KNOCK_MESSAGES.unreadable) };
+        const { message, code } = await readError(res);
+        return { ok: false, message: message ?? t(KNOCK_MESSAGES.unreadable), status: res.status, code };
     }
     const knocks = readStore(identity.publicKey);
     writeStore(identity.publicKey, knocks.map(k => (k.url === origin ? { ...k, cancelledAt: now.toISOString() } : k)));

@@ -13,6 +13,7 @@
  *    tap, and its Back returns to the look, not to the first screen.
  * 4. A phone that looked around, back on the first screen (a restart): the community in use is the look's, and never
  *    fills an invite's address. An invite's own server is the one used, and a bare code asks for its community.
+ * 5. The phone's back button at the look's door is the door's own Back: shut while the sign-in is out.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -26,6 +27,8 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
 const prompts = vi.hoisted(() => ({ asked: [] as string[] }));
+/** The phone's back button: its handlers, as React Native keeps them (the latest first). */
+const backs = vi.hoisted(() => ({ handlers: new Set<() => boolean>() }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', checkbox: 'checkbox' };
@@ -65,7 +68,12 @@ vi.mock('react-native', () => {
             },
         },
         AppState: { currentState: 'active', addEventListener: listener },
-        BackHandler: { addEventListener: listener },
+        BackHandler: {
+            addEventListener: (_event: string, handler: () => boolean) => {
+                backs.handlers.add(handler);
+                return { remove() { backs.handlers.delete(handler); } };
+            },
+        },
         DeviceEventEmitter: { addListener: listener, emit() {} },
         Keyboard: { addListener: listener, dismiss() {} },
         AccessibilityInfo: { announceForAccessibility: () => {}, isScreenReaderEnabled: async () => false, addEventListener: listener },
@@ -341,6 +349,7 @@ beforeEach(() => {
     store.map.clear();
     alerts.said.length = 0; alerts.buttons.length = 0; prompts.asked.length = 0;
     params.now = {};
+    backs.handlers.clear();
     nav.replaced.length = 0; nav.pushed.length = 0;
     work.started.length = 0; work.keysDrafted = 0;
     look.answer = { kind: 'guest' }; look.askedFor.length = 0;
@@ -398,6 +407,11 @@ function lookedAround() {
     store.map.set('beanpool_anchor_url', GLOBAL);
     store.map.set('beanpool_guest_nodes', JSON.stringify([GLOBAL]));
     door.cachedProfile = { profile: 'global', features: { openJoin: true, guestListingsOnly: true } };
+}
+/** The phone's back button pressed: the latest handler first, until one takes it. */
+async function phoneBack() {
+    await act(async () => { for (const handler of [...backs.handlers].reverse()) if (handler()) break; });
+    await settle();
 }
 /** The door's own screen is up: its two ways in (WordsDoor's DoorChoices, a stand-in here). */
 const doorOpen = () => all('[data-later-sweep="DoorChoices"]').length > 0;
@@ -466,5 +480,24 @@ describe('look before you join on a new phone (slice S12)', () => {
         await press('Join with an invite');
         await type('Invite link or code', 'MULL-1234');
         expect(communityField()).toBe(MULLUM);
+    });
+
+    it('5. the phone\'s back button at the look\'s door: shut while the sign-in is out, as the door\'s Back; back to the look once it opens', async () => {
+        // A door with the sign-in only: its first screen is the sign-in's.
+        door.check = { ok: true, profile: { profile: 'global', features: { openJoin: true, guestListingsOnly: true } } };
+        let signedIn!: (answer: unknown) => void;
+        door.signIn = new Promise((resolve) => { signedIn = resolve; });
+        params.now = { join: 'look' };
+        await mount();
+        await press('Continue with Google');
+        // The sign-in (its nonce, the provider's sheet) is out: the phone's Back leaves nothing, and the door stays.
+        await phoneBack();
+        expect(nav.replaced).toEqual([]);
+        expect(button('Back')).toBeTruthy();
+        signedIn({ kind: 'signed_in', signin: { provider: 'google', idToken: 'x', nonce: 'n' } });
+        await settle();
+        // The name step: Back is open, and the phone's returns to the look.
+        await phoneBack();
+        expect(nav.replaced).toEqual(['/(tabs)/market']);
     });
 });

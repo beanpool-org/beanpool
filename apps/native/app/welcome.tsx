@@ -835,16 +835,18 @@ export default function WelcomeScreen() {
         modeBefore.current = mode;
     }, [mode]);
 
-    // The phone's back button at the door opened from the look: back to the look, as the door's own Back.
+    // The phone's back button at the door opened from the look: back to the look, as the door's own Back, and only when
+    // that Back is open (global-join.ts doorWaysOut): not while the join is out, nor while the sign-in's nonce or a restore
+    // runs, whose answer would otherwise land with the look in front.
     useEffect(() => {
         if (mode !== 'globalJoin' || !doorFromLook) return;
         const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-            if (globalPhase === 'joining') return true;
+            if (!doorWaysOut(globalPhase, loading).back) return true;
             leaveGlobalDoor();
             return true;
         });
         return () => sub.remove();
-    }, [mode, doorFromLook, globalPhase]);
+    }, [mode, doorFromLook, globalPhase, loading]);
 
     // A re-key ask the app was closed in the middle of (utils/rekey-redeem.ts): back to its screen, which asks once more.
     useEffect(() => {

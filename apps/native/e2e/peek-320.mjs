@@ -84,6 +84,7 @@ const STUBS = {
         export const fetchPeekCommunityName = async () => 'Castlemaine BeanPool';
         export const fetchPeekShares = async () => globalThis.__shares;
         export const stopPeekShare = async () => {};
+        export const peekStopsHere = () => 0;
         export const makePeekLink = async () => ({ link: 'https://castlemaine.beanpool.org/?post=p&peek=t', expiresAt: '' });
     `,
     'use-node-profile': `export const useNodeProfile = () => ({ profile: 'local', features: { shareOutside: true }, checkedAt: '' });`,

@@ -8,7 +8,7 @@
  * Each hands the link to the phone's share sheet. A refusal says the node's own words, and nothing is shared: never a
  * false success.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PEEK_WORDS as W, t } from '@beanpool/core';
@@ -16,7 +16,7 @@ import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { shareOutsideOn } from '../utils/node-profile';
 import { eventLink } from '../utils/event-extras';
-import { makePeekLink } from '../utils/peek';
+import { makePeekLink, peekStopsHere } from '../utils/peek';
 
 /**
  * Whether a post may be offered for sharing outside: one everyone here sees, on the board, and not an event that has
@@ -33,18 +33,36 @@ export function shareableOutside(post: any, now = Date.now()): boolean {
     return scope === 'public' && active && (post?.status === 'active' || post?.status === 'pending');
 }
 
-/** Ask, then make the link and hand it to the share sheet. Exported for the event's own Share row. */
-export function confirmShareOutside(post: { id: string; title: string }, onBusy?: (busy: boolean) => void): void {
+/** A link made for `postId` but not handed over, and how many stops there had been then (utils/peek.ts peekStopsHere). */
+export type UnsentPeekLink = { postId: string; link: string; stops: number };
+
+/**
+ * Ask, then make the link and hand it to the share sheet. Exported for the event's own Share row.
+ *
+ * The node makes the link before the sheet opens, so a sheet the member closes (iOS says so; Android's never does) or
+ * one that fails leaves a live link: seven days, one of the member's 50. With `unsent` (the button's own, so it goes
+ * with the screen) that link is kept and the next Share hands it over, rather than making a second; never one made
+ * before a Stop sharing since, which may be that one.
+ */
+export function confirmShareOutside(
+    post: { id: string; title: string }, onBusy?: (busy: boolean) => void, unsent?: { current: UnsentPeekLink | null },
+): void {
     Alert.alert(t(W.shareOutside), t(W.shareOutsideNote), [
         { text: t('Cancel'), style: 'cancel' },
         {
             text: t('Share'),
             onPress: async () => {
                 onBusy?.(true);
+                const kept = unsent?.current;
+                let link = kept && kept.postId === post.id && kept.stops === peekStopsHere() ? kept.link : null;
+                const keep = (made: string) => { if (unsent) unsent.current = { postId: post.id, link: made, stops: peekStopsHere() }; };
                 try {
-                    const { link } = await makePeekLink(post.id);
-                    await Share.share({ message: `${post.title}\n${link}`, title: post.title });
+                    if (!link) link = (await makePeekLink(post.id)).link;
+                    const shared = await Share.share({ message: `${post.title}\n${link}`, title: post.title });
+                    if (shared?.action === Share.dismissedAction) keep(link);
+                    else if (unsent) unsent.current = null;
                 } catch (e: any) {
+                    if (link) keep(link);
                     Alert.alert(t(W.notShared), e?.message || t('Please try again.'));
                 } finally {
                     onBusy?.(false);
@@ -59,9 +77,10 @@ export function ShareOutsideButton({ post }: { post: any }) {
     const styles = useStyles(makeStyles);
     const profile = useNodeProfile();
     const [busy, setBusy] = useState(false);
+    const unsent = useRef<UnsentPeekLink | null>(null);
     if (!shareOutsideOn(profile?.features) || !shareableOutside(post)) return null;
     return (
-        <Pressable onPress={() => confirmShareOutside({ id: post.id, title: post.title }, setBusy)} disabled={busy}
+        <Pressable onPress={() => confirmShareOutside({ id: post.id, title: post.title }, setBusy, unsent)} disabled={busy}
             style={[styles.btn, busy && { opacity: 0.6 }]} accessibilityRole="button" testID="share-outside-button">
             <Text style={styles.btnText}>{t(W.shareOutside)}</Text>
         </Pressable>

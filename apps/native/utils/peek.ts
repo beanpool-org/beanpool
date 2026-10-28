@@ -125,7 +125,22 @@ export async function fetchPeekShares(): Promise<PeekShare[]> {
     return readPeekShares(await res.json());
 }
 
-/** Stop one of them: it opens nothing from now. */
+let stopsHere = 0;
+
+/**
+ * How many links Stop sharing has stopped from this app. A link Share outside kept unsent (components/SharePost.tsx) is
+ * handed over only while this is unchanged: the post screen stays open under Settings → Shared outside, and the link
+ * stopped there may be that one.
+ */
+export function peekStopsHere(): number {
+    return stopsHere;
+}
+
+/** Stop one of them: it opens nothing from now. Counted even where no answer came: the node may have stopped it. */
 export async function stopPeekShare(id: string): Promise<void> {
-    await signedWrite('/api/peek/stop', { id });
+    try {
+        await signedWrite('/api/peek/stop', { id });
+    } finally {
+        stopsHere += 1;
+    }
 }

@@ -264,7 +264,8 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(text()).toContain(String(SAMPLE_COMMUNITY.balance));
             expect(text()).not.toContain('RealMember');
             expect(text()).not.toMatch(/Ʀ|🔒/);
-            expect(net.calls).toEqual([]);
+            // L3: a member visiting the preview ledger records saw_ledger: true once on mount
+            expect(net.calls).toEqual(['db.signedRequest']);
         });
 
         it("Wallet: Example Valley's recent rows, with Send Beans and Export CSV as the marker's actions", async () => {
@@ -283,7 +284,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(host.querySelector('[aria-label="Amount to send"]')).toBeNull();
             expect(host.querySelector('button[aria-label="Export CSV"]')).toBeNull();
             expect(text()).not.toMatch(/Ʀ|🔒/);
-            expect(net.calls).toEqual([]);
+            expect(net.calls).toEqual(['db.signedRequest']);
         });
 
         it('the one marker, everywhere it shows: 🏘️ Local community in the info tone, dashed, never a lock, grey or fade', async () => {
@@ -333,7 +334,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(routes.pushed).toEqual([]);
             expect(alerts.shown).toEqual([]);
             expect(files.calls).toEqual([]);
-            expect(net.calls).toEqual([]);
+            expect(net.calls).toEqual(['db.signedRequest']);
         });
 
         it('the net spy: every button in both tabs, pressed; nothing asked of a node, nothing written, nothing shared', async () => {
@@ -363,7 +364,7 @@ for (const scheme of ['light', 'dark'] as const) {
             }
             expect(alerts.shown).toEqual([]);
             expect(files.calls).toEqual([]);
-            expect(net.calls).toEqual([]);
+            expect(net.calls).toEqual(['db.signedRequest']);
         });
     });
 }

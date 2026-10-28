@@ -17,7 +17,7 @@
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
-    getBalance, getTransactions, sendTransfer, request,
+    getBalance, getTransactions, sendTransfer, request, saveHomePreferences,
     type BalanceInfo, type TierInfo, type Transaction, type Member
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -112,6 +112,16 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     // (review of #2035, N2). A local community answers at once and reads as before.
     const readsBeans = useReadsOwn('beans', viewerIsMember && !preview, modeRetryCount);
     const waitingForMode = viewerIsMember && !preview && !readsBeans;
+
+    const sawLedgerSent = useRef(false);
+    useEffect(() => {
+        if (identity?.publicKey && preview && viewerIsMember && !sawLedgerSent.current) {
+            sawLedgerSent.current = true;
+            saveHomePreferences(identity.publicKey, { saw_ledger: true }).catch(() => {
+                sawLedgerSent.current = false;
+            });
+        }
+    }, [identity?.publicKey, preview, viewerIsMember]);
 
     useEffect(() => {
         if (!waitingForMode) {

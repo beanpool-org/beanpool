@@ -1,7 +1,8 @@
 /**
  * The web previews (components/ShowcasePreviews.tsx, LocalCommunityMark.tsx; DESIGN-global-showcase-fable.md §2, §6 W2):
  * no number from Example Valley may reach the node. Proven three ways here: every request a preview makes, through every
- * action and the sheet, is the node's info and nothing else, and none is a write; the marker never looks locked; and
+ * action and the sheet, is the node's info and nothing else, and none is a write (with the single exception of L3: a member
+ * visiting the preview ledger records saw_ledger: true on their own key); the marker never looks locked; and
  * only ShowcasePreviews.tsx imports the sample. The Ledger in preview is the real LedgerPage drawn from the sample
  * (design §1 row 3), so it is rendered here whole, both tabs, with the real api module under the fetch spy.
  */
@@ -30,7 +31,7 @@ const GLOBAL_INFO = {
 const MEMBER: BeanPoolIdentity = { publicKey: 'real-member-key', privateKey: 'real-member-private', callsign: 'RealMember', createdAt: '2026-10-01T00:00:00.000Z' };
 const S = SAMPLE_COMMUNITY;
 
-let calls: { url: string; method: string }[] = [];
+let calls: { url: string; method: string; body?: unknown }[] = [];
 
 beforeEach(() => {
     calls = [];
@@ -38,13 +39,21 @@ beforeEach(() => {
     localStorage.clear();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-        calls.push({ url, method: (init?.method ?? 'GET').toUpperCase() });
+        let body: unknown = undefined;
+        if (init?.body && typeof init.body === 'string') {
+            try {
+                body = JSON.parse(init.body);
+            } catch {
+                body = init.body;
+            }
+        }
+        calls.push({ url, method: (init?.method ?? 'GET').toUpperCase(), body });
         return new Response(JSON.stringify(GLOBAL_INFO), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }));
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 
-/** Every request so far: the node's info only, and never a write. */
+/** Every request so far: the node's info only, and never a write (L3 saw_ledger on member Ledger is asserted separately). */
 function onlyInfo() {
     expect(calls.every(c => c.method === 'GET')).toBe(true);
     expect(calls.every(c => new URL(c.url, 'http://x').pathname === '/api/community/info')).toBe(true);
@@ -106,8 +115,23 @@ describe('preview mode asks the node for its info and nothing else, and writes n
 
             // Let anything the page started land, then: the node's info only, and nothing about anyone's ledger.
             await new Promise(r => setTimeout(r, 20));
-            expect(calls.some(c => /\/api\/(ledger|members|community\/me|repay)/.test(c.url))).toBe(false);
-            onlyInfo();
+            if (identity) {
+                // L3: a member visiting the preview ledger records saw_ledger: true once on mount
+                const prefCalls = calls.filter(c => new URL(c.url, 'http://x').pathname === '/api/members/preferences');
+                expect(prefCalls).toHaveLength(1);
+                expect(prefCalls[0].method).toBe('POST');
+                expect(prefCalls[0].body).toEqual({ publicKey: MEMBER.publicKey, preferences: { saw_ledger: true } });
+                expect(calls.some(c => {
+                    const path = new URL(c.url, 'http://x').pathname;
+                    return path !== '/api/members/preferences' && /\/api\/(ledger|members|community\/me|repay)/.test(path);
+                })).toBe(false);
+                const infoCalls = calls.filter(c => new URL(c.url, 'http://x').pathname !== '/api/members/preferences');
+                expect(infoCalls.every(c => c.method === 'GET')).toBe(true);
+                expect(infoCalls.every(c => new URL(c.url, 'http://x').pathname === '/api/community/info')).toBe(true);
+            } else {
+                expect(calls.some(c => /\/api\/(ledger|members|community\/me|repay)/.test(c.url))).toBe(false);
+                onlyInfo();
+            }
         });
     }
 

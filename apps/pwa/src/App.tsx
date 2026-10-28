@@ -44,11 +44,11 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { MobileHeader, SidebarStatus } from './components/AppHeader';
-import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, t, tourStepForTab, tourSteps, webHelpKey, word, type Guide, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, useTour } from './lib/tour-store';
-import { getBundledGuide, inShownLanguage } from './lib/guide';
+import { getBundledGuide, loadBundledGuide, inShownLanguage } from './lib/guide';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
@@ -174,7 +174,7 @@ export function App() {
     const invitesMode = useFeatureMode('invites');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
-    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide'>('menu');
+    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
     // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
     const [settingsGuidePage, setSettingsGuidePage] = useState<string | null>(null);
     // A sign-in added to an account made with 12 words (lib/link-signin.ts): what came of it, said in Settings.
@@ -212,12 +212,20 @@ export function App() {
         setActiveTab('home');
     };
     const [helpOpen, setHelpOpen] = useState(false);
+    const [helpGuide, setHelpGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
     useEffect(() => {
         const open = () => setHelpOpen(true);
         window.addEventListener(OPEN_HELP_EVENT, open);
         return () => window.removeEventListener(OPEN_HELP_EVENT, open);
     }, []);
-    const helpWords = helpSheetFor(inShownLanguage(getBundledGuide()), webHelpKey({ tab: activeTab, settings: showSettings }));
+    useEffect(() => {
+        if (helpOpen && !helpGuide) {
+            loadBundledGuide().then(setHelpGuide).catch(() => {});
+        }
+    }, [helpOpen, helpGuide]);
+    const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
@@ -460,6 +468,11 @@ export function App() {
         }
         if (tab === 'settings-profile') {
             setSettingsInitialMode('profile');
+            setShowSettings(true);
+            return;
+        }
+        if (tab === 'settings-area') {
+            setSettingsInitialMode('area');
             setShowSettings(true);
             return;
         }

@@ -51,7 +51,7 @@ export const HOME_TIPS: readonly HomeTip[] = [
     { id: 'beans', when: beansOn, guide: 'how-it-works',
         text: word("Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.") },
     { id: 'no-beans', when: n => !beansOn(n), guide: 'posting',
-        text: word("There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.") },
+        text: word("There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.") },
     { id: 'price', when: beansOn, guide: 'posting',
         text: word('A rough guide: 40 Beans is about an hour of someone\'s time. You and the other person agree the real price.') },
     { id: 'words', when: always, guide: 'your-12-words',

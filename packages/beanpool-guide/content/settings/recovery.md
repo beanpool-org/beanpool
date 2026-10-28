@@ -98,7 +98,7 @@ For each sign-in account you link in the phone app, BeanPool's key vault keeps:
 
 While someone is getting back in with a sign-in (see "If someone else tries"), it keeps the new phone's one-time key and the times, until 7 days after that ends. When you remove a copy, it keeps a note of the removal for 30 days, with the two fingerprints and the day, so that a restore from an older backup removes the copy again.
 
-It never keeps your name, email, phone number, address or IP address, your sign-in account's id itself (only its fingerprint), which communities you are in, or a copy of what it handed back. The totals it signs each day count copies, restores and removals, and say nothing about anyone.
+It never keeps your name, email, phone number or address, your sign-in account's id itself (only its fingerprint), which communities you are in, or a copy of what it handed back. It never writes down your IP address: to limit abuse, it counts the requests from each address in its memory, and forgets them when it restarts. The totals it signs each day count copies, restores and removals, and say nothing about anyone.
 
 ## If you had linked GitHub
 

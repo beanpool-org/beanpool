@@ -35,6 +35,10 @@
  * and never heard: nothing is linked, as the phone can't tell the community wants a copy made. With no community at all
  * (`url` null), the vault, as before the rule. A build without a vault asks nothing new: every copy goes to the
  * community, whose server refuses one it keeps none of (409 `no_copies_here`).
+ *
+ * The screen that opened the sheet told the member where the copy goes (`shownAt`), from its own, earlier read of the
+ * rule. A copy goes only there: when the rule asked now sends it elsewhere (the owners changed it since, or that read got
+ * no answer), nothing is linked, no ticket is asked for and no sheet opens, so the member reads where it goes first.
  */
 
 import { signInWithProvider, startSsoSignIn, SsoSignInError } from './sso-signin';
@@ -42,15 +46,18 @@ import type { SsoProvider } from './sso-signin';
 import { enrolSsoKeeper, type KeeperEnrolmentResult } from './keeper-enrolment';
 import type { BeanPoolIdentity } from './identity';
 import { rememberConnectWanted, signInCopiesAt, vaultTicket, VaultError, VAULT_MESSAGES, type VaultFailure } from './vault';
+import type { SignInCopies } from './vault-config';
 import { copiesRuleNow } from './copies-rule';
 
 /**
- * What a member reads when the community keeps no copies, or can't be asked where it keeps them. Plain English (this
- * file is beside the 12 words' key path); the screens translate them (components/welcome/welcome-lines.ts).
+ * What a member reads when the community keeps no copies, can't be asked where it keeps them, or now keeps them somewhere
+ * other than the screen said. Plain English (this file is beside the 12 words' key path); the screens translate them
+ * (components/welcome/welcome-lines.ts).
  */
 export const CONNECT_RULE_MESSAGES = {
     none: "Your community keeps no copies of members' accounts, so no sign-in was linked. Your 12 words are your way back there.",
     unknown: "Your community couldn't be asked where it keeps copies, so no sign-in was linked. Try again when you're connected.",
+    changed: 'Your community changed where it keeps copies, so no sign-in was linked. Close this to see where a copy goes now, then link it again.',
 } as const;
 
 /**
@@ -101,6 +108,12 @@ export async function connectAndDeposit(options: {
      */
     copyAt?: 'community';
     /**
+     * Where the screen that opened the sheet told the member the copy goes (its `copiesAt`, from the community's rule as
+     * that screen read it). A copy is made only there: when the rule asked now sends it elsewhere, nothing is linked
+     * (`CONNECT_RULE_MESSAGES.changed`). Absent: wherever the rule says now.
+     */
+    shownAt?: SignInCopies;
+    /**
      * The phone's lock, asked before anything starts. The sheet hands it Settings' check (LocalAuth.authenticateUser);
      * null only for a key the join wizard has just made, the member's own new account.
      */
@@ -127,6 +140,8 @@ export async function connectAndDeposit(options: {
     if (rule === null) return nothingLinked(CONNECT_RULE_MESSAGES.unknown);
     const at = signInCopiesAt(rule);
     if (at === 'none') return nothingLinked(CONNECT_RULE_MESSAGES.none);
+    // The member was told it goes elsewhere: never a copy of the key where they weren't told it would be.
+    if (options.shownAt && options.shownAt !== at) return nothingLinked(CONNECT_RULE_MESSAGES.changed);
     if (at === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
 
     let grant: { ticket: string; nonce: string };

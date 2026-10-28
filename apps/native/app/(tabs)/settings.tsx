@@ -2439,6 +2439,8 @@ export default function SettingsScreen() {
                 provider={ssoEnrolProvider}
                 copiesAt={copiesAt}
                 onClose={() => setShowSsoSheet(false)}
+                // The community's rule moved on since this screen read it, and nothing was linked: read it again, words and all.
+                onCopiesChanged={() => { void fetchProtectionStatus(); }}
                 onEnrolled={(result) => {
                     setShowSsoSheet(false);
                     // Kept at the community (a build without a vault, or a community that keeps copies itself): it answers

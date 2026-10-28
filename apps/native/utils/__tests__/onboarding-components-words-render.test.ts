@@ -95,10 +95,10 @@ vi.mock('../../components/SsoButton', () => {
     const button = (name: string) => ({ title, onPress }: { title?: string; onPress: () => void }) => createElement('button', { role: 'button', 'aria-label': title, 'data-sso': name, onClick: onPress }, title);
     return { GoogleButton: button('google'), AppleButton: button('apple'), FacebookButton: button('facebook') };
 });
-const sheet = vi.hoisted(() => ({ answer: null as null | Promise<unknown> }));
+const sheet = vi.hoisted(() => ({ answer: null as null | Promise<unknown>, options: null as null | Record<string, unknown> }));
 vi.mock('../sso-sheet-connect', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-sheet-connect')>();
-    return { ...real, connectAndDeposit: async () => sheet.answer };
+    return { ...real, connectAndDeposit: async (options: Record<string, unknown>) => { sheet.options = options; return sheet.answer; } };
 });
 vi.mock('../sso-signin', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-signin')>();
@@ -137,6 +137,7 @@ import { RecoveryKitButtons } from '../../components/RecoveryKitButtons';
 import { CopyClearsNote, NoScreenLockNote } from '../../components/WordsOnScreen';
 import { protectionFrom } from '../protection-state';
 import { VAULT_MESSAGES } from '../vault';
+import { CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 import { SsoSignInError } from '../sso-signin';
 import { noVault, useVault } from './fake-vault';
 
@@ -146,7 +147,7 @@ const AS_WRITTEN = ['Google', 'Apple', 'Facebook', 'Sally', 'mullum.beanpool.org
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-beforeEach(() => { alerts.said.length = 0; prompts.asked.length = 0; sheet.answer = null; kit.print = 'done'; noVault(); setLanguage('en'); });
+beforeEach(() => { alerts.said.length = 0; prompts.asked.length = 0; sheet.answer = null; sheet.options = null; kit.print = 'done'; noVault(); setLanguage('en'); });
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; noVault(); setLanguage('en'); });
 
 const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
@@ -336,6 +337,46 @@ describe('the sign-in sheet (SsoEnrolSheet)', () => {
             check(`the sheet, not linked, ${vault ? 'vault' : 'community'}`);
         });
     }
+    // The connect makes the copy only where the screen said (utils/sso-sheet-connect.ts `shownAt`). When the community's
+    // rule moved on since, nothing is linked: no Try again (it would link where the member hasn't read), and the screen is
+    // told as the sheet closes, so it reads where a copy goes before they link one.
+    for (const shown of ['vault', 'community'] as const) {
+        it(`the screen said ${shown === 'vault' ? 'the key vault' : 'the community'} and the rule moved on: its sentence, no Try again, the screen told on Cancel`, async () => {
+            useVault();
+            sheet.answer = Promise.resolve({ enrolled: [], generation: null, skipped: [], available: 0, error: CONNECT_RULE_MESSAGES.changed });
+            let closed = 0;
+            let changed = 0;
+            await mount(createElement(SsoEnrolSheet, {
+                visible: true, provider: 'google', askPhoneLock: false, copiesAt: shown,
+                onClose() { closed++; }, onEnrolled() {}, onCopiesChanged() { changed++; },
+            }));
+            expect(sheet.options?.shownAt).toBe(shown);
+            expect(host!.textContent).toContain(pseudoLocalise(CONNECT_RULE_MESSAGES.changed));
+            const labels = all('button').map((b) => b.textContent);
+            expect(labels).not.toContain(pseudoLocalise('Try again'));
+            expect(labels).toContain(pseudoLocalise('Cancel'));
+            check(`the sheet, the rule moved on, ${shown}`);
+            expect(changed).toBe(0);
+            await click(all('button').find((b) => b.textContent === pseudoLocalise('Cancel')), 'Cancel');
+            expect(closed).toBe(1);
+            expect(changed).toBe(1);
+        });
+    }
+    it('any other refusal keeps Try again, and closing it tells the screen nothing', async () => {
+        useVault();
+        sheet.answer = Promise.resolve({ error: VAULT_MESSAGES.paused });
+        let closed = 0;
+        let changed = 0;
+        await mount(createElement(SsoEnrolSheet, {
+            visible: true, provider: 'google', askPhoneLock: false, copiesAt: 'vault',
+            onClose() { closed++; }, onEnrolled() {}, onCopiesChanged() { changed++; },
+        }));
+        expect(sheet.options?.shownAt).toBe('vault');
+        expect(all('button').map((b) => b.textContent)).toContain(pseudoLocalise('Try again'));
+        await click(all('button').find((b) => b.textContent === pseudoLocalise('Cancel')), 'Cancel');
+        expect(closed).toBe(1);
+        expect(changed).toBe(0);
+    });
 });
 
 describe("the recovery kit's buttons and the notes under the 12 words", () => {

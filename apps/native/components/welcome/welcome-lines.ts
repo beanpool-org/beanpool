@@ -103,9 +103,11 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'ID token missing subject claim (sub).': word('ID token missing subject claim (sub).'),
     "The phone's lock was not passed, so no sign-in was linked.": word("The phone's lock was not passed, so no sign-in was linked."),
     "That sign-in didn't say which account it was, so nothing was linked. Try again.": word("That sign-in didn't say which account it was, so nothing was linked. Try again."),
-    // utils/sso-sheet-connect.ts CONNECT_RULE_MESSAGES: the community's rule for copies said no, or couldn't be asked (VR2).
+    // utils/sso-sheet-connect.ts CONNECT_RULE_MESSAGES: the community's rule for copies said no, couldn't be asked, or
+    // sends the copy somewhere other than the screen said (VR2).
     "Your community keeps no copies of members' accounts, so no sign-in was linked. Your 12 words are your way back there.": word("Your community keeps no copies of members' accounts, so no sign-in was linked. Your 12 words are your way back there."),
     "Your community couldn't be asked where it keeps copies, so no sign-in was linked. Try again when you're connected.": word("Your community couldn't be asked where it keeps copies, so no sign-in was linked. Try again when you're connected."),
+    'Your community changed where it keeps copies, so no sign-in was linked. Close this to see where a copy goes now, then link it again.': word('Your community changed where it keeps copies, so no sign-in was linked. Close this to see where a copy goes now, then link it again.'),
     'No node configured yet.': word('No node configured yet.'),
     'The sign-in could not be linked.': word('The sign-in could not be linked.'),
     // utils/protection-state.ts KEEPER_LABELS: what holds a piece, on the covered panel.

@@ -10,6 +10,8 @@
  *   - `vault`, and a community from before the rule: the vault, as before;
  *   - a community that can't be asked now, whose rule the phone never heard: nothing is linked (never a copy where the
  *     community may not want one); one whose rule the phone kept goes by it.
+ *   - a screen that told the member one place (the vault, or the community) while the rule now says the other: nothing
+ *     is linked and no sheet opens, and neither place is sent anything; where they agree, the copy goes there.
  *   - the move card both ways: under `server` the reverse (vault → community) is offered and finishing it removes the
  *     vault's copy only once the new one is at the community; under `none` nothing is offered; under `vault` the forward
  *     move as before, and a deposit that went elsewhere leaves the old copy.
@@ -65,7 +67,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sealSeedToSso } from '@beanpool/core';
 import { connectAndDeposit, CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 import { readNodeProfile } from '../node-profile';
-import { readRecoveryCopiesRule, signInCopiesAt } from '../vault-config';
+import { readRecoveryCopiesRule, signInCopiesAt, type SignInCopies } from '../vault-config';
 import { copiesRuleChange, copiesRuleNow, copiesRuleSeen, knownCopiesRule } from '../copies-rule';
 import { finishMove, vaultMoveOffer } from '../vault-move';
 import type { KeeperEnrolmentResult } from '../keeper-enrolment';
@@ -132,10 +134,10 @@ afterEach(() => {
     noVault();
 });
 
-/** The sheet's connect for the community the phone is on, as the sheet runs it. */
-async function connect(url: string | null = COMMUNITY): Promise<{ value?: KeeperEnrolmentResult; error?: unknown }> {
+/** The sheet's connect for the community the phone is on, as the sheet runs it; `shownAt`: where its screen said the copy goes. */
+async function connect(url: string | null = COMMUNITY, shownAt?: SignInCopies): Promise<{ value?: KeeperEnrolmentResult; error?: unknown }> {
     const outcome = connectAndDeposit({
-        provider: 'facebook', url, identity: MEMBER, phoneLock: null, onSignedIn: () => {}, signal: new AbortController().signal,
+        provider: 'facebook', url, identity: MEMBER, ...(shownAt ? { shownAt } : {}), phoneLock: null, onSignedIn: () => {}, signal: new AbortController().signal,
     }).then((value) => ({ value }), (error) => ({ error }));
     await vi.advanceTimersByTimeAsync(30_000);
     return outcome;
@@ -232,6 +234,55 @@ describe('linking a sign-in, by the community\'s rule, in a build with the key v
         const { value } = await connect(null);
         expect(value?.keptAt).toBe('vault');
         expect(atCommunity()).toEqual([]);
+    });
+
+    // The screen read the rule earlier (kept within the hour, or its read got no answer and showed this build's place):
+    // the member was told one place, and the rule now says the other.
+    it('the screen said the key vault, the community keeps copies itself now: nothing linked, no sheet, nothing sent to either', async () => {
+        community.rule = 'server';
+        facebookSaysYes();
+        const { value, error } = await connect(COMMUNITY, 'vault');
+        expect(error).toBeUndefined();
+        expect(value?.error).toBe(CONNECT_RULE_MESSAGES.changed);
+        expect(value?.enrolled).toEqual([]);
+        expect(value?.keptAt).toBeUndefined();
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+        expect(atVault()).toEqual([]);
+        expect(atCommunity()).toEqual(['GET /api/community/info']);
+        expect(community.copies.size).toBe(0);
+        // The fresh answer is kept, so the screen reads the new place when it looks again.
+        expect(await knownCopiesRule(COMMUNITY)).toBe('server');
+    });
+
+    it('the screen said the community, the rule is the key vault now: nothing linked, and the vault is never asked', async () => {
+        community.rule = 'vault';
+        facebookSaysYes();
+        const { value } = await connect(COMMUNITY, 'community');
+        expect(value?.error).toBe(CONNECT_RULE_MESSAGES.changed);
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+        expect(atVault()).toEqual([]);
+        expect(atCommunity()).toEqual(['GET /api/community/info']);
+        expect(net.vault.copiesOf(MEMBER.publicKey)).toEqual([]);
+    });
+
+    it('the screen and the rule agree: linked where the screen said, as before', async () => {
+        community.rule = 'server';
+        facebookSaysYes();
+        const atCommunityNow = await connect(COMMUNITY, 'community');
+        expect(atCommunityNow.value?.error).toBeUndefined();
+        expect(atCommunityNow.value?.keptAt).toBe('community');
+        expect(atVault()).toEqual([]);
+        community.rule = 'vault';
+        const atVaultNow = await connect(COMMUNITY, 'vault');
+        expect(atVaultNow.value?.error).toBeUndefined();
+        expect(atVaultNow.value?.keptAt).toBe('vault');
+    });
+
+    it('a community that keeps none says so, whatever the screen said', async () => {
+        community.rule = 'none';
+        const { value } = await connect(COMMUNITY, 'vault');
+        expect(value?.error).toBe(CONNECT_RULE_MESSAGES.none);
+        expect(atVault()).toEqual([]);
     });
 });
 

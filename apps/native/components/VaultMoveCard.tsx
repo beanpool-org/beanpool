@@ -152,6 +152,9 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
                 provider={offer.provider}
                 copiesAt={keepHere ? 'community' : 'vault'}
                 onClose={() => setSheetOpen(false)}
+                // The community's rule moved on since this card was worked out, and nothing was linked: the card no longer
+                // holds. Put away, and Settings reads where copies go again; its next visit works the card out afresh.
+                onCopiesChanged={() => { setOffer(null); onMoved?.(null); }}
                 onEnrolled={async (result) => {
                     // The new copy is kept: the old one goes, once the new one is where the move meant (utils/vault-move.ts
                     // `finishMove`). Kept elsewhere (a rule changed meanwhile), both stay, and the member is told.

@@ -370,6 +370,8 @@ export default function WelcomeScreen() {
      * read as the step opens; this build's place until then and when the community never said.
      */
     const [backupCopiesAt, setBackupCopiesAt] = useState<SignInCopies>(() => signInCopiesAt());
+    /** Read the rule again: the sheet found it moved on since the step read it, and linked nothing. */
+    const [backupCopiesRead, setBackupCopiesRead] = useState(0);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
@@ -388,7 +390,7 @@ export default function WelcomeScreen() {
             if (live) setBackupCopiesAt(signInCopiesAt(rule));
         })();
         return () => { live = false; };
-    }, [mode]);
+    }, [mode, backupCopiesRead]);
     const [globalPhase, setGlobalPhase] = useState<DoorPhase>('checking');
     /** What the member reads on the `unavailable`, `restore` and `closed` screens. */
     const [globalMessage, setGlobalMessage] = useState<string | null>(null);
@@ -2290,6 +2292,7 @@ export default function WelcomeScreen() {
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
                             copiesAt={backupCopiesAt}
                             onClose={() => setShowSsoSheet(false)}
+                            onCopiesChanged={() => setBackupCopiesRead((n) => n + 1)}
                             onEnrolled={(result) => {
                                 setEnrolment(result);
                                 setShowSsoSheet(false);

@@ -9,7 +9,7 @@ import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import type { KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { signInReplacedWords, welcomeLineWords } from './welcome/welcome-lines';
-import { connectAndDeposit } from '../utils/sso-sheet-connect';
+import { connectAndDeposit, CONNECT_RULE_MESSAGES } from '../utils/sso-sheet-connect';
 import { authenticateUser } from '../utils/LocalAuth';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
@@ -24,6 +24,7 @@ export function SsoEnrolSheet({
     askPhoneLock = true,
     copyAt,
     copiesAt,
+    onCopiesChanged,
 }: {
     visible: boolean;
     onClose: () => void;
@@ -45,10 +46,16 @@ export function SsoEnrolSheet({
     copyAt?: 'community';
     /**
      * Where the screen that opened the sheet said the copy goes (utils/vault-config.ts signInCopiesAt with the community's
-     * rule, vault rethink VR2), for the words while it works. The connect asks the rule again itself, and the result says
-     * where the copy went. Absent: where this build keeps copies.
+     * rule, vault rethink VR2), for the words while it works. The connect asks the rule again itself and makes the copy
+     * only here (utils/sso-sheet-connect.ts `shownAt`), and the result says where the copy went. Absent: where this build
+     * keeps copies.
      */
     copiesAt?: SignInCopies;
+    /**
+     * The community's rule now sends the copy somewhere other than `copiesAt` said, so nothing was linked: told as the
+     * sheet closes, for the screen to read where a copy goes again before the member links one.
+     */
+    onCopiesChanged?: () => void;
 }): React.JSX.Element | null {
     const { colors } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -61,6 +68,11 @@ export function SsoEnrolSheet({
     const [step, setStep] = useState<'processing' | 'saving' | 'success' | 'error'>('processing');
     const [errorMessage, setErrorMessage] = useState('');
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
+    /**
+     * The connect found the community's rule moved on from `copiesAt`, and linked nothing: no Try again (it would link
+     * where the member hasn't read), and the screen is told as the sheet closes (`onCopiesChanged`).
+     */
+    const [copiesChanged, setCopiesChanged] = useState(false);
     /** Closing the sheet mid-sign-in: the sign-in, once done, deposits nothing (utils/sso-sheet-connect.ts). */
     const abortRef = React.useRef<AbortController | null>(null);
     const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,6 +84,15 @@ export function SsoEnrolSheet({
         };
     }, []);
 
+    /** Close; after the rule moved on from `copiesAt`, the screen reads where a copy goes again. */
+    const close = React.useCallback(() => {
+        if (copiesChanged) {
+            setCopiesChanged(false);
+            onCopiesChanged?.();
+        }
+        onClose();
+    }, [onClose, onCopiesChanged, copiesChanged]);
+
     /**
      * Close, and stop what is running: a sign-in still going deposits nothing once it is done.
      *
@@ -79,8 +100,8 @@ export function SsoEnrolSheet({
      */
     const closeAndStop = React.useCallback(() => {
         abortRef.current?.abort();
-        onClose();
-    }, [onClose]);
+        close();
+    }, [close]);
 
     const handleConnect = async () => {
         if (!identity) {
@@ -90,6 +111,7 @@ export function SsoEnrolSheet({
         }
 
         setStep('processing');
+        setCopiesChanged(false);
         abortRef.current?.abort();
         const abort = new AbortController();
         abortRef.current = abort;
@@ -107,6 +129,8 @@ export function SsoEnrolSheet({
                 url,
                 identity,
                 ...(copyAt ? { copyAt } : {}),
+                // Where the screen said the copy goes: it is made only there.
+                ...(copiesAt ? { shownAt: copiesAt } : {}),
                 phoneLock: askPhoneLock ? () => authenticateUser(t('Confirm authentication to link a sign-in to your account.')) : null,
                 // The provider is done: Cancel comes down, and the deposit goes ahead.
                 onSignedIn: async () => {
@@ -121,6 +145,7 @@ export function SsoEnrolSheet({
                 // The lower layers' sentences in the member's language (components/welcome/welcome-lines.ts); a node's
                 // or the key vault's own words as they came.
                 setErrorMessage(welcomeLineWords(result.error));
+                setCopiesChanged(result.error === CONNECT_RULE_MESSAGES.changed);
                 setStep('error');
             } else {
                 setEnrolResult(result);
@@ -245,16 +270,18 @@ export function SsoEnrolSheet({
                         <View style={styles.content} accessibilityLiveRegion="assertive">
                             <Text style={styles.title} accessibilityRole="header">{atVault ? t('Not linked') : t('Something went wrong')}</Text>
                             <Text style={styles.body} accessibilityRole="alert">{errorMessage}</Text>
-                            <TouchableOpacity
-                                style={styles.primaryButton}
-                                onPress={handleConnect}
-                                accessibilityRole="button"
-                            >
-                                <Text style={styles.primaryButtonText}>{t('Try again')}</Text>
-                            </TouchableOpacity>
+                            {!copiesChanged && (
+                                <TouchableOpacity
+                                    style={styles.primaryButton}
+                                    onPress={handleConnect}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={styles.primaryButtonText}>{t('Try again')}</Text>
+                                </TouchableOpacity>
+                            )}
                             <TouchableOpacity
                                 style={styles.secondaryButton}
-                                onPress={onClose}
+                                onPress={close}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.secondaryButtonText}>{t('Cancel')}</Text>

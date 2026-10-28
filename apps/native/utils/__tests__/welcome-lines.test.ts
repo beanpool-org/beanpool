@@ -48,6 +48,7 @@ import { COPY_CLEARS_LINE } from '../words-clipboard';
 import { KIT_FAILED_LINE, KIT_PRINT_LABEL, KIT_SAVE_LABEL, KIT_SAVE_WARNING } from '../recovery-kit';
 import { COMMUNITY_RESTORE_NOT_OFFERED, RELEASED_COPY_NOT_OPENED } from '../sso-recovery';
 import { VAULT_MESSAGES } from '../vault';
+import { CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 import { REDEEM_NO_ANSWER } from '../db';
 import { KEEPER_LABELS } from '../protection-state';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../sso-providers';
@@ -120,6 +121,7 @@ describe('the lower layers\' whole sentences', () => {
             DOOR_WORK_MESSAGES.solverUnavailable, RELEASED_COPY_NOT_OPENED, COMMUNITY_RESTORE_NOT_OFFERED,
             NO_WORDS_WAY_BACK, SSO_WORDS_NOTE, NO_SCREEN_LOCK_LINE, COPY_CLEARS_LINE,
             KIT_PRINT_LABEL, KIT_SAVE_LABEL, KIT_SAVE_WARNING, KIT_FAILED_LINE, ...Object.values(KEEPER_LABELS),
+            ...Object.values(CONNECT_RULE_MESSAGES),
         ];
         for (const english of constants) {
             expect(WELCOME_FIXED_LINES, english).toContain(english);

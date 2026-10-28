@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 151,
-  "hash": "d5489c3d685db364482eb74f5e85ddf9354b3507790b3c20d55becab89faec3a",
+  "version": 152,
+  "hash": "397bcd8b094631f5afc662d8c8431842f6443e962522d09399bcf4595cd54ce8",
   "sections": [
     {
       "id": "setup",
@@ -1493,6 +1493,37 @@
         },
         {
           "type": "h2",
+          "text": "Your community's card"
+        },
+        {
+          "type": "p",
+          "text": "Someone who opens your community's address in a browser, and has no account there, sees its card: what a stranger may read about your community, and the ways in. The website's map links it as **See** and your community's name. Each line on it follows a setting you already have:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The name**: your **Community name** (Settings → Node Identity). With none of your own, the card shows your address instead.",
+            "**How many members**: only while **Share member count** is on (How this community works).",
+            "**The town or area**: only while **Share location & radius** is on (How this community works), and only what you type in **Town or area (optional)** under the service radius in Node Identity, with the radius. A town, never a street: the pin itself is never on the card.",
+            "**Takes requests to join**, while requests to join are on (How this community works), any member may invite, and your community has a public address; otherwise **Takes new members by invite**.",
+            "**Ask to join**: on an Android phone, it opens your card in the BeanPool app, where the person sends their request. Elsewhere, it opens the global community with your community first, but only while your community is listed in the directory (Listed on, named, and told at least once), because that is the list the global community shows. Otherwise the card says **Ask to join from the BeanPool app.**",
+            "**Look around the global community**: the global community your server names."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**I have an invite** opens the invite form, and **Already a member** the ways back into an account. A browser that already holds an account here goes straight to the web app."
+        },
+        {
+          "type": "p",
+          "text": "Nothing else is on the card: no member's name or face, no listing, no balance. Your members' listings stay theirs, as before."
+        },
+        {
+          "type": "p",
+          "text": "**On your own server**, the global community is BeanPool's unless you name another with GLOBAL_COMMUNITY_URL in the server's .env. Set it to off and the card links nothing of the global community: no Look around the global community, and Ask to join opens the BeanPool app on an Android phone (or the app's store page when it isn't installed); anywhere else the card says **Ask to join from the BeanPool app.** Your server never contacts the global community either way: these are links a visitor may follow."
+        },
+        {
+          "type": "h2",
           "text": "What the open door keeps"
         },
         {
@@ -1539,6 +1570,18 @@
         {
           "type": "p",
           "text": "Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it."
+        },
+        {
+          "type": "p",
+          "text": "**Requests to join and the public directory.** When someone finds your community in the global directory and asks to join, your server tells its owners and admins with a push notification (\"Someone asked to join your community.\") and a line on Home under Needs you (\"2 people asked to join\"). Tapping either opens People → Invites in the app, where the request is listed with **Invite** and **Not now**. The manager's Home counts them under Action Required too; they are answered in the app, not here. In an Invite community (any member invites), members who opted into \"Requests to join\" in Notification Preferences are notified too; in a Known one, only owners and admins are."
+        },
+        {
+          "type": "p",
+          "text": "If a request waits **3 days** without an answer in an Invite community (any member invites), the Needs you line is shown to all members so someone can welcome them."
+        },
+        {
+          "type": "p",
+          "text": "If a request waits **7 days** with no answer, the server sends an operator alert (knock.waiting: \"A request to join has waited 7 days.\") to your configured webhook or ntfy address and an owner alert push."
         },
         {
           "type": "p",
@@ -4120,7 +4163,7 @@
         },
         {
           "type": "p",
-          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. To stop your server sending anything, an owner switches **Listed in the BeanPool directory** off under **How this community works**: the **Update Schedule** has no **Never** any more, and a server that had it set to Never was switched to not listed, with a 12-hour schedule for later, when it was updated. The directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent."
+          "text": "The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. To stop your server sending anything, an owner switches **Listed in the BeanPool directory** off under **How this community works**: the **Update Schedule** has no **Never** any more, and a server that had it set to Never was switched to not listed, with a 12-hour schedule for later, when it was updated. The directory keeps the last entry it received, as it was then, until your community leaves it (see \"How your community leaves the map\", below). Your members' names and posts are never sent."
         },
         {
           "type": "h3",
@@ -4155,11 +4198,36 @@
         },
         {
           "type": "p",
-          "text": "While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds is not removed: it stays as it was until your server sends a new one."
+          "text": "While either is true, **Publish Now** says **Not listed**, and why. An entry the directory already holds stays as it was until it goes quiet (below), except with DIRECTORY_UNLISTED: then your server removes it once, as it starts."
+        },
+        {
+          "type": "p",
+          "text": "The directory itself also leaves out an entry that gives people nowhere to go: one with no web address and no contact email or phone. A community with no name of its own, from a server too old to hold it back, is shown under its web address instead, so two of them never look like one. And it refuses entries from BeanPool's own test servers; their logs say so."
         },
         {
           "type": "p",
           "text": "To check the name your server sends, from anywhere, open https://YOUR-ADDRESS/api/directory/info. Its communityName must be your community's name: null means it has none yet."
+        },
+        {
+          "type": "h3",
+          "text": "How your community leaves the map"
+        },
+        {
+          "type": "p",
+          "text": "Your community comes off the directory, the map on beanpool.org and the list on the global community in any of these ways:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**An owner switches Listed in the BeanPool directory off**, under **How this community works**. Your server asks the directory to remove its entry at once, signed with the server's own key, as its updates are. The map on beanpool.org shows it at its next load, and the global community within the hour. If the directory can't be reached just then, your server asks again each time it starts, for as long as Listed is off. An update that was already on its way when Listed went off is followed by another removal.",
+            "**The closing day comes.** If an owner set a day the community closes (**Settings → Directory**), your server removes the entry on that day and sends nothing more. **Publish Now** then says why. Clear the day, or set a later one, and the community is listed again at once.",
+            "**The server starts with DIRECTORY_UNLISTED=1** in its .env after it was listed: it removes the entry once, as it starts.",
+            "**It stops sending updates**, because the server is off or can't reach the directory. The directory shows only communities that updated it in the last 7 days. After 36 hours without an update, the entry says **Not answering lately** under the community's name, on the map and in both apps, and people can still ask to join (their request waits until your server answers). After 7 days the entry is not shown, and after 30 days it is deleted. When your server updates again, the community is listed again."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A server that was never listed sends nothing. Leaving, like being listed, is something your server does for itself: nothing your members do needs the directory or BeanPool's servers."
         },
         {
           "type": "h3",
@@ -5127,7 +5195,7 @@
         {
           "type": "ul",
           "items": [
-            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). Also whether people can ask to join, the day it closes if an owner set one, and, while the community keeps the listing promise, how many owners it has and that its backups are locked and running: never who the owners are. The directory is public. Under Node Identity you can switch off the area (then only your members, owners and admins get the community's place from your server), the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
+            "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). Also whether people can ask to join, the day it closes if an owner set one, and, while the community keeps the listing promise, how many owners it has and that its backups are locked and running: never who the owners are. The directory is public. Under Node Identity you can switch off the area (then only your members, owners and admins get the community's place from your server), the member count and the health report, or stop sending updates (switching **Listed in the BeanPool directory** off removes the community's entry from the directory at once; see Address, identity and peers).",
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions. To stop the GitHub check, put DISABLE_UPDATE_CHECK=true in .env (see Updates, health checks and disk space): nothing else depends on it. To stop the app stores' check, put DISABLE_APP_STORE_CHECK=true in .env: phones are then told of no newer app, and the app's floor shows a banner only.",
             "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\") written in the language the member's phone uses BeanPool in, with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. Because those words are in that language, Expo, Apple and Google can tell which language the phone uses. What the notice was about stays on your server for 7 days, for the member it was sent to. The app learns your server's signing key from its own sign-up for notifications and acts on a notification only when that signature checks out for that member: a forged one opens nothing, and the app says it didn't come from the community. A server from before signed notifications sends none of this; the app shows its notifications in general words and opens nothing when one is tapped, until you update.",
             "Members' Pulse channels are fetched from the sites they link to.",

@@ -240,17 +240,20 @@ describe("another community's open door takes a phone with no account, at its ow
         expect(doorResumeUrl(plan)).toBe(URL_BASE);
         expect(openDoorHref(URL_BASE)).toEqual({ pathname: '/join-open-door', params: { node: URL_BASE } });
 
-        // Back at the door: the same key, still this door's own; its name is free to it; new work; the node says in.
+        // Back at the door: the same key, still this door's own; its name is free to it (its own); the door's work.
         const again = await openDoorKeyForThisPhone(URL_BASE);
         expect(again.identity.publicKey).toBe(key.identity.publicKey);
         expect(again.createdHere).toBe(true);
         expect(await checkNameAtDoor(URL_BASE, 'Wren', again)).toEqual({ kind: 'free' });
-        const retry = await solvedWork(URL_BASE, again.identity);
-        const answer = await submitWordsJoin(URL_BASE, await commitOpenDoorKey(URL_BASE, again, 'Wren'), 'Wren', retry);
-        expect(answer.kind).toBe('joined');
-        if (answer.kind !== 'joined') throw new Error('expected joined');
-        // The first join landed (its answer lost); the second is the node's `already_member`.
-        expect(sent.filter(s => s.path === '/api/join').map(s => s.status)).toEqual([200, 409]);
+        const retry = startDoorWork({ url: URL_BASE, identity: again.identity, door: 'words' });
+        runs.push(retry);
+        const ready = await retry.solution();
+        // The node knows the key: its work route answers that it is a member (409 already_member), which the screen
+        // (handleWordsJoin → afterAnswer) takes as in, with a key it made: finishNewAccount. No second join is sent.
+        expect(ready).toMatchObject({ kind: 'refused', answer: { kind: 'joined' } });
+        if (ready.kind !== 'refused' || ready.answer.kind !== 'joined') throw new Error('expected in');
+        const answer = ready.answer;
+        expect(sent.filter(s => s.path === '/api/join').map(s => s.status)).toEqual([200]);
 
         const named = await joinedUnderNodeName(URL_BASE, answer, { ...again.identity, callsign: 'Wren' });
         const kept = await finishOpenDoorJoin(URL_BASE, named, { enrolment: answer.enrolment, way: 'words', communityName: NODE_NAME });

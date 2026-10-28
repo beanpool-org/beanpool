@@ -193,8 +193,14 @@ describe('a link to the door only opens the screen (doorLinkFromSystemPath, door
         // The global community's address by that name: as the global link goes, held.
         expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(GLOBAL_NODE_URL)}`, initial: false }))
             .toBe('/join-global?from=link');
+        // No account (S2; before it, '/'): that address's door all the same, held for the tap, its host under the title.
+        // A link only opens the screen: nothing signed goes before the member's tap, and nothing is written before Join.
         phone.identity = null;
-        expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(ATTACKER)}`, initial: true })).toBe('/');
+        expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(ATTACKER)}`, initial: true }))
+            .toBe(`/join-open-door?node=${encodeURIComponent(ATTACKER)}&from=link`);
+        // The global community's address by that name, with no account: the first screen's door, as before.
+        expect(await redirectSystemPath({ path: `beanpool://join-global?node=${encodeURIComponent(GLOBAL_NODE_URL)}`, initial: false }))
+            .toMatch(/^\/welcome\?door=global&at=\d+$/);
     });
 
     it('the root layout reads no door link as an invite: no "Switch Nodes?", no welcome with an invite (PR #2131 review)', async () => {

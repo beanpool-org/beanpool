@@ -758,9 +758,19 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(await screen.findByText('No enterprises found')).toBeInTheDocument();
         // On 'all', the "+" is the action and no button is drawn
         expect(screen.queryByRole('button', { name: '+ Propose a Project' })).toBeNull();
-        // On 'projects', "Start a project" is offered
+        expect(screen.getByText('Start one with +: a chat group, a project or an enterprise.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Start a project' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Start an enterprise' })).toBeNull();
+        // On 'projects', "Start a project" is offered, and the line says what a project is for
         fireEvent.click(screen.getByRole('button', { name: '🌱 Projects' }));
         expect(screen.getByRole('button', { name: 'Start a project' })).toBeInTheDocument();
+        expect(screen.getByText('Got an idea that needs Beans? Start a project.')).toBeInTheDocument();
+        // On 'enterprises', "Start an enterprise"
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Enterprises' }));
+        expect(screen.getByRole('button', { name: 'Start an enterprise' })).toBeInTheDocument();
+        expect(screen.getByText('Something that keeps going and trades? Start an enterprise.')).toBeInTheDocument();
+        // Nowhere does the old "propose a project" line come back
+        expect(screen.queryByText(/propose a project/i)).toBeNull();
     });
 
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {

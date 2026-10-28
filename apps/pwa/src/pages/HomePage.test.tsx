@@ -950,29 +950,31 @@ describe('Find your community on the web: far is not near, none only once loaded
     });
 });
 
-describe('First steps on the global node, on the web (PR #1479 review)', () => {
-    const globalAnswer = (stepsOver: Partial<NonNullable<HomeAnswer['cards']['steps']>>) => answer({
+describe('The first week on the global node, on the web (L3, §3.2)', () => {
+    const DAY_MS = 86_400_000;
+    const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS).toISOString();
+    const globalAnswer = (stepsOver: Partial<NonNullable<HomeAnswer['cards']['steps']>>, days = 30) => answer({
         profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true },
-        me: { ...answer().me!, joinedAt: '2026-08-10T00:00:00.000Z', firstOffer: true },
+        me: { ...answer().me!, joinedAt: daysAgo(days), firstOffer: true },
     }, {
         beans: undefined,
         find: { point: 'area', communities: [{ key: 'b', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 }], communityCount: 2, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null },
-        steps: { joinedAt: '2026-08-10T00:00:00.000Z', firstOffer: true, firstPost: true, photo: false, interests: true, invited: null, area: false, knocked: null, ...stepsOver },
+        steps: { joinedAt: daysAgo(days), firstOffer: true, firstPost: true, photo: false, interests: true, invited: null, area: false, knocked: null, saidHello: false, watch: false, sawLedger: false, ...stepsOver },
     });
 
-    it('a member a month in who has posted: no First steps, though the node sends it for the area the web cannot set', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({})));
+    it('a member a month in who has undone steps: card ends after 14 days on global (§3.2, L3)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ firstPost: false }, 30)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-find');
         expect(screen.queryByTestId('home-card-steps')).toBeNull();
     });
 
-    it('before the first post it is there, with the ask as a link to the community', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ firstPost: false })));
+    it('a young member with undone steps sees The first week card (§3.2, L3)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ firstPost: false }, 2)));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const steps = await screen.findByTestId('home-card-steps');
         expect(within(steps).getByRole('button', { name: 'To do: Post something free or for swap' })).toBeInTheDocument();
-        expect(within(steps).getByRole('link', { name: 'To do: Ask Byron Shire BeanPool to let you in' })).toHaveAttribute('href', 'https://byron.example.org');
+        expect(within(steps).getByRole('button', { name: 'To do: Say roughly where you are' })).toBeInTheDocument();
     });
 });
 

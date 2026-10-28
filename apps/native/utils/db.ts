@@ -680,7 +680,22 @@ ${TOOL_DOCS_TABLE}
         // An enterprise's shop banner as its listing carried it (the node's `authorBannerUrl`, Pictures S6): the Market
         // card's picture when the listing has none of its own (utils/market-card-picture.ts). A plain column, no default:
         // a build from before it opens this table and writes past it.
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_banner TEXT;`); } catch (e) {}
+        // A copy from before the column holds its enterprises' listings without their banner, and the node sends a listing
+        // again only when it changes (since #2508 the photoless listings this serves are the older ones): such a copy is
+        // read whole once (review of #2565 at c05a9e37, blocking 2). Every cursor of the copy goes (syncCursorKeysOf), the
+        // held read and the checkpoint among them, so the read starts at its first page (#1719 B1), as a Force Resync's
+        // does, but nothing held is cleared. The cursors go before the column comes: an open cut off between the two finds
+        // the column still missing and forgets them again. A fresh copy has the column and no cursor to forget.
+        if (!(await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).some(c => c.name === 'carried_banner')) {
+            try {
+                const file = dbFileOf.get(database);
+                const { syncCursorKeysOf } = await import('../services/pillar-sync');
+                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
+            } catch (e) {
+                console.warn('[SQLite] Could not forget the sync cursors of a copy from before carried_banner:', e);
+            }
+            try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_banner TEXT;`); } catch (e) {}
+        }
         // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
         // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN card_fetched_at TEXT;`); } catch (e) {}

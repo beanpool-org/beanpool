@@ -53,7 +53,7 @@ vi.mock('../nodes', () => ({
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 
-import { applyDelta, clearDB, getDb, initDB } from '../db';
+import { applyDelta, clearDB, closeDB, getDb, initDB } from '../db';
 import {
     ALREADY_SYNCING, forceResyncNotice, forgetSyncCursors, getLastSyncTime, performSync, performSyncWhenFree, POSTS_HELD_TRIES, POSTS_PAGE_CAP,
     resetSyncFingerprints, syncCursorKeysOf,
@@ -301,6 +301,55 @@ describe('a delta of more than one page', () => {
         expect(postsReads()).toHaveLength(1);
         expect(held()).toHaveLength(1);
         expect(store.get(LAST_SYNC_KEY)).toBe(cursorBefore);
+    });
+});
+
+describe('a copy from before the posts kept their enterprise\'s banner (Pictures S6, review of #2565 at c05a9e37, blocking 2)', () => {
+    const FILE = 'beanpool_test.beanpool.org.db';
+    const BANNER = '/api/shops/shop-1/photo?v=ref1&k=Yqpu8qmgAGQ';
+    const banner = (id: string) => (sql.prepare('SELECT carried_banner FROM posts WHERE id = ?').get(id) as any)?.carried_banner ?? null;
+
+    it("is read whole once as the upgraded build opens it, so a listing the node won't send again gets its banner", async () => {
+        await phoneWithACursor();
+        // The node names the enterprise's banner on a listing that hasn't changed: no delta sends it again.
+        node.posts = [{ ...listing('old', 'Ladder', '2026-01-01T00:00:00.000Z'), authorBannerUrl: BANNER } as Listing];
+        await sync();
+        expect(postsReads().every(u => new URL(u).searchParams.has('updatedAfter'))).toBe(true);
+        expect(banner('old')).toBeNull();
+
+        // The previous build's copy (the table without the column) with that build's cursors, opened by this build.
+        await closeDB();
+        sql.exec('ALTER TABLE posts DROP COLUMN carried_banner');
+        const epoch = store.get(EPOCH_KEY);
+        expect(syncCursorKeysOf(FILE).filter(k => store.has(k))).toContain(LAST_SYNC_KEY);
+        await getDb();
+        expect(syncCursorKeysOf(FILE).filter(k => store.has(k))).toEqual([]);
+        // Not a cursor: which server the phone last read.
+        expect(store.get(EPOCH_KEY)).toBe(epoch);
+        expect(held()).toEqual([{ id: 'old', title: 'Ladder' }]);
+
+        await sync();
+        expect(postsReads().length).toBeGreaterThan(0);
+        expect(postsReads().some(u => new URL(u).searchParams.has('updatedAfter'))).toBe(false);
+        expect(banner('old')).toBe(BANNER);
+
+        // Once: the copy has the column now, so the next open forgets nothing and the next cycle is a delta again.
+        const cursor = store.get(LAST_SYNC_KEY);
+        expect(cursor).toBeTruthy();
+        await closeDB();
+        await getDb();
+        expect(store.get(LAST_SYNC_KEY)).toBe(cursor);
+        await sync();
+        expect(postsReads().every(u => new URL(u).searchParams.has('updatedAfter'))).toBe(true);
+    });
+
+    it('a fresh copy has the column: opening it forgets no cursor', async () => {
+        await phoneWithACursor();
+        const before = syncCursorKeysOf(FILE).filter(k => store.has(k));
+        expect(before).toContain(LAST_SYNC_KEY);
+        await closeDB();
+        await getDb();
+        expect(syncCursorKeysOf(FILE).filter(k => store.has(k))).toEqual(before);
     });
 });
 

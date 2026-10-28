@@ -569,7 +569,8 @@ async function addressBarClean(page, origin, where) {
 /** Photo, 12 words, tour, and into the app. */
 async function throughOnboarding(page, view, { shots = false, signIn = null } = {}) {
     await page.getByTestId('onboarding-stepper').waitFor({ timeout: 20_000 });
-    const bar = await page.getByTestId('onboarding-stepper').innerText();
+    // textContent, not innerText: under 360 px the bar draws marks only, its names hidden (the current one is said below it).
+    const bar = await page.getByTestId('onboarding-stepper').textContent();
     if (!/Sign in/.test(bar)) throw new Failure(`the steps bar says "${bar.replace(/\s+/g, ' ')}", not "Sign in"`);
     await noSideScroll(page, 'photo step');
     if (shots) await shot(page, view, 'photo');

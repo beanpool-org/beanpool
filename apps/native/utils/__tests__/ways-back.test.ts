@@ -68,6 +68,20 @@ interface Community {
     deletesFail: boolean;
     /** Only the deletes of these sign-ins' copies fail (a 5xx). */
     deletesFailFor: Set<string>;
+    /** The deletes of these sign-ins' copies land, but their answers never reach the phone (a dropped connection). */
+    answersLostFor: Set<string>;
+    /** The generation its copies were at when it last deleted them all: the next copy goes on from it, as the node's does. */
+    deletedAt: number;
+    /** When set, each request's fate (the seeded sweep): answered, refused (a 5xx), no answer, or landed with its answer lost. */
+    fate: ((req: SentRequest) => Fate) | null;
+}
+
+type Fate = 'answered' | 'refused' | 'down' | 'lost';
+
+/** A copy linked at `c` again from another device: a fresh one, a new generation (after a delete of all, on from it). */
+function linkAgain(c: Community, provider: string): void {
+    c.copies.add(provider);
+    c.generation = Math.max(c.generation, c.deletedAt) + 1;
 }
 
 interface Net {
@@ -82,7 +96,8 @@ let kim: BeanPoolIdentity;
 
 function network(): Net {
     const community = (copies: string[], generation: number): Community => ({
-        copies: new Set(copies), generation, down: false, deletesFail: false, deletesFailFor: new Set(),
+        copies: new Set(copies), generation, down: false, deletesFail: false, deletesFailFor: new Set(), answersLostFor: new Set(),
+        deletedAt: 0, fate: null,
     });
     const net: Net = { vault: new FakeVault(), communities: { [MULLUM]: community(['google'], 4), [GLOBAL]: community([], 0) }, sent: [], statusGate: null };
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -102,7 +117,8 @@ function network(): Net {
         }
         const c = net.communities[u.origin];
         if (!c) throw new Error(`No request expected: ${req.method} ${url}`);
-        if (c.down) throw new TypeError('Network request failed');
+        const fate = c.fate?.(req) ?? 'answered';
+        if (c.down || fate === 'down') throw new TypeError('Network request failed');
         // The node's own check of a member-signed request: Kim's key, for this community's host.
         if (!boundSignatureValid({ url, method: req.method, headers: req.headers, body: raw }, kim.publicKey)) {
             return json(401, { error: 'This request must be signed by an active member of this node.' });
@@ -113,10 +129,12 @@ function network(): Net {
         }
         const del = /^\/api\/recovery\/shares\/sso\/([a-z]+)$/.exec(u.pathname);
         if (req.method === 'DELETE' && del) {
-            if (c.deletesFail || c.deletesFailFor.has(del[1])) return json(503, { error: 'Try again later.' });
+            if (c.deletesFail || c.deletesFailFor.has(del[1]) || fate === 'refused') return json(503, { error: 'Try again later.' });
             if (!c.copies.delete(del[1])) return json(404, { error: `Provider '${del[1]}' is not connected for this account.` });
             // As the node answers: the new generation its copies are at, or 0 once it removed the last one.
+            if (!c.copies.size) c.deletedAt = c.generation;
             c.generation = c.copies.size ? c.generation + 1 : 0;
+            if (c.answersLostFor.has(del[1]) || fate === 'lost') throw new TypeError('Network request failed');
             return json(200, { removed: del[1], generation: c.generation, enrolledSso: [...c.copies] });
         }
         throw new Error(`No request expected: ${req.method} ${url}`);
@@ -568,6 +586,146 @@ describe('a community that can\'t be reached: "not yet removed", remembered, and
             expect(net.communities[MULLUM].copies.size).toBe(0);
             expect(await mullumPending()).toEqual([]);
         });
+
+        // PR #2570 review 4402938538: the guard followed only the deletes whose answers the phone read. One that landed
+        // while its answer was lost (a timeout, a dropped connection) moved Mullum's generation all the same, so the
+        // sibling waiting at the generation Kim saw was dropped unsent: Mullum kept it and nothing waited. Both of these
+        // left that copy at Mullum on this branch before the fix.
+        it('the first delete lands with its answer lost, and the second gets a 5xx: the second goes at the next open', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].answersLostFor.add('google');
+            net.communities[MULLUM].deletesFailFor.add('facebook');
+            const done = await removeEverything(kim, ways);
+            expect(done.communities.map((c) => [c.provider, c.removal.removed])).toEqual([['google', false], ['facebook', false]]);
+            expect([...net.communities[MULLUM].copies]).toEqual(['facebook']);
+            net.communities[MULLUM].answersLostFor.clear();
+            net.communities[MULLUM].deletesFailFor.clear();
+
+            await retryCommunityRemovals(kim);
+
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
+
+        it('the first delete gets a 5xx, and the second lands with its answer lost: the first goes at the next open', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].deletesFailFor.add('google');
+            net.communities[MULLUM].answersLostFor.add('facebook');
+            const done = await removeEverything(kim, ways);
+            expect(done.communities.map((c) => [c.provider, c.removal.removed])).toEqual([['google', false], ['facebook', false]]);
+            expect([...net.communities[MULLUM].copies]).toEqual(['google']);
+            net.communities[MULLUM].deletesFailFor.clear();
+            net.communities[MULLUM].answersLostFor.clear();
+
+            await retryCommunityRemovals(kim);
+
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
+
+        it('the same with Remove one at a time from one list: the one waiting goes at the next open', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].deletesFailFor.add('google');
+            net.communities[MULLUM].answersLostFor.add('facebook');
+            expect(await removeCommunityCopyFrom(kim, ways.communities[0], 'google')).toEqual({ removed: false, why: 'remembered' });
+            expect(await removeCommunityCopyFrom(kim, ways.communities[0], 'facebook')).toEqual({ removed: false, why: 'remembered' });
+            net.communities[MULLUM].deletesFailFor.clear();
+            net.communities[MULLUM].answersLostFor.clear();
+
+            await retryCommunityRemovals(kim);
+
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
+
+        /** The same trials every run (mulberry32). */
+        function seeded(seed: number): () => number {
+            let a = seed >>> 0;
+            return () => {
+                a = (a + 0x6d2b79f5) >>> 0;
+                let t = a;
+                t = Math.imul(t ^ (t >>> 15), t | 1);
+                t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        }
+
+        /**
+         * One trial of the review's sweep: Mullum keeps two or three of Kim's copies; Kim removes them (Remove everything,
+         * or one at a time from one list) while each delete is answered, refused, unanswered or lands with its answer lost;
+         * up to three passes follow where Mullum's status can't be asked either, then two where everything is answered.
+         * With `linkAgain`, another device links one of them at Mullum again before one of those passes. What went wrong,
+         * or null.
+         */
+        async function sweepTrial(random: () => number, relink: boolean): Promise<string | null> {
+            function pick<T>(xs: readonly T[]): T {
+                return xs[Math.floor(random() * xs.length)];
+            }
+            mem.async.clear();
+            mem.secure.clear();
+            const net = network();
+            await kimsPhone(net);
+            net.vault.copies.clear();
+            const mullum = net.communities[MULLUM];
+            mullum.copies = new Set(pick([['google', 'facebook'], ['google', 'facebook', 'apple']]));
+            const ways = await listWaysBack(kim);
+            const listed = ways.communities[0];
+            let failing = true;
+            mullum.fate = (req) => !failing
+                ? 'answered'
+                : req.method === 'DELETE' ? pick(['answered', 'refused', 'down', 'lost'] as const) : pick(['answered', 'down'] as const);
+            const oneByOne = random() < 0.5;
+            if (oneByOne) for (const p of listed.status!.providers) await removeCommunityCopyFrom(kim, listed, p);
+            else await removeEverything(kim, ways);
+            const passes = Math.floor(random() * 4);
+            const linkedAgain = relink ? pick(listed.status!.providers) : null;
+            const linkBefore = Math.floor(random() * (passes + 1));
+            let sentAtLink = net.sent.length;
+            for (let pass = 0; pass < passes + 2; pass++) {
+                if (pass === passes) failing = false;
+                if (linkedAgain && pass === linkBefore) {
+                    linkAgain(mullum, linkedAgain);
+                    sentAtLink = net.sent.length;
+                }
+                await retryCommunityRemovals(kim);
+            }
+            const trial = `${oneByOne ? 'one by one' : 'everything'}, ${passes} failing passes${linkedAgain ? `, ${linkedAgain} linked again before pass ${linkBefore}` : ''}`;
+            const waiting = (await listWaysBack(kim)).pending;
+            if (waiting.length) return `${trial}: still waiting ${waiting.map((w) => w.provider).join('+')}`;
+            if (!linkedAgain) return mullum.copies.size ? `${trial}: Mullum still keeps ${[...mullum.copies].join('+')}, with nothing waiting` : null;
+            const deletedAgain = net.sent.slice(sentAtLink).some((s) => s.origin === MULLUM && s.method === 'DELETE' && s.path.endsWith(`/${linkedAgain}`));
+            if (deletedAgain || !mullum.copies.has(linkedAgain)) return `${trial}: the copy linked again was sent a delete`;
+            return null;
+        }
+
+        it("a seeded sweep with nobody else changing Mullum's copies: every one goes, and nothing waits", async () => {
+            const random = seeded(2570);
+            const wrong: string[] = [];
+            for (let i = 0; i < 250; i++) {
+                const w = await sweepTrial(random, false);
+                if (w) wrong.push(`trial ${i}: ${w}`);
+            }
+            expect(wrong).toEqual([]);
+        }, 60_000);
+
+        it('a seeded sweep with a copy linked again from another device meanwhile: that copy is never sent a delete, and nothing waits', async () => {
+            const random = seeded(4402938538);
+            const wrong: string[] = [];
+            for (let i = 0; i < 250; i++) {
+                const w = await sweepTrial(random, true);
+                if (w) wrong.push(`trial ${i}: ${w}`);
+            }
+            expect(wrong).toEqual([]);
+        }, 60_000);
     });
 
     it('the move card never offers to move a copy that is waiting to be removed', async () => {

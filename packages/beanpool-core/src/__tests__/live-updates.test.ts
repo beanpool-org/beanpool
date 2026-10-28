@@ -15,6 +15,11 @@ import {
     wsNoRoomReason,
     wsNoRoomRetrySec,
     wsNoRoomDelayMs,
+    socketAlive,
+    messageBackstopDue,
+    MESSAGE_BACKSTOP_ALIVE_MS,
+    MESSAGE_BACKSTOP_DOWN_MS,
+    MESSAGE_BACKSTOP_TICK_MS,
 } from '../live-updates.js';
 
 // The shape the node's `new_post` / `post_updated` broadcasts carry to a member socket: `publicBroadcastPost` of a
@@ -250,5 +255,47 @@ describe('the "no room" close: a node with no place for a socket says when to co
 
     it('is always far longer than an ordinary reconnect, which a dropped socket keeps', () => {
         for (let i = 0; i < 1000; i++) expect(wsNoRoomDelayMs(1, WS_NO_ROOM_RETRY_SEC)).toBeGreaterThan(RECONNECT_CAP_MS);
+    });
+});
+
+describe('the message backstop (slice L0)', () => {
+    const PONG = 75_000;
+    const now = 1_000_000;
+
+    it('counts the socket alive only open, signed by the member and answering pings', () => {
+        expect(socketAlive(true, true, now - 30_000, now, PONG)).toBe(true);
+        expect(socketAlive(false, true, now - 1000, now, PONG)).toBe(false);
+        // Signed by nobody: bare doorbells only, never `new_message`.
+        expect(socketAlive(true, false, now - 1000, now, PONG)).toBe(false);
+        // Let in and closed for want of room, or never answered: no pong.
+        expect(socketAlive(true, true, null, now, PONG)).toBe(false);
+        // Quiet for the watchdog's limit.
+        expect(socketAlive(true, true, now - PONG, now, PONG)).toBe(false);
+    });
+
+    it('reads on every tick while the socket is down, and every 120 s while it is alive', () => {
+        expect(messageBackstopDue(now - 1, now, false)).toBe(true);
+        expect(messageBackstopDue(now - 30_000, now, true)).toBe(false);
+        expect(messageBackstopDue(now - 90_000, now, true)).toBe(false);
+        expect(messageBackstopDue(now - MESSAGE_BACKSTOP_ALIVE_MS, now, true)).toBe(true);
+    });
+
+    it('on a jittered 30 s tick: about every 120 s alive, every tick down', () => {
+        for (const tick of [MESSAGE_BACKSTOP_TICK_MS * 0.8, MESSAGE_BACKSTOP_TICK_MS, MESSAGE_BACKSTOP_TICK_MS * 1.2]) {
+            for (const alive of [true, false]) {
+                let last = 0;
+                const gaps: number[] = [];
+                for (let t = tick; t <= 3_600_000; t += tick) {
+                    if (messageBackstopDue(last, t, alive)) { gaps.push(t - last); last = t; }
+                }
+                expect(gaps.length).toBeGreaterThan(10);
+                for (const gap of gaps.slice(1)) {
+                    if (!alive) { expect(gap).toBe(tick); continue; }
+                    expect(gap).toBeGreaterThanOrEqual(MESSAGE_BACKSTOP_ALIVE_MS - MESSAGE_BACKSTOP_TICK_MS / 2);
+                    expect(gap).toBeLessThan(MESSAGE_BACKSTOP_ALIVE_MS + tick);
+                }
+            }
+        }
+        expect(MESSAGE_BACKSTOP_DOWN_MS).toBe(MESSAGE_BACKSTOP_TICK_MS);
     });
 });

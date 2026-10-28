@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import {
     getTreasury, getBalance, treasurySweep,
     treasuryApprove, treasuryReject, treasuryComplete,
@@ -35,7 +35,7 @@ import { ReportModal } from '../components/ReportModal';
 import { PostPhotoPicker, MAX_POST_PHOTOS } from '../components/PostPhotoPicker';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
-import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
+const EnterpriseLocationPicker = lazy(() => import('../components/EnterpriseLocationPicker').then(m => ({ default: m.EnterpriseLocationPicker })));
 import { Sentence } from '../components/Sentence';
 import { sampleTreasuryDetail, sampleEnterpriseLedger, SampleHeader } from '../components/ShowcasePreviews';
 import {
@@ -1476,11 +1476,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     )}
                                                 </div>
                                                 {showLocationPicker && (
-                                                    <EnterpriseLocationPicker
-                                                        treasury={{ publicKey: pubkey, lat: detail.lat ?? null, lng: detail.lng ?? null }}
-                                                        onLocationSaved={(lat, lng) => setDetail((d: any) => (d ? { ...d, lat, lng } : d))}
-                                                        onClose={() => setShowLocationPicker(false)}
-                                                    />
+                                                    <Suspense fallback={null}>
+                                                        <EnterpriseLocationPicker
+                                                            treasury={{ publicKey: pubkey, lat: detail.lat ?? null, lng: detail.lng ?? null }}
+                                                            onLocationSaved={(lat, lng) => setDetail((d: any) => (d ? { ...d, lat, lng } : d))}
+                                                            onClose={() => setShowLocationPicker(false)}
+                                                        />
+                                                    </Suspense>
                                                 )}
                                             </div>
                                         )}

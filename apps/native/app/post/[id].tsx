@@ -50,6 +50,7 @@ import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBo
 import { changedElsewhere } from '../../utils/changed-elsewhere';
 import { requestSync } from '../../services/pillar-sync';
 import { signedRequestWords } from '../../components/signed-request-lines';
+import { openLookDoor } from '../../utils/look-door';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading. The headings and the
@@ -1774,8 +1775,18 @@ export default function PostDetailModal() {
                     </View>
                 )}
 
+                {/* A visitor with no account, looking around (slice S12, utils/look-around.ts): nothing here can be signed, so
+                    the one action is the door, where the key is made. */}
+                {!identity && !isPulsePost && (
+                    <View style={[styles.otherPostActions, { marginTop: 10 }]}>
+                        <Pressable accessibilityRole="button" style={styles.messageBtn} onPress={openLookDoor} testID="post-join-to-message">
+                            <Text style={styles.messageBtnText}>{t('Join to message')}</Text>
+                        </Pressable>
+                    </View>
+                )}
+
                 {/* 4. Universal Actions for Peer (Message, Rate, Report) */}
-                {((!isOwnPost && !isPulsePost) || post.status === 'pending' || post.status === 'completed' || activeTx) && (
+                {!!identity && ((!isOwnPost && !isPulsePost) || post.status === 'pending' || post.status === 'completed' || activeTx) && (
                     <View style={[styles.otherPostActions, { marginTop: post.status === 'pending' || post.status === 'active' ? 10 : 0 }]}>
                         {targetPeerPubkey && !((post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee)) && (
                             <Pressable accessibilityRole="button" style={styles.messageBtn} onPress={async () => {

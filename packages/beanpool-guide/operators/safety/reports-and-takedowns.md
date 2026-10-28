@@ -67,6 +67,7 @@ In **Triage & Moderation**, find the post in the posts list and delete it.
 
 - If someone had paid for it and the beans were still held, they get them back. Open requests are cancelled. An event is cancelled, and people going to it get a cancellation notice.
 - Settings calls this permanent, but the record stays in the database, hidden. It cannot be brought back from Settings.
+- Its photos stop loading at once. If a cache sits in front of your server, its copy of a photo can keep loading for up to an hour. To have one gone sooner, purge its address there (see Limits on a global community).
 - **The author is told**: "Your post "…" was removed by the community's moderators", and the reason if one was chosen. It never says who removed it, or who reported it.
 - **Everyone who reported it is told** "The post you reported was removed". Each hears only about their own report, never about the others. Every open report on that post is closed as handled.
 - These come as an alert in the app and, if the member allows Marketplace notifications, on their phone.

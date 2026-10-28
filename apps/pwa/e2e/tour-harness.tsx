@@ -16,7 +16,7 @@ import { HeaderControls, HeaderTitle, useDotOnlyChip } from '../src/components/H
 import { LobbyHeader } from '../src/components/LobbyHeader';
 import { SyncChip, type SyncMode } from '../src/components/SyncChip';
 import { helpSheetFor, tourSteps } from '@beanpool/core';
-import { getBundledGuide } from '../src/lib/guide';
+import { getBundledGuide, loadBundledGuide } from '../src/lib/guide';
 
 const q = new URLSearchParams(location.search);
 // Dark as lib/useTheme.ts makes it: Tailwind's dark: classes and the theme's own colours (--bg-card and the rest).
@@ -69,5 +69,8 @@ function App() {
             <TourBar steps={steps} index={i} home={i === steps.length - 1 ? home : null} onNext={() => {}} onSkip={() => {}} onDone={() => {}} />
         </div>
     );
+}
+if (view === 'help') {
+    await loadBundledGuide();
 }
 createRoot(document.getElementById('root')!).render(<App />);

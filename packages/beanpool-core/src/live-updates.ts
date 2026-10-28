@@ -161,3 +161,36 @@ export function wsNoRoomDelayMs(refusals: number, retryAfterSec: number, random:
     const window = Math.min(WS_NO_ROOM_CAP_MS, asked * 1000 * 2 ** Math.min(n, 16));
     return Math.floor(window + random() * window / 2);
 }
+
+// ===================== MESSAGE BACKSTOP =====================
+
+/**
+ * The open app's backstop read of its messages: the phone's conversation list, the web app's open conversation. While
+ * the member's own socket is alive its `new_message` doorbell brings each new line at once, and the read only catches
+ * one a doorbell missed, so it is every 120 s; while the socket is down, refused or not the member's, every 30 s as
+ * before (scratch/fable-design/DESIGN-global-lounge-fable.md §5.2 item 3, slice L0). A foreground phone's requests
+ * about halve.
+ */
+export const MESSAGE_BACKSTOP_ALIVE_MS = 120_000;
+export const MESSAGE_BACKSTOP_DOWN_MS = 30_000;
+/** Both apps look on this tick, jittered, and read when messageBackstopDue says. */
+export const MESSAGE_BACKSTOP_TICK_MS = 30_000;
+
+/**
+ * Whether the socket counts as alive for the backstop: open, signed by the member (an unsigned socket gets bare
+ * doorbells only, never `new_message`), and answered a ping within the watchdog's limit (`pongTimeoutMs`, the apps'
+ * 75 s). A socket the node lets in and closes for want of room never gets a pong, so it never counts.
+ */
+export function socketAlive(open: boolean, signed: boolean, lastPongAt: number | null, now: number, pongTimeoutMs: number): boolean {
+    return open && signed && lastPongAt !== null && now - lastPongAt < pongTimeoutMs;
+}
+
+/**
+ * Whether the tick at `now` reads the messages, the last read having been at `lastReadAt`: every tick while the socket
+ * is down; while it is alive, once that read is MESSAGE_BACKSTOP_ALIVE_MS old, less half a tick, so a tick that comes a
+ * little early under its jitter is not put off by a whole one.
+ */
+export function messageBackstopDue(lastReadAt: number, now: number, alive: boolean): boolean {
+    if (!alive) return true;
+    return now - lastReadAt >= MESSAGE_BACKSTOP_ALIVE_MS - MESSAGE_BACKSTOP_TICK_MS / 2;
+}

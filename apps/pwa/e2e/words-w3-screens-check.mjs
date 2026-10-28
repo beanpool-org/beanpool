@@ -134,9 +134,7 @@ const SCREENS = [
     { name: 'home-card', ready: '[data-testid="home-card-menu"]', act: async (page) => { await page.locator('[data-testid="home-card-menu"]').click(); } },
     { name: 'tour', ready: '[data-testid="tour-bar"]' },
     { name: 'tour-step', ready: '[data-testid="tour-bar"]' },
-    { name: 'install', ready: 'body', act: async (page, lang) => {
-        await page.getByRole('button', { name: wordIn(lang, 'How?') }).click({ timeout: 10_000 });
-    } },
+    { name: 'install', ready: '[data-testid="desktop-install-steps"]' },
     { name: 'new-account', ready: '[data-testid="new-account-rule"]' },
     { name: 'start-community', ready: '[data-testid="start-community-screen"]' },
     { name: 'suggest', ready: 'form' },

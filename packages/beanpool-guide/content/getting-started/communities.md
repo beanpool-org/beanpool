@@ -16,7 +16,7 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 - Under **Join Another Community**, paste the invite link or code. If you only have a code, also fill in the community's address.
 - Tap **Join Community**.
 
-Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**.
+Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Tap **Next**, then check your name and photo for the new community. A sign-in account you linked to get back into your account works there too: BeanPool keeps one copy for all your communities.
 
 ## Visiting a community's address
 
@@ -100,3 +100,5 @@ To delete your account in one community, open it and use **Permanently Delete Ac
 ## Visiting as a guest
 
 If you add a community without an invite, you are a guest there. A **Join** button shows at the top, beside the **?**. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with their 12 words or a sign-in instead: see "Joining the global community from your account" above.
+
+On a new phone with no account yet, **Explore BeanPool worldwide** on the first screen opens the global community as a guest too, before there is any account: you see its listings and its map, and nothing about you is made or sent until you tap **Join**. See "Joining BeanPool".

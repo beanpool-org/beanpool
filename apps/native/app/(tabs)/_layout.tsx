@@ -7,7 +7,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { dealsNeedingMe, helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { webSocketAliveSince } from '../../services/ws-client';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
 import { HelpSheet } from '../../components/HelpSheet';
@@ -61,6 +62,8 @@ const LABEL_MAX_SCALE = 1.1;
 const LABEL_MIN_SCALE = 0.6;
 const UNDERLINE_HEIGHT = 3;
 const TAB_BUTTON_INSET = 5;
+/** A doorbell this soon after the last network read of the messages waits for the gap to pass (TabLayout's ws_activity). */
+const DOORBELL_READ_GAP_MS = 10_000;
 
 function TabItem({ label, icon, focused, color, count, badge }: {
     label: string;
@@ -150,7 +153,11 @@ export default function TabLayout() {
     const [unread, setUnread] = useState(0);
     const [dealsCount, setDealsCount] = useState(0);
     const [needsBackup, setNeedsBackup] = useState(false);
+    // When the last network read of the messages started (the doorbell's 10 s gap), and when the last read that worked
+    // and the last that failed started: only one that worked counts for the backstop (review of #2558).
     const lastNetSyncAtRef = useRef(0);
+    const lastReadOkAtRef = useRef(0);
+    const lastReadFailedAtRef = useRef(0);
     const { nodeUrl } = useNodeStatus();
     // Commons and Ledger are money: a node with Beans off (the global community) hides them when Decisions are off too
     // (with Decisions on, Commons stays for Decisions and groups). What this phone
@@ -211,9 +218,12 @@ export default function TabLayout() {
         const checkUnread = async (withNetworkSync = false) => {
             try {
                 if (withNetworkSync) {
-                    lastNetSyncAtRef.current = Date.now();
-                    // Discover new messages across active threads globally
-                    await syncMessages(identity.publicKey);
+                    const startedAt = Date.now();
+                    lastNetSyncAtRef.current = startedAt;
+                    // Discover new messages across active threads globally. Counted once it worked: one that failed with the
+                    // socket up (a 503 while the node is full, a timeout on a weak link) is read again on the next tick.
+                    if (await syncMessages(identity.publicKey).catch(() => false)) lastReadOkAtRef.current = Math.max(lastReadOkAtRef.current, startedAt);
+                    else lastReadFailedAtRef.current = Math.max(lastReadFailedAtRef.current, startedAt);
                 }
                 // Calculate unread sum across the updated SQLite pool
                 const count = await getGlobalUnreadCount(identity.publicKey);
@@ -233,10 +243,17 @@ export default function TabLayout() {
         const startPolling = () => {
             if (!iv) {
                 checkUnread(true);
-                // Local badge refresh every 5s; full network message-sync only as a 30s
-                // backstop — real-time arrival is covered by the ws_activity nudge below
+                // Local badge refresh every 5s; full network message-sync only as a backstop — real-time arrival is
+                // covered by the ws_activity nudge below. Every 120 s while the member's socket is alive, every 30 s
+                // while it is not (@beanpool/core messageBackstopDue, slice L0). A socket that opened after the last read
+                // doesn't count yet: a line sent while it was down never rang, so the next tick reads (review of #2558).
+                // Nor does a read that failed since the last one that worked: the next tick reads, as before slice L0.
                 iv = setInterval(() => checkUnread(false), withJitter(5000));
-                netIv = setInterval(() => checkUnread(true), withJitter(30000));
+                netIv = setInterval(() => {
+                    const lastRead = lastReadOkAtRef.current;
+                    const failedSince = lastReadFailedAtRef.current >= lastRead; // started together: read again
+                    if (messageBackstopDue(lastRead, Date.now(), !failedSince && webSocketAliveSince(lastRead))) checkUnread(true);
+                }, withJitter(MESSAGE_BACKSTOP_TICK_MS));
             }
         };
 
@@ -265,16 +282,35 @@ export default function TabLayout() {
 
         const appStateSub = AppState.addEventListener('change', handleAppStateChange);
 
-        const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
-            if (AppState.currentState === 'active' && Date.now() - lastNetSyncAtRef.current > 10000) {
+        // A doorbell within 10 s of the last network read doesn't read again at once. But that read may already have passed
+        // the doorbell's line (it was done, or past the list), and while the socket is alive the backstop is up to 120 s
+        // away, so the held doorbell reads once when the 10 s is up, unless a read that worked has started since it rang
+        // (review of #2558).
+        let heldDoorbell: ReturnType<typeof setTimeout> | null = null;
+        let lastDoorbellAt = 0;
+        const readForDoorbell = () => {
+            if (AppState.currentState !== 'active') return;
+            const sinceRead = Date.now() - lastNetSyncAtRef.current;
+            if (sinceRead > DOORBELL_READ_GAP_MS) {
+                if (heldDoorbell) { clearTimeout(heldDoorbell); heldDoorbell = null; }
                 checkUnread(true);
+                return;
             }
+            if (!heldDoorbell) heldDoorbell = setTimeout(() => {
+                heldDoorbell = null;
+                if (lastReadOkAtRef.current <= lastDoorbellAt) readForDoorbell();
+            }, DOORBELL_READ_GAP_MS - sinceRead + 1);
+        };
+        const wsSub = DeviceEventEmitter.addListener('ws_activity', () => {
+            lastDoorbellAt = Date.now();
+            readForDoorbell();
         });
 
         return () => {
             stopPolling();
             appStateSub.remove();
             wsSub.remove();
+            if (heldDoorbell) clearTimeout(heldDoorbell);
         };
     }, [identity]);
 

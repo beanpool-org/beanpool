@@ -240,6 +240,27 @@ export async function loadIdentity(): Promise<BeanPoolIdentity | null> {
 }
 
 /**
+ * The account the phone holds, read as {@link saveIdentity} reads it before every write: null only when there is none.
+ * An item that is there but can't be read (it isn't an account, or the read itself failed) throws
+ * {@link StoredKeyUnreadableError}, where {@link loadIdentity} answers null for both. For a caller that must never take
+ * an account it can't read for no account: an account arriving on a phone that looked around (look-around.ts
+ * forgetTheLook), and the look itself (look-around.ts lookingAroundHere, welcome.tsx exploreWorldwide). Writes nothing
+ * but what {@link loadIdentity} writes (a legacy copy moved in).
+ */
+export async function readStoredIdentity(): Promise<BeanPoolIdentity | null> {
+    await migrateLegacyIdentity();
+    let data: string | null;
+    try {
+        data = isWeb ? localStorage.getItem(KEY_ID) : await readKeyItem();
+    } catch {
+        throw new StoredKeyUnreadableError();
+    }
+    if (!data) return null;
+    if (!publicKeyIn(data)) throw new StoredKeyUnreadableError();
+    return JSON.parse(data);
+}
+
+/**
  * The one way to read a user's recovery words.
  *
  * Today it returns `identity.mnemonic` and nothing more, which is the whole point: every

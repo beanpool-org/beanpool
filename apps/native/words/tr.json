@@ -2,7 +2,7 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, native tools top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct native)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, native tools top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct native); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -602,7 +602,6 @@
   "Add a photo to your profile": "Profiline bir fotoğraf ekle",
   "Pick a few things you like": "Beğendiğin birkaç şeyi seç",
   "Post something free or for swap": "Ücretsiz veya takaslık bir şey paylaş",
-  "Ask a community to let you in": "Bir topluluktan seni içeri almasını iste",
   "{n} day|{n} days": {
     "one": "{n} gün",
     "other": "{n} gün"
@@ -621,7 +620,6 @@
   "Your credit opens with a first trade.": "Kredin ilk takasla açılır.",
   "Spending is paused for now. You can still receive and sell.": "Harcama şimdilik duraklatıldı. Hala alabilir ve satabilirsin.",
   "{amount} · room to spend {room}": "{amount} · harcama limiti {room}",
-  "The worldwide community": "Dünya çapındaki topluluk",
   "1 member. You're first. Invite someone.": "1 üye. İlksin. Birini davet et.",
   "1 member. You're first.": "1 üye. İlksin.",
   "{n} trade this month|{n} trades this month": {
@@ -5009,7 +5007,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Sizden başka hiç kimsenin erişememesini tercih ediyorsanız yalnızca 12 kelimenizi kullanın.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "BeanPool'un İzlanda'daki küçük bir sunucu olan anahtar kasası, oturumunuzun açtığı kopyayı saklar. BeanPool bu kopyaları açabilir: Şimdilik kasaya BeanPool'un kurucusu bakmaktadır ve sistem ikisi birlikte hareket etmek zorunda olan farklı ülkelerdeki üç kişiye devredilmektedir. Barındıran şirket çalışırken belleğini okuyabilir. Bir mahkeme kopyanın açılmasını emredebilir ve oturum açma hesabınızı ele geçiren herkes içeri girebilir.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Birini kaybetme ihtimaline karşı birden fazla bağlayın. Kopyayı saklayan topluluk sunucunuz aracılığıyla bunlardan herhangi biri hesabınızı yeni bir telefonda geri getirir.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Birini kaybetme ihtimaline karşı birden fazla bağlayın. Bunlardan herhangi biri hesabınızı her toplulukta yeni bir telefonda geri getirir.",
   "🛡️ You're covered on {community}": "🛡️ {community} üzerinde güvendesiniz",
   "🛡️ You're covered": "🛡️ Güvendesiniz",
   "Sign-In Recovery Providers (1-of-N)": "Oturum Açma Kurtarma Sağlayıcıları (N'de 1)",
@@ -6123,5 +6120,18 @@
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "BeanPool bildirimleri telefonunuzun ayarlarında kapalı. Açmak için Ayarlar'ı açın.",
   "Nothing here yet. Be the first:": "Henüz bir şey yok. İlk sen ol:",
   "Choose a banner photo, or keep this one": "Bir afiş fotoğrafı seçin veya bunu tutun",
-  "Your picture, until you choose a banner.": "Bir afiş seçene kadar profil resminiz."
+  "Your picture, until you choose a banner.": "Bir afiş seçene kadar profil resminiz.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Ziyaretçi olarak göz atıyorsunuz. Katılana kadar hiçbir şey kaydedilmez.",
+  "Join to post": "Paylaşmak için katıl",
+  "Join to message": "Mesaj göndermek için katıl",
+  "The global community": "Küresel topluluk",
+  "Choose a name": "Bir isim seç",
+  "Say roughly where you are": "Kabaca nerede olduğunu belirt",
+  "Add a picture (a preset counts)": "Bir resim ekle (hazır şablonlar da geçerlidir)",
+  "Look at an example Ledger": "Örnek bir defteri incele",
+  "Say hello to someone near you": "Yakınındaki birine merhaba de",
+  "Tell me when a community starts here, or say you'd help start one": "Burada bir topluluk başladığında bana haber ver ya da başlatmaya yardım et",
+  "Nothing within 250 km yet.": "Henüz 250 km içinde hiçbir şey yok.",
+  "See what people post elsewhere ›": "İnsanların başka yerlerde ne paylaştığını gör ›",
+  "Set your area": "Bölgeni ayarla"
 }

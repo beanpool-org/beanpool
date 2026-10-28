@@ -2,7 +2,7 @@
   "_meta": {
     "language": "pt",
     "name": "Portuguese (Brazilian)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-20",
@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Adicione uma foto ao perfil",
   "Pick a few things you like": "Escolha algumas coisas que curte",
   "Post something free or for swap": "Publique algo grátis ou para troca",
-  "Ask a community to let you in": "Peça para uma comunidade aceitar você",
   "{n} day|{n} days": {
     "one": "{n} dia",
     "other": "{n} dias"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "Seu crédito se abre com uma primeira troca.",
   "Spending is paused for now. You can still receive and sell.": "Gastos estão pausados por enquanto. Você ainda pode receber e vender.",
   "{amount} · room to spend {room}": "{amount} · limite para gastar {room}",
-  "The worldwide community": "A comunidade mundial",
   "1 member. You're first. Invite someone.": "1 membro. Você é o primeiro. Convide alguém.",
   "1 member. You're first.": "1 membro. Você é o primeiro.",
   "{n} trade this month|{n} trades this month": {
@@ -4995,7 +4993,6 @@
   "If you would rather nobody but you could get in, use only your 12 words.": "Se preferir que ninguém além de você possa acessar, utilize apenas suas 12 palavras.",
   "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.": "O cofre de chaves do BeanPool, um pequeno servidor na Islândia, guarda a cópia da conta que seu login abre. O BeanPool pode abrir essas cópias: por enquanto uma pessoa, o fundador do BeanPool, cuida do cofre, e a guarda está sendo transferida para três pessoas em países diferentes, sendo necessária a ação conjunta de duas. A empresa de hospedagem pode ler a memória enquanto o servidor opera. Uma ordem judicial poderia determinar a abertura de uma cópia, e quem assumir o controle do seu login poderá ter acesso.",
   "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.": "Conecte mais de um, caso perca algum. Qualquer um deles recupera sua conta em um novo celular, por meio do servidor da comunidade, que guarda a cópia.",
-  "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.": "Conecte mais de um, caso perca algum. Qualquer um deles recupera sua conta em um novo celular, em todas as comunidades.",
   "🛡️ You're covered on {community}": "🛡️ Você está protegido em {community}",
   "🛡️ You're covered": "🛡️ Você está protegido",
   "Sign-In Recovery Providers (1-of-N)": "Provedores de recuperação por login (1 de N)",
@@ -6123,5 +6120,18 @@
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "As notificações do BeanPool estão desligadas nas definições do seu telefone. Abra as Definições para as ligar.",
   "Nothing here yet. Be the first:": "Nada aqui ainda. Seja o primeiro:",
   "Choose a banner photo, or keep this one": "Escolha uma foto de banner ou mantenha esta",
-  "Your picture, until you choose a banner.": "Sua foto, até você escolher um banner."
+  "Your picture, until you choose a banner.": "Sua foto, até você escolher um banner.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "Você está dando uma olhada como visitante. Nada é salvo até você entrar.",
+  "Join to post": "Entre para publicar",
+  "Join to message": "Entre para mandar mensagem",
+  "The global community": "A comunidade global",
+  "Choose a name": "Escolha um nome",
+  "Say roughly where you are": "Diga aproximadamente onde você está",
+  "Add a picture (a preset counts)": "Adicione uma foto (uma predefinida conta)",
+  "Look at an example Ledger": "Veja um livro-razão de exemplo",
+  "Say hello to someone near you": "Diga oi para alguém perto de você",
+  "Tell me when a community starts here, or say you'd help start one": "Avise-me quando uma comunidade começar aqui ou diga que ajudaria a começar uma",
+  "Nothing within 250 km yet.": "Nada em um raio de 250 km ainda.",
+  "See what people post elsewhere ›": "Veja o que as pessoas publicam em outros lugares ›",
+  "Set your area": "Defina sua região"
 }

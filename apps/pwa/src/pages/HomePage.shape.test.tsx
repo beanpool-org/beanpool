@@ -43,6 +43,7 @@ const ME: BeanPoolIdentity = {
 const HOME_ANSWER_WITH_SHAPE: HomeAnswer = {
     profile: 'local',
     order: ['community'],
+    me: { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' },
     cards: {
         community: {
             type: 'community',
@@ -119,6 +120,22 @@ describe('HomePage community shape line and modal (S5)', () => {
         });
 
         render(<HomePage identity={ME} onNavigate={() => {}} onSeeWords={() => {}} />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('home-community-body')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByTestId('home-community-shape-summary')).not.toBeInTheDocument();
+    });
+
+    it('does NOT render the shape summary line to a visitor, who has no account here (the members\' card)', async () => {
+        vi.mocked(api.getHome).mockResolvedValueOnce({
+            notModified: false,
+            etag: 'tag-visitor',
+            answer: { ...HOME_ANSWER_WITH_SHAPE, welcome: true, me: null } as unknown as HomeAnswer,
+        });
+
+        render(<HomePage identity={null} onNavigate={() => {}} onSeeWords={() => {}} />);
 
         await waitFor(() => {
             expect(screen.getByTestId('home-community-body')).toBeInTheDocument();

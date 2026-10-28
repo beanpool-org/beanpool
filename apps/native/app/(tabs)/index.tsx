@@ -1003,12 +1003,13 @@ export default function HomeScreen() {
                 const sky = skyOf(answer, inst, place, now);
                 return sky ? frame(<SkyBody sky={sky} colors={colors} />) : null;
             }
+            // `features` only for a reader with an account here: the shape line is the members' card (design §4.1), and a visitor is told none of it.
             case 'community': return frame(
                 <CommunityBody
                     card={c.community}
                     profile={profile}
                     invitesOn={invitesOn}
-                    features={answer?.features}
+                    features={tailor ? answer?.features : undefined}
                     colors={colors}
                     onOpenShape={() => setShapeSheetOpen(true)}
                     onAdd={tailor ? () => setAddOpen(true) : undefined}

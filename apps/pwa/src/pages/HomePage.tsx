@@ -860,7 +860,8 @@ function CommunityBody({
     onEditHome: () => void;
 }) {
     const { wide } = useCardContainer();
-    const shapeSummary = communityShapeSummary(features);
+    // The members' card (design §4.1): a visitor, who reads the lobby's Home, is told none of it.
+    const shapeSummary = isVisitor ? null : communityShapeSummary(features);
     const isGlobal = profile === 'global';
     const hasDetailedStats = !isGlobal
         ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')

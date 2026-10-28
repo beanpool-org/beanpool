@@ -6,7 +6,8 @@
  * PR #2540 review 4393642129: in `to-me` the phone fetched and showed the stranger's photo before Accept (ChatImage calls
  * getDecryptedAttachment on mount). Review 4393642152: the recipient had a live composer before the node's lines arrived
  * (a local read, or no row yet), and a line sent then accepts the request. Review 4393642166: the opener's screen read
- * "Sent as a request" before the node had taken the line.
+ * "Sent as a request" before the node had taken the line. Review 4395541944: a refused Accept or Ignore said only "That did
+ * not go through. Please try again.", even for a request its opener had cancelled, and kept the member on it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The shipped pictures' requires (utils/bundled-avatars.ts, through MemberAvatar and the picture sheet) load as a number.
@@ -164,6 +165,7 @@ vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls,
 import { setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import ChatRoute from '../../app/chat/[id]';
+import { router } from 'expo-router';
 
 const NODE = 'https://mullum.example';
 const now = Date.now();
@@ -309,6 +311,58 @@ describe('a request waiting for this member, on the phone', () => {
         await tap('React');
         await tap('React with 👍');
         expect(callsOf('toggleMessageReactionApi')).toBe(1);
+    });
+
+    describe('Accept or Ignore refused (review 4395541944)', () => {
+        const refusal = (message: string, extra: Record<string, unknown>) => Object.assign(new Error(message), extra);
+        const GONE = () => refusal('There is no message request for you in this chat.', { status: 404, code: 'request_not_found', nodeAnswered: true });
+        async function kofiAsks(decide: () => Promise<unknown>): Promise<void> {
+            standIn({
+                getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+                getMessages: [{ id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'hello Ana', rawTimestamp: iso(now - 60_000), timestamp: '' }],
+                syncSingleConversation: true,
+                decideMessageRequest: decide,
+            });
+            await open();
+            expect(host.textContent).toContain('Kofi wants to message you');
+        }
+
+        it('a request its opener cancelled: Accept goes back to Talk, as Ignore does, and says nothing', async () => {
+            const navigate = vi.spyOn(router, 'navigate');
+            await kofiAsks(() => Promise.reject(GONE()));
+            await tap('Accept');
+            expect(navigate).toHaveBeenCalledWith('/(tabs)/chats');
+            expect(alerts.said).toEqual([]);
+            navigate.mockRestore();
+        });
+
+        it('a request its opener cancelled: Ignore goes back to Talk too, and says nothing', async () => {
+            const navigate = vi.spyOn(router, 'navigate');
+            await kofiAsks(() => Promise.reject(GONE()));
+            await tap('Ignore');
+            expect(navigate).toHaveBeenCalledWith('/(tabs)/chats');
+            expect(alerts.said).toEqual([]);
+            navigate.mockRestore();
+        });
+
+        it('the node refusing in its own words: those words, and the Accept card stays', async () => {
+            const navigate = vi.spyOn(router, 'navigate');
+            await kofiAsks(() => Promise.reject(refusal('This community is read-only for now.', { status: 503, code: 'standby', nodeAnswered: true })));
+            await tap('Accept');
+            expect(alerts.said).toEqual(['This community is read-only for now.']);
+            expect(host.textContent).toContain('Kofi wants to message you');
+            expect(navigate).not.toHaveBeenCalled();
+            navigate.mockRestore();
+        });
+
+        it("a proxy's page (no JSON error), or no answer: the community out of reach, never the page's words", async () => {
+            let answer: Error = refusal('Server returned 502', { status: 502, nodeAnswered: false });
+            await kofiAsks(() => Promise.reject(answer));
+            await tap('Accept');
+            answer = new Error('Network request failed');
+            await tap('Ignore');
+            expect(alerts.said).toEqual(['Connect to your community to accept or ignore.', 'Connect to your community to accept or ignore.']);
+        });
     });
 
     it('control: once the node has answered an ordinary chat, the composer sends', async () => {

@@ -8,6 +8,8 @@
  *   3. chat/[id].tsx: in mine-waiting mode, replaces composer with waiting line and Cancel request button
  *   4. chat/[id].tsx: tapping Cancel request calls decideMessageRequest(id, 'cancel')
  *   5. chat/[id].tsx: failed message bubble with __sendError shows server's words in Alert
+ *   6. MessageRequestsPane: a request the node no longer has drops its card; any other refusal says the web's words
+ *      (PR #2540 review 4395541944)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React, { createElement } from 'react';
@@ -171,6 +173,70 @@ describe('MessageRequestsPane on phone', () => {
         const openBtn = screen.getByTestId('request-card-open');
         expect(await screen.findByText(/Photo: shown when you accept/)).toBeTruthy();
         expect(openBtn.getAttribute('aria-label')).toBe('Bob. Photo: shown when you accept. Check this out. Open the chat to read it.');
+    });
+
+    // Review 4395541944: a refused Accept or Ignore said only "That did not go through. Please try again." and kept the card,
+    // so a request its opener cancelled stayed on the list and every retry said the same. The web drops the card on
+    // request_not_found and otherwise says decisionFailureWords. The phone's errors carry `nodeAnswered` (utils/db
+    // _signedRequest), not the web's `unsaid`.
+    const refusal = (message: string, extra: Record<string, unknown>) => Object.assign(new Error(message), extra);
+    const renderCard = (over: { onAccepted?: () => void; onChanged?: () => void } = {}) => render(
+        createElement(MessageRequestsPane, {
+            entries: [entry],
+            count: 1,
+            identity: { publicKey: 'me-pubkey' },
+            onOpen: () => {},
+            onAccepted: over.onAccepted ?? (() => {}),
+            onChanged: over.onChanged ?? (() => {}),
+        })
+    );
+
+    it('a request its opener cancelled: Accept drops the card with the next list, and says nothing', async () => {
+        dbMocks.decideMessageRequest.mockRejectedValueOnce(refusal('There is no message request for you in this chat.', { status: 404, code: 'request_not_found', nodeAnswered: true }));
+        const onAccepted = vi.fn();
+        const onChanged = vi.fn();
+        renderCard({ onAccepted, onChanged });
+
+        fireEvent.click(screen.getByTestId('request-accept'));
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+        expect(onAccepted).not.toHaveBeenCalled();
+        expect(alerts.said).toEqual([]);
+    });
+
+    it('a request its opener cancelled: Ignore drops the card too', async () => {
+        dbMocks.decideMessageRequest.mockRejectedValueOnce(refusal('There is no message request for you in this chat.', { status: 404, code: 'request_not_found', nodeAnswered: true }));
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+
+        fireEvent.click(screen.getByTestId('request-ignore'));
+        await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+        expect(alerts.said).toEqual([]);
+    });
+
+    it('the node refusing in its own words: those words, and the card stays', async () => {
+        dbMocks.decideMessageRequest.mockRejectedValueOnce(refusal('This community is read-only for now.', { status: 503, code: 'standby', nodeAnswered: true }));
+        const onChanged = vi.fn();
+        renderCard({ onChanged });
+
+        fireEvent.click(screen.getByTestId('request-accept'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(alerts.said[0].title).toBe('This community is read-only for now.');
+        expect(onChanged).not.toHaveBeenCalled();
+    });
+
+    it("a page that was not the node's (a proxy's 502), or no answer at all: the community out of reach, never the page's words", async () => {
+        dbMocks.decideMessageRequest.mockRejectedValueOnce(refusal('Server returned 502', { status: 502, nodeAnswered: false }));
+        renderCard();
+        fireEvent.click(screen.getByTestId('request-accept'));
+        await waitFor(() => expect(alerts.said.length).toBe(1));
+        expect(alerts.said[0].title).toBe('Connect to your community to accept or ignore.');
+        cleanup();
+
+        dbMocks.decideMessageRequest.mockRejectedValueOnce(new Error('Network request failed'));
+        renderCard();
+        fireEvent.click(screen.getByTestId('request-ignore'));
+        await waitFor(() => expect(alerts.said.length).toBe(2));
+        expect(alerts.said[1].title).toBe('Connect to your community to accept or ignore.');
     });
 
     it('offers Ignore all when count >= 6 and calls ignoreAllMessageRequests on confirm', async () => {

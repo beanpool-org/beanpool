@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Pressable, Alert, Animated } from 'react-native
 import { t, tn } from '@beanpool/core';
 import { decideMessageRequest, ignoreAllMessageRequests, getMessages, syncSingleConversation } from '../utils/db';
 import { blockUser } from '../utils/blocklist';
+import { requestDecisionFailureWords, requestIsGone } from '../utils/chat-actions';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
@@ -60,7 +61,9 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                 onChanged();
             }
         } catch (e: any) {
-            Alert.alert(t('That did not go through. Please try again.'));
+            // Gone from the node (its opener cancelled it): the list the card came from is old, so the next one drops it.
+            if (requestIsGone(e)) { onChanged(); return; }
+            Alert.alert(requestDecisionFailureWords(e));
         } finally {
             setBusy(false);
         }

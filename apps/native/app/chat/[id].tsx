@@ -39,7 +39,7 @@ import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode
 import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_LOCK_WORDS } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, messageTime, tombstoneText,
-    shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
+    shouldFollowNewMessages, shouldShowChatLoadError, requestDecisionFailureWords, requestIsGone, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
 import { isMuted, muteMenuLabel, type YourChatMute } from '../../utils/your-groups';
@@ -1676,7 +1676,9 @@ function ChatScreen({ id }: { id: string }) {
                                         setConvRow((prev: any) => prev ? { ...prev, request: answer.request } : prev);
                                         void syncSingleConversation(String(id));
                                     } catch (e: any) {
-                                        Alert.alert(t('That did not go through. Please try again.'));
+                                        // Gone from the node (its opener cancelled it): back to Talk, as Ignore goes.
+                                        if (requestIsGone(e)) { router.navigate('/(tabs)/chats'); return; }
+                                        Alert.alert(requestDecisionFailureWords(e));
                                     } finally {
                                         setDecidingRequest(false);
                                     }
@@ -1696,7 +1698,8 @@ function ChatScreen({ id }: { id: string }) {
                                         await decideMessageRequest(String(id), 'ignore');
                                         router.navigate('/(tabs)/chats');
                                     } catch (e: any) {
-                                        Alert.alert(t('That did not go through. Please try again.'));
+                                        if (requestIsGone(e)) { router.navigate('/(tabs)/chats'); return; }
+                                        Alert.alert(requestDecisionFailureWords(e));
                                     } finally {
                                         setDecidingRequest(false);
                                     }

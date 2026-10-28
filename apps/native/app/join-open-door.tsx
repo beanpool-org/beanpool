@@ -118,9 +118,9 @@ function backOrHome() {
 }
 
 /** Out of the door with nowhere to go back to: home for an account, the first screen for a phone with none. */
-function backOrStart(account: 'existing' | 'new' | null) {
+function backOrStart(kind: 'existing' | 'new' | null) {
     if (router.canGoBack()) router.back();
-    else router.replace(account === 'new' ? '/welcome' : '/(tabs)');
+    else router.replace(kind === 'new' ? '/welcome' : '/(tabs)');
 }
 
 /**
@@ -197,7 +197,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
      * key this door made, in memory until Join (a phone with no account: slice S2, utils/open-door-key.ts), or on the phone
      * with its record while a join it signed may have landed. Null until read.
      */
-    const [account, setAccount] = useState<'existing' | 'new' | null>(null);
+    const [keyKind, setKeyKind] = useState<'existing' | 'new' | null>(null);
     const keyRef = useRef<JoinKey | null>(null);
     keyRef.current = key;
     /** The sign-in the join will spend. Dropped once sent: a nonce is spent once. */
@@ -245,6 +245,14 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
      * this door made (`held`), else a new one in memory. Asked again at every try: the phone may hold a key since.
      */
     const keyForDoor = (held: JoinKey | null): Promise<JoinKey | null> => (door.global ? accountKeyForDoor() : openDoorKeyForThisPhone(doorUrl, held));
+    /**
+     * {@link keyForDoor} at a tap. The phone's account the door opened for, gone since (signed out while the screen was
+     * open): null, and the screen says so, as before slice S2; never a new account made in its place.
+     */
+    const keyAtTap = async (): Promise<JoinKey | null> => {
+        const joining = await keyForDoor(key);
+        return joining && joining.createdHere && keyKind === 'existing' ? null : joining;
+    };
 
     // Arriving: whose key joins. Nothing is written by reading it: a key the door makes is in memory until Join.
     useEffect(() => {
@@ -261,7 +269,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             // as before slice S2, when the root guard sent this screen there.
             if (!joining) { router.replace('/welcome'); return; }
             setKey(joining);
-            setAccount(joining.createdHere ? 'new' : 'existing');
+            setKeyKind(joining.createdHere ? 'new' : 'existing');
         })().catch(() => {});
         return () => { alive = false; };
         // Read once, as the door opens: the screen is keyed by its address.
@@ -276,7 +284,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         if (joinSendingRef.current) return;
         nameCheckRef.current?.abort();
         const made = key?.createdHere ? key : null;
-        if (!made) { backOrStart(account); return; }
+        if (!made) { backOrStart(keyKind); return; }
         void releaseOpenDoorKey(doorUrl, made).catch(() => false).then((removed) => {
             // The app loaded that key at its start (a restart while the join was out): it holds no account now.
             if (removed && identity?.publicKey === made.identity.publicKey) setIdentity(null);
@@ -371,7 +379,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         setLoading(true);
         setError(null);
         try {
-            const account = await keyForDoor(key);
+            const account = await keyAtTap();
             if (!account) {
                 setError(phoneDoorLineWords(ACCOUNT_DOOR_MESSAGES.noAccount));
                 return;
@@ -467,7 +475,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         try {
             // Asked again: the phone may hold a key since this door made one. The work names the key, so a different one
             // starts its own.
-            const account = await keyForDoor(key);
+            const account = await keyAtTap();
             if (!account) {
                 setError(phoneDoorLineWords(ACCOUNT_DOOR_MESSAGES.noAccount));
                 return;
@@ -647,13 +655,13 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                             <Text style={styles.body} accessibilityLiveRegion="polite">{message}</Text>
                             {/* A phone with no account: this sign-in's account is somewhere else, so the first screen's restore
                                 brings it here, as at the global community's door (welcome.tsx). */}
-                            {account === 'new' && (
+                            {keyKind === 'new' && (
                                 <Pressable style={styles.primary} onPress={() => router.replace({ pathname: '/welcome', params: { mode: 'member' } })} accessibilityRole="button">
                                     <Text style={styles.primaryText}>{t('🔑 Restore my account')}</Text>
                                 </Pressable>
                             )}
-                            <Pressable style={account === 'new' ? styles.secondary : styles.primary} onPress={signInAgain} accessibilityRole="button">
-                                <Text style={account === 'new' ? styles.secondaryText : styles.primaryText}>{t('Use a different sign-in')}</Text>
+                            <Pressable style={keyKind === 'new' ? styles.secondary : styles.primary} onPress={signInAgain} accessibilityRole="button">
+                                <Text style={keyKind === 'new' ? styles.secondaryText : styles.primaryText}>{t('Use a different sign-in')}</Text>
                             </Pressable>
                         </>
                     )}
@@ -662,14 +670,14 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                         one it has, or, with none, the one this door makes at Join. */}
                     {phase === 'choose' && (
                         <>
-                            <Text style={styles.body}>{account === 'new' ? sayNew.intro : say.intro}</Text>
+                            <Text style={styles.body}>{keyKind === 'new' ? sayNew.intro : say.intro}</Text>
                             {loading && (
                                 <View style={styles.busy} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={colors.brand.primary} />
                                 </View>
                             )}
                             {error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
-                            {account === null ? (
+                            {keyKind === null ? (
                                 <View style={styles.busy}>
                                     <ActivityIndicator size="large" color={colors.brand.primary} />
                                 </View>
@@ -682,7 +690,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                                     busy={doorWork.busy}
                                     wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                     signInNote={keeper.choose}
-                                    account={account}
+                                    account={keyKind}
                                 />
                             )}
                         </>
@@ -690,7 +698,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
 
                     {phase === 'signIn' && (
                         <>
-                            <Text style={styles.body}>{account === 'new' ? sayNew.introSignIn : say.intro}</Text>
+                            <Text style={styles.body}>{keyKind === 'new' ? sayNew.introSignIn : say.intro}</Text>
                             <Text style={styles.small}>{keeper.signIn}</Text>
                             {loading && (
                                 <View style={styles.busy} accessibilityLiveRegion="polite">
@@ -718,7 +726,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                     {phase === 'name' && (
                         <>
                             {way === 'words'
-                                ? <Text style={styles.small}>{account === 'new' ? sayNew.wordsName : t('🔑 With your 12 words: the ones this phone already has. No sign-in needed.')}</Text>
+                                ? <Text style={styles.small}>{keyKind === 'new' ? sayNew.wordsName : t('🔑 With your 12 words: the ones this phone already has. No sign-in needed.')}</Text>
                                 : signedInWith && <Text style={styles.small}>{t('✅ Signed in with {provider}', { provider: signedInWith })}</Text>}
                             <Text style={styles.label}>{say.nameLabel}</Text>
                             <TextInput

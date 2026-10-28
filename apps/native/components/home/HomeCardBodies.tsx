@@ -394,7 +394,7 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
             sub={facts || category}
             a11y={a11y}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl))} category={p.category} kind="listing" colors={colors} />}
+            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))} category={p.category} kind="listing" colors={colors} />}
             subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
             testID={testID}
         />

@@ -15,8 +15,9 @@ describe('Phone Market card ladder (Pictures S6)', () => {
     });
 
     it('grid card displays enterprise banner before CategoryTile when photoless', () => {
-        // Grid image wrapper must check for banner URL before falling back to CategoryTile
-        const gridBlock = marketSrc.split("if (viewMode === 'grid')")[1]?.split("if (viewMode === 'compact')")[0] || '';
+        // Grid image wrapper in renderItem must check for banner URL before falling back to CategoryTile
+        const renderItemBlock = marketSrc.split('const renderItem =')[1] || '';
+        const gridBlock = renderItemBlock.split("if (viewMode === 'grid')")[1]?.split("if (viewMode === 'compact')")[0] || '';
         expect(gridBlock).toMatch(/authorBannerUrl|author_banner_url/);
     });
 
@@ -26,7 +27,12 @@ describe('Phone Market card ladder (Pictures S6)', () => {
     });
 
     it('list row displays enterprise banner before CategoryTile when photoless', () => {
-        const listBlock = marketSrc.split('// List View')[1]?.split('return (')[1] || '';
+        const listBlock = marketSrc.split('// List View')[1] || '';
         expect(listBlock).toMatch(/authorBannerUrl|author_banner_url/);
+    });
+
+    it('Home MarketRow falls back to enterprise banner before CategoryTile', () => {
+        const homeBodiesSrc = source('components/home/HomeCardBodies.tsx');
+        expect(homeBodiesSrc).toMatch(/p\.photoUrl \|\| p\.bannerUrl/);
     });
 });

@@ -903,12 +903,16 @@ export default function MarketScreen() {
                         if (Array.isArray(photosArr)) {
                             photosArr = photosArr.map((url: string) => url && url.startsWith('/') ? `${anchorUrl}${url}` : url);
                         }
+                        const bannerUrl = p.authorBannerUrl || p.author_banner_url || null;
+                        const absoluteBannerUrl = bannerUrl && bannerUrl.startsWith('/') ? `${anchorUrl}${bannerUrl}` : bannerUrl;
                         return {
                             ...p,
                             photos: photosArr,
                             author_pubkey: p.author_pubkey ?? p.authorPublicKey,
                             author_callsign: p.author_callsign ?? p.authorCallsign,
                             author_avatar: p.author_avatar ?? p.authorAvatarUrl ?? null,
+                            author_banner_url: p.author_banner_url ?? absoluteBannerUrl,
+                            authorBannerUrl: p.authorBannerUrl ?? absoluteBannerUrl,
                             author_energy_cycled: p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
                             authorFoundingNeeded: p.authorFoundingNeeded ?? (p.author_founding_needed === 1),
                             author_founding_needed: p.author_founding_needed ?? (p.authorFoundingNeeded ? 1 : 0),
@@ -1518,6 +1522,7 @@ export default function MarketScreen() {
         const catLabel = categoryLabel(item.category);
 
         if (viewMode === 'grid') {
+            const gridMedia = coverImage || item.authorBannerUrl || item.author_banner_url || null;
             return (
                 <Pressable
                     style={[
@@ -1531,8 +1536,8 @@ export default function MarketScreen() {
                     accessibilityRole={isPulse ? undefined : "button"}
                 >
                     <View style={styles.gridImageWrapper}>
-                        {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                            <Image source={{ uri: listPhotoUrl(coverImage) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
+                        {gridMedia && typeof gridMedia === 'string' && gridMedia.trim() !== '' && gridMedia !== 'null' && gridMedia !== 'undefined' ? (
+                            <Image source={{ uri: listPhotoUrl(gridMedia) }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, gridMedia)} />
                         ) : (
                             <CategoryTile
                                 category={item.category}
@@ -1616,6 +1621,7 @@ export default function MarketScreen() {
 
         // Compact View
         if (viewMode === 'compact') {
+            const compactMedia = coverImage || item.authorBannerUrl || item.author_banner_url || null;
             return (
                 <Pressable
                     disabled={isPulse}
@@ -1624,8 +1630,8 @@ export default function MarketScreen() {
                 >
                     <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
                         <View style={{ width: 32, height: 32, borderRadius: 8, overflow: 'hidden', marginRight: 10 }}>
-                            {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                                <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
+                            {compactMedia && typeof compactMedia === 'string' && compactMedia.trim() !== '' && compactMedia !== 'null' && compactMedia !== 'undefined' ? (
+                                <Image source={{ uri: listPhotoUrl(compactMedia) }} style={{ width: '100%', height: '100%' }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                             ) : (
                                 <CategoryTile
                                     category={item.category}
@@ -1682,6 +1688,7 @@ export default function MarketScreen() {
         }
 
         // List View
+        const listMedia = coverImage || item.authorBannerUrl || item.author_banner_url || null;
         return (
             <Pressable
                 disabled={isPulse}
@@ -1689,8 +1696,8 @@ export default function MarketScreen() {
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
-                    {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: listPhotoUrl(coverImage) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, coverImage)} />
+                    {listMedia && typeof listMedia === 'string' && listMedia.trim() !== '' && listMedia !== 'null' && listMedia !== 'undefined' ? (
+                        <Image source={{ uri: listPhotoUrl(listMedia) }} style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} onError={() => refreshListingAfterPhotoError(item.id, listMedia)} />
                     ) : (
                         <View style={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}>
                             <CategoryTile

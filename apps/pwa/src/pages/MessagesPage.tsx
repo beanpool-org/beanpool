@@ -283,6 +283,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => { setViewerUri(null); }, [activeConv?.id]);
     const activeConvRef = useRef<Conversation | null>(null);
     useLayoutEffect(() => { activeConvRef.current = activeConv; }, [activeConv]);
+    // Whether the open DM still waits on the other person reading the member's newest line. No doorbell rings for a read
+    // (POST /api/messages/mark-read broadcasts nothing), so while a "✓" can still turn "✓✓" the backstop below reads every
+    // 30 s, as it did before slice L0, socket or not (review of #2558).
+    const awaitingPeerReadRef = useRef(false);
+    useLayoutEffect(() => {
+        const me = identity?.publicKey;
+        if (!me || activeConv?.type !== 'dm') { awaitingPeerReadRef.current = false; return; }
+        const ownNewest = messages.reduce((at, m) => m.authorPubkey === me ? Math.max(at, new Date(m.timestamp).getTime()) : at, -Infinity);
+        const peerRead = activeConv.peerLastReadAt ? new Date(activeConv.peerLastReadAt).getTime() : -Infinity;
+        awaitingPeerReadRef.current = ownNewest > peerRead;
+    }, [messages, activeConv?.type, activeConv?.peerLastReadAt, identity?.publicKey]);
     // Keys handed to members who lack them, once per group per page (GroupKeyring.serveMissing).
     const servedMissingRef = useRef<Set<string>>(new Set());
     const [draft, setDraft] = useState('');
@@ -565,15 +576,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             }
 
             // Poll for new messages as a backstop, paused when tab is hidden: every 120 s while the member's socket is
-            // alive (its doorbell below brings each new line at once), every 30 s while it is not (@beanpool/core
-            // messageBackstopDue, slice L0).
+            // alive (its doorbell below brings each new line, edit and reaction at once), every 30 s while it is not
+            // (@beanpool/core messageBackstopDue, slice L0). The doorbell never brings the other person's read, so while
+            // the member's newest line waits for it (awaitingPeerReadRef), every 30 s too.
             let lastReadAt = 0;
             const startPolling = () => {
                 if (!pollRef.current) {
                     lastReadAt = Date.now();
                     loadMessages(activeConv.id);
                     pollRef.current = window.setInterval(() => {
-                        if (!messageBackstopDue(lastReadAt, Date.now(), socketIsAlive())) return;
+                        if (!messageBackstopDue(lastReadAt, Date.now(), socketIsAlive() && !awaitingPeerReadRef.current)) return;
                         lastReadAt = Date.now();
                         loadMessages(activeConv.id);
                     }, withJitter(MESSAGE_BACKSTOP_TICK_MS));

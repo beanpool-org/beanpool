@@ -374,6 +374,55 @@ describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
         expect(screen.getByText('Missed by the doorbell, caught at 120 s')).toBeInTheDocument();
     });
 
+    it('3c. while the member\'s newest line waits for the other person\'s read, the backstop reads every 30 s, socket or not (review of #2558)', async () => {
+        vi.useFakeTimers();
+        socketAliveNow = true;
+        mockMessagesByConv['conv-1'] = [
+            ...mockMessagesByConv['conv-1'],
+            {
+                id: 'msg-mine',
+                conversationId: 'conv-1',
+                authorPubkey: 'my-pubkey',
+                ciphertext: 'Is the ladder still free?',
+                nonce: '00000',
+                timestamp: '2026-09-14T00:00:30.000Z',
+            },
+        ];
+
+        render(
+            <MessagesPage
+                identity={mockIdentity}
+                openConversationId="conv-1"
+            />
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        expect(screen.getByText('Is the ladder still free?')).toBeInTheDocument();
+        expect(screen.getByLabelText('Sent')).toBeInTheDocument();
+        const reads = () => vi.mocked(getConversationMessages).mock.calls.filter(([id]) => id === 'conv-1').length;
+        const opened = reads();
+
+        // Bob reads it. No doorbell rings for a read: the node broadcasts nothing on mark-read.
+        mockConversationDetails['conv-1'] = {
+            ...mockConversationDetails['conv-1'],
+            readCursors: [{ publicKey: 'peer-pubkey', lastReadAt: '2026-09-14T00:01:00.000Z' }],
+        } as any;
+
+        // The next tick of the 30 s backstop (36 s at most, jittered) reads, and the ticks turn.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(36_000);
+        });
+        expect(reads()).toBe(opened + 1);
+        expect(screen.getByLabelText('Read by recipient')).toBeInTheDocument();
+
+        // Nothing waits on a read now: with the socket alive, back to 120 s.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3 * 24_000);
+        });
+        expect(reads()).toBe(opened + 1);
+    });
+
     it('4. unread counts update for a conversation that is not open', async () => {
         // Render conversation list view (no open conversation)
         render(

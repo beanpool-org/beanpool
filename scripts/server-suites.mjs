@@ -361,6 +361,7 @@ export const SUITES = [
     'test-tunnel-token-owner-only',
     'test-registrar-contract',
     'test-invite-trampoline',
+    'test-community-card',
     'test-ticket-redeem-fault',
     'test-offline-ticket-check',
     'test-request-body',

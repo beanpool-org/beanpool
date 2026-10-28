@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, shops and probes)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, shops and probes); claude-opus-5-5 (machine draft, front doors S15: the community card)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -6120,5 +6120,12 @@
   "Turn on notifications?": "¿Activar notificaciones?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para que te enteres cuando alguien te responda, te envíe un mensaje o pida unirse. Nada más.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Las notificaciones de BeanPool están desactivadas en los ajustes de tu teléfono. Abre Ajustes para activarlas.",
-  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:"
+  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:",
+  "COMMUNITY": "COMUNIDAD",
+  "You're a member of {name}.": "Eres miembro de {name}.",
+  "Open {name}": "Abrir {name}",
+  "To ask, you need a BeanPool account first: tap Explore BeanPool worldwide on the first screen, then find {name} in Find a community.": "Para pedirlo, primero necesitas una cuenta de BeanPool: toca Explorar BeanPool en todo el mundo en la primera pantalla y luego busca {name} en Buscar una comunidad.",
+  "This link doesn't name a community this app can open.": "Este enlace no indica una comunidad que esta app pueda abrir.",
+  "Choose a banner photo, or keep this one": "Elige una foto de banner o conserva esta",
+  "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner."
 }

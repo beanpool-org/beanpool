@@ -41,7 +41,7 @@ import {
     listPlaceWatches, setPlaceWatch, removePlaceWatch, PlaceWatchLimitError, placeWatchLimit, PLACE_WATCH_RADIUS_KM,
 } from '../engine/place-watches.js';
 import type { RouteDeps } from './types.js';
-import { word } from '@beanpool/core';
+import { askHost, word } from '@beanpool/core';
 
 const MAX_QUERY_CHARS = 80;
 const DEFAULT_LIMIT = 20;
@@ -206,6 +206,10 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
         if (!point.ok) return badRequest(ctx, point.error);
         const q = nameQuery(ctx.query);
         if (!q.ok) return badRequest(ctx, q.error);
+        // One community by its host (`?ask=<host>` from a community's card, front doors S15), as core's askHost reads it.
+        const rawHost = ctx.query.host;
+        if (rawHost !== undefined && (typeof rawHost !== 'string' || askHost(rawHost) === null)) return badRequest(ctx, 'host is not a host name.');
+        const host = typeof rawHost === 'string' ? askHost(rawHost) : null;
         const limit = whole(ctx.query, 'limit', DEFAULT_LIMIT, 1, MAX_LIMIT);
         if (!limit.ok) return badRequest(ctx, limit.error);
         const offset = whole(ctx.query, 'offset', 0, 0, MAX_OFFSET);
@@ -229,7 +233,7 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
             ctx.status = 304;
             return;
         }
-        const { communities, total } = listCommunities({ point: point.value, q: q.value, limit: limit.value, offset: offset.value, order: order.value });
+        const { communities, total } = listCommunities({ point: point.value, q: q.value, host, limit: limit.value, offset: offset.value, order: order.value });
         ctx.body = { communities, total, limit: limit.value, offset: offset.value, fetchedAt: status.fetchedAt };
     });
 

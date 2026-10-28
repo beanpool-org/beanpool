@@ -1837,7 +1837,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             </div>
                                         )}
 
-                                        {!isEffectivePreview && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                        {/* Its leader's alone, as the node takes it (apps/server db.ts leadsProject): to any other collaborator it was a door the node refused. */}
+                                        {!isEffectivePreview && iAmLead && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
                                             <div className="pt-4 border-t border-emerald-500/20">
                                                 <button
                                                     type="button"
@@ -2071,7 +2072,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             accept="image/*"
                                             className="hidden"
                                             data-testid="add-banner-input"
-                                            aria-label={t('Add a banner photo')}
+                                            aria-label={t('Choose a banner photo, or keep this one')}
                                             onChange={handleBannerFileChange}
                                         />
                                         <button
@@ -2080,7 +2081,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             disabled={savingBanner}
                                             className={`min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold shadow-sm transition-colors cursor-pointer ${savingBanner ? 'opacity-60 cursor-not-allowed' : ''}`}
                                         >
-                                            {t('Add a banner photo')}
+                                            {t('Choose a banner photo, or keep this one')}
                                         </button>
                                         <button
                                             type="button"

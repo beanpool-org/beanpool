@@ -205,7 +205,7 @@ describe('banner-after-start (PWA)', () => {
 
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={KEEPER_ID} isMember={true} onBack={vi.fn()} />);
 
-        await waitFor(() => expect(screen.getByText('Add a banner photo')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Choose a banner photo, or keep this one')).toBeInTheDocument());
         expect(screen.getByText('Not now')).toBeInTheDocument();
     });
 
@@ -217,7 +217,7 @@ describe('banner-after-start (PWA)', () => {
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={KEEPER_ID} isMember={true} onBack={vi.fn()} />);
 
         await waitFor(() => expect(api.getTreasury).toHaveBeenCalled());
-        expect(screen.queryByText('Add a banner photo')).toBeNull();
+        expect(screen.queryByText('Choose a banner photo, or keep this one')).toBeNull();
     });
 
     it('4. not as a non-keeper', async () => {
@@ -227,7 +227,7 @@ describe('banner-after-start (PWA)', () => {
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={STRANGER_ID} isMember={true} onBack={vi.fn()} />);
 
         await waitFor(() => expect(api.getTreasury).toHaveBeenCalled());
-        expect(screen.queryByText('Add a banner photo')).toBeNull();
+        expect(screen.queryByText('Choose a banner photo, or keep this one')).toBeNull();
     });
 
     it('5. the button opens the crop step and saving sets the banner', async () => {
@@ -253,11 +253,11 @@ describe('banner-after-start (PWA)', () => {
 
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={KEEPER_ID} isMember={true} onBack={vi.fn()} />);
 
-        await waitFor(() => expect(screen.getByText('Add a banner photo')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Choose a banner photo, or keep this one')).toBeInTheDocument());
 
         // Locate file input for the banner prompt
         const fileInput = document.querySelector('input[type="file"][data-testid="add-banner-input"]') as HTMLInputElement
-            || screen.getByLabelText(/Add a banner photo/i) as HTMLInputElement;
+            || screen.getByLabelText(/Choose a banner photo, or keep this one/i) as HTMLInputElement;
         expect(fileInput).toBeInTheDocument();
 
         // Simulate picking a file
@@ -281,7 +281,7 @@ describe('banner-after-start (PWA)', () => {
         })));
 
         // Button goes
-        await waitFor(() => expect(screen.queryByText('Add a banner photo')).toBeNull());
+        await waitFor(() => expect(screen.queryByText('Choose a banner photo, or keep this one')).toBeNull());
     });
 
     it('6. Not now hides it and stays hidden after a reload', async () => {
@@ -295,7 +295,7 @@ describe('banner-after-start (PWA)', () => {
         fireEvent.click(notNowBtn);
 
         // Hidden immediately
-        expect(screen.queryByText('Add a banner photo')).toBeNull();
+        expect(screen.queryByText('Choose a banner photo, or keep this one')).toBeNull();
 
         // Unmount and re-render to simulate reload
         unmount();
@@ -303,7 +303,7 @@ describe('banner-after-start (PWA)', () => {
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={KEEPER_ID} isMember={true} onBack={vi.fn()} />);
 
         await waitFor(() => expect(api.getTreasury).toHaveBeenCalled());
-        expect(screen.queryByText('Add a banner photo')).toBeNull();
+        expect(screen.queryByText('Choose a banner photo, or keep this one')).toBeNull();
     });
 
     it('7. banner prompt not shown on completed or closed enterprise', async () => {
@@ -315,6 +315,6 @@ describe('banner-after-start (PWA)', () => {
         render(<TreasuryDetailPage pubkey={ENT_KEY} identity={KEEPER_ID} isMember={true} onBack={vi.fn()} />);
 
         await waitFor(() => expect(api.getTreasury).toHaveBeenCalled());
-        expect(screen.queryByText('Add a banner photo')).toBeNull();
+        expect(screen.queryByText('Choose a banner photo, or keep this one')).toBeNull();
     });
 });

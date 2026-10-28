@@ -8,6 +8,7 @@ import { pairRouteFromSystemPath } from '../utils/pair-link';
 import { holdStartUpLinkRoute } from '../utils/member-landing';
 import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
 import { doorLinkFromSystemPath, doorLinkRoute, type DoorLink } from '../utils/open-door';
+import { cardRouteFromSystemPath, isCommunityCardPath } from '../utils/community-card-link';
 
 /**
  * What the global community's link needs to know about the phone: whether it keeps a key, whether a join wizard was left
@@ -166,6 +167,18 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // link, a Settings return, an invite and an OAuth callback all keep the behaviour they had.
     const sharedPostId = postIdFromLink(path);
     if (sharedPostId) return `/post/${encodeURIComponent(sharedPostId)}`;
+
+    // A community's bare address, `https://<community>/`, or `beanpool://community-card?node=…` from its card's Ask to join
+    // (utils/community-card-link.ts, front doors S15): that community's card, member or not. Before, the bare address
+    // opened the member's own Home whichever community it named. After the shared post, so a root with `?post=` (or an
+    // invite) keeps its own landing. One that names no community this phone may read opens as from the icon (cold) or
+    // stays where it is (warm).
+    if (isCommunityCardPath(path)) {
+        const cardRoute = cardRouteFromSystemPath(path);
+        if (!cardRoute) return initial ? '/' : null;
+        if (initial) holdStartUpLinkRoute();
+        return cardRoute;
+    }
 
     return path;
 }

@@ -643,6 +643,12 @@ export interface CommunityProject {
 
 export interface NodeConfig {
     serviceRadius?: { lat: number; lng: number; radiusKm: number };
+    /**
+     * The town or area the community serves, in its owner's words ("Castlemaine and around"): the line a stranger's card
+     * shows for the area (routes/community-card.ts), never a point. Shown only while "Share Location & Radius"
+     * (`publishLocation`) is on, as the place is. Null or unset: the card names no area.
+     */
+    areaName?: string | null;
     publishLocation?: boolean;
     publishMembers?: boolean;
     /**
@@ -1469,6 +1475,7 @@ import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVers
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
+import { cleanLabel, AREA_NAME_MAX } from './config/clean-label.js';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
 // again in the member's language (member-words.ts).
 const { t: tr, tn: trn } = wordsFor('en');
@@ -9080,6 +9087,7 @@ export function getNodeConfig(): NodeConfig {
 
     const finalConfig: NodeConfig = {
         serviceRadius: config.serviceRadius,
+        areaName: typeof config.areaName === 'string' ? cleanLabel(config.areaName, AREA_NAME_MAX) ?? null : null,
         publishLocation: config.publishLocation !== false,
         publishMembers: config.publishMembers !== false,
         publishContactEmail: config.publishContactEmail === true,

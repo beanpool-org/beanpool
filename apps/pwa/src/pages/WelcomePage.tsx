@@ -27,8 +27,10 @@ import { validateMnemonic } from '../lib/mnemonic';
 import {
     redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile,
     recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
-    getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
+    getCommunityCard, getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
+import { CommunityCardPanel } from '../components/CommunityCardPanel';
+import { takeWelcomeDoor } from '../lib/community-card';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { keyLineWords } from '../components/key-lines';
 import { fetchConsentTerms, type ConsentTerms } from '../lib/known-consent';
@@ -46,7 +48,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { QRCodeSVG } from 'qrcode.react';
-import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word } from '@beanpool/core';
+import { AVATAR_PICTURE, createPairingSession, currentLanguage, decryptPairingPayload, lowercaseRecoveryWords, nodeOrigin, photoStepNote, t, word, type CommunityCard } from '@beanpool/core';
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { AreaStep } from '../components/AreaStep';
 import { nearbyListingsOn, rememberAreaPlace, senderForKey } from '../lib/member-area';
@@ -319,6 +321,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     useLanguage();
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
+    // The community's card at its bare address sends "I have an invite" here with `?door=invite` and "Already a member"
+    // with `?door=signin` (front doors S15): read once and taken out of the address.
+    const [welcomeDoor] = useState(() => (typeof window !== 'undefined' ? takeWelcomeDoor() : null));
     const [door, setDoor] = useState<Door>(() => (initialInfo ? doorOf(initialInfo) : 'checking'));
     // A local community (every node but the global one, an older node that says no profile included): its listings are
     // its members' (2026-09-28), so this page points a stranger to the global community to look around.
@@ -350,6 +355,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
+    // A local community's public card (front doors S15), drawn above the invite form: what a stranger may read about it,
+    // and its doors. None from a node too old to have one: the page is as before. 'loading' until the node has answered,
+    // when the page draws neither the card nor the old "No invite?" box, whose Look around links BeanPool's global
+    // community, which a node that names none (GLOBAL_COMMUNITY_URL=off) must never show.
+    const [communityCard, setCommunityCard] = useState<CommunityCard | null | 'loading'>('loading');
+    useEffect(() => {
+        if (!localCommunity) return;
+        let cancelled = false;
+        getCommunityCard()
+            .then((card) => { if (!cancelled) setCommunityCard(card); })
+            .catch(() => { if (!cancelled) setCommunityCard(null); });
+        return () => { cancelled = true; };
+    }, [localCommunity]);
     // Joined through the open door: the member exists on the node, so the steps after it have nothing to redeem, and
     // there is no going back to a name screen.
     const [joinedByDoor, setJoinedByDoor] = useState(false);
@@ -633,8 +651,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
      * address (`/?rekey=RK-…`), or '' from the restore options. Null: closed.
      */
     const [rekeyCode, setRekeyCode] = useState<string | null>(() => (typeof window !== 'undefined' ? rekeyCodeFromSearch(window.location.search) : null));
-    const [showNewUser, setShowNewUser] = useState(() => start !== 'restore');
-    const [showMemberOptions, setShowMemberOptions] = useState(() => start === 'restore');
+    const [showNewUser, setShowNewUser] = useState(() => start !== 'restore' && welcomeDoor !== 'signin');
+    const [showMemberOptions, setShowMemberOptions] = useState(() => start === 'restore' || welcomeDoor === 'signin');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     const [showAvatarSetup, setShowAvatarSetup] = useState(false);
@@ -2679,6 +2697,13 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : showNewUser ? (
                         /* ===== NEW USER SIGNUP + FAQs ===== */
                         <>
+                            {localCommunity && communityCard && communityCard !== 'loading' && (
+                                <CommunityCardPanel
+                                    card={communityCard}
+                                    compact={welcomeDoor === 'invite'}
+                                    onSignIn={() => { setShowNewUser(false); setShowMemberOptions(true); setError(null); }}
+                                />
+                            )}
                             <OnboardingStepper area={byArea} step={1} />
                             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.35rem' }}>
                                 {t('🎟️ Join with Invite Code')}
@@ -2711,6 +2736,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 placeholder={t('e.g. BP-7K3X-9M2W')}
                                 maxLength={800}
                                 disabled={loading}
+                                autoFocus={welcomeDoor === 'invite'}
                                 style={{
                                     ...inputStyle,
                                     fontFamily: 'monospace',
@@ -2787,8 +2813,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {loading ? t('Creating...') : t('Create Identity & Join →')}
                             </button>
 
-                            {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28) ===== */}
-                            {localCommunity && (
+                            {/* ===== NO INVITE: a local community's listings are its members' (2026-09-28). Its card above
+                                says the same with its own doors (front doors S15); this is for a node too old to send one. ===== */}
+                            {localCommunity && communityCard === null && (
                                 <div data-testid="welcome-no-invite" style={{
                                     marginTop: '0.5rem', padding: '1rem', borderRadius: '12px', textAlign: 'center',
                                     background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',

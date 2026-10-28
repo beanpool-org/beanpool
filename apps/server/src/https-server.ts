@@ -115,6 +115,7 @@ import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
 import { createAppAddressesRoutes } from './routes/app-addresses.js';
+import { createCommunityCardRoutes } from './routes/community-card.js';
 import { createOwnerUnlockRoutes } from './routes/owner-unlock.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createEventsRoutes } from './routes/events.js';
@@ -329,6 +330,9 @@ function verifyWsConnect(pathname: string, params: URLSearchParams, client: stri
 export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
+    // A stranger at the community's door (front doors S15, routes/community-card.ts): its name, its member count and its area
+    // only where its switches publish them, and how it takes new members. Nobody named, nothing listed.
+    '/api/community/card',
     '/api/community/health',
     // The consent a known community asks for at joining (engine/community-health.ts): read before joining.
     '/api/community/consent-terms',
@@ -1880,6 +1884,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     const routeModules = [
         createSettingsRoutes(deps),
         createCommunityRoutes(deps),
+        createCommunityCardRoutes(deps),
         createAdminRoutes(deps),
         createBackupRoutes(deps),
         createOffboxBackupRoutes(deps),

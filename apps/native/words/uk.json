@@ -6598,5 +6598,7 @@
   "Turn on notifications?": "Увімкнути сповіщення?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Щоб дізнаватися, коли хтось відповідає вам, пише повідомлення або просить приєднатися. Більше нічого.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Сповіщення BeanPool вимкнено в налаштуваннях телефона. Відкрийте налаштування, щоб увімкнути їх.",
-  "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:"
+  "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:",
+  "Choose a banner photo, or keep this one": "Виберіть фото для банера або залиште це",
+  "Your picture, until you choose a banner.": "Ваше зображення, доки ви не виберете банер."
 }

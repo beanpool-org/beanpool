@@ -16,6 +16,9 @@ export interface NodeIdentityPanelProps {
     onRefreshDiag: () => void;
 }
 
+/** The longest town or area the node keeps (apps/server config/clean-label.ts AREA_NAME_MAX). */
+const AREA_NAME_MAX = 60;
+
 /** Why the public directory doesn't list this community, and what to change: one line each (Directory Publishing). */
 export const DIRECTORY_HELD_BACK_LINES: Record<'unnamed' | 'unlisted' | 'probation', string> = {
     unnamed: 'Not on the public map yet: your community has no name of its own ("BeanPool Community" is the default). Type its name in Community name, then Save.',
@@ -59,6 +62,8 @@ export function NodeIdentityPanel({
     const [lat, setLat] = useState<number | null>(() => (diag as any)?.location?.lat ?? null);
     const [lng, setLng] = useState<number | null>(() => (diag as any)?.location?.lng ?? null);
     const [radiusKm, setRadiusKm] = useState<number>(0);
+    // The town or area a stranger's card names (node config `areaName`, apps/server routes/community-card.ts).
+    const [areaName, setAreaName] = useState('');
 
     // Geocoding location search
     const [searchQuery, setSearchQuery] = useState('');
@@ -124,6 +129,7 @@ export function NodeIdentityPanel({
                 }).catch(() => null);
                 if (configRes && configRes.ok && mounted) {
                     const cfg = await configRes.json().catch(() => ({}));
+                    if (typeof cfg.areaName === 'string') setAreaName(cfg.areaName);
                     if (cfg.serviceRadius === null) {
                         setArea('loaded');
                     } else if (cfg.serviceRadius && typeof cfg.serviceRadius === 'object') {
@@ -441,6 +447,8 @@ export function NodeIdentityPanel({
                             serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
                                 ? { lat, lng, radiusKm: Math.max(0, radiusKm) }
                                 : null,
+                            // The town or area the card names (null clears it): saved with the area it names.
+                            areaName: areaName.trim() || null,
                         }
                         : {}),
                 }),
@@ -672,6 +680,27 @@ export function NodeIdentityPanel({
                             <span className="text-xs text-nature-400">km</span>
                         </div>
                     </div>
+                </div>
+
+                {/* The town or area a stranger's card names (front doors S15): the place in words, never the pin. */}
+                <div className="space-y-1 pt-2">
+                    <label htmlFor="area-name" className="block text-xs font-bold text-nature-300">
+                        Town or area (optional)
+                    </label>
+                    <input
+                        id="area-name"
+                        type="text"
+                        value={areaName}
+                        maxLength={AREA_NAME_MAX}
+                        onChange={(e) => setAreaName(e.target.value)}
+                        placeholder="e.g. Castlemaine and around"
+                        disabled={area !== 'loaded'}
+                        aria-describedby="area-name-help"
+                        className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-terra-500 disabled:opacity-50"
+                    />
+                    <p id="area-name-help" className="text-xs text-nature-400 m-0">
+                        Shown on your community's card to people who visit its address, while Share location &amp; radius is on. A town, never a street.
+                    </p>
                 </div>
 
                 {/* Directory Publishing */}

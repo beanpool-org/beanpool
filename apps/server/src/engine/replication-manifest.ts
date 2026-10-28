@@ -770,6 +770,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
 /** Fields of the `node_config` row's JSON object (state-engine.ts NodeConfig). */
 export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
     serviceRadius: { kind: 'community-settings', reason: "the community's service area: the map, the Market, the directory" },
+    areaName: { kind: 'community-settings', reason: "the town or area a stranger's card names while the place is shared" },
     publishLocation: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
     publishMembers: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
     publishContactEmail: { kind: 'community-settings', reason: 'a directory switch; unset reads as not published (only an owner turns it on)' },

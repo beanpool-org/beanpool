@@ -43,7 +43,7 @@ import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, isHomeCardId,
     joinedLine, monthSummaryLine, nearbyLine, notAnsweringLine, probationSentence, pulseByLine, searchCardFor, shownFrame, shownLayout, skyOf,
-    starredFirst, stepLines, tierWords, toggleInterest, SKY_NO_PLACE_LINE,
+    starredFirst, stepLines, tierWords, toggleInterest, usePhoneAppCardDue, SKY_NO_PLACE_LINE,
     type HomeAnswer, type HomeCardId, type HomeCards, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import {
@@ -63,7 +63,8 @@ import { loadRadiusSettings } from '../lib/geo';
 import { sentCentre } from '../lib/listings-near';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
-import { getBundledGuide } from '../lib/guide';
+import { getBundledGuide, loadBundledGuide } from '../lib/guide';
+import type { Guide } from '@beanpool/core';
 import { ShopHomeBody } from '../components/shop/ShopHomeBody';
 import type { ShopHomeCard } from '../lib/shop';
 import { standingFromRefusal } from '../lib/standing-refusal';
@@ -81,6 +82,7 @@ import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../com
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
+import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
@@ -947,6 +949,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [interestsOpen, setInterestsOpen] = useState(false);
     // "Your way back in" is drawn: only the card knows (its schedule is in this browser), and it says so before the paint.
     const [safetyDrawn, setSafetyDrawn] = useState(false);
+    const [tipsGuide, setTipsGuide] = useState<Guide | null>(() => {
+        try { return getBundledGuide(); } catch { return null; }
+    });
     const [editOpen, setEditOpen] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     // A card's Settings… (from its "…" or Edit home).
@@ -963,6 +968,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // (the screen the 🏘️ sheet opens), or be told.
     const [startOpen, setStartOpen] = useState(false);
     const [watched, setWatched] = useState(false);
+    const [phoneAppDismissed, setPhoneAppDismissed] = useState(() => publicKey ? isUsePhoneAppDismissed(publicKey) : false);
+    useEffect(() => {
+        if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
+    }, [publicKey]);
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
@@ -2012,7 +2021,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const v = tipsView;
                 if (!v) return null;
                 const slug = v.tip.guide;
-                const page = slug ? findGuidePage(getBundledGuide(), slug) : null;
+                if (slug && !tipsGuide) {
+                    loadBundledGuide().then(setTipsGuide).catch(() => {});
+                }
+                const page = slug && tipsGuide ? findGuidePage(tipsGuide, slug) : null;
                 const btn = 'min-h-[44px] px-4 rounded-xl text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2';
                 return (
                     <HomeCard key={id} {...common} title={tipsCaption(v)}>
@@ -2340,6 +2352,24 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     </p>
                 )}
                 {!notesUnderFirst && firstNotes(false)}
+                {/* The "Use the phone app" card (front doors S4): after the first post or a week */}
+                {(() => {
+                    const p = a.me?.probation;
+                    const weekEnds = p?.ageEndsAt ? Date.parse(p.ageEndsAt) : (a.me?.joinedAt ? Date.parse(a.me.joinedAt) + 7 * 86_400_000 : null);
+                    const keptPosts = p ? Number(p.keptPosts) || 0 : (a.me ? 1 : 0);
+                    const due = publicKey && !visitor && !phoneAppDismissed && usePhoneAppCardDue({
+                        dismissed: phoneAppDismissed,
+                        keptPosts,
+                        weekOverAt: Number.isFinite(weekEnds) ? weekEnds : null,
+                        now,
+                    });
+                    return due ? (
+                        <UsePhoneAppCard
+                            publicKey={publicKey}
+                            onDismiss={() => setPhoneAppDismissed(true)}
+                        />
+                    ) : null;
+                })()}
                 {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
                     own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
                     Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}

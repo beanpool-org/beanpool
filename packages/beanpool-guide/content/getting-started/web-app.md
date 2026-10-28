@@ -109,7 +109,7 @@ If you joined the global community with 12 words, they are your only way back. A
 
 ## Putting your web account on a phone
 
-If you joined in a browser, bring the same account to the phone app. Don't join again on the phone: that makes a second account, and two accounts can never be joined into one. **Safety Backup**, next to your 12 words, and the **Sign-in recovery** card in Settings say how:
+If you joined in a browser, bring the same account to the phone app. Don't join again on the phone: that makes a second account, and two accounts can never be joined into one. Settings has a **Use the phone app** row, and a card appears on Home after your first post or a week, with links to the App Store, Google Play and a direct Android download. **Safety Backup**, next to your 12 words, and the **Sign-in recovery** card in Settings say how:
 
 - Install the BeanPool app and open it.
 - Tap **Already a Member? Restore Account**, then **Recover with 12 Words**.
@@ -128,7 +128,7 @@ Screen 1 of joining in a browser says the same the other way round: if you are a
 
 ## Installing it
 
-The web app may offer **Install BeanPool** so it opens from your home screen like an app. If your browser cannot do that, tap **How?** for steps.
+On a computer, you can install BeanPool so it opens in its own window from your desktop or dock: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, supports notifications, and avoids creating a second account or icon.
 
 ## Keep your 12 words
 

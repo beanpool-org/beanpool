@@ -1,245 +1,79 @@
 /**
- * InstallPrompt — PWA Install Banner
+ * InstallPrompt — PWA Install helpers & Desktop steps (front doors S4)
  *
- * Shows a floating prompt when the app isn't installed as a PWA.
- * Detects iOS vs Android and shows device-specific instructions.
- * Dismisses for 7 days on close.
- *
- * Never on top of the tour or a screen that fills the phone (rehearsal 14 Oct 2026, B1: at 320 px it took taps meant for
- * the tour's Next and Skip, and covered Start a community and the report form): App passes `hidden` while the tour runs
- * or is still offered, and any screen counted by lib/screen-cover keeps it down. It comes up 2 s after it may.
- *
- * The banner is navy in both themes, so its words are the brand's white ink (`--bp-commit-on`), never the page's ink.
+ * S4: The floating install banner on phones has been removed to prevent the "two icons"
+ * problem and guide phone users to the native app instead.
+ * Desktop install promotion now lives in Settings ("Install on this computer"),
+ * triggering the deferred beforeinstallprompt or showing instructions.
  */
 
 import { useState, useEffect } from 'react';
 import { t } from '@beanpool/core';
-import { useScreenCovered } from '../lib/screen-cover';
 import { Sentence } from './Sentence';
 
-const ON_BRAND = 'var(--bp-commit-on)';
-const SLIDE_UP_CSS = '@keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }';
-
-// Detect if running as installed PWA (standalone mode)
-function isInstalled(): boolean {
+/** Detect if running as installed PWA (standalone mode) */
+export function isInstalled(): boolean {
+    if (typeof window === 'undefined') return false;
     return window.matchMedia('(display-mode: standalone)').matches
         || (window.navigator as any).standalone === true;
 }
 
-function isIOS(): boolean {
-    return /iPhone|iPad|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+let globalDeferredPrompt: any = null;
+const promptListeners = new Set<(prompt: any) => void>();
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('beforeinstallprompt', (e: Event) => {
+        e.preventDefault();
+        globalDeferredPrompt = e;
+        promptListeners.forEach(listener => listener(e));
+    });
+
+    window.addEventListener('appinstalled', () => {
+        globalDeferredPrompt = null;
+        promptListeners.forEach(listener => listener(null));
+    });
 }
 
-function isAndroid(): boolean {
-    return /Android/.test(navigator.userAgent);
-}
-
-const DISMISS_KEY = 'beanpool-install-dismissed';
-// A separate key rather than a sentinel inside DISMISS_KEY: that field holds a timestamp and
-// is read with Number(), so parking a string like 'forever' in it would evaluate to NaN and
-// silently fail the comparison.
-const DISMISS_FOREVER_KEY = 'beanpool-install-dismissed-forever';
-const DISMISS_DAYS = 7;
-
-export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
-    const covered = useScreenCovered();
-    /** Not installed and not put away: the banner may come up once nothing else is in front. */
-    const [eligible, setEligible] = useState(false);
-    const [show, setShow] = useState(false);
-    const [showSteps, setShowSteps] = useState(false);
-    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+/**
+ * Access the deferred install prompt on desktop.
+ */
+export function useDeferredInstallPrompt() {
+    const [prompt, setPrompt] = useState<any>(globalDeferredPrompt);
 
     useEffect(() => {
-        // Don't show if already installed
-        if (isInstalled()) return;
-
-        // Don't show if the member asked never to see it again
-        if (localStorage.getItem(DISMISS_FOREVER_KEY) === '1') return;
-
-        // Don't show if recently dismissed
-        const dismissed = localStorage.getItem(DISMISS_KEY);
-        if (dismissed && Date.now() - Number(dismissed) < DISMISS_DAYS * 86400000) return;
-
-        setEligible(true);
-
-        // Listen for the Chrome/Android install prompt
-        const handler = (e: Event) => {
-            e.preventDefault();
-            setDeferredPrompt(e);
-        };
-        window.addEventListener('beforeinstallprompt', handler);
-
+        const handler = (p: any) => setPrompt(p);
+        promptListeners.add(handler);
         return () => {
-            window.removeEventListener('beforeinstallprompt', handler);
+            promptListeners.delete(handler);
         };
     }, []);
 
-    // Show after a short delay so it doesn't block first impression, counted from when nothing is in front of it.
-    const blocked = hidden || covered;
-    useEffect(() => {
-        if (!eligible || show || blocked) return;
-        const timer = setTimeout(() => setShow(true), 2000);
-        return () => clearTimeout(timer);
-    }, [eligible, show, blocked]);
+    return prompt;
+}
 
-    function handleDismiss() {
-        localStorage.setItem(DISMISS_KEY, String(Date.now()));
-        setEligible(false);
-        setShow(false);
-    }
-
-    function handleDismissForever() {
-        localStorage.setItem(DISMISS_FOREVER_KEY, '1');
-        setEligible(false);
-        setShow(false);
-    }
-
-    async function handleNativeInstall() {
-        if (deferredPrompt) {
-            deferredPrompt.prompt();
-            const result = await deferredPrompt.userChoice;
-            if (result.outcome === 'accepted') {
-                setEligible(false);
-                setShow(false);
-            }
-            setDeferredPrompt(null);
-        }
-    }
-
-    if (!show || blocked) return null;
-
-    const ios = isIOS();
-    const android = isAndroid();
-
+/**
+ * Desktop installation instructions shown when browser has no beforeinstallprompt.
+ */
+export function DesktopInstallSteps() {
     return (
         <div
-            role="region"
-            aria-label={t('App installation prompt')}
-            style={{
-                position: 'fixed',
-                bottom: '4.5rem',
-                left: '0.75rem',
-                right: '0.75rem',
-                background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-                border: '1px solid #2563eb',
-                borderRadius: '16px',
-                padding: '1rem 1.25rem',
-                zIndex: 1000,
-                boxShadow: '0 8px 32px rgba(37, 99, 235, 0.3)',
-                animation: 'slideUp 0.4s ease-out',
-            }}
+            className="p-3 rounded-xl bg-nature-100 dark:bg-nature-800 text-xs text-nature-700 dark:text-nature-200 leading-relaxed mt-2"
+            data-testid="desktop-install-steps"
         >
-            <style>{SLIDE_UP_CSS}</style>
-
-            {/* Close button */}
-            <button
-                type="button"
-                onClick={handleDismiss}
-                style={{
-                    position: 'absolute', top: '0.4rem', right: '0.5rem',
-                    background: 'rgba(255,255,255,0.1)', border: 'none', color: ON_BRAND,
-                    fontSize: '1rem', cursor: 'pointer', padding: '0.4rem 0.6rem',
-                    borderRadius: '8px', lineHeight: 1,
-                    minWidth: '44px', minHeight: '44px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+            <Sentence
+                text={t('Look for the {icon} (⊕) in your browser\'s address bar, or use your browser menu → "Install app"')}
+                parts={{
+                    icon: <strong className="font-semibold text-bp-commit-fill dark:text-blue-400">{t('install icon')}</strong>,
                 }}
-                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                aria-label={t('Dismiss install prompt')}
-            >✕</button>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: showSteps ? '0.75rem' : 0 }}>
-                <span style={{ fontSize: '2rem' }} aria-hidden="true">📲</span>
-                {/* Both sides may wrap: a longer language's words break inside their own side, never under the other. */}
-                <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
-                    <p style={{ fontWeight: 700, fontSize: '0.95rem', color: ON_BRAND, marginBottom: '0.2rem' }}>
-                        {t('Install BeanPool')}
-                    </p>
-                    <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                        {t('Get the full app on your home screen')}
-                    </p>
-                </div>
-                {deferredPrompt ? (
-                    <button
-                        type="button"
-                        onClick={handleNativeInstall}
-                        style={{
-                            padding: '0.5rem 1rem', borderRadius: '10px',
-                            background: 'var(--bp-info-fill)', color: ON_BRAND, border: 'none',
-                            fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
-                            fontFamily: 'inherit',
-                            minWidth: '44px', minHeight: '44px',
-                        }}
-                        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                    >
-                        {t('Install')}
-                    </button>
-                ) : (
-                    <button
-                        type="button"
-                        onClick={() => setShowSteps(!showSteps)}
-                        aria-expanded={showSteps}
-                        style={{
-                            padding: '0.5rem 1rem', borderRadius: '10px',
-                            background: showSteps ? 'var(--bp-neutral-hover)' : 'var(--bp-info-fill)', color: ON_BRAND,
-                            border: 'none', fontSize: '0.85rem', fontWeight: 600,
-                            // No nowrap: at 320 px with 130 % text the row squeezes the button, and 'Hide steps' ran out past its fill.
-                            // At most 45 % of the row, its words wrapping inside it (the pseudo-locale's 'Hide steps' ran 120 px out).
-                            cursor: 'pointer', fontFamily: 'inherit',
-                            minWidth: '44px', minHeight: '44px', maxWidth: '45%', overflowWrap: 'anywhere',
-                        }}
-                        className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                    >
-                        {showSteps ? t('Hide steps') : t('How?')}
-                    </button>
-                )}
-            </div>
-
-            {/* The X only snoozes for a week. This is the way out for someone who is never
-                going to install it — and it now survives signing out. */}
-            <button
-                type="button"
-                onClick={handleDismissForever}
-                style={{
-                    alignSelf: 'flex-start', marginTop: '0.15rem', padding: '0.25rem 0',
-                    background: 'none', border: 'none', color: '#94a3b8',
-                    fontSize: '0.78rem', fontFamily: 'inherit', cursor: 'pointer',
-                    textDecoration: 'underline', textUnderlineOffset: '2px',
-                    minHeight: '44px', display: 'inline-flex', alignItems: 'center',
-                }}
-                className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            >
-                {t('Don’t show this again')}
-            </button>
-
-            {/* Device-specific instructions */}
-            {showSteps && (
-                <div style={{
-                    background: 'rgba(0,0,0,0.3)', borderRadius: '10px',
-                    padding: '0.75rem 1rem', fontSize: '0.85rem', color: '#cbd5e1',
-                    lineHeight: 1.6,
-                }}>
-                    {ios ? (
-                        <>
-                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>{t('iPhone / iPad:')}</p>
-                            <p><Sentence text={t('1. Tap the {share} button {icon} at the bottom')} parts={{ share: <strong style={{ color: '#60a5fa' }}>{t('Share')}</strong>, icon: <span style={{ fontSize: '1.1rem' }}>⬆</span> }} /></p>
-                            <p><Sentence text={t('2. Scroll down and tap {add}')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add to Home Screen"')}</strong> }} /></p>
-                            <p><Sentence text={t('3. Tap {add} in the top right')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add"')}</strong> }} /></p>
-                        </>
-                    ) : android ? (
-                        <>
-                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>{t('Android:')}</p>
-                            <p><Sentence text={t('1. Tap the {menu} in the top right')} parts={{ menu: <strong style={{ color: '#60a5fa' }}>{t('⋮ menu')}</strong> }} /></p>
-                            <p><Sentence text={t('2. Tap {add}')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add to Home screen"')}</strong> }} /></p>
-                            <p><Sentence text={t('3. Tap {add} to confirm')} parts={{ add: <strong style={{ color: '#60a5fa' }}>{t('"Add"')}</strong> }} /></p>
-                        </>
-                    ) : (
-                        <>
-                            <p style={{ fontWeight: 600, color: ON_BRAND, marginBottom: '0.4rem' }}>{t('Desktop:')}</p>
-                            <p><Sentence text={t('Look for the {icon} (⊕) in your browser\'s address bar, or use your browser menu → "Install app"')} parts={{ icon: <strong style={{ color: '#60a5fa' }}>{t('install icon')}</strong> }} /></p>
-                        </>
-                    )}
-                </div>
-            )}
+            />
         </div>
     );
+}
+
+/**
+ * InstallPrompt banner is removed on phones and desktop (front doors S4).
+ * Retained for backwards compatibility returning null.
+ */
+export function InstallPrompt(_props?: { hidden?: boolean }) {
+    return null;
 }

@@ -89,3 +89,5 @@ To delete your account in one community, open it and use **Permanently Delete Ac
 ## Visiting as a guest
 
 If you add a community without an invite, you are a guest there. A **Join** button shows at the top, beside the **?**. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with their 12 words or a sign-in instead: see "Joining the global community from your account" above.
+
+On a new phone with no account yet, **Explore BeanPool worldwide** on the first screen opens the global community as a guest too, before there is any account: you see its listings and its map, and nothing about you is made or sent until you tap **Join**. See "Joining BeanPool".

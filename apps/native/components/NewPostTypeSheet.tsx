@@ -149,10 +149,12 @@ const makeStyles = ({ theme, colors }: ThemeContextType) => StyleSheet.create({
     },
     actionSheetCancel: {
         marginTop: 16,
+        minHeight: 48,
         backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6',
         borderRadius: 12,
         paddingVertical: 12,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     actionSheetCancelText: {
         fontSize: 15,

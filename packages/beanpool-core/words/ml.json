@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "+ പോസ്റ്റ് ചേർക്കുക എന്നത് ടാപ്പുചെയ്ത് ഓഫർ നൽകുക: ഭക്ഷണം, ഒരു യാത്ര, അല്ലെങ്കിൽ സമയം. ആവശ്യത്തിന് മുമ്പ് ഒരു ഓഫർ പോസ്റ്റ് ചെയ്യുക, അങ്ങനെ എല്ലാവരും എന്തെങ്കിലും നൽകുന്നു.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "+ പോസ്റ്റ് ചേർക്കുക എന്നത് ടാപ്പുചെയ്ത് സൗജന്യമായോ കൈമാറ്റത്തിനായോ എന്തെങ്കിലും നൽകുക. നിങ്ങൾക്ക് ആവശ്യമുള്ള ഒന്നാണ് ആവശ്യം.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "പയർ നൽകിയതും ലഭിച്ചതുമായ സഹായങ്ങൾ കണക്കാക്കുന്നു. എല്ലാവരും പൂജ്യത്തിൽ നിന്നാണ് തുടങ്ങുന്നത്: നിങ്ങൾ സ്വീകരിച്ചത്രയും നൽകിയിട്ടുണ്ടെന്നാണ് പൂജ്യം അർത്ഥമാക്കുന്നത്.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "ലോകമെമ്പാടുമുള്ള കമ്മ്യൂണിറ്റിയിൽ പയറുകൾ ഇല്ല. പകരമായി നിങ്ങൾക്ക് എന്താണ് വേണ്ടതെന്ന് പോസ്റ്റിൽ പറയുക: സൗജന്യം, കൈമാറ്റം, അല്ലെങ്കിൽ സംസാരിക്കുക.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "ഒരു ഏകദേശ കണക്ക്: 40 പയർ എന്നത് ഒരാളുടെ ഒരു മണിക്കൂർ സമയത്തിന് തുല്യമാണ്. നിങ്ങളും മറ്റേ വ്യക്തിയും യഥാർത്ഥ വില തീരുമാനിക്കുന്നു.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "നിങ്ങളുടെ 12 വാക്കുകളാണ് അക്കൗണ്ടിന്റെ താക്കോൽ, പാസ്‌വേഡ് ഇല്ല. അവ ഒരു പേപ്പറിൽ എഴുതി സുരക്ഷിതമായി സൂക്ഷിക്കുക: ആർക്കും അവ പുനഃസജ്ജമാക്കാൻ കഴിയില്ല.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "മാപ്പ് നിങ്ങളുടെ അടുത്തുള്ളവ കാണിക്കുന്നു: പച്ച പിന്നുകൾ ഓഫറുകളാണ്, ഓറഞ്ച് ആവശ്യങ്ങളാണ്, പർപ്പിൾ ഇവന്റുകളാണ്. നിങ്ങളുടെ സ്വന്തം പിൻ വീടിന്റെ കൃത്യമായ സ്ഥാനത്തിന് പകരം അടുത്തായി വെയ്ക്കാം.",
@@ -784,5 +783,6 @@
   "Start a project or an enterprise →": "ഒരു പ്രോജക്റ്റോ സംരംഭമോ ആരംഭിക്കുക →",
   "Social Circle": "സോഷ്യൽ സർക്കിൾ",
   "Working Group": "വർക്കിംഗ് ഗ്രൂപ്പ്",
-  "Guild": "ഗിൽഡ്"
+  "Guild": "ഗിൽഡ്",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "ആഗോള കമ്മ്യൂണിറ്റിയിൽ പയറുകൾ ഇല്ല. പകരമായി നിങ്ങൾക്ക് എന്താണ് വേണ്ടതെന്ന് പോസ്റ്റിൽ പറയുക: സൗജന്യം, കൈമാറ്റം, അല്ലെങ്കിൽ സംസാരിക്കുക."
 }

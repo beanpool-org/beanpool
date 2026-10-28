@@ -562,7 +562,6 @@
   "Your credit opens with a first trade.": "Kredit Anda terbuka dengan transaksi pertama.",
   "Spending is paused for now. You can still receive and sell.": "Pengeluaran dijeda sementara. Anda tetap dapat menerima dan menjual.",
   "{amount} · room to spend {room}": "{amount} · sisa belanja {room}",
-  "The worldwide community": "Komunitas global",
   "1 member. You're first. Invite someone.": "1 anggota. Anda yang pertama. Undang seseorang.",
   "1 member. You're first.": "1 anggota. Anda yang pertama.",
   "{members} · {trades} · {communities}.": "{members} · {trades} · {communities}.",
@@ -5882,5 +5881,6 @@
   "Turn on notifications?": "Nyalakan notifikasi?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Agar Anda tahu saat seseorang membalas, mengirim pesan, atau meminta bergabung. Tidak ada yang lain.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Notifikasi BeanPool dimatikan di pengaturan ponsel Anda. Buka Pengaturan untuk menyalakannya.",
-  "Nothing here yet. Be the first:": "Belum ada apa-apa di sini. Jadilah yang pertama:"
+  "Nothing here yet. Be the first:": "Belum ada apa-apa di sini. Jadilah yang pertama:",
+  "The global community": "Komunitas global"
 }

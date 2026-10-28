@@ -299,7 +299,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "انقر على + إضافة منشور لتقديم عرض: خبز، توصيلة، ساعة من وقتك. انشر عرضًا قبل نشر الحاجة، ليشارك الجميع بشيء.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "انقر على + إضافة منشور لتقديم شيء مجاني أو للمبادلة. الحاجة هي شيء تبحث عنه.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "تحسب الفاصوليا المساعدة المقدمة والمتلقاة. يبدأ الجميع من الصفر، والصفر مكان جيد: يعني أنك قدمت بقدر ما أخذت.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "لا توجد فاصوليا في المجتمع العالمي. اذكر في منشورك ما تريده بالمقابل: مجانًا، مبادلة، أو بالاتفاق.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "دليل تقريبي: 40 فاصوليا تعادل تقريبًا ساعة من وقت شخص ما. تتفق أنت والشخص الآخر على السعر الفعلي.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "كلماتك الـ 12 هي مفتاح حسابك، ولا توجد كلمة مرور. اكتبها على ورقة واحتفظ بها بأمان: لا أحد يستطيع إعادة ضبطها لك.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "تُظهر الخريطة ما هو قريب منك: الدبابيس الخضراء عروض، والبرتقالية حاجات، والبنفسجية فعاليات. يمكن لدبوسك أن يقع بالقرب من منزلك بدلاً من مكانه الدقيق.",
@@ -932,5 +931,6 @@
   "Start a project or an enterprise →": "بدء مشروع أو مؤسسة ←",
   "Social Circle": "دائرة اجتماعية",
   "Working Group": "مجموعة عمل",
-  "Guild": "نقابة"
+  "Guild": "نقابة",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "لا توجد فاصوليا في المجتمع العالمي. اذكر في منشورك ما تريده بالمقابل: مجانًا، مبادلة، أو بالاتفاق."
 }

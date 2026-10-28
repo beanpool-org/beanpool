@@ -656,7 +656,6 @@
   "Your credit opens with a first trade.": "Кредит открывается с первой сделкой.",
   "Spending is paused for now. You can still receive and sell.": "Траты временно приостановлены. Вы по-прежнему можете получать и продавать.",
   "{amount} · room to spend {room}": "{amount} · лимит на расходы {room}",
-  "The worldwide community": "Глобальное сообщество",
   "1 member. You're first. Invite someone.": "1 участник. Вы первый. Пригласите кого-нибудь.",
   "1 member. You're first.": "1 участник. Вы первый.",
   "{n} trade this month|{n} trades this month": {
@@ -6599,5 +6598,6 @@
   "Turn on notifications?": "Включить уведомления?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Чтобы вы знали, когда кто-то ответит вам, напишет сообщение или попросит присоединиться. Больше ни для чего.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Уведомления BeanPool выключены в настройках телефона. Откройте настройки, чтобы включить их.",
-  "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:"
+  "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:",
+  "The global community": "Глобальное сообщество"
 }

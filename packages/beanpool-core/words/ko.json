@@ -214,7 +214,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "+ 게시물 추가를 눌러 제공할 것을 올려 보세요. 빵, 태워주기, 1시간의 도움 등 무엇이든 좋아요. 모두가 나눌 수 있도록 요청보다 제공을 먼저 올려 주세요.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "+ 게시물 추가를 눌러 나눔이나 교환할 것을 올려 보세요. 요청은 내가 찾고 있는 것을 뜻해요.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "콩은 주고받은 도움을 세는 단위예요. 누구나 0에서 시작하며, 0은 받은 만큼 베풀었다는 뜻이기도 해요.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "전 세계 커뮤니티에서는 콩을 쓰지 않아요. 나눔, 물물교환, 문의 등 원하는 조건을 게시물에 적어 주세요.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "대략적인 기준: 콩 40개는 한 시간 정도의 도움이에요. 실제 가격은 상대방과 직접 상의해 정해요.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "12개 단어가 내 계정의 열쇠이며, 비밀번호는 따로 없어요. 종이에 적어 안전하게 보관하세요. 아무도 대신 찾아줄 수 없어요.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "지도에서 내 주변 소식을 확인하세요. 초록 핀은 제공, 주황은 요청, 보라는 이벤트예요. 내 핀은 집 정확한 위치가 아니라 대략적인 근처에 표시돼요.",
@@ -747,5 +746,6 @@
   "Start a project or an enterprise →": "프로젝트나 사업 시작하기 →",
   "Social Circle": "친목 모임",
   "Working Group": "실무 모임",
-  "Guild": "길드"
+  "Guild": "길드",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "글로벌 커뮤니티에서는 콩을 쓰지 않아요. 나눔, 물물교환, 문의 등 원하는 조건을 게시물에 적어 주세요."
 }

@@ -621,7 +621,6 @@
   "Your credit opens with a first trade.": "முதல் பரிமாற்றத்துடன் உங்கள் கடன் வரம்பு தொடங்குகிறது.",
   "Spending is paused for now. You can still receive and sell.": "செலவழிப்பது தற்போது இடைநிறுத்தப்பட்டுள்ளது. நீங்கள் இன்னும் பெறவும் விற்கவும் முடியும்.",
   "{amount} · room to spend {room}": "{amount} · செலவழிக்கும் வரம்பு {room}",
-  "The worldwide community": "உலகளாவிய சமூகம்",
   "1 member. You're first. Invite someone.": "1 உறுப்பினர். நீங்கள் முதலாமவர். ஒருவரை அழைக்கவும்.",
   "1 member. You're first.": "1 உறுப்பினர். நீங்கள் முதலாமவர்.",
   "{n} trade this month|{n} trades this month": {
@@ -6121,5 +6120,6 @@
   "Turn on notifications?": "அறிவிப்புகளை இயக்கவா?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "யாராவது உங்களுக்குப் பதிலளிக்கும் போது, செய்தி அனுப்பும் போது அல்லது இணையக் கோரும் போது நீங்கள் அறிந்துகொள்ள. வேறு எதுவுமில்லை.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "உங்கள் தொலைபேசி அமைப்புகளில் BeanPool அறிவிப்புகள் முடக்கப்பட்டுள்ளன. அவற்றை இயக்க அமைப்புகளைத் திறக்கவும்.",
-  "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:"
+  "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:",
+  "The global community": "உலகளாவிய சமூகம்"
 }

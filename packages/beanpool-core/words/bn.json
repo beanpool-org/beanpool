@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "+ পোস্ট যোগ করুন ট্যাপ করে প্রস্তাব দিন: রুটি, গাড়ি চড়া, আপনার এক ঘণ্টার সময়। প্রয়োজনের আগে একটি প্রস্তাব দিন, যাতে সবাই কিছু না কিছু দেয়।",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "বিনামূল্যে বা বিনিময়ের জন্য কিছু দিতে + পোস্ট যোগ করুন ট্যাপ করুন। প্রয়োজন হলো যা আপনি খুঁজছেন।",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "শিম দেওয়া ও নেওয়া সাহায্যের হিসাব রাখে। সবাই শূন্য থেকে শুরু করে, এবং শূন্য একটি ভালো স্থান: এর অর্থ আপনি যতটা পেয়েছেন ততটাই দিয়েছেন।",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "বিশ্বব্যাপী সম্প্রদায়ে কোনো শিম নেই। আপনার পোস্টে বলুন আপনি বিনিময়ে কী চান: বিনামূল্যে, বিনিময়, বা জিজ্ঞাসা করুন।",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "একটি সাধারণ ধারণা: ৪০টি শিম হলো কারও প্রায় এক ঘণ্টার সময়। আপনি এবং অপর ব্যক্তি আসল মূল্য নির্ধারণ করেন।",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "আপনার ১২টি শব্দ হলো আপনার অ্যাকাউন্টের চাবি, এবং কোনো পাসওয়ার্ড নেই। এগুলো কাগজে লিখে নিরাপদে রাখুন: কেউ এগুলো রিসেট করতে পারবে না।",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "মানচিত্র দেখায় আপনার কাছাকাছি কী আছে: সবুজ পিন হলো প্রস্তাব, কমলা হলো প্রয়োজন, বেগুনি হলো ইভেন্ট। আপনার নিজস্ব পিনটি আপনার ঘরের ঠিক ওপরে না রেখে আশেপাশে রাখা যায়।",
@@ -784,5 +783,6 @@
   "Start a project or an enterprise →": "একটি প্রকল্প বা উদ্যোগ শুরু করুন →",
   "Social Circle": "সামাজিক বলয়",
   "Working Group": "কর্মদল",
-  "Guild": "গিল্ড"
+  "Guild": "গিল্ড",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "বিশ্বব্যাপী সম্প্রদায়ে কোনো শিম নেই। আপনার পোস্টে বলুন আপনি বিনিময়ে কী চান: বিনামূল্যে, বিনিময়, বা জিজ্ঞাসা করুন।"
 }

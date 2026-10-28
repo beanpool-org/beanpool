@@ -591,9 +591,9 @@ export function communityLine(c: NonNullable<HomeCards['community']>, profile: s
     return parts.join(' · ');
 }
 
-/** The community card's name: the community's own, or the global node's "The worldwide community". */
+/** The community card's name: the community's own, or the global node's "The global community". */
 export function communityName(c: NonNullable<HomeCards['community']>, profile: string): string {
-    if (profile === 'global') return t('The worldwide community');
+    if (profile === 'global') return t('The global community');
     return c.name || t(CARD_TITLES.community);
 }
 

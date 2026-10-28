@@ -184,7 +184,7 @@ describe('what each person sees, top down (§3.2)', () => {
         expect(draw(a, EVERY, ctx({ safetyUp: true, now: NOW }))).toEqual(['safety', 'find', 'steps', 'interests', 'events', 'market', 'joined', 'community']);
         expect(draw(a, EVERY, ctx({ safetyUp: false, interests: ['food'], now: NOW }))).toEqual(['find', 'steps', 'events', 'market', 'joined', 'community']);
         expect(joinedLine(a.cards.joined!, 'global')).toBe('14 people within 50 km joined this week.');
-        expect(communityLines(a.cards.community, 'global', false)).toEqual({ title: 'The worldwide community', line: '2,310 members · 38 communities listed.' });
+        expect(communityLines(a.cards.community, 'global', false)).toEqual({ title: 'The global community', line: '2,310 members · 38 communities listed.' });
     });
 
     it('a suspended member\'s answer (no community cards) still draws their own and the community card', () => {

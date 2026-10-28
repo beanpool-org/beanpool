@@ -620,7 +620,6 @@
   "Your credit opens with a first trade.": "Kikomo chako cha mkopo hufunguka na biashara ya kwanza.",
   "Spending is paused for now. You can still receive and sell.": "Matumizi yamesitishwa kwa sasa. Bado unaweza kupokea na kuuza.",
   "{amount} · room to spend {room}": "{amount} · nafasi ya kutumia {room}",
-  "The worldwide community": "Jumuiya ya kimataifa",
   "1 member. You're first. Invite someone.": "Mwanachama 1. Wewe ni wa kwanza. Mwalike mtu.",
   "1 member. You're first.": "Mwanachama 1. Wewe ni wa kwanza.",
   "{n} trade this month|{n} trades this month": {
@@ -6121,5 +6120,6 @@
   "Turn on notifications?": "Washa arifa?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Ili ujue mtu anapokujibu, anapokutumia ujumbe, au anapoomba kujiunga. Hakuna kingine.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Arifa za BeanPool zimezimwa katika mipangilio ya simu yako. Fungua Mipangilio ili kuziwasha.",
-  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:"
+  "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:",
+  "The global community": "Jumuiya ya kimataifa"
 }

@@ -602,7 +602,6 @@
   "Your credit opens with a first trade.": "完成首筆交易即可開啟信用額度。",
   "Spending is paused for now. You can still receive and sell.": "支出功能暫時暫停。你仍可正常接收豆子與出售物品。",
   "{amount} · room to spend {room}": "{amount} · 可透支額度 {room}",
-  "The worldwide community": "全球社群",
   "1 member. You're first. Invite someone.": "1 位成員。你是第一位。快去邀請新夥伴吧。",
   "1 member. You're first.": "1 位成員。你是第一位。",
   "{n} trade this month|{n} trades this month": {
@@ -5882,5 +5881,6 @@
   "Turn on notifications?": "開啟通知？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回覆、發訊息或申請加入時收到提醒。不會用於其他任何用途。",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手機設定中已關閉 BeanPool 的通知。開啟設定即可開啟。",
-  "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者："
+  "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者：",
+  "The global community": "全球社群"
 }

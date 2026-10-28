@@ -631,7 +631,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
             expect(ex.querySelectorAll('button, a')).toHaveLength(0);
         }
         expect(screen.getByTestId('home-card-events')).toHaveTextContent('Place shown after you join');
-        expect(screen.getByTestId('home-card-community')).toHaveTextContent('The worldwide community');
+        expect(screen.getByTestId('home-card-community')).toHaveTextContent('The global community');
         expect(screen.getByTestId('home-card-community')).toHaveTextContent('2,310 members · 38 communities listed.');
         expect(page.textContent).not.toMatch(/Beans|Tune/);
         expect(api.saveHomePreferences).not.toHaveBeenCalled();

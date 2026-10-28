@@ -562,7 +562,6 @@
   "Your credit opens with a first trade.": "Η πίστωσή σας ξεκινά με την πρώτη συναλλαγή.",
   "Spending is paused for now. You can still receive and sell.": "Οι δαπάνες έχουν τεθεί σε παύση προς το παρόν. Μπορείτε ακόμα να λαμβάνετε και να πουλάτε.",
   "{amount} · room to spend {room}": "{amount} · περιθώριο δαπάνης {room}",
-  "The worldwide community": "Η παγκόσμια κοινότητα",
   "1 member. You're first. Invite someone.": "1 μέλος. Είστε πρώτος. Προσκαλέστε κάποιον.",
   "1 member. You're first.": "1 μέλος. Είστε πρώτος.",
   "{n} trade this month|{n} trades this month": {
@@ -6121,5 +6120,6 @@
   "Turn on notifications?": "Ενεργοποίηση ειδοποιήσεων;",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Οι ειδοποιήσεις για το BeanPool είναι απενεργοποιημένες στις ρυθμίσεις του τηλεφώνου σας. Ανοίξτε τις Ρυθμίσεις για να τις ενεργοποιήσετε.",
-  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:"
+  "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:",
+  "The global community": "Η παγκόσμια κοινότητα"
 }

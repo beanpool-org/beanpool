@@ -3707,7 +3707,7 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
             cards: {
                 ...base.cards,
                 community: {
-                    name: 'The worldwide community',
+                    name: 'The global community',
                     members: 1200,
                     communities: 42,
                     listings: 500,

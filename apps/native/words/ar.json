@@ -692,7 +692,6 @@
   "Your credit opens with a first trade.": "يفتح حدك الائتماني مع أول معامله لك.",
   "Spending is paused for now. You can still receive and sell.": "الإنفاق متوقف مؤقتًا الآن. لا يزال بإمكانك الاستلام والبيع.",
   "{amount} · room to spend {room}": "{amount} · مجال للإنفاق {room}",
-  "The worldwide community": "المجتمع العالمي",
   "1 member. You're first. Invite someone.": "عضو واحد. أنت أولهم. ادعُ شخصًا ما.",
   "1 member. You're first.": "عضو واحد. أنت أولهم.",
   "{n} trade this month|{n} trades this month": {
@@ -7077,5 +7076,6 @@
   "Turn on notifications?": "هل تريد تشغيل الإشعارات؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها.",
-  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:"
+  "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:",
+  "The global community": "المجتمع العالمي"
 }

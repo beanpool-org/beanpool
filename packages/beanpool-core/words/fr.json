@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "Touchez + PUBLIER pour proposer une Offre : du pain, un trajet, une heure de votre temps. Publiez une Offre avant une Demande, afin que chacun apporte sa part.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "Touchez + PUBLIER pour proposer un don ou un échange. Une Demande est ce que vous cherchez.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "Les haricots comptent l'aide apportée et reçue. Tout le monde commence à zéro, et zéro est un très bon équilibre : cela signifie que vous avez autant donné que reçu.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "Il n'y a pas de haricots sur la communauté mondiale. Précisez dans votre annonce ce que vous souhaitez en échange : gratuit, troc ou à convenir.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "Repère indicatif : 40 haricots correspondent environ à une heure de temps. Vous fixez le juste prix ensemble.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "Vos 12 mots sont la clé de votre compte, il n'y a aucun mot de passe. Notez-les sur papier et gardez-les en lieu sûr : personne ne peut les réinitialiser à votre place.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "La Carte montre ce qui se trouve près de chez vous : les repères verts sont des Offres, les orange des Demandes, les violets des événements. Votre repère peut être placé près de chez vous plutôt qu'exactement dessus.",
@@ -784,5 +783,6 @@
   "Start a project or an enterprise →": "Lancer un projet ou une entreprise →",
   "Social Circle": "Cercle social",
   "Working Group": "Groupe de travail",
-  "Guild": "Guilde"
+  "Guild": "Guilde",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Il n'y a pas de haricots sur la communauté globale. Précisez dans votre annonce ce que vous souhaitez en échange : gratuit, troc ou à convenir."
 }

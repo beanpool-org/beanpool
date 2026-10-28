@@ -620,7 +620,6 @@
   "Your credit opens with a first trade.": "آپ کا کریڈٹ پہلے تبادلے سے کھلتا ہے۔",
   "Spending is paused for now. You can still receive and sell.": "خرچ کرنا فی الحال موقوف ہے۔ آپ اب بھی وصول اور فروخت کر سکتے ہیں۔",
   "{amount} · room to spend {room}": "{amount} · خرچ کرنے کی گنجائش: {room}",
-  "The worldwide community": "عالمی کمیونٹی",
   "1 member. You're first. Invite someone.": "1 رکن۔ آپ پہلے ہیں۔ کسی کو مدعو کریں۔",
   "1 member. You're first.": "1 رکن۔ آپ پہلے ہیں۔",
   "{n} trade this month|{n} trades this month": {
@@ -6121,5 +6120,6 @@
   "Turn on notifications?": "اطلاعات آن کریں؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تاکہ جب کوئی آپ کو جواب دے، پیغام بھیجے یا شامل ہونے کی درخواست کرے تو آپ کو معلوم ہو سکے۔ اس کے علاوہ کچھ نہیں۔",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "آپ کے فون کی ترتیبات میں BeanPool کی اطلاعات بند ہیں۔ انہیں آن کرنے کے لیے ترتیبات کھولیں۔",
-  "Nothing here yet. Be the first:": "یہاں ابھی کچھ نہیں ہے۔ پہلے بنیں:"
+  "Nothing here yet. Be the first:": "یہاں ابھی کچھ نہیں ہے۔ پہلے بنیں:",
+  "The global community": "عالمی کمیونٹی"
 }

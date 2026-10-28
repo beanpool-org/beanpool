@@ -620,7 +620,6 @@
   "Your credit opens with a first trade.": "Tu crédito se abre con un primer intercambio.",
   "Spending is paused for now. You can still receive and sell.": "El gasto está pausado por ahora. Aún puedes recibir y vender.",
   "{amount} · room to spend {room}": "{amount} · margen para gastar {room}",
-  "The worldwide community": "La comunidad mundial",
   "1 member. You're first. Invite someone.": "1 miembro. Eres el primero. Invita a alguien.",
   "1 member. You're first.": "1 miembro. Eres el primero.",
   "{n} trade this month|{n} trades this month": {
@@ -6121,5 +6120,6 @@
   "Turn on notifications?": "¿Activar notificaciones?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para que te enteres cuando alguien te responda, te envíe un mensaje o pida unirse. Nada más.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Las notificaciones de BeanPool están desactivadas en los ajustes de tu teléfono. Abre Ajustes para activarlas.",
-  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:"
+  "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:",
+  "The global community": "La comunidad global"
 }

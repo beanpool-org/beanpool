@@ -561,7 +561,6 @@
   "Your credit opens with a first trade.": "اعتبار شما با اولین معامله باز می‌شود.",
   "Spending is paused for now. You can still receive and sell.": "خرج کردن فعلاً متوقف است. همچنان می‌توانید دریافت کنید و بفروشید.",
   "{amount} · room to spend {room}": "{amount} · سقف خرج کردن {room}",
-  "The worldwide community": "جامعه جهانی",
   "1 member. You're first. Invite someone.": "۱ عضو. شما اولین نفر هستید. کسی را دعوت کنید.",
   "1 member. You're first.": "۱ عضو. شما اولین نفر هستید.",
   "{n} trade this month|{n} trades this month": {
@@ -6121,5 +6120,6 @@
   "Turn on notifications?": "روشن کردن اعلان‌ها؟",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "اعلان‌های BeanPool در تنظیمات تلفن شما خاموش است. برای روشن کردن آن‌ها، تنظیمات را باز کنید.",
-  "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:"
+  "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:",
+  "The global community": "جامعه جهانی"
 }

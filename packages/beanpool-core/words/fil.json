@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "I-tap ang + ADD POST para mag-alok: tinapay, sakay, isang oras ng panahon mo. Mag-alok muna bago Humingi, para may dala ang bawat isa.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "I-tap ang + ADD POST para maglagay ng libre o pampalit. Ang Kahilingan ay bagay na hinahanap mo.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "Binibilang ng munggo ang tulong na ibinigay at natanggap. Nagsisimula ang lahat sa zero, at ayos lang ang zero: ibig sabihin ay nagbigay ka kasing dami ng nakuha mo.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "Walang mga munggo sa pandaigdigang komunidad. Sabihin sa iyong post kung ano ang gusto mong kapalit: libre, palitan, o magtanong.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "Tantiyang gabay: ang 40 munggo ay humigit-kumulang isang oras ng trabaho. Kayo ng kabilang tao ang magkasundo sa totoong presyo.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "Ang iyong 12 salita ang susi sa iyong account, at walang password. Isulat sa papel at itagong mabuti: walang makakapag-reset nito para sa iyo.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "Ipinapakita ng Mapa ang malapit sa iyo: berde ang Alok, kahel ang Hiling, lila ang kaganapan. Ang sarili mong pin ay maaaring ilagay malapit sa bahay mo sa halip na eksaktong doon.",
@@ -784,5 +783,6 @@
   "Start a project or an enterprise →": "Magsimula ng proyekto o negosyo →",
   "Social Circle": "Social Circle",
   "Working Group": "Working Group",
-  "Guild": "Guild"
+  "Guild": "Guild",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Walang mga munggo sa pandaigdigang komunidad. Sabihin sa iyong post kung ano ang gusto mong kapalit: libre, palitan, o magtanong."
 }

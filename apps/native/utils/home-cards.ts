@@ -1055,7 +1055,7 @@ export function beansLines(b: NonNullable<HomeCards['beans']>): { main: string; 
 /** The community's card (§3.1): its name and totals, public by rule. */
 export function communityLines(card: HomeCards['community'] | undefined, profile: string, invitesOn: boolean): { title: string; line: string } {
     const global = profile === 'global';
-    const title = global ? t('The worldwide community') : (card?.name?.trim() || cardName('community'));
+    const title = global ? t('The global community') : (card?.name?.trim() || cardName('community'));
     if (!card) return { title, line: '' };
     if (!global && card.members <= 1) {
         return { title, line: invitesOn ? t("1 member. You're first. Invite someone.") : t("1 member. You're first.") };

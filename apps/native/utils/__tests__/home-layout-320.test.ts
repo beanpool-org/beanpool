@@ -61,7 +61,7 @@ describe('a card at 320dp × 1.3', () => {
         const menu = num(s.menuButton.width) + num(s.menuButton.marginRight);
         const tune = HOME_TARGET_DP;
         const room = CARD_INNER - menu - tune;
-        for (const name of [...CARD_NAMES, 'The worldwide community', tipsCaption({ position: 15, total: 15 })]) {
+        for (const name of [...CARD_NAMES, 'The global community', tipsCaption({ position: 15, total: 15 })]) {
             const w = longestWord(name.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) });
             expect(w, name).toBeLessThan(room);
         }

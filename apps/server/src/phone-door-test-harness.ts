@@ -18,7 +18,8 @@
  *   limiters                    clear the gateway's, the chat's and the door's limiters (every request here comes from one address)
  *   member {key}                the member's row and its open_joins row (door, network hash, how long the hash is kept)
  *   probation {key}             the member's new-account limits, as /api/community/me reports them
- *   prune {key}                 a moderator removes the member (adminPruneUser), as the moderation screen does
+ *   prune {key}                 the member is removed (adminPruneUser): on global, by a moderator, as the moderation screen
+ *                               does; where the community votes (the community profile), by its vote, the only removal there
  *   status {key, status}        the member's status (`suspended`, `active`), as the server suites set it
  *   doorNumber {name, value}    a `doorNumbers.<name>` override, as an operator sets one in node_config
  *   removedNewcomers {ips}      a 12-words newcomer from each address, removed minutes after joining (design §2.4)
@@ -71,7 +72,7 @@ async function main(): Promise<void> {
     const readline = await import('node:readline');
     const crypto = await import('node:crypto');
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, adminPruneUser, broadcast } = await import('./state-engine.js');
+    const { initStateEngine, adminPruneUser, COMMUNITY_DECISION_ACTOR, broadcast } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { startHttpServer } = await import('./http-server.js');
     const { openJoinAddressHash, registerOpenJoin, wordsJoinHash } = await import('./engine/open-join.js');
@@ -87,7 +88,7 @@ async function main(): Promise<void> {
     const { bumpPostsVersion } = await import('./engine/versions.js');
     const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
     const { forgetSyncEpochHeaderValue } = await import('./services/identity-epoch.js');
-    const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
+    const { NODE_PROFILE_KEY, getProfileSwitches } = await import('./config/node-profile.js');
     const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { initClaimCode } = await import('./claim-code.js');
 
@@ -108,6 +109,11 @@ async function main(): Promise<void> {
         console.log(`PHONE-DOOR-NODE-HTTP-PORT ${httpPort}`);
     }
 
+    // Who removes a member here. Where the community votes, only its vote does (removal by vote S3: state-engine
+    // removalVoteRefusal), so the removal is the vote's; on global (votes off) a moderator's, with the password.
+    const removeMember = (key: string) =>
+        adminPruneUser(key, getProfileSwitches().decisions ? COMMUNITY_DECISION_ACTOR : 'owner:password');
+
     const commands: Record<string, (args: any) => unknown> = {
         limiters: () => {
             resetGatewayRateLimit();
@@ -121,7 +127,7 @@ async function main(): Promise<void> {
         }),
         probation: ({ key }) => probationState(String(key)),
         prune: ({ key }) => {
-            adminPruneUser(String(key), 'owner:password');
+            removeMember(String(key));
             return true;
         },
         status: ({ key, status }: { key?: string; status?: string }) => {
@@ -141,7 +147,7 @@ async function main(): Promise<void> {
             const key = crypto.randomBytes(32).toString('hex');
             const ipHash = openJoinAddressHash(limiterKeyForIp(ip));
             const outcome = registerOpenJoin(broadcast, { publicKey: key, callsign: `Gone ${key.slice(0, 4)}`, provider: 'words', joinHash: wordsJoinHash(), ipHash });
-            if (outcome.ok) adminPruneUser(key, 'owner:password');
+            if (outcome.ok) removeMember(key);
             return { ip, joined: outcome.ok };
         }),
         workingOff: ({ key, beans, owed }: { key?: string; beans?: number; owed?: number }) => {

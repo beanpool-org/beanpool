@@ -18,11 +18,22 @@ describe('requestModeOf', () => {
         expect(requestModeOf(null, ME, [])).toBe('none');
     });
 
-    it('someone else\'s request is the reader\'s to decide once the opener has written', () => {
+    it('someone else\'s request is the reader\'s to decide, whatever state it names', () => {
         for (const state of ['pending', 'ignored', 'expired']) {
             expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [lineBy(PEER, AT)])).toBe('to-me');
-            expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [])).toBe('none');
+            expect(requestModeOf(dm({ state, from: PEER, at: AT }), ME, [])).toBe('to-me');
         }
+    });
+
+    it('after Cancel request, the person it was for cannot accept it, by Accept or by writing', () => {
+        // Marty, 28 Oct 2026 (PR #2540): the node's state is the authority. Its opener withdrew every line, and the node still
+        // names the request: the reader gets the Accept card (whose Accept the node answers 404, which drops it), never a
+        // composer whose line would accept it, nor a photo.
+        const withdrawn = dm({ state: 'pending', from: PEER, at: AT });
+        expect(requestModeOf(withdrawn, ME, [])).toBe('to-me');
+        expect(requestModeOf(withdrawn, ME, [lineBy(ME, '2026-10-22T09:00:00.000Z')])).toBe('to-me');   // the reader's own, from before
+        expect(requestModeOf(withdrawn, ME, [lineBy(PEER, AT, 'system')])).toBe('to-me');               // a node notice
+        expect(requestTakesPhoto(requestModeOf(withdrawn, ME, []))).toBe(false);
     });
 
     it('supports native message row shapes (senderId, rawTimestamp)', () => {
@@ -54,7 +65,7 @@ describe('requestModeOf', () => {
         expect(requestModeOf(lifted, ME, null)).toBe('mine-loading');
         expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT, nextLineIsRequest: true }), ME, [])).toBe('none');
         expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [lineBy(PEER, AT)])).toBe('to-me');
-        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [])).toBe('none');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT, nextLineIsRequest: true }), ME, [])).toBe('to-me');
     });
 
     it('30 days on (expired), the reader\'s next line is a new request', () => {

@@ -67,10 +67,10 @@ export function requestModeOf(
 ): RequestMode {
     const r = conv?.type === 'dm' ? conv.request : null;
     if (!r || r.state === 'accepted') return 'none';
-    if (r.from !== me) {
-        if (!lines) return 'to-me';
-        return openerLinesSince(conv!, lines) > 0 ? 'to-me' : 'none';
-    }
+    // The node's state is the authority (Marty, 28 Oct 2026, PR #2540): a request someone else made is the reader's to
+    // decide, even once its opener withdrew every line of it (Cancel request). The page never makes it an ordinary chat:
+    // its Accept finds no request then (404, which drops it), and nothing of the reader's accepts it at the node.
+    if (r.from !== me) return 'to-me';
     if (r.state === 'expired') return 'mine-unsent';
     if (!lines) return 'mine-loading';
     // The node's count, not the page's (PR #2404 review 4356625513): a line kept for the opener while they were blocked is

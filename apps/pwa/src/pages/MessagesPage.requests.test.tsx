@@ -547,6 +547,30 @@ describe('the chat in request mode, for the person it is for', () => {
         expect(within(bar).getByRole('button', { name: 'Accept' })).toBeEnabled();
     });
 
+    it('after Cancel request, the person it was for cannot accept it, by Accept or by writing', async () => {
+        // Marty, 28 Oct 2026 (PR #2540): the node's state is the authority. Bo cancels while Ann has his request open: the
+        // node's next read has no line of his in it and still names his request, so the chat stays a request for her, with no
+        // composer to write in (a line of hers would accept it). Her Accept finds no request (404), and the chat leaves.
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        vi.mocked(decideMessageRequest).mockImplementation(async () => {
+            throw Object.assign(new Error('There is no message request for you in this chat.'), { status: 404, code: 'request_not_found' });
+        });
+        render(<MessagesPage identity={idOf(ann)} />);
+        await openFromCard();
+        node.list = annListWith([]);
+        node.reads[CONV] = readOf(pending(), []);
+        await ringDoorbell();
+        await waitFor(() => expect(screen.queryAllByText('Hello')).toHaveLength(0));
+        expect(screen.getByTestId('request-mode')).toHaveTextContent('Bo wants to message you');
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        fireEvent.click(within(screen.getByTestId('request-mode')).getByRole('button', { name: 'Accept' }));
+        await waitFor(() => expect(screen.queryByTestId('request-mode')).toBeNull());
+        expect(decideMessageRequest).toHaveBeenCalledWith(CONV, 'accept');
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
     it('a request opened by its id (a push) opens in request mode, never as a new chat', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);

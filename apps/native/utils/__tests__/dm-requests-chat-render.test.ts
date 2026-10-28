@@ -365,6 +365,38 @@ describe('a request waiting for this member, on the phone', () => {
         });
     });
 
+    it('after Cancel request, the person it was for cannot accept it, by Accept or by writing', async () => {
+        // Marty, 28 Oct 2026 (PR #2540): the node's state is the authority. Kofi cancels while Ana has his request open: the
+        // node's next answer has no line of his in it (the sync drops the withdrawn one) and still names his request, so the
+        // chat stays a request for her, with no composer (a line of hers would accept it). Her Accept finds no request (404),
+        // and the chat goes back to Talk.
+        const navigate = vi.spyOn(router, 'navigate');
+        let lines: unknown[] = [{ id: 'k1', senderId: 'kofi-key', authorPubkey: 'kofi-key', type: 'text', text: 'hello Ana', rawTimestamp: iso(now - 60_000), timestamp: '' }];
+        standIn({
+            getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: KOFI_REQUEST },
+            getMessages: () => Promise.resolve(lines),
+            syncSingleConversation: true,
+            decideMessageRequest: () => Promise.reject(Object.assign(new Error('There is no message request for you in this chat.'), { status: 404, code: 'request_not_found', nodeAnswered: true })),
+            insertMessage: 'line-1',
+        });
+        await open();
+        expect(host.textContent).toContain('hello Ana');
+
+        lines = [];
+        await syncLanded();
+        expect(host.textContent).not.toContain('hello Ana');
+        expect(host.textContent).toContain('Kofi wants to message you');
+        expect(box()).toBeNull();
+        await typeAndSend('hi Kofi');
+        expect(sent()).toBe(0);
+
+        await tap('Accept');
+        expect(navigate).toHaveBeenCalledWith('/(tabs)/chats');
+        expect(alerts.said).toEqual([]);
+        expect(sent()).toBe(0);
+        navigate.mockRestore();
+    });
+
     it('control: once the node has answered an ordinary chat, the composer sends', async () => {
         standIn({ getConversation: { name: 'Kofi', otherPubkey: 'kofi-key', type: 'dm', request: null }, getMessages: [], syncSingleConversation: true, insertMessage: 'line-1' });
         await open();

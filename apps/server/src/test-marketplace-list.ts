@@ -24,6 +24,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { openShop, setShopPhoto } from './engine/shops.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { setSwitchOverride } from './config/node-profile.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { ledger } from './engine/ledger.js';
 
@@ -130,7 +131,8 @@ async function main(): Promise<void> {
     assert(bobListing.authorBannerUrl === undefined,
         `member photoless listing carries no authorBannerUrl (got ${bobListing.authorBannerUrl})`);
 
-    // 4. Visitor read (unsigned): gets none
+    // 4. Visitor read (unsigned): gets none (with visitors' view enabled)
+    setSwitchOverride('guestListingsOnly', true);
     const visitorRes = await call('GET', null, '/api/marketplace/posts');
     assert(visitorRes.status === 200, `visitor GET /api/marketplace/posts returns 200 (got ${visitorRes.status})`);
     const visitorPosts: any[] = Array.isArray(visitorRes.body) ? visitorRes.body : visitorRes.body?.posts;
@@ -154,6 +156,28 @@ async function main(): Promise<void> {
     const entStrangerListing = strangerPosts.find((p: any) => p.title === 'Enterprise Sourdough');
     assert(entStrangerListing?.authorBannerUrl === undefined,
         `signed non-member gets no authorBannerUrl on enterprise listing (got ${entStrangerListing?.authorBannerUrl})`);
+
+    // 6. Home Market rows: enterprise photoless listing carries bannerUrl, member's carries null, visitor gets null
+    const homeMemberRes = await call('GET', alice, '/api/home');
+    assert(homeMemberRes.status === 200, `member GET /api/home returns 200 (got ${homeMemberRes.status})`);
+    const homeMarketItems = homeMemberRes.body?.cards?.market?.items || [];
+    const entHomeItem = homeMarketItems.find((p: any) => p.id === 'post-ent-1');
+    const bobHomeItem = homeMarketItems.find((p: any) => p.id === 'post-bob-1');
+    assert(!!entHomeItem, 'enterprise listing found in home market items');
+    assert(typeof entHomeItem?.bannerUrl === 'string' && entHomeItem.bannerUrl.startsWith(`/api/shops/${entShop.id}/photo?v=`) && entHomeItem.bannerUrl.includes('&k='),
+        `enterprise listing in home market items carries shop bannerUrl (got ${entHomeItem?.bannerUrl})`);
+    assert(!!bobHomeItem, 'bob listing found in home market items');
+    assert(bobHomeItem?.bannerUrl === null,
+        `member listing in home market items carries null bannerUrl (got ${bobHomeItem?.bannerUrl})`);
+
+    // Visitor read of /api/home: visitor gets null bannerUrl on enterprise listing
+    const homeVisitorRes = await call('GET', null, '/api/home');
+    assert(homeVisitorRes.status === 200, `visitor GET /api/home returns 200 (got ${homeVisitorRes.status})`);
+    const homeVisitorItems = homeVisitorRes.body?.cards?.market?.items || [];
+    const entVisitorHomeItem = homeVisitorItems.find((p: any) => p.id === 'post-ent-1');
+    assert(!!entVisitorHomeItem, 'enterprise listing found in visitor home market items');
+    assert(entVisitorHomeItem?.bannerUrl === null,
+        `visitor gets null bannerUrl on enterprise listing in home (got ${entVisitorHomeItem?.bannerUrl})`);
 
     console.log(`\nAll ${passed}/${run} checks passed!\n`);
     process.exit(0);

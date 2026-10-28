@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import type { NodeProfile } from '../../lib/profiles';
@@ -225,5 +225,66 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'A long enough reason' } });
         fireEvent.click(screen.getByRole('button', { name: 'Halt Decision' }));
         expect(await screen.findByText('Cannot halt decision with status failed')).toBeInTheDocument();
+    });
+
+    // Removal by vote, Amendment A point 4: an admin hides a case shown to be false, with a reason members read in its place.
+    it('hides the case of a vote on removing a member, with a public reason of 10+ characters; the vote itself carries on', async () => {
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseVote, keepVote]);
+        const hide = vi.spyOn(nodeClient, 'hideDecisionCase').mockResolvedValue({ success: true });
+        render(<DecisionsAdminPanel activeNode={node} />);
+        const [pauseRow, keepRow] = await screen.findAllByTestId('admin-decision-row');
+        // Only a vote on removing a member has a case to hide.
+        expect(keepRow.textContent).not.toContain('Hide case');
+        fireEvent.click(within(pauseRow).getByRole('button', { name: 'Hide case' }));
+        const dialog = screen.getByRole('dialog', { name: 'Hide case' });
+        expect(dialog).toHaveTextContent('Hide the case of “Remove Troll?”?');
+        expect(dialog).toHaveTextContent('The vote itself carries on: to stop it, halt it.');
+        const confirm = within(dialog).getByRole('button', { name: 'Hide case' });
+        expect(confirm).toBeDisabled();
+        fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: 'not true' } });
+        expect(confirm).toBeDisabled();
+        fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: '  Two witnesses showed it false  ' } });
+        expect(confirm).not.toBeDisabled();
+        fireEvent.click(confirm);
+        await waitFor(() => expect(hide).toHaveBeenCalledWith('https://test-node.local', 'dec-pause-1', 'Two witnesses showed it false', 'pw', undefined));
+    });
+
+    it('a hidden case shows the reason members read, not the button; closed removal votes are listed to hide one', async () => {
+        const hidden: nodeClient.AdminDecisionItem = { ...pauseVote, caseHiddenAt: '2026-09-21T00:00:00.000Z', caseHiddenReason: 'Two witnesses showed it false' };
+        const closed: nodeClient.AdminDecisionItem = { ...pauseVote, id: 'dec-closed-1', title: 'Remove Ola?', subjectName: 'Ola', status: 'failed' };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([hidden]);
+        vi.mocked(nodeClient.fetchPastRemovalVotes).mockResolvedValue([closed]);
+        const hide = vi.spyOn(nodeClient, 'hideDecisionCase').mockResolvedValue({ success: true });
+        render(<DecisionsAdminPanel activeNode={node} />);
+        const row = await screen.findByTestId('admin-decision-row');
+        expect(within(row).getByTestId('admin-case-hidden')).toHaveTextContent('Case hidden as false. Members read: “Two witnesses showed it false”');
+        expect(within(row).queryByRole('button', { name: 'Hide case' })).toBeNull();
+        const past = screen.getByTestId('past-removal-votes');
+        expect(past).toHaveTextContent('Closed votes on removing a member (1)');
+        const pastRow = within(past).getByTestId('past-removal-row');
+        expect(pastRow).toHaveTextContent('Remove Ola?');
+        expect(pastRow).toHaveTextContent('failed');
+        expect(pastRow).toHaveTextContent('About: Ola');
+        fireEvent.click(within(pastRow).getByRole('button', { name: 'Hide case' }));
+        fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'The deposit was refunded in full' } });
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Hide case' })).getByRole('button', { name: 'Hide case' }));
+        await waitFor(() => expect(hide).toHaveBeenCalledWith('https://test-node.local', 'dec-closed-1', 'The deposit was refunded in full', 'pw', undefined));
+    });
+
+    it('no Hide case on a suspension nobody votes on, and the node\'s refusal shows when hiding fails', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeDecisionsOn').mockResolvedValue(false);
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseVote]);
+        const first = render(<DecisionsAdminPanel activeNode={node} />);
+        expect(await screen.findByText('Troll is suspended')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Hide case' })).toBeNull();
+        first.unmount();
+
+        vi.mocked(nodeClient.fetchNodeDecisionsOn).mockResolvedValue(true);
+        vi.spyOn(nodeClient, 'hideDecisionCase').mockRejectedValue(new Error('This case is already hidden'));
+        render(<DecisionsAdminPanel activeNode={node} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Hide case' }));
+        fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'A long enough reason' } });
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Hide case' })).getByRole('button', { name: 'Hide case' }));
+        expect(await screen.findByText('This case is already hidden')).toBeInTheDocument();
     });
 });

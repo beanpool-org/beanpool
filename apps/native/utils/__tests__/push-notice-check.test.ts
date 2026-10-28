@@ -632,6 +632,13 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('decision.open', null)).toBe('/(tabs)');
     });
 
+    it('a removal vote, to its voters and to the member it is about, lands on Commons, Decide; without it, on Home (removal by vote, Amendment A)', () => {
+        for (const kind of ['decision.removal', 'account.removal-vote'] as const) {
+            expect(noticeRoute(kind, { screen: 'decide' })).toBe('/(tabs)/projects?section=decide');
+            for (const d of [null, { screen: 'nowhere' }, ...FORGED.map((x) => ({ screen: x }))]) expect(noticeRoute(kind, d)).toBe('/(tabs)');
+        }
+    });
+
     it("a group's vote opening lands on the group it names (its chat, the info sheet open), its id in the node's own shape; never Talk (slice S3)", () => {
         const GROUP = '0f8e2c1a-5b6d-4e7f-9a0b-1c2d3e4f5a6b';
         expect(noticeRoute('decision.open', { screen: 'group', groupId: GROUP })).toBe(`/chat/${GROUP}?group=1&info=1`);

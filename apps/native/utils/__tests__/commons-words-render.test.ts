@@ -168,6 +168,9 @@ const node = vi.hoisted(() => ({
     voice: { voiceCredits: 16, hasCompletedTrade: true } as { voiceCredits: number; hasCompletedTrade: boolean } | null,
     vote: { success: true } as Record<string, unknown>,
     area: null as null | { lat: number; lng: number },
+    // What the member sent about a vote on removing them (removal by vote, Amendment A): replies, and cases reported false.
+    replies: [] as Array<[string, string]>,
+    reports: [] as string[],
 }));
 vi.mock('../use-reader-features', () => ({
     useReaderFeatures: () => ({ node: node.features, reader: null, effective: node.features, known: true }),
@@ -185,6 +188,8 @@ vi.mock('../db', () => ({
     fetchGroups: async () => node.groups,
     fetchYourGroups: async () => [],
     castDecisionVote: async () => node.vote,
+    replyToRemovalCase: async (id: string, reply: string) => { node.replies.push([id, reply]); return { success: true }; },
+    reportRemovalCase: async (id: string) => { node.reports.push(id); return { success: true }; },
     createDecision: async () => ({ success: true }),
     createPost: async () => ({}),
     createEnterpriseApi: async () => ({}),
@@ -267,6 +272,14 @@ const OPEN = [
     decision('19191919', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Abe', rule: 2, serverRole: 'admin', pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) } }),
     // A vote on removing the member themself: it says they can't vote on it, in place of the buttons.
     decision('20202020', { authorPubkey: 'SYSTEM', effect: 'remove_member', subject: KEY, params: { memberName: 'Zed', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) } }),
+    // A fair vote on removing a member (removal by vote, Amendment A): the admin who paused named and the member's reply; one
+    // paused with the server's password, its case hidden as false; a member's own removal, proposed before, naming them.
+    decision('21212121', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Uma', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) },
+        proposer: { kind: 'admin', name: 'Ada' }, subjectReply: 'I refunded the deposit the same day.' }),
+    decision('23232323', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Ivy', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) },
+        proposer: { kind: 'password', name: null }, caseHiddenAt: iso(Date.now() - DAY), caseHiddenReason: 'Two witnesses showed it false',
+        description: 'An admin hid the case for this vote, as one shown to be false. Their reason: Two witnesses showed it false' }),
+    decision('24242424', { effect: 'remove_member', params: { memberName: 'Lou' }, proposer: { kind: 'member', name: 'Tia' } }),
 ];
 const PAST = [
     decision('77777777', { status: 'executed', effect: 'freeze_credit', executionReason: 'Credit floor set to 0', tally: tally({ quorumMet: true, passed: true }) }),
@@ -287,6 +300,7 @@ const OTHERS = [
     ...TREASURIES.flatMap((e) => [e.name, e.purpose]),
     ...[...OPEN, ...PAST].flatMap((d) => [d.title, d.description]),
     'Dave', 'Mia', 'Kofi', 'Ana', 'Ola', 'Abe', 'Zed', 'Credit floor set to 0', 'Duplicate of last week', 'Reach The Moon', 'sky', 'PAUSED BY STORM', 'system:decision:',
+    'Uma', 'Ada', 'Ivy', 'Lou', 'Tia', 'I refunded the deposit the same day.', 'Two witnesses showed it false', 'It was a misunderstanding.',
     'Example Valley', ...SAMPLE_COMMUNITY.decisions.flatMap((d) => [d.question, (d as { body?: string }).body ?? '']),
     ...sampleDecisions().flatMap((d) => [d.title, d.description]), ...sampleEnterprises().flatMap((e) => [e.name ?? '', e.purpose ?? '']),
 ].filter(Boolean).sort((a, b) => b.length - a.length);
@@ -311,6 +325,8 @@ beforeEach(() => {
     node.voice = { voiceCredits: 16, hasCompletedTrade: true };
     node.vote = { success: true };
     node.area = null;
+    node.replies = [];
+    node.reports = [];
     yours.items = [];
     yours.error = null;
     picked.date = null;
@@ -494,6 +510,37 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(bypassing(), 'propose').toEqual([]);
     });
 
+    it('Decide: a fair vote on removing a member: who brought it, the reply beside the case, a hidden case, the member\'s own reply and report', async () => {
+        await renderIn('xx');
+        await click(byLabel(pseudoLocalise('Decide Section')), 'Decide');
+        expect(host.textContent).toContain(pseudoLocalise('{admin}, an admin, paused {name} on {date}.').replace('{admin}', 'Ada').replace('{name}', 'Uma').split('{date}')[0]);
+        expect(host.textContent).toContain(pseudoLocalise("{name}'s reply").replace('{name}', 'Uma'));
+        expect(host.textContent).toContain('I refunded the deposit the same day.');
+        expect(host.textContent).toContain(pseudoLocalise("An owner paused {name} on {date}, signed in with the server's password.").replace('{name}', 'Ivy').split('{date}')[0]);
+        expect(host.querySelector('[data-testid="removal-case-hidden"]')?.textContent)
+            .toBe(pseudoLocalise('An admin hid the case for this vote, as one shown to be false. Their reason: {reason}').replace('{reason}', 'Two witnesses showed it false'));
+        expect(host.textContent).toContain(pseudoLocalise('Proposed by {name}.').replace('{name}', 'Tia'));
+        expect(bypassing(), 'cards').toEqual([]);
+        // The member's own vote: Reply to this case opens the sheet, and Send reply sends their words, trimmed.
+        await click(button('Reply to this case'), 'Reply to this case');
+        expect(host.querySelector('[data-testid="removal-reply-sheet"]')).toBeTruthy();
+        expect(host.textContent).toContain(pseudoLocalise('Everyone who reads this vote sees your reply beside the case.'));
+        expect(bypassing(), 'sheet').toEqual([]);
+        await type(host.querySelector('[data-testid="removal-reply-input"]'), '  It was a misunderstanding.  ');
+        await click(host.querySelector('[data-testid="removal-reply-send"]'), 'Send reply');
+        expect(node.replies).toEqual([['20202020', 'It was a misunderstanding.']]);
+        expect(host.querySelector('[data-testid="removal-reply-sheet"]')).toBeNull();
+        // Report this case as false: asked first, then sent, then said.
+        await click(button('Report this case as false'), 'Report this case as false');
+        expect(alerts.said).toContain(pseudoLocalise('Report this case as a false accusation? The admins and owners see your report, and who brought the case.'));
+        expect(node.reports).toEqual([]);
+        await act(async () => { await alerts.buttons.find((b) => b.text === pseudoLocalise('Report'))?.onPress?.(); });
+        await settle(4);
+        expect(node.reports).toEqual(['20202020']);
+        expect(host.querySelector('[data-testid="removal-case-reported"]')?.textContent).toBe(pseudoLocalise('Reported. The admins and owners will look at it.'));
+        expect(bypassing(), 'report').toEqual([]);
+    });
+
     it('Decide: a member with no trade yet is told before voting on money, and asked to trade before proposing', async () => {
         node.canPropose = false;
         node.voice = { voiceCredits: 0, hasCompletedTrade: false };
@@ -594,7 +641,11 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
             'Reach The Moon', 'TOUCHES: SKY', 'Keep Suspension?', 'Grant Enterprise', 'Quadratic', '1m1v', 'Vote YES', 'Vote NO',
             'An admin paused Ola on 22 Oct 2026.', 'Yes removes Ola after 7 days. No brings Ola back as soon as the vote closes.',
             "Abe holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, Abe is back when it closes.",
-            "This vote is about you, so you can't vote on it."]) {
+            "This vote is about you, so you can't vote on it.",
+            'Ada, an admin, paused Uma on 22 Oct 2026.', "Uma's reply", 'I refunded the deposit the same day.',
+            "An owner paused Ivy on 22 Oct 2026, signed in with the server's password.",
+            'An admin hid the case for this vote, as one shown to be false. Their reason: Two witnesses showed it false', 'Proposed by Tia.',
+            'Reply to this case', 'Report this case as false']) {
             expect(host.textContent, english).toContain(english);
         }
         expect(host.textContent).not.toContain('An admin paused Mia');

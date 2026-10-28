@@ -31,6 +31,17 @@ describe('the kinds', () => {
         expect(pushNoticeWords('group.invite')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'You were invited to join a group.' });
     });
 
+    it("a removal vote is two kinds of its own, landing on Home: the voters' names nobody, and the member's says it is about their account (removal by vote, Amendment A)", () => {
+        expect(isPushNoticeKind('decision.removal')).toBe(true);
+        expect(PUSH_NOTICE_KINDS['decision.removal'].tab).toBe('home');
+        expect(pushNoticeWords('decision.removal')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'Your community opened a vote on removing a member.' });
+        expect(isPushNoticeKind('account.removal-vote')).toBe(true);
+        expect(PUSH_NOTICE_KINDS['account.removal-vote'].tab).toBe('home');
+        expect(pushNoticeWords('account.removal-vote')).toEqual({
+            title: PUSH_NOTICE_TITLE, body: 'Your community opened a vote about your account. Open BeanPool to read it and reply.',
+        });
+    });
+
     it('a knock notice lands on People with fixed generic words, and the answer is no push kind (the phone posts it)', () => {
         expect(isPushNoticeKind('community.knock')).toBe(true);
         expect(PUSH_NOTICE_KINDS['community.knock'].tab).toBe('people');

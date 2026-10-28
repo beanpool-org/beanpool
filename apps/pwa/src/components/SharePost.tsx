@@ -67,24 +67,31 @@ async function handOver(title: string, link: string): Promise<'shared' | 'copied
  * browser that refuses either once the tap has waited on the node: Safari's share() and clipboard need the tap itself)
  * leaves a live link, seven days and one of the member's 50. It is never lost: it is shown to copy by hand, and Try
  * again (or the button again) hands the same link over inside that tap, with no wait before it; no second link is made.
+ * A share sheet the member closed leaves one too: it is kept the same way, unshown, for the next tap.
  */
 export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
     const info = useCommunityInfo();
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
-    // The link whose hand-over failed, for the post it was made for (the same button may be drawn for another post next).
-    const [kept, setKept] = useState<{ postId: string; link: string } | null>(null);
+    // The link made but not handed over, for the post it was made for (the same button may be drawn for another post
+    // next): `failed`, shown to copy by hand; or the share sheet was closed, kept unshown for the next tap.
+    const [kept, setKept] = useState<{ postId: string; link: string; failed: boolean } | null>(null);
     if (info?.features?.shareOutside !== true || !shareableOutside(post)) return null;
     const keptLink = kept?.postId === post.id ? kept.link : null;
+    const shownLink = kept?.postId === post.id && kept.failed ? kept.link : null;
 
     const handOverNow = async (link: string) => {
         const how = await handOver(post.title, link);
         if (how === 'failed') {
-            setKept({ postId: post.id, link });
+            setKept({ postId: post.id, link, failed: true });
             setNote({ text: t('Could not copy the link.'), ok: false });
             return;
         }
-        if (how === 'cancelled') return;
+        if (how === 'cancelled') {
+            // A field already shown stays shown.
+            setKept(k => ({ postId: post.id, link, failed: k?.postId === post.id && k.link === link && k.failed }));
+            return;
+        }
         setKept(null);
         if (how === 'copied') setNote({ text: t('Link copied.'), ok: true });
     };
@@ -113,9 +120,9 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
                     {note.text}
                 </p>
             )}
-            {keptLink && (
+            {shownLink && (
                 <div className="flex flex-wrap gap-2 items-center">
-                    <input type="text" readOnly value={keptLink} data-testid="share-outside-link" aria-label={t('The link to share')}
+                    <input type="text" readOnly value={shownLink} data-testid="share-outside-link" aria-label={t('The link to share')}
                         onFocus={e => e.currentTarget.select()}
                         className="flex-1 min-w-0 basis-48 min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white text-sm" />
                     <button type="button" data-testid="share-outside-retry" onClick={share} disabled={busy} className={BUTTON}>

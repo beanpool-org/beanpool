@@ -820,7 +820,6 @@
   "Add a photo to your profile": "Προσθέστε μια φωτογραφία στο προφίλ σας",
   "Pick a few things you like": "Επιλέξτε μερικά πράγματα που σας αρέσουν",
   "Post something free or for swap": "Αναρτήστε κάτι δωρεάν ή για ανταλλαγή",
-  "Ask a community to let you in": "Ζητήστε από μια κοινότητα να σας δεχτεί",
   "For your first {span}: {posts} and {chats} a day.": "Για το πρώτο σας {span}: {posts} και {chats} την ημέρα.",
   "Your events": "Οι εκδηλώσεις σας",
   "★ For You Feed": "★ Ροή «Για εσάς»",
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Για να μαθαίνετε όταν κάποιος σας απαντάει, σας στέλνει μήνυμα ή ζητά να εγγραφεί. Τίποτα άλλο.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Οι ειδοποιήσεις για το BeanPool είναι απενεργοποιημένες στις ρυθμίσεις του τηλεφώνου σας. Ανοίξτε τις Ρυθμίσεις για να τις ενεργοποιήσετε.",
   "Nothing here yet. Be the first:": "Δεν υπάρχει τίποτα εδώ ακόμα. Γίνετε ο πρώτος:",
-  "The global community": "Η παγκόσμια κοινότητα"
+  "The global community": "Η παγκόσμια κοινότητα",
+  "Choose a name": "Επιλέξτε ένα όνομα",
+  "Say roughly where you are": "Πείτε περίπου πού βρίσκεστε",
+  "Add a picture (a preset counts)": "Προσθέστε μια εικόνα (ένα προκαθορισμένο μετράει)",
+  "Look at an example Ledger": "Δείτε ένα παράδειγμα καθολικού",
+  "Say hello to someone near you": "Πείτε ένα γεια σε κάποιον κοντά σας",
+  "Tell me when a community starts here, or say you'd help start one": "Ειδοποιήστε με όταν ξεκινήσει μια κοινότητα εδώ, ή βοηθήστε να ξεκινήσει μία",
+  "Nothing within 250 km yet.": "Τίποτα σε ακτίνα 250 χλμ. ακόμα.",
+  "See what people post elsewhere ›": "Δείτε τι αναρτούν αλλού ›"
 }

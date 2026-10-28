@@ -555,7 +555,6 @@
   "Add a photo to your profile": "Tambahkan foto ke profil Anda",
   "Pick a few things you like": "Pilih beberapa hal yang Anda sukai",
   "Post something free or for swap": "Pasang barang gratis atau barter",
-  "Ask a community to let you in": "Minta komunitas untuk menerima Anda",
   "For your first {span}: {posts} and {chats} a day.": "Untuk {span} pertama Anda: {posts} dan {chats} per hari.",
   "{line} Waiting on you.": "{line} Menunggu Anda.",
   "0 Beans · nothing to repay": "0 kacang · tidak ada yang perlu dibayar kembali",
@@ -5882,5 +5881,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Agar Anda tahu saat seseorang membalas, mengirim pesan, atau meminta bergabung. Tidak ada yang lain.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Notifikasi BeanPool dimatikan di pengaturan ponsel Anda. Buka Pengaturan untuk menyalakannya.",
   "Nothing here yet. Be the first:": "Belum ada apa-apa di sini. Jadilah yang pertama:",
-  "The global community": "Komunitas global"
+  "The global community": "Komunitas global",
+  "Choose a name": "Pilih nama",
+  "Say roughly where you are": "Beri tahu kira-kira di mana Anda berada",
+  "Add a picture (a preset counts)": "Tambahkan foto (gambar bawaan juga dihitung)",
+  "Look at an example Ledger": "Lihat contoh Buku Besar",
+  "Say hello to someone near you": "Sapa seseorang di dekatmu",
+  "Tell me when a community starts here, or say you'd help start one": "Beri tahu aku jika ada komunitas di sini, atau bersedia membantu memulainya",
+  "Nothing within 250 km yet.": "Belum ada apa-apa dalam radius 250 km.",
+  "See what people post elsewhere ›": "Lihat postingan orang di tempat lain ›"
 }

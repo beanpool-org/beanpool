@@ -586,7 +586,6 @@
   "Add a photo to your profile": "프로필에 사진 추가하기",
   "Pick a few things you like": "관심 있는 분야 몇 가지 고르기",
   "Post something free or for swap": "나눔이나 교환할 물건 올리기",
-  "Ask a community to let you in": "커뮤니티에 가입 요청하기",
   "{n} day|{n} days": {
     "other": "{n}일"
   },
@@ -5882,5 +5881,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "휴대폰 설정에서 BeanPool 알림이 꺼져 있습니다. 켜려면 설정을 여세요.",
   "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:",
-  "The global community": "글로벌 커뮤니티"
+  "The global community": "글로벌 커뮤니티",
+  "Choose a name": "이름 선택하기",
+  "Say roughly where you are": "대략적인 위치 설정하기",
+  "Add a picture (a preset counts)": "사진 추가하기 (프리셋도 가능)",
+  "Look at an example Ledger": "원장 예시 살펴보기",
+  "Say hello to someone near you": "가까운 이웃에게 인사하기",
+  "Tell me when a community starts here, or say you'd help start one": "여기서 커뮤니티가 시작되면 알림 받기 또는 시작 돕기",
+  "Nothing within 250 km yet.": "아직 250km 이내에 등록된 항목이 없어요.",
+  "See what people post elsewhere ›": "다른 지역 게시물 보기 ›"
 }

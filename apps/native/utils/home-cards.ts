@@ -175,7 +175,10 @@ export interface HomeCards {
     needs?: { items: HomeNeedsItem[] };
     safety?: { words: true; signInLinked: false };
     find?: HomeFind;
-    steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
+    steps?: {
+        joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean;
+        invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
+    };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: HomeDealItem[] };
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
     enterprise?: {
@@ -776,7 +779,7 @@ export function marketForward(params: { tab?: string | string[]; dealsTab?: stri
  * A First steps line (§3.1), with what is done. `suggestion`: a line that never holds the card open (the phone can't
  * tick it: a knock is kept on the community knocked on, not here); it goes once the phone remembers a knock.
  */
-export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask'; text: string; done: boolean; suggestion?: true }
+export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch'; text: string; done: boolean; suggestion?: true }
 
 /**
  * `canInvite`: whether the reader can invite here ({@link invitesForReader}). The node sends `invited: false` wherever
@@ -815,15 +818,19 @@ function communityToAsk(find: HomeFind | undefined): boolean {
 }
 
 /**
- * The First steps lines of the global node (§3.1, §7; the web app's, apps/pwa lib/home-cards.ts `stepLines`): a first
- * post, free or for swap (Beans are off there), and, while a community within 250 km has an address and the phone
- * remembers no knock, a suggestion to ask one to let them in, which never holds the card open. The design's "Set your area" is left
- * out, as on the web: no screen on the phone sets the account's area yet, and every line opens a screen.
+ * The first-week card replaces First steps for a global member (§3.2, §6): the seven real steps, ticked by the node's
+ * facts; a done step never un-ticks; the card ends after 14 days or all done.
  */
-export function globalStepLines(steps: NonNullable<HomeCards['steps']>, find: HomeFind | undefined, knocked: boolean): StepLine[] {
-    const lines: StepLine[] = [{ id: 'post', text: t('Post something free or for swap'), done: steps.firstPost }];
-    if (!knocked && communityToAsk(find)) lines.push({ id: 'ask', text: t('Ask a community to let you in'), done: false, suggestion: true });
-    return lines;
+export function globalStepLines(steps: NonNullable<HomeCards['steps']>, _find?: HomeFind | undefined, _knocked?: boolean): StepLine[] {
+    return [
+        { id: 'name', text: t('Choose a name'), done: true },
+        { id: 'area', text: t('Say roughly where you are'), done: !!steps.area },
+        { id: 'photo', text: t('Add a picture (a preset counts)'), done: !!steps.photo },
+        { id: 'sawLedger', text: t('Look at an example Ledger'), done: !!steps.sawLedger },
+        { id: 'post', text: t('Post something free or for swap'), done: !!steps.firstPost },
+        { id: 'saidHello', text: t('Say hello to someone near you'), done: !!steps.saidHello },
+        { id: 'watch', text: t("Tell me when a community starts here, or say you'd help start one"), done: !!steps.watch },
+    ];
 }
 
 /**
@@ -873,7 +880,8 @@ export function firstSteps(
     const note = probationSentence(answer.me?.probation);
     const joined = Date.parse(answer.me?.joinedAt ?? s.joinedAt ?? '');
     const young = Number.isFinite(joined) && (ctx.now ?? Date.now()) - joined < STEPS_NEW_DAYS * DAY_MS;
-    return { lines, note, show: young || lines.some(l => !l.done && !l.suggestion) || note !== null };
+    // §3.2, §6: the card ends after 14 days or all done
+    return { lines, note, show: young && lines.some(l => !l.done) };
 }
 
 /**

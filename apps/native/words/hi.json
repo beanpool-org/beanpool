@@ -543,7 +543,6 @@
   "Add a photo to your profile": "अपनी प्रोफ़ाइल में फ़ोटो जोड़ें",
   "Pick a few things you like": "अपनी पसंद की कुछ चीज़ें चुनें",
   "Post something free or for swap": "मुफ़्त या अदला-बदली के लिए कुछ पोस्ट करें",
-  "Ask a community to let you in": "किसी समुदाय से जुड़ने का अनुरोध करें",
   "{n} day|{n} days": {
     "one": "{n} दिन",
     "other": "{n} दिन"
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ताकि जब कोई आपको उत्तर दे, संदेश भेजे, या जुड़ने का अनुरोध करे तो आपको पता चले। और कुछ नहीं।",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "आपके फ़ोन की सेटिंग में BeanPool की सूचनाएँ बंद हैं। उन्हें चालू करने के लिए सेटिंग खोलें।",
   "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:",
-  "The global community": "वैश्विक समुदाय"
+  "The global community": "वैश्विक समुदाय",
+  "Choose a name": "एक नाम चुनें",
+  "Say roughly where you are": "बताएँ कि आप लगभग कहाँ हैं",
+  "Add a picture (a preset counts)": "एक तस्वीर जोड़ें (प्रीसेट भी मान्य है)",
+  "Look at an example Ledger": "एक उदाहरण बहीखाता देखें",
+  "Say hello to someone near you": "अपने नजदीकी किसी व्यक्ति को नमस्ते कहें",
+  "Tell me when a community starts here, or say you'd help start one": "यहाँ समुदाय शुरू होने पर मुझे बताएँ, या एक शुरू करने में मदद की बात कहें",
+  "Nothing within 250 km yet.": "अभी 250 किमी के भीतर कुछ नहीं है।",
+  "See what people post elsewhere ›": "देखें कि लोग अन्यत्र क्या पोस्ट कर रहे हैं ›"
 }

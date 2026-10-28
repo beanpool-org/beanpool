@@ -586,7 +586,6 @@
   "Add a photo to your profile": "Thêm ảnh vào hồ sơ của bạn",
   "Pick a few things you like": "Chọn một số điều bạn thích",
   "Post something free or for swap": "Đăng thứ gì đó miễn phí hoặc để trao đổi",
-  "Ask a community to let you in": "Xin gia nhập một cộng đồng",
   "{n} day|{n} days": {
     "other": "{n} ngày"
   },
@@ -5882,5 +5881,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Để bạn biết khi ai đó trả lời bạn, nhắn tin cho bạn hoặc yêu cầu tham gia. Không có gì khác.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Thông báo của BeanPool đang tắt trong cài đặt điện thoại của bạn. Mở Cài đặt để bật.",
   "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:",
-  "The global community": "Cộng đồng toàn cầu"
+  "The global community": "Cộng đồng toàn cầu",
+  "Choose a name": "Chọn một tên",
+  "Say roughly where you are": "Cho biết đại khái vị trí của bạn",
+  "Add a picture (a preset counts)": "Thêm ảnh (ảnh có sẵn cũng được tính)",
+  "Look at an example Ledger": "Xem sổ cái ví dụ",
+  "Say hello to someone near you": "Gửi lời chào tới người ở gần bạn",
+  "Tell me when a community starts here, or say you'd help start one": "Báo cho tôi khi có cộng đồng bắt đầu ở đây, hoặc ngỏ ý giúp bắt đầu một cộng đồng",
+  "Nothing within 250 km yet.": "Chưa có gì trong phạm vi 250 km.",
+  "See what people post elsewhere ›": "Xem mọi người đăng gì ở nơi khác ›"
 }

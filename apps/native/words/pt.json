@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Adicione uma foto ao perfil",
   "Pick a few things you like": "Escolha algumas coisas que curte",
   "Post something free or for swap": "Publique algo grátis ou para troca",
-  "Ask a community to let you in": "Peça para uma comunidade aceitar você",
   "{n} day|{n} days": {
     "one": "{n} dia",
     "other": "{n} dias"
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para saber quando alguém responder, enviar uma mensagem ou pedir para entrar. Nada mais.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "As notificações do BeanPool estão desligadas nas definições do seu telefone. Abra as Definições para as ligar.",
   "Nothing here yet. Be the first:": "Nada aqui ainda. Seja o primeiro:",
-  "The global community": "A comunidade global"
+  "The global community": "A comunidade global",
+  "Choose a name": "Escolha um nome",
+  "Say roughly where you are": "Diga aproximadamente onde você está",
+  "Add a picture (a preset counts)": "Adicione uma foto (uma predefinida conta)",
+  "Look at an example Ledger": "Veja um livro-razão de exemplo",
+  "Say hello to someone near you": "Diga oi para alguém perto de você",
+  "Tell me when a community starts here, or say you'd help start one": "Avise-me quando uma comunidade começar aqui ou diga que ajudaria a começar uma",
+  "Nothing within 250 km yet.": "Nada em um raio de 250 km ainda.",
+  "See what people post elsewhere ›": "Veja o que as pessoas publicam em outros lugares ›"
 }

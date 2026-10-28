@@ -631,7 +631,6 @@
   "Add a photo to your profile": "Додайте фото до профілю",
   "Pick a few things you like": "Оберіть те, що вам подобається",
   "Post something free or for swap": "Опублікуйте щось безкоштовне або для обміну",
-  "Ask a community to let you in": "Попросіть спільноту впустити вас",
   "{n} day|{n} days": {
     "one": "{n} день",
     "few": "{n} дні",
@@ -6599,5 +6598,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Щоб дізнаватися, коли хтось відповідає вам, пише повідомлення або просить приєднатися. Більше нічого.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Сповіщення BeanPool вимкнено в налаштуваннях телефона. Відкрийте налаштування, щоб увімкнути їх.",
   "Nothing here yet. Be the first:": "Тут поки нічого немає. Будьте першими:",
-  "The global community": "Глобальна спільнота"
+  "The global community": "Глобальна спільнота",
+  "Choose a name": "Оберіть ім'я",
+  "Say roughly where you are": "Вкажіть приблизне місцезнаходження",
+  "Add a picture (a preset counts)": "Додайте фото (можна стандартне)",
+  "Look at an example Ledger": "Подивіться приклад реєстру",
+  "Say hello to someone near you": "Привітайтеся з кимось поблизу",
+  "Tell me when a community starts here, or say you'd help start one": "Повідомити, коли спільнота з'явиться тут, або допомогти створити",
+  "Nothing within 250 km yet.": "У радіусі 250 км поки нічого немає.",
+  "See what people post elsewhere ›": "Подивитися дописи з інших місць ›"
 }

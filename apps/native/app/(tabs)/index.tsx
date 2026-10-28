@@ -725,6 +725,11 @@ export default function HomeScreen() {
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
         else if (step === 'ask') router.push('/find-community');
+        else if (step === 'area') router.push('/your-area');
+        else if (step === 'sawLedger') router.push('/(tabs)/ledger');
+        else if (step === 'saidHello') router.push({ pathname: '/(tabs)/people', params: { view: 'community' } });
+        else if (step === 'watch') router.push('/find-community');
+        else if (step === 'name') { /* already done */ }
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     }, [openTune]);
 

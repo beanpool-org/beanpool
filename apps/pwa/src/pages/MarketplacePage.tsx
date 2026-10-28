@@ -3463,8 +3463,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <div className="space-y-6">
                                     <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-10 mt-2 text-center shadow-soft">
                                         <p className="text-sm font-bold text-nature-700 dark:text-nature-300 mb-3">
-                                            {t('Nothing here yet. Be the first:')}
+                                            {nearbyListings ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                         </p>
+                                        {nearbyListings && (
+                                            <div className="mb-4">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEverywhere(true)}
+                                                    data-testid="market-see-elsewhere"
+                                                    className="text-sm font-bold text-nature-800 dark:text-nature-100 underline cursor-pointer"
+                                                >
+                                                    {t('See what people post elsewhere ›')}
+                                                </button>
+                                            </div>
+                                        )}
                                         <div data-testid="market-empty-tiles" className="flex items-center justify-center gap-3 mb-6">
                                             {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
                                                 <div key={cat} className="w-14 h-14 rounded-xl overflow-hidden shadow-sm">

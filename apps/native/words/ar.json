@@ -661,7 +661,6 @@
   "Add a photo to your profile": "أضف صورة إلى ملفك الشخصي",
   "Pick a few things you like": "اختر بعض الأشياء التي تعجبك",
   "Post something free or for swap": "انشر شيئًا مجانيًا أو للتبادل",
-  "Ask a community to let you in": "اطلب من مجتمع السماح لك بالانضمام",
   "{n} day|{n} days": {
     "zero": "{n} يوم",
     "one": "{n} يوم",
@@ -7077,5 +7076,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "لتصلك إشعارات عندما يرد عليك شخص ما، أو يراسلك، أو يطلب الانضمام. لا شيء آخر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "الإشعارات متوقفة لـ BeanPool في إعدادات هاتفك. افتح الإعدادات لتشغيلها.",
   "Nothing here yet. Be the first:": "لا يوجد شيء هنا بعد. كن أول من ينشر:",
-  "The global community": "المجتمع العالمي"
+  "The global community": "المجتمع العالمي",
+  "Choose a name": "اختر اسماً",
+  "Say roughly where you are": "حدد موقعك التقريبي",
+  "Add a picture (a preset counts)": "أضف صورة (الصور الجاهزة مقبولة)",
+  "Look at an example Ledger": "اطلع على دفتر حسابات نموذجي",
+  "Say hello to someone near you": "رحّب بشخص قريب منك",
+  "Tell me when a community starts here, or say you'd help start one": "أخبرني عندما يبدأ مجتمع هنا، أو ساهم في بدء واحد",
+  "Nothing within 250 km yet.": "لا يوجد شيء في نطاق 250 كم بعد.",
+  "See what people post elsewhere ›": "شاهد ما ينشره الآخرون في أماكن أخرى ›"
 }

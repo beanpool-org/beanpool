@@ -602,7 +602,6 @@
   "Add a photo to your profile": "உங்கள் சுயவிவரத்தில் புகைப்படத்தைச் சேர்க்கவும்",
   "Pick a few things you like": "உங்களுக்குப் பிடித்த சிலவற்றைத் தேர்ந்தெடுக்கவும்",
   "Post something free or for swap": "இலவசமாகவோ அல்லது பரிமாற்றத்திற்கோ எதையாவது பகிருங்கள்",
-  "Ask a community to let you in": "ஒரு சமூகத்தில் உங்களை இணைக்கக் கேளுங்கள்",
   "{n} day|{n} days": {
     "one": "{n} நாள்",
     "other": "{n} நாட்கள்"
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "யாராவது உங்களுக்குப் பதிலளிக்கும் போது, செய்தி அனுப்பும் போது அல்லது இணையக் கோரும் போது நீங்கள் அறிந்துகொள்ள. வேறு எதுவுமில்லை.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "உங்கள் தொலைபேசி அமைப்புகளில் BeanPool அறிவிப்புகள் முடக்கப்பட்டுள்ளன. அவற்றை இயக்க அமைப்புகளைத் திறக்கவும்.",
   "Nothing here yet. Be the first:": "இங்கு இன்னும் எதுவும் இல்லை. முதலாவதாக இருங்கள்:",
-  "The global community": "உலகளாவிய சமூகம்"
+  "The global community": "உலகளாவிய சமூகம்",
+  "Choose a name": "ஒரு பெயரைத் தேர்வுசெய்க",
+  "Say roughly where you are": "நீங்கள் தோராயமாக எங்கு இருக்கிறீர்கள் என்று சொல்லுங்கள்",
+  "Add a picture (a preset counts)": "ஒரு படத்தைச் சேர்க்கவும் (முன்னமைக்கப்பட்டதும் அடங்கும்)",
+  "Look at an example Ledger": "ஒரு மாதிரி பேரேட்டைப் பாருங்கள்",
+  "Say hello to someone near you": "உங்களுக்கு அருகில் உள்ள ஒருவருக்கு வணக்கம் சொல்லுங்கள்",
+  "Tell me when a community starts here, or say you'd help start one": "இங்கு ஒரு சமூகம் தொடங்கும் போது தெரிவிக்கவும், அல்லது ஒன்றைத் தொடங்க உதവவும்",
+  "Nothing within 250 km yet.": "இன்னும் 250 கி.மீ-க்குள் எதுவும் இல்லை.",
+  "See what people post elsewhere ›": "மற்ற இடங்களில் மக்கள் என்ன இடுகையிடுகிறார்கள் என்று பாருங்கள் ›"
 }

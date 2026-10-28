@@ -599,7 +599,6 @@
   "Add a photo to your profile": "Magdagdag ng larawan sa iyong profile",
   "Pick a few things you like": "Pumili ng ilang bagay na gusto mo",
   "Post something free or for swap": "Mag-post ng libre o pampalit",
-  "Ask a community to let you in": "Hilingin sa komunidad na papasukin ka",
   "For your first {span}: {posts} and {chats} a day.": "Para sa iyong unang {span}: {posts} at {chats} sa isang araw.",
   "{line} Waiting on you.": "{line} Naghihintay sa iyo.",
   "0 Beans · nothing to repay": "0 munggo · walang babayaran",
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Para marinig mo kapag may sumagot sa iyo, nagpadala ng mensahe, o humiling na sumali. Wala nang iba.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Naka-off ang mga notification ng BeanPool sa settings ng iyong telepono. Buksan ang Settings para i-on ang mga ito.",
   "Nothing here yet. Be the first:": "Wala pa rito. Mauna ka na:",
-  "The global community": "Ang pandaigdigang komunidad"
+  "The global community": "Ang pandaigdigang komunidad",
+  "Choose a name": "Pumili ng pangalan",
+  "Say roughly where you are": "Sabihin kung humigit-kumulang nasaan ka",
+  "Add a picture (a preset counts)": "Magdagdag ng larawan (kasama ang preset)",
+  "Look at an example Ledger": "Tingnan ang halimbawang Ledger",
+  "Say hello to someone near you": "Bumati sa isang taong malapit sa iyo",
+  "Tell me when a community starts here, or say you'd help start one": "Sabihan ako kapag may nagsimulang komunidad dito, o sabihing tutulong ka",
+  "Nothing within 250 km yet.": "Wala pa sa loob ng 250 km.",
+  "See what people post elsewhere ›": "Tingnan ang ipino-post ng mga tao sa ibang lugar ›"
 }

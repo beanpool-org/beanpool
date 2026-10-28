@@ -138,13 +138,32 @@ describe('a card at 320dp × 1.3', () => {
         expect(body).not.toMatch(/<Pressable|minHeight: 44/);
     });
 
-    it('First steps\' global lines (H4) fit their two lines beside the box; the limits sentence wraps with no limit', () => {
+    it('The first week global lines (L3) fit beside the box; the limits sentence wraps with no limit', () => {
         const box = textWidth('☐', 18);
         const room = CARD_INNER - box - num(s.row.gap);
-        for (const line of ['Post something free or for swap', 'Ask a community to let you in']) {
+        for (const line of [
+            'Choose a name',
+            'Say roughly where you are',
+            'Add a picture (a preset counts)',
+            'Look at an example Ledger',
+            'Post something free or for swap',
+            'Say hello to someone near you',
+        ]) {
+            expect(longestWord(line, num(s.rowLine.fontSize)), line).toBeLessThan(room);
             expect(textWidth(line, num(s.rowLine.fontSize)), line).toBeLessThanOrEqual(2 * room);
         }
+        const watch = "Tell me when a community starts here, or say you'd help start one";
+        expect(longestWord(watch, num(s.rowLine.fontSize)), watch).toBeLessThan(room);
+        expect(textWidth(watch, num(s.rowLine.fontSize)), watch).toBeLessThanOrEqual(4 * room);
+        expect(read('components/home/HomeCardBodies.tsx')).toMatch(/lines=\{4\}/);
         expect(read('components/home/HomeCardBodies.tsx')).toMatch(/\{!!note && <Text style=\{\[s\.note, \{ marginTop: 4 \}\]\} testID="home-steps-limits">\{note\}<\/Text>\}/);
+    });
+
+    it('the empty Market at 320 dp (L3): words fit the 320 dp screen', () => {
+        for (const line of ['Nothing within 250 km yet.', 'See what people post elsewhere ›']) {
+            expect(longestWord(line, 14), line).toBeLessThan(CARD_INNER);
+            expect(textWidth(line, 14), line).toBeLessThanOrEqual(2 * CARD_INNER);
+        }
     });
 
     it('every target is at least 48dp (§8)', () => {

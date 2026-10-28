@@ -554,7 +554,6 @@
   "Add a photo to your profile": "プロフィールに写真を追加",
   "Pick a few things you like": "好きな分野をいくつか選ぶ",
   "Post something free or for swap": "無料のものや物々交換を出品",
-  "Ask a community to let you in": "コミュニティに参加申請する",
   "For your first {span}: {posts} and {chats} a day.": "最初の{span}：1日あたり投稿{posts}件、チャット{chats}件まで。",
   "{line} Waiting on you.": "{line} あなたの対応待ちです。",
   "0 Beans · nothing to repay": "0豆 · 返済の必要はありません",
@@ -5882,5 +5881,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "誰かが返信したとき、メッセージを送ったとき、または参加をリクエストしたときに通知が届きます。それ以外には届きません。",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "スマートフォンの設定で BeanPool の通知がオフになっています。オンにするには設定を開いてください。",
   "Nothing here yet. Be the first:": "ここにはまだ何もありません。最初になりましょう:",
-  "The global community": "グローバルコミュニティ"
+  "The global community": "グローバルコミュニティ",
+  "Choose a name": "名前を選ぶ",
+  "Say roughly where you are": "大体の場所を設定する",
+  "Add a picture (a preset counts)": "画像を追加する（プリセットでも可）",
+  "Look at an example Ledger": "台帳の例を見る",
+  "Say hello to someone near you": "近くの人に挨拶してみましょう",
+  "Tell me when a community starts here, or say you'd help start one": "ここでコミュニティが始まったら通知する、または立ち上げに参加する",
+  "Nothing within 250 km yet.": "250 km以内にはまだ何もありません。",
+  "See what people post elsewhere ›": "他の場所の投稿を見る ›"
 }

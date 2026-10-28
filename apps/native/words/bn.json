@@ -541,7 +541,6 @@
   "Add a photo to your profile": "আপনার প্রোফাইলে একটি ছবি যোগ করুন",
   "Pick a few things you like": "আপনার পছন্দের কয়েকটি বিষয় বেছে নিন",
   "Post something free or for swap": "বিনামূল্যে বা বিনিময়ের জন্য কিছু পোস্ট করুন",
-  "Ask a community to let you in": "একটি সম্প্রদায়ে যোগদানের অনুরোধ করুন",
   "{n} day|{n} days": {
     "one": "{n} দিন",
     "other": "{n} দিন"
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "যাতে কেউ উত্তর দিলে, বার্তা পাঠালে বা যোগদানের অনুরোধ করলে জানতে পারেন। আর কিছুই নয়।",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "আপনার ফোনের সেটিংসে BeanPool-এর বিজ্ঞপ্তি বন্ধ আছে। চালু করতে সেটিংস খুলুন।",
   "Nothing here yet. Be the first:": "এখানে এখনও কিছু নেই। প্রথম হন:",
-  "The global community": "বিশ্বব্যাপী সম্প্রদায়"
+  "The global community": "বিশ্বব্যাপী সম্প্রদায়",
+  "Choose a name": "একটি নাম চয়ন করুন",
+  "Say roughly where you are": "মোটামুটি আপনি কোথায় আছেন তা বলুন",
+  "Add a picture (a preset counts)": "একটি ছবি যোগ করুন (প্রিসেটও গ্রহণযোগ্য)",
+  "Look at an example Ledger": "একটি উদাহরণ লেজার দেখুন",
+  "Say hello to someone near you": "আপনার কাছের কাউকে হ্যালো বলুন",
+  "Tell me when a community starts here, or say you'd help start one": "এখানে কোনো সম্প্রদায় শুরু হলে আমাকে জানান, বা শুরু করতে সাহায্য করুন",
+  "Nothing within 250 km yet.": "এখনও ২৫০ কিলোমিটারের মধ্যে কিছু নেই।",
+  "See what people post elsewhere ›": "অন্যত্র মানুষ কী পোস্ট করে তা দেখুন ›"
 }

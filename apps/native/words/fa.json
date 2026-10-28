@@ -542,7 +542,6 @@
   "Add a photo to your profile": "افزودن عکس به نمایه خود",
   "Pick a few things you like": "چند مورد از علایق خود را انتخاب کنید",
   "Post something free or for swap": "موردی رایگان یا برای مبادله ثبت کنید",
-  "Ask a community to let you in": "درخواست پیوستن به یک جامعه",
   "{n} day|{n} days": {
     "one": "{n} روز",
     "other": "{n} روز"
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "اعلان‌های BeanPool در تنظیمات تلفن شما خاموش است. برای روشن کردن آن‌ها، تنظیمات را باز کنید.",
   "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:",
-  "The global community": "جامعه جهانی"
+  "The global community": "جامعه جهانی",
+  "Choose a name": "یک نام انتخاب کنید",
+  "Say roughly where you are": "تقریباً بگویید کجا هستید",
+  "Add a picture (a preset counts)": "یک تصویر اضافه کنید (تصاویر پیش‌فرض هم پذیرفته می‌شوند)",
+  "Look at an example Ledger": "یک دفتر کل نمونه را مشاهده کنید",
+  "Say hello to someone near you": "به فردی نزدیک خود سلام کنید",
+  "Tell me when a community starts here, or say you'd help start one": "وقتی جامعه‌ای اینجا شروع شد به من خبر بده، یا بگو برای شروع کمک می‌کنی",
+  "Nothing within 250 km yet.": "هنوز چیزی در فاصله ۲۵۰ کیلومتری نیست.",
+  "See what people post elsewhere ›": "ببینید دیگران در جاهای دیگر چه ارسال می‌کنند ›"
 }

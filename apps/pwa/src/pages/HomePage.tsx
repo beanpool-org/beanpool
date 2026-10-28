@@ -1967,6 +1967,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     interests: openTune,
                     invite: () => onNavigate('people-invites'),
                     ask: undefined,
+                    name: undefined,
+                    area: () => onNavigate('settings-area'),
+                    sawLedger: () => onNavigate('ledger'),
+                    saidHello: () => onNavigate('people-community'),
+                    watch: () => {
+                        const y = cardY.current.get('find');
+                        if (y !== undefined) window.scrollTo({ top: Math.max(0, y - 8), behavior: 'smooth' });
+                    },
                 };
                 const lines = stepLines(a, myInterests).map(l => ({ ...l, go: goes[l.key] }));
                 const limits = probationSentence(a.me?.probation);

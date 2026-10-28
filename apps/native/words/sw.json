@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Weka picha kwenye wasifu wako",
   "Pick a few things you like": "Chagua vitu vichache unavyopenda",
   "Post something free or for swap": "Weka kitu cha bure au cha kubadilishana",
-  "Ask a community to let you in": "Omba jumuiya ikuruhusu kuingia",
   "{n} day|{n} days": {
     "one": "siku {n}",
     "other": "siku {n}"
@@ -6121,5 +6120,13 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Ili ujue mtu anapokujibu, anapokutumia ujumbe, au anapoomba kujiunga. Hakuna kingine.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Arifa za BeanPool zimezimwa katika mipangilio ya simu yako. Fungua Mipangilio ili kuziwasha.",
   "Nothing here yet. Be the first:": "Hakuna kitu hapa bado. Kuwa wa kwanza:",
-  "The global community": "Jumuiya ya kimataifa"
+  "The global community": "Jumuiya ya kimataifa",
+  "Choose a name": "Chagua jina",
+  "Say roughly where you are": "Sema takriban mahali ulipo",
+  "Add a picture (a preset counts)": "Ongeza picha (picha iliyopo inafaa)",
+  "Look at an example Ledger": "Tazama mfano wa leja",
+  "Say hello to someone near you": "Msalimie mtu aliye karibu nawe",
+  "Tell me when a community starts here, or say you'd help start one": "Niarifu jumuiya itakapoanza hapa, au taja kuwa ungesaidia kuianzisha",
+  "Nothing within 250 km yet.": "Hakuna chochote ndani ya kilomita 250 bado.",
+  "See what people post elsewhere ›": "Ona kile watu wanachochapisha kwingineko ›"
 }

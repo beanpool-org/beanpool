@@ -7,7 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useIdentity } from '../IdentityContext';
-import { getBalance, getTransactions, getMemberProfile, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal } from '../../utils/db';
+import { getBalance, getTransactions, getMemberProfile, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -453,6 +453,12 @@ export default function LedgerScreen() {
     useFocusEffect(
         React.useCallback(() => {
             loadData(); loadMembers();
+            if (identity?.publicKey) {
+                signedRequest('/api/members/preferences', {
+                    publicKey: identity.publicKey,
+                    preferences: { saw_ledger: true },
+                }).catch(() => {});
+            }
             const s1 = DeviceEventEmitter.addListener('transaction_completed', loadData);
             const s2 = DeviceEventEmitter.addListener('sync_data_updated', loadData);
             const s3 = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => setBlocked(new Set(Array.isArray(list) ? list : [])));

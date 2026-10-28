@@ -45,10 +45,11 @@ import { db } from '../db/db.js';
 
 export const HOME_LAYOUT_PREF_KEY = 'home.layout';
 export const INTERESTS_PREF_KEY = 'interests';
+export const SAW_LEDGER_PREF_KEY = 'saw_ledger';
 /** When the interests last changed, stamped by the node beside them. Not a key an app may send. */
 export const INTERESTS_STAMP_PREF_KEY = 'interests.updatedAt';
 /** The preference keys this module owns, as the apps send and read them (and as they are stored). */
-export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, INTERESTS_PREF_KEY, TOUR_PREF_KEY];
+export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, INTERESTS_PREF_KEY, TOUR_PREF_KEY, SAW_LEDGER_PREF_KEY];
 export { TOUR_PREF_KEY };
 
 /** Every card Home can show, in the design's default order (§3.1). A member can't make a card; the catalogue is the catalogue. */
@@ -290,6 +291,11 @@ export function homePreferenceWrites(publicKey: string, preferences: Record<stri
         if (!keptAt || !kept || JSON.stringify(kept) !== JSON.stringify(list)) {
             const after = keptAt ? Date.parse(keptAt) + 1 : -Infinity;
             writes.push([INTERESTS_STAMP_PREF_KEY, new Date(Math.max(now.getTime(), after)).toISOString()]);
+        }
+    }
+    if (Object.prototype.hasOwnProperty.call(preferences, SAW_LEDGER_PREF_KEY)) {
+        if (preferences[SAW_LEDGER_PREF_KEY] === true || preferences[SAW_LEDGER_PREF_KEY] === 'true') {
+            writes.push([SAW_LEDGER_PREF_KEY, 'true']);
         }
     }
     return writes;

@@ -364,6 +364,13 @@ async function main(): Promise<void> {
     assert(same(keys(q3), ['peer-sao']), `accents are forgiven: "sao paulo" finds São Paulo (${JSON.stringify(keys(q3))})`);
     const q4 = await call('GET', null, '/api/global/communities?q=nowhere');
     assert(q4.status === 200 && same(keys(q4), []) && q4.body?.total === 0, 'a name nobody has: none');
+    // One community by its address's host, as a community's card names it in `?ask=<host>` (front doors S15).
+    const h1 = await call('GET', null, '/api/global/communities?host=MULLUM.beanpool.org&limit=1');
+    assert(h1.status === 200 && same(keys(h1), ['peer-mullum']) && h1.body?.total === 1, `host= finds the one community at that address, case forgiven (${JSON.stringify(keys(h1))})`);
+    const h2 = await call('GET', null, '/api/global/communities?host=beanpool.org');
+    assert(h2.status === 200 && same(keys(h2), []), 'host= matches the whole host, never a part of it');
+    const h3 = await call('GET', null, `/api/global/communities?host=${encodeURIComponent('https://mullum.beanpool.org/')}`);
+    assert(h3.status === 400, `host= takes a host name, never a URL (${h3.status})`);
     const p1 = await call('GET', null, `/api/global/communities?lat=${BYRON_POINT.lat}&lng=${BYRON_POINT.lng}&limit=2`);
     const p2 = await call('GET', null, `/api/global/communities?lat=${BYRON_POINT.lat}&lng=${BYRON_POINT.lng}&limit=2&offset=2`);
     const p4 = await call('GET', null, `/api/global/communities?lat=${BYRON_POINT.lat}&lng=${BYRON_POINT.lng}&limit=2&offset=6`);

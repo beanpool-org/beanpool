@@ -19,6 +19,23 @@ Joining with a code is signed by the new member's own key, from the app or the w
 
 **Your own open door, in the app.** A server you run with the global profile and its door open, at your own address, is joined in the BeanPool app through the same door screen as the global community's, under your community's name, with your address shown under it. Someone whose phone already holds a BeanPool account, and reaches your community without being a member, is told **You're not a member here yet** and offered **Join ‹your community› with this account**, with the ways in your door has (12 secret words, a sign-in). They join with the key already on their phone, and the app asks your server alone, never beanpool.org. To send people straight to it, the link **beanpool://join-open-door?node=https://your.address** (your own address after node=) opens that screen on a phone with an account: the app asks your server whether the door is open before it shows a way in, and sends nothing signed until the person taps. A phone with no account yet opens at the app's first screen: the app's door for a brand-new phone is the global community's, so a newcomer starts an account there, or with an invite to a local community, and then joins yours with it.
 
+## Your community's card
+
+Someone who opens your community's address in a browser, and has no account there, sees its card: what a stranger may read about your community, and the ways in. The website's map links it as **See** and your community's name. Each line on it follows a setting you already have:
+
+- **The name**: your **Community name** (Settings → Node Identity). With none of your own, the card shows your address instead.
+- **How many members**: only while **Share member count** is on (How this community works).
+- **The town or area**: only while **Share location & radius** is on (How this community works), and only what you type in **Town or area (optional)** under the service radius in Node Identity, with the radius. A town, never a street: the pin itself is never on the card.
+- **Takes requests to join**, while requests to join are on (How this community works), any member may invite, and your community has a public address; otherwise **Takes new members by invite**.
+- **Ask to join**: on an Android phone, it opens your card in the BeanPool app, where the person sends their request. Elsewhere, it opens the global community with your community first, but only while your community is listed in the directory (Listed on, named, and told at least once), because that is the list the global community shows. Otherwise the card says **Ask to join from the BeanPool app.**
+- **Look around the global community**: the global community your server names.
+
+**I have an invite** opens the invite form, and **Already a member** the ways back into an account. A browser that already holds an account here goes straight to the web app.
+
+Nothing else is on the card: no member's name or face, no listing, no balance. Your members' listings stay theirs, as before.
+
+**On your own server**, the global community is BeanPool's unless you name another with GLOBAL_COMMUNITY_URL in the server's .env. Set it to off and the card links nothing of the global community: no Look around the global community, and Ask to join opens the BeanPool app on an Android phone (or the app's store page when it isn't installed); anywhere else the card says **Ask to join from the BeanPool app.** Your server never contacts the global community either way: these are links a visitor may follow.
+
 ## What the open door keeps
 
 For each member who joined through the open door, your server keeps a small record beside their account:

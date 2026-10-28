@@ -542,6 +542,7 @@
   "Add a photo to your profile": "افزودن عکس به نمایه خود",
   "Pick a few things you like": "چند مورد از علایق خود را انتخاب کنید",
   "Post something free or for swap": "موردی رایگان یا برای مبادله ثبت کنید",
+  "Ask a community to let you in": "درخواست پیوستن به یک جامعه",
   "{n} day|{n} days": {
     "one": "{n} روز",
     "other": "{n} روز"
@@ -560,6 +561,7 @@
   "Your credit opens with a first trade.": "اعتبار شما با اولین معامله باز می‌شود.",
   "Spending is paused for now. You can still receive and sell.": "خرج کردن فعلاً متوقف است. همچنان می‌توانید دریافت کنید و بفروشید.",
   "{amount} · room to spend {room}": "{amount} · سقف خرج کردن {room}",
+  "The worldwide community": "جامعه جهانی",
   "1 member. You're first. Invite someone.": "۱ عضو. شما اولین نفر هستید. کسی را دعوت کنید.",
   "1 member. You're first.": "۱ عضو. شما اولین نفر هستید.",
   "{n} trade this month|{n} trades this month": {
@@ -6120,6 +6122,8 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "تا وقتی کسی به شما پاسخ می‌دهد، پیام می‌دهد، یا درخواست پیوستن دارد باخبر شوید. نه هیچ چیز دیگر.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "اعلان‌های BeanPool در تنظیمات تلفن شما خاموش است. برای روشن کردن آن‌ها، تنظیمات را باز کنید.",
   "Nothing here yet. Be the first:": "هنوز چیزی اینجا نیست. اولین نفر باشید:",
+  "Choose a banner photo, or keep this one": "یک عکس بنر انتخاب کنید، یا همین را نگه دارید",
+  "Your picture, until you choose a banner.": "تصویر شما، تا زمانی که یک بنر انتخاب کنید.",
   "The global community": "جامعه جهانی",
   "Choose a name": "یک نام انتخاب کنید",
   "Say roughly where you are": "تقریباً بگویید کجا هستید",

@@ -586,6 +586,7 @@
   "Add a photo to your profile": "為個人檔案新增相片",
   "Pick a few things you like": "挑選一些你喜歡的類別",
   "Post something free or for swap": "發布免費贈送或置換的閒置物品",
+  "Ask a community to let you in": "申請加入一個社群",
   "{n} day|{n} days": {
     "other": "{n} 天"
   },
@@ -601,6 +602,7 @@
   "Your credit opens with a first trade.": "完成首筆交易即可開啟信用額度。",
   "Spending is paused for now. You can still receive and sell.": "支出功能暫時暫停。你仍可正常接收豆子與出售物品。",
   "{amount} · room to spend {room}": "{amount} · 可透支額度 {room}",
+  "The worldwide community": "全球社群",
   "1 member. You're first. Invite someone.": "1 位成員。你是第一位。快去邀請新夥伴吧。",
   "1 member. You're first.": "1 位成員。你是第一位。",
   "{n} trade this month|{n} trades this month": {
@@ -5881,6 +5883,8 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回覆、發訊息或申請加入時收到提醒。不會用於其他任何用途。",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手機設定中已關閉 BeanPool 的通知。開啟設定即可開啟。",
   "Nothing here yet. Be the first:": "這裡還沒有任何內容。成為第一個發布者：",
+  "Choose a banner photo, or keep this one": "選擇橫幅相片，或保留此相片",
+  "Your picture, until you choose a banner.": "您的頭像，直到您選擇橫幅。",
   "The global community": "全球社群",
   "Choose a name": "選擇一個名字",
   "Say roughly where you are": "說明你的大致位置",

@@ -586,6 +586,7 @@
   "Add a photo to your profile": "프로필에 사진 추가하기",
   "Pick a few things you like": "관심 있는 분야 몇 가지 고르기",
   "Post something free or for swap": "나눔이나 교환할 물건 올리기",
+  "Ask a community to let you in": "커뮤니티에 가입 요청하기",
   "{n} day|{n} days": {
     "other": "{n}일"
   },
@@ -601,6 +602,7 @@
   "Your credit opens with a first trade.": "첫 거래를 마치면 신용 한도가 생겨요.",
   "Spending is paused for now. You can still receive and sell.": "현재 사용이 일시 중지되었어요. 받기와 판매는 계속 가능해요.",
   "{amount} · room to spend {room}": "{amount} · 쓸 수 있는 여유 한도 {room}",
+  "The worldwide community": "전 세계 커뮤니티",
   "1 member. You're first. Invite someone.": "멤버 1명. 첫 번째 멤버예요. 이웃을 초대해 보세요.",
   "1 member. You're first.": "멤버 1명. 첫 번째 멤버예요.",
   "{n} trade this month|{n} trades this month": {
@@ -5881,6 +5883,8 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "누군가 답변하거나, 메시지를 보내거나, 가입을 요청할 때 알림을 받습니다. 그 외에는 알림이 오지 않습니다.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "휴대폰 설정에서 BeanPool 알림이 꺼져 있습니다. 켜려면 설정을 여세요.",
   "Nothing here yet. Be the first:": "아직 아무것도 없어요. 첫 번째가 되어보세요:",
+  "Choose a banner photo, or keep this one": "배너 사진을 선택하거나 이 사진을 유지하세요",
+  "Your picture, until you choose a banner.": "배너를 선택할 때까지 표시되는 사진입니다.",
   "The global community": "글로벌 커뮤니티",
   "Choose a name": "이름 선택하기",
   "Say roughly where you are": "대략적인 위치 설정하기",

@@ -601,6 +601,7 @@
   "Add a photo to your profile": "പ്രൊഫൈലിൽ ഫോട്ടോ ചേർക്കുക",
   "Pick a few things you like": "നിങ്ങൾക്ക് ഇഷ്ടമുള്ള ചിലത് തിരഞ്ഞെടുക്കുക",
   "Post something free or for swap": "സൗജന്യമായോ കൈമാറ്റത്തിനായോ എന്തെങ്കിലും പോസ്റ്റ് ചെയ്യുക",
+  "Ask a community to let you in": "ഒരു കമ്മ്യൂണിറ്റിയിൽ പ്രവേശിക്കാൻ ആവശ്യപ്പെടുക",
   "{n} day|{n} days": {
     "one": "{n} ദിവസം",
     "other": "{n} ദിവസങ്ങൾ"
@@ -619,6 +620,7 @@
   "Your credit opens with a first trade.": "ആദ്യ ഇടപാടിലൂടെ ക്രെഡിറ്റ് ആരംഭിക്കുന്നു.",
   "Spending is paused for now. You can still receive and sell.": "ചെലവഴിക്കൽ ഇപ്പോൾ താൽക്കാലികമായി നിർത്തിയിരിക്കുന്നു. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും.",
   "{amount} · room to spend {room}": "{amount} · ചെലവഴിക്കാനുള്ള പരിധി {room}",
+  "The worldwide community": "ലോകമെമ്പാടുമുള്ള കമ്മ്യൂണിറ്റി",
   "1 member. You're first. Invite someone.": "1 അംഗം. നിങ്ങൾ ആദ്യത്തെ ആളാണ്. ആരെയെങ്കിലും ക്ഷണിക്കുക.",
   "1 member. You're first.": "1 അംഗം. നിങ്ങൾ ആദ്യത്തെ ആളാണ്.",
   "{n} trade this month|{n} trades this month": {
@@ -6120,6 +6122,8 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ആരെങ്കിലും മറുപടി നൽകുമ്പോഴോ സന്ദേശമയയ്ക്കുമ്പോഴോ ചേരാൻ അഭ്യർത്ഥിക്കുമ്പോഴോ അറിയാൻ. മറ്റൊന്നിനുമല്ല.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "നിങ്ങളുടെ ഫോണിന്റെ ക്രമീകരണങ്ങളിൽ BeanPool-ന്റെ അറിയിപ്പുകൾ ഓഫാണ്. അവ ഓണാക്കാൻ ക്രമീകരണങ്ങൾ തുറക്കുക.",
   "Nothing here yet. Be the first:": "ഇവിടെ ഇതുവരെ ഒന്നുമില്ല. ആദ്യത്തെയാളാകൂ:",
+  "Choose a banner photo, or keep this one": "ഒരു ബാനർ ഫോട്ടോ തിരഞ്ഞെടുക്കുക, അല്ലെങ്കിൽ ഇത് നിലനിർത്തുക",
+  "Your picture, until you choose a banner.": "ഒരു ബാനർ തിരഞ്ഞെടുക്കുന്നതുവരെ നിങ്ങളുടെ ചിത്രം.",
   "The global community": "ആഗോള കമ്മ്യൂണിറ്റി",
   "Choose a name": "ഒരു പേര് തിരഞ്ഞെടുക്കുക",
   "Say roughly where you are": "നിങ്ങൾ എവിടെയാണെന്ന് ഏകദേശം പറയുക",

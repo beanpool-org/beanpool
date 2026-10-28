@@ -20,6 +20,11 @@
  * a card's inside at 320 dp × 1.3, every target is at least 44 dp, and no colour is written outside the central tokens.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+    Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { act, createElement } from 'react';
@@ -31,6 +36,23 @@ import { createRoot, type Root } from 'react-dom/client';
 const SCREEN = 320;
 const FONT_SCALE = 1.3;
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => void }> }));
+
+vi.mock('expo', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+}));
+
+vi.mock('expo-modules-core', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+    EventEmitter: vi.fn(() => ({ addListener: vi.fn(), removeListener: vi.fn() })),
+    NativeModulesProxy: {},
+    ProxyNativeModule: {},
+}));
+
+vi.mock('expo-image', () => ({
+    Image: ({ source, testID, ...rest }: any) => createElement('img', { src: source?.uri ?? source, 'data-testid': testID, ...rest }),
+}));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', radiogroup: 'radiogroup', checkbox: 'checkbox' };
@@ -66,6 +88,7 @@ vi.mock('react-native', () => {
         AccessibilityInfo: { announceForAccessibility: () => {} },
         useWindowDimensions: () => ({ width: SCREEN, height: 569, scale: 1.5, fontScale: FONT_SCALE }),
         Dimensions: { get: () => ({ width: SCREEN, height: 569, scale: 1.5, fontScale: FONT_SCALE }) },
+        I18nManager: { isRTL: false, allowRTL: () => {}, forceRTL: () => {} },
     };
 });
 const nav = vi.hoisted(() => ({ pushed: [] as unknown[], navigated: [] as unknown[], backs: 0 }));
@@ -135,6 +158,7 @@ function shopAnswer() {
     return { ...s, counts: { ...COUNTS0, things: live.length, available: live.filter((l) => l.status === 'active').length, out: live.filter((l) => l.status === 'pending' && l.lendable).length } };
 }
 vi.mock('../db', () => ({
+    getMemberProfile: async () => null,
     signedGet: async (p: string) => {
         node.log.push({ method: 'GET', path: p });
         if (node.mode === 'down') throw new TypeError('Network request failed');

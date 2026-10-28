@@ -543,6 +543,7 @@
   "Add a photo to your profile": "अपनी प्रोफ़ाइल में फ़ोटो जोड़ें",
   "Pick a few things you like": "अपनी पसंद की कुछ चीज़ें चुनें",
   "Post something free or for swap": "मुफ़्त या अदला-बदली के लिए कुछ पोस्ट करें",
+  "Ask a community to let you in": "किसी समुदाय से जुड़ने का अनुरोध करें",
   "{n} day|{n} days": {
     "one": "{n} दिन",
     "other": "{n} दिन"
@@ -561,6 +562,7 @@
   "Your credit opens with a first trade.": "आपका क्रेडिट पहले व्यापार के साथ खुलता है।",
   "Spending is paused for now. You can still receive and sell.": "खर्च अभी रोका गया है। आप अभी भी प्राप्त और बेच सकते हैं।",
   "{amount} · room to spend {room}": "{amount} · खर्च करने की गुंजाइश {room}",
+  "The worldwide community": "वैश्विक समुदाय",
   "1 member. You're first. Invite someone.": "1 सदस्य। आप पहले हैं। किसी को आमंत्रित करें।",
   "1 member. You're first.": "1 सदस्य। आप पहले हैं।",
   "{n} trade this month|{n} trades this month": {
@@ -6120,6 +6122,8 @@
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ताकि जब कोई आपको उत्तर दे, संदेश भेजे, या जुड़ने का अनुरोध करे तो आपको पता चले। और कुछ नहीं।",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "आपके फ़ोन की सेटिंग में BeanPool की सूचनाएँ बंद हैं। उन्हें चालू करने के लिए सेटिंग खोलें।",
   "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:",
+  "Choose a banner photo, or keep this one": "बैनर फ़ोटो चुनें, या इसे ही रहने दें",
+  "Your picture, until you choose a banner.": "आपकी तस्वीर, जब तक कि आप कोई बैनर न चुन लें।",
   "The global community": "वैश्विक समुदाय",
   "Choose a name": "एक नाम चुनें",
   "Say roughly where you are": "बताएँ कि आप लगभग कहाँ हैं",

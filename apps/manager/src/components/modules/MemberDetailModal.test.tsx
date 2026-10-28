@@ -534,7 +534,8 @@ describe('MemberDetailModal', () => {
     // removing a member is its vote. The modal offers the suspension (the pause that opens the vote) and never Prune;
     // Offboard only inside a removal the community voted for; the owner's Prune Branch until the branch vote.
     describe('where the community votes', () => {
-        const active = { ...mockMember, status: 'active' };
+        const KEY = 'a'.repeat(64);
+        const active = { ...mockMember, publicKey: KEY, status: 'active' };
         const removalInGrace = (subject: string): nodeClient.AdminDecisionItem => ({
             id: 'dec-grace', authorPubkey: 'SYSTEM', title: 'Remove alice?', description: 'An admin paused alice.', effect: 'remove_member',
             touches: 'member', status: 'execution_pending_grace', subject, subjectName: 'alice', params: { rule: 2 },
@@ -563,7 +564,7 @@ describe('MemberDetailModal', () => {
         });
 
         it('offers Offboard inside a removal the community voted for, and still no Prune', async () => {
-            vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([removalInGrace('pubkey-1234567890-abcdef')]);
+            vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([removalInGrace(KEY)]);
             draw();
             expect(await screen.findByText('🚪 Offboard')).toBeInTheDocument();
             expect(screen.queryByText('🗑️ Prune Account')).toBeNull();
@@ -577,9 +578,15 @@ describe('MemberDetailModal', () => {
         });
 
         it("keeps the owner's Prune Branch until the branch vote", async () => {
-            draw({ members: [active, { publicKey: 'child-pubkey-1', invitedBy: 'pubkey-1234567890-abcdef' }], onPruneBranch: vi.fn() });
+            draw({ members: [active, { publicKey: 'b'.repeat(64), invitedBy: KEY }], onPruneBranch: vi.fn() });
             await screen.findByTestId('removal-is-the-vote');
             expect(screen.getByText('🗑️ Prune Branch')).toBeInTheDocument();
+        });
+
+        it('a row under another spelling of a key, no member\'s account, keeps Prune to tidy it away', async () => {
+            draw({ member: { ...active, publicKey: KEY.toUpperCase() } });
+            expect(await screen.findByText('🗑️ Prune Account')).toBeInTheDocument();
+            expect(screen.queryByTestId('removal-is-the-vote')).toBeNull();
         });
 
         it('with votes off, Prune and Offboard are there as before, and no word of a vote', async () => {

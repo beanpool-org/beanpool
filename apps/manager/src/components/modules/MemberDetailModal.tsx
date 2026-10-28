@@ -7,7 +7,7 @@ import { RekeyMemberWizard } from './RekeyMemberWizard';
 import { OffboardMemberWizard } from './OffboardMemberWizard';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
-import { emergencySuspendMember, liftMemberSuspension } from '../../lib/node-client';
+import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions } from '../../lib/node-client';
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { t } from '../../lib/fresh-proof';
@@ -136,6 +136,34 @@ export function MemberDetailModal({
     // Suspending or removing an owner asks an owner's fresh proof each time (server ownerRemovalProof).
     const suspendProof = useFreshProof();
     const pruneProof = useFreshProof();
+
+    // Removal by vote S3 (scratch/fable-design/DESIGN-removal-by-vote-fable.md §2): where the community votes, removing a
+    // member is its vote. The suspension above opens it; Prune is gone, and Offboard only settles a removal the community
+    // voted for, in its grace window. Where votes are off (the global node, or the operator's switch) both are as before.
+    // Until the node has said which, neither is offered: the node refuses them anyway.
+    const [doors, setDoors] = useState<{ votesOn: boolean; settlesRemoval: boolean } | null>(null);
+    useEffect(() => {
+        if (!nodeUrl || !pubkey) {
+            setDoors(null);
+            return;
+        }
+        let live = true;
+        Promise.all([
+            fetchNodeDecisionsOn(nodeUrl),
+            fetchAdminDecisions(nodeUrl, adminPassword, tfaToken).catch(() => []),
+        ]).then(([votesOn, decisions]) => {
+            if (!live) return;
+            const settlesRemoval = decisions.some((d) => d.effect === 'remove_member' && d.status === 'execution_pending_grace' && d.subject === pubkey);
+            setDoors({ votesOn, settlesRemoval });
+        });
+        return () => { live = false; };
+    }, [nodeUrl, pubkey, adminPassword, tfaToken]);
+    // A row stored under another spelling of a key is no member's account (the server's isMemberKeySpelling): Prune tidies it
+    // away wherever the community votes, as the node itself tells an operator to.
+    const strayRow = !!pubkey && !/^[0-9a-f]{64}$/.test(pubkey);
+    const removalIsTheVote = doors?.votesOn === true && !strayRow;
+    const mayPrune = doors !== null && (!doors.votesOn || strayRow);
+    const mayOffboard = doors !== null && (!doors.votesOn || doors.settlesRemoval);
 
     const handlePrune = async (code?: string) => {
         try {
@@ -623,10 +651,16 @@ export function MemberDetailModal({
                                 </div>
                             ) : showSuspend ? (
                                 <div className="space-y-2">
-                                    <p className="m-0 text-nature-300">
-                                        Suspends <strong>{displayName}</strong> now. Members then vote for 7 days on keeping it; if they
-                                        don't, it lifts by itself.
-                                    </p>
+                                    {doors?.votesOn === false ? (
+                                        <p className="m-0 text-nature-300">
+                                            Suspends <strong>{displayName}</strong> now, for 7 days. It lifts by itself then, or sooner if you lift it.
+                                        </p>
+                                    ) : (
+                                        <p className="m-0 text-nature-300">
+                                            Suspends <strong>{displayName}</strong> now. Members then vote for 7 days on removing them; if the
+                                            vote doesn't pass, the suspension lifts by itself.
+                                        </p>
+                                    )}
                                     <label htmlFor="suspend-reason" className="block font-bold text-nature-300">
                                         Reason (members will see this)
                                     </label>
@@ -659,7 +693,11 @@ export function MemberDetailModal({
                                 </div>
                             ) : (
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="text-nature-400">Emergency: suspend now, the community decides whether it stays.</span>
+                                    <span className="text-nature-400">
+                                        {doors?.votesOn === false
+                                            ? 'Emergency: suspend now, for 7 days.'
+                                            : 'Suspend now: the community then votes on removing them.'}
+                                    </span>
                                     <button
                                         onClick={() => { setShowSuspend(true); setSuspendDone(null); }}
                                         className="px-3 py-2 rounded-xl font-bold border bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink border-amber-800/80 text-[11px] whitespace-nowrap"
@@ -751,15 +789,19 @@ export function MemberDetailModal({
                                 <span>🔑 Re-Key</span>
                             </button>
 
-                            <button
-                                onClick={() => setShowOffboardWizard(true)}
-                                className="px-3 py-2 rounded-xl font-bold transition-all border bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border-red-800 text-[11px]"
-                                title="Offboard member: donate/gift surplus or formally write off debt before pruning"
-                            >
-                                <span>🚪 Offboard</span>
-                            </button>
+                            {mayOffboard && (
+                                <button
+                                    onClick={() => setShowOffboardWizard(true)}
+                                    className="px-3 py-2 rounded-xl font-bold transition-all border bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink border-red-800 text-[11px]"
+                                    title={doors?.settlesRemoval
+                                        ? 'Settle their Beans, and complete the removal the community voted for now'
+                                        : 'Offboard member: donate/gift surplus or formally write off debt before pruning'}
+                                >
+                                    <span>🚪 Offboard</span>
+                                </button>
+                            )}
 
-                            {onPrune && (
+                            {onPrune && mayPrune && (
                                 <button
                                     onClick={() => setShowPruneConfirm(true)}
                                     className="px-3 py-2 rounded-xl font-bold transition-all border bg-nature-900 hover:bg-nature-800 text-nature-300 border-nature-700 text-[11px]"
@@ -778,6 +820,13 @@ export function MemberDetailModal({
                                 </button>
                             )}
                         </div>
+                    )}
+                    {removalIsTheVote && (
+                        <p className="m-0 text-[11px] text-nature-400" data-testid="removal-is-the-vote">
+                            {doors?.settlesRemoval
+                                ? "Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now."
+                                : "Removing a member is the community's vote here. Suspending them opens it."}
+                        </p>
                     )}
                     <FreshProofBox proof={pruneProof} testId="prune-proof" />
                 </div>

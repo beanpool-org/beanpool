@@ -3110,6 +3110,11 @@ export interface OffboardPreviewResponse {
         publicKey: string;
         callsign: string;
     }>;
+    /**
+     * Where the community votes, the removal it voted for that this offboarding settles and completes (removal by vote S3);
+     * the node refuses the preview for anyone without one. Null where votes are off, and absent from a node before S3.
+     */
+    settlesRemoval?: { decisionId: string; gracePeriodEndsAt: string | null } | null;
 }
 
 export interface OffboardResponse {

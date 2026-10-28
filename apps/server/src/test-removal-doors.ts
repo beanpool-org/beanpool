@@ -34,6 +34,7 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -137,6 +138,7 @@ async function main() {
         const id = keypair(callsign);
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, ago(30 * DAY), invitedBy, `INV-${callsign.toUpperCase()}`);
+        setMemberPhoto(db, id.pubKeyHex, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pubKeyHex);
         if (beans > 0) se.transfer('genesis', id.pubKeyHex, beans, `seed ${callsign}`, 'direct', true);
         return id;
@@ -278,9 +280,9 @@ async function main() {
     // ── 4. A removal a member proposed before this version ───────────────────────────────────────────────────────────
     console.log('\n── 4. An open removal from before ──');
     const ned = seedMember('NoShowNed'), noa = seedMember('NoaStays');
-    const nedVote = proposedBefore({ authorPubkey: tia.pubKeyHex, title: 'Remove NoShowNed', description: 'Gone a year, owes the Commons', subject: ned.pubKeyHex });
+    const nedVote = proposedBefore({ authorPubkey: ada.pubKeyHex, title: 'Remove NoShowNed', description: 'Gone a year, owes the Commons', subject: ned.pubKeyHex });
     const noaVote = proposedBefore({ authorPubkey: gil.pubKeyHex, title: 'Remove NoaStays', description: 'A grudge, not a reason', subject: noa.pubKeyHex });
-    assert(decision(nedVote.id)?.status === 'open' && decision(nedVote.id)?.author_pubkey === tia.pubKeyHex, 'an open removal Tia proposed before the upgrade is there');
+    assert(decision(nedVote.id)?.status === 'open' && decision(nedVote.id)?.author_pubkey === ada.pubKeyHex, 'an open removal Ada proposed before the upgrade is there');
     voteAndClose(nedVote.id, true);
     assert(decision(nedVote.id)?.status === 'execution_pending_grace' && statusOf(ned) === 'disabled' && row(ned)?.credit_frozen === 1,
         `it passes and waits out its grace window, Ned paused and his credit frozen (${decision(nedVote.id)?.status} ${statusOf(ned)})`);

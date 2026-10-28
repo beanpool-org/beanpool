@@ -32,6 +32,7 @@ import {
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, pushServiceRefusals,
     hideBurst, undoBurst,
+    removalVoteRefusal, REMOVAL_IS_THE_VOTE_CODE,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
@@ -96,6 +97,7 @@ import {
     getRekeyStatus,
     getOffboardPreview,
     executeOffboard,
+    offboardRefusalFirst,
     type OffboardOptions,
 } from '../engine/member-wizards.js';
 import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
@@ -1911,10 +1913,18 @@ router.post('/api/local/admin/users/:pubkey/tier', async (ctx) => {
     }
 });
 
+// Remove a member at once. Where the community votes, only its vote removes a member (removal by vote S3: state-engine
+// removalVoteRefusal): refused in words that say to pause them instead, before an owner's fresh proof is spent on it.
 router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    const refusal = removalVoteRefusal(ctx.params.pubkey, actor);
+    if (refusal) {
+        ctx.status = 400;
+        ctx.body = { error: refusal, code: REMOVAL_IS_THE_VOTE_CODE };
+        return;
+    }
     if (!(await ownerRemovalProof(ctx, 'prune', ctx.params.pubkey, actor))) return;
     try {
         const heldRole = heldNodeRoleOf(ctx.params.pubkey);
@@ -2819,7 +2829,8 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';
         ctx.status = msg.includes('not found') ? 404 : 400;
-        ctx.body = { error: msg };
+        // Where the community votes and has not voted to remove them, the refusal's code too (member-wizards removalToSettle).
+        ctx.body = { error: msg, ...(e?.code ? { code: e.code } : {}) };
     }
 });
 
@@ -2843,6 +2854,14 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
             error: 'Two-person rule requires signed key-based admin authentication to gift offboarding funds to a member.',
             code: 'KEY_AUTH_REQUIRED',
         };
+        return;
+    }
+    // Where the community votes, offboarding only settles a removal it voted for, in its grace window (removal by vote S3:
+    // member-wizards removalToSettle): refused in words before an owner's fresh proof is spent on it.
+    const notASettlement: any = offboardRefusalFirst(String(pubkey));
+    if (notASettlement) {
+        ctx.status = notASettlement.status || 400;
+        ctx.body = { error: notASettlement.message, code: notASettlement.code };
         return;
     }
     // Spelt as executeOffboard spells them (member-wizards cleanPub, cleanOperator).

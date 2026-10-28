@@ -106,12 +106,14 @@ describe('Member detail: suspend and prune an owner (S4a)', () => {
 
     it('prune account through the members list: the box opens in the member\'s screen, not an alert; the code re-sends the prune', async () => {
         const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        const sent = mockNode(`/users/${owner}/prune`, [[401, CODE_ASK], [200, { success: true }]]);
+        // Prune Account is offered where the node's community votes are switched off (removal by vote S3).
+        const sent = mockNode(`/users/${owner}/prune`, [[401, CODE_ASK], [200, { success: true }]], { '/api/community/info': { features: { decisions: false } } });
         const onRefresh = vi.fn();
         render(
             <MembersModule
                 nodeData={{ members: [{ publicKey: owner, name: 'Anna Owner', status: 'active' }], profiles: [{ publicKey: owner, name: 'Anna Owner' }], posts: [], health: { healthScore: 98, flags: [] }, reports: [] } as never}
                 nodeDataLoading={false}
+                activeNodeUrl={NODE}
                 onRefresh={onRefresh}
                 onPruneUser={(pk, code) => pruneNodeUser(NODE, pk, 'pw', undefined, code).then(() => {})}
             />

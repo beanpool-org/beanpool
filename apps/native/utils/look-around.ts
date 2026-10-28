@@ -11,8 +11,8 @@
  * read it makes is one the node answers unsigned. Anything that needs a key (a message, a profile, asking a community,
  * Settings) opens the door instead ({@link LOOK_DOOR}).
  *
- * Identity: nothing here makes, reads out, writes or sends a key. Looking writes the guest mark, the saved list and the
- * community in use, nothing of an account.
+ * Identity: nothing here makes, writes or sends a key ({@link forgetTheLook} only asks whether the phone holds one).
+ * Looking writes the guest mark, the saved list and the community in use, nothing of an account.
  *
  * No-domain-lock-in: only the global community's own door leads here; a phone that never taps it is exactly as before.
  */
@@ -46,6 +46,33 @@ export function isLookRoute(segments: readonly string[]): boolean {
 /** Whether a node's profile gives a visitor with no key its view: the global community's, open to visitors, not a preview. */
 export function showsVisitorsView(profile: Pick<NodeProfile, 'profile' | 'features'> | null | undefined): boolean {
     return profile?.profile === 'global' && profile.features?.guestListingsOnly === true && profile.features?.privatePreview !== true;
+}
+
+export interface ForgetDeps {
+    /** The key the phone holds; throws for one it can't read. */
+    storedKey(): Promise<unknown>;
+    clearGuestNodes(): Promise<void>;
+}
+
+/**
+ * An account is arriving on a phone that held none (a restore, a re-key code): the guest marks on it are the look's,
+ * not this account's choices (nothing else marks a phone with no account: Sign Out and Delete wipe them, identity.ts
+ * wipeIdentityScopedStorage), so they go before it arrives. Kept, the account restored into the global community would
+ * read as a visitor there: the sync would send it none of the account's blocks (blocklist.ts) and keep a visitors' view
+ * over its listings (posts-view.ts), and a key it doesn't know would sit there as a guest instead of hearing so
+ * (app/node-mismatch.tsx), as before S12. A phone that holds a key, or one it can't read, keeps its marks. Never throws.
+ */
+export async function forgetTheLook(injected?: ForgetDeps): Promise<void> {
+    try {
+        const deps = injected ?? await (async (): Promise<ForgetDeps> => {
+            const [identity, nodes] = await Promise.all([import('./identity'), import('./nodes')]);
+            return { storedKey: identity.loadIdentity, clearGuestNodes: nodes.clearGuestNodes };
+        })();
+        if (await deps.storedKey()) return;
+        await deps.clearGuestNodes();
+    } catch {
+        // A key this phone can't read is an account: its marks stay.
+    }
 }
 
 export interface LookingDeps {

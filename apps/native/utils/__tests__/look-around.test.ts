@@ -4,7 +4,7 @@
  * network.
  */
 import { describe, expect, it } from 'vitest';
-import { LOOK_DOOR, LOOK_LANDING, isLookRoute, lookingAroundHere, showsVisitorsView, type LookingDeps } from '../look-around';
+import { LOOK_DOOR, LOOK_LANDING, forgetTheLook, isLookRoute, lookingAroundHere, showsVisitorsView, type LookingDeps } from '../look-around';
 
 const GLOBAL = 'https://global.beanpool.org';
 const VISITORS = { profile: 'global', features: { guestListingsOnly: true, openJoin: true } } as const;
@@ -62,5 +62,36 @@ describe('lookingAroundHere', () => {
         expect(await lookingAroundHere(deps({ profile: { profile: 'global', features: {} } }))).toBe(false);
         expect(await lookingAroundHere(deps({ profile: null }))).toBe(false);
         expect(await lookingAroundHere(deps({ throws: true }))).toBe(false);
+    });
+});
+
+describe('forgetTheLook (an account arriving on a phone that held none: a restore, a re-key code)', () => {
+    const marks = (key: unknown) => {
+        const done: string[] = [];
+        return {
+            done,
+            deps: {
+                storedKey: async () => { if (key instanceof Error) throw key; return key; },
+                clearGuestNodes: async () => { done.push('cleared'); },
+            },
+        };
+    };
+
+    it('no key on the phone: the look\'s guest marks go', async () => {
+        const { done, deps } = marks(null);
+        await forgetTheLook(deps);
+        expect(done).toEqual(['cleared']);
+    });
+
+    it('a key on the phone, or one it can\'t read: its marks are its own, and stay', async () => {
+        for (const key of [{ publicKey: 'a'.repeat(64) }, new Error('unreadable')]) {
+            const { done, deps } = marks(key);
+            await forgetTheLook(deps);
+            expect(done).toEqual([]);
+        }
+    });
+
+    it('never throws, whatever storage does', async () => {
+        await expect(forgetTheLook({ storedKey: async () => null, clearGuestNodes: async () => { throw new Error('disk'); } })).resolves.toBeUndefined();
     });
 });

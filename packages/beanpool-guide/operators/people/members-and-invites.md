@@ -54,11 +54,11 @@ A standby copies these records (all but the connection's reference), and so does
 
 ## Who may invite
 
-Open **How this community works** (under Setting up, or Settings → How this community works). Under **Who can join**, choose who can bring people into the community: make an invite, or answer someone who asks to join:
+Open **How this community works** (under Setting up, or Settings → How this community works). Under **Who can join**, pick one of three choices for who can bring people into the community (make an invite, or answer someone who asks to join) and save it:
 
-- **Any member invites**: Every local community starts this way. Any member can make an invite in the app or the web app, and answer a request to join.
-- **Only admins invite**: Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead of the invite maker (the invite tree and the codes they made earlier stay), says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. Owners and admins can also keep a names list of who the members are, in the app on their own phones: see "Running a known community".
-- **Paused — no new members for now**: Stops all new joins. No member or admin can generate an invite, existing unused invites are refused, and requests to join are turned off while paused. Members see that joining is paused on their card and in the guide.
+- **Invite: any member invites**: Every local community starts this way. Any member can make an invite in the app or the web app, and answer a request to join.
+- **Known: only admins invite**: Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead of the invite maker (the invite tree and the codes they made earlier stay), says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. Owners and admins can also keep a names list of who the members are, in the app on their own phones: see "Running a known community".
+- **Paused: nobody new for now**: Stops all new joins. No member or admin can generate an invite, existing unused invites are refused, and requests to join are turned off while paused. Members see that joining is paused on their card and in the guide.
 
 Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it.
 

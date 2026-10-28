@@ -200,10 +200,8 @@ test("the operator manual: Settings' bundled operators.json is well formed", () 
 test("the operator manual is a separate collection: the members' guide carries none of its pages", () => {
     const { guide, manual } = sourceGuides();
     const memberSlugs = new Set(guide.guides.map(g => g.slug));
-    // Distinct slugs, so a page name never means two different pages in search results or links,
-    // except for how-this-community-works which has deliberate dedicated pages in both (design §8.3).
+    // Distinct slugs, so a page name never means two different pages in search results or links.
     for (const p of manual.guides) {
-        if (p.slug === 'how-this-community-works') continue;
         assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
     }
 });

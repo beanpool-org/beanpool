@@ -105,7 +105,7 @@ describe('HomePage community shape line and modal (S5)', () => {
         // Click Read more in guide
         const readMoreBtn = screen.getByTestId('community-shape-read-more');
         fireEvent.click(readMoreBtn);
-        expect(onNavigate).toHaveBeenCalledWith('guide', 'how-this-community-works');
+        expect(onNavigate).toHaveBeenCalledWith('guide', 'how-your-community-works');
     });
 
     it('does NOT render the shape summary line on an old node without shape features', async () => {

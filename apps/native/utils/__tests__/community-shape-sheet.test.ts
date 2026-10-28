@@ -141,7 +141,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
             readMore.click();
         });
         expect(onClose).toHaveBeenCalled();
-        expect(routes.pushed).toEqual([{ pathname: '/guide/[slug]', params: { slug: 'how-this-community-works' } }]);
+        expect(routes.pushed).toEqual([{ pathname: '/guide/[slug]', params: { slug: 'how-your-community-works' } }]);
     });
 
     it('renders in dark theme cleanly without error', async () => {

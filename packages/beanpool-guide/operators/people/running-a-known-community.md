@@ -116,7 +116,7 @@ Every change to the switch, the known floor, the cap and any member's known floo
 
 A community can be a mix of members your admins know and members they do not. To run a mixed community:
 
-- **Any member invites.** In the manager, open **People & Safety → Invites & QR**; under **Who may invite**, keep **Invite** (any member invites). People your members bring in join without your admins needing to know them.
+- **Any member invites.** In the manager, open **How this community works** (under Setting up); under **Who can join**, keep **Invite: any member invites**. People your members bring in join without your admins needing to know them.
 - **Keep the names list.** In the BeanPool app on an owner's or admin's phone, open **Settings → Community admin → Names list**, tap **Add a name**, and tap **Confirm a member** for each person your admins know.
 - **The known floor.** It is on in every community, so there is nothing to turn on: **Confirmed members get the known floor** is checked unless an owner unchecks it. To change the amounts, open **How this community works** (under Setting up), find **Known floor for confirmed members**, set them, and save.
 

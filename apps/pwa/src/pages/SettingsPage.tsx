@@ -2027,7 +2027,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                     features={effectiveShapeFeatures as any}
                     onOpenGuide={() => {
                         setShapeModalOpen(false);
-                        setGuidePage('how-this-community-works');
+                        setGuidePage('how-your-community-works');
                         setMode('guide');
                     }}
                 />

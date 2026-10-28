@@ -2507,7 +2507,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     isOpen={shapeModalOpen}
                     onClose={() => setShapeModalOpen(false)}
                     features={answer?.features}
-                    onOpenGuide={() => onNavigate('guide', 'how-this-community-works')}
+                    onOpenGuide={() => onNavigate('guide', 'how-your-community-works')}
                 />
             </div>
         </div>

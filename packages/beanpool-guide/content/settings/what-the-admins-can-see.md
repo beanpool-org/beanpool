@@ -2,7 +2,7 @@
 slug: what-the-admins-can-see
 title: What the admins can see
 summary: In a community whose admins keep a names list: what it holds about you, who can read it, what your community's server keeps, and what being confirmed means.
-related: privacy, joining, leaving-or-deleting, admins-ai-assistants, how-this-community-works
+related: privacy, joining, leaving-or-deleting, admins-ai-assistants, how-your-community-works
 ---
 
 ## The names list

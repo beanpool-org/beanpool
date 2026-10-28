@@ -1,7 +1,7 @@
 /**
  * The members' read-only community shape sheet (design §4, slice S5).
  * Lists the facts from Table 4.2 as paragraphs with bold tokens.
- * "Read more in the guide" button links to `/guide/how-this-community-works`.
+ * "Read more in the guide" button links to `/guide/how-your-community-works`.
  */
 import React from 'react';
 import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
@@ -31,7 +31,7 @@ export function CommunityShapeSheet({
 
     const onReadMore = () => {
         onClose();
-        router.push({ pathname: '/guide/[slug]', params: { slug: 'how-this-community-works' } });
+        router.push({ pathname: '/guide/[slug]', params: { slug: 'how-your-community-works' } });
     };
 
     return (

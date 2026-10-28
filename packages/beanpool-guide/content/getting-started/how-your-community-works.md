@@ -1,5 +1,5 @@
 ---
-slug: how-this-community-works
+slug: how-your-community-works
 title: How this community works
 summary: The rules and settings for your community: who can join, Beans, decisions, message requests, and safety.
 help: This page explains the settings on your community's card: how people join, Beans, message requests, votes and safety rules.

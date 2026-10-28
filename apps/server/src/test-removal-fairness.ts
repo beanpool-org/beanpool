@@ -144,7 +144,7 @@ async function main() {
     const { createTableText } = await import('./db/table-rules.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
     const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
-    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const { ownerSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
@@ -172,6 +172,8 @@ async function main() {
         if (opts.token !== false) se.registerPushToken(id.pubKeyHex, id.token, 'android');
         return id;
     };
+    const otto = seed('OwnerOtto');   // a second owner: pausing one asks an owner's fresh proof
+    grantNodeRole(otto.pubKeyHex, 'owner', gen.pubKeyHex);
     const ada = seed('AdminAda');
     grantNodeRole(ada.pubKeyHex, 'admin', gen.pubKeyHex);
     const abe = seed('AdminAbe');
@@ -204,6 +206,7 @@ async function main() {
     };
     const adaSession = sessionOf(ada);
     const abeSession = sessionOf(abe);
+    const gwenSession = ownerSessionHeaders(gen.pubKeyHex);
     const password = () => twoFa.headers();
     const fresh = () => { resetAdminAuthTarpit(); resetAdminRateLimit(); resetGatewayRateLimit(); };
     const statusOf = (id: Id) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(id.pubKeyHex) as { status: string }).status;
@@ -290,6 +293,11 @@ async function main() {
     assert(daveCard.card?.proposer?.kind === 'admin' && daveCard.card.proposer.name === ada.callsign,
         `Dave's card names who paused him: Ada (${JSON.stringify(daveCard.card?.proposer)})`);
     assert(!daveCard.text.includes(ada.pubKeyHex) && !('pausedBy' in (daveCard.card?.params ?? {})), "never by key: Ada's key is nowhere in the list");
+    // By the name she had when she paused him: a name she takes later doesn't rewrite the record.
+    db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run('AdaLater', ada.pubKeyHex);
+    const renamed = await cardFor(vi, daveVote);
+    db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run(ada.callsign, ada.pubKeyHex);
+    assert(renamed.card?.proposer?.name === ada.callsign, `named as she was called when she paused him (${renamed.card?.proposer?.name})`);
     // A vote opened before the name was recorded names the admin as they are called now.
     const bare = de.getDecision(daveVote)!;
     const { pausedByName: _name, ...withoutName } = bare.params;
@@ -375,6 +383,8 @@ async function main() {
     const adminList = await admin('/api/local/admin/decisions', adaSession);
     const adminRow = (adminList.body?.decisions ?? []).find((d: any) => d.id === daveVote);
     assert(adminRow?.description.includes(DAVE_CASE) && adminRow?.caseHiddenBy === ada.pubKeyHex, "the admins' list keeps the case and who hid it");
+    const engineHide = de.adminHideCase(finnVote, vi.pubKeyHex, 'A member asking the engine itself');
+    assert(!engineHide.success && engineHide.status === 403 && !row(finnVote).case_hidden_at, 'the engine refuses a member underneath, whatever route reaches it');
     fresh();
     const again = await admin(`/api/local/admin/decisions/${daveVote}/hide-case`, abeSession, { reason: 'Hiding it a second time' });
     assert(again.status === 409 && row(daveVote).case_hidden_by === ada.pubKeyHex, `once only: a second hide 409 (${again.status})`);
@@ -429,6 +439,24 @@ async function main() {
         `nor through a report: 403, the report left as it was (${throughReport.status} ${reportAfter.status})`);
     const engineRefusal = de.adminEmergencySuspend(dave.pubKeyHex, ada.pubKeyHex, 'Asked of the engine directly');
     assert(!engineRefusal.success && engineRefusal.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(dave) === 'active', 'the engine refuses underneath, whatever route reaches it');
+    let reportThrew: any = null;
+    try { se.actionReport(daveReport.id, false, true, false, { actor: ada.pubKeyHex }); } catch (e) { reportThrew = e; }
+    assert(reportThrew?.status === 403 && reportThrew?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(dave) === 'active'
+        && (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(daveReport.id) as { status: string }).status === 'pending',
+        "and so does the report's, before any write");
+    // Before any fresh proof: an owner pausing another owner gives one, but a pause the cool-down refuses never asks it.
+    const ottoVote = de.adminEmergencySuspend(otto.pubKeyHex, gen.pubKeyHex, 'Locked the other owner out of the server').decision!.id;
+    voteAndClose(ottoVote, false);
+    assert(row(ottoVote).status === 'failed' && statusOf(otto) === 'active', `the community says No on Otto, whom Gwen paused (${row(ottoVote).status})`);
+    fresh();
+    const gwenAgain = await admin(`/api/local/admin/users/${otto.pubKeyHex}/suspend`, gwenSession, { reason: 'Locked the other owner out again' });
+    assert(gwenAgain.status === 403 && gwenAgain.body?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(otto) === 'active',
+        `Gwen can't pause Otto again, refused before any fresh proof is asked (${gwenAgain.status} ${gwenAgain.text.slice(0, 120)})`);
+    const ottoReport = se.submitReport(voters[2].pubKeyHex, otto.pubKeyHex, 'Locked the server again this week')!;
+    fresh();
+    const gwenReport = await admin(`/api/local/admin/reports/${ottoReport.id}/action`, gwenSession, { suspendUser: true });
+    assert(gwenReport.status === 403 && gwenReport.body?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(otto) === 'active',
+        `nor through a report, refused before any fresh proof too (${gwenReport.status} ${gwenReport.text.slice(0, 120)})`);
     // Another admin can; Abe lifts it by hand before its vote closes, which ends it without removing Dave: Abe waits now.
     const abePause = await pause(abeSession, dave, 'Another complaint about the bike repairs');
     const abeVote = abePause.body?.decision?.id as string;

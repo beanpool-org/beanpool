@@ -157,7 +157,11 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
             fontSize: 13,
             fontStyle: 'italic',
             color: colors.text.secondary,
-            marginBottom: preview.text ? 4 : 0,
+        },
+        // Applied at render, not read from `preview` here: useStyles builds the sheet once per theme, while the preview
+        // is still loading (PR #2540 review 4399651606).
+        previewPhotoAboveText: {
+            marginBottom: 4,
         },
         previewPlaceholder: {
             fontSize: 13,
@@ -251,7 +255,7 @@ function RequestCard({ entry, myPubkey, onOpen, onAccepted, onChanged }: Request
                 ) : (preview.text || preview.photo) ? (
                     <View>
                         {preview.photo && (
-                            <Text style={styles.previewPhoto}>
+                            <Text style={[styles.previewPhoto, preview.text ? styles.previewPhotoAboveText : null]}>
                                 <Text aria-hidden={true} importantForAccessibility="no">🖼️ </Text>
                                 {t('Photo: shown when you accept')}
                             </Text>

@@ -14,6 +14,8 @@
  *      when it mounts there (PR #2540 review 4396980215)
  *   8. MessageRequestsPane: Block drops the card only when the sender is on the list after it; a block that didn't happen
  *      says so and the card stays (PR #2540 review 4399651364)
+ *   9. MessageRequestsPane: the closed-photo line has a gap under it when a caption follows, read at render, not frozen in
+ *      the sheet while the preview loads (PR #2540 review 4399651606)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -33,6 +35,7 @@ vi.mock('react-native', () => {
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (role) attrs.role = role;
         if (onPress && !props.disabled) attrs.onClick = onPress;
+        if (props.style) attrs['data-style'] = JSON.stringify(props.style);
         return createElement(tag, attrs, children);
     };
     return {
@@ -61,10 +64,13 @@ vi.mock('react-native', () => {
 
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
+    const { useMemo } = await import('react');
     const ctx = { theme: 'light', colors: lightColors };
     return {
         useTheme: () => ctx,
-        useStyles: (make: (c: typeof ctx) => any) => make(ctx),
+        // Built once per theme, as the real hook memoizes it (app/ThemeContext.tsx useStyles): a sheet that reads anything
+        // else keeps what it read at the first render (PR #2540 review 4399651606).
+        useStyles: (make: (c: typeof ctx) => any) => useMemo(() => make(ctx), []),
     };
 });
 
@@ -186,6 +192,28 @@ describe('MessageRequestsPane on phone', () => {
         const openBtn = screen.getByTestId('request-card-open');
         expect(await screen.findByText(/Photo: shown when you accept/)).toBeTruthy();
         expect(openBtn.getAttribute('aria-label')).toBe('Bob. Photo: shown when you accept. Check this out. Open the chat to read it.');
+    });
+
+    // Review 4399651606: the gap under the closed-photo line was read from `preview` inside the sheet, which is built once,
+    // while the preview is still loading, so a photo's caption always touched the line above it.
+    const flatStyle = (el: Element) => Object.assign({}, ...[JSON.parse(el.getAttribute('data-style') || '{}')].flat(Infinity).filter(Boolean));
+    it('puts a gap under the closed-photo line when a caption follows it, and none when it does not', async () => {
+        dbMocks.getMessages.mockResolvedValueOnce([
+            { id: 'm2', type: 'image', text: 'Check this out', authorPubkey: 'bob-pubkey', timestamp: '2026-10-27T00:00:00Z' } as any,
+        ]);
+        const props = { count: 1, identity: { publicKey: 'me-pubkey' }, onOpen: () => {}, onAccepted: () => {}, onChanged: () => {} };
+        render(createElement(MessageRequestsPane, { ...props, entries: [entry] }));
+        const withCaption = await screen.findByText(/Photo: shown when you accept/);
+        expect(screen.getByText('Check this out')).toBeTruthy();
+        expect(flatStyle(withCaption).marginBottom).toBe(4);
+        cleanup();
+
+        dbMocks.getMessages.mockResolvedValueOnce([
+            { id: 'm3', type: 'image', text: '', authorPubkey: 'bob-pubkey', timestamp: '2026-10-27T00:00:00Z' } as any,
+        ]);
+        render(createElement(MessageRequestsPane, { ...props, entries: [entry] }));
+        const alone = await screen.findByText(/Photo: shown when you accept/);
+        expect(flatStyle(alone).marginBottom ?? 0).toBe(0);
     });
 
     // Review 4395541944: a refused Accept or Ignore said only "That did not go through. Please try again." and kept the card,

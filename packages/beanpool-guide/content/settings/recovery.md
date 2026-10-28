@@ -70,7 +70,7 @@ If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remo
 
 The other way round: where your community keeps copies on its own server, and the key vault has one for you that your community doesn't, **Settings** shows **Keep your Google recovery with your community** (or Facebook, or Apple). Tap **Move it** and sign in once: your community's server keeps a fresh copy, made on this phone, and the key vault then deletes its copy. **Remove it instead** deletes the key vault's copy and makes none. If the key vault doesn't answer, the new copy is kept and the old one stays: remove it in **Where your account can be brought back from**.
 
-A move deletes the old copy only once the new one is kept where the move meant. If your community changed where it keeps copies while you were moving one, both copies stay, and the app says so.
+A move deletes the old copy only once the new one is kept where the move meant. If your community changed where it keeps copies since the card appeared, the move links nothing, your copy stays where it is, and the app says so.
 
 ## Where your community keeps copies
 
@@ -79,6 +79,8 @@ Each community chooses where its members' copies go, and only its owners change 
 - **BeanPool's key vault**, where every community starts. A sign-in you link keeps its copy at the key vault.
 - **Its own server.** A sign-in you link keeps its copy on your community's server instead, and the app doesn't ask the key vault for it. The app still asks the key vault whether it has a copy of your account, so it can offer to move one to your community (see above).
 - **Nowhere.** The community keeps no copies and doesn't use the key vault. The app offers no sign-in to link there, and your 12 words are your way back there. If you lose your phone and your 12 words, an admin can move your Beans and your name to a new key (see "Lost your phone and your 12 words").
+
+In the app, a sign-in's copy goes only where the screen told you it would. If your community changed its choice since the screen last checked, nothing is linked, the app says so, and the screen then shows where a copy goes now.
 
 A copy you already have is yours, wherever you made it: one key is a member of all your communities, and a copy made through one community also brings you back into the others. No community can remove it; you can, in **Where your account can be brought back from**.
 

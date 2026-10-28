@@ -85,7 +85,7 @@ describe('the Commons page in the pseudo-locale', () => {
         render(<ProjectsPage identity={ME} />);
         expect(await screen.findByText(xx('Nothing of yours yet. Start something with +, or find one below.'))).toBeInTheDocument();
         expect(await screen.findByText(xx('No groups found'))).toBeInTheDocument();
-        expect(await screen.findByText(xx('No enterprises found'))).toBeInTheDocument();
+        expect(await screen.findByText(xx('No others yet'))).toBeInTheDocument();
         expect(screen.getByText(xx('Start a working group, guild, or team to coordinate discussions.'))).toBeInTheDocument();
         expect(bypassing()).toEqual([]);
     });
@@ -165,6 +165,7 @@ describe('the Commons page in the pseudo-locale', () => {
         render(<ProjectsPage identity={ME} />);
         // Empty state on Projects chip has Start a project
         fireEvent.click(screen.getByRole('button', { name: xx('🌱 Projects') }));
+        expect(await screen.findByText(xx('No projects to back yet'))).toBeInTheDocument();
         fireEvent.click(await screen.findByRole('button', { name: xx('Start a project') }));
         const dialog = screen.getByRole('dialog');
         expect(within(dialog).getByRole('heading').textContent).toBe(xx('Start a project'));

@@ -28,7 +28,7 @@ const cases = [
     // The Decide section: the Commons Pool and Voice credits cards, with the phone's words.
     { id: 'decide-cards', view: 'decide', wait: '[data-testid="voice-credits-card"]' },
     // Empty Groups list on each chip: the line says what the chip is for and the button starts that kind (none on All).
-    { id: 'empty-all', view: 'groups', wait: 'text=No enterprises found', clipY: 420 },
+    { id: 'empty-all', view: 'groups', wait: 'text=No others yet', clipY: 420 },
     { id: 'empty-projects', view: 'groups', chip: '🌱 Projects', wait: 'text=Start a project', clipY: 420 },
     { id: 'empty-enterprises', view: 'groups', chip: '🏛️ Enterprises', wait: 'text=Start an enterprise', clipY: 420 },
     // Talk's group form hands over here: Commons opens with Start something up.

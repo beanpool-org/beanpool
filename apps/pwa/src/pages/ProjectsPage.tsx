@@ -30,7 +30,7 @@ import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting
 import { EnterpriseCard } from '../components/EnterpriseCard';
 import { LocalCommunitySheet } from '../components/LocalCommunityMark';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
-import { commonsHeading, findHeading, yoursEmpty, enterprisesOn, type GroupKind } from '../lib/commons-sections';
+import { commonsHeading, findEmptyTitle, findHeading, yoursEmpty, enterprisesOn, type GroupKind } from '../lib/commons-sections';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -502,6 +502,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     const headingInfo = commonsHeading(communityInfo?.features);
     const findHeadingLine = { text: findHeading(groupCategoryFilter, communityInfo?.features) };
+    const emptyFindLine = { text: findEmptyTitle(groupCategoryFilter, communityInfo?.features) };
     const emptyYoursLine = { text: yoursEmpty(communityInfo?.features) };
 
     return (
@@ -1010,7 +1011,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     !beansOn ? null : (
                     <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
                         <p className="text-4xl opacity-50 mb-3">🌱</p>
-                        <p className="text-base font-bold text-nature-950 dark:text-white mb-1">{t('No enterprises found')}</p>
+                        <p className="text-base font-bold text-nature-950 dark:text-white mb-1">{t(emptyFindLine.text)}</p>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-6">
                             {groupCategoryFilter === 'projects'
                                 ? t('Got an idea that needs Beans? Start a project.')

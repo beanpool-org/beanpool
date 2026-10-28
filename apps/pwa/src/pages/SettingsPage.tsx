@@ -19,7 +19,7 @@ import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getFriends, removeFriendApi,
     getNodeApiUrl, getStoredNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
-    updateNotificationPreferences, getNodeStats, getSignInRecovery, request,
+    updateNotificationPreferences, getNodeStats, getSignInRecovery, request, getCommunityMe,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
 import { useCommunityInfo, useReaderFeatures } from '../lib/features';
@@ -247,7 +247,20 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     // global community its node names (§B.3). Nothing of either before the node's info arrives, or when it names none.
     const communityInfo = useCommunityInfo();
     const readerFeatures = useReaderFeatures(communityInfo);
-    const effectiveShapeFeatures = { ...communityInfo?.features, ...(readerFeatures ?? {}) };
+    const [memberFeatures, setMemberFeatures] = useState<Record<string, unknown> | null>(null);
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let cancelled = false;
+        getCommunityMe()
+            .then((me) => {
+                if (!cancelled && me?.features && typeof me.features === 'object') {
+                    setMemberFeatures(me.features as Record<string, unknown>);
+                }
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [identity?.publicKey]);
+    const effectiveShapeFeatures = { ...communityInfo?.features, ...(readerFeatures ?? {}), ...(memberFeatures ?? {}) };
     const pageHost = webAppHost();
     const phoneLater = phoneLaterLines({
         where: 'settings', appsGlobal: isAppsGlobal(communityInfo, pageHost), host: webAppAddress(), hasWords, signIns: signInRecoveryNames,

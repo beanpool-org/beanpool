@@ -5882,5 +5882,7 @@
   "Turn on notifications?": "开启通知？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "以便在有人回复、发消息或申请加入时收到提醒。不会用于其他任何用途。",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "手机设置中已关闭 BeanPool 的通知。打开设置即可开启。",
-  "Nothing here yet. Be the first:": "这里还没有任何内容。成为第一个发布者："
+  "Nothing here yet. Be the first:": "这里还没有任何内容。成为第一个发布者：",
+  "Choose a banner photo, or keep this one": "选择横幅照片，或保留此照片",
+  "Your picture, until you choose a banner.": "您的头像，直到您选择横幅。"
 }

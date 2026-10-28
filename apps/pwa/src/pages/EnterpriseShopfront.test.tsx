@@ -292,24 +292,52 @@ describe("the enterprise page is its shopfront (a member's read)", () => {
         expect(within(opened).getByText('Income & Spend (P&L)')).toBeInTheDocument();
     });
 
-    it("the banner is its shop's photo, drawn across the top; with none, or one that won't load, a quiet block in its kind's emoji", async () => {
+    it("the banner is its shop's photo, drawn across the top; with none, or one that won't load, the default banner from its logo (S3)", async () => {
         const BANNER = `/api/shops/${SHOP_ID}/photo?v=ab12cd34&k=${'K'.repeat(22)}`;
         await open({ detail: membersView({ shop: { ...SHOP, photoUrl: BANNER } }), keeperOf: [] });
         const photo = within(byId('shopfront-banner')!).getByTestId('shopfront-banner-photo');
         expect(photo.getAttribute('src')).toBe(BANNER);
         expect(photo.className).toContain('object-cover');
         expect(byId('shopfront-banner')?.textContent).toBe('');
-        fireEvent.error(photo);
-        expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument();
-        expect(byId('shopfront-banner')?.textContent).toContain('🎨');
-        expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
+
+        // None with bundled logo (default avatar in membersView is null -> bundled preset): monogram with 10 round copies on category's tint.
         cleanup();
-        await open({ detail: membersView(), keeperOf: [] });
+        const initialFetches = fetchMock.mock.calls.length;
+        await open({ detail: membersView({ avatar: 'bundled://leaf', shop: { ...SHOP, photoUrl: null } }), keeperOf: [] });
         expect(byId('shopfront-banner-photo')).toBeNull();
-        expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument();
-        expect(byId('shopfront-banner')?.textContent).toContain('🎨');
-        expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
+        const defaultBanner = within(byId('shopfront-banner')!).getByTestId('default-banner');
+        expect(defaultBanner).toBeInTheDocument();
+        expect(defaultBanner.style.backgroundColor).toContain('var(--bp-tile-arts-tint)');
+        const monogramCopies = within(defaultBanner).getAllByTestId('default-banner-monogram-copy');
+        expect(monogramCopies).toHaveLength(10);
+        for (const copy of monogramCopies) {
+            expect(copy.className).toContain('rounded-full');
+            expect(copy.getAttribute('src')).toBe('/avatars/avatar_leaf.jpg');
+        }
+        // Nothing fetched beyond the avatar (no request to a shop photo URL)
+        const newFetches = fetchMock.mock.calls.slice(initialFetches).map(([u]) => String(u));
+        expect(newFetches.some((url) => url.includes('/photo'))).toBe(false);
+
+        // Echo for a photo logo: one round copy, ground is category's tint.
+        cleanup();
+        await open({ detail: membersView({ avatar: 'https://mullum.example/avatar.jpg', shop: { ...SHOP, photoUrl: null } }), keeperOf: [] });
+        const echoBanner = within(byId('shopfront-banner')!).getByTestId('default-banner');
+        expect(echoBanner).toBeInTheDocument();
+        expect(echoBanner.style.backgroundColor).toContain('var(--bp-tile-arts-tint)');
+        const echoCopy = within(echoBanner).getByTestId('default-banner-echo-copy');
+        expect(echoCopy).toBeInTheDocument();
+        expect(echoCopy.className).toContain('rounded-full');
+        expect(echoCopy.getAttribute('src')).toBe('https://mullum.example/avatar.jpg');
+        expect(within(echoBanner).queryByTestId('default-banner-monogram-copy')).toBeNull();
+
+        // One that fails to load: falls back to the default banner too.
+        cleanup();
+        await open({ detail: membersView({ avatar: 'bundled://leaf', shop: { ...SHOP, photoUrl: 'https://mullum.example/broken.jpg' } }), keeperOf: [] });
+        fireEvent.error(within(byId('shopfront-banner')!).getByTestId('shopfront-banner-photo'));
+        expect(byId('shopfront-banner-photo')).toBeNull();
+        const fallbackBanner = within(byId('shopfront-banner')!).getByTestId('default-banner');
+        expect(fallbackBanner).toBeInTheDocument();
+        expect(within(fallbackBanner).getAllByTestId('default-banner-monogram-copy')).toHaveLength(10);
     });
 
     it("a project's goal card sits above About", async () => {
@@ -683,9 +711,8 @@ describe("the keepers' Manage tab", () => {
             await waitFor(() => expect(byId('manage-face-saved')).not.toBeNull());
             expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/shop`, body: { photo: null } }]);
             fireEvent.click(screen.getByRole('tab', { name: 'Page' }));
-            await waitFor(() => expect(within(byId('shopfront-banner')!).getByTestId('category-tile')).toBeInTheDocument());
-            expect(byId('shopfront-banner')?.textContent).toContain('🎨');
-            expect(byId('shopfront-banner')?.textContent).toMatch(/ARTS/i);
+            await waitFor(() => expect(within(byId('shopfront-banner')!).getByTestId('default-banner')).toBeInTheDocument());
+            expect(within(byId('shopfront-banner')!).getAllByTestId('default-banner-monogram-copy')).toHaveLength(10);
             expect(byId('shopfront-banner-photo')).toBeNull();
         });
 

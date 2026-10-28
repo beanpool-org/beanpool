@@ -10,6 +10,11 @@
  * 7. starting a project still lands where it did (Alert -> router.back)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule('node:module');
+    Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+    Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+});
 import Module from 'node:module';
 import { act, createElement, useEffect, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -390,7 +395,7 @@ describe('banner-after-start (Native)', () => {
         await mount(createElement(TreasuryDetailScreen));
 
         const addBannerBtn = Array.from(host!.querySelectorAll('button, span, div')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtn).toBeDefined();
 
@@ -410,7 +415,7 @@ describe('banner-after-start (Native)', () => {
         await mount(createElement(TreasuryDetailScreen));
 
         const addBannerBtn = Array.from(host!.querySelectorAll('button, span, div')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtn).toBeUndefined();
     });
@@ -428,7 +433,7 @@ describe('banner-after-start (Native)', () => {
         await mount(createElement(TreasuryDetailScreen));
 
         const addBannerBtn = Array.from(host!.querySelectorAll('button, span, div')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtn).toBeUndefined();
     });
@@ -446,7 +451,7 @@ describe('banner-after-start (Native)', () => {
         await mount(createElement(TreasuryDetailScreen));
 
         const addBannerBtn = Array.from(host!.querySelectorAll('button')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtn).toBeDefined();
 
@@ -458,7 +463,7 @@ describe('banner-after-start (Native)', () => {
 
         // After saving, button goes
         const addBannerBtnAfter = Array.from(host!.querySelectorAll('button')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtnAfter).toBeUndefined();
     });
@@ -479,7 +484,7 @@ describe('banner-after-start (Native)', () => {
 
         // Hidden immediately
         const addBannerBtnAfter = Array.from(host!.querySelectorAll('button')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtnAfter).toBeUndefined();
 
@@ -493,7 +498,7 @@ describe('banner-after-start (Native)', () => {
         await mount(createElement(TreasuryDetailScreen));
 
         const addBannerBtnReload = Array.from(host!.querySelectorAll('button')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtnReload).toBeUndefined();
     });
@@ -509,7 +514,7 @@ describe('banner-after-start (Native)', () => {
         await mount(createElement(TreasuryDetailScreen));
 
         const addBannerBtn = Array.from(host!.querySelectorAll('button')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtn).toBeDefined();
     });
@@ -522,7 +527,7 @@ describe('banner-after-start (Native)', () => {
         await mount(createElement(TreasuryDetailScreen));
 
         const addBannerBtn = Array.from(host!.querySelectorAll('button')).find(el =>
-            /Add a banner photo/i.test(el.textContent || el.getAttribute('aria-label') || '')
+            /Choose a banner photo, or keep this one/i.test(el.textContent || el.getAttribute('aria-label') || '')
         );
         expect(addBannerBtn).toBeUndefined();
     });

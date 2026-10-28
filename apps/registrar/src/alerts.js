@@ -242,6 +242,28 @@ export const nonceCondition = (missing) => ({
         : 'The request_nonces table is there again: v2 requests are served.',
 });
 
+// DNS records on the zone against its cap (Marty, 28 Oct: "Not CloudFlare pro yet. When we need it. At 80% capacity").
+// The percentage is rounded DOWN, so what is shown and what is alerted agree: 159 of 200 reads 79%, 160 reads 80%.
+export const DNS_RECORD_ALERT_PCT = 80;
+export const dnsRecordPct = (count, cap) => Math.floor((count * 100) / cap);
+
+export function dnsRecordCapCondition(env, { count, cap }) {
+    const domain = base(env);
+    const pct = dnsRecordPct(count, cap);
+    const active = pct >= DNS_RECORD_ALERT_PCT;
+    return {
+        key: 'dns-record-cap',
+        category: 'health',
+        priority: PRIORITY.high,
+        tag: TAG.warning,
+        title: 'DNS records near cap',
+        active,
+        detail: active
+            ? `${domain} has ${count} of ${cap} DNS records (${pct}%). Time to move the zone to Cloudflare Pro, or free unused names.`
+            : `${domain} has ${count} of ${cap} DNS records (${pct}%).`,
+    };
+}
+
 // ntfy takes a message of up to 4,096 bytes (a longer body becomes an attachment, "You received a file"): a body stays
 // under this, as many events as fit and then "… and N more, see /admin".
 const MAX_BODY_BYTES = 3900;
@@ -555,6 +577,26 @@ export async function alertStatus(env) {
     const settings = Object.fromEntries(CATEGORIES.map((c) => [c, 'on']));
     for (const r of (await env.DB.prepare('SELECT category, mode FROM alert_settings').all()).results || [])
         if (CATEGORIES.includes(r.category) && MODES.includes(r.mode)) settings[r.category] = r.mode;
+    let dns_records = {
+        count: null,
+        cap: null,
+        pct: null,
+        checked_at: null,
+        error: null,
+    };
+    try {
+        const row = await env.DB.prepare("SELECT since, value FROM watch_marks WHERE key='dns-records'").first();
+        if (row?.value) {
+            const val = JSON.parse(row.value);
+            dns_records = {
+                count: val.count ?? null,
+                cap: val.cap ?? dns_records.cap,
+                pct: val.pct ?? null,
+                checked_at: row.since ?? null,
+                error: val.error ?? null,
+            };
+        }
+    } catch { /* watch_marks table missing or error */ }
     return {
         channel: {
             set: channelSet(env), token: typeof env.NTFY_TOKEN === 'string' && !!env.NTFY_TOKEN.trim(),
@@ -567,6 +609,8 @@ export async function alertStatus(env) {
         held_for_digest: await n('held=1 AND sent_at IS NULL'),
         active: (await env.DB.prepare('SELECT key, since, last_told_at, detail FROM alert_state ORDER BY since').all()).results || [],
         recent: (await env.DB.prepare('SELECT id, at, category, priority, title, body, name, held, muted, sent_at FROM alert_outbox ORDER BY id DESC LIMIT 50').all()).results || [],
+        dns_records,
+        dns_alert_pct: DNS_RECORD_ALERT_PCT,
     };
 }
 

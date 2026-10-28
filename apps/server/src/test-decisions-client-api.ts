@@ -471,7 +471,9 @@ async function runSuite() {
     const cleanFormatted = formatDebtWriteOffLine('CleanMember', 0, Math.round(commonsPoolBal));
     assert(cleanFormatted === cleanExpected, 'Zero-debt ballot correctly states \u22120 and charges 0');
 
-    // Propose removal ballot with parameters
+    // Propose a removal ballot: since removal by vote S3 nobody proposes one (an admin's pause opens it, and the pause's vote
+    // records the debt: test-pause), so it is refused in words and nothing is written.
+    const removalsBefore = (db.prepare("SELECT COUNT(*) AS n FROM decisions WHERE effect = 'remove_member'").get() as { n: number }).n;
     const resRemoval = await callRouter(commonsRouter, 'POST', '/api/commons/decisions', {
         actor: charlie,
         body: {
@@ -488,10 +490,8 @@ async function runSuite() {
             },
         },
     });
-    assert(resRemoval.status === 200, 'Removal decision proposed successfully');
-    const decisionRemoval = resRemoval.body.decision;
-    assert(decisionRemoval.effect === 'remove_member', 'Decision effect is remove_member');
-    assert(decisionRemoval.params.debt === 180, 'Params record debtor debt amount');
+    assert(resRemoval.status === 400 && /pauses them/.test(resRemoval.body?.error ?? ''), `A removal ballot is refused when proposed, in words that say a pause opens it (${resRemoval.status} ${JSON.stringify(resRemoval.body)})`);
+    assert((db.prepare("SELECT COUNT(*) AS n FROM decisions WHERE effect = 'remove_member'").get() as { n: number }).n === removalsBefore, 'and no removal Decision is written');
 
     console.log('\n--- 5. History & Execution Provenance ---');
 

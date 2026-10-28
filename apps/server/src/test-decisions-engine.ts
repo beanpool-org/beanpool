@@ -68,6 +68,7 @@ import {
     publicDecision,
 } from './state-engine.js';
 import * as decisionsEngine from './decisions-engine.js';
+import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { NODE_PROFILE_KEY } from './config/node-profile.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
@@ -525,13 +526,12 @@ async function runDecisionsSuite() {
     const rogueMember = 'member_rogue_' + Date.now();
     seedTestMember(rogueMember, 'RogueDave', { earnedCredit: 50 });
 
-    // Removal requires 66% supermajority on 25% quorum
-    const decRemoval = createDecision({
+    // Removal requires 66% supermajority on 25% quorum. Since removal by vote S3 nobody proposes one (only an admin's pause
+    // opens it, section 13); one a member proposed before still runs to its end, and is this section's.
+    const decRemoval = removalProposedFromBefore({
         authorPubkey: admin,
         title: 'Remove RogueDave from node',
         description: 'Malicious behaviour',
-        touches: 'member',
-        effect: 'remove_member',
         subject: rogueMember,
     });
     castDecisionVote(decRemoval.id, voterA, true);
@@ -559,12 +559,10 @@ async function runDecisionsSuite() {
     db.prepare("UPDATE members SET status = 'disabled', credit_frozen = 1 WHERE public_key = ?").run(disabledMember);
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at) VALUES (?, -75, 0, ?)").run(disabledMember, new Date().toISOString());
 
-    const decOpenRemoval = createDecision({
+    const decOpenRemoval = removalProposedFromBefore({
         authorPubkey: admin,
         title: 'Remove already disabled member',
         description: 'Testing halt on open decision',
-        touches: 'member',
-        effect: 'remove_member',
         subject: disabledMember,
         closesAt: new Date(Date.now() + 100000).toISOString(),
     });
@@ -578,12 +576,10 @@ async function runDecisionsSuite() {
     testAssert(disabledMemberCheck.credit_frozen === 1, 'Halting OPEN decision does NOT unfreeze credit for a frozen member');
 
     // Second removal decision — test auto-execution when grace period ends
-    const decRemoval2 = createDecision({
+    const decRemoval2 = removalProposedFromBefore({
         authorPubkey: admin,
         title: 'Remove RogueDave round 2',
         description: 'Confirmed rogue activity',
-        touches: 'member',
-        effect: 'remove_member',
         subject: rogueMember,
     });
     castDecisionVote(decRemoval2.id, voterA, true);
@@ -608,12 +604,10 @@ async function runDecisionsSuite() {
     const memberToRevert = 'member_revert_' + Date.now();
     seedTestMember(memberToRevert, 'RevertMe');
 
-    const decRemoval3 = createDecision({
+    const decRemoval3 = removalProposedFromBefore({
         authorPubkey: admin,
         title: 'Remove RevertMe',
         description: 'Misunderstanding',
-        touches: 'member',
-        effect: 'remove_member',
         subject: memberToRevert,
     });
     castDecisionVote(decRemoval3.id, voterA, true);
@@ -1128,22 +1122,36 @@ async function runDecisionsSuite() {
         const otherE = tallyDecision(other.id).electorate, ownE = tallyDecision(piaVote.id).electorate;
         testAssert(otherE === ownE + 1, `She is in every electorate but her own removal's (other ${otherE}, her own ${ownE})`);
     }
-    // A removal a member proposes: its subject, active, is not in its electorate and does not vote on it either.
+    // A removal a member proposed (before removal by vote S3, still open): its subject, active, is not in its electorate and
+    // does not vote on it either.
     const xavi = fresh('XaviActive', true);
-    const removeXavi = createDecision({ authorPubkey: authorB, title: 'Remove Xavi', description: 'A removal a member proposes', touches: 'member', effect: 'remove_member', subject: xavi });
+    const removeXavi = removalProposedFromBefore({ authorPubkey: authorB, title: 'Remove Xavi', description: 'A removal a member proposes', subject: xavi });
     const xaviOwn = castDecisionVote(removeXavi.id, xavi, false);
     testAssert(isOff(xaviOwn) && !db.prepare('SELECT 1 FROM decision_votes WHERE decision_id = ? AND voter_pubkey = ?').get(removeXavi.id, xavi),
         `Nor does anyone vote on a removal of them a member proposed (${JSON.stringify(xaviOwn)})`);
     testAssert(tallyDecision(removeXavi.id).electorate === tallyDecision(other.id).electorate - 1, 'and they are not in its electorate');
     testAssert(castDecisionVote(other.id, xavi, true).success, 'though they vote on every other Decision');
-    // A member's proposal can't carry the node's marks of a pause vote.
-    const forged = createDecision({
-        authorPubkey: authorC, title: 'Remove Fay', description: 'A member writes the node’s marks', touches: 'member', effect: 'remove_member', subject: fresh('FayForged'),
-        params: { rule: 2, pausedBy: admin, pausedAt: new Date().toISOString(), reason: 'Looks like a pause' },
+    // A member can't write the node's marks of a pause vote: since removal by vote S3 a member proposes no removal at all.
+    const fay = fresh('FayForged');
+    let forgedRefusal = '';
+    try {
+        createDecision({
+            authorPubkey: authorC, title: 'Remove Fay', description: 'A member writes the node’s marks', touches: 'member', effect: 'remove_member', subject: fay,
+            params: { rule: 2, pausedBy: admin, pausedAt: new Date().toISOString(), reason: 'Looks like a pause' },
+        });
+    } catch (e: any) {
+        forgedRefusal = e?.message || String(e);
+    }
+    testAssert(forgedRefusal === decisionsEngine.REMOVAL_FOLLOWS_A_PAUSE && !db.prepare('SELECT 1 FROM decisions WHERE subject = ?').get(fay),
+        `A member's removal proposal with a pause vote's marks is refused, and nothing is written (${forgedRefusal})`);
+    // Nor does any other proposal carry them.
+    const markedFreeze = createDecision({
+        authorPubkey: authorC, title: 'Freeze Fay', description: 'A member writes the node’s marks on another Decision', touches: 'member', effect: 'freeze_credit', subject: fay,
+        params: { rule: 2, pausedBy: admin, pausedAt: new Date().toISOString() },
     });
-    testAssert(!!forged.params && !('rule' in forged.params) && !('pausedBy' in forged.params) && !('pausedAt' in forged.params),
-        `A member's removal proposal can't carry a pause vote's marks (${JSON.stringify(forged.params)})`);
-    adminHaltDecision(forged.id, admin, 'Out of the way of the blocks below');
+    testAssert(!!markedFreeze.params && !('rule' in markedFreeze.params) && !('pausedBy' in markedFreeze.params) && !('pausedAt' in markedFreeze.params),
+        `A member's proposal can't carry a pause vote's marks (${JSON.stringify(markedFreeze.params)})`);
+    adminHaltDecision(markedFreeze.id, admin, 'Out of the way of the blocks below');
     testAssert(countsIn(other.id, quinn), 'setup: an active member counts in the other Decision\'s electorate (the checks below have teeth)');
     retire(quinn);
 
@@ -1167,7 +1175,7 @@ async function runDecisionsSuite() {
     grantNodeRole(kit, 'moderator', admin);
     const kitRole = roleRow(kit);
     const kitPause = pause(kit);
-    const removeKit = createDecision({ authorPubkey: authorD, title: 'Remove Kit', description: 'A removal a member proposes while Kit is paused', touches: 'member', effect: 'remove_member', subject: kit });
+    const removeKit = removalProposedFromBefore({ authorPubkey: authorD, title: 'Remove Kit', description: 'A removal a member proposes while Kit is paused', subject: kit });
     vote(removeKit.id, 4, 0);
     testAssert(closeAndTick(removeKit.id).status === 'execution_pending_grace', 'setup: a member\'s removal of Kit, paused, passes into its grace window');
     adminSetCreditFrozen(kit, false);

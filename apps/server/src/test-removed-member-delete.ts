@@ -50,6 +50,7 @@ import {
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
 import { createDecision, executeDecision, getDecision } from './decisions-engine.js';
+import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { openJoinTaken } from './engine/open-join.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -315,8 +316,8 @@ async function main(): Promise<void> {
 
         // A removal passes for Rae: suspended for its 7 days of grace. She deletes her account in them; an admin then halts it.
         const rae = makeMember('RaeRD', 0);
-        const removal = createDecision({ authorPubkey: proposer().pk, title: 'Remove Rae', description: 'Rae has harmed members here', touches: 'member',
-            effect: 'remove_member', subject: rae.pk });
+        // One proposed before removal by vote S3 (since then only an admin's pause opens one).
+        const removal = removalProposedFromBefore({ authorPubkey: proposer().pk, title: 'Remove Rae', description: 'Rae has harmed members here', subject: rae.pk });
         const graced = executeDecision(removal.id);
         assert(graced.status === 'execution_pending_grace' && statusOf(rae.pk) === 'disabled', `setup: the removal of Rae is in its grace period (${graced.status}, ${statusOf(rae.pk)})`);
         const raeDeletes = await call('POST', '/api/member/purge', rae, {});

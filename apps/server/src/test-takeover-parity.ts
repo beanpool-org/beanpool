@@ -121,6 +121,11 @@ async function child(): Promise<void> {
     const fetches = guardFetch();
     await runNodeChild({
         ...serveCommands,
+        /** A removal a member proposed before removal by vote S3, still open (since then only an admin's pause opens one). */
+        'removal-from-before': async (a: { authorPubkey: string; title: string; description: string; subject: string; closesAt?: string }) => {
+            const { removalProposedFromBefore } = await import('./decisions-from-before-test-fixture.js');
+            return removalProposedFromBefore(a);
+        },
         'backdate-members': async (a: { publicKeys: string[]; days: number }) => {
             const { db } = await import('./db/db.js');
             const at = new Date(Date.now() - a.days * 86_400_000).toISOString();
@@ -523,10 +528,11 @@ async function main(): Promise<void> {
         built('Gwen proposes a Decision', await S_(gwen, '/api/commons/decisions', {
             title: 'Make Cy a voucher', description: 'Cy has helped half the street', touches: 'member', effect: 'grant_voucher', subject: cy.pk,
         }));
-        const removal = built('Ann proposes removing Rex, closing in a few seconds', await S_(ann, '/api/commons/decisions', {
-            title: 'Remove Rex', description: 'Rex has not been seen in a year', touches: 'member', effect: 'remove_member', subject: rex.pk,
+        // Ann's removal of Rex, proposed before removal by vote S3 (a member proposes none since), closing in a few seconds.
+        const removal = await main.send('removal-from-before', {
+            authorPubkey: ann.pk, title: 'Remove Rex', description: 'Rex has not been seen in a year', subject: rex.pk,
             closesAt: new Date(Date.now() + 2500).toISOString(),
-        })).decision;
+        });
         for (const v of [gwen, ann, bo, cy, dee]) built(`${v.name} votes for it`, await S_(v, `/api/commons/decisions/${removal.id}/vote`, { support: true }));
         const wholeCopy = await pull('the whole copy', true);
 

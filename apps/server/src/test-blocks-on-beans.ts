@@ -140,9 +140,10 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             return JSON.stringify(await se.exportSyncState(a.nodeId));
         },
-        prune: async (a: { key: string; actor: string }) => {
+        // Removed by the community's vote: where the community votes, the only removal (removal by vote S3).
+        prune: async (a: { key: string }) => {
             const se = await import('./state-engine.js');
-            se.adminPruneUser(a.key, a.actor);
+            se.adminPruneUser(a.key, se.COMMUNITY_DECISION_ACTOR);
             return true;
         },
         'delete-account': async (a: { key: string }) => {
@@ -403,7 +404,7 @@ async function main(): Promise<void> {
         // ── 8. a prune and a self-deletion ──────────────────────────────────────────────────────
         console.log('── 8. a prune and a self-deletion ──');
         const rowsBefore = (await main.send('holding', { text: NOTE, recipient: ann.pk })).withheldRows;
-        await main.send('prune', { key: bo.pk, actor: gwen.pk });
+        await main.send('prune', { key: bo.pk });
         const pruned = await main.send('holding', { text: NOTE, recipient: ann.pk });
         assert(pruned.withheld === 0 && !pruned.withheldWords.includes(String(NUM)) && !pruned.withheldWords.some((w: string) => w.includes('412345678')),
             `a prune takes his words (${pruned.withheld})`);

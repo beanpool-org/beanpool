@@ -19,7 +19,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { db } from './db/db.js';
-import { initStateEngine, purgeMemberSelf, adminPruneUser } from './state-engine.js';
+import { initStateEngine, purgeMemberSelf, adminPruneUser, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
 import { addChannel, deleteChannel } from './engine/creator-channels.js';
 import { prunePulseItems } from './engine/pulse-resolver.js';
 import { getPulseThumbnailService } from './engine/pulse-thumbnail.js';
@@ -139,7 +139,7 @@ async function main(): Promise<void> {
     const inactiveChannel = addChannel({ ownerPubkey: inactive, platform: 'youtube', raw: 'https://www.youtube.com/@inactive', category: 'craft' });
     insertItem('item_inactive', inactiveChannel.id, inactive, new Date().toISOString());
     await cacheImage('item_inactive');
-    adminPruneUser(inactive, 'owner:password');
+    adminPruneUser(inactive, COMMUNITY_DECISION_ACTOR);
     await settle();
     await expectEvicted('item_inactive', "Pruned member's item");
 

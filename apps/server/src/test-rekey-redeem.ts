@@ -42,7 +42,7 @@ process.env.BEANPOOL_ADDRESSES = 'mullum.test';
 import crypto from 'node:crypto';
 import https from 'node:https';
 import { db } from './db/db.js';
-import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getBalance, adminPruneUser, reconcileLedgerFromDb } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, getBalance, adminPruneUser, COMMUNITY_DECISION_ACTOR, reconcileLedgerFromDb } from './state-engine.js';
 import { grantNodeRole, nodeRoleOf as getMemberNodeRole } from './engine/node-roles.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
@@ -447,7 +447,7 @@ async function runTests() {
         const memberGuess = await ask(admin, 'RK-ABCD-EF01');
         assert(memberGuess.status === 409 && memberGuess.json.error === REKEY_KEY_HAS_ACCOUNT, '...with the same answer for a made-up code, so it learns nothing about codes');
         const closed = join('ClosedCleo');
-        adminPruneUser(closed.pubKeyHex, owner.pubKeyHex);
+        adminPruneUser(closed.pubKeyHex, COMMUNITY_DECISION_ACTOR);
         const cl = await ask(closed, code);
         assert(cl.status === 403 && proposalCount(code) === 0, `a closed account's key is refused (got ${cl.status})`);
     }

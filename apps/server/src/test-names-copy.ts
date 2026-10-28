@@ -31,6 +31,7 @@ import { initStateEngine, exportSyncState } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
+import { setSwitchOverride } from './config/node-profile.js';
 import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -228,7 +229,10 @@ async function main(): Promise<void> {
     require_(demoted.status === 200, `13. Dee is made a moderator (${show(demoted)})`);
     await state(owen);
     assert(!!copyRow(dee.pk), '13. demoted: Dee\'s row is kept');
+    // An admin removes a member outright only where community votes are switched off (removal by vote S3).
+    setSwitchOverride('decisions', false);
     const pruned = await call(null, 'POST', `/api/local/admin/users/${nia.pk}/prune`, {}, PASSWORD());
+    setSwitchOverride('decisions', true);
     require_(pruned.status === 200, `13. Nia is removed (${show(pruned)})`);
     assert(!copyRow(nia.pk), '13. removed: Nia\'s row is gone');
     const purged = await call(kit, 'POST', '/api/member/purge', { action: 'purge_account' });

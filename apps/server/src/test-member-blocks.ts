@@ -61,7 +61,7 @@ import WebSocket from 'ws';
 import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
+    initStateEngine, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -425,7 +425,7 @@ async function main(): Promise<void> {
     assert(same(keysOf(bo), [cy.pk]), "Bo's block of her is his and stays");
     await call('POST', dee, '/api/blocks', { targetPubkeys: [ann.pk, bo.pk] });
     const deeRows = rowsOf(dee);
-    attempt(() => adminPruneUser(dee.pk, 'owner:password'));
+    attempt(() => adminPruneUser(dee.pk, COMMUNITY_DECISION_ACTOR));
     assert(deeRows.length === 2 && rowsOf(dee).length === 0 && deeRows.every(r => { const t = coverOf(dee.pk, r.blocked_pubkey); return !!t && t >= r.updated_at; })
         && !!listTombOf(dee.pk) && tombsOf(dee.pk) === 1,
         `a removal takes Dee's list, tombstoned with one for the list (${deeRows.length} → ${rowsOf(dee).length}, ${tombsOf(dee.pk)} tombstone)`);

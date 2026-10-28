@@ -53,6 +53,7 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { createDecision, executeDecision, tickDecisions } from './decisions-engine.js';
+import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { sweepExpiredDebts, DEBT_RECORD_KEPT_MS, debtRecord as debtRecordOf } from './engine/names-debts.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -203,7 +204,8 @@ async function main(): Promise<void> {
     const rob = await debtor('Rob', 300, robEntry);
     const total = nodeTotal();
     const commonsBefore = getCommonsBalanceExact();
-    const removal = createDecision({ authorPubkey: proposer().pk, title: 'Remove Rob', description: 'Rob left owing and went quiet', touches: 'member', effect: 'remove_member', subject: rob.pk });
+    // A removal proposed before removal by vote S3 (since then only an admin's pause opens one), still open.
+    const removal = removalProposedFromBefore({ authorPubkey: proposer().pk, title: 'Remove Rob', description: 'Rob left owing and went quiet', subject: rob.pk });
     executeDecision(removal.id);
     tickDecisions(Date.now() + 8 * DAY);
     const robStatus = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(rob.pk) as any)?.status;
@@ -313,7 +315,7 @@ async function main(): Promise<void> {
     console.log('── 6. forgiven ──');
     const kyEntry = makeEntry();
     const ky = await debtor('Ky', 150, kyEntry);
-    const kyRemoval = createDecision({ authorPubkey: proposer().pk, title: 'Remove Ky', description: 'Ky left the community owing', touches: 'member', effect: 'remove_member', subject: ky.pk });
+    const kyRemoval = removalProposedFromBefore({ authorPubkey: proposer().pk, title: 'Remove Ky', description: 'Ky left the community owing', subject: ky.pk });
     executeDecision(kyRemoval.id);
     tickDecisions(Date.now() + 8 * DAY);
     const kyDebt = debtsOf(kyEntry)[0];

@@ -29,6 +29,7 @@ import { db } from './db/db.js';
 import { REKEY_OWN_KEY } from './engine/member-wizards.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
+import { setSwitchOverride } from './config/node-profile.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -629,6 +630,9 @@ async function main() {
     // ── 11. Removing an owner or admin (prune, prune a branch holding one, offboard) is owner-only in the engine
     // (state-engine assertMayPrune), so asked; an admin removing a member is not. ──
     console.log('\n11. Prune, branch prune and offboard of an admin from a stale phone session');
+    // Pruning and offboarding someone outright happen only where community votes are switched off (removal by vote S3;
+    // test-removal-doors has the votes-on refusals): the step-up they ask is checked there.
+    setSwitchOverride('decisions', false);
     {
         const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
         const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
@@ -665,6 +669,7 @@ async function main() {
         const prunePlain = await postJson(`/api/local/admin/users/${plain.pub}/prune`, {}, as(adminStale));
         assert(!isStepUp(prunePlain) && prunePlain.status === 200, `an admin prunes a member six minutes on, unasked (got ${prunePlain.status} ${JSON.stringify(prunePlain.body)})`);
     }
+    setSwitchOverride('decisions', true);
 
     // ── 12. Actioning a report with suspendUser takes the subject's role: an owner's or admin's is asked ──
     console.log('\n12. Report action with suspendUser on an admin from a stale phone session');

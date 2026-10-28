@@ -162,14 +162,16 @@ export async function commitDoorKey(
  * is sent, so a join that lands with its answer lost is covered too; a join that works replaces the record anyway. Leaves
  * any other record alone.
  *
- * `keepNewKey`: the door's mark also said that the key's 12 words are new, never shown (onboarding-state.ts
- * `keyMadeForThisJoin`), and the record keeps that half as `newKey`, which never takes a key off. For a claim by the key
- * (claim-key.ts `claimWithKey`): a tap refused, or whose answer was lost, leaves the next tap knowing.
+ * The door's mark also said that the key's 12 words are new, never shown (onboarding-state.ts `keyMadeForThisJoin`), and
+ * the record keeps that half as `newKey`, which never takes a key off. Whichever join takes the key over, one refused, or
+ * whose answer was lost, or that never finished, leaves the next try knowing: a claim by the key (claim-key.ts
+ * `claimWithKey`), and an invite's redeem that the app was stopped in, after which the door's record comes back to its door
+ * (open-door-key.ts `openDoorKeyIsNew`; PR #2564 review).
  */
-export async function adoptJoinKey(publicKey: string, { keepNewKey = false }: { keepNewKey?: boolean } = {}): Promise<void> {
+export async function adoptJoinKey(publicKey: string): Promise<void> {
     const record = await getPendingOnboarding();
     if (!record || !markedByADoor(record, publicKey)) return;
-    const adopted: PendingOnboarding = { ...record, ...(keepNewKey ? { newKey: publicKey } : {}) };
+    const adopted: PendingOnboarding = { ...record, newKey: publicKey };
     delete adopted.freshKey;
     delete adopted.joinsOut;
     await setPendingOnboarding(adopted);

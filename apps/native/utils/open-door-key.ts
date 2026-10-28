@@ -18,6 +18,8 @@
  * - Once in, the wizard's record moves on to Your Photo at that address ({@link finishOpenDoorJoin}), and the welcome screen
  *   resumes it: Your Photo, Safety Backup with the 12 words, How it Works, then Home. As the global community's door does
  *   at its own address (app/welcome.tsx `finishGlobalJoin`).
+ * - A key this door made that an invite join took over since (its redeem never finished) never comes off, but its words
+ *   are still the member's new ones: the door finishes its join the same way ({@link openDoorKeyIsNew}).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -25,7 +27,7 @@ import {
 } from './door-key';
 import type { BeanPoolIdentity } from './identity';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
-import { doorJoinOut, getPendingOnboarding, setPendingOnboarding } from './onboarding-state';
+import { doorJoinOut, getPendingOnboarding, keyMadeForThisJoin, setPendingOnboarding } from './onboarding-state';
 import { communitySwitched } from './community-switch';
 import { assertPlainNodeAddress } from './node-url';
 import { addSavedNode, clearGuestNode } from './nodes';
@@ -59,6 +61,21 @@ export async function releaseOpenDoorKey(url: string, key: JoinKey): Promise<boo
     const record = await getPendingOnboarding();
     if (!doorJoinOut(record) || !madeByTheDoor(record, key.identity.publicKey, openDoorAt(url))) return false;
     return releaseDoorKey(openDoorAt(url), key);
+}
+
+/**
+ * Whether a join by `publicKey` at the door at `url` is the member's new account there, so that once in it goes on to Your
+ * Photo and Safety Backup with the 12 words ({@link finishOpenDoorJoin}), never to the account's profile step: this door's
+ * join is still at the door (`doorJoinOut`, at this address), and its record says the key's words are this join's
+ * (onboarding-state.ts `keyMadeForThisJoin`). That is a key this door made: still its own (`freshKey`), or taken over since
+ * by an invite join whose redeem never finished, which leaves `newKey` in the mark's place (door-key.ts `adoptJoinKey`).
+ * Without this the door read such a key as the phone's account: its finish never moved the record on, and every launch
+ * came back to the door, the words never shown (PR #2564 review). Read from the saved record, at the answer. False for the
+ * phone's own account, which the door writes no record for.
+ */
+export async function openDoorKeyIsNew(url: string, publicKey: string): Promise<boolean> {
+    const record = await getPendingOnboarding();
+    return !!record && doorJoinOut(record) && record.anchorUrl === url && keyMadeForThisJoin(record, publicKey);
 }
 
 /**

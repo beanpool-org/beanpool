@@ -42,10 +42,13 @@ vi.mock('expo-secure-store', () => ({
 }));
 
 import { importIdentity, loadIdentity } from '../identity';
-import { getPendingOnboarding, resumePlan, doorResumeUrl, doorJoinOut, setPendingOnboarding } from '../onboarding-state';
-import { submitWordsJoin, commitJoinKey, joinKeyForThisPhone, releaseJoinKey } from '../global-join';
+import {
+    getPendingOnboarding, resumePlan, doorResumeUrl, doorJoinOut, setPendingOnboarding, updatePendingOnboarding, wizardHold,
+} from '../onboarding-state';
+import { submitWordsJoin, commitJoinKey, joinKeyForThisPhone, releaseJoinKey, adoptJoinKey } from '../global-join';
 import type { DoorWorkRun } from '../door-work';
-import { commitOpenDoorKey, finishOpenDoorJoin, openDoorKeyForThisPhone, releaseOpenDoorKey } from '../open-door-key';
+import { commitOpenDoorKey, finishOpenDoorJoin, openDoorKeyForThisPhone, openDoorKeyIsNew, releaseOpenDoorKey } from '../open-door-key';
+import { setupRedirect } from '../auth-return';
 import { getSavedNodes } from '../nodes';
 import { readOneWayBack } from '../one-way-back';
 import { GLOBAL_NODE_URL } from '../global-node-url';
@@ -225,5 +228,107 @@ describe('never another key', () => {
         // And a record from before S2, of the global door with no address, is no other door's.
         await setPendingOnboarding({ step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: '', callsign: 'Wren', freshKey: key.identity.publicKey, joinsOut: 0 });
         expect(await releaseOpenDoorKey(SELF, key)).toBe(false);
+    });
+});
+
+/**
+ * PR #2564's deciding review (765cde0d, inline at onboarding-state.ts:315): a door's key that an invite join takes over
+ * (welcome.tsx handleCreate, door-key.ts adoptJoinKey) and whose redeem never finishes. Before the fix the record kept no
+ * mark of the key at all: the door read it as the phone's account, the account's finish never moved the record on, and
+ * every launch went welcome → door → profile-setup → welcome, with the 12 words never shown. The record now keeps the mark's
+ * other half (`newKey`): the key never comes off, and the door finishes the join as the new account it is (open-door-key.ts
+ * openDoorKeyIsNew), as S1's claim does for such a key (#2433 item 11).
+ */
+describe('a door join an invite join took over', () => {
+    it('an open-door join interrupted by an unfinished invite redeem still reaches Safety Backup, never loops', async () => {
+        // A new phone joins at THIS door, and the answer is lost: the node may hold the key.
+        const key = await openDoorKeyForThisPhone(SELF);
+        const K = key.identity.publicKey;
+        door(null);
+        expect((await submitWordsJoin(SELF, await commitOpenDoorKey(SELF, key, 'Wren'), 'Wren', NO_WORK)).kind).toBe('unreachable');
+        expect((await getPendingOnboarding())?.joinsOut).toBe(1);
+
+        // Back to welcome, and an invite: handleCreate reuses the phone's key, and takes the door's mark off it before its
+        // redeem. The redeem never finishes (the app is stopped).
+        await adoptJoinKey(K);
+        const record = await getPendingOnboarding();
+        // No door may take the key off now (it went to the invite's community), but its words are still new.
+        expect(record).toMatchObject({ step: 'globalJoin', flow: 'global', anchorUrl: SELF, newKey: K });
+        expect(record).not.toHaveProperty('freshKey');
+        expect(record).not.toHaveProperty('joinsOut');
+
+        // The next launch: the guard holds the phone to the door, and welcome hands the record back to THIS door.
+        const stored = await loadIdentity();
+        expect(wizardHold(record)).toBe('door');
+        const plan = resumePlan(record, stored);
+        expect(plan).toMatchObject({ action: 'resume', mode: 'globalJoin', anchorUrl: SELF, freshKey: false, newKey: true });
+        expect(doorResumeUrl(plan)).toBe(SELF);
+
+        // At the door: the same key, which Back never takes off, and a new account to the member.
+        const atDoor = await openDoorKeyForThisPhone(SELF);
+        expect(atDoor).toEqual({ identity: stored, createdHere: false });
+        expect(await openDoorKeyIsNew(SELF, K)).toBe(true);
+        expect(await releaseOpenDoorKey(SELF, atDoor)).toBe(false);
+        expect((await loadIdentity())?.publicKey).toBe(K);
+        expect(await getPendingOnboarding()).toEqual(record);
+
+        // Join again: the node has the key from the first join. The screen finishes it as a new account
+        // (join-open-door.tsx afterAnswer → finishNewAccount), never the account's profile step.
+        door({ status: 409, body: { code: 'already_member' } });
+        expect((await submitWordsJoin(SELF, atDoor.identity, 'Wren', NO_WORK)).kind).toBe('joined');
+        await finishOpenDoorJoin(SELF, atDoor.identity, { enrolment: null, way: 'words', communityName: null });
+        const joined = await getPendingOnboarding();
+        expect(joined).toMatchObject({ step: 'profileSetup', flow: 'global', anchorUrl: SELF, redeemed: true, newKey: K, joinDoor: 'words' });
+        expect(mem.async.get(ANCHOR)).toBe(SELF);
+
+        // Never looping: the door no longer holds the phone, welcome keeps it for the wizard, and hands it to no door.
+        expect(wizardHold(joined)).toBe('wizard');
+        const guard = { hasIdentity: true, pendingOnboarding: true, doorOut: false };
+        expect(setupRedirect(['welcome'], guard)).toBeNull();
+        expect(setupRedirect(['join-open-door'], guard)).toBe('/welcome');
+        const photo = resumePlan(joined, await loadIdentity());
+        expect(photo).toMatchObject({ action: 'resume', mode: 'profileSetup', anchorUrl: SELF, newKey: true });
+        expect(doorResumeUrl(photo)).toBeNull();
+        // Your Photo, then Safety Backup: the 12 words as the member's own new ones, with no lock first.
+        await updatePendingOnboarding({ step: 'seedBackup', avatar: null });
+        const backup = resumePlan(await getPendingOnboarding(), await loadIdentity());
+        expect(backup).toMatchObject({ action: 'resume', mode: 'seedBackup', anchorUrl: SELF, newKey: true, joinDoor: 'words' });
+        expect(doorResumeUrl(backup)).toBeNull();
+    });
+
+    it('the phone\'s own account at a door with no record of its own is never a new account there', async () => {
+        const account = { publicKey: 'ab'.repeat(32), privateKey: '07'.repeat(32), callsign: 'Sam' } as any;
+        await importIdentity(account);
+        expect(await openDoorKeyIsNew(SELF, account.publicKey)).toBe(false);
+        // An invite join's record saying the key is new is no door's: the door screen sends such a phone to welcome.
+        await setPendingOnboarding({ step: 'create', inviteCode: 'INV-ABCD-EFGH', anchorUrl: SELF, callsign: 'Sam', newKey: account.publicKey });
+        expect(await openDoorKeyIsNew(SELF, account.publicKey)).toBe(false);
+        // Nor is the global community's door's, or one at another address.
+        await setPendingOnboarding({ step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: GLOBAL_NODE_URL, callsign: 'Sam', newKey: account.publicKey });
+        expect(await openDoorKeyIsNew(GLOBAL_NODE_URL, account.publicKey)).toBe(false);
+        await setPendingOnboarding({ step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: 'https://commons.example.nz', callsign: 'Sam', newKey: account.publicKey });
+        expect(await openDoorKeyIsNew(SELF, account.publicKey)).toBe(false);
+        // This door's record names another key: not this one.
+        await setPendingOnboarding({ step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: SELF, callsign: 'Sam', newKey: 'cd'.repeat(32) });
+        expect(await openDoorKeyIsNew(SELF, account.publicKey)).toBe(false);
+    });
+
+    it('a door record whose key the phone no longer marks as the door\'s is dropped, never handed back (the claim\'s rule)', async () => {
+        const key = await openDoorKeyForThisPhone(SELF);
+        await commitOpenDoorKey(SELF, key, 'Wren');
+        const stored = await loadIdentity();
+        const atSelf = (await getPendingOnboarding())!;
+        // No mark at all: the door would read the key as an account, whose finish never moves the record on.
+        expect(resumePlan({ ...atSelf, freshKey: undefined }, stored)).toEqual({ action: 'clear' });
+        // Another key on the phone than the one the record names, by either half of the mark.
+        const other = { ...stored!, publicKey: 'cd'.repeat(32) };
+        expect(resumePlan(atSelf, other)).toEqual({ action: 'clear' });
+        expect(resumePlan({ ...atSelf, freshKey: undefined, newKey: key.identity.publicKey }, other)).toEqual({ action: 'clear' });
+        // Either half for the stored key: back to the door, as before.
+        expect(doorResumeUrl(resumePlan(atSelf, stored))).toBe(SELF);
+        expect(doorResumeUrl(resumePlan({ ...atSelf, freshKey: undefined, newKey: key.identity.publicKey }, stored))).toBe(SELF);
+        // The global community's own door is welcome's, which always moves its record on: unchanged.
+        const globalDoor = { ...atSelf, anchorUrl: GLOBAL_NODE_URL, freshKey: undefined };
+        expect(resumePlan(globalDoor, stored)).toMatchObject({ action: 'resume', mode: 'globalJoin', anchorUrl: GLOBAL_NODE_URL });
     });
 });

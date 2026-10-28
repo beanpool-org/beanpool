@@ -129,7 +129,7 @@ export async function claimWithKey(req: ClaimWithKey): Promise<ClaimedWithKey> {
             // Whether the key's words are new is read before adoptJoinKey takes another door's mark off it. The record
             // keeps that half of the mark (`newKey`), so a tap after a wrong code or a lost answer still knows.
             wordsUnseen = keyMadeForThisJoin(await getPendingOnboarding(), identity.publicKey);
-            await adoptJoinKey(identity.publicKey, { keepNewKey: true });
+            await adoptJoinKey(identity.publicKey);
         }
         req.onSending?.();
     };

@@ -47,9 +47,9 @@ export interface PendingOnboarding {
     flow?: OnboardingFlow;
     /**
      * Global and claim flows only: the public key the door made, which has never been offered to any other community.
-     * An invite join that reuses the key takes this away before it sends it (door-key.ts `adoptJoinKey`),
-     * and replaces the whole record once it has redeemed. Survives a restart so a door that refuses for good
-     * can take that key off the phone again (identity.ts `discardUnjoinedIdentity`), but only while
+     * An invite join that reuses the key takes this away before it sends it (door-key.ts `adoptJoinKey`, which leaves
+     * `newKey` in its place), and replaces the whole record once it has redeemed. Survives a restart so a door that
+     * refuses for good can take that key off the phone again (identity.ts `discardUnjoinedIdentity`), but only while
      * `joinsOut` is 0. A key, not a flag: only that exact key is ever taken, never one the phone already had
      * or holds instead.
      */
@@ -98,8 +98,8 @@ export interface PendingOnboarding {
      * or another key: the phone already had this key (an established account joining another community), and Safety
      * Backup reads its words only once the phone's lock has passed (words-behind-lock.ts; PR #1205 review 4112404374).
      * A key, not a flag, as `freshKey` is: it never vouches for any key but that one. The invite wizard writes it as soon
-     * as its key is on the phone, before the redeem ({@link recordJoinKeyMade}). A door's key that a claim takes over keeps
-     * it in place of the door's `freshKey` (door-key.ts `adoptJoinKey`, `keepNewKey`): its words are still new.
+     * as its key is on the phone, before the redeem ({@link recordJoinKeyMade}). A door's key that another join takes over
+     * (an invite's, a claim's) keeps it in place of the door's `freshKey` (door-key.ts `adoptJoinKey`): its words are still new.
      */
     newKey?: string;
     /**
@@ -252,6 +252,13 @@ export function keyMadeForThisJoin(record: PendingOnboarding | null | undefined,
  * phone holds another key. Such a key never comes off the phone, and the claim screen would read it as an account, which
  * never asks the node whose it is: handed back there, the phone would come back to it at every launch (#2433 review).
  * The record goes; the key stays.
+ *
+ * So is a join at another community's open door, at the door, whose record no longer says the stored key's words are this
+ * join's: neither the door's `freshKey` nor the `newKey` that another join leaves in its place when it takes the key over
+ * (door-key.ts `adoptJoinKey`), so the phone holds another key. The door screen would read that key as an account, whose
+ * finish never moves the record on: handed back there, the phone would come back to it at every launch (PR #2564 review).
+ * A record that keeps either half goes back to the door, which finishes the join as a new account (open-door-key.ts
+ * `openDoorKeyIsNew`): Your Photo, then Safety Backup with the words.
  */
 export function resumePlan(
     pending: PendingOnboarding | null,
@@ -271,6 +278,7 @@ export function resumePlan(
     const fits = flow === 'claim' ? pending.step !== 'create' && pending.step !== 'globalJoin' : !claimOnly.includes(pending.step);
     if (!fits) return { action: 'clear' };
     if (flow === 'claim' && pending.step === 'claim' && pending.freshKey !== stored.publicKey) return { action: 'clear' };
+    if (doorJoinOut({ ...pending, anchorUrl }) && !keyMadeForThisJoin(pending, stored.publicKey)) return { action: 'clear' };
     const doorFlow = flow === 'global' || flow === 'claim';
     return {
         action: 'resume',
@@ -334,6 +342,9 @@ export function claimInFlight(record: PendingOnboarding | null | undefined): boo
  * guard leaves the door screen alone for it (auth-return.ts `setupRedirect`, `doorOut`), so the node can say whether it
  * landed; every other screen goes to welcome, which hands it back to the door screen ({@link doorResumeUrl}). The global
  * community's own door is the welcome screen's, held there as before.
+ *
+ * Read from the step alone, as {@link claimInFlight} is. Welcome, where every other screen goes, drops such a record once
+ * it marks no key the phone holds ({@link resumePlan}), and the phone is held no more.
  */
 export function doorJoinOut(record: PendingOnboarding | null | undefined): boolean {
     return record?.flow === 'global' && record.step === 'globalJoin' && !!record.anchorUrl && record.anchorUrl !== GLOBAL_NODE_URL;

@@ -98,7 +98,7 @@ import { ConsentText } from '../components/ConsentText';
 import { useWords } from '../components/LanguageProvider';
 import { LanguageSwitch } from '../components/LanguagePicker';
 import { CLAIM_NEW_SERVER_ROUTE, claimRouteFor } from '../utils/claim-link';
-import { openDoorHref } from '../utils/open-door';
+import { openDoorHref, takeRestoreAt } from '../utils/open-door';
 import { communityName } from '../utils/community-name';
 import { claimSuccessActions, readNodeAddresses } from '../utils/node-claim';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
@@ -185,6 +185,17 @@ export default function WelcomeScreen() {
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
+    // Another community's door sent the member here to restore (app/join-open-door.tsx, "🔑 Restore my account"): the
+    // address field starts with that community's, the one under the door's title (utils/open-door.ts restoreAtDoorHref),
+    // and the phone's anchor, read after it, never replaces it.
+    const restoreAtDoor = useRef<string | null>(null);
+    useEffect(() => {
+        if (params?.mode !== 'member') return;
+        const at = takeRestoreAt();
+        if (!at) return;
+        restoreAtDoor.current = at;
+        setRecoveryAnchorUrl(at);
+    }, [params?.mode]);
     const [notifVisible, setNotifVisible] = useState(false);
     const [notifBusy, setNotifBusy] = useState(false);
     useEffect(() => {
@@ -699,7 +710,7 @@ export default function WelcomeScreen() {
         AsyncStorage.getItem('beanpool_anchor_url').then(val => {
             if (val) {
                 setCreateAnchorUrl(val);
-                setRecoveryAnchorUrl(val);
+                if (!restoreAtDoor.current) setRecoveryAnchorUrl(val);
             }
         });
         

@@ -47,7 +47,7 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'),
         ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => s },
-        Alert: { alert() {} },
+        Alert: { alert: (title: string) => { said.alerts.push(title); } },
         BackHandler: { addEventListener: listener },
         AppState: { addEventListener: listener, currentState: 'active' },
         DeviceEventEmitter: { addListener: listener, emit() {} },
@@ -55,6 +55,7 @@ vi.mock('react-native', () => {
     };
 });
 const route = vi.hoisted(() => ({ params: {} as Record<string, string | undefined>, replaced: [] as unknown[] }));
+const said = vi.hoisted(() => ({ alerts: [] as string[] }));
 vi.mock('expo-router', async () => {
     const { useEffect } = await import('react');
     return {
@@ -81,11 +82,19 @@ vi.mock('../../app/ThemeContext', async () => {
     };
 });
 vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'member' }) }));
-vi.mock('../../components/SsoButton', () => ({
-    GoogleButton: ({ title }: { title: string }) => createElement('button', null, title),
-    AppleButton: ({ title }: { title: string }) => createElement('button', null, title),
-    FacebookButton: ({ title }: { title: string }) => createElement('button', null, title),
-}));
+vi.mock('../../components/SsoButton', () => {
+    const button = ({ title, onPress }: { title: string; onPress?: () => void }) => createElement('button', { onClick: () => onPress?.() }, title);
+    return { GoogleButton: button, AppleButton: button, FacebookButton: button };
+});
+// The door's sign-in, answered before any join when a case says so (its sign-in has an account there already); else real.
+const doorSignIn = vi.hoisted(() => ({ answer: null as null | { kind: string; message: string } }));
+vi.mock('../global-join', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../global-join')>();
+    return {
+        ...real,
+        signInAtDoor: (...args: Parameters<typeof real.signInAtDoor>) => (doorSignIn.answer ? Promise.resolve({ kind: 'answered', answer: doorSignIn.answer }) : real.signInAtDoor(...args)),
+    };
+});
 const KEY = { publicKey: 'ab'.repeat(32), privateKey: 'not-used', callsign: 'Wren' };
 // The account on the phone (null: none), read as the screen reads it: the global community's door through
 // accountKeyForDoor, another community's through the key rule at its address (utils/open-door-key.ts → door-key.ts,
@@ -104,7 +113,10 @@ vi.mock('../global-join-existing', async (importOriginal) => ({
 const work = vi.hoisted(() => {
     const started: { url: string; key: string; door: string }[] = [];
     const hook = {
-        start: (url: string, identity: { publicKey: string }, door: string) => { started.push({ url, key: identity.publicKey, door }); return {}; },
+        start: (url: string, identity: { publicKey: string }, door: string) => {
+            started.push({ url, key: identity.publicKey, door });
+            return { state: () => ({ phase: 'ready' }), solution: async () => ({ kind: 'none' }), again: async () => ({ kind: 'none' }) };
+        },
         stop() {}, runFor: () => null, state: () => null, busy: null,
     };
     return { started, hook };
@@ -131,7 +143,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import JoinOpenDoorScreen from '../../app/join-open-door';
 import JoinGlobalAlias from '../../app/join-global';
 import { rememberGlobalDoor } from '../global-door-offer';
-import { openDoorHrefForTap, takeDoorTap } from '../open-door';
+import { openDoorHrefForTap, takeDoorTap, takeRestoreAt } from '../open-door';
+import { draftIdentity } from '../identity';
 import * as SecureStore from 'expo-secure-store';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -167,6 +180,9 @@ beforeEach(() => {
     work.started.length = 0;
     route.params = {};
     route.replaced.length = 0;
+    said.alerts.length = 0;
+    doorSignIn.answer = null;
+    takeRestoreAt();
     phone.key = KEY;
     vi.mocked(SecureStore.setItemAsync).mockClear();
     takeDoorTap('');
@@ -402,8 +418,83 @@ describe("another community's door on a phone with no account (S2)", () => {
         expect(src).toContain("if (account.createdHere && via === 'join' && await releaseOpenDoorKey(doorUrl, account)) {");
         expect(src).toContain('void releaseOpenDoorKey(doorUrl, made)');
         expect(src.match(/releaseOpenDoorKey\(/g)).toHaveLength(2);
-        // In with a key it made: the wizard (12 words at Safety Backup), never the account's profile step.
-        expect(src).toContain("if (answer.kind === 'joined' && account.createdHere) {");
+        // In with a key it made, or one an invite join took over and never finished with: the wizard (12 words at Safety
+        // Backup), never the account's profile step (PR #2564 review).
+        expect(src).toContain("if (answer.kind === 'joined' && (account.createdHere || await openDoorKeyIsNew(doorUrl, account.identity.publicKey))) {");
         expect(src).toMatch(/await finishOpenDoorJoin\(doorUrl, named, \{[^}]*\}\);[\s\S]*router\.replace\('\/welcome'\);/);
+    });
+
+    /**
+     * PR #2564's deciding review: the door made a key, an invite join took it over (door-key.ts adoptJoinKey) and its
+     * redeem never finished. The key never comes off, but the member has never seen its 12 words: the door says what it says
+     * to a new account, and once in the wizard shows them. Before the fix it drew the account's words ("your key and your
+     * 12 words stay the same"), and its finish never moved the record on: every launch came back here.
+     */
+    const takenOver = (publicKey: string) => JSON.stringify({ step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: SELF, callsign: 'Wren', redeemed: false, newKey: publicKey });
+
+    it('a key an invite join took over from this door, its redeem never finished: the door speaks to a new account', async () => {
+        store.map.set('beanpool_pending_onboarding', takenOver(KEY.publicKey));
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [SELF]: OPEN });
+        await render();
+        expect(route.replaced).toEqual([]);
+        expect(text()).toContain('Join Riverbend Open with a new BeanPool account on this phone: 12 words, or a sign-in.');
+        expect(text()).toContain('Create an account with 12 secret words');
+        expect(text()).not.toContain('your key and your 12 words stay the same');
+        expect(text()).not.toContain('Join with this account');
+        await tap('Create an account with 12 secret words');
+        expect(text()).toContain('🔑 An account with 12 secret words. They come next, after your photo.');
+        expect(text()).not.toContain('the ones this phone already has');
+        // Reading the screen writes nothing, and takes nothing off.
+        expect(store.map.get('beanpool_pending_onboarding')).toBe(takenOver(KEY.publicKey));
+        expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+    });
+
+    it("an open-door join interrupted by an unfinished invite redeem still reaches Safety Backup, never loops: in, the wizard, never the account's profile step", async () => {
+        const held = await draftIdentity('Wren');
+        phone.key = held as unknown as typeof KEY;
+        store.map.set('beanpool_pending_onboarding', takenOver(held.publicKey));
+        route.params = { node: SELF, from: 'link' };
+        const joins: string[] = [];
+        const answers = network({ [SELF]: OPEN });
+        globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+            if (String(input) === `${SELF}/api/join` && init?.method === 'POST') {
+                joins.push(String(input));
+                // The node has the key from the door's first join, whose answer was lost.
+                return new Response(JSON.stringify({ code: 'already_member' }), { status: 409 });
+            }
+            return answers(input as any, init as any);
+        }) as typeof fetch;
+        await render();
+        await tap('Create an account with 12 secret words');
+        await tap('Join');
+        expect(joins).toEqual([`${SELF}/api/join`]);
+        // The wizard's record at Your Photo here, with the words as the member's new ones: welcome shows them at Safety
+        // Backup with no lock. The door holds the phone no more.
+        expect(JSON.parse(store.map.get('beanpool_pending_onboarding')!)).toMatchObject({
+            step: 'profileSetup', flow: 'global', anchorUrl: SELF, redeemed: true, newKey: held.publicKey, joinDoor: 'words',
+        });
+        expect(store.map.get('beanpool_anchor_url')).toBe(SELF);
+        expect(route.replaced).toEqual(['/welcome']);
+        // Never the account's finish: no "You're in" notice that says the words are the same as before, no profile step.
+        expect(said.alerts).toEqual([]);
+        expect(JSON.stringify(route.replaced)).not.toContain('profile-setup');
+        expect(new Set(asked.map(u => new URL(u).origin))).toEqual(new Set([SELF]));
+    });
+
+    it("🔑 Restore my account (its sign-in has an account there already): welcome's restore, with THIS community's address handed over", async () => {
+        phone.key = null;
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [SELF]: { ...OPEN, features: { ...OPEN.features, wordsDoor: false } } });
+        doorSignIn.answer = { kind: 'already_joined', message: 'This sign-in already has an account here.' };
+        await render();
+        await tap('Continue with Google');
+        expect(text()).toContain('This sign-in already has a BeanPool account in Riverbend Open. Restore it with your 12 words or your sign-in instead.');
+        await tap('🔑 Restore my account');
+        expect(route.replaced).toEqual([{ pathname: '/welcome', params: { mode: 'member' } }]);
+        // The address under the door's title, for the restore's address field (welcome.tsx takes it, once).
+        expect(takeRestoreAt()).toBe(SELF);
+        expect(takeRestoreAt()).toBeNull();
+        nothingWritten();
     });
 });

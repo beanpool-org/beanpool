@@ -21,7 +21,7 @@ import { DoorChoices, DoorWorkProgress } from '../components/WordsDoor';
 import { startOneWayBack } from '../utils/one-way-back';
 import { vaultCopyKnown } from '../utils/vault';
 import { ACCOUNT_DOOR_MESSAGES, accountKeyForDoor, finishJoinFromAccount, rememberAccountClosed } from '../utils/global-join-existing';
-import { commitOpenDoorKey, finishOpenDoorJoin, openDoorKeyForThisPhone, releaseOpenDoorKey } from '../utils/open-door-key';
+import { commitOpenDoorKey, finishOpenDoorJoin, openDoorKeyForThisPhone, openDoorKeyIsNew, releaseOpenDoorKey } from '../utils/open-door-key';
 import { doorJoinOut, getPendingOnboarding } from '../utils/onboarding-state';
 import { StoredKeyUnreadableError } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
@@ -30,7 +30,7 @@ import { afterJoinRedirect } from '../utils/pair-device-target';
 import { signInCopiesAt } from '../utils/vault-config';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { FROM_LINK } from '../utils/global-link';
-import { doorNodeFromParam, takeDoorTap, type DoorNode } from '../utils/open-door';
+import { doorNodeFromParam, restoreAtDoorHref, takeDoorTap, type DoorNode } from '../utils/open-door';
 import {
     doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedGlobalBodyWords, joinedTitle,
     newPhoneDoorWords, phoneDoorLineWords, placeAt, type DoorPlace,
@@ -195,7 +195,8 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
     /**
      * Whose key the door joins with, read from the phone as it opens: `existing`, the phone's own account (slice P5); `new`, a
      * key this door made, in memory until Join (a phone with no account: slice S2, utils/open-door-key.ts), or on the phone
-     * with its record while a join it signed may have landed. Null until read.
+     * with its record while a join it signed may have landed, or since taken over by an invite join whose redeem never
+     * finished (its words never shown: open-door-key.ts openDoorKeyIsNew). Null until read.
      */
     const [keyKind, setKeyKind] = useState<'existing' | 'new' | null>(null);
     const keyRef = useRef<JoinKey | null>(null);
@@ -268,8 +269,11 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             // The global community's door with no account on the phone is the first screen's ("Explore BeanPool worldwide"),
             // as before slice S2, when the root guard sent this screen there.
             if (!joining) { router.replace('/welcome'); return; }
+            // A key whose 12 words this phone has never shown is the member's new account, whoever holds it now.
+            const isNew = joining.createdHere || await openDoorKeyIsNew(doorUrl, joining.identity.publicKey);
+            if (!alive) return;
             setKey(joining);
-            setKeyKind(joining.createdHere ? 'new' : 'existing');
+            setKeyKind(isNew ? 'new' : 'existing');
         })().catch(() => {});
         return () => { alive = false; };
         // Read once, as the door opens: the screen is keyed by its address.
@@ -523,7 +527,10 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
      * signed can have landed (utils/open-door-key.ts releaseOpenDoorKey).
      */
     async function afterAnswer(answer: DoorAnswer, account: JoinKey, typed: string, joinedBy: DoorWay = 'sign-in', via: 'signIn' | 'join' = 'join') {
-        if (answer.kind === 'joined' && account.createdHere) {
+        // In with a key whose 12 words the member has never seen: one this door made, or one an invite join took over since
+        // and never finished with (open-door-key.ts openDoorKeyIsNew). The wizard shows them; the account's finish would leave
+        // the door's record at the door, and every launch would come back here (PR #2564 review).
+        if (answer.kind === 'joined' && (account.createdHere || await openDoorKeyIsNew(doorUrl, account.identity.publicKey))) {
             await finishNewAccount(answer, account, typed, joinedBy);
             return;
         }
@@ -654,9 +661,10 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                         <>
                             <Text style={styles.body} accessibilityLiveRegion="polite">{message}</Text>
                             {/* A phone with no account: this sign-in's account is somewhere else, so the first screen's restore
-                                brings it here, as at the global community's door (welcome.tsx). */}
+                                brings it here, as at the global community's door (welcome.tsx), with this community's address
+                                filled in: the one under the title. */}
                             {keyKind === 'new' && (
-                                <Pressable style={styles.primary} onPress={() => router.replace({ pathname: '/welcome', params: { mode: 'member' } })} accessibilityRole="button">
+                                <Pressable style={styles.primary} onPress={() => router.replace(restoreAtDoorHref(doorUrl))} accessibilityRole="button">
                                     <Text style={styles.primaryText}>{t('🔑 Restore my account')}</Text>
                                 </Pressable>
                             )}

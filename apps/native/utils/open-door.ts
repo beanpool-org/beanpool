@@ -94,6 +94,28 @@ export function takeDoorTap(url: string, nowMs: number = Date.now()): boolean {
     return !!tap && tap.url === url && nowMs >= tap.atMs && nowMs - tap.atMs < TAPPED_DOOR_MS;
 }
 
+/**
+ * **🔑 Restore my account** at a door (app/join-open-door.tsx: its sign-in has an account there already, made on another
+ * phone): the first screen's restore, with the door's community in its address field, the address shown under the door's
+ * title. On a new phone the field was empty, and the member had to type it (PR #2564 review). Handed over in memory, as
+ * {@link takeDoorTap} is, for one opening within a minute (app/welcome.tsx {@link takeRestoreAt}): no link fills the field.
+ */
+let restoreAt: { url: string; atMs: number } | null = null;
+
+/** Where the door's Restore goes: welcome's restore, with the door's address handed over ({@link takeRestoreAt}). */
+export function restoreAtDoorHref(url: string, nowMs: number = Date.now()): { pathname: '/welcome'; params: { mode: 'member' } } {
+    const door = doorNodeAt(url);
+    restoreAt = door ? { url: door.url, atMs: nowMs } : null;
+    return { pathname: '/welcome', params: { mode: 'member' } };
+}
+
+/** The address a door's Restore handed the first screen's restore just now, or null. Read once: the next reading is null. */
+export function takeRestoreAt(nowMs: number = Date.now()): string | null {
+    const handed = restoreAt;
+    restoreAt = null;
+    return handed && nowMs >= handed.atMs && nowMs - handed.atMs < TAPPED_DOOR_MS ? handed.url : null;
+}
+
 /** A link to the door, as the system hands it over. */
 export interface DoorLink {
     /** The community it names (the global community when it names none), null when refused. */

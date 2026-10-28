@@ -329,6 +329,7 @@ import { LanguageSwitch } from '../../components/LanguagePicker';
 import WelcomeScreen from '../../app/welcome';
 import { noVault, useVault } from './fake-vault';
 import { DOOR_MESSAGES } from '../global-join';
+import { restoreAtDoorHref } from '../open-door';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
@@ -672,5 +673,49 @@ describe('a language picked on an open step redraws it, live', () => {
         // A sentence of this sweep's the catalog doesn't have yet: its English, never a gap.
         const pen = 'No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.';
         expect(page.textContent).toContain(typeof fr[pen] === 'string' ? fr[pen] as string : pen);
+    });
+});
+
+/**
+ * PR #2564's deciding review (not blocking, taken): another community's door's **🔑 Restore my account**
+ * (app/join-open-door.tsx) opened this restore with an empty address field on a new phone, and the member had to type the
+ * address shown under the door's title. The door hands it over in memory (utils/open-door.ts restoreAtDoorHref).
+ */
+describe("another community's door sent the member here to restore", () => {
+    const SELF = 'https://open.riverbend.example';
+    const field = () => all('input').find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)') as HTMLInputElement | undefined;
+
+    it("with 12 words: the address field is that community's, over the phone's anchor", async () => {
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await mount('en');
+        expect(host!.textContent).toContain('🔑 Restore your account');
+        await press('🔑 Recover with 12 Words', 'en');
+        expect(field()?.value).toBe(SELF);
+    });
+
+    it("with a sign-in, at the community: the same address", async () => {
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await mount('en');
+        await press('🌐 Recover with Social', 'en');
+        expect(field()?.value).toBe(SELF);
+    });
+
+    it("opened any other way, nothing is handed over: the phone's anchor, as before; and a hand-over is read once", async () => {
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        params.now = { mode: 'member' };
+        await mount('en');
+        await press('🔑 Recover with 12 Words', 'en');
+        expect(field()?.value).toBe('https://mullum.beanpool.org');
+        act(() => root?.unmount()); host?.remove();
+
+        restoreAtDoorHref(SELF);
+        await mount('en');
+        act(() => root?.unmount()); host?.remove();
+        await mount('en');
+        await press('🔑 Recover with 12 Words', 'en');
+        expect(field()?.value).toBe('https://mullum.beanpool.org');
     });
 });

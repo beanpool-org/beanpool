@@ -15,6 +15,7 @@ Set up a BeanPool community server for me.
 
 - If I have no server yet, help me rent a small one: Ubuntu 24.04 with at least 1 GB of memory, about US$6 a month. I sign up and pay myself.
 - Install Docker and Docker Compose from the system's own packages (on Ubuntu 24.04: docker.io and docker-compose-v2).
+- Turn on Docker live-restore so Docker can restart or update itself without stopping your community: if /etc/docker/daemon.json is missing, write {"live-restore": true}; if it exists, merge the key in (keeping every other key). Then run systemctl reload docker and check docker info --format '{{.LiveRestoreEnabled}}' says true.
 - On a server with 1 GB of memory, first add 2 GB of swap and keep it on after a restart.
 - Install BeanPool with the one block under Start a community on beanpool.org, which is also in the README at github.com/beanpool-org/beanpool. It pulls the published image of the latest release. Never build BeanPool from source, and change nothing in docker-compose.yml.
 - For the block's last line, give the community its address. On a rented server with a public IP address and ports 80 and 443 open: docker compose exec beanpool-node beanpool claim --ip THE-SERVER'S-IP. On a computer at home, or with no ports open: --name NAME instead. If I have my own domain pointed at the server: --address https://my.domain. Never give the phone a plain http:// address on the internet: phones refuse it.
@@ -24,10 +25,14 @@ Set up a BeanPool community server for me.
 ## What the assistant does
 
 - Looks at the server: its system, memory and disk.
-- Installs Docker, and adds swap on a 1 GB server, which otherwise can run out of memory while it starts.
+- Installs Docker, turns on live-restore, and adds swap on a 1 GB server, which otherwise can run out of memory while it starts.
 - Runs the one block: fetches the compose file, creates the network the server uses, pulls the published image, starts it, and waits until the server has made its one-time claim code.
 - Runs beanpool claim with the address. With --ip or your own domain, your server gets its own certificate for the address, and beanpool claim waits up to three minutes until the address answers with it. With a name, your server asks for NAME.beanpool.org with its own key and waits up to three minutes for it to go live; a name that waits for approval moves over by itself once approved. See Your community needs an address phones can reach, in First-time setup.
 - Shows you the claim code, the QR code and the numbered steps for your phone: install BeanPool, then scan. The claim makes your account.
+
+### Docker and live-restore
+
+Docker can restart or update itself without stopping your community when live-restore is enabled. On a server installed before this change, turn it on by adding `{"live-restore": true}` to `/etc/docker/daemon.json` (if the file already exists, merge the key in so other settings are kept), reloading Docker with `systemctl reload docker` (never a restart), and checking that `docker info --format '{{.LiveRestoreEnabled}}'` prints `true`.
 
 If beanpool claim prints a warning that phones will not connect, or that the QR code carries no address, it says why: with --ip, most often port 80 or 443 closed in the server's firewall. Fix that and run it again, or use a name. The claim code waits until a phone uses it.
 

@@ -13,6 +13,10 @@ A new server has no admin password, and you do not put one in the .env file. If 
 
 On its first start the server makes the claim code and puts it in a file, data/claim-code.txt, that only the server can read. It never prints the code in the log, because the log is kept for as long as the server runs and gets copied into support requests. beanpool claim shows it to you. You can also read it with: docker compose exec beanpool-node cat /data/claim-code.txt
 
+### Docker and live-restore
+
+Docker can restart or update itself without stopping your community when live-restore is enabled. A new server gets this by default during install. On a server installed before this change, turn it on by adding `{"live-restore": true}` to `/etc/docker/daemon.json` (if the file already exists, merge the key in, keeping every other key), running `systemctl reload docker` (never a restart), and checking that `docker info --format '{{.LiveRestoreEnabled}}'` prints `true`.
+
 ### Servers that still have a password
 
 A server set up before the claim code keeps its admin password exactly as it was. Its first password was the ADMIN_PASSWORD in .env, or one the server made up and put in data/first-admin-password.txt. Read that file with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Until you change the password in Access & Security, every start reminds you in the log that the file is still there, without printing the password. The file is deleted the moment you change it. The server reads ADMIN_PASSWORD only on its first start, so to change the password, use Settings.

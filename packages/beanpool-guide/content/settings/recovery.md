@@ -22,31 +22,49 @@ Your account's key is not in your phone's backups. A new phone needs your 12 wor
 
 ## With a sign-in account
 
-This works only if you linked one before (see below), and only while your community's server is running.
+This works only if you linked one before (see below). BeanPool's key vault keeps the locked copy, and your sign-in finds it: you don't type your name or your community's address.
 
-- Type your name in the community. The app may suggest "Is this you?".
-- Type your community's name or address.
 - Tap **Recover with** and the account you linked: Google or Facebook, or Apple on an iPhone.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose the account you linked. On Android, Google shows its own list of accounts. If it can't show one on that phone, a Google web page opens instead.
+- For your safety, getting back in with a sign-in waits a day. The app says when your account comes back. It checks by itself while it is open, and **Check now** asks straight away.
+- If you still have another phone with your account on it, open BeanPool there and tap **Yes, it's me** (see "If someone else tries"). Your account comes back within a minute.
+- When your account is back, choose the community to open it in. The global community is filled in; to use your own, type its name or address, or tap it under **Your communities on this phone**. Tap **Continue**. Your name and photo come back from that community.
+- **Use my 12 words instead** works any time, with no wait. **Start again** starts over with a sign-in.
+
+If the app says **Getting back in with a sign-in is paused for a little while**, BeanPool's key vault has restarted and is waiting for the people who look after it to open it again. Nothing is lost: try again later. Your 12 words work any time.
+
+If the key vault keeps no copy for that sign-in account, the app says so: your community may still keep one, from before the key vault (see "Moving a copy your community keeps"). Type your name in the community and your community's name or address, then sign in once more. That copy works only while your community's server is running.
 
 If the sign-in account was linked from a phone that had your 12 words, on an up-to-date app, your 12 words come back too. Otherwise the phone has no 12 words: they can't be rebuilt from a sign-in. If you have them written down, you can add them (see "Your 12 words"). Until then a linked sign-in account is that phone's way back, so keep one linked, and link a second one if you can (see below).
 
 ## Protecting your account now
 
+**Account Protection** lists your ways back: **Your 12 words** first, then **A sign-in you link**, which says where its copy is kept before you link one. **Who can open it** under it says who can open that copy (see "Who can open the copy").
+
 - Open **Settings** and tap **Account Protection**.
-- Under **Sign-In Recovery Providers (1-of-N)**, tap **Protect with** and choose an account.
+- Under **A sign-in you link**, tap **Protect with** and choose an account.
 - Pass your phone's lock screen check. The linked account can bring your account back, so the app asks first.
 - With Google on an iPhone, a Google web page opens. Sign in there and choose your account, and you come back to BeanPool.
 
-This works on a phone with no 12 words too.
+**Safety Backup**, when you join a community, says the same, under the same heading: a sign-in you link there, or the one you joined with, keeps its copy at BeanPool's key vault.
+
+One linked sign-in account covers all your communities: you don't link it again in each one. This works on a phone with no 12 words too.
 
 If you joined the global community with 12 words, use **Add a sign-in**, near the top of **Account Protection**, instead. It is a way back too, and it also lifts the limits on a new 12-words account. See "Your 12 words".
 
 If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 
-This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community.
+This is not a way to log in. Your account is still your own key. The linked account only helps you get it back.
 
-To remove it, tap **Disconnect**.
+- If BeanPool's key vault is paused when you link an account, nothing is linked and the app says so. **Settings** then offers **Link your** (Google, Apple or Facebook) **sign-in** again, with **Link it**.
+- A sign-in account protects one BeanPool account. If it was protecting a different one, it protects this one now, and the app says so: that other account then has only its 12 words.
+- To remove it, tap **Disconnect**. The key vault deletes its copy at once, and from its backups within 30 days, or later if the vault is paused in that time.
+
+## Moving a copy your community keeps
+
+Before the key vault, each community kept its own copy for the sign-in accounts linked there. If yours still keeps one, **Settings** shows **Move your Google recovery to BeanPool's key vault** (or Facebook, or Apple). Tap **Move it**, pass your phone's lock screen check and sign in once. The key vault gets a fresh copy, made on this phone, and your community's copy is then deleted. **Not now** puts the card away for a week.
+
+If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remove it**. Your community's copy is deleted and none is made at the key vault, so that sign-in account no longer brings your account back until you link it again. On a phone with no 12 words, the app warns you first: without them, and without a sign-in account, nothing brings your account back. If your community doesn't answer, the app says **Not removed yet** and tries again the next time you open **Settings**.
 
 ## If you had linked GitHub
 
@@ -58,17 +76,30 @@ BeanPool no longer uses GitHub. A GitHub account's id is public, so a copy locke
 
 ## Who can open the copy
 
-A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. On the global community, that is BeanPool. A stolen copy of the server's database can't, once the server has been updated for it. Anyone who takes over your sign-in account can get in too: see "If someone else tries".
+A linked sign-in account works because a locked copy of your account is kept for it. Where it is kept depends on how you linked it.
 
-If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account. Disconnecting deletes the copy. A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Disconnecting does not delete the copies already in the server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back. The people who run the server can open those too.
+**BeanPool's key vault: a sign-in linked in the phone app.** When you link Google, Apple or Facebook in the phone app, or join with one, your phone locks a copy of your key, with your 12 words if the phone has them, to that sign-in and sends it to BeanPool's key vault: a small server in Iceland that does nothing else. The app says so where you link it, at **Safety Backup** and in **Account Protection**, under **A sign-in you link**. The vault gives the copy back only after Google, Apple or Facebook tells it that it's you. It waits a day first, and tells your other phones, so you can stop it if it wasn't you.
+
+BeanPool can open these copies. For now one person, BeanPool's founder, looks after the vault. It is moving to three people in different countries, and then it takes two of them working together. The company that hosts it can read its memory while it runs, as with any rented server. A court could order a copy opened. Anyone who takes over your Google, Apple or Facebook account could get in too: see "If someone else tries". Tap **Who can open it** under **A sign-in you link** to read this in the app.
+
+**Your community's server: a copy from before the key vault.** A copy your community kept before the key vault stays there until you move it or remove it (see "Moving a copy your community keeps"). The first owner of a community, who links a sign-in while setting it up, has that copy kept on the community's own server too, never at the key vault. The people who run that server can open it, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.
+
+**The global community's server: a sign-in you joined with in a web browser.** The web app has no link to the key vault. When you join the global community in a browser with a sign-in, the global community's server keeps the copy, and **Safety Backup** and **Settings** there say so. The people who run that server, BeanPool, can open it. On any other community, the web app makes no copy, and **Settings** there says whether that community's server keeps one.
+
+If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account in the phone app. That deletes the key vault's copy at once, and from its backups within 30 days, or later if the vault is paused in that time. A copy on a community's server goes with **Remove it instead** (above). A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Removing a copy there does not delete the copies already in that server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back from it. The people who run the server can open those too. Your 12 words always work, with or without any copy.
 
 ## If someone else tries
 
-If someone starts recovering your account, Settings shows **Someone is recovering your account** while it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. If they get in with your linked sign-in account, you get an alert that your account was just restored on another device, and they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password.
+If someone starts getting back into your account with your linked sign-in account, your phones are told, and **Settings** shows **Someone is getting back into your account**, with when it goes through.
+
+- If it was you, on another phone, tap **Yes, it's me** and pass your phone's lock screen check. It goes through now, and **Settings** shows **Let through** until your other phone has your account.
+- If it wasn't, tap **Stop**. It never goes through, and whoever tried gets nothing. Then make sure that sign-in account has its own strong password.
+
+A copy your community still keeps, from before the key vault, has no day's wait. If someone uses it, **Settings** shows **Someone is recovering your account** while it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. If they get in, you get an alert that your account was just restored on another device, and they may already be in by the time you see it.
 
 ## If the phone already has an account
 
-Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once you have signed in). Nothing changes until you type **WIPE**, tap **Replace Account** and pass your phone's lock screen check. Tap **Keep**, then the account's name, **go back** to leave everything as it was.
+Restoring a different account replaces the one on this phone, whether you restore with your 12 words or with a sign-in account. The app asks first, on **Replace this phone's account?** (with a sign-in account, once your account is back and you tap **Continue**). Nothing changes until you type **WIPE**, tap **Replace Account** and pass your phone's lock screen check. Tap **Keep**, then the account's name, **go back** to leave everything as it was.
 
 Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words** and pass your phone's lock screen check. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
 

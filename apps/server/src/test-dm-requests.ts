@@ -76,7 +76,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, purgeMemberSelf, getListedUnreadCounts, grantNodeRole,
+    initStateEngine, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, purgeMemberSelf, getListedUnreadCounts, grantNodeRole,
     ensureTransactionConversation, dispatchPushNotification, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -1254,7 +1254,7 @@ async function localRun(): Promise<void> {
     for (const [c, s] of [[ikeConv, ike], [jemConv, jem], [kitConv, kit]] as [string, Id][]) await send(c, s);
     const ignoreIke = await decide(ann, ikeConv, 'ignore');
     const ignoreKit = await decide(ann, kitConv, 'ignore');
-    attempt(() => adminPruneUser(jem.pk, 'owner:password'));
+    attempt(() => adminPruneUser(jem.pk, COMMUNITY_DECISION_ACTOR));
     // And one that lapsed before its opener was removed (PR #2392 review 4354806402): Op's.
     const op = member('Op');
     const opConv: string = (await open(op, ann)).body?.conversation?.id;
@@ -1262,7 +1262,7 @@ async function localRun(): Promise<void> {
     ageRequest(opConv, 31);
     attempt(() => requestsEngine.expireOldRequests(Date.now()));
     const opLapsed = rowOf(opConv)?.state;
-    attempt(() => adminPruneUser(op.pk, 'owner:password'));
+    attempt(() => adminPruneUser(op.pk, COMMUNITY_DECISION_ACTOR));
     // And two Ann ignored and then blocked (the director's mirror of option b, 23 Oct): Pia, made a moderator, writes while
     // on, which accepts hers, hidden from Ann; Ros writes once requests are off, a line kept for him alone.
     const [pia, ros] = [member('Pia'), member('Ros')];

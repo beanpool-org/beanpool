@@ -45,7 +45,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { wrapCreatePost } from './post-test-helper.js';
 import {
-    initStateEngine, transfer, adminPruneUser, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost as rawCreatePost,
+    initStateEngine, transfer, adminPruneUser, COMMUNITY_DECISION_ACTOR, createConversation, sendMessage, getBalance, getCommonsBalance, runLedgerAudit, createPost as rawCreatePost,
     createTreasury, adminAssignTreasuryOperator, proposeKeeperRemoval, requestToJoinEnterprise, approveKeeperRequest, getLeadInactivity,
 } from './state-engine.js';
 const createPost = wrapCreatePost(rawCreatePost);
@@ -231,12 +231,12 @@ async function main(): Promise<void> {
     const proposeReinstate = (subject: string) => call('POST', '/api/commons/decisions', proposer(),
         { title: 'Reinstate them', description: 'They have made amends with the community', touches: 'member', effect: 'reinstate_member', subject });
 
-    // ── 1. A member removed by an admin deletes their account ─────────────────────────────────────
-    console.log('── 1. A member removed by an admin deletes their account: their profile is erased');
+    // ── 1. A member the community removed deletes their account ─────────────────────────────────────
+    console.log('── 1. A member the community removed deletes their account: their profile is erased');
     const rita = makeMember('RitaRD', 40);
     giveFriendsAndCopies(rita, alice);
     joinedThroughTheDoor(rita, 'door-hash-rita');
-    adminPruneUser(rita.pk, 'owner:password');
+    adminPruneUser(rita.pk, COMMUNITY_DECISION_ACTOR);
     {
         const kept = profileOf(rita.pk);
         assert(kept?.status === 'pruned' && kept?.callsign === 'RitaRD' && kept?.bio === 'RitaRD grows garlic' && kept?.contact_value === 'ritard@example.com'
@@ -282,7 +282,7 @@ async function main(): Promise<void> {
         const offer = createPost('offer', 'produce', 'Rex walnuts', 'A bag of walnuts', 5, 'fixed', rex.pk)!;
         db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, updated_at)
                     VALUES ('rex-deal', ?, ?, ?, 5, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(offer.id, alice.pk, rex.pk);
-        adminPruneUser(rex.pk, 'owner:password');
+        adminPruneUser(rex.pk, COMMUNITY_DECISION_ACTOR);
         const before = snapshot();
         const refused = await call('POST', '/api/member/purge', rex, {});
         const changed = changedTables(before, snapshot());
@@ -302,7 +302,7 @@ async function main(): Promise<void> {
 
         // A vote to reinstate Rob opens while he is removed; he deletes his account before it closes.
         const rob = makeMember('RobRD', 0);
-        adminPruneUser(rob.pk, 'owner:password');
+        adminPruneUser(rob.pk, COMMUNITY_DECISION_ACTOR);
         const open = createDecision({ authorPubkey: proposer().pk, title: 'Reinstate Rob', description: 'Rob has made amends with us', touches: 'member',
             effect: 'reinstate_member', subject: rob.pk });
         const robDeletes = await call('POST', '/api/member/purge', rob, {});
@@ -388,7 +388,7 @@ async function main(): Promise<void> {
     {
         const ray = makeMember('RayRD', 10);
         giveFriendsAndCopies(ray, alice);
-        adminPruneUser(ray.pk, 'owner:password');
+        adminPruneUser(ray.pk, COMMUNITY_DECISION_ACTOR);
         const mal = makeMember('MalRD', 10);
         const stranger = keypair('StrangerRD');
         const rows = () => [ray, mal, alice].map(m => wholeRow(m.pk)).join('\n');
@@ -427,7 +427,7 @@ async function main(): Promise<void> {
         const mos = makeEnterprise(mo, [max]);
         const ask = requestToJoinEnterprise(mos, lena.pk, 0);
         const addLena = approveKeeperRequest(ask.id, mo.pk).change!;
-        adminPruneUser(lena.pk, 'owner:password');
+        adminPruneUser(lena.pk, COMMUNITY_DECISION_ACTOR);
         assert(roleIn(ent, lena.pk) === 'lead' && getLeadInactivity(ent).leadPubkey === lena.pk && changeOf(removeKai.id).status === 'pending'
             && changeOf(addLena.id).status === 'pending',
             'setup: the removal leaves Lena lead, whom the keepers could replace by succession, and her two keeper changes pending');
@@ -454,7 +454,7 @@ async function main(): Promise<void> {
         // Sol is the only keeper of an enterprise, and is removed.
         const sol = makeMember('SolRD', 0);
         const solo = makeEnterprise(sol, []);
-        adminPruneUser(sol.pk, 'owner:password');
+        adminPruneUser(sol.pk, COMMUNITY_DECISION_ACTOR);
         const beansBefore = beansOf(solo);
         const solDeletes = await call('POST', '/api/member/purge', sol, {});
         const p = pausedOf(solo);

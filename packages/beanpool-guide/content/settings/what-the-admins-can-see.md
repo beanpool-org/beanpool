@@ -56,7 +56,7 @@ You can take your consent back at any time: open **Settings**, where your app sh
 
 Whether or not you agreed to anything, in any community:
 
-- **When your account is removed.** In a community that votes, that is after it voted to remove you; where votes are switched off, an admin removes you. The admin who settles it sees your balance and how many trades you have open, so that what you hold or owe can be settled. The other admins and the owner can see who looked, at whose balance, and when.
+- **When your account is removed.** In a community that votes, that is after it voted to remove you; where votes are switched off, it is when an admin removes your account. The admin who settles it sees your balance and how many trades you have open, so that what you hold or owe can be settled. The other admins and the owner can see who looked, at whose balance, and when.
 - **When your community votes on removing you.** Everyone who can vote in it sees your balance and any debt, in that vote only. An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.
 - **Whoever runs your community's server** holds its whole database, your balance and trades included, and its backups, snapshots and standby copies.
 

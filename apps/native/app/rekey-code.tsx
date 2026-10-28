@@ -24,6 +24,7 @@ import { useIdentity } from './IdentityContext';
 import { communitySwitched } from '../utils/community-switch';
 import { assertPlainNodeAddress } from '../utils/node-url';
 import { draftIdentity, getMnemonic, importIdentity, loadIdentity, StoredKeyUnreadableError, type BeanPoolIdentity } from '../utils/identity';
+import { forgetTheLook } from '../utils/look-around';
 import { useWords } from '../components/LanguageProvider';
 import { keyLineWords } from '../components/key-lines';
 import { upperCase } from '@beanpool/core';
@@ -43,6 +44,7 @@ const deps: RekeyDeps = {
     loadIdentity,
     draftIdentity: () => draftIdentity(''),
     importIdentity,
+    forgetLook: forgetTheLook,
     signStatement: signReEnrollStatement,
     signedHeaders: buildSignedHeaders,
     fetch: (input, init) => fetch(input, init),

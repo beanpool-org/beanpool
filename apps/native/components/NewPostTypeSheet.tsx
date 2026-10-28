@@ -4,6 +4,9 @@
  * Extracted from the Market tab, where it was inline — which is how the map's + came to open an
  * Offer/Need-only sheet while the Market tab offered four types. One component, one list
  * (`NEW_POST_TYPES`), so the two entry points cannot drift apart again.
+ *
+ * A phone with no account, looking around (slice S12, utils/look-around.ts), has nothing to post with: the sheet says so
+ * and offers **Join to post**, the door, where the key is made.
  */
 
 import React from 'react';
@@ -11,6 +14,8 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { t } from '@beanpool/core';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { NEW_POST_TYPES, composeOptionA11yLabel, type ComposePostType } from '../utils/compose-options';
+import { useIdentity } from '../app/IdentityContext';
+import { openLookDoor } from '../utils/look-door';
 
 interface NewPostTypeSheetProps {
     visible: boolean;
@@ -21,6 +26,7 @@ interface NewPostTypeSheetProps {
 
 export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeSheetProps) {
     const styles = useStyles(makeStyles);
+    const { identity } = useIdentity();
 
     return (
         <Modal
@@ -32,9 +38,23 @@ export function NewPostTypeSheet({ visible, onClose, onSelect }: NewPostTypeShee
             <Pressable style={styles.actionSheetBackdrop} accessibilityRole="button" accessibilityLabel={t('Close create post sheet')} onPress={onClose}>
                 <Pressable style={styles.actionSheetContainer} onPress={(e) => e.stopPropagation()}>
                     <Text style={styles.actionSheetTitle}>{t('Create New Post')}</Text>
-                    <Text style={styles.actionSheetSubtitle}>{t('What would you like to share with the village?')}</Text>
+                    <Text style={styles.actionSheetSubtitle}>{identity ? t('What would you like to share with the village?') : t("You're looking around as a visitor. Nothing is saved until you join.")}</Text>
 
-                    {NEW_POST_TYPES.map((option, i) => (
+                    {!identity && (
+                        <Pressable
+                            style={styles.joinToPost}
+                            accessibilityRole="button"
+                            onPress={() => {
+                                onClose();
+                                openLookDoor();
+                            }}
+                            testID="new-post-join"
+                        >
+                            <Text style={styles.joinToPostText}>{t('Join to post')}</Text>
+                        </Pressable>
+                    )}
+
+                    {identity && NEW_POST_TYPES.map((option, i) => (
                         <Pressable
                             key={option.id}
                             style={[styles.actionSheetOption, i === NEW_POST_TYPES.length - 1 && { borderBottomWidth: 0 }]}
@@ -112,12 +132,29 @@ const makeStyles = ({ theme, colors }: ThemeContextType) => StyleSheet.create({
         color: colors.text.secondary,
         marginTop: 2,
     },
+    joinToPost: {
+        minHeight: 48,
+        backgroundColor: colors.brand.fill,
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    joinToPostText: {
+        color: colors.text.inverse,
+        fontSize: 16,
+        fontWeight: '800',
+        textAlign: 'center',
+    },
     actionSheetCancel: {
         marginTop: 16,
+        minHeight: 48,
         backgroundColor: theme === 'dark' ? '#374151' : '#f3f4f6',
         borderRadius: 12,
         paddingVertical: 12,
         alignItems: 'center',
+        justifyContent: 'center',
     },
     actionSheetCancelText: {
         fontSize: 15,

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -6123,5 +6123,8 @@
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "നിങ്ങളുടെ ഫോണിന്റെ ക്രമീകരണങ്ങളിൽ BeanPool-ന്റെ അറിയിപ്പുകൾ ഓഫാണ്. അവ ഓണാക്കാൻ ക്രമീകരണങ്ങൾ തുറക്കുക.",
   "Nothing here yet. Be the first:": "ഇവിടെ ഇതുവരെ ഒന്നുമില്ല. ആദ്യത്തെയാളാകൂ:",
   "Choose a banner photo, or keep this one": "ഒരു ബാനർ ഫോട്ടോ തിരഞ്ഞെടുക്കുക, അല്ലെങ്കിൽ ഇത് നിലനിർത്തുക",
-  "Your picture, until you choose a banner.": "ഒരു ബാനർ തിരഞ്ഞെടുക്കുന്നതുവരെ നിങ്ങളുടെ ചിത്രം."
+  "Your picture, until you choose a banner.": "ഒരു ബാനർ തിരഞ്ഞെടുക്കുന്നതുവരെ നിങ്ങളുടെ ചിത്രം.",
+  "You're looking around as a visitor. Nothing is saved until you join.": "നിങ്ങൾ ഒരു സന്ദർശകനായി ചുറ്റും നോക്കുകയാണ്. ചേരുന്നതുവരെ ഒന്നും സംരക്ഷിക്കപ്പെടില്ല.",
+  "Join to post": "പോസ്റ്റ് ചെയ്യാൻ ചേരുക",
+  "Join to message": "സന്ദേശം അയക്കാൻ ചേരുക"
 }

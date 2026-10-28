@@ -207,6 +207,16 @@ export async function clearGuestNode(url: string): Promise<void> {
     } catch {}
 }
 
+/**
+ * Every guest mark on the phone goes: an account arriving on a phone that held none, whose marks were the look's
+ * (utils/look-around.ts forgetTheLook). Never throws.
+ */
+export async function clearGuestNodes(): Promise<void> {
+    try {
+        await AsyncStorage.removeItem(GUEST_KEY);
+    } catch {}
+}
+
 export async function isGuestNode(url: string): Promise<boolean> {
     if (!url) return false;
     return (await readGuestNodes()).includes(url);

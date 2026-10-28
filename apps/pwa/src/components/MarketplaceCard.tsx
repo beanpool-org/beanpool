@@ -76,7 +76,10 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         (post as any)?._remoteCallsign
     ) || null;
 
-    const hasPhoto = post.photos && post.photos.length > 0;
+    const firstPhoto = post.photos && post.photos.length > 0 ? post.photos[0] : null;
+    const bannerUrl = post.authorBannerUrl || (post as any)?.author_banner_url || null;
+    const displayImage = firstPhoto || bannerUrl;
+    const photosToZoom = firstPhoto ? post.photos! : (bannerUrl ? [bannerUrl] : []);
     // The price and the founding-trade chip are Beans: neither shows where Beans are marked (`beansMarked`).
     const showPrice = !isPulse && !beansMarked;
     const foundingChip = !!post.authorFoundingNeeded && !beansMarked;
@@ -148,8 +151,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                     {/* Compact Category Picture / Tile */}
                     <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0">
-                        {hasPhoto ? (
-                            <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
+                        {displayImage ? (
+                            <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                         ) : (
                             <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
                         )}
@@ -224,20 +227,20 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
             >
                 {/* Left Thumbnail (80px) */}
                 <div className="w-20 h-20 rounded-xl overflow-hidden shadow-inner flex-shrink-0 relative">
-                    {hasPhoto ? (
+                    {displayImage ? (
                         <button
                             type="button"
                             onClick={(e) => {
-                                if (onPhotoClick) {
+                                if (onPhotoClick && photosToZoom.length > 0) {
                                     e.stopPropagation();
-                                    onPhotoClick(post.photos!, 0, e);
+                                    onPhotoClick(photosToZoom, 0, e);
                                 }
                             }}
                             onKeyDown={(e) => {
-                                if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
+                                if (onPhotoClick && photosToZoom.length > 0 && (e.key === 'Enter' || e.key === ' ')) {
                                     e.stopPropagation();
                                     e.preventDefault();
-                                    onPhotoClick(post.photos!, 0, e as any);
+                                    onPhotoClick(photosToZoom, 0, e as any);
                                 }
                             }}
                             aria-label={t('View enlarged photo: {title}', { title: post.title })}
@@ -245,7 +248,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                             }`}
                         >
-                            <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
+                            <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                         </button>
                     ) : (
                         <CategoryTile category={post.category} kind={isPulse ? 'pulse' : (post.type === 'event' ? 'event' : 'listing')} size="thumb" />
@@ -349,20 +352,20 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
         >
             {/* Square Media Box at Card Top (edge to edge, radius 14) */}
             <div className="relative w-full aspect-square overflow-hidden">
-                {hasPhoto ? (
+                {displayImage ? (
                     <button
                         type="button"
                         onClick={(e) => {
-                            if (onPhotoClick) {
+                            if (onPhotoClick && photosToZoom.length > 0) {
                                 e.stopPropagation();
-                                onPhotoClick(post.photos!, 0, e);
+                                onPhotoClick(photosToZoom, 0, e);
                             }
                         }}
                         onKeyDown={(e) => {
-                            if (onPhotoClick && (e.key === 'Enter' || e.key === ' ')) {
+                            if (onPhotoClick && photosToZoom.length > 0 && (e.key === 'Enter' || e.key === ' ')) {
                                 e.stopPropagation();
                                 e.preventDefault();
-                                onPhotoClick(post.photos!, 0, e as any);
+                                onPhotoClick(photosToZoom, 0, e as any);
                             }
                         }}
                         aria-label={t('View enlarged photo: {title}', { title: post.title })}
@@ -370,7 +373,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                         }`}
                     >
-                        <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
+                        <img src={listPhotoUrl(displayImage)} alt={post.title} className="w-full h-full object-cover" />
                     </button>
                 ) : (
                     <CategoryTile

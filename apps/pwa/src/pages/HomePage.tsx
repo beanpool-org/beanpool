@@ -313,7 +313,7 @@ function MarketListingItem({
     onNavigate: (page: string, id?: string) => void;
     nextImageLoading: () => 'eager' | 'lazy';
 }) {
-    const photo = resolveImageUrl(item.photoUrl);
+    const photo = resolveImageUrl(item.photoUrl || item.bannerUrl);
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
     const price = !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
         : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;

@@ -301,6 +301,53 @@ describe('Remove one copy: removed only on the keeper\'s own answer', () => {
         expect(net.communities[MULLUM].copies.size).toBe(0);
         expect(mem.async.get(vaultMoveUnfinishedStoreKey(kim.publicKey))).toBeUndefined();
     });
+
+    // PR #2570 review: any 2xx was taken for Mullum's word. A captive portal's page said "Removed from Mullumbimby.",
+    // nothing was remembered, and the list straight after still showed the copy kept. On this branch before the fix the
+    // first answer gave { removed: true }.
+    it("an answer that isn't Mullum's own (a captive portal's 200 page, a 404 page, a 2xx naming no copy or another): not removed, remembered, and sent again once Mullum answers", async () => {
+        const net = network();
+        await kimsPhone(net);
+        const ways = await listWaysBack(kim);
+        const node = vi.mocked(fetch).getMockImplementation()!;
+        // Something between the phone and Mullum answers its DELETEs itself: Mullum never sees them.
+        let between: (() => Response) | null = null;
+        vi.mocked(fetch).mockImplementation(async (input, init) => (
+            between && String(init?.method).toUpperCase() === 'DELETE' ? between() : node(input, init)
+        ));
+        const page = (status: number, html: string) => () => new Response(html, { status, headers: { 'Content-Type': 'text/html' } });
+        const json = (status: number, body: unknown) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+        for (const answer of [
+            page(200, '<html><body>Welcome to the hotel Wi-Fi. Accept the terms to continue.</body></html>'),
+            page(404, '<html><body>404 Not Found</body></html>'),
+            json(200, { ok: true }),
+            json(200, { removed: 'facebook', generation: 5 }),
+        ]) {
+            between = answer;
+            expect(await removeCommunityCopyFrom(kim, ways.communities[0], 'google')).toEqual({ removed: false, why: 'remembered' });
+            const waiting = await listWaysBack(kim);
+            expect(waiting.pending).toEqual([{ url: MULLUM, provider: 'google' }]);
+            expect(waiting.communities[0].status).toEqual({ providers: ['google'], generation: 4 });
+        }
+        expect(net.communities[MULLUM].copies.has('google')).toBe(true);
+
+        // Mullum answers for itself again: the remembered delete is sent and lands.
+        between = null;
+        await retryCommunityRemovals(kim);
+        expect(net.communities[MULLUM].copies.size).toBe(0);
+        expect((await listWaysBack(kim)).pending).toEqual([]);
+    });
+
+    it("Mullum's own 404 (it keeps no copy for that sign-in) is removed: already gone", async () => {
+        const net = network();
+        await kimsPhone(net);
+        const ways = await listWaysBack(kim);
+        // Removed meanwhile from another device: Mullum answers the DELETE with its JSON 404.
+        net.communities[MULLUM].copies.clear();
+        expect(await removeCommunityCopyFrom(kim, ways.communities[0], 'google')).toEqual({ removed: true });
+        expect(deletesAt(net, MULLUM)).toHaveLength(1);
+        expect(mem.async.get(vaultMoveUnfinishedStoreKey(kim.publicKey))).toBeUndefined();
+    });
 });
 
 describe('a community that can\'t be reached: "not yet removed", remembered, and tried again at the next open', () => {

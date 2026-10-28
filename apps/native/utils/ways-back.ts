@@ -18,8 +18,9 @@
  * ## Removing (never a false "removed")
  *
  * - A vault copy is removed only on the vault's signed `deleted` answer (utils/vault.ts `disconnectFromVault`); a
- *   community's only on its own 2xx, or a 404 for a copy already gone. Anything short of that is "not removed", and a
- *   community's delete is then remembered and tried again (with the guard against a newer copy, vault-move.ts).
+ *   community's only on its own answer: a 2xx naming the copy removed, or its 404 for a copy already gone (never a
+ *   proxy's page, vault-move.ts `removeCommunityCopy`). Anything short of that is "not removed", and a community's
+ *   delete is then remembered and tried again (with the guard against a newer copy, vault-move.ts).
  * - **Remove everything**: the vault's `all`, when it listed a copy or couldn't say, and a delete for every copy each
  *   community listed. A community that couldn't be asked has nothing removed, and the result says so: the phone never
  *   deletes a copy it was never shown, at a community it couldn't see.

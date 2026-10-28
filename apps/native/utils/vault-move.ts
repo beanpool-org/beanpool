@@ -98,7 +98,7 @@ export async function communityCopies(identity: BeanPoolIdentity, url: string): 
 }
 
 /**
- * What a community did with a delete. `gone`: it removed the copy (a 2xx), or had none (a 404). `generation`: the
+ * What a community did with a delete. `gone`: it removed the copy, or had none, in its own answer. `generation`: the
  * generation its copies of this key are at now, as its 2xx answer gives it (routes/keepers.ts: 0 once it keeps none);
  * null when it doesn't say, as a 404 doesn't.
  */
@@ -108,27 +108,28 @@ export interface CommunityDelete {
 }
 
 /**
- * Remove the community's copy for `provider`: a signed DELETE, and nothing else. Not gone when the community refused it
- * or didn't answer in time (it is then tried again, see {@link deleteOrRemember}).
+ * Remove the community's copy for `provider`: a signed DELETE, and nothing else. Gone only on the node's own answer
+ * (routes/keepers.ts): a 2xx whose JSON names the copy removed (`removed: provider`), or a 404 with its JSON `error` (it
+ * has no copy for that sign-in: already gone). Any other answer is not gone, a 2xx included: a captive portal or proxy
+ * on a plain `http://` address answers 200 with its own page, and a saved address may now point at another server
+ * (utils/node-post.ts `purgeAccountOnNode` refuses the same for Delete account, #1303). Not gone either when the
+ * community refused it or didn't answer in time. A delete not gone is tried again ({@link deleteOrRemember}).
  */
 export async function removeCommunityCopy(identity: BeanPoolIdentity, url: string, provider: SsoProvider): Promise<CommunityDelete> {
+    const notGone: CommunityDelete = { gone: false, generation: null };
     let res: Response | null;
     try {
         res = await within(signedDelete(url, `/api/recovery/shares/sso/${encodeURIComponent(provider)}`, identity), COMMUNITY_TIMEOUT_MS);
     } catch {
-        return { gone: false, generation: null };
+        return notGone;
     }
-    // 404: the community has no copy for it (already gone).
-    if (!res || !(res.ok || res.status === 404)) return { gone: false, generation: null };
-    if (!res.ok) return { gone: true, generation: null };
-    try {
-        // Gone already: an answer that can't be read only leaves the generation unsaid.
-        const body = await within(res.json(), COMMUNITY_TIMEOUT_MS) as { generation?: unknown } | null;
-        const generation = body?.generation;
-        return { gone: true, generation: typeof generation === 'number' && Number.isSafeInteger(generation) ? generation : null };
-    } catch {
-        return { gone: true, generation: null };
-    }
+    if (!res || !(res.ok || res.status === 404)) return notGone;
+    const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { removed?: unknown; generation?: unknown; error?: unknown } | null;
+    if (!body || typeof body !== 'object') return notGone;
+    if (!res.ok) return typeof body.error === 'string' ? { gone: true, generation: null } : notGone;
+    if (body.removed !== provider) return notGone;
+    const generation = body.generation;
+    return { gone: true, generation: typeof generation === 'number' && Number.isSafeInteger(generation) ? generation : null };
 }
 
 /**

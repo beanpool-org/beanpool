@@ -9,9 +9,10 @@ import { LOOK_DOOR, LOOK_LANDING, forgetTheLook, isLookRoute, lookingAroundHere,
 const GLOBAL = 'https://global.beanpool.org';
 const VISITORS = { profile: 'global', features: { guestListingsOnly: true, openJoin: true } } as const;
 
-function deps(over: Partial<{ anchor: string | null; guests: string[]; profile: unknown; throws: boolean }> = {}): LookingDeps {
-    const { anchor = GLOBAL, guests = [GLOBAL], profile = VISITORS, throws = false } = over;
+function deps(over: Partial<{ anchor: string | null; guests: string[]; profile: unknown; throws: boolean; key: unknown }> = {}): LookingDeps {
+    const { anchor = GLOBAL, guests = [GLOBAL], profile = VISITORS, throws = false, key = null } = over;
     return {
+        storedKey: async () => { if (key instanceof Error) throw key; return key; },
         anchor: async () => { if (throws) throw new Error('storage'); return anchor; },
         isGuestNode: async (url) => guests.includes(url),
         cachedProfile: async () => profile as never,
@@ -62,6 +63,11 @@ describe('lookingAroundHere', () => {
         expect(await lookingAroundHere(deps({ profile: { profile: 'global', features: {} } }))).toBe(false);
         expect(await lookingAroundHere(deps({ profile: null }))).toBe(false);
         expect(await lookingAroundHere(deps({ throws: true }))).toBe(false);
+    });
+
+    it('a phone that holds a key, readable or not, is never looking around: the guard sends it to the first screen, as before', async () => {
+        expect(await lookingAroundHere(deps({ key: { publicKey: 'a'.repeat(64) } }))).toBe(false);
+        expect(await lookingAroundHere(deps({ key: new Error('unreadable') }))).toBe(false);
     });
 });
 

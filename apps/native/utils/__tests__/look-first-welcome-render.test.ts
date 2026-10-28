@@ -14,6 +14,8 @@
  * 4. A phone that looked around, back on the first screen (a restart): the community in use is the look's, and never
  *    fills an invite's address. An invite's own server is the one used, and a bare code asks for its community.
  * 5. The phone's back button at the look's door is the door's own Back: shut while the sign-in is out.
+ * 6. A phone whose key can't be read (no account in the context: loadIdentity answers null) is an account all the same,
+ *    read through identity.ts readStoredIdentity: Explore opens the door as before, and the phone is not looking around.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -109,7 +111,13 @@ vi.mock('expo-clipboard', () => ({
 vi.mock('expo-image-picker', () => ({}));
 vi.mock('expo-application', () => ({ getInstallReferrerAsync: async () => null }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
-vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
+/** The phone's key item, as expo-secure-store answers for it: none, an item that isn't an account, or a read that throws. */
+const keyItem = vi.hoisted(() => ({ value: null as string | null, throws: false }));
+vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
+    getItemAsync: async () => { if (keyItem.throws) throw new Error('DecryptException: could not decrypt the value'); return keyItem.value; },
+    setItemAsync: async () => {}, deleteItemAsync: async () => {},
+}));
 vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
     return { getRandomBytes: (len: number) => new Uint8Array(randomBytes(len)), randomUUID: () => 'a-uuid', digest: async () => new ArrayBuffer(32) };
@@ -355,6 +363,7 @@ beforeEach(() => {
     look.answer = { kind: 'guest' }; look.askedFor.length = 0;
     clip.has = false; clip.text = '';
     phone.stored = null; phone.pending = null;
+    keyItem.value = null; keyItem.throws = false;
     // An open door with both ways in: opened, it would draft the key and start the 12-words work at once.
     door.check = { ok: true, profile: { profile: 'global', features: { openJoin: true, wordsDoor: true, guestListingsOnly: true } } };
     door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedProfile = null;
@@ -499,5 +508,28 @@ describe('look before you join on a new phone (slice S12)', () => {
         // The name step: Back is open, and the phone's returns to the look.
         await phoneBack();
         expect(nav.replaced).toEqual(['/(tabs)/market']);
+    });
+
+    it('6a. a key the phone can\'t read (an item that isn\'t an account, or a read that throws): Explore opens the door as before, never the look', async () => {
+        for (const item of [{ value: '{"publicKey":"ab', throws: false }, { value: null, throws: true }]) {
+            Object.assign(keyItem, item);
+            look.askedFor.length = 0; nav.replaced.length = 0;
+            await mount();
+            await press('Explore BeanPool worldwide');
+            expect(look.askedFor, JSON.stringify(item)).toEqual([]);
+            expect(nav.replaced).toEqual([]);
+            expect(doorOpen()).toBe(true);
+            act(() => root?.unmount());
+            host?.remove();
+        }
+    });
+
+    it('6b. a key the phone can\'t read, with guest marks of its own: not looking around, so its community fills the field as before', async () => {
+        lookedAround();
+        keyItem.throws = true;
+        await mount();
+        await press('Join with an invite');
+        await type('Invite link or code', 'MULL-1234');
+        expect(communityField()).toBe(GLOBAL);
     });
 });

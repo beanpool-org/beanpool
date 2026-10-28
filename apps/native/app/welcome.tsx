@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
-import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity, StoredKeyUnreadableError } from '../utils/identity';
+import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity, StoredKeyUnreadableError, readStoredIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../utils/words-put-away';
@@ -1578,7 +1578,7 @@ export default function WelcomeScreen() {
      * account, the global community opens as a visitor first (utils/global-guest-visit.ts with no identity): its listings,
      * Home's visitor cards and the map, with Join at the top. No key is made and no door's work starts: that is Join's. The
      * door opens as before, and says why, wherever looking can't happen: the door shut, in a preview or unreachable (an
-     * offline first open), no visitors' view, an account already on the phone, or a join wizard part way.
+     * offline first open), no visitors' view, an account already on the phone (readable or not), or a join wizard part way.
      */
     async function exploreWorldwide() {
         if (exploringRef.current) return;
@@ -1586,8 +1586,11 @@ export default function WelcomeScreen() {
         exploringRef.current = true;
         setExploring(true);
         try {
-            const pending = await getPendingOnboarding().catch(() => null);
-            const answer = pending ? null : await visitGlobalAsGuest(null).catch(() => null);
+            // An account the phone holds but can't read (loadIdentity's null, so none in the context) is an account all the
+            // same: the door, whose Join refuses to write over it, as before the look (identity.ts readStoredIdentity).
+            const keyHeld = await readStoredIdentity().then(Boolean, () => true);
+            const pending = keyHeld ? null : await getPendingOnboarding().catch(() => null);
+            const answer = keyHeld || pending ? null : await visitGlobalAsGuest(null).catch(() => null);
             if (!screenMountedRef.current || modeRef.current !== 'home') return;
             if (answer?.kind === 'guest') {
                 // The sync reads the visitors' view unsigned; the root guard lets a visitor stay on the look's screens.

@@ -11,7 +11,8 @@
  * read it makes is one the node answers unsigned. Anything that needs a key (a message, a profile, asking a community,
  * Settings) opens the door instead ({@link LOOK_DOOR}).
  *
- * Identity: nothing here makes, writes or sends a key ({@link forgetTheLook} only asks whether the phone holds one).
+ * Identity: nothing here makes, writes or sends a key ({@link forgetTheLook} and {@link lookingAroundHere} only ask
+ * whether the phone holds one, readable or not: identity.ts readStoredIdentity).
  * Looking writes the guest mark, the saved list and the community in use, nothing of an account.
  *
  * No-domain-lock-in: only the global community's own door leads here; a phone that never taps it is exactly as before.
@@ -50,7 +51,7 @@ export function showsVisitorsView(profile: Pick<NodeProfile, 'profile' | 'featur
 }
 
 export interface ForgetDeps {
-    /** The key the phone holds; throws for one it can't read. */
+    /** The key the phone holds; throws for one it can't read (identity.ts readStoredIdentity, never loadIdentity's null). */
     storedKey(): Promise<unknown>;
     clearGuestNodes(): Promise<void>;
 }
@@ -67,7 +68,7 @@ export async function forgetTheLook(injected?: ForgetDeps): Promise<void> {
     try {
         const deps = injected ?? await (async (): Promise<ForgetDeps> => {
             const [identity, nodes] = await Promise.all([import('./identity'), import('./nodes')]);
-            return { storedKey: identity.loadIdentity, clearGuestNodes: nodes.clearGuestNodes };
+            return { storedKey: identity.readStoredIdentity, clearGuestNodes: nodes.clearGuestNodes };
         })();
         if (await deps.storedKey()) return;
         await deps.clearGuestNodes();
@@ -77,16 +78,19 @@ export async function forgetTheLook(injected?: ForgetDeps): Promise<void> {
 }
 
 export interface LookingDeps {
+    /** The key the phone holds; throws for one it can't read (identity.ts readStoredIdentity). */
+    storedKey(): Promise<unknown>;
     anchor(): Promise<string | null>;
     isGuestNode(url: string): Promise<boolean>;
     cachedProfile(url: string): Promise<Pick<NodeProfile, 'profile' | 'features'> | null>;
 }
 
 async function defaultDeps(): Promise<LookingDeps> {
-    const [{ default: AsyncStorage }, nodes, profiles] = await Promise.all([
-        import('@react-native-async-storage/async-storage'), import('./nodes'), import('./node-profile'),
+    const [{ default: AsyncStorage }, nodes, profiles, identity] = await Promise.all([
+        import('@react-native-async-storage/async-storage'), import('./nodes'), import('./node-profile'), import('./identity'),
     ]);
     return {
+        storedKey: identity.readStoredIdentity,
         anchor: () => AsyncStorage.getItem('beanpool_anchor_url'),
         isGuestNode: nodes.isGuestNode,
         cachedProfile: profiles.getCachedNodeProfile,
@@ -96,7 +100,8 @@ async function defaultDeps(): Promise<LookingDeps> {
 /**
  * Whether the phone, holding no account, is looking around: the community in use is a chosen guest visit whose saved
  * profile shows visitors its view ({@link showsVisitorsView}). False for anything it can't read: the guard then sends
- * the phone to the first screen, as it always has. No network.
+ * the phone to the first screen, as it always has. False too for a phone that holds a key, readable or not: an account
+ * whose key can't be read this launch is no visitor, and goes to the first screen as before the look. No network.
  */
 export async function lookingAroundHere(injected?: LookingDeps): Promise<boolean> {
     try {
@@ -104,7 +109,8 @@ export async function lookingAroundHere(injected?: LookingDeps): Promise<boolean
         const anchor = await deps.anchor();
         if (!anchor) return false;
         if (!(await deps.isGuestNode(anchor))) return false;
-        return showsVisitorsView(await deps.cachedProfile(anchor));
+        if (!showsVisitorsView(await deps.cachedProfile(anchor))) return false;
+        return !(await deps.storedKey());
     } catch {
         return false;
     }

@@ -593,6 +593,42 @@ describe('MemberDetailModal', () => {
             expect(screen.queryByText(/if the vote doesn't pass/)).toBeNull();
         });
 
+        // A pause holds an owner's or admin's role aside, so the members list gives a paused one no role (nodeRole null) while the
+        // server still counts it: the page of an admin you paused, opened again, must not promise that the open vote removes
+        // them (review 4398466214). The role is in the pause's own vote, which the modal already fetches (params.serverRole).
+        describe('for an owner or an admin who is paused', () => {
+            const pauseOf = (subject: string, serverRole?: 'owner' | 'admin'): nodeClient.AdminDecisionItem => ({
+                ...removalInGrace(subject), id: 'dec-pause', status: 'open', gracePeriodEndsAt: null,
+                params: { rule: 2, pausedAt: '2026-10-01T00:00:00.000Z', ...(serverRole ? { serverRole } : {}) },
+            });
+            const paused = { ...active, status: 'disabled' };
+
+            it('says no vote removes one, as it does for a live owner or admin, and never that suspending them opens it', async () => {
+                for (const role of ['owner', 'admin'] as const) {
+                    vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseOf(KEY, role)]);
+                    const { unmount } = draw({ member: paused, nodeRole: null });
+                    const note = await screen.findByTestId('removal-is-the-vote');
+                    expect(note).toHaveTextContent(/no vote removes an owner or admin/);
+                    expect(note).toHaveTextContent(/An owner can take that role away first/);
+                    expect(note).not.toHaveTextContent(/Suspending them opens it/);
+                    expect(screen.getByText(/Suspended/)).toBeInTheDocument();
+                    unmount();
+                }
+            });
+
+            it("reads the role from this member's own pause, not another member's", async () => {
+                vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseOf('someone-else-pubkey', 'admin')]);
+                draw({ member: paused, nodeRole: null });
+                expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+            });
+
+            it('a paused member who holds no such role keeps the plain note', async () => {
+                vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([pauseOf(KEY)]);
+                draw({ member: paused, nodeRole: null });
+                expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+            });
+        });
+
         it('for a moderator, a member with a job whom a vote can remove, the suspension opens the vote', async () => {
             draw({ nodeRole: 'moderator' });
             expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);

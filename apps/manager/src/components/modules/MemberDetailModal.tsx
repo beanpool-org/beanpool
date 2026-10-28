@@ -141,7 +141,9 @@ export function MemberDetailModal({
     // member is its vote. The suspension above opens it; Prune is gone, and Offboard only settles a removal the community
     // voted for, in its grace window. Where votes are off (the global node, or the operator's switch) both are as before.
     // Until the node has said which, neither is offered: the node refuses them anyway.
-    const [doors, setDoors] = useState<{ votesOn: boolean; settlesRemoval: boolean } | null>(null);
+    // `pausedRole`: the owner or admin role a pause holds aside. The members list gives a paused member no role (nodeRole null),
+    // but the server still counts it, and the pause's own vote carries it (params.serverRole).
+    const [doors, setDoors] = useState<{ votesOn: boolean; settlesRemoval: boolean; pausedRole: MemberNodeRole | null } | null>(null);
     useEffect(() => {
         if (!nodeUrl || !pubkey) {
             setDoors(null);
@@ -154,7 +156,9 @@ export function MemberDetailModal({
         ]).then(([votesOn, decisions]) => {
             if (!live) return;
             const settlesRemoval = decisions.some((d) => d.effect === 'remove_member' && d.status === 'execution_pending_grace' && d.subject === pubkey);
-            setDoors({ votesOn, settlesRemoval });
+            const heldRoles = decisions.map((d) => (d.effect === 'remove_member' && d.subject === pubkey ? d.params?.serverRole : null));
+            const pausedRole = heldRoles.find((r): r is 'owner' | 'admin' => r === 'owner' || r === 'admin') ?? null;
+            setDoors({ votesOn, settlesRemoval, pausedRole });
         });
         return () => { live = false; };
     }, [nodeUrl, pubkey, adminPassword, tfaToken]);
@@ -234,7 +238,8 @@ export function MemberDetailModal({
 
     const currentRole = localRole;
     // No vote removes an owner or an admin (the server's §3.8 refusal): suspending one only parks them until its vote closes.
-    const holdsServerRole = currentRole === 'owner' || currentRole === 'admin';
+    // A paused one counts too (doors.pausedRole): the server refuses their removal as it does a live one's.
+    const holdsServerRole = currentRole === 'owner' || currentRole === 'admin' || doors?.pausedRole != null;
     const effectiveViewerRole: MemberNodeRole | null = viewerRole !== undefined ? viewerRole : 'owner';
 
     // Counts the OTHER owners, and lets this member's live role stand for them: the members list and ownerCount were

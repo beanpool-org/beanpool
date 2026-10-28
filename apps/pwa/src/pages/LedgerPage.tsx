@@ -113,11 +113,15 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const readsBeans = useReadsOwn('beans', viewerIsMember && !preview, modeRetryCount);
     const waitingForMode = viewerIsMember && !preview && !readsBeans;
 
+    const sawLedgerSent = useRef(false);
     useEffect(() => {
-        if (identity?.publicKey) {
-            saveHomePreferences(identity.publicKey, { saw_ledger: true } as any).catch(() => {});
+        if (identity?.publicKey && preview && viewerIsMember && !sawLedgerSent.current) {
+            sawLedgerSent.current = true;
+            saveHomePreferences(identity.publicKey, { saw_ledger: true }).catch(() => {
+                sawLedgerSent.current = false;
+            });
         }
-    }, [identity?.publicKey]);
+    }, [identity?.publicKey, preview, viewerIsMember]);
 
     useEffect(() => {
         if (!waitingForMode) {

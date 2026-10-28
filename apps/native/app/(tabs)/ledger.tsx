@@ -453,7 +453,7 @@ export default function LedgerScreen() {
     const sawLedgerSent = React.useRef(false);
 
     React.useEffect(() => {
-        if (identity?.publicKey && !sawLedgerSent.current) {
+        if (identity?.publicKey && preview && !sawLedgerSent.current) {
             sawLedgerSent.current = true;
             signedRequest('/api/members/preferences', {
                 publicKey: identity.publicKey,
@@ -462,7 +462,7 @@ export default function LedgerScreen() {
                 sawLedgerSent.current = false;
             });
         }
-    }, [identity?.publicKey]);
+    }, [identity?.publicKey, preview]);
 
     useFocusEffect(
         React.useCallback(() => {

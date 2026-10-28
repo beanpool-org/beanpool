@@ -295,7 +295,7 @@ export function homePreferenceWrites(publicKey: string, preferences: Record<stri
     }
     if (Object.prototype.hasOwnProperty.call(preferences, SAW_LEDGER_PREF_KEY)) {
         if (preferences[SAW_LEDGER_PREF_KEY] === true || preferences[SAW_LEDGER_PREF_KEY] === 'true') {
-            writes.push([SAW_LEDGER_PREF_KEY, 'true']);
+            if (!hasSawLedger(publicKey)) writes.push([SAW_LEDGER_PREF_KEY, 'true']);
         }
     }
     return writes;

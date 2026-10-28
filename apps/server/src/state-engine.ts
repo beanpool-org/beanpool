@@ -10043,6 +10043,10 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     // Turning it off is anyone's (the web app saves every switch at once); turning it on, a member's alone.
     if (body.notify_knocks === true && !getActingMember(publicKey)) throw new Error(KNOCK_PUSH_MEMBERS_ONLY_MESSAGE);
     const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
+    const nonHomeEntries = Object.entries(body).filter(([k]) => k !== 'eventReminderOffsets' && !isHomeKey(k));
+    if (nonHomeEntries.length === 0 && homeWrites.length === 0 && offsets === undefined) {
+        return true;
+    }
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);
         const tx = db.transaction(() => {

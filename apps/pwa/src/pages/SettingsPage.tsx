@@ -25,6 +25,7 @@ import { useCommunityInfo } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines, usePhoneBrowser } from '../lib/global-entry';
 import { isInstalled, useDeferredInstallPrompt, clearDeferredPrompt, DesktopInstallSteps } from '../components/InstallPrompt';
 import { StoreBadges, ApkDownloadLink } from '../components/UsePhoneAppCard';
+import { SharedOutsideSection } from '../components/SharedOutsideSection';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
@@ -1124,6 +1125,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 </div>
                             </div>
                         </div>
+
+                        {/* ─── Shared outside (front doors S6): the links this member shared outside the community, and Stop
+                             sharing. Only where the community lets members share outside. ─── */}
+                        <SharedOutsideSection />
 
                         {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
                              not this community's node), the website. The same rows as the member app's Settings. ─── */}

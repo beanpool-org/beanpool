@@ -22,6 +22,7 @@ import { useLanguage } from './lib/useLanguage';
 import { useOwnAvatar } from './lib/useOwnAvatar';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
+import { PeekPage } from './pages/PeekPage';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
@@ -63,6 +64,7 @@ import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
+import { takePeekParam } from './lib/peek';
 import { YourShopPage } from './pages/YourShopPage';
 import { ShopDetailPage } from './pages/ShopDetailPage';
 import { takeShopParam } from './lib/shop';
@@ -513,6 +515,10 @@ export function App() {
     // works for everyone; somebody who is not a member of this community never gets here, because the
     // identity gate shows them the join page instead, which is the right landing for them.
     const [linkedPost, setLinkedPost] = useState<string | null>(null);
+    // `/?post=<id>&peek=<ticket>`: a post a member shared outside the community (front doors S6). Read before the post
+    // param is taken, and the ticket taken out of the address: a stranger here reads that one post (pages/PeekPage.tsx);
+    // a member opens it as any shared post, through `post` below.
+    const [peekParam, setPeekParam] = useState(() => (typeof window !== 'undefined' ? takePeekParam() : null));
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
@@ -817,6 +823,15 @@ export function App() {
         };
         if (visitorView.kind === 'lobby') {
             return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} />;
+        }
+        // A stranger with a link a member shared outside: that one post first, then this community's doors. Its invite
+        // form and its ways back are the welcome page's, which reads where to start from `?door=` (lib/community-card.ts).
+        if (peekParam) {
+            const toWelcome = (door: 'invite' | 'signin') => {
+                try { window.history.replaceState(window.history.state, '', `${window.location.pathname}?door=${door}`); } catch { /* the page opens at its start */ }
+                setPeekParam(null);
+            };
+            return <PeekPage postId={peekParam.postId} ticket={peekParam.ticket} onWelcome={toWelcome} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (

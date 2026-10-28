@@ -14,6 +14,7 @@ import { MarketplaceCard } from '../components/MarketplaceCard';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
+import { SharePostButtons } from '../components/SharePost';
 import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
@@ -1578,6 +1579,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </p>
                     )}
                 </div>
+
+                 {/* Share with members, and outside the community where it allows it (front doors S6). */}
+                 <SharePostButtons post={selectedPost} />
 
                  {/* Action buttons */}
                  

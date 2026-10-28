@@ -46,6 +46,13 @@ fi
 # find module ..." from tsc, vitest and the server suites, which reads like broken code; this names the real problem.
 node scripts/check-deps-installed.mjs || exit 1
 
+# Build shared packages (@beanpool/core, @beanpool/engine, @beanpool/signin) before parallel checks fan out.
+# Their dist is shared across packages (pwa, server, native, engine). Building them once here prevents
+# concurrent tsc executions from racing on dist when build and test run side by side.
+if [ -d "packages/beanpool-core" ]; then
+  pnpm turbo run build --filter=@beanpool/core --filter=@beanpool/engine --filter=@beanpool/signin
+fi
+
 # The commit under test, and whether the tree is exactly that commit, for the green record at the end.
 [ $ALL_REQUESTED -eq 1 ] && green_run_start
 

@@ -1476,8 +1476,6 @@
   "You must be logged in to vote.": "Du musst angemeldet sein, um abzustimmen.",
   "Failed to record vote": "Stimme konnte nicht erfasst werden",
   "Failed to cast vote": "Stimme konnte nicht abgegeben werden",
-  "Voice credits for money votes": "Stimm-Credits für Geld-Abstimmungen",
-  "From completed trades · N votes cost N×N": "Aus abgeschlossenen Tauschen · N Stimmen kosten N×N",
   "Dismiss error": "Fehler verwerfen",
   "Decisions view": "Beschlussansicht",
   "Open Decisions": "Offene Beschlüsse",
@@ -2738,7 +2736,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Hast du eine Idee, die der Community nützt? Starte einen Betrieb oder schlage ein Projekt vor.",
   "+ Propose a Project": "+ Projekt vorschlagen",
   "Close dialog": "Dialog schließen",
-  "Initiative Type": "Art der Initiative",
   "A leader, a goal, an end date": "Eine Leitung, ein Ziel, ein Enddatum",
   "Keepers; it keeps going": "Verwalter; läuft dauerhaft",
   "Name / Title": "Name / Titel",
@@ -3625,5 +3622,8 @@
   "Tell me when a community starts here, or say you'd help start one": "Benachrichtigen, wenn hier eine Community startet, oder beim Start helfen",
   "Nothing within 250 km yet.": "Noch nichts im Umkreis von 250 km.",
   "See what people post elsewhere ›": "Beiträge von anderswo ansehen ›",
-  "Set your area": "Lege deinen Bereich fest"
+  "Set your area": "Lege deinen Bereich fest",
+  "Voice credits": "Stimmguthaben",
+  "For money votes · opens after your first completed trade": "Für Geldabstimmungen · wird nach deinem ersten abgeschlossenen Handel freigeschaltet",
+  "For money votes · from completed trades · N votes cost N×N": "Für Geldabstimmungen · aus abgeschlossenen Handelsgeschäften · N Stimmen kosten N×N"
 }

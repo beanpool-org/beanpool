@@ -1620,8 +1620,6 @@
   "You must be logged in to vote.": "يجب تسجيل الدخول للتصويت.",
   "Failed to record vote": "تعذر تسجيل التصويت",
   "Failed to cast vote": "تعذر الإدلاء بالتصويت",
-  "Voice credits for money votes": "نقاط صوت لتصويتات الأموال",
-  "From completed trades · N votes cost N×N": "من الصفقات المكتملة · تكلفة N صوت هي N×N",
   "Dismiss error": "تجاهل الخطأ",
   "Decisions view": "عرض القرارات",
   "Open Decisions": "القرارات المفتوحة",
@@ -3118,7 +3116,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "هل لديك فكرة تفيد المجتمع؟ ابدأ مؤسسة أو اقترح مشروعًا للبدء.",
   "+ Propose a Project": "+ اقتراح مشروع",
   "Close dialog": "إغلاق النافذة",
-  "Initiative Type": "نوع المبادرة",
   "A leader, a goal, an end date": "قائد، هدف، تاريخ انتهاء",
   "Keepers; it keeps going": "مسؤولون؛ وتستمر دائمًا",
   "Name / Title": "الاسم / العنوان",
@@ -4125,5 +4122,8 @@
   "Tell me when a community starts here, or say you'd help start one": "أخبرني عندما يبدأ مجتمع هنا، أو ساهم في بدء واحد",
   "Nothing within 250 km yet.": "لا يوجد شيء في نطاق 250 كم بعد.",
   "See what people post elsewhere ›": "شاهد ما ينشره الآخرون في أماكن أخرى ›",
-  "Set your area": "حدد منطقتك"
+  "Set your area": "حدد منطقتك",
+  "Voice credits": "أرصدة التصويت",
+  "For money votes · opens after your first completed trade": "للتصويت على الأموال · يُتاح بعد أول صفقة مكتملة لك",
+  "For money votes · from completed trades · N votes cost N×N": "للتصويت على الأموال · من الصفقات المكتملة · تكلفة N صوت هي N×N"
 }

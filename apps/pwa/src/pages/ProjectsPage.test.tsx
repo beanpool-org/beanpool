@@ -335,7 +335,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         expect(within(tabs).queryByText('Enterprises')).toBeNull();
         expect(within(tabs).getByText('Groups')).toBeInTheDocument();
 
-        for (const text of ['Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
+        for (const text of ['Commons', 'Commons Pool', 'Voice credits', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
     });
@@ -346,7 +346,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         // qualifiedTradeValue 9.6 from the Decisions list, floored; earnedCredit (12) is a different number.
         await waitFor(() => expect(within(card).getByText('9')).toBeInTheDocument());
         expect(within(card).queryByText('12')).toBeNull();
-        expect(within(card).getByText('From completed trades · N votes cost N×N')).toBeInTheDocument();
+        expect(within(card).getByText('For money votes · from completed trades · N votes cost N×N')).toBeInTheDocument();
     });
 
     it('gates Propose on the node\'s rule: a node admin with no earned credit may propose', async () => {
@@ -751,12 +751,16 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(screen.queryByRole('button', { name: '+ Propose a Project' })).toBeNull();
     });
 
-    it('Beans on and no enterprises: the empty state still offers "+ Propose a Project"', async () => {
+    it('Beans on and no enterprises: the Projects chip empty state offers "Start a project" (Fable 5.1 §3.1, §5 S5)', async () => {
         vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
         vi.mocked(communityInfoOnce).mockResolvedValue({ ...globalInfo, profile: 'local' as never, features: { ...globalInfo.features, beans: true } });
         render(<ProjectsPage identity={backerIdentity} />);
         expect(await screen.findByText('No enterprises found')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '+ Propose a Project' })).toBeInTheDocument();
+        // On 'all', the "+" is the action and no button is drawn
+        expect(screen.queryByRole('button', { name: '+ Propose a Project' })).toBeNull();
+        // On 'projects', "Start a project" is offered
+        fireEvent.click(screen.getByRole('button', { name: '🌱 Projects' }));
+        expect(screen.getByRole('button', { name: 'Start a project' })).toBeInTheDocument();
     });
 
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
@@ -771,7 +775,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} />);
         const card = await screen.findByTestId('voice-credits-card');
         await waitFor(() => expect(within(card).getByText('9')).toBeInTheDocument());
-        expect(within(card).getByText('From completed trades · N votes cost N×N')).toBeInTheDocument();
+        expect(within(card).getByText('For money votes · from completed trades · N votes cost N×N')).toBeInTheDocument();
     });
 });
 

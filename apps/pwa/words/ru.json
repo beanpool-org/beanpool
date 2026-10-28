@@ -1548,8 +1548,6 @@
   "You must be logged in to vote.": "Для голосования необходимо войти.",
   "Failed to record vote": "Не удалось записать голос",
   "Failed to cast vote": "Не удалось отдать голос",
-  "Voice credits for money votes": "Кредиты голоса для голосований о средствах",
-  "From completed trades · N votes cost N×N": "От совершённых сделок · N голосов стоят N×N",
   "Dismiss error": "Скрыть ошибку",
   "Decisions view": "Просмотр решений",
   "Open Decisions": "Открытые решения",
@@ -2924,7 +2922,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Есть идея на пользу сообществу? Создайте предприятие или предложите проект.",
   "+ Propose a Project": "+ Предложить проект",
   "Close dialog": "Закрыть окно",
-  "Initiative Type": "Тип инициативы",
   "A leader, a goal, an end date": "Лидер, цель, срок окончания",
   "Keepers; it keeps going": "Хранители; действует постоянно",
   "Name / Title": "Название",
@@ -3875,5 +3872,8 @@
   "Tell me when a community starts here, or say you'd help start one": "Сообщить, когда сообщество появится здесь, или помочь его создать",
   "Nothing within 250 km yet.": "В радиусе 250 км пока ничего нет.",
   "See what people post elsewhere ›": "Посмотреть публикации из других мест ›",
-  "Set your area": "Укажите свой район"
+  "Set your area": "Укажите свой район",
+  "Voice credits": "Голосовые кредиты",
+  "For money votes · opens after your first completed trade": "Для голосований о средствах · доступно после первой сделки",
+  "For money votes · from completed trades · N votes cost N×N": "Для голосований о средствах · за совершённые сделки · N голосов стоят N×N"
 }

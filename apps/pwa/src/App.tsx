@@ -172,6 +172,7 @@ export function App() {
     const beansMode = useFeatureMode('beans');
     const enterprisesMode = useFeatureMode('enterprises');
     const invitesMode = useFeatureMode('invites');
+    const [projectsInitialStart, setProjectsInitialStart] = useState(false);
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
@@ -498,6 +499,7 @@ export function App() {
         setActiveTab(tab as Tab);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
         if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); }
+        if (tab === 'projects' && contextId === 'start') setProjectsInitialStart(true);
     }
 
     // `/app#profile=<key>` (node Settings' "View my profile"): read once on load, opened once the identity has loaded.
@@ -1170,6 +1172,7 @@ export function App() {
                                     }}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     isMember={isGuest === null ? null : !isGuest}
+                                    initialStart={projectsInitialStart}
                                 />
                             )}
                         </>

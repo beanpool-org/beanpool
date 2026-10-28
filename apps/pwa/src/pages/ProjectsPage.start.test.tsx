@@ -330,8 +330,9 @@ describe('ProjectsPage - Commons S2 Start Something (Fable 5.1 §3.5, §5 S2)', 
         fireEvent.click(within(proposeModal).getByRole('button', { name: /Close dialog/i }));
         expect(screen.queryByRole('dialog', { name: /Start a project or an enterprise/i })).toBeNull();
 
-        // 2. Click empty-state "+ Propose a Project"
-        const emptyProposeBtn = screen.getByRole('button', { name: /\+ Propose a Project/i });
+        // 2. Click empty-state "Start a project" on the Projects chip (Fable 5.1 §3.1, §5 S5)
+        fireEvent.click(screen.getByRole('button', { name: /🌱 Projects/ }));
+        const emptyProposeBtn = screen.getByRole('button', { name: /Start a project/i });
         fireEvent.click(emptyProposeBtn);
 
         // Modal should open with "Start a project" and submit asks for logo

@@ -1476,8 +1476,6 @@
   "You must be logged in to vote.": "Oy kullanmak için giriş yapmış olmalısınız.",
   "Failed to record vote": "Oy kaydedilemedi",
   "Failed to cast vote": "Oy kullanılamadı",
-  "Voice credits for money votes": "Mali oylamalar için oy kredileri",
-  "From completed trades · N votes cost N×N": "Tamamlanan takaslardan · N oy N×N maliyetindedir",
   "Dismiss error": "Hatayı kapat",
   "Decisions view": "Kararlar görünümü",
   "Open Decisions": "Açık Kararlar",
@@ -2738,7 +2736,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Topluluğa fayda sağlayacak bir fikriniz mi var? Başlamak için bir girişim kurun veya bir proje önerin.",
   "+ Propose a Project": "+ Bir Proje Öner",
   "Close dialog": "Pencereyi kapat",
-  "Initiative Type": "Girişim Türü",
   "A leader, a goal, an end date": "Bir lider, bir hedef, bir bitiş tarihi",
   "Keepers; it keeps going": "Sorumlular; süreklidir",
   "Name / Title": "İsim / Başlık",
@@ -3625,5 +3622,8 @@
   "Tell me when a community starts here, or say you'd help start one": "Burada bir topluluk başladığında bana haber ver ya da başlatmaya yardım et",
   "Nothing within 250 km yet.": "Henüz 250 km içinde hiçbir şey yok.",
   "See what people post elsewhere ›": "İnsanların başka yerlerde ne paylaştığını gör ›",
-  "Set your area": "Bölgeni ayarla"
+  "Set your area": "Bölgeni ayarla",
+  "Voice credits": "Oy kredileri",
+  "For money votes · opens after your first completed trade": "Mali oylamalar için · ilk tamamlanan takasından sonra açılır",
+  "For money votes · from completed trades · N votes cost N×N": "Mali oylamalar için · tamamlanan takaslardan · N oyun maliyeti N×N"
 }

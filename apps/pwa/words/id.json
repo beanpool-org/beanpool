@@ -1440,8 +1440,6 @@
   "You must be logged in to vote.": "Kamu harus masuk untuk memberikan suara.",
   "Failed to record vote": "Gagal mencatat suara",
   "Failed to cast vote": "Gagal memberikan suara",
-  "Voice credits for money votes": "Kredit suara untuk pemungutan suara dana",
-  "From completed trades · N votes cost N×N": "Dari transaksi yang selesai · N suara membutuhkan N×N",
   "Dismiss error": "Tutup kesalahan",
   "Decisions view": "Tampilan Keputusan",
   "Open Decisions": "Keputusan Terbuka",
@@ -2639,7 +2637,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Punya ide yang bermanfaat bagi komunitas? Mulai usaha atau usulkan proyek untuk memulainya.",
   "+ Propose a Project": "+ Usulkan Proyek",
   "Close dialog": "Tutup dialog",
-  "Initiative Type": "Jenis Inisiatif",
   "A leader, a goal, an end date": "Pemimpin, target, tanggal akhir",
   "Keepers; it keeps going": "Pengurus; terus berjalan",
   "Name / Title": "Nama / Judul",
@@ -3500,5 +3497,8 @@
   "Tell me when a community starts here, or say you'd help start one": "Beri tahu aku jika ada komunitas di sini, atau bersedia membantu memulainya",
   "Nothing within 250 km yet.": "Belum ada apa-apa dalam radius 250 km.",
   "See what people post elsewhere ›": "Lihat postingan orang di tempat lain ›",
-  "Set your area": "Atur wilayah Anda"
+  "Set your area": "Atur wilayah Anda",
+  "Voice credits": "Kredit suara",
+  "For money votes · opens after your first completed trade": "Untuk pemungutan suara dana · aktif setelah transaksi pertamamu selesai",
+  "For money votes · from completed trades · N votes cost N×N": "Untuk pemungutan suara dana · dari transaksi selesai · N suara berbiaya N×N"
 }

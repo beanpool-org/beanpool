@@ -1548,8 +1548,6 @@
   "You must be logged in to vote.": "Необхідно увійти, щоб голосувати.",
   "Failed to record vote": "Не вдалося записати голос",
   "Failed to cast vote": "Не вдалося проголосувати",
-  "Voice credits for money votes": "Кредити голосу для фінансових рішень",
-  "From completed trades · N votes cost N×N": "Від завершених обмінів · N голосів коштують N×N",
   "Dismiss error": "Закрити помилку",
   "Decisions view": "Перегляд рішень",
   "Open Decisions": "Відкриті рішення",
@@ -2924,7 +2922,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Маєте ідею на користь спільноти? Створіть підприємство або запропонуйте проєкт.",
   "+ Propose a Project": "+ Запропонувати проєкт",
   "Close dialog": "Закрити діалог",
-  "Initiative Type": "Тип ініціативи",
   "A leader, a goal, an end date": "Керівник, мета, кінцева дата",
   "Keepers; it keeps going": "Доглядачі; діє постійно",
   "Name / Title": "Назва / Заголовок",
@@ -3875,5 +3872,8 @@
   "Tell me when a community starts here, or say you'd help start one": "Повідомити, коли спільнота з'явиться тут, або допомогти створити",
   "Nothing within 250 km yet.": "У радіусі 250 км поки нічого немає.",
   "See what people post elsewhere ›": "Подивитися дописи з інших місць ›",
-  "Set your area": "Вкажіть свій район"
+  "Set your area": "Вкажіть свій район",
+  "Voice credits": "Голосові бали",
+  "For money votes · opens after your first completed trade": "Для фінансових голосувань · відкривається після першого завершеного обміну",
+  "For money votes · from completed trades · N votes cost N×N": "Для фінансових голосувань · від завершених обмінів · N голосів коштують N×N"
 }

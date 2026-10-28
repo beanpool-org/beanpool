@@ -1476,8 +1476,6 @@
   "You must be logged in to vote.": "Πρέπει να έχεις συνδεθεί για να ψηφίσεις.",
   "Failed to record vote": "Αποτυχία καταχώρισης ψήφου",
   "Failed to cast vote": "Αποτυχία υποβολής ψήφου",
-  "Voice credits for money votes": "Πιστώσεις φωνής για ψηφοφορίες χρημάτων",
-  "From completed trades · N votes cost N×N": "Από ολοκληρωμένες συναλλαγές · N ψήφοι κοστίζουν N×N",
   "Dismiss error": "Παράβλεψη σφάλματος",
   "Decisions view": "Προβολή Αποφάσεων",
   "Open Decisions": "Ανοιχτές Αποφάσεις",
@@ -2730,7 +2728,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Έχεις μια ιδέα που ωφελεί την κοινότητα; Ξεκίνα ένα εγχείρημα ή πρότεινε ένα έργο για να ξεκινήσεις.",
   "+ Propose a Project": "+ Πρόταση έργου",
   "Close dialog": "Κλείσιμο διαλόγου",
-  "Initiative Type": "Τύπος πρωτοβουλίας",
   "A leader, a goal, an end date": "Ένας επικεφαλής, ένας στόχος, μια ημερομηνία λήξης",
   "Keepers; it keeps going": "Υπεύθυνοι· συνεχίζει διαρκώς",
   "Name / Title": "Όνομα / Τίτλος",
@@ -3625,5 +3622,8 @@
   "Tell me when a community starts here, or say you'd help start one": "Ειδοποιήστε με όταν ξεκινήσει μια κοινότητα εδώ, ή βοηθήστε να ξεκινήσει μία",
   "Nothing within 250 km yet.": "Τίποτα σε ακτίνα 250 χλμ. ακόμα.",
   "See what people post elsewhere ›": "Δείτε τι αναρτούν αλλού ›",
-  "Set your area": "Ορίστε την περιοχή σας"
+  "Set your area": "Ορίστε την περιοχή σας",
+  "Voice credits": "Πιστώσεις ψήφου",
+  "For money votes · opens after your first completed trade": "Για ψηφοφορίες χρημάτων · ενεργοποιείται μετά την πρώτη σου ολοκληρωμένη συναλλαγή",
+  "For money votes · from completed trades · N votes cost N×N": "Για ψηφοφορίες χρημάτων · από ολοκληρωμένες συναλλαγές · N ψήφοι κοστίζουν N×N"
 }

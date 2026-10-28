@@ -1476,8 +1476,6 @@
   "You must be logged in to vote.": "வாக்களிக்க நீங்கள் உள்நுழைந்திருக்க வேண்டும்.",
   "Failed to record vote": "வாக்கைப் பதிவு செய்ய முடியவில்லை",
   "Failed to cast vote": "வாக்களிக்க முடியவில்லை",
-  "Voice credits for money votes": "நிதி வாக்குகளுக்கான குரல் வரவுகள்",
-  "From completed trades · N votes cost N×N": "முடிந்த பரிவர்த்தனைகளிலிருந்து · N வாக்குகளுக்கு N×N செலவாகும்",
   "Dismiss error": "பிழையை நிராகரி",
   "Decisions view": "முடிவுகள் பார்வை",
   "Open Decisions": "திறந்த முடிவுகள்",
@@ -2738,7 +2736,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "சமூகத்திற்குப் பயனளிக்கும் யோசனை உள்ளதா? தொடங்க ஒரு கூட்டு முயற்சியைத் தொடங்குங்கள் அல்லது ஒரு திட்டத்தை முன்மொழியுங்கள்.",
   "+ Propose a Project": "+ திட்டத்தை முன்மொழி",
   "Close dialog": "உரையாடலை மூடு",
-  "Initiative Type": "முயற்சியின் வகை",
   "A leader, a goal, an end date": "ஒரு தலைவர், ஓர் இலக்கு, ஒரு முடிவு தேதி",
   "Keepers; it keeps going": "பொறுப்பாளர்கள்; தொடர்ந்து இயங்கும்",
   "Name / Title": "பெயர் / தலைப்பு",
@@ -3625,5 +3622,8 @@
   "Tell me when a community starts here, or say you'd help start one": "இங்கு ஒரு சமூகம் தொடங்கும் போது தெரிவிக்கவும், அல்லது ஒன்றைத் தொடங்க உதവவும்",
   "Nothing within 250 km yet.": "இன்னும் 250 கி.மீ-க்குள் எதுவும் இல்லை.",
   "See what people post elsewhere ›": "மற்ற இடங்களில் மக்கள் என்ன இடுகையிடுகிறார்கள் என்று பாருங்கள் ›",
-  "Set your area": "உங்கள் பகுதியை அமைக்கவும்"
+  "Set your area": "உங்கள் பகுதியை அமைக்கவும்",
+  "Voice credits": "குரல் வரவுகள்",
+  "For money votes · opens after your first completed trade": "பண வாக்குகளுக்கு · உங்கள் முதல் முடிந்த வர்த்தகத்திற்குப் பிறகு தொடங்கும்",
+  "For money votes · from completed trades · N votes cost N×N": "பண வாக்குகளுக்கு · முடிந்த வர்த்தகங்களிலிருந்து · N வாக்குகளுக்கு N×N செலவாகும்"
 }

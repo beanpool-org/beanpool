@@ -3255,6 +3255,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <CreateGroupModal
                     isOpen
                     onClose={() => setShowCreateGroup(false)}
+                    onStartWithBeans={() => {
+                        setShowCreateGroup(false);
+                        onNavigate?.('projects', 'start');
+                    }}
                     onCreated={(group) => {
                         // As the phone's (decision 8): straight into the new group's chat. Its id is the group's.
                         setShowCreateGroup(false);

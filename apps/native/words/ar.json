@@ -443,7 +443,6 @@
   "🎉 FUNDED": "🎉 تم التمويل",
   "🌱 PROJECT": "🌱 مشروع",
   "🏛️ ENTERPRISE": "🏛️ مؤسسة",
-  "Enterprise Balance": "رصيد المؤسسة",
   "in deficit (keepers eat last)": "في حالة عجز (يتحمل الرعاة المسؤولية أخيرًا)",
   "Pledge Beans": "تعهد بـ فاصوليا",
   "Word {n}: {word}": "الكلمة {n}: {word}",
@@ -3106,7 +3105,6 @@
   "PURPOSE STATEMENT *": "بيان الغرض *",
   "Purpose statement": "بيان الغرض",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "وضّح بوضوح الغرض من وجود هذه المؤسسة (مثال: 'نبني ونحافظ على بيت ظل مشترك بحلول نوفمبر').",
-  "The purpose statement is what the community judges the initiative against.": "بيان الغرض هو المعيار الذي يقيم المجتمع المبادرة على أساسه.",
   "FUNDING GOAL ({currency}) *": "هدف التمويل ({currency}) *",
   "Funding goal amount": "مبلغ هدف التمويل",
   "Pledges are held safely in the enterprise account.": "تُحفظ التعهدات بأمان في حساب المؤسسة.",
@@ -7089,5 +7087,6 @@
   "Tell me when a community starts here, or say you'd help start one": "أخبرني عندما يبدأ مجتمع هنا، أو ساهم في بدء واحد",
   "Nothing within 250 km yet.": "لا يوجد شيء في نطاق 250 كم بعد.",
   "See what people post elsewhere ›": "شاهد ما ينشره الآخرون في أماكن أخرى ›",
-  "Set your area": "حدد منطقتك"
+  "Set your area": "حدد منطقتك",
+  "The purpose statement is what the community judges the project or enterprise against.": "بيان الغرض هو المعيار الذي يقيم المجتمع المشروع أو المؤسسة على أساسه."
 }

@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 IMEFADHILIWA",
   "🌱 PROJECT": "🌱 MRADI",
   "🏛️ ENTERPRISE": "🏛️ SHIRIKA",
-  "Enterprise Balance": "Salio la Mradi",
   "in deficit (keepers eat last)": "katika nakisi (wasimamizi hupokea mwisho)",
   "Pledge Beans": "Weka Ahadi ya Maharagwe",
   "Word {n}: {word}": "Neno {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "MAELEZO YA MADHUMUNI *",
   "Purpose statement": "Maelezo ya madhumuni",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Eleza waziwazi kile shirika hili lipo kufanya (mf. 'Tunajenga na kudumisha nyumba ya kivuli ya jumuiya ifikapo Novemba').",
-  "The purpose statement is what the community judges the initiative against.": "Maelezo ya madhumuni ndicho jumuiya inachotumia kuhukumu mpango huo.",
   "FUNDING GOAL ({currency}) *": "LENGO LA UFADHILI ({currency}) *",
   "Funding goal amount": "Kiasi cha lengo la ufadhili",
   "Pledges are held safely in the enterprise account.": "Ahadi huwekwa salama katika akaunti ya shirika.",
@@ -6133,5 +6131,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Niarifu jumuiya itakapoanza hapa, au taja kuwa ungesaidia kuianzisha",
   "Nothing within 250 km yet.": "Hakuna chochote ndani ya kilomita 250 bado.",
   "See what people post elsewhere ›": "Ona kile watu wanachochapisha kwingineko ›",
-  "Set your area": "Weka eneo lako"
+  "Set your area": "Weka eneo lako",
+  "The purpose statement is what the community judges the project or enterprise against.": "Maelezo ya madhumuni ndicho jumuiya inachotumia kuhukumu mradi au biashara."
 }

@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 ΧΡΗΜΑΤΟΔΟΤΗΘΗΚΕ",
   "🌱 PROJECT": "🌱 ΕΡΓΟ",
   "🏛️ ENTERPRISE": "🏛️ ΕΓΧΕΙΡΗΜΑ",
-  "Enterprise Balance": "Υπόλοιπο εγχειρήματος",
   "in deficit (keepers eat last)": "σε έλλειμμα (οι υπεύθυνοι πληρώνονται τελευταίοι)",
   "Pledge Beans": "Δέσμευση φασολιών",
   "Word {n}: {word}": "Λέξη {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "ΔΗΛΩΣΗ ΣΚΟΠΟΥ *",
   "Purpose statement": "Δήλωση σκοπού",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Περίγραψε καθαρά τον σκοπό αυτού του εγχειρήματος (π.χ. 'Χτίζουμε και συντηρούμε ένα κοινοτικό θερμοκήπιο μέχρι τον Νοέμβριο').",
-  "The purpose statement is what the community judges the initiative against.": "Η δήλωση σκοπού είναι το κριτήριο με το οποίο η κοινότητα αξιολογεί την πρωτοβουλία.",
   "FUNDING GOAL ({currency}) *": "ΣΤΟΧΟΣ ΧΡΗΜΑΤΟΔΟΤΗΣΗΣ ({currency}) *",
   "Funding goal amount": "Ποσό στόχου χρηματοδότησης",
   "Pledges are held safely in the enterprise account.": "Οι δεσμεύσεις φυλάσσονται με ασφάλεια στον λογαριασμό του εγχειρήματος.",
@@ -6133,5 +6131,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Ειδοποιήστε με όταν ξεκινήσει μια κοινότητα εδώ, ή βοηθήστε να ξεκινήσει μία",
   "Nothing within 250 km yet.": "Τίποτα σε ακτίνα 250 χλμ. ακόμα.",
   "See what people post elsewhere ›": "Δείτε τι αναρτούν αλλού ›",
-  "Set your area": "Ορίστε την περιοχή σας"
+  "Set your area": "Ορίστε την περιοχή σας",
+  "The purpose statement is what the community judges the project or enterprise against.": "Η δήλωση σκοπού είναι το κριτήριο με το οποίο η κοινότητα αξιολογεί το έργο ή το εγχείρημα."
 }

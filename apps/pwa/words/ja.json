@@ -1440,8 +1440,6 @@
   "You must be logged in to vote.": "投票するにはログインしている必要があります。",
   "Failed to record vote": "投票を記録できませんでした",
   "Failed to cast vote": "投票できませんでした",
-  "Voice credits for money votes": "資金投票用の発言権クレジット",
-  "From completed trades · N votes cost N×N": "完了した取引から付与 · N票の行使にはN×Nクレジットが必要",
   "Dismiss error": "エラーを閉じる",
   "Decisions view": "決定の表示",
   "Open Decisions": "進行中の決定",
@@ -1949,7 +1947,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "コミュニティのためになるアイデアをお持ちですか？事業体を立ち上げるかプロジェクトを提案して始めましょう。",
   "+ Propose a Project": "+ プロジェクトを提案",
   "Close dialog": "ダイアログを閉じる",
-  "Initiative Type": "取り組みのタイプ",
   "A leader, a goal, an end date": "リーダー、目標、期限",
   "Keepers; it keeps going": "運営者、継続的な活動",
   "Name / Title": "名称 / タイトル",
@@ -3500,5 +3497,8 @@
   "Tell me when a community starts here, or say you'd help start one": "ここでコミュニティが始まったら通知する、または立ち上げに参加する",
   "Nothing within 250 km yet.": "250 km以内にはまだ何もありません。",
   "See what people post elsewhere ›": "他の場所の投稿を見る ›",
-  "Set your area": "地域を設定"
+  "Set your area": "地域を設定",
+  "Voice credits": "ボイスクレジット",
+  "For money votes · opens after your first completed trade": "資金の投票用 · 最初の取引を完了すると利用可能",
+  "For money votes · from completed trades · N votes cost N×N": "資金の投票用 · 取引の完了で獲得 · N票にはN×Nが必要"
 }

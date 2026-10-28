@@ -687,7 +687,6 @@
   "🎉 FUNDED": "🎉 TENDANAI",
   "🌱 PROJECT": "🌱 PROYEK",
   "🏛️ ENTERPRISE": "🏛️ USAHA",
-  "Enterprise Balance": "Saldo Usaha",
   "in deficit (keepers eat last)": "defisit (pengelola makan paling akhir)",
   "Pledge Beans": "Komitmenkan Kacang",
   "Word {n}: {word}": "Kata {n}: {word}",
@@ -2558,7 +2557,6 @@
   "PURPOSE STATEMENT *": "PERNYATAAN TUJUAN *",
   "Purpose statement": "Pernyataan tujuan",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Nyatakan dengan jelas apa tujuan usaha ini didirikan (mis. 'Kami membangun dan merawat rumah peneduh bersama hingga November').",
-  "The purpose statement is what the community judges the initiative against.": "Pernyataan tujuan adalah dasar bagi komunitas untuk menilai inisiatif ini.",
   "FUNDING GOAL ({currency}) *": "TARGET PENDANAAN ({currency}) *",
   "Funding goal amount": "Jumlah target pendanaan",
   "Pledges are held safely in the enterprise account.": "Komitmen tersimpan aman di akun usaha.",
@@ -5894,5 +5892,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Beri tahu aku jika ada komunitas di sini, atau bersedia membantu memulainya",
   "Nothing within 250 km yet.": "Belum ada apa-apa dalam radius 250 km.",
   "See what people post elsewhere ›": "Lihat postingan orang di tempat lain ›",
-  "Set your area": "Atur wilayah Anda"
+  "Set your area": "Atur wilayah Anda",
+  "The purpose statement is what the community judges the project or enterprise against.": "Pernyataan tujuan adalah dasar bagi komunitas untuk menilai proyek atau usaha ini."
 }

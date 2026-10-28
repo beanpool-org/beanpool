@@ -418,7 +418,6 @@
   "🎉 FUNDED": "🎉 ĐÃ GÂY QUỸ ĐỦ",
   "🌱 PROJECT": "🌱 DỰ ÁN",
   "🏛️ ENTERPRISE": "🏛️ DỰ ÁN CỘNG ĐỒNG",
-  "Enterprise Balance": "Số dư dự án",
   "in deficit (keepers eat last)": "thâm hụt (người quản lý nhận sau cùng)",
   "Pledge Beans": "Cam kết góp đậu",
   "Word {n}: {word}": "Từ {n}: {word}",
@@ -2556,7 +2555,6 @@
   "PURPOSE STATEMENT *": "TUYÊN BỐ MỤC ĐÍCH *",
   "Purpose statement": "Tuyên bố mục đích",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Nêu rõ mục đích hoạt động của doanh nghiệp này (ví dụ: 'Chúng tôi xây dựng và duy trì một nhà lưới cộng đồng trước tháng 11').",
-  "The purpose statement is what the community judges the initiative against.": "Tuyên bố mục đích là cơ sở để cộng đồng đánh giá sáng kiến.",
   "FUNDING GOAL ({currency}) *": "MỤC TIÊU GÂY QUỸ ({currency}) *",
   "Funding goal amount": "Số tiền mục tiêu gây quỹ",
   "Pledges are held safely in the enterprise account.": "Các khoản cam kết đóng góp được giữ an toàn trong tài khoản doanh nghiệp.",
@@ -5894,5 +5892,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Báo cho tôi khi có cộng đồng bắt đầu ở đây, hoặc ngỏ ý giúp bắt đầu một cộng đồng",
   "Nothing within 250 km yet.": "Chưa có gì trong phạm vi 250 km.",
   "See what people post elsewhere ›": "Xem mọi người đăng gì ở nơi khác ›",
-  "Set your area": "Thiết lập khu vực của bạn"
+  "Set your area": "Thiết lập khu vực của bạn",
+  "The purpose statement is what the community judges the project or enterprise against.": "Tuyên bố mục đích là cơ sở để cộng đồng đánh giá dự án hoặc doanh nghiệp."
 }

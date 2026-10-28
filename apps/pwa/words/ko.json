@@ -1429,8 +1429,6 @@
   "You must be logged in to vote.": "투표하려면 로그인해야 해요.",
   "Failed to record vote": "투표를 기록하지 못했어요",
   "Failed to cast vote": "투표를 행사하지 못했어요",
-  "Voice credits for money votes": "자금 투표용 발언권 크레딧",
-  "From completed trades · N votes cost N×N": "완료된 거래 기반 · N표 투표 시 N×N 크레딧 소모",
   "Dismiss error": "오류 닫기",
   "Decisions view": "결정 보기",
   "Open Decisions": "진행 중인 결정",
@@ -2633,7 +2631,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "커뮤니티에 도움이 될 아이디어가 있나요? 기업이나 프로젝트를 제안해 보세요.",
   "+ Propose a Project": "+ 프로젝트 제안",
   "Close dialog": "대화상자 닫기",
-  "Initiative Type": "계획 유형",
   "A leader, a goal, an end date": "리더, 목표, 마감일",
   "Keepers; it keeps going": "관리자; 지속 운영",
   "Name / Title": "이름 / 제목",
@@ -3500,5 +3497,8 @@
   "Tell me when a community starts here, or say you'd help start one": "여기서 커뮤니티가 시작되면 알림 받기 또는 시작 돕기",
   "Nothing within 250 km yet.": "아직 250km 이내에 등록된 항목이 없어요.",
   "See what people post elsewhere ›": "다른 지역 게시물 보기 ›",
-  "Set your area": "내 지역 설정"
+  "Set your area": "내 지역 설정",
+  "Voice credits": "보이스 크레딧",
+  "For money votes · opens after your first completed trade": "재정 투표용 · 첫 거래 완료 후 이용 가능",
+  "For money votes · from completed trades · N votes cost N×N": "재정 투표용 · 거래 완료 시 적립 · N표 행사 시 N×N 소모"
 }

@@ -1440,8 +1440,6 @@
   "You must be logged in to vote.": "你必須登入才能投票。",
   "Failed to record vote": "記錄投票失敗",
   "Failed to cast vote": "投票失敗",
-  "Voice credits for money votes": "資金投票專用表決點數",
-  "From completed trades · N votes cost N×N": "來自已完成交易 · N 票需消耗 N×N 點數",
   "Dismiss error": "關閉錯誤訊息",
   "Decisions view": "決策檢視",
   "Open Decisions": "進行中的決策",
@@ -2633,7 +2631,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "有造福社群的好點子嗎？發起在地事業或提議專案開始行動吧。",
   "+ Propose a Project": "+ 發起專案",
   "Close dialog": "關閉對話方塊",
-  "Initiative Type": "發起項目類型",
   "A leader, a goal, an end date": "負責人、募資目標、結束日期",
   "Keepers; it keeps going": "經營者；持續運營",
   "Name / Title": "名稱／標題",
@@ -3500,5 +3497,8 @@
   "Tell me when a community starts here, or say you'd help start one": "在此處建立社群時通知我，或表示願意協助建立",
   "Nothing within 250 km yet.": "250 公里內尚無內容。",
   "See what people post elsewhere ›": "查看其他地方的內容 ›",
-  "Set your area": "設定你的地區"
+  "Set your area": "設定你的地區",
+  "Voice credits": "表決點數",
+  "For money votes · opens after your first completed trade": "用於資金表決 · 完成首筆交易後開啟",
+  "For money votes · from completed trades · N votes cost N×N": "用於資金表決 · 來自已完成的交易 · 投 N 票消耗 N×N 點"
 }

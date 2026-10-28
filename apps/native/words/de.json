@@ -764,7 +764,6 @@
   "🎉 FUNDED": "🎉 FINANZIERT",
   "🌱 PROJECT": "🌱 PROJEKT",
   "🏛️ ENTERPRISE": "🏛️ BETRIEB",
-  "Enterprise Balance": "Betriebsguthaben",
   "in deficit (keepers eat last)": "im Minus (Verwalter essen zuletzt)",
   "Pledge Beans": "Bohnen zusagen",
   "Word {n}: {word}": "Wort {n}: {word}",
@@ -2668,7 +2667,6 @@
   "PURPOSE STATEMENT *": "ZWECKBESCHREIBUNG *",
   "Purpose statement": "Zweckbeschreibung",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Beschreibe klar, was dieser Betrieb bezweckt (z. B. ‚Wir bauen und pflegen bis November ein Gemeinschafts-Gewächshaus‘).",
-  "The purpose statement is what the community judges the initiative against.": "An der Zweckbeschreibung misst die Community die Initiative.",
   "FUNDING GOAL ({currency}) *": "FINANZIERUNGSZIEL ({currency}) *",
   "Funding goal amount": "Betrag des Finanzierungsziels",
   "Pledges are held safely in the enterprise account.": "Zusagen werden sicher auf dem Betriebskonto verwahrt.",
@@ -6133,5 +6131,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Benachrichtigen, wenn hier eine Community startet, oder beim Start helfen",
   "Nothing within 250 km yet.": "Noch nichts im Umkreis von 250 km.",
   "See what people post elsewhere ›": "Beiträge von anderswo ansehen ›",
-  "Set your area": "Lege deinen Bereich fest"
+  "Set your area": "Lege deinen Bereich fest",
+  "The purpose statement is what the community judges the project or enterprise against.": "An der Zweckbeschreibung misst die Community das Projekt oder den Betrieb."
 }

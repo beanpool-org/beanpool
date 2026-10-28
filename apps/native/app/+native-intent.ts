@@ -96,6 +96,12 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
         return initial ? '/' : null;
     }
 
+    // Legacy project screens deleted in Fable 5.1 §5 S6: deep links land on Commons (/(tabs)/projects).
+    if (foregroundPath === 'project-detail' || foregroundPath === 'edit-project') {
+        if (initial) holdStartUpLinkRoute();
+        return '/(tabs)/projects';
+    }
+
     // The web app's pairing QR, scanned with the phone's camera app (utils/pair-link.ts): the pairing screen, given the
     // whole link to read as a scan would. Before the sign-in checks below, so a pair link is never taken for a
     // provider's return. Cold start and warm alike: the screen is pushed over wherever the member is, or opens on it. On a

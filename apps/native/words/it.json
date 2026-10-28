@@ -731,7 +731,6 @@
   "🎉 FUNDED": "🎉 FINANZIATO",
   "🌱 PROJECT": "🌱 PROGETTO",
   "🏛️ ENTERPRISE": "🏛️ IMPRESA",
-  "Enterprise Balance": "Saldo dell'impresa",
   "in deficit (keepers eat last)": "in disavanzo (i custodi mangiano per ultimi)",
   "Pledge Beans": "Prometti fagioli",
   "Word {n}: {word}": "Parola {n}: {word}",
@@ -2666,7 +2665,6 @@
   "PURPOSE STATEMENT *": "DICHIARAZIONE D'INTENTI *",
   "Purpose statement": "Dichiarazione d'intenti",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Indica chiaramente lo scopo di questa impresa (es. 'Costruiremo e manterremo una serra ombreggiante comunitaria entro novembre').",
-  "The purpose statement is what the community judges the initiative against.": "La comunità valuta l'iniziativa in base alla dichiarazione d'intenti.",
   "FUNDING GOAL ({currency}) *": "OBIETTIVO DI FINANZIAMENTO ({currency}) *",
   "Funding goal amount": "Importo dell'obiettivo di finanziamento",
   "Pledges are held safely in the enterprise account.": "Le promesse sono custodite al sicuro nel conto dell'impresa.",
@@ -6133,5 +6131,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Avvisami quando nasce una comunità qui, o dì che aiuteresti ad avviarne una",
   "Nothing within 250 km yet.": "Ancora nulla nel raggio di 250 km.",
   "See what people post elsewhere ›": "Guarda cosa pubblicano altrove ›",
-  "Set your area": "Imposta la tua zona"
+  "Set your area": "Imposta la tua zona",
+  "The purpose statement is what the community judges the project or enterprise against.": "La comunità valuta il progetto o l'impresa in base alla dichiarazione d'intenti."
 }

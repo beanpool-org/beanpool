@@ -1476,8 +1476,6 @@
   "You must be logged in to vote.": "ভোট দেওয়ার জন্য আপনাকে অবশ্যই লগ ইন করতে হবে।",
   "Failed to record vote": "ভোট রেকর্ড করা যায়নি",
   "Failed to cast vote": "ভোট দেওয়া যায়নি",
-  "Voice credits for money votes": "অর্থ সংক্রান্ত ভোটের জন্য ভয়েস ক্রেডিট",
-  "From completed trades · N votes cost N×N": "সম্পন্ন লেনদেন থেকে · N ভোটের খরচ N×N",
   "Dismiss error": "ত্রুটি খারিজ করুন",
   "Decisions view": "সিদ্ধান্ত দৃশ্য",
   "Open Decisions": "সক্রিয় সিদ্ধান্তসমূহ",
@@ -2730,7 +2728,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "কমিউনিটির উপকারে আসে এমন কোনো ধারণা আছে? শুরু করতে একটি উদ্যোগ বা প্রকল্পের প্রস্তাব দিন।",
   "+ Propose a Project": "+ প্রকল্পের প্রস্তাব দিন",
   "Close dialog": "ডায়ালগ বন্ধ করুন",
-  "Initiative Type": "উদ্যোগের ধরন",
   "A leader, a goal, an end date": "একজন নেতা, একটি লক্ষ্য, একটি সমাপ্তির তারিখ",
   "Keepers; it keeps going": "কিপাররা; এটি চলমান থাকে",
   "Name / Title": "নাম / শিরোনাম",
@@ -3625,5 +3622,8 @@
   "Tell me when a community starts here, or say you'd help start one": "এখানে কোনো সম্প্রদায় শুরু হলে আমাকে জানান, বা শুরু করতে সাহায্য করুন",
   "Nothing within 250 km yet.": "এখনও ২৫০ কিলোমিটারের মধ্যে কিছু নেই।",
   "See what people post elsewhere ›": "অন্যত্র মানুষ কী পোস্ট করে তা দেখুন ›",
-  "Set your area": "আপনার এলাকা সেট করুন"
+  "Set your area": "আপনার এলাকা সেট করুন",
+  "Voice credits": "ভয়েস ক্রেডিট",
+  "For money votes · opens after your first completed trade": "অর্থ সংক্রান্ত ভোটের জন্য · আপনার প্রথম লেনদেন সম্পন্ন হওয়ার পর উন্মুক্ত হয়",
+  "For money votes · from completed trades · N votes cost N×N": "অর্থ সংক্রান্ত ভোটের জন্য · সম্পন্ন হওয়া লেনদেন থেকে · N ভোটের খরচ N×N"
 }

@@ -1440,8 +1440,6 @@
   "You must be logged in to vote.": "你必须登录才能投票。",
   "Failed to record vote": "记录投票失败",
   "Failed to cast vote": "投票失败",
-  "Voice credits for money votes": "资金投票表决点",
-  "From completed trades · N votes cost N×N": "来自已完成的交易 · N 票消耗 N×N 点",
   "Dismiss error": "忽略错误",
   "Decisions view": "决策视图",
   "Open Decisions": "进行中的决策",
@@ -2633,7 +2631,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "有益于社区的好构想？创立企业或提议项目以着手开展。",
   "+ Propose a Project": "+ 提议项目",
   "Close dialog": "关闭对话框",
-  "Initiative Type": "倡议类型",
   "A leader, a goal, an end date": "负责人、筹款目标、截止日期",
   "Keepers; it keeps going": "管理者；持续运营",
   "Name / Title": "名称 / 标题",
@@ -3500,5 +3497,8 @@
   "Tell me when a community starts here, or say you'd help start one": "在此处建立社区时通知我，或表示愿意协助创建",
   "Nothing within 250 km yet.": "250 公里内暂无内容。",
   "See what people post elsewhere ›": "查看其他地方的内容 ›",
-  "Set your area": "设置你的地区"
+  "Set your area": "设置你的地区",
+  "Voice credits": "表决点数",
+  "For money votes · opens after your first completed trade": "用于资金投票 · 完成首笔交易后开启",
+  "For money votes · from completed trades · N votes cost N×N": "用于资金投票 · 来自已完成的交易 · 投 N 票消耗 N×N 点"
 }

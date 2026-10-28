@@ -1476,8 +1476,6 @@
   "You must be logged in to vote.": "मतदान करने के लिए आपका लॉग इन होना आवश्यक है।",
   "Failed to record vote": "वोट दर्ज नहीं हो सका",
   "Failed to cast vote": "वोट नहीं डाला जा सका",
-  "Voice credits for money votes": "धन निर्णयों के लिए वॉयस क्रेडिट",
-  "From completed trades · N votes cost N×N": "पूर्ण व्यापारों से · N वोटों की लागत N×N",
   "Dismiss error": "त्रुटि हटाएं",
   "Decisions view": "निर्णय दृश्य",
   "Open Decisions": "सक्रिय निर्णय",
@@ -2738,7 +2736,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "क्या आपके पास कोई ऐसा विचार है जिससे समुदाय को लाभ हो? शुरुआत करने के लिए कोई उद्यम शुरू करें या कोई प्रोजेक्ट प्रस्तावित करें।",
   "+ Propose a Project": "+ एक प्रोजेक्ट प्रस्तावित करें",
   "Close dialog": "संवाद बंद करें",
-  "Initiative Type": "पहल का प्रकार",
   "A leader, a goal, an end date": "एक प्रमुख, एक लक्ष्य, समाप्ति तिथि",
   "Keepers; it keeps going": "व्यवस्थापक; यह लगातार चलता है",
   "Name / Title": "नाम / शीर्षक",
@@ -3625,5 +3622,8 @@
   "Tell me when a community starts here, or say you'd help start one": "यहाँ समुदाय शुरू होने पर मुझे बताएँ, या एक शुरू करने में मदद की बात कहें",
   "Nothing within 250 km yet.": "अभी 250 किमी के भीतर कुछ नहीं है।",
   "See what people post elsewhere ›": "देखें कि लोग अन्यत्र क्या पोस्ट कर रहे हैं ›",
-  "Set your area": "अपना क्षेत्र सेट करें"
+  "Set your area": "अपना क्षेत्र सेट करें",
+  "Voice credits": "वॉयस क्रेडिट",
+  "For money votes · opens after your first completed trade": "धन संबंधी मतदान के लिए · आपका पहला लेन-देन पूरा होने के बाद खुलता है",
+  "For money votes · from completed trades · N votes cost N×N": "धन संबंधी मतदान के लिए · पूरे किए गए लेन-देन से · N वोटों की लागत N×N है"
 }

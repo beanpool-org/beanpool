@@ -425,7 +425,6 @@
   "🎉 FUNDED": "🎉 वित्तपोषित",
   "🌱 PROJECT": "🌱 परियोजना",
   "🏛️ ENTERPRISE": "🏛️ उपक्रम",
-  "Enterprise Balance": "उपक्रम शेष",
   "in deficit (keepers eat last)": "घाटे में (प्रबंधकों को अंत में मिलता है)",
   "Pledge Beans": "फलियों का संकल्प लें",
   "Word {n}: {word}": "शब्द {n}: {word}",
@@ -2668,7 +2667,6 @@
   "PURPOSE STATEMENT *": "उद्देश्य विवरण *",
   "Purpose statement": "उद्देश्य विवरण",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "साफ़ तौर पर बताएं कि यह उपक्रम क्या करने के लिए है (जैसे 'हम नवंबर तक एक सामुदायिक शेड हाउस बनाएंगे और उसकी देखरेख करेंगे')।",
-  "The purpose statement is what the community judges the initiative against.": "उद्देश्य विवरण के आधार पर ही समुदाय इस पहल का आकलन करता है।",
   "FUNDING GOAL ({currency}) *": "फ़ंडिंग लक्ष्य ({currency}) *",
   "Funding goal amount": "फ़ंडिंग लक्ष्य राशि",
   "Pledges are held safely in the enterprise account.": "संकल्प राशि उपक्रम खाते में सुरक्षित रखी जाती है।",
@@ -6133,5 +6131,6 @@
   "Tell me when a community starts here, or say you'd help start one": "यहाँ समुदाय शुरू होने पर मुझे बताएँ, या एक शुरू करने में मदद की बात कहें",
   "Nothing within 250 km yet.": "अभी 250 किमी के भीतर कुछ नहीं है।",
   "See what people post elsewhere ›": "देखें कि लोग अन्यत्र क्या पोस्ट कर रहे हैं ›",
-  "Set your area": "अपना क्षेत्र सेट करें"
+  "Set your area": "अपना क्षेत्र सेट करें",
+  "The purpose statement is what the community judges the project or enterprise against.": "उद्देश्य विवरण के आधार पर ही समुदाय परियोजना या उपक्रम का आकलन करता है।"
 }

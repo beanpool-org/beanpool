@@ -1471,8 +1471,6 @@
   "You must be logged in to vote.": "Lazima uwe umeingia ili kupiga kura.",
   "Failed to record vote": "Imeshindwa kurekodi kura",
   "Failed to cast vote": "Imeshindwa kupiga kura",
-  "Voice credits for money votes": "Mikopo ya sauti kwa kura za fedha",
-  "From completed trades · N votes cost N×N": "Kutoka kwa biashara zilizokamilika · Kura N zinagharimu N×N",
   "Dismiss error": "Ondoa hitilafu",
   "Decisions view": "Mwonekano wa maamuzi",
   "Open Decisions": "Maamuzi Yaliyo Wazi",
@@ -2730,7 +2728,6 @@
   "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Una wazo lenye faida kwa jumuiya? Anzisha biashara au pendekeza mradi ili kuanza.",
   "+ Propose a Project": "+ Pendekeza Mradi",
   "Close dialog": "Funga mazungumzo",
-  "Initiative Type": "Aina ya Mradi",
   "A leader, a goal, an end date": "Kiongozi, lengo, tarehe ya mwisho",
   "Keepers; it keeps going": "Wasimamizi; huendelea",
   "Name / Title": "Jina / Kichwa",
@@ -3625,5 +3622,8 @@
   "Tell me when a community starts here, or say you'd help start one": "Niarifu jumuiya itakapoanza hapa, au taja kuwa ungesaidia kuianzisha",
   "Nothing within 250 km yet.": "Hakuna chochote ndani ya kilomita 250 bado.",
   "See what people post elsewhere ›": "Ona kile watu wanachochapisha kwingineko ›",
-  "Set your area": "Weka eneo lako"
+  "Set your area": "Weka eneo lako",
+  "Voice credits": "Mikopo ya sauti",
+  "For money votes · opens after your first completed trade": "Kwa kura za fedha · hufunguliwa baada ya biashara yako ya kwanza iliyokamilika",
+  "For money votes · from completed trades · N votes cost N×N": "Kwa kura za fedha · kutoka kwa biashara zilizokamilika · kura N hugharimu N×N"
 }

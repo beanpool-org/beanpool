@@ -27,13 +27,18 @@ let bundledPromise: Promise<Guide> | null = null;
 export async function loadBundledGuide(): Promise<Guide> {
     if (BUNDLED) return BUNDLED;
     if (!bundledPromise) {
-        bundledPromise = import('@beanpool/guide/generated/guide.json').then((m) => {
-            const raw = m.default ?? m;
-            const valid = validateGuide(raw);
-            if (!valid) throw new Error("The bundled members' guide is invalid");
-            BUNDLED = valid;
-            return valid;
-        });
+        bundledPromise = import('@beanpool/guide/generated/guide.json')
+            .then((m) => {
+                const raw = m.default ?? m;
+                const valid = validateGuide(raw);
+                if (!valid) throw new Error("The bundled members' guide is invalid");
+                BUNDLED = valid;
+                return valid;
+            })
+            .catch((err) => {
+                bundledPromise = null;
+                throw err;
+            });
     }
     return bundledPromise;
 }

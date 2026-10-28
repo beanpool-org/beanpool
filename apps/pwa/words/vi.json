@@ -2626,7 +2626,6 @@
   "View Details →": "Xem chi tiết →",
   "Loading enterprises…": "Đang tải doanh nghiệp…",
   "No enterprises found": "Không tìm thấy doanh nghiệp",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Bạn có ý tưởng mang lại lợi ích cho cộng đồng? Hãy bắt đầu một doanh nghiệp hoặc đề xuất dự án để khởi đầu.",
   "Close dialog": "Đóng hộp thoại",
   "A leader, a goal, an end date": "Một trưởng nhóm, một mục tiêu, ngày kết thúc",
   "Keepers; it keeps going": "Những người quản lý; duy trì lâu dài",
@@ -3498,5 +3497,8 @@
   "Set your area": "Thiết lập khu vực của bạn",
   "Voice credits": "Tín chỉ biểu quyết",
   "For money votes · opens after your first completed trade": "Dành cho bỏ phiếu về tiền · mở sau giao dịch hoàn thành đầu tiên của bạn",
-  "For money votes · from completed trades · N votes cost N×N": "Dành cho bỏ phiếu về tiền · từ các giao dịch hoàn thành · N phiếu tốn N×N"
+  "For money votes · from completed trades · N votes cost N×N": "Dành cho bỏ phiếu về tiền · từ các giao dịch hoàn thành · N phiếu tốn N×N",
+  "Got an idea that needs Beans? Start a project.": "Có ý tưởng cần Đậu? Hãy bắt đầu một dự án.",
+  "Something that keeps going and trades? Start an enterprise.": "Dự định duy trì lâu dài và trao đổi? Hãy bắt đầu một doanh nghiệp.",
+  "Start one with +: a chat group, a project or an enterprise.": "Bắt đầu với dấu +: một nhóm chat, một dự án hoặc một doanh nghiệp."
 }

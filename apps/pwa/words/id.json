@@ -2632,7 +2632,6 @@
   "View Details →": "Lihat Detail →",
   "Loading enterprises…": "Memuat usaha…",
   "No enterprises found": "Usaha tidak ditemukan",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Punya ide yang bermanfaat bagi komunitas? Mulai usaha atau usulkan proyek untuk memulainya.",
   "Close dialog": "Tutup dialog",
   "A leader, a goal, an end date": "Pemimpin, target, tanggal akhir",
   "Keepers; it keeps going": "Pengurus; terus berjalan",
@@ -3498,5 +3497,8 @@
   "Set your area": "Atur wilayah Anda",
   "Voice credits": "Kredit suara",
   "For money votes · opens after your first completed trade": "Untuk pemungutan suara dana · aktif setelah transaksi pertamamu selesai",
-  "For money votes · from completed trades · N votes cost N×N": "Untuk pemungutan suara dana · dari transaksi selesai · N suara berbiaya N×N"
+  "For money votes · from completed trades · N votes cost N×N": "Untuk pemungutan suara dana · dari transaksi selesai · N suara berbiaya N×N",
+  "Got an idea that needs Beans? Start a project.": "Punya ide yang butuh kacang? Mulai proyek.",
+  "Something that keeps going and trades? Start an enterprise.": "Sesuatu yang terus berjalan dan bertransaksi? Mulai sebuah usaha.",
+  "Start one with +: a chat group, a project or an enterprise.": "Mulai satu dengan +: grup obrolan, proyek, atau usaha."
 }

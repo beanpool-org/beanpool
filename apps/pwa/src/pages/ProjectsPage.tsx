@@ -43,7 +43,10 @@ interface Props {
      * waits for the answer. Omitted means a member.
      */
     isMember?: boolean | null;
+    /** Talk's group form hands over here: open on the Start something dialog (the page asks to be told once it has, see onStartOpened). */
     initialStart?: boolean;
+    /** The page has opened the dialog the link asked for; the caller drops the ask, so the next visit to Commons opens as usual. */
+    onStartOpened?: () => void;
 }
 
 /** Shown when the browser cannot read, decode or draw the picked photo (the crop rejected): a word() key, put through t() where shown. */
@@ -84,7 +87,7 @@ const localToday = (): string => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember, initialStart }: Props) {
+export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember, initialStart, onStartOpened }: Props) {
     const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
     // The reader's balance is Beans: where they are in preview (the global node) it is never asked (lib/features readsOwn).
     const readsBalance = useReadsOwn('beans', canLoadBalance);
@@ -184,10 +187,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     // "＋ Start something": where focus goes back when the sheet, or a sheet it opened, closes.
     const startButtonRef = useRef<HTMLButtonElement>(null);
     // Start something dialog
-    const [showStartSomething, setShowStartSomething] = useState(initialStart ?? false);
+    const [showStartSomething, setShowStartSomething] = useState(!!initialStart);
     useEffect(() => {
-        if (initialStart) setShowStartSomething(true);
-    }, [initialStart]);
+        if (!initialStart) return;
+        setShowStartSomething(true);
+        onStartOpened?.();
+    }, [initialStart, onStartOpened]);
     const [showDecisionsSheet, setShowDecisionsSheet] = useState(false);
     const [showStartCommunity, setShowStartCommunity] = useState(false);
 
@@ -1007,7 +1012,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         <p className="text-4xl opacity-50 mb-3">🌱</p>
                         <p className="text-base font-bold text-nature-950 dark:text-white mb-1">{t('No enterprises found')}</p>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-6">
-                            {t('Got an idea that benefits the community? Start an enterprise or propose a project to get started.')}
+                            {groupCategoryFilter === 'projects'
+                                ? t('Got an idea that needs Beans? Start a project.')
+                                : groupCategoryFilter === 'enterprises'
+                                ? t('Something that keeps going and trades? Start an enterprise.')
+                                : t('Start one with +: a chat group, a project or an enterprise.')}
                         </p>
                         {identity && groupCategoryFilter !== 'all' && (
                             <button

@@ -2731,7 +2731,6 @@
   "View Details →": "Details ansehen →",
   "Loading enterprises…": "Betriebe werden geladen…",
   "No enterprises found": "Keine Betriebe gefunden",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Hast du eine Idee, die der Community nützt? Starte einen Betrieb oder schlage ein Projekt vor.",
   "Close dialog": "Dialog schließen",
   "A leader, a goal, an end date": "Eine Leitung, ein Ziel, ein Enddatum",
   "Keepers; it keeps going": "Verwalter; läuft dauerhaft",
@@ -3623,5 +3622,8 @@
   "Set your area": "Lege deinen Bereich fest",
   "Voice credits": "Stimmguthaben",
   "For money votes · opens after your first completed trade": "Für Geldabstimmungen · wird nach deinem ersten abgeschlossenen Handel freigeschaltet",
-  "For money votes · from completed trades · N votes cost N×N": "Für Geldabstimmungen · aus abgeschlossenen Handelsgeschäften · N Stimmen kosten N×N"
+  "For money votes · from completed trades · N votes cost N×N": "Für Geldabstimmungen · aus abgeschlossenen Handelsgeschäften · N Stimmen kosten N×N",
+  "Got an idea that needs Beans? Start a project.": "Hast du eine Idee, die Bohnen braucht? Starte ein Projekt.",
+  "Something that keeps going and trades? Start an enterprise.": "Etwas Dauerhaftes, das handelt? Starte einen Betrieb.",
+  "Start one with +: a chat group, a project or an enterprise.": "Starte eine mit +: eine Chatgruppe, ein Projekt oder einen Betrieb."
 }

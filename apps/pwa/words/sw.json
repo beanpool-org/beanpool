@@ -2723,7 +2723,6 @@
   "View Details →": "Tazama Maelezo →",
   "Loading enterprises…": "Inapakia biashara…",
   "No enterprises found": "Hakuna biashara zilizopatikana",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Una wazo lenye faida kwa jumuiya? Anzisha biashara au pendekeza mradi ili kuanza.",
   "Close dialog": "Funga mazungumzo",
   "A leader, a goal, an end date": "Kiongozi, lengo, tarehe ya mwisho",
   "Keepers; it keeps going": "Wasimamizi; huendelea",
@@ -3623,5 +3622,8 @@
   "Set your area": "Weka eneo lako",
   "Voice credits": "Mikopo ya sauti",
   "For money votes · opens after your first completed trade": "Kwa kura za fedha · hufunguliwa baada ya biashara yako ya kwanza iliyokamilika",
-  "For money votes · from completed trades · N votes cost N×N": "Kwa kura za fedha · kutoka kwa biashara zilizokamilika · kura N hugharimu N×N"
+  "For money votes · from completed trades · N votes cost N×N": "Kwa kura za fedha · kutoka kwa biashara zilizokamilika · kura N hugharimu N×N",
+  "Got an idea that needs Beans? Start a project.": "Una wazo linalohitaji Maharagwe? Anzisha mradi.",
+  "Something that keeps going and trades? Start an enterprise.": "Kitu kinachoendelea na kufanya biashara? Anzisha shirika.",
+  "Start one with +: a chat group, a project or an enterprise.": "Anzisha kimoja kwa +: kikundi cha gumzo, mradi au shirika."
 }

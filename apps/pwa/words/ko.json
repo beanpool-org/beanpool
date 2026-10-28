@@ -2626,7 +2626,6 @@
   "View Details →": "세부정보 보기 →",
   "Loading enterprises…": "기업 불러오는 중…",
   "No enterprises found": "기업이 없어요",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "커뮤니티에 도움이 될 아이디어가 있나요? 기업이나 프로젝트를 제안해 보세요.",
   "Close dialog": "대화상자 닫기",
   "A leader, a goal, an end date": "리더, 목표, 마감일",
   "Keepers; it keeps going": "관리자; 지속 운영",
@@ -3498,5 +3497,8 @@
   "Set your area": "내 지역 설정",
   "Voice credits": "보이스 크레딧",
   "For money votes · opens after your first completed trade": "재정 투표용 · 첫 거래 완료 후 이용 가능",
-  "For money votes · from completed trades · N votes cost N×N": "재정 투표용 · 거래 완료 시 적립 · N표 행사 시 N×N 소모"
+  "For money votes · from completed trades · N votes cost N×N": "재정 투표용 · 거래 완료 시 적립 · N표 행사 시 N×N 소모",
+  "Got an idea that needs Beans? Start a project.": "콩이 필요한 좋은 아이디어가 있나요? 프로젝트를 시작해 보세요.",
+  "Something that keeps going and trades? Start an enterprise.": "지속적으로 거래하며 운영하고 싶다면? 기업을 시작해 보세요.",
+  "Start one with +: a chat group, a project or an enterprise.": "+ 버튼으로 대화 모임, 프로젝트 또는 기업을 시작해 보세요."
 }

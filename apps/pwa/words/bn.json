@@ -2723,7 +2723,6 @@
   "View Details →": "বিস্তারিত দেখুন →",
   "Loading enterprises…": "উদ্যোগগুলো লোড হচ্ছে…",
   "No enterprises found": "কোনো উদ্যোগ পাওয়া যায়নি",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "কমিউনিটির উপকারে আসে এমন কোনো ধারণা আছে? শুরু করতে একটি উদ্যোগ বা প্রকল্পের প্রস্তাব দিন।",
   "Close dialog": "ডায়ালগ বন্ধ করুন",
   "A leader, a goal, an end date": "একজন নেতা, একটি লক্ষ্য, একটি সমাপ্তির তারিখ",
   "Keepers; it keeps going": "কিপাররা; এটি চলমান থাকে",
@@ -3623,5 +3622,8 @@
   "Set your area": "আপনার এলাকা সেট করুন",
   "Voice credits": "ভয়েস ক্রেডিট",
   "For money votes · opens after your first completed trade": "অর্থ সংক্রান্ত ভোটের জন্য · আপনার প্রথম লেনদেন সম্পন্ন হওয়ার পর উন্মুক্ত হয়",
-  "For money votes · from completed trades · N votes cost N×N": "অর্থ সংক্রান্ত ভোটের জন্য · সম্পন্ন হওয়া লেনদেন থেকে · N ভোটের খরচ N×N"
+  "For money votes · from completed trades · N votes cost N×N": "অর্থ সংক্রান্ত ভোটের জন্য · সম্পন্ন হওয়া লেনদেন থেকে · N ভোটের খরচ N×N",
+  "Got an idea that needs Beans? Start a project.": "এমন কোনো ধারণা আছে যার জন্য শিম প্রয়োজন? একটি প্রকল্প শুরু করুন।",
+  "Something that keeps going and trades? Start an enterprise.": "এমন কিছু যা নিয়মিত চলবে এবং লেনদেন করবে? একটি উদ্যোগ শুরু করুন।",
+  "Start one with +: a chat group, a project or an enterprise.": "+ দিয়ে একটি শুরু করুন: একটি চ্যাট গ্রুপ, একটি প্রকল্প বা একটি উদ্যোগ।"
 }

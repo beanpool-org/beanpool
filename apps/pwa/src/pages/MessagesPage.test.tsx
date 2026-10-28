@@ -838,7 +838,7 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
 
         fireEvent.click(within(screen.getByTestId('groups-empty')).getByRole('button', { name: /New group/ }));
         const dialog = await screen.findByRole('dialog');
-        const bridge = within(dialog).getByText(/With Beans involved\? Start a project or an enterprise →/i);
+        const bridge = within(dialog).getByRole('button', { name: /With Beans involved\?\s*Start a project or an enterprise →/ });
         expect(bridge).toBeInTheDocument();
         fireEvent.click(bridge);
         expect(onNavigate).toHaveBeenCalledWith('projects', 'start');

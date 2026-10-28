@@ -1942,7 +1942,6 @@
   "View Details →": "詳細を見る →",
   "Loading enterprises…": "事業体を読み込み中…",
   "No enterprises found": "事業体が見つかりません",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "コミュニティのためになるアイデアをお持ちですか？事業体を立ち上げるかプロジェクトを提案して始めましょう。",
   "Close dialog": "ダイアログを閉じる",
   "A leader, a goal, an end date": "リーダー、目標、期限",
   "Keepers; it keeps going": "運営者、継続的な活動",
@@ -3498,5 +3497,8 @@
   "Set your area": "地域を設定",
   "Voice credits": "ボイスクレジット",
   "For money votes · opens after your first completed trade": "資金の投票用 · 最初の取引を完了すると利用可能",
-  "For money votes · from completed trades · N votes cost N×N": "資金の投票用 · 取引の完了で獲得 · N票にはN×Nが必要"
+  "For money votes · from completed trades · N votes cost N×N": "資金の投票用 · 取引の完了で獲得 · N票にはN×Nが必要",
+  "Got an idea that needs Beans? Start a project.": "豆が必要なアイデアがありますか？プロジェクトを立ち上げましょう。",
+  "Something that keeps going and trades? Start an enterprise.": "継続して取引を行う活動ですか？事業体を立ち上げましょう。",
+  "Start one with +: a chat group, a project or an enterprise.": "「+」でグループを立ち上げましょう：チャットグループ、プロジェクト、または事業体。"
 }

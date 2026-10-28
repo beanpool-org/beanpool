@@ -2731,7 +2731,6 @@
   "View Details →": "Tingnan ang Mga Detalye →",
   "Loading enterprises…": "Nilo-load ang mga negosyo…",
   "No enterprises found": "Walang natagpuang negosyo",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "May ideya ka ba na kapaki-pakinabang sa komunidad? Magsimula ng negosyo o magmungkahi ng proyekto para makapagsimula.",
   "Close dialog": "Isara ang dialog",
   "A leader, a goal, an end date": "Isang pinuno, isang layunin, isang petsa ng pagtatapos",
   "Keepers; it keeps going": "Mga tagapangalaga; nagpapatuloy ito",
@@ -3623,5 +3622,8 @@
   "Set your area": "Itakda ang iyong lugar",
   "Voice credits": "Kredito sa boses",
   "For money votes · opens after your first completed trade": "Para sa mga botohan sa pera · bubukas pagkatapos ng iyong unang natapos na palitan",
-  "For money votes · from completed trades · N votes cost N×N": "Para sa mga botohan sa pera · mula sa mga natapos na palitan · ang halaga ng N boto ay N×N"
+  "For money votes · from completed trades · N votes cost N×N": "Para sa mga botohan sa pera · mula sa mga natapos na palitan · ang halaga ng N boto ay N×N",
+  "Got an idea that needs Beans? Start a project.": "May ideya ka bang kailangan ng munggo? Magsimula ng proyekto.",
+  "Something that keeps going and trades? Start an enterprise.": "Isang bagay na patuloy na tumatakbo at nakikipagpalitan? Magsimula ng negosyo.",
+  "Start one with +: a chat group, a project or an enterprise.": "Magsimula ng isa gamit ang +: isang chat group, proyekto, o negosyo."
 }

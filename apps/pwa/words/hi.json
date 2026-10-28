@@ -2731,7 +2731,6 @@
   "View Details →": "विवरण देखें →",
   "Loading enterprises…": "उद्यम लोड हो रहे हैं…",
   "No enterprises found": "कोई उद्यम नहीं मिला",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "क्या आपके पास कोई ऐसा विचार है जिससे समुदाय को लाभ हो? शुरुआत करने के लिए कोई उद्यम शुरू करें या कोई प्रोजेक्ट प्रस्तावित करें।",
   "Close dialog": "संवाद बंद करें",
   "A leader, a goal, an end date": "एक प्रमुख, एक लक्ष्य, समाप्ति तिथि",
   "Keepers; it keeps going": "व्यवस्थापक; यह लगातार चलता है",
@@ -3623,5 +3622,8 @@
   "Set your area": "अपना क्षेत्र सेट करें",
   "Voice credits": "वॉयस क्रेडिट",
   "For money votes · opens after your first completed trade": "धन संबंधी मतदान के लिए · आपका पहला लेन-देन पूरा होने के बाद खुलता है",
-  "For money votes · from completed trades · N votes cost N×N": "धन संबंधी मतदान के लिए · पूरे किए गए लेन-देन से · N वोटों की लागत N×N है"
+  "For money votes · from completed trades · N votes cost N×N": "धन संबंधी मतदान के लिए · पूरे किए गए लेन-देन से · N वोटों की लागत N×N है",
+  "Got an idea that needs Beans? Start a project.": "कोई विचार है जिसके लिए फलियाँ चाहिए? एक परियोजना शुरू करें।",
+  "Something that keeps going and trades? Start an enterprise.": "कुछ ऐसा जो चलता रहे और व्यापार करे? एक उपक्रम शुरू करें।",
+  "Start one with +: a chat group, a project or an enterprise.": "+ से एक शुरू करें: एक चैट समूह, एक परियोजना या एक उपक्रम।"
 }

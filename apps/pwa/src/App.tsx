@@ -1173,6 +1173,7 @@ export function App() {
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     isMember={isGuest === null ? null : !isGuest}
                                     initialStart={projectsInitialStart}
+                                    onStartOpened={() => setProjectsInitialStart(false)}
                                 />
                             )}
                         </>

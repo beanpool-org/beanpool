@@ -2917,7 +2917,6 @@
   "View Details →": "Подробнее →",
   "Loading enterprises…": "Загрузка предприятий…",
   "No enterprises found": "Предприятия не найдены",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "Есть идея на пользу сообществу? Создайте предприятие или предложите проект.",
   "Close dialog": "Закрыть окно",
   "A leader, a goal, an end date": "Лидер, цель, срок окончания",
   "Keepers; it keeps going": "Хранители; действует постоянно",
@@ -3873,5 +3872,8 @@
   "Set your area": "Укажите свой район",
   "Voice credits": "Голосовые кредиты",
   "For money votes · opens after your first completed trade": "Для голосований о средствах · доступно после первой сделки",
-  "For money votes · from completed trades · N votes cost N×N": "Для голосований о средствах · за совершённые сделки · N голосов стоят N×N"
+  "For money votes · from completed trades · N votes cost N×N": "Для голосований о средствах · за совершённые сделки · N голосов стоят N×N",
+  "Got an idea that needs Beans? Start a project.": "Есть идея, требующая бобов? Создайте проект.",
+  "Something that keeps going and trades? Start an enterprise.": "Что-то постоянное и торгующее? Создайте предприятие.",
+  "Start one with +: a chat group, a project or an enterprise.": "Создайте свою с помощью +: чат-группу, проект или предприятие."
 }

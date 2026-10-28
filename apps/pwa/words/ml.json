@@ -2723,7 +2723,6 @@
   "View Details →": "വിവരങ്ങൾ കാണുക →",
   "Loading enterprises…": "സംരംഭങ്ങൾ ലോഡ് ചെയ്യുന്നു…",
   "No enterprises found": "സംരംഭങ്ങളൊന്നും കണ്ടെത്തിയില്ല",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "കമ്മ്യൂണിറ്റിക്ക് പ്രയോജനപ്പെടുന്ന ഒരു ആശയമുണ്ടോ? ആരംഭിക്കാൻ ഒരു സംരംഭം തുടങ്ങുകയോ ഒരു പ്രോജക്റ്റ് നിർദ്ദേശിക്കുകയോ ചെയ്യുക.",
   "Close dialog": "ഡയലോഗ് അടയ്ക്കുക",
   "A leader, a goal, an end date": "ഒരു ലീഡർ, ഒരു ലക്ഷ്യം, അവസാന തീയതി",
   "Keepers; it keeps going": "സൂക്ഷിപ്പുകാർ; തുടർന്നും പ്രവർത്തിക്കുന്നു",
@@ -3623,5 +3622,8 @@
   "Set your area": "പ്രദേശം സജ്ജമാക്കുക",
   "Voice credits": "വോയ്സ് ക്രെഡിറ്റുകൾ",
   "For money votes · opens after your first completed trade": "സാമ്പത്തിക വോട്ടുകൾക്കായി · ആദ്യ ഇടപാട് പൂർത്തിയായ ശേഷം തുറക്കുന്നു",
-  "For money votes · from completed trades · N votes cost N×N": "സാമ്പത്തിക വോട്ടുകൾക്കായി · പൂർത്തിയായ ഇടപാടുകളിൽ നിന്ന് · N വോട്ടുകൾക്ക് N×N ചെലവാകും"
+  "For money votes · from completed trades · N votes cost N×N": "സാമ്പത്തിക വോട്ടുകൾക്കായി · പൂർത്തിയായ ഇടപാടുകളിൽ നിന്ന് · N വോട്ടുകൾക്ക് N×N ചെലവാകും",
+  "Got an idea that needs Beans? Start a project.": "പയർ ആവശ്യമുള്ള ഒരു ആശയമുണ്ടോ? ഒരു പ്രോജക്റ്റ് ആരംഭിക്കുക.",
+  "Something that keeps going and trades? Start an enterprise.": "തുടർന്നും പ്രവർത്തിക്കുകയും ഇടപാടുകൾ നടത്തുകയും ചെയ്യുന്ന ഒന്നാണോ? ഒരു സംരംഭം ആരംഭിക്കുക.",
+  "Start one with +: a chat group, a project or an enterprise.": "+ ഉപയോഗിച്ച് ഒരെണ്ണം ആരംഭിക്കുക: ഒരു ചാറ്റ് ഗ്രൂപ്പ്, ഒരു പ്രോജക്റ്റ് അല്ലെങ്കിൽ ഒരു സംരംഭം."
 }

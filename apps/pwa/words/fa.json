@@ -2731,7 +2731,6 @@
   "View Details →": "مشاهده جزئیات →",
   "Loading enterprises…": "در حال بارگیری طرح‌های تجاری…",
   "No enterprises found": "هیچ طرح تجاری یافت نشد",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "ایده‌ای دارید که به نفع جامعه باشد؟ برای شروع، یک طرح تجاری راه‌اندازی کنید یا پروژه‌ای پیشنهاد دهید.",
   "Close dialog": "بستن پنجره",
   "A leader, a goal, an end date": "یک سرپرست، یک هدف، یک تاریخ پایان",
   "Keepers; it keeps going": "مدیران؛ ادامه می‌یابد",
@@ -3623,5 +3622,8 @@
   "Set your area": "منطقه خود را تنظیم کنید",
   "Voice credits": "اعتبار رأی",
   "For money votes · opens after your first completed trade": "برای رأی‌گیری‌های مالی · پس از اولین مبادله کامل‌شده باز می‌شود",
-  "For money votes · from completed trades · N votes cost N×N": "برای رأی‌گیری‌های مالی · از مبادلات انجام‌شده · هزینه N رأی برابر است با N×N"
+  "For money votes · from completed trades · N votes cost N×N": "برای رأی‌گیری‌های مالی · از مبادلات انجام‌شده · هزینه N رأی برابر است با N×N",
+  "Got an idea that needs Beans? Start a project.": "ایده‌ای دارید که به لوبیا نیاز دارد؟ یک پروژه شروع کنید.",
+  "Something that keeps going and trades? Start an enterprise.": "کاری که ادامه‌دار است و مبادله می‌کند؟ یک طرح تجاری شروع کنید.",
+  "Start one with +: a chat group, a project or an enterprise.": "با + یکی بسازید: یک گروه گفتگو، یک پروژه یا یک طرح تجاری."
 }

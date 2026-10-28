@@ -3111,7 +3111,6 @@
   "View Details →": "عرض التفاصيل →",
   "Loading enterprises…": "جارٍ تحميل المؤسسات…",
   "No enterprises found": "لم يتم العثور على مؤسسات",
-  "Got an idea that benefits the community? Start an enterprise or propose a project to get started.": "هل لديك فكرة تفيد المجتمع؟ ابدأ مؤسسة أو اقترح مشروعًا للبدء.",
   "Close dialog": "إغلاق النافذة",
   "A leader, a goal, an end date": "قائد، هدف، تاريخ انتهاء",
   "Keepers; it keeps going": "مسؤولون؛ وتستمر دائمًا",
@@ -4123,5 +4122,8 @@
   "Set your area": "حدد منطقتك",
   "Voice credits": "أرصدة التصويت",
   "For money votes · opens after your first completed trade": "للتصويت على الأموال · يُتاح بعد أول صفقة مكتملة لك",
-  "For money votes · from completed trades · N votes cost N×N": "للتصويت على الأموال · من الصفقات المكتملة · تكلفة N صوت هي N×N"
+  "For money votes · from completed trades · N votes cost N×N": "للتصويت على الأموال · من الصفقات المكتملة · تكلفة N صوت هي N×N",
+  "Got an idea that needs Beans? Start a project.": "لديك فكرة تحتاج إلى فاصوليا؟ ابدأ مشروعًا.",
+  "Something that keeps going and trades? Start an enterprise.": "نشاط مستمر ويجري تداولات؟ أنشئ مؤسسة.",
+  "Start one with +: a chat group, a project or an enterprise.": "أنشئ واحدة بالضغط على +: مجموعة دردشة، أو مشروع، أو مؤسسة."
 }

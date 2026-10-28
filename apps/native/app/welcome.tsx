@@ -11,7 +11,7 @@ import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
 import {
-    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan, keyMadeForThisJoin,
+    getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan, keyMadeForThisJoin, doorResumeUrl,
     recordJoinKeyMade, type OnboardingFlow,
 } from '../utils/onboarding-state';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
@@ -98,6 +98,8 @@ import { ConsentText } from '../components/ConsentText';
 import { useWords } from '../components/LanguageProvider';
 import { LanguageSwitch } from '../components/LanguagePicker';
 import { CLAIM_NEW_SERVER_ROUTE, claimRouteFor } from '../utils/claim-link';
+import { openDoorHref } from '../utils/open-door';
+import { communityName } from '../utils/community-name';
 import { claimSuccessActions, readNodeAddresses } from '../utils/node-claim';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 import { useManageNode } from '../components/useManageNode';
@@ -835,6 +837,14 @@ export default function WelcomeScreen() {
                 // A claim whose answer the phone never had: back to the claim screen with the key it made, where the node
                 // says whether it landed (app/claim-community.tsx). The code is typed again there: it is never kept here.
                 router.replace(claimRouteFor({ node: plan.anchorUrl, nodeRefused: false, codeId: plan.claimCodeId, code: null }));
+                return;
+            }
+            const doorAt = doorResumeUrl(plan);
+            if (doorAt) {
+                // A join at another community's open door that never finished (utils/open-door-key.ts): back to that door with
+                // the key it made, where the node says whether it landed. Over this screen, so the door's Back returns here,
+                // where an invite or a restore still work with the same key (one identity per device).
+                router.push(openDoorHref(doorAt));
                 return;
             }
             setCallsign(plan.callsign);
@@ -2326,7 +2336,7 @@ export default function WelcomeScreen() {
                             colors={colors}
                             visible={showLinkSheet}
                             identity={pendingIdentity}
-                            url={GLOBAL_NODE_URL}
+                            url={joinFlow === 'global' && createAnchorUrl ? createAnchorUrl : GLOBAL_NODE_URL}
                             askPhoneLock={!pendingWordsAreNew}
                             onClose={() => setShowLinkSheet(false)}
                             onLinked={(answer) => {
@@ -2455,7 +2465,10 @@ export default function WelcomeScreen() {
                         <View style={guideStyles.card}>
                             <Text style={guideStyles.cardTitle}>{t('🌍 A place to meet')}</Text>
                             <Text style={guideStyles.cardText}>
-                                {t('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.')}
+                                {joinFlow === 'global' && createAnchorUrl && createAnchorUrl !== GLOBAL_NODE_URL
+                                    // Another community's open door (slice S2): its own name, never the global community's.
+                                    ? t('{name} has no Beans: credit, the Commons and trading in Beans live in communities that use them, which you join with an invite from a member.', { name: communityName({ url: createAnchorUrl, alias: claimedName }) })
+                                    : t('The global community is for meeting people and finding a community near you. There are no Beans here: credit, the Commons and trading in Beans live in local communities, which you join with an invite from a member.')}
                             </Text>
                         </View>
                         )}

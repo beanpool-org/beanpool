@@ -105,6 +105,27 @@ export function doorScreenWords(place: DoorPlace) {
 }
 
 /**
+ * What another community's door says to a phone with no account (DESIGN-account-without-global-fable.md §4, slice S2): the
+ * join makes a new BeanPool account on this phone, there (utils/open-door-key.ts). Never said at the global community's
+ * door, which with no account is the first screen's.
+ */
+export function newPhoneDoorWords(place: DoorPlace) {
+    const name = place.name;
+    return {
+        /** Under the title, above the two ways in. */
+        intro: t('Join {name} with a new BeanPool account on this phone: 12 words, or a sign-in.', { name }),
+        /** A door that takes a sign-in only. */
+        introSignIn: t('Join {name} with a new BeanPool account on this phone.', { name }),
+        /** The name step, the 12-words way: the words are new, and come after the photo (as at the first screen's door). */
+        wordsName: t('🔑 An account with 12 secret words. They come next, after your photo.'),
+        /** 409 `already_joined`: this sign-in has an account there already, made on another phone. */
+        alreadyJoined: t('This sign-in already has a BeanPool account in {name}. Restore it with your 12 words or your sign-in instead.', { name }),
+        /** In, but the phone couldn't write the wizard's next step. */
+        notSaved: t("{name} let you in, but this phone couldn't save that yet. Try again.", { name }),
+    };
+}
+
+/**
  * Who keeps a copy of the account for the door's sign-in, said beside the sign-in buttons: `choose` under the two ways in,
  * `signIn` above the buttons. The global community's door as before. At another community's door, a build without the
  * key vault sends the copy in the join and that community keeps it; a build with the vault deposits it there only where

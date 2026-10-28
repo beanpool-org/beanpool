@@ -9,7 +9,9 @@
  * A door is a {@link KeyDoor}: the flow its wizard record carries (utils/onboarding-state.ts) and the address of the
  * community the key joins. Nothing here names a community. The doors so far:
  * - the global community's open door (utils/global-join.ts), at GLOBAL_NODE_URL;
- * - a community's claim (utils/claim-key.ts), at that community's own address, which needs nothing of ours.
+ * - a community's claim (utils/claim-key.ts), at that community's own address, which needs nothing of ours;
+ * - any other community's open door (utils/open-door-key.ts, app/join-open-door.tsx), at that community's own address: a
+ *   self-hoster's node with the global profile, listed nowhere of ours ({@link openDoorAt}).
  *
  * ## A key any node may hold is never taken off the phone
  *
@@ -39,10 +41,22 @@ export interface JoinKey {
     createdHere: boolean;
 }
 
-/** A door a key joins by: its wizard record's flow, and the community's address (the record's `anchorUrl`). */
+/**
+ * A door a key joins by: its wizard record's flow, and the community's address (the record's `anchorUrl`). Flow `global` is
+ * an open door, the global community's or any other community's ({@link openDoorAt}): the address says whose.
+ */
 export interface KeyDoor {
     flow: 'global' | 'claim';
     url: string;
+}
+
+/**
+ * The open door of the community at `url`, as a key door: the flow the global community's door has always written (`global`,
+ * read as "an open door"), at that address (DESIGN-account-without-global-fable.md §2.3). The global community's door is
+ * `openDoorAt(GLOBAL_NODE_URL)`.
+ */
+export function openDoorAt(url: string): KeyDoor {
+    return { flow: 'global', url };
 }
 
 /** The record's step while a door's join is out: the door's own screen, which the next launch comes back to. */

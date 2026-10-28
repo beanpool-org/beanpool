@@ -3,6 +3,8 @@ import type { BeanPoolIdentity } from './identity';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import { offeredProviders } from './sso-providers';
 import { CLAIM_CODE_ID, cleanClaimName, claimNodeOrigin } from './claim-link';
+import { doorNodeAt } from './open-door';
+import { GLOBAL_NODE_URL } from './global-node-url';
 
 /**
  * Mid-wizard onboarding state.
@@ -26,8 +28,10 @@ export type OnboardingStep = 'create' | 'globalJoin' | 'claim' | 'profileSetup' 
  * community existed.
  *
  * - `invite`: an invite to a community (step `create`).
- * - `global`: the global community's open door (step `globalJoin`, utils/global-join.ts). Its
- *   `inviteCode` is '' and its `anchorUrl` is the global community.
+ * - `global`: an open door (step `globalJoin`). Its `inviteCode` is '' and its `anchorUrl` says whose: the global
+ *   community's (utils/global-join.ts, the first screen's "Explore BeanPool worldwide"), or, since S2 of
+ *   DESIGN-account-without-global-fable.md, any other community's at its own address (utils/open-door-key.ts,
+ *   app/join-open-door.tsx: a self-hoster's node with the global profile, listed nowhere of ours).
  * - `claim`: a community's claim made this account (step `claim` while the claim is out, utils/claim-key.ts and
  *   app/claim-community.tsx). Its `inviteCode` is '' and its `anchorUrl` is the community claimed, at its own address.
  *   After the claim: Your Photo, Safety Backup, How it Works, then the owner's card (step `ownerCard`).
@@ -66,7 +70,8 @@ export interface PendingOnboarding {
     claimCodeId?: string;
     /**
      * Claim flow only, once the claim is in: the community's name as its server said it, cleaned (claim-link.ts
-     * `cleanClaimName`), for the owner's card at the wizard's end ("You own ‹name›").
+     * `cleanClaimName`), for the owner's card at the wizard's end ("You own ‹name›"). Also another community's open door,
+     * once its join is in, when the door knew the name: How it Works names it, never "the global community".
      */
     communityName?: string;
     /**
@@ -210,7 +215,10 @@ export type ResumePlan =
         joinDoor: 'words' | null;
         /** Claim flow at step `claim`: the code's id, for the claim screen's route; null otherwise. */
         claimCodeId: string | null;
-        /** Claim flow: the community's name for the owner's card, cleaned again as it is read; null when none was kept. */
+        /**
+         * Claim flow: the community's name for the owner's card; another community's open door: its name for How it Works.
+         * Cleaned again as it is read; null when none was kept.
+         */
         communityName: string | null;
     };
 
@@ -254,8 +262,9 @@ export function resumePlan(
     if (arrival.incomingInvite && pending.inviteCode !== arrival.paramsInvite) return { action: 'none' };
     if (!stored) return { action: 'clear' };
     const flow: OnboardingFlow = pending.flow === 'global' ? 'global' : pending.flow === 'claim' ? 'claim' : 'invite';
-    // A claim's address is checked as a link's is (claim-link.ts): the record is read back from storage, like any input.
-    const anchorUrl = flow === 'claim' ? claimNodeOrigin(pending.anchorUrl) : pending.anchorUrl || '';
+    // A claim's address is checked as a link's is (claim-link.ts), and another community's open door as the door screen
+    // checks its own (open-door.ts doorNodeAt): the record is read back from storage, like any input.
+    const anchorUrl = flow === 'claim' ? claimNodeOrigin(pending.anchorUrl) : flow === 'global' ? openDoorAddress(pending.anchorUrl) : pending.anchorUrl || '';
     if (anchorUrl === null) return { action: 'clear' };
     // A claim's own two steps and the three every door shares; the claim's two belong to no other flow.
     const claimOnly: readonly OnboardingStep[] = ['claim', 'ownerCard'];
@@ -281,8 +290,29 @@ export function resumePlan(
         joinDoor: doorFlow && pending.joinDoor === 'words' ? 'words' : null,
         claimCodeId: flow === 'claim' && pending.step === 'claim' && typeof pending.claimCodeId === 'string' && CLAIM_CODE_ID.test(pending.claimCodeId)
             ? pending.claimCodeId : null,
-        communityName: flow === 'claim' ? cleanClaimName(pending.communityName) : null,
+        communityName: flow === 'claim' || (flow === 'global' && anchorUrl !== GLOBAL_NODE_URL) ? cleanClaimName(pending.communityName) : null,
     };
+}
+
+/**
+ * An open door's address as a record holds it: the global community's (or none, as every global record before S2) as it
+ * always was; another community's only where the door screen would take it (open-door.ts doorNodeAt), in its one spelling,
+ * else null.
+ */
+function openDoorAddress(raw: string | undefined): string | null {
+    if (!raw || raw === GLOBAL_NODE_URL) return raw || '';
+    return doorNodeAt(raw)?.url ?? null;
+}
+
+/**
+ * The address of another community's open door whose join the welcome screen hands back to the door screen
+ * (app/join-open-door.tsx), where the node says whether it landed: a door join (flow `global`, step `globalJoin`) at an
+ * address that is not the global community's. Null for every other plan: the global community's own door is the welcome
+ * screen's, as before.
+ */
+export function doorResumeUrl(plan: ResumePlan): string | null {
+    if (plan.action !== 'resume' || plan.flow !== 'global' || plan.mode !== 'globalJoin') return null;
+    return plan.anchorUrl && plan.anchorUrl !== GLOBAL_NODE_URL ? plan.anchorUrl : null;
 }
 
 /**
@@ -296,6 +326,27 @@ export function resumePlan(
  */
 export function claimInFlight(record: PendingOnboarding | null | undefined): boolean {
     return record?.flow === 'claim' && record.step === 'claim';
+}
+
+/**
+ * A join at another community's open door that has not finished (flow `global`, step `globalJoin`, at an address that is
+ * not the global community's; utils/open-door-key.ts): its key may be on the phone, and the node may hold it. The root
+ * guard leaves the door screen alone for it (auth-return.ts `setupRedirect`, `doorOut`), so the node can say whether it
+ * landed; every other screen goes to welcome, which hands it back to the door screen ({@link doorResumeUrl}). The global
+ * community's own door is the welcome screen's, held there as before.
+ */
+export function doorJoinOut(record: PendingOnboarding | null | undefined): boolean {
+    return record?.flow === 'global' && record.step === 'globalJoin' && !!record.anchorUrl && record.anchorUrl !== GLOBAL_NODE_URL;
+}
+
+/**
+ * What a wizard record holds the root guard to (app/_layout.tsx): nothing (`false`, no record); a claim whose answer is not
+ * in (`claim`); another community's door join not finished (`door`); or any other wizard (`wizard`): welcome alone.
+ */
+export function wizardHold(record: PendingOnboarding | null | undefined): false | 'wizard' | 'claim' | 'door' {
+    if (!record) return false;
+    if (claimInFlight(record)) return 'claim';
+    return doorJoinOut(record) ? 'door' : 'wizard';
 }
 
 /**

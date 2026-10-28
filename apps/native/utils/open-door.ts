@@ -14,7 +14,8 @@
  *   invite (app/_layout.tsx): its signed work waits for the member's first tap (`from=link`), as the global community's
  *   own link does (utils/global-link.ts). Another community's door that the member's Join in the app didn't open just now
  *   ({@link takeDoorTap}) waits the same, so a link in a spelling the intercept doesn't know holds too. Nothing joins
- *   without the member's tap, and the key that joins is the phone's own.
+ *   without the member's tap, and the key that joins is the phone's own: its account, or, on a phone with none, a key the
+ *   door makes in memory and writes only at Join (utils/open-door-key.ts; DESIGN-account-without-global-fable.md §2.3).
  * - The community's name is its own answer (or the phone's saved name for it, or its host), never a link's.
  *
  * Kept free of the screens' imports and of the phone's storage, so the router can read a link without loading either.
@@ -133,14 +134,15 @@ export function doorLinkFromSystemPath(path: unknown): DoorLink | null {
  * Where a door link goes, or null to stay where the member is (cold: as from the icon).
  *
  * - The global community's: as its own link (utils/global-link.ts globalLinkRoute), so every way into it reads the one rule.
- * - Another community's, for a phone with an account and no join wizard left half done: its door, with the work held for
- *   the member's tap. An address the screen refuses opens the screen, which says so (never quietly another door).
- * - With no account, or a wizard half done: as from the icon. A new phone joins another community by its invite; the first
- *   screen's own door is the global community's.
+ * - Another community's, for a phone with no join wizard left half done: its door, with the work held for the member's tap.
+ *   With an account, that account joins. With none, the door makes one there, at the community's own address
+ *   (DESIGN-account-without-global-fable.md §2.3, slice S2): a self-hoster's open community takes a new phone with nothing
+ *   of ours. An address the screen refuses opens the screen, which says so (never quietly another door).
+ * - A wizard half done: as from the icon. It resumes, and the link starts nothing new.
  */
 export function doorLinkRoute(link: DoorLink, phone: PhoneAtLink, initial: boolean, nowMs: number): string | null {
     if (link.node?.global) return globalLinkRoute(phone, initial, nowMs);
-    if (phone.wizardPending || !phone.account) return initial ? '/' : null;
+    if (phone.wizardPending) return initial ? '/' : null;
     const node = link.node ? link.node.url : (link.named ?? '');
     return `${OPEN_DOOR_PATH}?node=${encodeURIComponent(node)}&from=${FROM_LINK}`;
 }

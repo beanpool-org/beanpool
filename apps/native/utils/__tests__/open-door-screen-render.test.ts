@@ -12,6 +12,9 @@
  *   - a community that isn't open: says why, under its own name.
  *   - opened by a link (`from=link`), or with another community's address any way but the member's Join in the app (a
  *     link in a spelling the router's intercept doesn't know, its old name with an address): the work waits for the tap.
+ *   - a phone with no account (DESIGN-account-without-global-fable.md §2.3, §4, slice S2): another community's door draws
+ *     the two ways in for a NEW account there, never the no-account line, with a key made in memory and nothing written to
+ *     the phone; the global community's door with no account is the first screen's, as before.
  *
  * Nothing is contacted: fetch answers the addresses in the test and refuses anything else.
  */
@@ -51,11 +54,11 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
-const route = vi.hoisted(() => ({ params: {} as Record<string, string | undefined> }));
+const route = vi.hoisted(() => ({ params: {} as Record<string, string | undefined>, replaced: [] as unknown[] }));
 vi.mock('expo-router', async () => {
     const { useEffect } = await import('react');
     return {
-        router: { replace() {}, push() {}, back() {}, canGoBack: () => true },
+        router: { replace(to: unknown) { route.replaced.push(to); }, push() {}, back() {}, canGoBack: () => true, canDismiss: () => false, dismissAll() {} },
         useLocalSearchParams: () => route.params,
         useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]),
         ErrorBoundary: () => null,
@@ -84,9 +87,17 @@ vi.mock('../../components/SsoButton', () => ({
     FacebookButton: ({ title }: { title: string }) => createElement('button', null, title),
 }));
 const KEY = { publicKey: 'ab'.repeat(32), privateKey: 'not-used', callsign: 'Wren' };
+// The account on the phone (null: none), read as the screen reads it: the global community's door through
+// accountKeyForDoor, another community's through the key rule at its address (utils/open-door-key.ts → door-key.ts,
+// which reads the stored identity). Before S2 every door read accountKeyForDoor alone.
+const phone = vi.hoisted(() => ({ key: null as null | { publicKey: string; privateKey: string; callsign: string } }));
+vi.mock('../identity', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../identity')>()),
+    loadIdentity: async () => phone.key,
+}));
 vi.mock('../global-join-existing', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../global-join-existing')>()),
-    accountKeyForDoor: async () => ({ identity: KEY, createdHere: false }),
+    accountKeyForDoor: async () => (phone.key ? { identity: phone.key, createdHere: false } : null),
 }));
 // The door's work, counted: started for which address, by which key. Its functions are stable, as the real hook's are
 // (useCallback): the screen's effects depend on them.
@@ -121,6 +132,9 @@ import JoinOpenDoorScreen from '../../app/join-open-door';
 import JoinGlobalAlias from '../../app/join-global';
 import { rememberGlobalDoor } from '../global-door-offer';
 import { openDoorHrefForTap, takeDoorTap } from '../open-door';
+import * as SecureStore from 'expo-secure-store';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const GLOBAL = 'https://global.beanpool.org';
 const SELF = 'https://open.riverbend.example';
@@ -152,6 +166,9 @@ beforeEach(() => {
     asked.length = 0;
     work.started.length = 0;
     route.params = {};
+    route.replaced.length = 0;
+    phone.key = KEY;
+    vi.mocked(SecureStore.setItemAsync).mockClear();
     takeDoorTap('');
     vi.mocked(rememberGlobalDoor).mockClear();
 });
@@ -270,5 +287,123 @@ describe("the global community's door (no node, and its old name)", () => {
         expect(work.started).toEqual([{ url: GLOBAL, key: KEY.publicKey, door: 'words' }]);
         // Its answer is what the sheet's global row reads on the way back.
         expect(rememberGlobalDoor).toHaveBeenCalledTimes(1);
+    });
+});
+
+/**
+ * The link of a self-hoster's open community (`beanpool://join-open-door?node=…`) on a phone with no account (slice S2):
+ * the door makes the account there. Nothing is made by reading the screen: the key is in memory until Join.
+ */
+describe("another community's door on a phone with no account (S2)", () => {
+    const nothingWritten = () => {
+        expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+        expect(store.map.has('beanpool_pending_onboarding')).toBe(false);
+        expect(store.map.has('beanpool_anchor_url')).toBe(false);
+    };
+    const tap = async (label: string) => {
+        await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes(label))!.click(); });
+        await settle();
+    };
+
+    it('opened by its link: the two ways in for a NEW account there, never the no-account line; the work waits for the tap; nothing written', async () => {
+        phone.key = null;
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [SELF]: OPEN });
+        await render();
+        expect(header()!.textContent).toBe('Riverbend Open');
+        expect(text()).toContain('open.riverbend.example');
+        expect(text()).toContain('Join Riverbend Open with a new BeanPool account on this phone: 12 words, or a sign-in.');
+        expect(text()).toContain('Create an account with 12 secret words');
+        expect(text()).toContain('No Google, Apple or Facebook needed. Your 12 words are the only way back in.');
+        expect(text()).toContain('Or sign in');
+        expect(text()).not.toContain('Join with this account');
+        expect(text()).not.toContain('This phone has no BeanPool account now');
+        expect(text()).not.toMatch(/global community/i);
+        // Only THIS community is asked, and the screen stays (no first-screen detour).
+        expect(new Set(asked.map(u => new URL(u).origin))).toEqual(new Set([SELF]));
+        expect(route.replaced).toEqual([]);
+        expect(work.started).toEqual([]);
+        nothingWritten();
+
+        // The member's tap: the work starts at THIS address for a key made in memory (not any account's), still unwritten.
+        await tap('Create an account with 12 secret words');
+        expect(work.started).toHaveLength(1);
+        expect(work.started[0]).toMatchObject({ url: SELF, door: 'words' });
+        expect(work.started[0].key).toMatch(/^[0-9a-f]{64}$/);
+        expect(work.started[0].key).not.toBe(KEY.publicKey);
+        expect(text()).toContain('🔑 An account with 12 secret words. They come next, after your photo.');
+        expect(text()).not.toContain('the ones this phone already has');
+        nothingWritten();
+    });
+
+    it("opened by the member's Join in the app: the work starts at once, for the key made in memory; nothing written", async () => {
+        phone.key = null;
+        route.params = (openDoorHrefForTap(SELF) as { params: Record<string, string> }).params;
+        globalThis.fetch = network({ [SELF]: OPEN });
+        await render();
+        expect(work.started).toHaveLength(1);
+        expect(work.started[0]).toMatchObject({ url: SELF, door: 'words' });
+        expect(work.started[0].key).not.toBe(KEY.publicKey);
+        nothingWritten();
+    });
+
+    it('a door that takes a sign-in only: says so for a new account, with no 12-words promise', async () => {
+        phone.key = null;
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [SELF]: { ...OPEN, features: { ...OPEN.features, wordsDoor: false } } });
+        await render();
+        expect(text()).toContain('Join Riverbend Open with a new BeanPool account on this phone.');
+        expect(text()).not.toContain('12 words, or a sign-in');
+        expect(text()).toContain('Continue with Google');
+        nothingWritten();
+    });
+
+    it('an account on the phone: as since P5, the account joins (no "new account" words)', async () => {
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [SELF]: OPEN });
+        await render();
+        expect(text()).toContain('Join with this account');
+        expect(text()).not.toContain('with a new BeanPool account');
+        expect(text()).not.toContain('Create an account with 12 secret words');
+    });
+
+    it.each([['join-open-door', JoinOpenDoorScreen], ['join-global', JoinGlobalAlias]])(
+        "the global community's door (%s) with no account: the first screen's, as before S2; no key made, no work",
+        async (_name, screen) => {
+            phone.key = null;
+            globalThis.fetch = network({ [GLOBAL]: OPEN });
+            await render(screen);
+            expect(route.replaced).toEqual(['/welcome']);
+            expect(work.started).toEqual([]);
+            expect(text()).not.toContain('Create an account with 12 secret words');
+            nothingWritten();
+        },
+    );
+
+    it("a join wizard half done that is not this door's own: the first screen resumes it, and this door starts nothing", async () => {
+        phone.key = null;
+        store.map.set('beanpool_pending_onboarding', JSON.stringify({ step: 'create', inviteCode: 'INV-ABCD-EFGH', anchorUrl: 'https://riverside.example', callsign: 'Wren', redeemed: false }));
+        route.params = { node: SELF, from: 'link' };
+        globalThis.fetch = network({ [SELF]: OPEN });
+        await render();
+        expect(route.replaced).toEqual(['/welcome']);
+        expect(work.started).toEqual([]);
+    });
+
+    it('the screen writes a key only at Join, only a key it made, and takes one off only on the join\'s own refusal or Back', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/join-open-door.tsx'), 'utf8');
+        // Both joins: the key this door made goes onto the phone just before the join is sent; the account never.
+        expect(src).toContain('const joining = key.createdHere ? await commitOpenDoorKey(doorUrl, key, typed) : key.identity;');
+        expect(src).toContain('const joining = account.createdHere ? await commitOpenDoorKey(doorUrl, account, typed) : account.identity;');
+        expect(src.match(/commitOpenDoorKey\(/g)).toHaveLength(2);
+        expect(src.indexOf('commitOpenDoorKey(doorUrl, key, typed)')).toBeLessThan(src.indexOf('submitJoin(doorUrl,'));
+        expect(src.indexOf('commitOpenDoorKey(doorUrl, account, typed)')).toBeLessThan(src.indexOf('submitWordsJoin(doorUrl,'));
+        // Off the phone: the join's own refusal for good (never the sign-in's), and Back.
+        expect(src).toContain("if (account.createdHere && via === 'join' && await releaseOpenDoorKey(doorUrl, account)) {");
+        expect(src).toContain('void releaseOpenDoorKey(doorUrl, made)');
+        expect(src.match(/releaseOpenDoorKey\(/g)).toHaveLength(2);
+        // In with a key it made: the wizard (12 words at Safety Backup), never the account's profile step.
+        expect(src).toContain("if (answer.kind === 'joined' && account.createdHere) {");
+        expect(src).toMatch(/await finishOpenDoorJoin\(doorUrl, named, \{[^}]*\}\);[\s\S]*router\.replace\('\/welcome'\);/);
     });
 });

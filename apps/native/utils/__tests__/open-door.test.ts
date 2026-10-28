@@ -3,8 +3,9 @@
  * P5, DESIGN-global-entry-fable.md decision 6): which addresses it takes, where a tap and a link go, and what it says.
  *
  * - No lock-in: any plain https origin on any domain is a door; the global community's is only the default.
- * - A link only opens the screen: its work held for the member's tap (`from=link`), only for a phone with an account,
- *   never with another param it carried, and an address the screen refuses is said, never swapped for another door.
+ * - A link only opens the screen: its work held for the member's tap (`from=link`), never with another param it carried,
+ *   and an address the screen refuses is said, never swapped for another door. Since S2 (DESIGN-account-without-global-
+ *   fable.md §2.3) another community's link opens its door on a phone with no account too: the door makes the account.
  * - The global community's door says exactly what it said before P5; another community's says the same under its name.
  */
 import fs from 'node:fs';
@@ -226,13 +227,34 @@ describe('a link to the door only opens the screen (doorLinkFromSystemPath, door
         }
     });
 
-    it('an account: that community\'s door, its work held for the tap; with no account or a wizard half done, as from the icon', () => {
+    it('an account: that community\'s door, its work held for the tap; a wizard half done, as from the icon', () => {
         const link = doorLinkFromSystemPath(LINK)!;
         expect(doorLinkRoute(link, { account: true, wizardPending: false }, false, 1)).toBe(`/join-open-door?node=${encodeURIComponent(SELF)}&from=link`);
-        expect(doorLinkRoute(link, { account: false, wizardPending: false }, true, 1)).toBe('/');
-        expect(doorLinkRoute(link, { account: false, wizardPending: false }, false, 1)).toBeNull();
         expect(doorLinkRoute(link, { account: true, wizardPending: true }, true, 1)).toBe('/');
         expect(doorLinkRoute(link, { account: true, wizardPending: true }, false, 1)).toBeNull();
+    });
+
+    it('no account (S2): that community\'s door all the same, cold or warm, its work held for the tap; never our domain', () => {
+        // Before S2 this was `'/'` cold and null warm: a self-hoster's open community could take no new phone without us
+        // (DESIGN-account-without-global-fable.md §1 row 3). The door now makes the account there, at Join.
+        const link = doorLinkFromSystemPath(LINK)!;
+        const door = `/join-open-door?node=${encodeURIComponent(SELF)}&from=link`;
+        expect(doorLinkRoute(link, { account: false, wizardPending: false }, true, 1)).toBe(door);
+        expect(doorLinkRoute(link, { account: false, wizardPending: false }, false, 1)).toBe(door);
+        // Any address the screen takes: an IP, a LAN name with a port, a self-hoster's own domain.
+        for (const node of ['https://203.0.113.7', 'https://riverbend.lan:8443', 'https://open.riverbend.example']) {
+            const at = doorLinkFromSystemPath(`beanpool://join-open-door?node=${encodeURIComponent(node)}`)!;
+            expect(at.node, node).toEqual({ url: node, global: false });
+            const to = doorLinkRoute(at, { account: false, wizardPending: false }, false, 1)!;
+            expect(to, node).toBe(`/join-open-door?node=${encodeURIComponent(node)}&from=link`);
+            expect(to).not.toContain('beanpool.org');
+        }
+        // A wizard half done (a join of any door left without its answer) still comes first: it resumes.
+        expect(doorLinkRoute(link, { account: false, wizardPending: true }, true, 1)).toBe('/');
+        expect(doorLinkRoute(link, { account: false, wizardPending: true }, false, 1)).toBeNull();
+        // An address the screen refuses opens the screen that says so, as for an account.
+        const refused = doorLinkFromSystemPath('beanpool://join-open-door?node=http%3A%2F%2Fevil.test')!;
+        expect(doorLinkRoute(refused, { account: false, wizardPending: false }, false, 1)).toBe('/join-open-door?node=http%3A%2F%2Fevil.test&from=link');
     });
 
     it('a refused address opens the screen that says so, held; the global community\'s goes as its own link does', () => {
@@ -247,8 +269,13 @@ describe('a link to the door only opens the screen (doorLinkFromSystemPath, door
         phone.identity = ACCOUNT;
         expect(await redirectSystemPath({ path: LINK, initial: false })).toBe(`/join-open-door?node=${encodeURIComponent(SELF)}&from=link`);
         expect(phone.reads).toBeGreaterThan(0);
+        // No account (S2): the door all the same, where its join makes the account.
         phone.identity = null;
+        expect(await redirectSystemPath({ path: LINK, initial: true })).toBe(`/join-open-door?node=${encodeURIComponent(SELF)}&from=link`);
+        // A wizard half done: as from the icon.
+        phone.pending = { step: 'globalJoin', flow: 'global', anchorUrl: SELF };
         expect(await redirectSystemPath({ path: LINK, initial: true })).toBe('/');
+        phone.pending = null;
         // Left as before P5: Expo Router opens join-global (global-link.test.ts pins it as no link of its own).
         expect(redirectSystemPath({ path: 'beanpool://join-global', initial: false })).toBe('beanpool://join-global');
     });

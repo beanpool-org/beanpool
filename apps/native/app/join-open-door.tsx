@@ -12,7 +12,7 @@ import { authenticateUser } from '../utils/LocalAuth';
 import { checkGlobalDoor, wordsDoorOn, type GlobalDoorRefusal } from '../utils/node-profile';
 import { rememberGlobalDoor } from '../utils/global-door-offer';
 import {
-    MAX_JOIN_NAME, checkNameAtDoor, doorWaysOut, nextStepFor, signInAtDoor, submitJoin, submitWordsJoin,
+    MAX_JOIN_NAME, checkNameAtDoor, doorWaysOut, joinedUnderNodeName, nextStepFor, signInAtDoor, submitJoin, submitWordsJoin,
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
@@ -21,6 +21,10 @@ import { DoorChoices, DoorWorkProgress } from '../components/WordsDoor';
 import { startOneWayBack } from '../utils/one-way-back';
 import { vaultCopyKnown } from '../utils/vault';
 import { ACCOUNT_DOOR_MESSAGES, accountKeyForDoor, finishJoinFromAccount, rememberAccountClosed } from '../utils/global-join-existing';
+import { commitOpenDoorKey, finishOpenDoorJoin, openDoorKeyForThisPhone, releaseOpenDoorKey } from '../utils/open-door-key';
+import { doorJoinOut, getPendingOnboarding } from '../utils/onboarding-state';
+import { StoredKeyUnreadableError } from '../utils/identity';
+import { useIdentity } from './IdentityContext';
 import { HOME_REDIRECT } from '../utils/join-another-community';
 import { afterJoinRedirect } from '../utils/pair-device-target';
 import { signInCopiesAt } from '../utils/vault-config';
@@ -29,7 +33,7 @@ import { FROM_LINK } from '../utils/global-link';
 import { doorNodeFromParam, takeDoorTap, type DoorNode } from '../utils/open-door';
 import {
     doorAnswerWords, doorKeeperWords, doorNameCheckWords, doorRefusalWords, doorScreenWords, globalPlace, joinedGlobalBodyWords, joinedTitle,
-    phoneDoorLineWords, placeAt, type DoorPlace,
+    newPhoneDoorWords, phoneDoorLineWords, placeAt, type DoorPlace,
 } from '../utils/open-door-words';
 import { askCommunityName } from '../utils/community-name';
 import { getSavedNodes } from '../utils/nodes';
@@ -47,6 +51,12 @@ export { ErrorBoundary };
  * Sign in once, check the name, join, with the key on the phone; then the profile step for that community (its photo),
  * as after any second community. Nothing on the phone changes until the community has let the member in, and a
  * refusal leaves everything as it was.
+ *
+ * Another community's door also takes a phone with no account (DESIGN-account-without-global-fable.md §2.3, slice S2;
+ * utils/open-door-key.ts): its link opens this screen on a new phone, and the join makes the account there, at the
+ * community's own address. The key is made in memory and written only at Join, with the wizard's record; a refusal for good
+ * takes it off again, a lost answer keeps it, and once in, the welcome screen's wizard shows the 12 words. The global
+ * community's door with no account stays the first screen's ("Explore BeanPool worldwide"): this screen sends it there.
  */
 export default function JoinOpenDoorScreen() {
     const { then: thenParam, from: fromParam, node: nodeParam } = useLocalSearchParams<{ then?: string; from?: string; node?: string }>();
@@ -107,6 +117,22 @@ function backOrHome() {
     else router.replace('/(tabs)');
 }
 
+/** Out of the door with nowhere to go back to: home for an account, the first screen for a phone with none. */
+function backOrStart(account: 'existing' | 'new' | null) {
+    if (router.canGoBack()) router.back();
+    else router.replace(account === 'new' ? '/welcome' : '/(tabs)');
+}
+
+/**
+ * What the screen says for a join that threw: the phone's own sentence in the member's language where the door's table
+ * has it (open-door-words.ts phoneDoorLineWords), else as it came; `fallback` when there is none.
+ */
+function errorWords(e: unknown, fallback: string): string {
+    if (e instanceof StoredKeyUnreadableError) return t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.");
+    const message = (e as Error | null)?.message;
+    return message ? phoneDoorLineWords(message) : fallback;
+}
+
 /** A door for an address the phone won't sign for or connect to (utils/open-door.ts doorNodeAt). Nothing was asked. */
 function RefusedDoor() {
     const styles = useDoorStyles();
@@ -131,6 +157,7 @@ function RefusedDoor() {
 function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; thenParam?: string; fromParam?: string }) {
     const { colors } = useTheme();
     const { recheck } = useNodeStatus();
+    const { identity, setIdentity } = useIdentity();
     const insets = useSafeAreaInsets();
     const styles = useDoorStyles();
     /** Every request this door makes goes to this address, and only to it. */
@@ -155,6 +182,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         return () => { alive = false; };
     }, [door.global, doorUrl]);
     const say = doorScreenWords(place);
+    const sayNew = newPhoneDoorWords(place);
 
     const [phase, setPhase] = useState<DoorPhase>('checking');
     /** What the member reads on the `unavailable`, `restore` and `closed` screens. */
@@ -164,6 +192,14 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [key, setKey] = useState<JoinKey | null>(null);
+    /**
+     * Whose key the door joins with, read from the phone as it opens: `existing`, the phone's own account (slice P5); `new`, a
+     * key this door made, in memory until Join (a phone with no account: slice S2, utils/open-door-key.ts), or on the phone
+     * with its record while a join it signed may have landed. Null until read.
+     */
+    const [account, setAccount] = useState<'existing' | 'new' | null>(null);
+    const keyRef = useRef<JoinKey | null>(null);
+    keyRef.current = key;
     /** The sign-in the join will spend. Dropped once sent: a nonce is spent once. */
     const [signin, setSignin] = useState<DoorSignIn | null>(null);
     const [name, setName] = useState('');
@@ -203,9 +239,61 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
 
     const ways = doorWaysOut(phase, loading);
 
-    // Android's back button keeps to the same ways out as the screen's own.
+    /**
+     * The key this door joins with: the global community's door, the phone's account only (with none, the door is the first
+     * screen's); another community's, the key rule at its address (utils/open-door-key.ts): the phone's account, else the key
+     * this door made (`held`), else a new one in memory. Asked again at every try: the phone may hold a key since.
+     */
+    const keyForDoor = (held: JoinKey | null): Promise<JoinKey | null> => (door.global ? accountKeyForDoor() : openDoorKeyForThisPhone(doorUrl, held));
+
+    // Arriving: whose key joins. Nothing is written by reading it: a key the door makes is in memory until Join.
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            // A join wizard half done that is not this door's own join resumes on the first screen, and this door starts
+            // nothing, as for its link (utils/open-door.ts doorLinkRoute).
+            const record = await getPendingOnboarding();
+            if (!alive) return;
+            if (record && !(doorJoinOut(record) && record.anchorUrl === doorUrl)) { router.replace('/welcome'); return; }
+            const joining = await keyForDoor(null);
+            if (!alive) return;
+            // The global community's door with no account on the phone is the first screen's ("Explore BeanPool worldwide"),
+            // as before slice S2, when the root guard sent this screen there.
+            if (!joining) { router.replace('/welcome'); return; }
+            setKey(joining);
+            setAccount(joining.createdHere ? 'new' : 'existing');
+        })().catch(() => {});
+        return () => { alive = false; };
+        // Read once, as the door opens: the screen is keyed by its address.
+    }, []);
+
+    /**
+     * Back. A key this door made comes off the phone as the member leaves, unless a join it signed may have landed
+     * (utils/open-door-key.ts releaseOpenDoorKey): then it stays with its record, and the next launch comes back to this door.
+     * The phone's own account is left exactly as it was.
+     */
+    function leave() {
+        if (joinSendingRef.current) return;
+        nameCheckRef.current?.abort();
+        const made = key?.createdHere ? key : null;
+        if (!made) { backOrStart(account); return; }
+        void releaseOpenDoorKey(doorUrl, made).catch(() => false).then((removed) => {
+            // The app loaded that key at its start (a restart while the join was out): it holds no account now.
+            if (removed && identity?.publicKey === made.identity.publicKey) setIdentity(null);
+            backOrStart('new');
+        });
+    }
+    const leaveRef = useRef(leave);
+    leaveRef.current = leave;
+
+    // Android's back button keeps to the same ways out as the screen's own, and a key this door made leaves by the same way
+    // as the screen's Back, so it never stays behind by another.
     useFocusEffect(useCallback(() => {
-        const sub = BackHandler.addEventListener('hardwareBackPress', () => joinSendingRef.current || !ways.back);
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            if (joinSendingRef.current || !ways.back) return true;
+            if (keyRef.current?.createdHere) { leaveRef.current(); return true; }
+            return false;
+        });
         return () => sub.remove();
     }, [ways.back]));
 
@@ -239,26 +327,13 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         return () => { cancelled = true; };
     }, [phase, doorUrl, door.global]);
 
-    // The 12-words door's work starts as the door opens, signed by the key on this phone, so it is done by Join. Opened by a
-    // link, the key is read (from the phone only) and the work waits for the member's first tap.
+    // The 12-words door's work starts as the door opens, signed by the key the join will be signed by (the phone's own, or
+    // the one this door made, in memory), so it is done by Join. Opened by a link, the work waits for the member's first tap.
     const startWork = doorWork.start;
     useEffect(() => {
-        if (phase !== 'choose') return;
-        let cancelled = false;
-        accountKeyForDoor().then(account => {
-            if (cancelled || !account) return;
-            setKey(account);
-            if (!heldForTap) startWork(doorUrl, account.identity, 'words');
-        }).catch(() => {});
-        return () => { cancelled = true; };
-    }, [phase, startWork, heldForTap]);
-
-    function leave() {
-        if (joinSendingRef.current) return;
-        nameCheckRef.current?.abort();
-        if (router.canGoBack()) router.back();
-        else router.replace('/(tabs)');
-    }
+        if (phase !== 'choose' || !key) return;
+        if (!heldForTap) startWork(doorUrl, key.identity, 'words');
+    }, [phase, startWork, heldForTap, key]);
 
     /**
      * "Choose another way" (or "Use a different sign-in"): stops the name check and the wait for the 12-words work, so the
@@ -287,24 +362,28 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         setPhase('name');
     }
 
-    /** Step one: the phone's lock, then the sign-in, both for the key the phone holds. */
+    /**
+     * Step one: the sign-in, for the key the join will be signed by. The phone's own account first passes the phone's lock;
+     * a key this door made has nothing behind it yet (as at the first screen's door, welcome.tsx handleGlobalSignIn).
+     */
     async function handleSignIn(provider: SsoProvider) {
         setHeldForTap(false);
         setLoading(true);
         setError(null);
         try {
-            const account = await accountKeyForDoor();
+            const account = await keyForDoor(key);
             if (!account) {
                 setError(phoneDoorLineWords(ACCOUNT_DOOR_MESSAGES.noAccount));
                 return;
             }
             setKey(account);
-            // The sign-in also links to this account, so the phone's lock first, as Account Protection's connect asks
+            // The sign-in also links to the phone's account, so the phone's lock first, as Account Protection's connect asks
             // it. A check that doesn't pass starts nothing.
-            if (!(await authenticateUser(t('Confirm authentication to link a sign-in to your account.')))) return;
+            if (!account.createdHere && !(await authenticateUser(t('Confirm authentication to link a sign-in to your account.')))) return;
             const result = await signInAtDoor(provider, doorUrl, account.identity);
             if (result.kind === 'answered') {
-                await afterAnswer(result.answer, account, name.trim() || account.identity.callsign);
+                // The door answered before any join (shut, a limit, or in already): never the join's own refusal.
+                await afterAnswer(result.answer, account, name.trim() || account.identity.callsign, 'sign-in', 'signIn');
                 return;
             }
             setSignin(result.signin);
@@ -318,14 +397,17 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             setPhase('name');
         } catch (e) {
             // A cancel is not an error: the member thought better of it.
-            const failure = e as { reason?: string; message?: string } | null;
-            setError(failure?.reason === 'cancelled' ? null : (failure?.message || t('Sign-in failed. Try again.')));
+            const failure = e as { reason?: string } | null;
+            setError(failure?.reason === 'cancelled' ? null : errorWords(e, t('Sign-in failed. Try again.')));
         } finally {
             setLoading(false);
         }
     }
 
-    /** Step two: the name, checked at the door, then the join, signed by the key the phone holds. */
+    /**
+     * Step two: the name, checked at the door, then the join, signed by the key the phone holds. A key this door made goes
+     * onto the phone first, with the wizard's record (utils/open-door-key.ts commitOpenDoorKey): never before Join.
+     */
     async function handleJoin() {
         if (!key || !signin) { setPhase('signIn'); return; }
         const typed = name.trim().slice(0, MAX_JOIN_NAME).trim();
@@ -349,12 +431,13 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             setSuggestions([]);
             joinSendingRef.current = true;
             setPhase('joining');
-            const answer = await submitJoin(doorUrl, key.identity, typed, signin, { onSignInAgain: (line) => setNotice(phoneDoorLineWords(line)), work: doorWork.runFor('sign-in') });
+            const joining = key.createdHere ? await commitOpenDoorKey(doorUrl, key, typed) : key.identity;
+            const answer = await submitJoin(doorUrl, joining, typed, signin, { onSignInAgain: (line) => setNotice(phoneDoorLineWords(line)), work: doorWork.runFor('sign-in') });
             setSignin(null);
-            await afterAnswer(answer, key, typed);
+            await afterAnswer(answer, key, typed, 'sign-in', 'join');
         } catch (e) {
             setSignin(null);
-            setError((e as Error | null)?.message || t('Your join could not be completed. Please sign in and try again.'));
+            setError(errorWords(e, t('Your join could not be completed. Please sign in and try again.')));
             setPhase(wordsDoor ? 'choose' : 'signIn');
         } finally {
             joinSendingRef.current = false;
@@ -365,9 +448,10 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
     }
 
     /**
-     * The 12-words way with the key on this phone: the name, checked at the door; the work (done already at ordinary
-     * levels; otherwise it finishes here, and Back still works); then the join, with no sign-in. Nothing on the phone
-     * changes until the door has let the member in.
+     * The 12-words way with the key the join will be signed by: the name, checked at the door; the work (done already at
+     * ordinary levels; otherwise it finishes here, and Back still works); then the join, with no sign-in. For the phone's
+     * own account nothing on the phone changes until the door has let the member in; a key this door made goes onto the
+     * phone, with the wizard's record, just before the join is sent.
      */
     async function handleWordsJoin() {
         const typed = name.trim().slice(0, MAX_JOIN_NAME).trim();
@@ -381,7 +465,9 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         const stop = new AbortController();
         nameCheckRef.current = stop;
         try {
-            const account = await accountKeyForDoor();
+            // Asked again: the phone may hold a key since this door made one. The work names the key, so a different one
+            // starts its own.
+            const account = await keyForDoor(key);
             if (!account) {
                 setError(phoneDoorLineWords(ACCOUNT_DOOR_MESSAGES.noAccount));
                 return;
@@ -402,15 +488,17 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             if (stop.signal.aborted || ready.kind === 'cancelled') return;
             setWorkWaiting(false);
             if (ready.kind === 'refused') {
-                await afterAnswer(ready.answer, account, typed, 'words');
+                // Nothing was sent: a refusal before any join, like one at the sign-in. Every key and record stays.
+                await afterAnswer(ready.answer, account, typed, 'words', 'signIn');
                 return;
             }
             joinSendingRef.current = true;
             setPhase('joining');
-            const answer = await submitWordsJoin(doorUrl, account.identity, typed, run);
-            await afterAnswer(answer, account, typed, 'words');
+            const joining = account.createdHere ? await commitOpenDoorKey(doorUrl, account, typed) : account.identity;
+            const answer = await submitWordsJoin(doorUrl, joining, typed, run);
+            await afterAnswer(answer, account, typed, 'words', 'join');
         } catch (e) {
-            setError((e as Error | null)?.message || t('Your join could not be completed. Please try again.'));
+            setError(errorWords(e, t('Your join could not be completed. Please try again.')));
             setPhase('name');
         } finally {
             joinSendingRef.current = false;
@@ -420,8 +508,17 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         }
     }
 
-    /** Where each answer takes the member. A refusal changes nothing on the phone: there is nothing to put back. */
-    async function afterAnswer(answer: DoorAnswer, account: JoinKey, typed: string, joinedBy: DoorWay = 'sign-in') {
+    /**
+     * Where each answer takes the member. `via` is what answered: the sign-in (the nonce, or the 12-words door's work before
+     * any join) or the join itself. For the phone's own account a refusal changes nothing on the phone: there is nothing to
+     * put back. A key this door made comes off again only on the join's own refusal for good, and only when no join it
+     * signed can have landed (utils/open-door-key.ts releaseOpenDoorKey).
+     */
+    async function afterAnswer(answer: DoorAnswer, account: JoinKey, typed: string, joinedBy: DoorWay = 'sign-in', via: 'signIn' | 'join' = 'join') {
+        if (answer.kind === 'joined' && account.createdHere) {
+            await finishNewAccount(answer, account, typed, joinedBy);
+            return;
+        }
         if (answer.kind === 'joined') {
             let joined: Awaited<ReturnType<typeof finishJoinFromAccount>>;
             try {
@@ -474,10 +571,39 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
             setPhase(joinedBy === 'words' ? 'name' : wordsDoor ? 'choose' : 'signIn');
             return;
         }
+        // Refused for good. A refusal at the sign-in leaves every key and record alone: a shut door says so before it looks
+        // for the member, so an earlier join whose answer was lost may still have landed.
+        if (account.createdHere && via === 'join' && await releaseOpenDoorKey(doorUrl, account)) {
+            // Off the phone: the next try makes a new one. The app loaded that key at its start (a restart while the join
+            // was out): it holds no account now.
+            setKey(null);
+            if (identity?.publicKey === account.identity.publicKey) setIdentity(null);
+        }
         setSignin(null);
         setRefusal(null);
-        setMessage(doorAnswerWords(answer, place));
+        setMessage(account.createdHere && answer.kind === 'already_joined' ? sayNew.alreadyJoined : doorAnswerWords(answer, place));
         setPhase(next === 'restore' ? 'restore' : answer.kind === 'door_closed' ? 'unavailable' : 'closed');
+    }
+
+    /**
+     * In, with a key this door made (slice S2): the phone is this community's now, under the name the node kept, and the
+     * wizard's record moves on to Your Photo at its address (utils/open-door-key.ts finishOpenDoorJoin). The welcome screen
+     * resumes it: Your Photo, Safety Backup with the 12 words, How it Works, then Home. One welcome, never this screen under it.
+     */
+    async function finishNewAccount(answer: Extract<DoorAnswer, { kind: 'joined' }>, made: JoinKey, typed: string, joinedBy: DoorWay) {
+        try {
+            const named = await joinedUnderNodeName(doorUrl, answer, { ...made.identity, callsign: typed.trim() || made.identity.callsign });
+            await finishOpenDoorJoin(doorUrl, named, { enrolment: answer.enrolment, way: joinedBy, communityName: knownName ?? null });
+        } catch (e) {
+            // The node has the key and the key is on the phone, with its record: only the wizard's next step couldn't be
+            // written. Said, and Join again is answered as the join was (`already_member`).
+            setError(errorWords(e, sayNew.notSaved));
+            setPhase(joinedBy === 'words' ? 'name' : wordsDoor ? 'choose' : 'signIn');
+            return;
+        }
+        doorWork.stop();
+        if (router.canDismiss()) router.dismissAll();
+        router.replace('/welcome');
     }
 
     const signedInWith = signin ? SSO_PROVIDER_NAMES[signin.provider] : null;
@@ -519,38 +645,52 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                     {phase === 'restore' && (
                         <>
                             <Text style={styles.body} accessibilityLiveRegion="polite">{message}</Text>
-                            <Pressable style={styles.primary} onPress={signInAgain} accessibilityRole="button">
-                                <Text style={styles.primaryText}>{t('Use a different sign-in')}</Text>
+                            {/* A phone with no account: this sign-in's account is somewhere else, so the first screen's restore
+                                brings it here, as at the global community's door (welcome.tsx). */}
+                            {account === 'new' && (
+                                <Pressable style={styles.primary} onPress={() => router.replace({ pathname: '/welcome', params: { mode: 'member' } })} accessibilityRole="button">
+                                    <Text style={styles.primaryText}>{t('🔑 Restore my account')}</Text>
+                                </Pressable>
+                            )}
+                            <Pressable style={account === 'new' ? styles.secondary : styles.primary} onPress={signInAgain} accessibilityRole="button">
+                                <Text style={account === 'new' ? styles.secondaryText : styles.primaryText}>{t('Use a different sign-in')}</Text>
                             </Pressable>
                         </>
                     )}
 
-                    {/* Two ways in, side by side, words first (two-doors design §2.6). Either way, the account on this phone. */}
+                    {/* Two ways in, side by side, words first (two-doors design §2.6). Either way, the account on this phone: the
+                        one it has, or, with none, the one this door makes at Join. */}
                     {phase === 'choose' && (
                         <>
-                            <Text style={styles.body}>{say.intro}</Text>
+                            <Text style={styles.body}>{account === 'new' ? sayNew.intro : say.intro}</Text>
                             {loading && (
                                 <View style={styles.busy} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={colors.brand.primary} />
                                 </View>
                             )}
                             {error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
-                            <DoorChoices
-                                colors={colors}
-                                onWords={chooseWords}
-                                onSignIn={handleSignIn}
-                                disabled={loading}
-                                busy={doorWork.busy}
-                                wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
-                                signInNote={keeper.choose}
-                                account="existing"
-                            />
+                            {account === null ? (
+                                <View style={styles.busy}>
+                                    <ActivityIndicator size="large" color={colors.brand.primary} />
+                                </View>
+                            ) : (
+                                <DoorChoices
+                                    colors={colors}
+                                    onWords={chooseWords}
+                                    onSignIn={handleSignIn}
+                                    disabled={loading}
+                                    busy={doorWork.busy}
+                                    wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
+                                    signInNote={keeper.choose}
+                                    account={account}
+                                />
+                            )}
                         </>
                     )}
 
                     {phase === 'signIn' && (
                         <>
-                            <Text style={styles.body}>{say.intro}</Text>
+                            <Text style={styles.body}>{account === 'new' ? sayNew.introSignIn : say.intro}</Text>
                             <Text style={styles.small}>{keeper.signIn}</Text>
                             {loading && (
                                 <View style={styles.busy} accessibilityLiveRegion="polite">
@@ -578,7 +718,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                     {phase === 'name' && (
                         <>
                             {way === 'words'
-                                ? <Text style={styles.small}>{t('🔑 With your 12 words: the ones this phone already has. No sign-in needed.')}</Text>
+                                ? <Text style={styles.small}>{account === 'new' ? sayNew.wordsName : t('🔑 With your 12 words: the ones this phone already has. No sign-in needed.')}</Text>
                                 : signedInWith && <Text style={styles.small}>{t('✅ Signed in with {provider}', { provider: signedInWith })}</Text>}
                             <Text style={styles.label}>{say.nameLabel}</Text>
                             <TextInput

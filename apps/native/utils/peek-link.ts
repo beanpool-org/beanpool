@@ -20,6 +20,12 @@ const SITE_HOSTS = new Set(['beanpool.org', 'www.beanpool.org']);
 /** `beanpool://peek…` in the spellings a system hands over (as utils/community-card-link.ts reads its own). */
 const APP_PATH = /^(?:beanpool:\/\/\/?|\/)?peek\/?(?:\?([^#]*))?(?:#.*)?$/i;
 
+/** A community's address as a peek may name it: communityOrigin's rule (never the global community), and never the website. */
+function peekOrigin(raw: unknown): string | null {
+    const origin = communityOrigin(raw);
+    return origin && !SITE_HOSTS.has(origin.replace(/^https:\/\//, '').replace(/:\d+$/, '')) ? origin : null;
+}
+
 /** The peek screen's route for a community's origin, a post and a ticket. */
 export function peekRoute(origin: string, postId: string, ticket: string): string {
     return `${PEEK_ROUTE}?node=${encodeURIComponent(origin)}&post=${encodeURIComponent(postId)}&peek=${encodeURIComponent(ticket)}`;
@@ -33,7 +39,7 @@ export function peekFromSystemPath(path: unknown): { origin: string; postId: str
     if (app) {
         const q = new URLSearchParams(app[1] ?? '');
         const nodes = q.getAll('node');
-        const origin = nodes.length === 1 ? communityOrigin(nodes[0]) : null;
+        const origin = nodes.length === 1 ? peekOrigin(nodes[0]) : null;
         const peek = peekFromLink(`?${app[1] ?? ''}`);
         return origin && peek ? { origin, ...peek } : null;
     }
@@ -45,7 +51,7 @@ export function peekFromSystemPath(path: unknown): { origin: string; postId: str
         return null;
     }
     if (url.pathname !== '/' || url.username || url.password || SITE_HOSTS.has(url.hostname.toLowerCase())) return null;
-    const origin = communityOrigin(`https://${url.host}`);
+    const origin = peekOrigin(`https://${url.host}`);
     const peek = peekFromLink(s);
     return origin && peek ? { origin, ...peek } : null;
 }
@@ -66,6 +72,6 @@ export function peekRouteFromSystemPath(path: unknown): string | null {
 
 /** The screen's own params, checked again: a route can be pushed with anything. */
 export function readPeekParams(params: { node?: unknown; post?: unknown; peek?: unknown }): { origin: string; postId: string; ticket: string } | null {
-    const origin = communityOrigin(params.node);
+    const origin = peekOrigin(params.node);
     return origin && isPeekPostId(params.post) && isPeekTicket(params.peek) ? { origin, postId: params.post, ticket: params.peek } : null;
 }

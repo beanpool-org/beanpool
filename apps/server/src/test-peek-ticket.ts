@@ -18,7 +18,7 @@
  *      (Android: the app by intent, falling back to Google Play with the peek in the referrer; iPhone: beanpool://peek;
  *      a computer: the browser), names nobody; a member's browser goes to the web app; a link that opens nothing is the
  *      community's card
- *   8. at most 50 links open at once per member
+ *   8. at most 50 links open at once per member, and 100 made in a day (stopped ones included)
  *
  * Fail-first: on origin/main every section fails (there is no /api/peek, the read is gated, `/` redirects).
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-peek-ticket.ts
@@ -388,6 +388,25 @@ async function main(): Promise<void> {
     const oneOff = ((await get('/api/peek/mine', bob)).body?.shares ?? [])[0];
     await call('POST', '/api/peek/stop', { id: bob, body: { id: oneOff?.id } });
     assert((await share(bob, other.id)).status === 201, 'one stopped: another may be shared');
+    // Making and stopping links in a loop: each stopped row stays a month, so a day's making is bounded too.
+    const { PEEK_TICKETS_PER_DAY } = await import('@beanpool/core');
+    const bobRows = (db.prepare('SELECT COUNT(*) AS c FROM peek_tickets WHERE sharer_pubkey = ?').get(bob.pk) as { c: number }).c;
+    let churned = 0;
+    for (let i = bobRows; i < PEEK_TICKETS_PER_DAY; i++) {
+        const r = await share(bob, other.id);
+        if (r.status === 201) {
+            churned++;
+            await call('POST', '/api/peek/stop', { id: bob, body: { id: r.body?.id } });
+        } else {
+            const victim = ((await get('/api/peek/mine', bob)).body?.shares ?? [])[0];
+            await call('POST', '/api/peek/stop', { id: bob, body: { id: victim?.id } });
+            i--;
+        }
+    }
+    const overDay = await share(bob, other.id);
+    const rows = (db.prepare('SELECT COUNT(*) AS c FROM peek_tickets WHERE sharer_pubkey = ?').get(bob.pk) as { c: number }).c;
+    assert(overDay.status === 429 && overDay.body?.code === 'too_many_shares_today' && rows === PEEK_TICKETS_PER_DAY,
+        `made and stopped in a loop: the ${PEEK_TICKETS_PER_DAY + 1}st in a day is 429 too_many_shares_today, and his rows stop at ${PEEK_TICKETS_PER_DAY} (${overDay.status} ${overDay.body?.code}, ${rows} rows, ${churned} churned)`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

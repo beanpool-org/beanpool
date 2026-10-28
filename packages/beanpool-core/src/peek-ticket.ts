@@ -22,6 +22,12 @@ export const PEEK_TICKET_DAYS = 7;
 /** The most links one member may have open at once on a community (each one a row on its node until it ends). */
 export const PEEK_TICKETS_LIVE_MAX = 50;
 
+/**
+ * The most links one member may make in a day, stopped ones included: a stopped link keeps its row until a month after it
+ * would have run out, so without this a member making and stopping links in a loop could grow the node's table for good.
+ */
+export const PEEK_TICKETS_PER_DAY = 100;
+
 /** A ticket's shape: 16 random bytes in base64url, unpadded (22 characters). Nothing else is ever looked up. */
 const TICKET = /^[A-Za-z0-9_-]{22}$/;
 

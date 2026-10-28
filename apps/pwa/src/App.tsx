@@ -64,7 +64,7 @@ import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
-import { takePeekParam } from './lib/peek';
+import { readPeekParam, takePeekParam } from './lib/peek';
 import { YourShopPage } from './pages/YourShopPage';
 import { ShopDetailPage } from './pages/ShopDetailPage';
 import { takeShopParam } from './lib/shop';
@@ -518,8 +518,9 @@ export function App() {
     // `/?post=<id>&peek=<ticket>`: a post a member shared outside the community (front doors S6). Read before the post
     // param is taken, and the ticket taken out of the address: a stranger here reads that one post (pages/PeekPage.tsx);
     // a member opens it as any shared post, through `post` below.
-    const [peekParam, setPeekParam] = useState(() => (typeof window !== 'undefined' ? takePeekParam() : null));
-    useEffect(() => { setLinkedPost(takePostParam()); }, []);
+    // Read in the initializer (which may run twice), taken out of the address in the effect.
+    const [peekParam, setPeekParam] = useState(() => (typeof window !== 'undefined' ? readPeekParam() : null));
+    useEffect(() => { takePeekParam(); setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
     // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the

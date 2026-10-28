@@ -51,10 +51,10 @@ export function SharedOutsideSection() {
                     <div className="px-4 pb-4 flex flex-col gap-3" data-testid="settings-shared-outside-list">
                         {shares === 'loading' && <p role="status" className="m-0 text-sm text-text-primary">{t('Loading...')}</p>}
                         {shares === 'failed' && (
-                            <p role="alert" className="m-0 text-sm text-red-700 dark:text-red-300 break-words">
-                                {t('Could not load this. Check your connection and try again.')}{' '}
-                                <button type="button" onClick={load} className="underline font-semibold bg-transparent border-0 p-0 cursor-pointer text-inherit">{t('Retry')}</button>
-                            </p>
+                            <div role="alert" className="flex flex-col items-start gap-2">
+                                <p className="m-0 text-sm text-red-700 dark:text-red-300 break-words">{t('Could not load this. Check your connection and try again.')}</p>
+                                <button type="button" onClick={load} className="min-h-[44px] px-4 rounded-xl border border-bp-ink-info text-bp-ink-info font-bold text-sm bg-transparent cursor-pointer">{t('Retry')}</button>
+                            </div>
                         )}
                         {Array.isArray(shares) && shares.length === 0 && (
                             <p className="m-0 text-sm text-text-primary break-words">{t(W.sharedOutsideNone)}</p>

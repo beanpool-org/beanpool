@@ -37,7 +37,7 @@
  * ticket, from the member's signed request, and keeps the list.
  */
 import crypto from 'node:crypto';
-import { PEEK_TICKET_DAYS, PEEK_TICKETS_LIVE_MAX, isPeekPostId, isPeekTicket, word, type PeekShare } from '@beanpool/core';
+import { PEEK_TICKET_DAYS, PEEK_TICKETS_LIVE_MAX, PEEK_TICKETS_PER_DAY, isPeekPostId, isPeekTicket, word, type PeekShare } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ON_HOLIDAY_SQL, getPosts, guestPost, readsAsMember, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -51,10 +51,12 @@ const KEEP_AFTER_EXPIRY_MS = 30 * DAY_MS;
 export const PEEK_OFF_CODE = 'share_outside_off';
 export const PEEK_NOT_SHAREABLE_CODE = 'not_shareable';
 export const PEEK_TOO_MANY_CODE = 'too_many_shares';
+export const PEEK_TOO_MANY_TODAY_CODE = 'too_many_shares_today';
 
 export const PEEK_OFF = word('This community has turned sharing outside off.');
 export const PEEK_NOT_SHAREABLE = word('Only a post everyone in this community can see can be shared outside.');
 export const PEEK_TOO_MANY = word('You have 50 links shared outside. Stop one under Settings, Shared outside, to share another.');
+export const PEEK_TOO_MANY_TODAY = word("You've shared 100 links outside today. You can share more tomorrow.");
 export const PEEK_NOT_A_MEMBER = word('Only a member of this community can share its posts outside.');
 export const PEEK_STANDBY = word('This server is a standby copy of the community. Share from its main address.');
 export const PEEK_NO_SUCH_SHARE = word('No such link to stop.');
@@ -119,7 +121,8 @@ export function peekTicketOpens(postId: unknown, ticket: unknown, now = Date.now
 /**
  * A new link for `sharer` to share `postId` outside: the ticket (handed out once, here, and never again), the row's id
  * and when it runs out. Refused (PeekError) for a sharer who doesn't read as a member, a community with sharing outside
- * off, a post a visitor could not be shown, a standby, and a member with PEEK_TICKETS_LIVE_MAX links open already.
+ * off, a post a visitor could not be shown, a standby, a member with PEEK_TICKETS_LIVE_MAX links open already, and one
+ * who made PEEK_TICKETS_PER_DAY in the last day (stopped ones included: each keeps its row for a month after it ends).
  */
 export function makePeekTicket(sharer: string, postId: unknown, now = Date.now()): { ticket: string; id: string; postId: string; expiresAt: string } {
     if (getNodeRole() === 'backup') throw new PeekError(503, 'standby', PEEK_STANDBY);
@@ -136,6 +139,10 @@ export function makePeekTicket(sharer: string, postId: unknown, now = Date.now()
         const live = (db.prepare('SELECT COUNT(*) AS c FROM peek_tickets WHERE sharer_pubkey = ? AND expires_at > ? AND revoked_at IS NULL')
             .get(sharer, at) as { c: number }).c;
         if (live >= PEEK_TICKETS_LIVE_MAX) throw new PeekError(429, PEEK_TOO_MANY_CODE, PEEK_TOO_MANY);
+        // Made in the last day: each runs out PEEK_TICKET_DAYS after it was made, so on the same index as above.
+        const madeToday = (db.prepare('SELECT COUNT(*) AS c FROM peek_tickets WHERE sharer_pubkey = ? AND expires_at > ?')
+            .get(sharer, new Date(now + (PEEK_TICKET_DAYS - 1) * DAY_MS).toISOString()) as { c: number }).c;
+        if (madeToday >= PEEK_TICKETS_PER_DAY) throw new PeekError(429, PEEK_TOO_MANY_TODAY_CODE, PEEK_TOO_MANY_TODAY);
         db.prepare('INSERT INTO peek_tickets (id, ticket_hash, post_id, sharer_pubkey, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
             .run(id, hashOf(ticket), postId, sharer, at, expiresAt);
     })();

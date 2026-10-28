@@ -66,7 +66,7 @@ interface Props {
     onBack: () => void;
     themePreference: ThemePreference;
     onThemePreferenceChange: (preference: ThemePreference) => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area';
     /** With initialMode 'guide': the guide page to open at (Home's Tips card, Read more); absent: its front page. */
     initialGuidePage?: string | null;
     onReRunSetup?: () => void;

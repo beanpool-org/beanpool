@@ -168,7 +168,7 @@ export function App() {
     const invitesMode = useFeatureMode('invites');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
-    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide'>('menu');
+    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
     // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
     const [settingsGuidePage, setSettingsGuidePage] = useState<string | null>(null);
     // A sign-in added to an account made with 12 words (lib/link-signin.ts): what came of it, said in Settings.
@@ -454,6 +454,11 @@ export function App() {
         }
         if (tab === 'settings-profile') {
             setSettingsInitialMode('profile');
+            setShowSettings(true);
+            return;
+        }
+        if (tab === 'settings-area') {
+            setSettingsInitialMode('area');
             setShowSettings(true);
             return;
         }

@@ -558,6 +558,9 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).toContain('Type at least 2 letters of a name.');
                 expect(contrastOf('Type at least 2 letters of a name.', colors)).toBeGreaterThanOrEqual(4.5);
                 expect(text()).not.toContain('Loading');
+                expect(host.querySelector('[data-testid="people-community-set-area"]')).not.toBeNull();
+                await press('[data-testid="people-community-set-area"]');
+                expect(nav.pushed).toContain('/your-area');
                 await fits([OWN]);
             });
 

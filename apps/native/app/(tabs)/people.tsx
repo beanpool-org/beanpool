@@ -1007,6 +1007,32 @@ export default function PeopleScreen() {
                                 <Text style={{ color: colors.text.secondary, fontSize: 15, fontWeight: '500', textAlign: 'center' }}>
                                     {communityListEmpty(listNote, searchQuery)}
                                 </Text>
+                                {listNote === 'noArea' && (
+                                    <Pressable
+                                        onPress={() => router.push('/your-area' as any)}
+                                        style={({ pressed }) => [
+                                            {
+                                                marginTop: 16,
+                                                paddingVertical: 10,
+                                                paddingHorizontal: 20,
+                                                borderRadius: 10,
+                                                backgroundColor: colors.brand.primary,
+                                                opacity: pressed ? 0.8 : 1,
+                                                minHeight: 48,
+                                                minWidth: 48,
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                            },
+                                        ]}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Set your area')}
+                                        testID="people-community-set-area"
+                                    >
+                                        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+                                            {t('Set your area')}
+                                        </Text>
+                                    </Pressable>
+                                )}
                             </View>
                         }
                         renderItem={({ item, index }) => {

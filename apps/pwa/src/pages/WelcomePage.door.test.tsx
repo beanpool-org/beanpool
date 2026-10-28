@@ -188,11 +188,28 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
         expect(screen.getByLabelText("I've written these words down somewhere safe")).not.toBeChecked();
     });
 
-    it('not stored: the words screen is exactly as before', async () => {
+    it('not stored: the words screen as before, the words the only way back, and no sign-in line', async () => {
         await toTheWords({ enrolled: false, error: 'The recovery keeper could not be stored.' });
         expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
         expect(screen.getByText(/way to recover your identity if you lose this device\./)).toBeInTheDocument();
         expect(within(wordsIntro()).getAllByText('only', { selector: 'strong' }).length).toBeGreaterThan(0);
+    });
+
+    // Vault rethink VR0 (design §1.2, §7): where the copy is, at the moment it is made. The web app has no key vault
+    // client, so a sign-in join's copy is on this community's server, which answered that it keeps it; with none kept
+    // (here, or any join without a sign-in: an invite, or 12 words), this community keeps nothing.
+    it("stored: this community's server keeps the copy, the key and its 12 words, and who can open it; never the key vault", async () => {
+        await toTheWords({ enrolled: true, generation: 1, provider: 'google', enrolledSso: ['google'] });
+        expect(screen.getByTestId('backup-signin-recovery').textContent).toBe(
+            "Signing in with Google also brings this account back. This community's server keeps a locked copy of your key and 12 words for it. The people who run it can open that copy, and so can anyone who gets into your sign-in account.");
+        expect(screen.queryByTestId('backup-no-copy')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/key vault|Iceland/);
+    });
+
+    it("not stored: this community's server keeps no copy", async () => {
+        await toTheWords({ enrolled: false, error: 'The recovery keeper could not be stored.' });
+        expect(screen.getByTestId('backup-no-copy').textContent).toBe("This community's server keeps no copy of your account.");
+        expect(document.body.textContent).not.toMatch(/key vault|Iceland/);
     });
 });
 

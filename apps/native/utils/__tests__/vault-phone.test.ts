@@ -970,7 +970,13 @@ describe('status, disconnect, push token, and the check at app open', () => {
 
     it('Account Protection\'s spinner waits only in front of the sign-in part: the 12 words never wait behind the vault', () => {
         const settings = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
-        expect(settings).toMatch(/\{protectionLoading \? \([\s\S]*?<KeeperProtectionPanel[\s\S]*?\/>\s*<\/>\s*\)\}\s*<>\s*\{\/\* On every phone\./);
+        // Was the panel itself inside the spinner's branch. VR0 (Account Protection's ways back) draws one panel in two
+        // places, by build: a build without a vault inside that branch, as before; a build with one after the 12 words,
+        // once the vault has answered. Either way the words come straight after the branch, never inside it.
+        expect(settings).toMatch(/\{protectionLoading \? \([\s\S]*?\{!waysBack && protectionPanel\}\s*<\/>\s*\)\}\s*<>\s*\{\/\* On every phone\./);
+        const words = settings.indexOf('{/* On every phone.');
+        expect(settings.indexOf('{waysBack && !protectionLoading && protectionPanel}')).toBeGreaterThan(words);
+        expect(settings).toMatch(/const waysBack = hasVault\(\);\s*const protectionPanel = \(\s*<KeeperProtectionPanel\s+colors=\{colors\}[\s\S]*?waysBack=\{waysBack\}[\s\S]*?\/>\s*\);/);
     });
 
     it('a Stop or "Yes, it\'s me" that came too late gets a final answer in the app\'s words, never "try again later"', async () => {

@@ -11,6 +11,12 @@ vi.mock('react-native', () => ({
     TouchableOpacity: 'TouchableOpacity',
 }));
 
+// "Who can open it ›" keeps its own open/closed state (a hook, which this hand-made renderer can't run): drawn here as
+// a host with its label, and what it opens drawn as if open. onboarding-components-words-render.test.ts presses the real one.
+vi.mock('../../components/WhoCanOpen', () => ({
+    WhoCanOpen: (props: { label: string; children: unknown }) => React.createElement('WhoCanOpen', { label: props.label }, props.children),
+}));
+
 // The provider buttons draw SVG logos; only their titles matter here.
 vi.mock('../../components/SsoButton', () => {
     const button = (name: string) => (props: { title: string; onPress: () => void }) =>
@@ -23,7 +29,7 @@ vi.mock('../../components/SsoButton', () => {
 });
 
 import {
-    KeeperProtectionPanel, VAULT_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SSO_GROUP_NOTE,
+    KeeperProtectionPanel, VAULT_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, SIGN_IN_ROW,
 } from '../../components/KeeperProtectionPanel';
 import { noVault, useVault } from './fake-vault';
 
@@ -81,8 +87,8 @@ const COVERED = protectionFrom({
     enrolledSso: ['facebook'], threshold: 1, isSingleBlob: true,
 });
 
-function panel(protection: typeof WORDS_ONLY, hasWords: boolean, onProtectSso = vi.fn()) {
-    return render(React.createElement(KeeperProtectionPanel, { protection, hasWords, onProtectSso, onDisconnectSso: vi.fn() }));
+function panel(protection: typeof WORDS_ONLY, hasWords: boolean, onProtectSso = vi.fn(), waysBack = false) {
+    return render(React.createElement(KeeperProtectionPanel, { protection, hasWords, onProtectSso, onDisconnectSso: vi.fn(), waysBack }));
 }
 
 describe('what a phone with no 12 words is told', () => {
@@ -131,7 +137,9 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         expect(text).toContain('Facebook Connected');
         expect(text).not.toMatch(/12 words|written down/i);
         // Was "It only works while your hub is running.": the copy is at BeanPool's key vault now (V4), not with a hub.
-        expect(text).toContain(SSO_GROUP_NOTE);
+        // Was SSO_GROUP_NOTE: VR0's sign-in row says where the copy is, and that it holds the key alone on this phone.
+        expect(text).toContain(`${SIGN_IN_ROW.vaultKeepsKey} ${SIGN_IN_ROW.whoCanOpen}`);
+        expect(text).toContain(SIGN_IN_ROW.moreThanOne);
         expect(text).not.toMatch(/hub/i);
     });
 
@@ -143,9 +151,10 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         expect(text).toContain('🔑 Your 12 words are your primary recovery');
         expect(text).toContain('Your 12 words are your primary key to your account. Write them down safely.');
         // Was "…restores your account on a new phone. [note] It only works while your hub is running — so keep the words
-        // written down.": the hub sentence went with the copy moving to the key vault (V4); the words part stays.
-        expect(text).toContain(`${SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} Keep the words written down as well.`);
-        expect(SSO_GROUP_NOTE).toBe('Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.');
+        // written down.": the hub sentence went with the copy moving to the key vault (V4); the words part stays. Was
+        // SSO_GROUP_NOTE's two sentences: its second is the sign-in row's first now (VR0), so only the first is left here.
+        expect(text).toContain(`${SIGN_IN_ROW.moreThanOne} ${SSO_WORDS_NOTE} Keep the words written down as well.`);
+        expect(SIGN_IN_ROW.moreThanOne).toBe('Connect more than one, in case you lose one.');
         expect(SSO_WORDS_NOTE).toBe('A sign-in connected on this version of the app brings your 12 words back too. One connected on an earlier version brings back your account without them: tap Connect again to include them.');
         expect(text).not.toMatch(/does not hand your 12 words back/);
         expect(text).not.toContain(NO_WORDS_WAY_BACK);
@@ -228,9 +237,20 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
         expect(withoutWords).not.toContain(SIGN_IN_COPY_WORDS_ONLY);
     });
 
-    it('with no sign-in connected, nothing: there is no copy to talk about', () => {
-        expect(textOf(panel(WORDS_ONLY, true))).not.toContain(VAULT_COPY_OPENERS);
-        expect(textOf(panel(WORDS_ONLY, false))).not.toContain(VAULT_COPY_OPENERS);
+    // Was "with no sign-in connected, nothing: there is no copy to talk about" (not.toContain(VAULT_COPY_OPENERS)). Vault
+    // rethink VR0 (Marty, 27 Oct, pick 10) says where the copy goes and who can open it at the moment it is made, so
+    // before Protect with: under the row "A sign-in you link", which says how a linked sign-in works, one tap away and
+    // never on the page by itself. With no copy yet, nothing says one exists: no provider is drawn as connected.
+    it('with no sign-in connected: who can open a copy is one tap away under the row, before one is made', () => {
+        for (const hasWords of [true, false]) {
+            const tree = panel(WORDS_ONLY, hasWords);
+            const [who] = findAll(tree, 'WhoCanOpen');
+            expect(who.props.label).toBe(SIGN_IN_ROW.whoCanOpenButton);
+            expect(textOf([who])).toBe(hasWords ? `${VAULT_COPY_OPENERS} ${SIGN_IN_COPY_WORDS_ONLY}` : VAULT_COPY_OPENERS);
+            const text = textOf(tree);
+            expect(text.indexOf(SIGN_IN_ROW.title)).toBeLessThan(text.indexOf(VAULT_COPY_OPENERS));
+            expect(text).not.toMatch(/Connected/);
+        }
     });
 
     it('covered with one sign-in: the footnote no longer says the server cannot open it alone', () => {
@@ -243,6 +263,92 @@ describe('KeeperProtectionPanel: who can open a sign-in copy', () => {
         expect(text).toContain("Protected by your sign-in account, in every community. It brings your account back on a new phone: it takes a day, or less if another phone of yours says it's you, and your other phones are told so they can stop it.");
         expect(text).not.toMatch(/community's server/);
         expect(text).not.toMatch(/computer/);
+    });
+});
+
+// Vault rethink VR0 (DESIGN-vault-rethink-fable.md §4.5, §7; Marty, 27 Oct, picks 10 and 14): where the copy goes is said
+// on the panel itself, before Protect with is tapped, at Safety Backup (both doors) and in Account Protection.
+describe('KeeperProtectionPanel, VR0: the sign-in row names the key vault where the copy is made', () => {
+    it('the sentences, word for word', () => {
+        expect(SIGN_IN_ROW).toEqual({
+            title: 'A sign-in you link',
+            bringsBack: 'Google or Facebook brings your account back on a new phone.',
+            bringsBackIos: 'Google, Apple or Facebook brings your account back on a new phone.',
+            vaultKeeps: "BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it.",
+            vaultKeepsKey: "BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key for it.",
+            whoCanOpen: 'The people who look after the vault can open that copy, and so can anyone who gets into your sign-in account.',
+            wait: "It takes a day, or less if another phone of yours says it's you.",
+            moreThanOne: 'Connect more than one, in case you lose one.',
+            whoCanOpenButton: 'Who can open it',
+        });
+    });
+
+    it('before any sign-in (the invite door): the row, all four sentences, above the Protect with buttons', () => {
+        const tree = panel(WORDS_ONLY, true);
+        const text = textOf(tree);
+        const row = `${SIGN_IN_ROW.bringsBack} ${SIGN_IN_ROW.vaultKeeps} ${SIGN_IN_ROW.whoCanOpen} ${SIGN_IN_ROW.wait}`;
+        expect(text.split('\n')).toContain(row);
+        expect(text.indexOf(SIGN_IN_ROW.title)).toBeLessThan(text.indexOf(row));
+        expect(text.indexOf(row)).toBeLessThan(text.indexOf('Protect with Google'));
+        // The row's heading is a header, as the panel's own heading is.
+        const title = findAll(tree, 'Text').find(n => n.children.join('') === SIGN_IN_ROW.title);
+        expect(title?.props.accessibilityRole).toBe('header');
+        // Apple only where it is offered.
+        expect(text).not.toContain('Apple');
+    });
+
+    it('on an iPhone the row names Apple, which it offers', async () => {
+        const rn = await import('react-native');
+        const was = rn.Platform.OS;
+        (rn.Platform as { OS: string }).OS = 'ios';
+        try {
+            const text = textOf(panel(WORDS_ONLY, true));
+            expect(text).toContain(`${SIGN_IN_ROW.bringsBackIos} ${SIGN_IN_ROW.vaultKeeps}`);
+            expect(text).toContain('Protect with Apple');
+        } finally {
+            (rn.Platform as { OS: string }).OS = was;
+        }
+    });
+
+    it('a phone with no 12 words: the copy holds the key alone, and the row says so', () => {
+        const text = textOf(panel(WORDS_ONLY, false));
+        expect(text.split('\n')).toContain(`${SIGN_IN_ROW.bringsBack} ${SIGN_IN_ROW.vaultKeepsKey} ${SIGN_IN_ROW.whoCanOpen} ${SIGN_IN_ROW.wait}`);
+        expect(text).not.toContain(SIGN_IN_ROW.vaultKeeps);
+    });
+
+    it('covered (the global door, joined with a sign-in): the footnote says it brings the account back and waits a day, the row the vault and who', () => {
+        const text = textOf(panel(COVERED, true));
+        expect(text.split('\n')).toContain(`${SIGN_IN_ROW.vaultKeeps} ${SIGN_IN_ROW.whoCanOpen}`);
+        expect(text).not.toContain(SIGN_IN_ROW.bringsBack);
+        expect(text).not.toContain(SIGN_IN_ROW.wait);
+        expect(text.indexOf('Protected by your sign-in account')).toBeLessThan(text.indexOf(SIGN_IN_ROW.vaultKeeps));
+        expect(text.indexOf(SIGN_IN_ROW.vaultKeeps)).toBeLessThan(text.indexOf('Facebook Connected'));
+    });
+
+    it("an account a claim made: none of it (its copy is at its community, never the vault's)", () => {
+        for (const protection of [WORDS_ONLY, COVERED]) {
+            const tree = render(React.createElement(KeeperProtectionPanel, {
+                protection, hasWords: true, copyAt: 'community', communityName: 'Valley Hub', onProtectSso: vi.fn(),
+            }));
+            const text = textOf(tree);
+            for (const line of Object.values(SIGN_IN_ROW)) expect(text).not.toContain(line);
+            expect(findAll(tree, 'WhoCanOpen')).toEqual([]);
+        }
+    });
+
+    it('Account Protection (waysBack), words on the phone, no sign-in yet: the sign-in row alone, the words being the row above', () => {
+        const text = textOf(panel(WORDS_ONLY, true, vi.fn(), true));
+        expect(text).not.toContain('Your 12 words are your primary recovery');
+        expect(text).not.toContain('Your 12 words are your primary key to your account');
+        expect(text.split('\n')[0]).toBe(SIGN_IN_ROW.title);
+        expect(text).toContain(SIGN_IN_ROW.vaultKeeps);
+        expect(text).toContain('Protect with Google');
+    });
+
+    it('waysBack changes nothing else: covered, and a phone with no 12 words, read as at Safety Backup', () => {
+        expect(textOf(panel(COVERED, true, vi.fn(), true))).toBe(textOf(panel(COVERED, true)));
+        expect(textOf(panel(WORDS_ONLY, false, vi.fn(), true))).toBe(textOf(panel(WORDS_ONLY, false)));
+        expect(textOf(panel(WORDS_ONLY, false, vi.fn(), true))).toContain(NO_WORDS_WAY_BACK);
     });
 });
 

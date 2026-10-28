@@ -740,6 +740,9 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
 /** Why an offboarding is refused where the community votes and has not voted to remove the member (removalToSettle). */
 export const OFFBOARD_SETTLES_A_REMOVAL = "Offboarding settles a removal the community voted for, in its 7-day grace window, "
     + "and no removal of this member has passed. Removing a member is the community's vote here: pause them instead, and that opens the vote.";
+/** The same refusal for an owner or an admin, whom no vote removes (state-engine REMOVAL_OF_A_ROLE_HOLDER; review 4397436971). */
+export const OFFBOARD_A_ROLE_HOLDER = "Offboarding settles a removal the community voted for, in its 7-day grace window, "
+    + "and no vote removes an owner or admin of this community's server. An owner can take that role away first; after that, they are a member like any other, and pausing them opens the vote.";
 
 /**
  * The removal this offboarding settles (removal by vote S3: scratch/fable-design/DESIGN-removal-by-vote-fable.md §2 row 5,
@@ -752,7 +755,7 @@ export function removalToSettle(publicKey: string): { id: string; gracePeriodEnd
     if (!getProfileSwitches().decisions) return null;
     const removal = removalInGraceOf(publicKey);
     if (removal) return removal;
-    const err: any = new Error(OFFBOARD_SETTLES_A_REMOVAL);
+    const err: any = new Error(heldPrivilegedRole(publicKey) ? OFFBOARD_A_ROLE_HOLDER : OFFBOARD_SETTLES_A_REMOVAL);
     err.status = 400;
     err.statusCode = 400;
     err.code = REMOVAL_IS_THE_VOTE_CODE;

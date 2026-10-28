@@ -821,11 +821,14 @@ export function MemberDetailModal({
                             )}
                         </div>
                     )}
+                    {/* No vote removes an owner or an admin (the server's §3.8 refusal): suspending one only parks them until its vote closes. */}
                     {removalIsTheVote && (
                         <p className="m-0 text-[11px] text-nature-400" data-testid="removal-is-the-vote">
                             {doors?.settlesRemoval
                                 ? "Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now."
-                                : "Removing a member is the community's vote here. Suspending them opens it."}
+                                : currentRole === 'owner' || currentRole === 'admin'
+                                    ? "Removing a member is the community's vote here, and no vote removes an owner or admin. An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote."
+                                    : "Removing a member is the community's vote here. Suspending them opens it."}
                         </p>
                     )}
                     <FreshProofBox proof={pruneProof} testId="prune-proof" />

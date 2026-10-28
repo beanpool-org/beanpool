@@ -8575,6 +8575,13 @@ export function pruneNeedsOwner(publicKey: string, actor: string): boolean {
  * pause that opens it. The operator's own words, to the owners and admins (routes/admin.ts, the manager).
  */
 export const REMOVAL_IS_THE_VOTE = "Removing a member is the community's vote here. Pause them instead: that opens the vote, and the community decides.";
+/**
+ * The same refusal for an owner or an admin (heldPrivilegedRole, a role a pause holds aside included). No vote removes one
+ * (decisions-engine NODE_OPERATOR_EFFECTS, docs/the-commons.md §3.8), so a pause would only park them until its vote closes:
+ * an owner takes the role away first, and then they are a member like any other (design §2 row 9; review 4397436971).
+ */
+export const REMOVAL_OF_A_ROLE_HOLDER = "Removing a member is the community's vote here, and no vote removes an owner or admin of this community's server. "
+    + 'An owner can take that role away first; after that, they are a member like any other, and pausing them opens the vote.';
 /** The `code` a refusal of a removal or an offboarding answers with where the community votes. */
 export const REMOVAL_IS_THE_VOTE_CODE = 'removal_is_the_vote';
 
@@ -8614,7 +8621,7 @@ export function removalVoteRefusal(publicKey: string, actor: string, door: Prune
     if (!isMemberKeySpelling(publicKey)) return null;
     if (door === 'owner-branch' && isOwnerLevelActor(actor)) return null;
     if (door === 'settles-removal' && removalInGraceOf(publicKey)) return null;
-    return REMOVAL_IS_THE_VOTE;
+    return heldPrivilegedRole(publicKey) ? REMOVAL_OF_A_ROLE_HOLDER : REMOVAL_IS_THE_VOTE;
 }
 
 /**

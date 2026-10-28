@@ -7,12 +7,13 @@
  * admin's key session, an owner's, and the password with a 2FA code.
  *
  *  1. Prune, votes on: an admin's key, the password and an owner's key are each refused 400 in words that say what to do
- *     instead (pause them; the community's vote decides), an owner's of another owner before any fresh proof is asked.
+ *     instead (pause them; the community's vote decides), an owner's of another owner before any fresh proof is asked. For
+ *     an owner or an admin the words say no vote removes one, and that an owner takes the role away first (§3.8).
  *     Nothing changes: the member stays active and no Bean moves. The engine refuses underneath, whatever route reaches
  *     it (adminPruneUser by an admin, an owner, the password: a burst's removal included).
  *  2. Offboard, votes on: refused outside a removal the community voted for (400 in words; an owner's before any fresh
- *     proof is asked; the engine underneath in the same words), and its preview too, which then logs no look at the
- *     member's balance. Inside one's grace window (Hal, paused, the vote passed): the preview
+ *     proof is asked, in the words for an owner or admin; the engine underneath in the same words), and its preview too,
+ *     which then logs no look at the member's balance. Inside one's grace window (Hal, paused, the vote passed): the preview
  *     answers and names the removal, and the offboarding settles Hal's Beans exactly as chosen (a gift to Gil), completes
  *     the removal now as Accelerate does (the Decision executed, Hal removed) and moves nothing else. The owners are not
  *     told an admin removed someone: the community did.
@@ -201,18 +202,32 @@ async function main() {
     console.log('── 1. Prune ──');
     const pam = seedMember('PlainPam');
     const accountsBefore = accountsNow();
+    const pamWords: string[] = [];
     for (const [who, session] of [['an admin', adaSession], ['the password', password()], ['an owner', gwenSession]] as const) {
         fresh();
         const r = await admin('POST', `/api/local/admin/users/${pam.pubKeyHex}/prune`, session, {});
+        pamWords.push(r.body?.error ?? '');
         assert(r.status === 400 && r.body?.code === 'removal_is_the_vote' && SAYS_VOTE.test(r.body?.error ?? '') && SAYS_PAUSE.test(r.body?.error ?? ''),
             `${who} pruning Pam is refused 400, in words that say to pause her and let the community's vote decide (${r.status} ${r.text.slice(0, 200)})`);
     }
+    assert(pamWords.every((w) => w === se.REMOVAL_IS_THE_VOTE), `Pam holds no role, so the words are the plain ones: pause her, and the vote decides (${pamWords[0]})`);
     assert(statusOf(pam) === 'active' && accountsNow() === accountsBefore, `Pam is still active and no Bean moved (${statusOf(pam)})`);
     fresh();
     const ownerOnOwner = await admin('POST', `/api/local/admin/users/${otto.pubKeyHex}/prune`, gwenSession, {});
     assert(ownerOnOwner.status === 400 && ownerOnOwner.body?.code === 'removal_is_the_vote',
         `an owner pruning another owner is refused the same way, before any fresh proof is asked (${ownerOnOwner.status} ${ownerOnOwner.text.slice(0, 160)})`);
     assert(statusOf(otto) === 'active', 'and Otto is still an owner, active');
+    // No vote removes an owner or an admin (decisions-engine §3.8): a pause would only park them until its vote closes, so
+    // the words say what does work instead, an owner taking the role away first (review 4397436971).
+    const SAYS_ROLE_AWAY = (w: string) => w === se.REMOVAL_OF_A_ROLE_HOLDER && /no vote removes an owner or admin/i.test(w) && /take that role away first/i.test(w);
+    assert(SAYS_ROLE_AWAY(ownerOnOwner.body?.error ?? ''),
+        `the words for Otto, an owner, say no vote removes an owner or admin and that an owner takes the role away first (${ownerOnOwner.body?.error})`);
+    fresh();
+    const ownerOnAdmin = await admin('POST', `/api/local/admin/users/${ada.pubKeyHex}/prune`, gwenSession, {});
+    assert(ownerOnAdmin.status === 400 && ownerOnAdmin.body?.code === 'removal_is_the_vote' && SAYS_ROLE_AWAY(ownerOnAdmin.body?.error ?? '') && statusOf(ada) === 'active',
+        `and an owner pruning Ada, an admin, is told the same, and Ada is untouched (${ownerOnAdmin.status} ${ownerOnAdmin.text.slice(0, 160)})`);
+    const engineOnOwner = refusalOf(() => se.adminPruneUser(otto.pubKeyHex, gen.pubKeyHex));
+    assert(engineOnOwner.status === 400 && SAYS_ROLE_AWAY(engineOnOwner.message), `the engine says it too (${engineOnOwner.status}: ${engineOnOwner.message.slice(0, 80)})`);
     // The engine refuses underneath, whatever route reaches it.
     for (const [who, actor] of [['an admin', ada.pubKeyHex], ['the password', 'owner:password'], ['an owner', gen.pubKeyHex]] as const) {
         const refused = refusalOf(() => se.adminPruneUser(pam.pubKeyHex, actor));
@@ -240,9 +255,14 @@ async function main() {
     const ottoOff = await admin('POST', `/api/local/admin/members/${otto.pubKeyHex}/offboard`, gwenSession, { resolution: 'donate_to_commons' });
     assert(ottoOff.status === 400 && ottoOff.body?.code === 'removal_is_the_vote' && statusOf(otto) === 'active',
         `offboarding an owner is refused the same way, before any fresh proof is asked (${ottoOff.status} ${ottoOff.text.slice(0, 160)})`);
+    assert(/^Offboarding settles a removal the community voted for/.test(ottoOff.body?.error ?? '') && /no vote removes an owner or admin/i.test(ottoOff.body?.error ?? '')
+        && /take that role away first/i.test(ottoOff.body?.error ?? '') && !/no removal of this member has passed/.test(ottoOff.body?.error ?? ''),
+        `in words that say no vote removes an owner or admin, and that an owner takes the role away first (${ottoOff.body?.error})`);
     const engineOff = refusalOf(() => executeOffboard(olly.pubKeyHex, { resolution: 'donate_to_commons' }, ada.pubKeyHex));
     assert(engineOff.status === 400 && /^Offboarding settles a removal the community voted for/.test(engineOff.message) && statusOf(olly) === 'active',
         `the offboarding engine refuses underneath, in the same words (${engineOff.status}: ${engineOff.message.slice(0, 80)})`);
+    assert(/no removal of this member has passed/.test(engineOff.message) && SAYS_PAUSE.test(engineOff.message) && !/owner or admin/.test(engineOff.message),
+        `Olly holds no role: the words say no removal of him has passed, and to pause him (${engineOff.message})`);
 
     const hal = seedMember('HalfwayHal', gen.pubKeyHex, 37.5);
     const halVote = await pause(hal);

@@ -563,6 +563,23 @@ describe('MemberDetailModal', () => {
             expect(screen.getByText('⏸️ Suspend')).toBeInTheDocument();
         });
 
+        // No vote removes an owner or an admin (the server's §3.8 refusal): suspending one only parks them until its vote closes,
+        // so the note says what does work instead (review 4397436971).
+        it('for an owner or an admin, says no vote removes one and that an owner takes the role away first', async () => {
+            for (const role of ['owner', 'admin'] as const) {
+                const { unmount } = draw({ nodeRole: role });
+                const note = await screen.findByTestId('removal-is-the-vote');
+                expect(note).toHaveTextContent(/no vote removes an owner or admin/);
+                expect(note).toHaveTextContent(/An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote\.$/);
+                unmount();
+            }
+        });
+
+        it('for a moderator, a member with a job whom a vote can remove, the suspension opens the vote', async () => {
+            draw({ nodeRole: 'moderator' });
+            expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+        });
+
         it('offers Offboard inside a removal the community voted for, and still no Prune', async () => {
             vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([removalInGrace(KEY)]);
             draw();

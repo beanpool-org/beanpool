@@ -301,8 +301,12 @@ export function homePreferenceWrites(publicKey: string, preferences: Record<stri
     return writes;
 }
 
+export function hasSawLedger(publicKey: string): boolean {
+    return storedValue(publicKey, SAW_LEDGER_PREF_KEY) === 'true';
+}
+
 /** A member's Home keys as served: each one saved, through the checks; the interests with the node's stamp for them. */
-export type OwnHomePreferences = { 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string; tour?: TourRecord };
+export type OwnHomePreferences = { 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string; tour?: TourRecord; saw_ledger?: boolean };
 
 /** The Home keys this member has, through the checks, for their own read: a key never saved (or unreadable) is absent. */
 export function ownHomePreferences(publicKey: string): OwnHomePreferences {
@@ -316,6 +320,7 @@ export function ownHomePreferences(publicKey: string): OwnHomePreferences {
     }
     const tour = getTourRecord(publicKey);
     if (tour) out.tour = tour;
+    if (hasSawLedger(publicKey)) out[SAW_LEDGER_PREF_KEY] = true;
     return out;
 }
 
@@ -333,5 +338,8 @@ export function homePreferencesNamed(publicKey: string, preferences: unknown): O
         out.interestsUpdatedAt = own.interestsUpdatedAt;
     }
     if (Object.prototype.hasOwnProperty.call(preferences, TOUR_PREF_KEY) && own.tour) out.tour = own.tour;
+    if (Object.prototype.hasOwnProperty.call(preferences, SAW_LEDGER_PREF_KEY) && own[SAW_LEDGER_PREF_KEY]) {
+        out[SAW_LEDGER_PREF_KEY] = own[SAW_LEDGER_PREF_KEY];
+    }
     return out;
 }

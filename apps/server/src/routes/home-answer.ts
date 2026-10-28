@@ -83,7 +83,8 @@ import { actionableKnockCount, actionableKnocksWaitingDays } from '../engine/kno
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
-import { getInterestsUpdatedAt, getTourRecord } from '../engine/home-preferences.js';
+import { getInterestsUpdatedAt, getTourRecord, hasSawLedger } from '../engine/home-preferences.js';
+import { standbyWritesNothing } from '../config/node-role.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
 import { publicRepeatPattern } from '../engine/event-series-roll.js';
@@ -694,16 +695,6 @@ function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
             EXISTS(SELECT 1 FROM posts WHERE author_pubkey = ? AND type IN ('offer', 'need') AND origin_node IS NULL) AS post,
             EXISTS(SELECT 1 FROM invite_codes WHERE created_by = ?) AS invited`).get(me, me) as { post: number; invited: number };
 
-    // Facts from the node's tables (L3, §3.2)
-    const saidHelloRaw = !!(db.prepare(`SELECT (
-            EXISTS(SELECT 1 FROM messages WHERE author_pubkey = ?) OR
-            EXISTS(SELECT 1 FROM dm_requests WHERE from_pubkey = ?)
-        ) AS said`).get(me, me) as { said: number })?.said;
-    const watchRaw = !!(db.prepare(`SELECT EXISTS(SELECT 1 FROM place_watches WHERE pubkey = ?) AS watched`).get(me) as { watched: number })?.watched;
-    const tourRecord = getTourRecord(me);
-    const sawLedgerPref = db.prepare(`SELECT 1 FROM member_preferences WHERE public_key = ? AND pref_key = 'saw_ledger' AND pref_value = 'true'`).get(me) !== undefined;
-    const sawLedgerRaw = tourRecord?.state === 'done' || sawLedgerPref;
-
     // A done step never un-ticks (L3, §6): persisted in member_preferences under 'step_<key>'
     const donePrefs = new Set(
         (db.prepare(`SELECT pref_key FROM member_preferences WHERE public_key = ? AND pref_key LIKE 'step_%' AND pref_value = 'true'`).all(me) as { pref_key: string }[])
@@ -712,17 +703,38 @@ function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
     const isArea = !!readMemberArea(me) || donePrefs.has('step_area');
     const isPhoto = !!row?.avatarUrl || donePrefs.has('step_photo');
     const isPost = !!mine.post || donePrefs.has('step_post');
-    const isHello = saidHelloRaw || donePrefs.has('step_hello');
-    const isWatch = watchRaw || donePrefs.has('step_watch');
-    const isLedger = sawLedgerRaw || donePrefs.has('step_ledger');
 
-    const savePref = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, 'true')`);
-    if (isArea && !donePrefs.has('step_area')) savePref.run(me, 'step_area');
-    if (isPhoto && !donePrefs.has('step_photo')) savePref.run(me, 'step_photo');
-    if (isPost && !donePrefs.has('step_post')) savePref.run(me, 'step_post');
-    if (isHello && !donePrefs.has('step_hello')) savePref.run(me, 'step_hello');
-    if (isWatch && !donePrefs.has('step_watch')) savePref.run(me, 'step_watch');
-    if (isLedger && !donePrefs.has('step_ledger')) savePref.run(me, 'step_ledger');
+    let isHello = false;
+    let isWatch = false;
+    let isLedger = false;
+
+    // Facts from the node's tables (L3, §3.2) — evaluated only for global node and only if not already done
+    if (c.switches.guestListingsOnly) {
+        isHello = donePrefs.has('step_hello') || !!(db.prepare(`SELECT (
+                EXISTS(SELECT 1 FROM messages WHERE author_pubkey = ?) OR
+                EXISTS(SELECT 1 FROM dm_requests WHERE from_pubkey = ?)
+            ) AS said`).get(me, me) as { said: number })?.said;
+        isWatch = donePrefs.has('step_watch') || !!(db.prepare(`SELECT EXISTS(SELECT 1 FROM place_watches WHERE pubkey = ?) AS watched`).get(me) as { watched: number })?.watched;
+        isLedger = donePrefs.has('step_ledger') || getTourRecord(me)?.state === 'done' || hasSawLedger(me);
+    }
+
+    if (!standbyWritesNothing() && c.switches.guestListingsOnly) {
+        const toSave: string[] = [];
+        if (isArea && !donePrefs.has('step_area')) toSave.push('step_area');
+        if (isPhoto && !donePrefs.has('step_photo')) toSave.push('step_photo');
+        if (isPost && !donePrefs.has('step_post')) toSave.push('step_post');
+        if (isHello && !donePrefs.has('step_hello')) toSave.push('step_hello');
+        if (isWatch && !donePrefs.has('step_watch')) toSave.push('step_watch');
+        if (isLedger && !donePrefs.has('step_ledger')) toSave.push('step_ledger');
+
+        if (toSave.length > 0) {
+            db.transaction(() => {
+                const savePref = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, 'true')`);
+                for (const key of toSave) savePref.run(me, key);
+                db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(me);
+            })();
+        }
+    }
 
     const steps = {
         joinedAt: row?.joinedAt ?? null,

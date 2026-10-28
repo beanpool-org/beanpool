@@ -2205,6 +2205,8 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_conversation_participants_pubkey ON conversation_participants(public_key)`).run(); } catch { }
     // Perf: Add index to marketplace_transactions for status and completed_at (PR 26 review fix)
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_status_completed ON marketplace_transactions(status, completed_at)`).run(); } catch { }
+    // Perf: Add index to messages for author_pubkey
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_messages_author_pubkey ON messages(author_pubkey)`).run(); } catch { }
 
     // Dropped, not replaced. `idx_creator_channels_syndicate(syndicate_to_node, category)` led on a
     // two-valued column and matched no query that ships: the only read of syndicate_to_node is

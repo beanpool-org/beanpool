@@ -17,7 +17,7 @@
 export function emitAppEvent(name: string, payload?: unknown): void {
     try {
         const { DeviceEventEmitter } = require('react-native');
-        DeviceEventEmitter.emit(name, payload);
+        DeviceEventEmitter?.emit?.(name, payload);
     } catch {
         // Not in a React Native runtime (vitest, a script) — nothing is listening anyway.
     }

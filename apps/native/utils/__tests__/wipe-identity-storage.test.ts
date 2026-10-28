@@ -78,6 +78,11 @@ describe('wipeIdentityScopedStorage', () => {
             // pins: restored here, that DM is still judged on what the phone held at the update (§3.4 amendment 5).
             [`beanpool_dm_lines_at_update:${'ab'.repeat(32)}:beanpool_test.beanpool.org.db`]: JSON.stringify({ d1: [] }),
             [`beanpool_dm_lines_at_update:${'ab'.repeat(32)}:community_castlemaine.db`]: JSON.stringify({}),
+            // The message requests each community's node last listed for the account (db.ts saveMessageRequests): who wrote
+            // to it, each stranger's name and picture, and the chat's id. A copy the next sync replaces: it goes with the
+            // account, in every community (PR #2540 review 4394671101).
+            [`beanpool_message_requests:${'ab'.repeat(32)}:beanpool_test.beanpool.org.db`]: JSON.stringify([{ id: 'r1', peerCallsign: 'Kofi', peerAvatar: 'bundled://koala', participants: ['ab'.repeat(32), 'cd'.repeat(32)] }]),
+            [`beanpool_message_requests:${'ab'.repeat(32)}:community_castlemaine.db`]: JSON.stringify([]),
             // The leave statements not yet confirmed (push-leave.ts), and the phone's push stamp: they are how the
             // leaving account's alerts stop where the phone had no connection as it left, so they outlive the wipe.
             beanpool_push_leave_statements: JSON.stringify([{ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32) }]),

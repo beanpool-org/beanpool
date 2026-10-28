@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, front doors S15: the community card)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -784,5 +784,20 @@
   "Start a project or an enterprise →": "Iniciar un proyecto o emprendimiento →",
   "Social Circle": "Círculo social",
   "Working Group": "Grupo de trabajo",
-  "Guild": "Gremio"
+  "Guild": "Gremio",
+  "A BeanPool community": "Una comunidad de BeanPool",
+  "{n} member|{n} members": {
+    "one": "{n} miembro",
+    "other": "{n} miembros"
+  },
+  "{area}, within about {km} km": "{area}, en unos {km} km a la redonda",
+  "Takes requests to join": "Acepta solicitudes para unirse",
+  "Anyone can join": "Cualquiera puede unirse",
+  "Takes new members by invite": "Admite nuevos miembros por invitación",
+  "You join the global community first, then ask {name} from there.": "Primero te unes a la comunidad global y, desde allí, pides unirte a {name}.",
+  "Ask to join from the BeanPool app.": "Pide unirte desde la app de BeanPool.",
+  "Join\u0004button: join a community anyone may join": "Unirse",
+  "I have an invite": "Tengo una invitación",
+  "Already a member": "Ya soy miembro",
+  "🌍 Look around the global community": "🌍 Echa un vistazo a la comunidad global"
 }

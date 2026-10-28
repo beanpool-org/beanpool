@@ -312,7 +312,7 @@ const styleOf = (el: Element | null) => JSON.parse(el?.getAttribute('data-style'
  * Every keeper action the enterprise page had before the console (app/treasury-detail.tsx at f6104d01), each with the
  * view of the enterprise it shows for and how a member finds it: its spoken name, or its words on a button.
  */
-type View = 'lead' | 'paused' | 'windingUp' | 'quietProject' | 'quietProjectVote';
+type View = 'lead' | 'paused' | 'windingUp' | 'leadProject' | 'quietProject' | 'quietProjectVote';
 const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string; testID?: string }> = [
     { what: "approve a member's request to keep it", view: 'lead', label: 'Approve keeper request' },
     { what: "decline a member's request to keep it", view: 'lead', label: 'Decline keeper request' },
@@ -335,7 +335,7 @@ const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string
     { what: 'stop the wind-up', view: 'windingUp', label: 'Stop Wind-Up' },
     { what: 'finalise the wind-up', view: 'windingUp', label: 'Finalise Wind-Up' },
     { what: 'propose a new leader while the leader is quiet', view: 'quietProject', label: 'Propose Active Collaborator as Leader' },
-    { what: 'cancel an initiative and refund its backers', view: 'quietProject', label: 'Cancel initiative and refund escrow' },
+    { what: 'cancel an initiative and refund its backers', view: 'leadProject', label: 'Cancel initiative and refund escrow' },
     { what: 'vote yes on a new leader', view: 'quietProjectVote', label: 'Yes, make Zoe leader' },
     { what: 'vote no on a new leader', view: 'quietProjectVote', label: 'No, do not make Zoe leader' },
 ];
@@ -344,6 +344,8 @@ const VIEWS: Record<View, () => Record<string, unknown>> = {
     lead: () => leadsView(),
     paused: () => leadsView({ paused: true, pausedAt: iso(now - 5 * DAY) }),
     windingUp: () => leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpGraceEndsAt: iso(now - 3600_000) }),
+    // A project its leader reads: its cancel is theirs alone, as the node takes it (apps/server db.ts leadsProject).
+    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120 }),
     quietProject: () => quietProject(),
     quietProjectVote: () => quietProject({ succession: { proposals: [PROPOSAL] } }),
 };
@@ -401,6 +403,18 @@ for (const dark of [false, true]) {
                 expect(byId('manage-screen'), view).not.toBeNull();
                 for (const a of ACTIONS.filter((x) => x.view === view)) expect(found(a), `${a.what}, in the console (${view})`).not.toBeNull();
             }
+        });
+
+        it("a project's cancel is its leader's: a collaborator who doesn't lead it reads none, for the node refuses theirs", async () => {
+            net.answer = community({ getTreasuryDetail: quietProject() });
+            await render('console');
+            expect(byId('manage-screen')).not.toBeNull();
+            // Drawn: what this collaborator can do there is.
+            expect(byLabel('Propose Active Collaborator as Leader')).not.toBeNull();
+            expect(byLabel('Cancel initiative and refund escrow')).toBeNull();
+            net.answer = community({ getTreasuryDetail: VIEWS.leadProject() });
+            await render('console');
+            expect(byLabel('Cancel initiative and refund escrow')).not.toBeNull();
         });
 
         it('a release by the hour asks the hours; a candidate is picked from the keepers', async () => {

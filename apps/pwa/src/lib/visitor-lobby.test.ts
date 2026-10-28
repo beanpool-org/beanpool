@@ -3,7 +3,10 @@
  * (G9b follow-up, 4112421730): one key, one use, only the post's id, and nothing once it is stale.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { keepLinkedPost, takeKeptLinkedPost, LINKED_POST_KEPT_MS, LINKED_POST_STORAGE_KEY } from './visitor-lobby';
+import {
+    keepLinkedPost, takeKeptLinkedPost, LINKED_POST_KEPT_MS, LINKED_POST_STORAGE_KEY,
+    keepAskedCommunity, takeKeptAskedCommunity, takeAskParam, ASKED_COMMUNITY_STORAGE_KEY,
+} from './visitor-lobby';
 
 const T0 = Date.UTC(2026, 8, 27, 10, 0, 0);
 
@@ -64,5 +67,56 @@ describe('the listing kept across a join', () => {
         expect(refusing.setItem).toHaveBeenCalled();
         expect(takeKeptLinkedPost(T0 + 1)).toBeNull();
         expect(refusing.getItem).toHaveBeenCalled();
+    });
+});
+
+describe('the community a stranger came to ask to join (?ask=, front doors S15)', () => {
+    const page = (search: string) => {
+        const replaced: string[] = [];
+        const win = {
+            location: { search, pathname: '/app', hash: '' } as Location,
+            history: { state: null, replaceState: (_s: unknown, _t: string, url: string) => { replaced.push(url); } } as unknown as History,
+        };
+        return { win, replaced };
+    };
+
+    it('?ask=<host> is read once and taken out of the address, the rest kept', () => {
+        const { win, replaced } = page('?lang=es&ask=Test.BeanPool.org');
+        expect(takeAskParam(win)).toBe('test.beanpool.org');
+        expect(replaced).toEqual(['/app?lang=es']);
+    });
+
+    it('an ask that is no host (a URL, a path, a script) opens nothing, and still leaves the address', () => {
+        for (const bad of ['https://test.beanpool.org/', 'test.beanpool.org/x', '<script>', '', 'a b']) {
+            const { win, replaced } = page(`?ask=${encodeURIComponent(bad)}`);
+            expect(takeAskParam(win)).toBeNull();
+            expect(replaced).toEqual(['/app']);
+        }
+        expect(takeAskParam(page('?post=p1').win)).toBeNull();
+    });
+
+    it('survives a sign-in round trip: kept in the lobby, handed back once after the join, then gone', () => {
+        keepAskedCommunity('test.beanpool.org', T0);
+        // The page leaves for the provider and comes back: only the tab's storage carries it.
+        expect(takeKeptAskedCommunity(T0 + 4 * 60_000)).toBe('test.beanpool.org');
+        expect(takeKeptAskedCommunity(T0 + 4 * 60_000)).toBeNull();
+        expect(sessionStorage.getItem(ASKED_COMMUNITY_STORAGE_KEY)).toBeNull();
+    });
+
+    it('holds the host and when, nothing else; never anything that is no host; nothing once stale', () => {
+        keepAskedCommunity('Mullum.beanpool.org:8443', T0);
+        expect(JSON.parse(sessionStorage.getItem(ASKED_COMMUNITY_STORAGE_KEY)!)).toEqual({ host: 'mullum.beanpool.org:8443', at: T0 });
+        expect(takeKeptAskedCommunity(T0 + LINKED_POST_KEPT_MS + 1)).toBeNull();
+        keepAskedCommunity('javascript:alert(1)', T0);
+        expect(sessionStorage.getItem(ASKED_COMMUNITY_STORAGE_KEY)).toBeNull();
+        sessionStorage.setItem(ASKED_COMMUNITY_STORAGE_KEY, JSON.stringify({ host: 'evil.example/path', at: T0 }));
+        expect(takeKeptAskedCommunity(T0 + 1)).toBeNull();
+    });
+
+    it('a browser whose storage refuses: nothing is thrown, and nothing opens', () => {
+        const refuse = () => { throw new DOMException('denied', 'SecurityError'); };
+        vi.stubGlobal('sessionStorage', { getItem: vi.fn(refuse), setItem: vi.fn(refuse), removeItem: vi.fn(refuse), clear: vi.fn(), key: vi.fn(), length: 0 });
+        expect(() => keepAskedCommunity('test.beanpool.org', T0)).not.toThrow();
+        expect(takeKeptAskedCommunity(T0 + 1)).toBeNull();
     });
 });

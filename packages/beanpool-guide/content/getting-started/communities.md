@@ -18,6 +18,17 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 
 Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**.
 
+## Visiting a community's address
+
+A community's own address (such as castlemaine.beanpool.org) shows its card to anyone who isn't a member: its name, how many members it has and its town or area if the community shares them, and whether it **Takes requests to join** or **Takes new members by invite**. Nothing else: no members' names, no listings, no balances, never an exact place. The website's map links each community's card with **See** and its name.
+
+- **Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you join the global community, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**
+- **I have an invite**: the form for your invite code.
+- **Already a member**: the ways back into your account.
+- **Look around the global community**: where the community links to one.
+
+In the app, a community's address opens its card too. On your own community's card, tap **Open** and its name. On another community's card, tap **Ask to join** and send a few words about yourself: the request goes to that community, as from **Find a community**. With an invite, tap **I have an invite**, then paste it under **Join Another Community**.
+
 ## Joining the global community from your account
 
 The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it when the global community is open and hasn't told the app that this account is already a member there.

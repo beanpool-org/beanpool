@@ -1839,7 +1839,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             </div>
                                         )}
 
-                                        {!isEffectivePreview && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
+                                        {/* Its leader's alone, as the node takes it (apps/server db.ts leadsProject): to any other collaborator it was a door the node refused. */}
+                                        {!isEffectivePreview && iAmLead && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
                                             <div className="pt-4 border-t border-emerald-500/20">
                                                 <button
                                                     type="button"

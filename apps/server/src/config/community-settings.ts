@@ -15,7 +15,8 @@
  *   schedule, the door (who may invite, config/door.ts), whether a confirmation against the names list needs two
  *   admins (engine/names-list.ts), and the listing promise's ticked lines and closing day (engine/directory-promise.ts). The baseline travels only where the main server has one (every main server writes one at its first
  *   boot): installing "none" would make the next audit accept whatever the ledger sums to, and hide a drift.
- * - The `node_config` row's object: the service area, the four directory switches and how often the directory is told.
+ * - The `node_config` row's object: the service area and the town or area its card names, the four directory switches and
+ *   how often the directory is told.
  *
  * Never: the admin password and two-factor (the take-over bundle brings those), the replication token, a standby's
  * main server and its pull settings, TLS, the node key, the identity epoch, the role. Every field is named here, and
@@ -43,7 +44,7 @@ import { getLocalConfig, updateLocalConfig, DEFAULT_THRESHOLDS, type LocalConfig
 import { getNodeConfig, updateNodeConfig, clearEnterpriseFloorCache, type NodeConfig } from '../state-engine.js';
 import { isAutoSnapshotInterval, restartScheduler, MAX_SNAPSHOTS_KEPT } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
-import { cleanLabel } from './clean-label.js';
+import { cleanLabel, AREA_NAME_MAX } from './clean-label.js';
 import { cleanStartCommunityUrl } from './start-community.js';
 import { cleanPromiseRow } from '../engine/directory-promise.js';
 import { REMOVED_GATEWAY_SWITCHES } from './gateway.js';
@@ -68,6 +69,7 @@ export const COMMUNITY_NODE_CONFIG_KEYS = [
 /** Fields of the `node_config` row's object that are the community's. */
 export const COMMUNITY_DIRECTORY_FIELDS = [
     'serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours',
+    'areaName',
 ] as const;
 
 /** Where a standby keeps its main server's record. */
@@ -121,6 +123,7 @@ export function readCommunitySettings(): SyncCommunitySettings {
             publishContactPhone: n.publishContactPhone === true,
             publishHealth: n.publishHealth !== false,
             directoryPushIntervalHours: n.directoryPushIntervalHours ?? DEFAULT_DIRECTORY_PUSH_INTERVAL_HOURS,
+            areaName: n.areaName ?? null,
         },
     };
 }
@@ -263,6 +266,8 @@ const DIRECTORY_CHECKS: Record<(typeof COMMUNITY_DIRECTORY_FIELDS)[number], Chec
     publishContactPhone: bool,
     publishHealth: bool,
     directoryPushIntervalHours: (v) => (isDirectoryPushInterval(v) || v === LEGACY_NEVER_INTERVAL ? v : BAD),
+    // The town or area a stranger's card names (routes/community-card.ts), as the node config route keeps it.
+    areaName: orNull(label(AREA_NAME_MAX)),
 };
 
 /**

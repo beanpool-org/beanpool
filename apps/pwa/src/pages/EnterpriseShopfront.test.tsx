@@ -462,7 +462,7 @@ describe('from one enterprise to another', () => {
  * Every keeper action the web page had before the console (TreasuryDetailPage.tsx at f6104d01), each with the view of the
  * enterprise it shows for and how a member finds it: its spoken name, or its words on a button.
  */
-type View = 'lead' | 'paused' | 'windingUp' | 'quietProject' | 'quietProjectVote';
+type View = 'lead' | 'paused' | 'windingUp' | 'leadProject' | 'quietProject' | 'quietProjectVote';
 const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string; testID?: string }> = [
     { what: "approve a member's request to keep it", view: 'lead', label: 'Approve Ivo as a keeper' },
     { what: "decline a member's request to keep it", view: 'lead', label: 'Decline Ivo as a keeper' },
@@ -485,7 +485,7 @@ const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string
     { what: 'stop the wind-up', view: 'windingUp', button: '🛑 Stop Wind-Up' },
     { what: 'finalise the wind-up', view: 'windingUp', button: '🏁 Finalise Wind-Up' },
     { what: 'propose a new leader while the leader is quiet', view: 'quietProject', button: 'Propose Leader' },
-    { what: 'cancel an initiative and refund its backers', view: 'quietProject', button: '🛑Cancel Initiative & Refund Escrow' },
+    { what: 'cancel an initiative and refund its backers', view: 'leadProject', button: '🛑Cancel Initiative & Refund Escrow' },
     { what: 'vote yes on a new leader', view: 'quietProjectVote', label: 'Yes, make Zoe leader' },
     { what: 'vote no on a new leader', view: 'quietProjectVote', label: 'No, do not make Zoe leader' },
 ];
@@ -493,6 +493,8 @@ const VIEWS: Record<View, () => Record<string, unknown>> = {
     lead: () => leadsView(),
     paused: () => leadsView({ paused: true, pausedAt: iso(now - 5 * DAY) }),
     windingUp: () => leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpInitiatedAt: iso(now - 8 * DAY), windUpGraceEndsAt: iso(now - 3600_000) }),
+    // A project its leader reads: its cancel is theirs alone, as the node takes it (apps/server db.ts leadsProject).
+    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120 }),
     quietProject: () => quietProject(),
     quietProjectVote: () => quietProject({ succession: { proposals: [PROPOSAL] } }),
 };
@@ -543,6 +545,19 @@ describe("the keepers' Manage tab", () => {
             });
             cleanup();
         }
+    });
+
+    it("a project's cancel is its leader's: a collaborator who doesn't lead it reads none, for the node refuses theirs", async () => {
+        const cancel = ACTIONS.find((a) => a.what === 'cancel an initiative and refund its backers')!;
+        await open({ detail: quietProject() });
+        const quiet = await manage();
+        await waitFor(() => expect(found(ACTIONS.find((a) => a.what === 'propose a new leader while the leader is quiet')!, quiet)).not.toBeNull());
+        expect(found(cancel, quiet)).toBeNull();
+        cleanup();
+
+        await open({ detail: VIEWS.leadProject() });
+        const led = await manage();
+        await waitFor(() => expect(found(cancel, led)).not.toBeNull());
     });
 
     it("its new Offer starts in its shop's category, which the keeper can still change", async () => {

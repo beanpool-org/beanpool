@@ -521,6 +521,8 @@ export interface SyncCommunitySettings {
         publishContactPhone?: boolean;
         publishHealth?: boolean;
         directoryPushIntervalHours?: number;
+        /** The town or area a stranger's card names while the place is shared, or null for none (apps/server routes/community-card.ts). */
+        areaName?: string | null;
     };
 }
 

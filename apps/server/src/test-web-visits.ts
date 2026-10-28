@@ -2,8 +2,9 @@
  * Web app visits a day (engine/web-visits.ts): counted where the page is served, with no address, cookie or lasting hash.
  * Over REAL HTTPS through the node's own middleware, with a stand-in web app in public/:
  *
- *   1. a person's browser opening the web app (/app, where / redirects; /app/…; an old browser asking for text/html) is
- *      one visit, once per page load; / itself, its files, the API, Settings, the manager, an invite's install page, a
+ *   1. a person's browser opening the web app (/app, where / redirects a browser that keeps an account here; /app/…; an
+ *      old browser asking for text/html) is one visit, once per page load; / itself (the redirect, and a stranger's
+ *      community card, routes/community-card.ts), its files, the API, Settings, the manager, an invite's install page, a
  *      sign-in's return, HEAD, a prefetch, a page's own fetch, and crawlers, link previews, uptime checks, headless
  *      browsers, scripts and an empty User-Agent are not. Phones named CUBOT, and the Telegram and Facebook in-app
  *      browsers, are people
@@ -173,7 +174,11 @@ async function main(): Promise<void> {
     // ── 1. what counts as a visit ────────────────────────────────────────────────────────────────
     say('\n--- 1. a person opening the web app is one visit; nothing else is ---');
     assert(today().visits === 0, 'a new server has counted no visit');
+    // A stranger at a local community's bare address reads its card (front doors S15), which is no visit to the web app.
     let r = await send('GET', '/', opening(CUBOT, ADDR_A));
+    assert(r.status === 200 && r.body.includes('data-testid="community-card"') && today().visits === 0, `GET / for a stranger is the community's card and no visit (got ${r.status})`);
+    // A browser that keeps an account here (the web app's hint cookie) goes to the web app.
+    r = await send('GET', '/', { ...opening(CUBOT, ADDR_A), Cookie: 'bp_account_here=1' });
     assert(r.status === 302 && String(r.headers.location) === '/app' && today().visits === 0, `GET / redirects to /app and is no visit itself (got ${r.status} → ${r.headers.location})`);
     r = await send('GET', '/app', opening(CUBOT, ADDR_A));
     assert(r.status === 200 && r.body.includes('the web app'), `GET /app serves the web app (got ${r.status})`);

@@ -109,7 +109,8 @@ vi.mock('../lib/api', () => ({
         return {
             ...mockTreasuryDetail,
             publicKey: pk,
-            keepers: [{ pubkey: 'my-user-pubkey', callsign: 'Alice', role: 'admin' }],
+            // Its maker and only keeper, so its lead: a project's cancel is its lead's (apps/server db.ts leadsProject).
+            keepers: [{ pubkey: 'my-user-pubkey', callsign: 'Alice', role: 'lead' }],
         };
     }),
     getBalance: vi.fn(async () => mockBalance),

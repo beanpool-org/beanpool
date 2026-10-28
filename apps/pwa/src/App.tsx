@@ -24,7 +24,8 @@ import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
-import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
+import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
+import { setAccountHint } from './lib/community-card';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { readsOwn, useFeatureMode } from './lib/features';
@@ -143,6 +144,11 @@ export function App() {
     const fitNavLabels = useFitNavLabels(lang);
     const [identity, setIdentity] = useState<BeanPoolIdentity | null>(null);
     const [loading, setLoading] = useState(true);
+    // The hint the node reads at its bare address (front doors S15, lib/community-card.ts): with an account here `/`
+    // opens this app as before; without one it shows a stranger the community's card. Said once the identity has loaded.
+    useEffect(() => {
+        if (!loading) setAccountHint(!!identity);
+    }, [loading, identity]);
     /*
      * With no identity: the global lobby (G9b) when the node shows visitors its listings and nothing is part way through
      * a join in this browser; otherwise the welcome page, as always. Decided once, from the node's own word; a node
@@ -503,6 +509,24 @@ export function App() {
     useEffect(() => { setLinkedPost(takePostParam()); }, []);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
+    // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
+    // join, as it keeps a shared listing; a member lands on Home with the Find card on that community (above the cards
+    // where Home draws no Find card).
+    const [askParam] = useState(() => takeAskParam());
+    const [askedCommunity, setAskedCommunity] = useState<string | null>(null);
+    // Once per page, at the first identity: the identity object is replaced later (a profile saved), and that is no ask.
+    const askTaken = useRef(false);
+    useEffect(() => {
+        if (!identity || askTaken.current) return;
+        askTaken.current = true;
+        const kept = takeKeptAskedCommunity();
+        const asked = askParam ?? kept;
+        if (!asked) return;
+        setActiveTab('home');
+        setAskedCommunity(asked);
+    }, [identity, askParam]);
+    const clearAskedCommunity = useCallback(() => setAskedCommunity(null), []);
+
     // `/?shop=<id>` — a shared shop link.
     const [linkedShop, setLinkedShop] = useState<string | null>(null);
     useEffect(() => { setLinkedShop(takeShopParam()); }, []);
@@ -785,7 +809,7 @@ export function App() {
             setIdentity(signedIn);
         };
         if (visitorView.kind === 'lobby') {
-            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
+            return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
@@ -1085,6 +1109,8 @@ export function App() {
                                     onAddCardTaken={clearAddHomeCard}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
+                                    askedCommunity={askedCommunity}
+                                    onAskedCommunitySeen={clearAskedCommunity}
                                 />
                             )}
                             {activeTab === 'marketplace' && (

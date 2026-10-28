@@ -39,7 +39,9 @@ export function setupRedirect(segments: readonly string[], { hasIdentity, pendin
     // until the admin binds it (utils/rekey-redeem.ts).
     // `claim-community`: the `beanpool claim` QR scanned on a phone with no account yet (Dax, 23 Oct 2026). The claim makes
     // the account there, on the member's tap: a self-hosted community's first owner needs nothing of ours.
-    if (!hasIdentity) return root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' ? null : '/welcome';
+    // `community-card`: a community's public card from its bare address (front doors S15, app/community-card.tsx). It reads
+    // the community's public card and nothing else, and its doors lead to welcome; a stranger with no account is who it is for.
+    if (!hasIdentity) return root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' || root === 'community-card' ? null : '/welcome';
     // A claim whose answer is not in: its screen stays, where the node says whether it landed (app/claim-community.tsx).
     if (pendingOnboarding) return root === 'welcome' || (claimOut && root === 'claim-community') ? null : '/welcome';
     return null;

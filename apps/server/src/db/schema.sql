@@ -2886,7 +2886,9 @@ CREATE TABLE IF NOT EXISTS dm_requests (
     state_before    TEXT CHECK (state_before IN ('pending', 'ignored', 'expired')),
     -- When the person a request its opener withdrew was for reached out to the opener (their line, or their asking for the
     -- chat) while the opener blocked them: a request of their own, kept for them alone as their lines then are, which only
-    -- they read, so the row stays as the opener left it (engine/dm-requests.ts reachedOutRow). Null otherwise.
+    -- they read, so the row stays as the opener left it (engine/dm-requests.ts reachedOutRow). It stays once anything
+    -- accepts the row, the opener's line among them (answerReachOut), so they read the acceptance as of their own. Null
+    -- otherwise.
     reached_out_at  TEXT,
     -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
     updated_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

@@ -162,6 +162,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
     // Groups State
     const [groups, setGroups] = useState<Group[]>([]);
+    // ⚡ Bolt: O(1) Map lookup for group details by ID instead of O(G) .find() scans in render
+    const groupsById = useMemo(() => new Map(groups.map(g => [g.id, g])), [groups]);
     const [loadingGroups, setLoadingGroups] = useState(false);
     const [yourChats, setYourChats] = useState<YourChat[] | null>(null);
     const [loadingYourChats, setLoadingYourChats] = useState<boolean>(!!identity?.publicKey && isMember !== false);
@@ -769,7 +771,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 );
                             })}
                             {yourGroupRows.map(g => {
-                                const fullGroup = groups.find(item => item.id === g.id);
+                                const fullGroup = groupsById.get(g.id);
                                 const category = g.category || fullGroup?.category;
                                 const memberCount = fullGroup?.memberCount;
                                 const description = fullGroup?.description;

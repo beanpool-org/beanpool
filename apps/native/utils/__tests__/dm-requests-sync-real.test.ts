@@ -18,7 +18,9 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 // Review 4394120364: the Requests list was kept per member, so it followed them into another community. Review 4394670854:
 // once the preview wrote a request's people, the Talk badge, Home's Needs you and the contact picker's Recents counted it.
 // Review 4395542064: the open chat's poll wrote the node's `request` into a DM before the pins' gate, so with the pins
-// unread a node could hide a chat held here from the list and swap its composer for an Accept card.
+// unread a node could hide a chat held here from the list and swap its composer for an Accept card. Review 4395706539:
+// decideMessageRequest wrote nothing to the phone, so after Accept on a Requests card the chat opened on the row's waiting
+// request and drew the Accept card again, and a poll or list asked for before Accept or Cancel request put the old state back.
 
 const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
@@ -71,7 +73,8 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests, getGlobalUnreadCount, getUnreadByConversation, getRecentChatMembers, _resetDmPeerPinsForTests } from '../db';
+import { getDb, getMessages, getConversation, getConversations, getConversationKind, syncMessages, syncSingleConversation, insertMessage, getMessageRequests, getGlobalUnreadCount, getUnreadByConversation, getRecentChatMembers, decideMessageRequest, _resetDmPeerPinsForTests } from '../db';
+import { requestModeOf } from '@beanpool/core';
 import { messageRequestsStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
@@ -89,7 +92,7 @@ function person(name: string): Person {
 // ── The node ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 interface Line { id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string; type: string; systemType: null; metadata: null; timestamp: string; editedAt: null }
-interface Conv { id: string; participants: string[]; request: { state: string; from: string; at: string } | null }
+interface Conv { id: string; participants: string[]; request: { state: string; from: string; at: string; nextLineIsRequest?: boolean } | null }
 const node = {
     lines: [] as Line[],
     convs: [] as Conv[],
@@ -117,19 +120,33 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
         node.lines.push(line);
         return answer(200, { success: true, message: line });
     }
+    if (init.method === 'POST' && u.pathname === '/api/messages/request') {
+        // Accept, Ignore or Cancel request (routes/messaging.ts): the request as the member now reads it.
+        const b = JSON.parse(init.body);
+        const conv = node.convs.find((c) => c.id === b.conversationId);
+        if (!conv?.request) return answer(404, { error: 'There is no message request for you in this chat.', code: 'request_not_found' });
+        if (b.decision === 'cancel') {
+            cancel(conv);
+            conv.request = { ...conv.request, nextLineIsRequest: true };
+        } else {
+            conv.request = { ...conv.request, state: b.decision === 'accept' ? 'accepted' : 'ignored' };
+        }
+        return answer(200, { success: true, request: { ...conv.request } });
+    }
     const list = u.pathname.match(/^\/api\/messages\/conversations\/([^/]+)$/);
     if (list) {
         const mine = node.convs.filter((c) => c.participants.includes(list[1]));
         const asked = mine.filter((c) => waitingFor(c, list[1]) && node.lines.some((l) => l.conversationId === c.id));
-        const meanwhile = node.beforeList;
-        node.beforeList = null;
-        if (meanwhile) await meanwhile();
-        return answer(200, {
+        const body = {
             conversations: mine.filter((c) => !c.request || c.request.from === list[1] || c.request.state === 'accepted').map(view),
             totalUnread: 0,
             deletedAccounts: [],
             requests: { count: asked.length, conversations: asked.map(view) },
-        });
+        };
+        const meanwhile = node.beforeList;
+        node.beforeList = null;
+        if (meanwhile) await meanwhile();
+        return answer(200, body);
     }
     const page = u.pathname.match(/^\/api\/messages\/([^/]+)$/);
     if (page) {
@@ -501,5 +518,128 @@ describe("the pins' gate on a request the node names (review 4395542064)", () =>
         // Control: once the pins read, it is written with its request.
         expect(await withScreens(() => syncSingleConversation(req.id))).toBe(true);
         expect(JSON.parse(requestOf(req.id))).toMatchObject({ state: 'pending', from: rhea.publicKey });
+    });
+});
+
+describe('a decision on a request, on the phone before anything reads it (review 4395706539)', () => {
+    const requestOf = (id: string) => JSON.parse((sql.prepare('SELECT request FROM conversations WHERE id = ?').get(id) as any)?.request ?? 'null');
+    /** What the chat reads from the row as it opens, before its first poll answers (app/chat/[id].tsx: no lines yet). */
+    const opensAs = async (id: string) => requestModeOf(await getConversation(id, bo.publicKey), bo.publicKey, null);
+    const decide = (id: string, decision: 'accept' | 'ignore' | 'cancel') => withScreens(() => decideMessageRequest(id, decision));
+    async function rheaAsks(id: string): Promise<Conv> {
+        const req: Conv = { id, participants: [rhea.publicKey, bo.publicKey], request: { state: 'pending', from: rhea.publicKey, at: new Date(clock + 500).toISOString() } };
+        node.convs.push(req);
+        write(req, rhea, 'first words from Rhea');
+        await withScreens(() => syncMessages(bo.publicKey));
+        return req;
+    }
+
+    it('Accept on a Requests card: the chat opens on the acceptance, with no Accept card, and it is his chat', async () => {
+        const req = await rheaAsks('dm-rhea-bo-acc-1');
+        expect(await withScreens(() => syncSingleConversation(req.id))).toBe(true);
+        // Control: the card's preview wrote the request waiting, which the chat opens as the Accept card.
+        expect(await opensAs(req.id)).toBe('to-me');
+
+        const answer = await decide(req.id, 'accept');
+
+        expect(answer.request).toMatchObject({ state: 'accepted', from: rhea.publicKey });
+        expect(requestOf(req.id)).toMatchObject({ state: 'accepted', from: rhea.publicKey });
+        expect(await opensAs(req.id)).toBe('none');
+        expect((await withScreens(() => getConversations(bo.publicKey))).map((c: any) => c.id).sort()).toEqual(['dm-bo-kai', req.id].sort());
+    });
+
+    it("a poll in flight when Accept lands, asked for before it, writes the acceptance and not the waiting request it read", async () => {
+        const req = await rheaAsks('dm-rhea-bo-acc-2');
+        await withScreens(() => syncSingleConversation(req.id));
+        node.beforePage = async () => { await decide(req.id, 'accept'); };
+
+        expect(await withScreens(() => syncSingleConversation(req.id))).toBe(true);
+        expect(requestOf(req.id)).toMatchObject({ state: 'accepted' });
+        expect(await opensAs(req.id)).toBe('none');
+
+        // The next poll, asked for after it: the node's word, the same.
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(requestOf(req.id)).toMatchObject({ state: 'accepted' });
+    });
+
+    it("the card's first preview still in flight (no row here yet) when Accept lands: the row it writes holds the acceptance", async () => {
+        const req = await rheaAsks('dm-rhea-bo-acc-3');
+        expect(sql.prepare('SELECT id FROM conversations WHERE id = ?').get(req.id) ?? null).toBeNull();
+        node.beforePage = async () => { await decide(req.id, 'accept'); };
+
+        await withScreens(() => syncSingleConversation(req.id));
+
+        expect(requestOf(req.id)).toMatchObject({ state: 'accepted', from: rhea.publicKey });
+        expect(await opensAs(req.id)).toBe('none');
+        expect(await texts(req.id)).toEqual(['first words from Rhea']);
+    });
+
+    it('an acceptance made on his other app is never undone by a page asked for before it (core requestAfterRead)', async () => {
+        const req = await rheaAsks('dm-rhea-bo-acc-4');
+        await withScreens(() => syncSingleConversation(req.id));
+        // While the page is on its way, he accepts on the web app and the list here hears it.
+        node.beforePage = async () => {
+            req.request = { ...req.request!, state: 'accepted' };
+            await withScreens(() => syncMessages(bo.publicKey));
+            expect(requestOf(req.id)).toMatchObject({ state: 'accepted' });
+        };
+
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(requestOf(req.id)).toMatchObject({ state: 'accepted' });
+
+        // Control: a request named afresh (a new `at`) is the node's word, and is written.
+        req.request = { state: 'pending', from: rhea.publicKey, at: new Date(clock + 5000).toISOString() };
+        await withScreens(() => syncSingleConversation(req.id));
+        expect(requestOf(req.id)).toMatchObject({ state: 'pending', at: req.request.at });
+    });
+
+    it('Ignore: the row holds what the node answered, and the chat stays out of his list', async () => {
+        const req = await rheaAsks('dm-rhea-bo-ign-1');
+        await withScreens(() => syncSingleConversation(req.id));
+
+        await decide(req.id, 'ignore');
+
+        expect(requestOf(req.id)).toMatchObject({ state: 'ignored', from: rhea.publicKey });
+        expect((await withScreens(() => getConversations(bo.publicKey))).map((c: any) => c.id)).toEqual(['dm-bo-kai']);
+    });
+
+    describe('Cancel request, on his own request', () => {
+        async function bosRequest(id: string): Promise<Conv> {
+            const req: Conv = { id, participants: [bo.publicKey, rhea.publicKey], request: { state: 'pending', from: bo.publicKey, at: new Date(clock + 500).toISOString(), nextLineIsRequest: false } };
+            node.convs.push(req);
+            write(req, bo, 'his first words');
+            await withScreens(() => syncMessages(bo.publicKey));
+            await withScreens(() => syncSingleConversation(req.id));
+            expect(requestOf(req.id)).toMatchObject({ from: bo.publicKey, nextLineIsRequest: false });
+            return req;
+        }
+
+        it('the row says his next line is the request, so the chat reads it so on any reread', async () => {
+            const req = await bosRequest('dm-bo-rhea-can-1');
+
+            await decide(req.id, 'cancel');
+
+            expect(requestOf(req.id)).toMatchObject({ state: 'pending', from: bo.publicKey, nextLineIsRequest: true });
+            expect(requestModeOf(await getConversation(req.id, bo.publicKey), bo.publicKey, [])).toBe('mine-unsent');
+        });
+
+        it('a list asked for before the cancel leaves it so, and the next list says the same', async () => {
+            const req = await bosRequest('dm-bo-rhea-can-2');
+            node.beforeList = async () => { await decide(req.id, 'cancel'); };
+
+            await withScreens(() => syncMessages(bo.publicKey));
+            expect(requestOf(req.id)).toMatchObject({ nextLineIsRequest: true });
+
+            await withScreens(() => syncMessages(bo.publicKey));
+            expect(requestOf(req.id)).toMatchObject({ nextLineIsRequest: true });
+        });
+
+        it("the chat's poll in flight, asked for before the cancel, leaves it so", async () => {
+            const req = await bosRequest('dm-bo-rhea-can-3');
+            node.beforePage = async () => { await decide(req.id, 'cancel'); };
+
+            await withScreens(() => syncSingleConversation(req.id));
+            expect(requestOf(req.id)).toMatchObject({ nextLineIsRequest: true });
+        });
     });
 });

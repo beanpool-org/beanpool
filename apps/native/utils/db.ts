@@ -33,7 +33,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { reportKind, t, requestAfterOwnLine } from '@beanpool/core';
+import { reportKind, t, requestAfterOwnLine, requestAfterRead } from '@beanpool/core';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -4382,6 +4382,7 @@ export async function syncMessages(publicKey: string) {
         const timeout1 = setTimeout(() => controller1.abort(), 10000);
         
         let convRes;
+        const decidedBefore = _requestDecisions;
         try {
             convRes = await signedGet(`/api/messages/conversations/${publicKey}`, { signal: controller1.signal });
         } catch (e) {
@@ -4516,13 +4517,18 @@ export async function syncMessages(publicKey: string) {
             // The node's read cursor is its listed peer's: kept only for the key this phone pinned.
             const cursorPeer = pinned ? (pinKeyOf(listedPeer) === pinned.peer ? pinned.peer : null) : listedPeer;
             const postPhotoString = conv.postPhoto ? JSON.stringify([conv.postPhoto]) : null;
-            const requestJson = conv.request ? JSON.stringify(conv.request) : null;
             // The chat's ⋮ menu reads this to show Mute or Unmute without a request of its own.
             if ('mute' in conv) rememberChatMute(conv.id, conv.mute ?? null);
             let needsConvWrite = false;
+            // The row's request as this list leaves it (requestAfterReadHere): asked again just before the write, so a
+            // decision taken here since the list was asked is never written over (PR #2540 review 4395706539).
+            let heldRequest: string | null | undefined = null;
+            const requestAfterList = () => requestAfterReadHere(conv.id, heldRequest, conv.request, decidedBefore);
             try {
                 const localConv = await database.getFirstAsync<any>(
                     'SELECT id, type, post_title, post_status, post_photo, post_credits, request, listed FROM conversations WHERE id = ?', [conv.id]);
+                heldRequest = localConv?.request;
+                const requestJson = requestAfterList();
                 // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
                 if (localConv?.type === 'dm' && conv.type && conv.type !== 'dm') {
                     console.warn(`[DM guard] the node calls DM ${String(conv.id).slice(0, 8)} a ${conv.type}: ignored, it stays a DM`);
@@ -4534,7 +4540,7 @@ export async function syncMessages(publicKey: string) {
                     (localConv.post_status ?? null) !== (conv.postStatus ?? null) ||
                     (localConv.post_photo ?? null) !== postPhotoString ||
                     (localConv.post_credits ?? null) !== (conv.postCredits ?? null) ||
-                    (localConv.request ?? null) !== requestJson ||
+                    (requestJson !== undefined && (localConv.request ?? null) !== requestJson) ||
                     localConv.listed !== 1
                 ) {
                     needsConvWrite = true;
@@ -4589,18 +4595,20 @@ export async function syncMessages(publicKey: string) {
                                 conv.postStatus || null,
                                 postPhotoString,
                                 conv.postCredits || null,
-                                requestJson
+                                requestAfterList() ?? null
                             ]
                         );
                     } else {
+                        // Undefined: the row keeps the request it holds.
+                        const requestJson = requestAfterList();
                         await txn.runAsync(
-                            'UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, request = ?, listed = 1 WHERE id = ?',
+                            `UPDATE conversations SET post_title = ?, post_status = ?, post_photo = ?, post_credits = ?, ${requestJson === undefined ? '' : 'request = ?, '}listed = 1 WHERE id = ?`,
                             [
                                 conv.postTitle || null,
                                 conv.postStatus || null,
                                 postPhotoString,
                                 conv.postCredits || null,
-                                requestJson,
+                                ...(requestJson === undefined ? [] : [requestJson]),
                                 conv.id
                             ]
                         );
@@ -4740,6 +4748,29 @@ function ownLineTaken(conversationId: string): void {
     _ownLinesTaken.set(conversationId, (_ownLinesTaken.get(conversationId) ?? 0) + 1);
 }
 
+// The decisions on a message request the node took from this phone (its 200), numbered, with the request as each one
+// answered it: a read asked for before one of them doesn't carry it, so it writes that answer in place of its own (PR #2540
+// review 4395706539). Each read notes the count as it is asked.
+let _requestDecisions = 0;
+const _requestDecided = new Map<string, { n: number; request: string }>();
+
+/**
+ * The request a read of the node's leaves on one conversation, the read asked for when `asOf` decisions had been taken
+ * here, over the row's (`held`, its stored JSON; null or undefined for none): a decision taken since writes its own answer;
+ * an acceptance held stays against a read of the same request still naming it waiting (core requestAfterRead), and
+ * undefined says to leave the row as it is; otherwise the read's, as stored JSON or null. Asked just before the write, with
+ * no await between, so a decision landing first is always seen.
+ */
+function requestAfterReadHere(conversationId: string, held: string | null | undefined, read: unknown, asOf: number): string | null | undefined {
+    const decided = _requestDecided.get(conversationId);
+    if (decided && decided.n > asOf) return decided.request;
+    let prev: any = null;
+    if (typeof held === 'string') { try { prev = JSON.parse(held); } catch { prev = null; } }
+    const next = requestAfterRead(prev, { request: (read ?? null) as any });
+    if (prev && next === prev) return undefined;
+    return next ? JSON.stringify(next) : null;
+}
+
 /**
  * This conversation's newest lines and its request from the node, written to this phone. True once the node's answer has
  * been written here (its lines, and a request's people and withdrawn lines); false when there was no answer, or the pins'
@@ -4758,6 +4789,7 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return false;
         const takenBefore = _ownLinesTaken.get(conversationId) ?? 0;
+        const decidedBefore = _requestDecisions;
 
         // 12s (not 5s) to ride out a slow node: an abort throws the whole response
         // away and the incoming message waits for the NEXT tick to try again — that
@@ -4814,11 +4846,14 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
         // The node's word on the chat's request, after the gate and never while the pins are unread: it decides whether the
         // chat is in the list (isRequestFor) and whether it has a composer (requestModeOf), so a node answering a request on a
         // DM held here would hide that chat and stop its sends in the very state the gate exists for (review 4395542064).
+        // Never over a decision taken here since this page was asked, nor an acceptance it still names waiting (review
+        // 4395706539).
         if (!pollPinsUnread && msgData?.conversation && 'request' in msgData.conversation) {
             try {
-                const reqJson = msgData.conversation.request ? JSON.stringify(msgData.conversation.request) : null;
                 const conv = msgData.conversation;
-                await database.runAsync(`
+                const held = await database.getFirstAsync<{ request: string | null }>('SELECT request FROM conversations WHERE id = ?', [conversationId]);
+                const reqJson = requestAfterReadHere(conversationId, held?.request, conv.request, decidedBefore);
+                if (reqJson !== undefined) await database.runAsync(`
                     INSERT INTO conversations (id, type, post_id, name, created_by, created_at, request)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET request = excluded.request
@@ -4844,7 +4879,7 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
         if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && typeof req?.from === 'string' && req.from !== myIdentity.publicKey) {
             try {
                 const mine = await database.getFirstAsync('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?', [conversationId, myIdentity.publicKey]);
-                if (!mine) await writeConversationFromNode(database, { ...msgData.conversation, id: conversationId });
+                if (!mine) await writeConversationFromNode(database, { ...msgData.conversation, id: conversationId }, decidedBefore);
             } catch (e: any) {
                 console.warn(`[Sync] Could not write the request's people: ${e?.message || e}`);
             }
@@ -5738,12 +5773,13 @@ function heardFromListing(c: any, others: string[]): DmHeard | undefined {
 async function refreshConversationFromNode(conversationId: string): Promise<void> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const decidedBefore = _requestDecisions;
     try {
         const res = await signedGet(`/api/messages/${encodeURIComponent(conversationId)}?limit=1`, { signal: controller.signal });
         if (!res.ok) return;
         const conv = (await res.json())?.conversation;
         if (!conv?.id || typeof conv.type !== 'string') return;
-        await writeConversationFromNode(await getDb(), conv);
+        await writeConversationFromNode(await getDb(), conv, decidedBefore);
     } catch {
         // Offline or refused: the lock simply fails, and says so.
     } finally {
@@ -5756,7 +5792,7 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
  * message request when the answer names one, so a request opened from a push or a link is one before its lines arrive
  * (PR #2540 review 4393642152), and its people, so its lines open and its chat is named (review 4393642140).
  */
-async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: any): Promise<void> {
+async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: any, asOf: number): Promise<void> {
     // The pins before the node's rows, through the handle they are written with: the account's first read with this file
     // open seeds it from the rows and lines held before these (dmPins), so the node's answer is only ever a listing,
     // judged on the lines held then.
@@ -5767,12 +5803,19 @@ async function writeConversationFromNode(database: SQLite.SQLiteDatabase, conv: 
     // chat's row is still written (#1872 ultrareview, U6): a group opened from a push routes as the group it is.
     if (me && !before && await isDmHere(database, conv.id, conv.type)) return;
     const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
-    const request = 'request' in conv ? (conv.request ? JSON.stringify(conv.request) : null) : undefined;
+    // Its request as a read asked for when `asOf` decisions had been taken here leaves it (requestAfterReadHere), worked out
+    // just before each write: a decision landing between them is never written over (PR #2540 review 4395706539).
+    const read = 'request' in conv;
+    const type = await heldConversationType(conv.id, conv.type);
     await database.runAsync(
         'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at, request) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString(), request ?? null]
+        [conv.id, type, conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString(), read ? requestAfterReadHere(conv.id, null, conv.request, asOf) ?? null : null]
     );
-    if (request !== undefined) await database.runAsync('UPDATE conversations SET request = ? WHERE id = ? AND request IS NOT ?', [request, conv.id, request]);
+    if (read) {
+        const held = await database.getFirstAsync<{ request: string | null }>('SELECT request FROM conversations WHERE id = ?', [conv.id]);
+        const request = requestAfterReadHere(conv.id, held?.request, conv.request, asOf);
+        if (request !== undefined) await database.runAsync('UPDATE conversations SET request = ? WHERE id = ? AND request IS NOT ?', [request, conv.id, request]);
+    }
     // A pinned DM's rows are [me, the pinned key], as the sync writes them; the listing is heard by the pin below.
     const pinned = me && before ? dmPinFor(before, conv.id) : null;
     for (const pk of pinned ? [me, pinned.peer] : Array.isArray(conv.participants) ? conv.participants : []) {
@@ -6512,6 +6555,22 @@ async function requestLineTaken(database: SQLite.SQLiteDatabase, conversationId:
         const was = JSON.parse(row.request);
         const now = requestAfterOwnLine(was, me);
         if (now !== was) await database.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [JSON.stringify(now), conversationId]);
+    } catch { /* the next poll brings the node's word */ }
+}
+
+/**
+ * The node took a decision on the chat's request (its 200; `request` the request as the member now reads it): written to
+ * this phone's row, as on the node, and kept for a read asked for before it, which writes it in place of its own
+ * (requestAfterReadHere): an open chat's poll, or a card's preview, in flight when Accept was tapped answers the request
+ * waiting, and a list from before Cancel request names its line waiting (PR #2540 review 4395706539). Never throws.
+ */
+async function requestDecided(conversationId: string, request: unknown): Promise<void> {
+    if (!request || typeof request !== 'object') return;
+    try {
+        const json = JSON.stringify(request);
+        _requestDecided.set(conversationId, { n: ++_requestDecisions, request: json });
+        const database = await getDb();
+        await database.runAsync('UPDATE conversations SET request = ? WHERE id = ?', [json, conversationId]);
     } catch { /* the next poll brings the node's word */ }
 }
 
@@ -7314,8 +7373,15 @@ export async function saveMessageRequests(myPubkey: string, file: string, reques
     } catch {}
 }
 
+/**
+ * Accept, Ignore or Cancel request on the node. Its answer (200) is the request as the member now reads it, and it goes
+ * into this phone's row before this returns (requestDecided): the chat opened next, as after Accept on a Requests card,
+ * reads the decided request, and so does every reread of the row after it (PR #2540 review 4395706539).
+ */
 export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel'): Promise<{ success: boolean; request?: any }> {
-    return _signedRequest('/api/messages/request', { conversationId, decision });
+    const answer = await _signedRequest('/api/messages/request', { conversationId, decision });
+    await requestDecided(conversationId, answer?.request);
+    return answer;
 }
 
 export async function ignoreAllMessageRequests(): Promise<{ success: boolean; ignored: number }> {

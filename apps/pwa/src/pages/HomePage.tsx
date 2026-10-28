@@ -2375,8 +2375,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 {/* The "Use the phone app" card (front doors S4): after the first post or a week */}
                 {(() => {
                     const p = a.me?.probation;
-                    const weekEnds = p?.ageEndsAt ? Date.parse(p.ageEndsAt) : (a.me?.joinedAt ? Date.parse(a.me.joinedAt) + 7 * 86_400_000 : null);
-                    const keptPosts = p ? Number(p.keptPosts) || 0 : (a.me ? 1 : 0);
+                    const weekEnds = a.me?.joinedAt ? Date.parse(a.me.joinedAt) + 7 * 86_400_000 : null;
+                    const keptPosts = Math.max(Number(p?.keptPosts) || 0, a.me?.firstOffer || a.cards?.steps?.firstPost ? 1 : 0);
                     const due = publicKey && !visitor && !phoneAppDismissed && usePhoneAppCardDue({
                         dismissed: phoneAppDismissed,
                         keptPosts,

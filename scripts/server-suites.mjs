@@ -470,6 +470,7 @@ export const SUITES = [
     'test-poll-vote-origins',
     'test-suspended-and-visitor-reads',
     'test-pause',
+    'test-removal-doors',
     'test-viewer-helpers',
     'test-visitors-cant-act',
     'test-doors-key-case',

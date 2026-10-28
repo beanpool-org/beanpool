@@ -207,16 +207,17 @@ describe('the root guard while the member is still setting up', () => {
 describe('the root guard while a phone with no account looks around the global community (slice S12)', () => {
     const LOOKING = { hasIdentity: false, pendingOnboarding: false, lookingAround: true };
     const DOOR = { pathname: '/welcome', params: { join: 'look' } };
-    // The look: Home, the Market and the Map (the example Ledger and Commons where shown), a listing, the guide, the sheet.
+    // The look: Home, the Market and the Map (the example Ledger and Commons where shown), a listing, the guide, the sheet,
+    // Start a community (no key: its ways to run one, the details to copy).
     const LOOK: string[][] = [
         ['(tabs)'], ['(tabs)', 'index'], ['(tabs)', 'market'], ['(tabs)', 'map'], ['(tabs)', 'ledger'], ['(tabs)', 'projects'],
-        ['post', '[id]'], ['guide', '[slug]'], ['guide', 'section', '[id]'], ['beanpool'],
+        ['post', '[id]'], ['guide', '[slug]'], ['guide', 'section', '[id]'], ['beanpool'], ['start-community'],
     ];
     // Each needs a key: a message, people, Settings, asking a community, a profile, the not-recognised screen, a sign-in return.
     const NEEDS_A_KEY: string[][] = [
         ['(tabs)', 'chats'], ['(tabs)', 'people'], ['(tabs)', 'pulse'], ['(tabs)', 'settings'],
         ['chat', '[id]'], ['new-message'], ['channels'], ['group', '[id]'], ['find-community'], ['profile-setup'],
-        ['public-profile'], ['join-global'], ['join-open-door'], ['node-mismatch'], ['settings-signin'], ['start-community'],
+        ['public-profile'], ['join-global'], ['join-open-door'], ['node-mismatch'], ['settings-signin'],
         ...PROVIDERS.map((p) => ['auth', p]),
     ];
 

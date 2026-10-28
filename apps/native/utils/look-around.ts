@@ -30,11 +30,12 @@ export const LOOK_LANDING = '/(tabs)/market' as const;
 
 /**
  * The screens a phone with no account may look at: Home, the Market and the Map (with the example Ledger and Commons
- * where the node shows them), one listing, the members' guide and the BeanPool sheet. Talk, People, Pulse and Settings
- * are an account's, as is every other screen.
+ * where the node shows them), one listing, the members' guide, the BeanPool sheet, and Start a community (its ways to
+ * run one and the details to copy: the organiser's door, which needs no key). Talk, People, Pulse and Settings are an
+ * account's, as is every other screen.
  */
 const LOOK_TABS: ReadonlySet<string> = new Set(['index', 'market', 'map', 'ledger', 'projects']);
-const LOOK_ROOTS: ReadonlySet<string> = new Set(['post', 'guide', 'beanpool']);
+const LOOK_ROOTS: ReadonlySet<string> = new Set(['post', 'guide', 'beanpool', 'start-community']);
 
 /** Whether `segments` (expo-router's useSegments) is a screen a visitor with no key may stay on. */
 export function isLookRoute(segments: readonly string[]): boolean {

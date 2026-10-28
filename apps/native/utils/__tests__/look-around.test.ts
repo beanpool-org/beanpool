@@ -19,9 +19,9 @@ function deps(over: Partial<{ anchor: string | null; guests: string[]; profile: 
 }
 
 describe('the look', () => {
-    it('is Home, the Market, the Map (and the example Ledger and Commons), a listing, the guide and the BeanPool sheet', () => {
+    it('is Home, the Market, the Map (and the example Ledger and Commons), a listing, the guide, the BeanPool sheet and Start a community', () => {
         for (const s of [['(tabs)'], ['(tabs)', 'index'], ['(tabs)', 'market'], ['(tabs)', 'map'], ['(tabs)', 'ledger'], ['(tabs)', 'projects'],
-            ['post', '[id]'], ['guide', '[slug]'], ['beanpool']]) {
+            ['post', '[id]'], ['guide', '[slug]'], ['beanpool'], ['start-community']]) {
             expect(isLookRoute(s), s.join('/')).toBe(true);
         }
     });

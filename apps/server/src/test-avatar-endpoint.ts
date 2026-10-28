@@ -30,7 +30,7 @@ import { createAvatarRoutes } from './routes/avatar.js';
 import { withAvatarKey } from './avatar-test-url.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createCommunityRoutes } from './routes/community.js';
-import { getAvatarService, AvatarService, AvatarCache, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
+import { getAvatarService, AvatarService, AvatarCache, AVATAR_FORMAT_ERROR, findBundledAvatarFile } from './engine/avatar.js';
 import type { RouteDeps } from './routes/types.js';
 
 let run = 0, passed = 0;
@@ -326,6 +326,27 @@ async function main() {
     });
     assert(thumb304.status === 304, 'Conditional GET thumb avatar with matching ETag returns 304');
 
+    // 3.3 Bundled avatar (WebP) via AvatarService
+    const bundledAvatarRes = await avatarService.getAvatar(pkBundled);
+    assert(bundledAvatarRes.status === 200, 'AvatarService.getAvatar for bundled avatar returns 200');
+    assert(Buffer.isBuffer(bundledAvatarRes.buffer), 'Bundled avatar body is binary Buffer');
+    assert(bundledAvatarRes.contentType === 'image/webp', `Bundled avatar Content-Type is image/webp (got: ${bundledAvatarRes.contentType})`);
+    assert(!!bundledAvatarRes.etag && bundledAvatarRes.etag.startsWith('"'), `Bundled avatar returns strong ETag: ${bundledAvatarRes.etag}`);
+
+    const bundled304 = await avatarService.getAvatar(pkBundled, 'full', { ifNoneMatch: bundledAvatarRes.etag });
+    assert(bundled304.status === 304, 'Conditional getAvatar for bundled avatar returns 304');
+
+    // Bundled avatar on group and shop
+    db.prepare("INSERT OR REPLACE INTO group_pictures (group_id, picture) VALUES ('test-grp-s1', 'bundled://sunflower')").run();
+    const groupPicRes = await avatarService.getGroupPicture('test-grp-s1');
+    assert(groupPicRes.status === 200, 'getGroupPicture for bundled avatar returns 200');
+    assert(groupPicRes.contentType === 'image/webp', 'Group bundled picture Content-Type is image/webp');
+
+    db.prepare("INSERT OR REPLACE INTO shop_photos (shop_id, photo) VALUES ('test-shp-s1', 'bundled://crystal')").run();
+    const shopPhotoRes = await avatarService.getShopPhoto('test-shp-s1');
+    assert(shopPhotoRes.status === 200, 'getShopPhoto for bundled avatar returns 200');
+    assert(shopPhotoRes.contentType === 'image/webp', 'Shop bundled photo Content-Type is image/webp');
+
     // =========================================================================
     // SECTION 4: In-Memory LRU Cache Verification
     // =========================================================================
@@ -380,6 +401,15 @@ async function main() {
     avatarService.cache.clear();
     const traversalRes = await dispatchRoute(avatarRouter, 'GET', withAvatarKey(`/api/avatar/${pkPhoto}`));
     assert(traversalRes.status === 404, 'Bundled avatar path traversal is refused');
+
+    // Bundled avatar file resolution unit tests
+    const foundLeaf = findBundledAvatarFile('leaf');
+    assert(foundLeaf !== null && foundLeaf.mimeType === 'image/webp' && fs.existsSync(foundLeaf.filePath),
+        'findBundledAvatarFile resolves bundled leaf to .webp with image/webp');
+    assert(findBundledAvatarFile('unknown-preset-xyz') === null,
+        'findBundledAvatarFile returns null for unknown preset');
+    assert(findBundledAvatarFile('../../etc/passwd') === null,
+        'findBundledAvatarFile returns null for path traversal attempt');
 
     // Batch 8: the test node's Community Eggs enterprise stored a NON-base64 SVG data URL (from
     // scripts/bootstrap-community-eggs.mjs). The data-URL regex required `;base64,`, so it fell through

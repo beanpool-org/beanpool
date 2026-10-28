@@ -41,7 +41,7 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - A "Keep the suspension?" vote opened before this version runs to its end as it did.
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
 - The vote names who suspended them: members read your name on it, never your key. Suspended with the server's password, it says an owner did.
-- The suspended person is told at once: an alert on their phone, and a notice the web app shows when they open it. They can reply to the case on the vote itself, and everyone who reads the vote sees the reply beside it. Everyone who can vote on it gets an alert too, which never says who it is about.
+- The suspended person is told at once: an alert on their phone, and a notice the web app shows when they open it. They can reply to the case on the vote itself, and everyone who reads the vote sees the reply beside it. If they delete their account, the reply goes with it. Everyone who can vote on it gets an alert too, which never says who it is about.
 - **The cool-down:** if a vote on removing someone you suspended ends without removing them (it fails, too few vote, or it is halted or lifted before it closes), you can't suspend them again for 90 days, from their page or from a report. Settings says until when. Another admin can. A removal the community passed that an admin then halted doesn't count.
 - In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else.
 

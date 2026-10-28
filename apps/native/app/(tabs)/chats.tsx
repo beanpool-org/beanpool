@@ -81,8 +81,15 @@ export default function ChatsScreen() {
     }, [sortBy, nodeProfile]);
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
     const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
-    const [requests, setRequests] = useState<{ count: number; conversations: any[] } | null>(null);
+    // The message requests kept for this community (utils/db getMessageRequests): undefined until read, null for none kept
+    // (requests off on the node, a community not synced yet, or after Sign Out or Replace).
+    const [requests, setRequests] = useState<{ count: number; conversations: any[] } | null | undefined>(undefined);
     const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
+    // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
+    // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
+    React.useEffect(() => {
+        if (requests === null && messagesFilter === 'requests') setMessagesFilter('all');
+    }, [requests, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
     // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
@@ -927,10 +934,10 @@ export default function ChatsScreen() {
                 </View>
             )}
             </QuickReturnBlock>
-            {messagesFilter === 'requests' ? (
+            {messagesFilter === 'requests' && requests ? (
                 <MessageRequestsPane
-                    entries={requests?.conversations ?? []}
-                    count={requests?.count ?? 0}
+                    entries={requests.conversations}
+                    count={requests.count}
                     identity={identity}
                     qr={qr}
                     onOpen={(entry) => router.push(`/chat/${entry.id}`)}

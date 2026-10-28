@@ -88,7 +88,7 @@ export default defineConfig({
                     { platform: 'play', id: 'org.beanpool.pillar' },
                     { platform: 'itunes', id: '6761870086' },
                 ],
-                prefer_related_applications: true,
+                prefer_related_applications: false,
                 icons: [
                     {
                         src: '/icon-192x192.png',

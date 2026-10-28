@@ -258,10 +258,11 @@ describe('the root guard while a phone with no account looks around the global c
         ['post', '[id]'], ['guide', '[slug]'], ['guide', 'section', '[id]'], ['beanpool'], ['start-community'],
     ];
     // Each needs a key: a message, people, Settings, asking a community, a profile, the not-recognised screen, a sign-in return.
+    // Another community's open door is not one since S2: its join makes the key there (the merged guard's test, below).
     const NEEDS_A_KEY: string[][] = [
         ['(tabs)', 'chats'], ['(tabs)', 'people'], ['(tabs)', 'pulse'], ['(tabs)', 'settings'],
         ['chat', '[id]'], ['new-message'], ['channels'], ['group', '[id]'], ['find-community'], ['profile-setup'],
-        ['public-profile'], ['join-global'], ['join-open-door'], ['node-mismatch'], ['settings-signin'],
+        ['public-profile'], ['join-global'], ['node-mismatch'], ['settings-signin'],
         ...PROVIDERS.map((p) => ['auth', p]),
     ];
 
@@ -292,6 +293,27 @@ describe('the root guard while a phone with no account looks around the global c
             expect(setupRedirect(segments, { ...SET_UP, lookingAround: true }), segments.join('/')).toBeNull();
             expect(setupRedirect(segments, { ...WIZARD_PENDING, lookingAround: true }), segments.join('/')).toBe('/welcome');
         }
+    });
+
+    it('another community\'s door (S2) and a community\'s card (S15) stay ahead of the look (S12), looking around or not', () => {
+        // Looking around global, another community's door link opens that door, not global's: the look's door would send the
+        // phone to join the global community instead. The card stays as it does for any stranger.
+        for (const state of [LOOKING, NO_IDENTITY]) {
+            expect(setupRedirect(['join-open-door'], state), `door, looking ${state === LOOKING}`).toBeNull();
+            expect(setupRedirect(['community-card'], state), `card, looking ${state === LOOKING}`).toBeNull();
+        }
+        // The rest of the merged guard as each slice left it: a screen that needs a key opens the look's door while looking
+        // and the first screen otherwise; the global community's door is not let through with no account (S2).
+        expect(setupRedirect(['(tabs)', 'chats'], LOOKING)).toEqual(DOOR);
+        expect(setupRedirect(['join-global'], LOOKING)).toEqual(DOOR);
+        expect(setupRedirect(['(tabs)', 'chats'], NO_IDENTITY)).toBe('/welcome');
+        expect(setupRedirect(['join-global'], NO_IDENTITY)).toBe('/welcome');
+        expect(setupRedirect(['(tabs)', 'market'], LOOKING)).toBeNull();
+        expect(setupRedirect([], LOOKING)).toBe('/welcome');
+        // A door join out (the wizard's record, its key on the phone) keeps its door whatever the look says.
+        const DOOR_OUT = { hasIdentity: true, pendingOnboarding: true, doorOut: true };
+        expect(setupRedirect(['join-open-door'], { ...DOOR_OUT, lookingAround: true })).toBeNull();
+        expect(setupRedirect(['(tabs)', 'market'], { ...DOOR_OUT, lookingAround: true })).toBe('/welcome');
     });
 
     it('the root layout asks whether the phone is looking around only with no identity, and drops an answer for a screen it has left', () => {

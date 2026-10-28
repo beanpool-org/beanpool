@@ -40,10 +40,20 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - No vote removes an owner or admin: on one of them, the suspension ends when the vote closes, whatever it decides, and their role comes back.
 - A "Keep the suspension?" vote opened before this version runs to its end as it did.
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
-- The suspended person gets no notification. Tell them yourself.
+- The vote names who suspended them: members read your name on it, never your key. Suspended with the server's password, it says an owner did.
+- The suspended person is told at once: an alert on their phone, and a notice the web app shows when they open it. They can reply to the case on the vote itself, and everyone who reads the vote sees the reply beside it. Everyone who can vote on it gets an alert too, which never says who it is about.
+- **The cool-down:** if a vote on removing someone you suspended ends without removing them (it fails, too few vote, or it is halted or lifted before it closes), you can't suspend them again for 90 days, from their page or from a report. Settings says until when. Another admin can. A removal the community passed that an admin then halted doesn't count.
 - In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else.
 
-On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account.
+On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account. The suspended person gets no notification there: tell them yourself.
+
+## Hiding a false case
+
+When the case on a vote on removing someone is shown to be false, **Hide case** on that vote (open, in its grace period, or under **Closed votes on removing a member**) hides it. Write a reason of at least 10 characters: members read it in the case's place. Who brought the case and the member's reply stay; Settings keeps the case and who hid it. A case is hidden once and stays hidden.
+
+Hiding doesn't stop the vote. To stop it, halt it (below), which lifts the suspension.
+
+The member the vote is about can report the case as a false accusation from the vote. It arrives in Reports like any other, about whoever brought the case.
 
 ## Removing someone
 

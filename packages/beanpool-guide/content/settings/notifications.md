@@ -10,7 +10,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar, communitie
 
 - Open **Settings**. Under **App Settings**, tap **Notification Preferences**.
 - Switch each kind on or off:
-- **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in.
+- **Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in. Also when your community opens a vote on removing a member that you can vote on.
 - **Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.
 - **Held in Trust & System:** beans held, released or in question.
 - **Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown.
@@ -19,7 +19,7 @@ In the web app the first is called **Chat Messages**, and the third is the one n
 
 Changes save by themselves. They are kept by your community's server, so they follow your account.
 
-Two alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, and that an admin started moving your account to a new phone. If you run your community's server, its alerts about the server always come through too.
+Three alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, that an admin started moving your account to a new phone, and that your community opened a vote about your account. If you run your community's server, its alerts about the server always come through too.
 
 ## What an alert says
 
@@ -29,6 +29,7 @@ An alert on your phone says only what kind of news it is, for example:
 - "There is news on one of your trades."
 - "An event you're going to starts soon."
 - "Your community has a notice for you."
+- "Your community opened a vote on removing a member." It never says who the vote is about.
 - "Someone asked to join your community."
 - "A community answered your request."
 

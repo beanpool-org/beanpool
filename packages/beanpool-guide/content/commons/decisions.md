@@ -25,6 +25,10 @@ Each Decision shows:
 - **Turnout:** how many votes it needs, and whether it has them yet;
 - **Tally:** the Yes and No so far, and how much Yes it needs.
 
+A vote on removing a member also shows who brought the case (the admin who suspended them), and the member's own reply, beside the case, once they have written one. If an admin hid the case because it was shown to be false, you read the admin's reason in its place. When a vote on removing a member opens, everyone who can vote on it gets an alert on their phone. See "Rules and how decisions work".
+
+If the vote is about you, the card says you can't vote on it, and offers **Reply to this case** while it is open, and **Report this case as false**.
+
 ## Voting
 
 - Tap **Vote YES** or **Vote NO**. On the phone, the app says **Vote Recorded**. In the web app, the card updates.

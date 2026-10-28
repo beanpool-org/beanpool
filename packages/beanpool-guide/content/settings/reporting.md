@@ -41,6 +41,10 @@ The owners and admins are told when any report comes in: only its kind and how m
 
 If one of your own posts is removed by the moderators, you get an alert saying so, and why if they gave a reason. It does not say who reported it.
 
+## A false accusation in a vote about you
+
+If your community is voting on removing you and the case against you is false, open **Commons**, then **Decide**, and tap **Report this case as false** on the vote. The report goes to the owners and admins like any other, and names whoever brought the case. You can also reply to the case on the vote itself, where everyone reads it beside the case. If the case is shown to be false, an admin can hide it, with a reason everyone can read in its place. See "Rules and how decisions work".
+
 Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report.
 
 ## On global.beanpool.org

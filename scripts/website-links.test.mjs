@@ -161,7 +161,11 @@ test('the "Start a community" install block enables Docker live-restore idempote
         assert.ok(pySnippetMatch, 'README block has a python3 -c snippet');
         const originalSnippet = pySnippetMatch[1];
         const runSnippet = (targetFile) => {
-            const adapted = originalSnippet.replaceAll('/etc/docker/daemon.json', targetFile).replaceAll('/etc/docker', tmpDir);
+            const normalizedTarget = targetFile.replaceAll('\\', '/');
+            const normalizedTmp = tmpDir.replaceAll('\\', '/');
+            const adapted = originalSnippet
+                .replaceAll('/etc/docker/daemon.json', normalizedTarget)
+                .replaceAll('/etc/docker', normalizedTmp);
             execFileSync('python3', ['-c', adapted]);
         };
 

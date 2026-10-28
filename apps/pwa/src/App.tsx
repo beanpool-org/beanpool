@@ -22,6 +22,7 @@ import { useLanguage } from './lib/useLanguage';
 import { useOwnAvatar } from './lib/useOwnAvatar';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
+import { PeekPage } from './pages/PeekPage';
 import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { forgetRecentLookups } from './lib/members-on-demand';
 import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCommunity } from './lib/visitor-lobby';
@@ -63,6 +64,7 @@ import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
+import { forgetKeptPeek, keepPeek, peekAtLoad, takePeekParam } from './lib/peek';
 import { YourShopPage } from './pages/YourShopPage';
 import { ShopDetailPage } from './pages/ShopDetailPage';
 import { takeShopParam } from './lib/shop';
@@ -172,6 +174,7 @@ export function App() {
     const beansMode = useFeatureMode('beans');
     const enterprisesMode = useFeatureMode('enterprises');
     const invitesMode = useFeatureMode('invites');
+    const [projectsInitialStart, setProjectsInitialStart] = useState(false);
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide' | 'area'>('menu');
@@ -498,6 +501,7 @@ export function App() {
         setActiveTab(tab as Tab);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
         if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); }
+        if (tab === 'projects' && contextId === 'start') setProjectsInitialStart(true);
     }
 
     // `/app#profile=<key>` (node Settings' "View my profile"): read once on load, opened once the identity has loaded.
@@ -513,7 +517,20 @@ export function App() {
     // works for everyone; somebody who is not a member of this community never gets here, because the
     // identity gate shows them the join page instead, which is the right landing for them.
     const [linkedPost, setLinkedPost] = useState<string | null>(null);
-    useEffect(() => { setLinkedPost(takePostParam()); }, []);
+    // `/?post=<id>&peek=<ticket>`: a post a member shared outside the community (front doors S6). Read before the post
+    // param is taken, and the ticket taken out of the address: a stranger here reads that one post (pages/PeekPage.tsx);
+    // a member opens it as any shared post, through `post` below.
+    // Read in the initializer (which may run twice), taken out of the address in the effect, and kept for this tab so a
+    // stranger who reloads is still on that post (lib/peek.ts keepPeek). A link with another query forgets it; so does an
+    // account here, below, and taking a door.
+    const [peekParam, setPeekParam] = useState(() => (typeof window !== 'undefined' ? peekAtLoad() : null));
+    useEffect(() => {
+        if (peekParam) keepPeek(peekParam);
+        else if (window.location.search) forgetKeptPeek();
+        takePeekParam();
+        setLinkedPost(takePostParam());
+    }, []); // once, at load: what the address carried then
+    useEffect(() => { if (identity) forgetKeptPeek(); }, [identity]);
     const clearLinkedPost = useCallback(() => setLinkedPost(null), []);
 
     // `/?ask=<host>`, from a local community's card (front doors S15): the lobby keeps it in this tab for after the
@@ -817,6 +834,16 @@ export function App() {
         };
         if (visitorView.kind === 'lobby') {
             return <GuestLobby info={visitorView.info} health={communityHealth} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} askedCommunity={askParam} />;
+        }
+        // A stranger with a link a member shared outside: that one post first, then this community's doors. Its invite
+        // form and its ways back are the welcome page's, which reads where to start from `?door=` (lib/community-card.ts).
+        if (peekParam) {
+            const toWelcome = (door: 'invite' | 'signin') => {
+                forgetKeptPeek();
+                try { window.history.replaceState(window.history.state, '', `${window.location.pathname}?door=${door}`); } catch { /* the page opens at its start */ }
+                setPeekParam(null);
+            };
+            return <PeekPage postId={peekParam.postId} ticket={peekParam.ticket} onWelcome={toWelcome} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
@@ -1170,6 +1197,8 @@ export function App() {
                                     }}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     isMember={isGuest === null ? null : !isGuest}
+                                    initialStart={projectsInitialStart}
+                                    onStartOpened={() => setProjectsInitialStart(false)}
                                 />
                             )}
                         </>

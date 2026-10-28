@@ -619,3 +619,41 @@ describe('Talk follows a language picked in Settings', () => {
         expect(host.textContent).toContain('Kofi');
     });
 });
+
+// PR #2540 review 4395541801: the push tap ("Someone new wants to message you") opens Requests without looking, and Talk drew
+// the Requests pane whenever that filter was on, while its All and Requests pills draw only with a list kept for this
+// community. With none (a community not synced yet, after Sign Out or Replace, or requests off on the node), the member
+// had the empty Requests card, no pills and no chats, until a sync kept a list. The web guards this (MessagesPage.tsx).
+describe('Talk opened on Requests (review 4395541801)', () => {
+    const NO_REQUESTS = "No requests. A first message from someone you haven't added or talked to arrives here.";
+    const ROSA_ASKS = { count: 1, conversations: [{ id: 'req-rosa', peerCallsign: 'Rosa', participants: [ME.publicKey, 'rosa-key'], request: { state: 'pending', from: 'rosa-key', at: iso(now - 60_000) } }] };
+
+    it('no list kept for this community: the chats are drawn, not an empty Requests with no way back', async () => {
+        params.now = { filter: 'requests' };
+        net.answer = community({ getMessageRequests: null });
+        await renderIn('en');
+
+        expect(host.textContent).not.toContain(NO_REQUESTS);
+        expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
+    });
+
+    it('while the kept list is still being read, the chats are drawn', async () => {
+        params.now = { filter: 'requests' };
+        await renderIn('en');
+
+        expect(net.calls).toContain('db.getMessageRequests');
+        expect(host.textContent).not.toContain(NO_REQUESTS);
+        expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
+    });
+
+    it('control: with a list kept, the tap opens Requests on its card, with the pills to go back to All', async () => {
+        params.now = { filter: 'requests' };
+        net.answer = community({ getMessageRequests: ROSA_ASKS });
+        await renderIn('en');
+
+        expect(host.textContent).toContain('1 person wants to message you');
+        expect(host.textContent).not.toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
+        await click(buttonWithText('All'), 'the All pill');
+        expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
+    });
+});

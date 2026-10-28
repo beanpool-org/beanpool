@@ -258,11 +258,12 @@ async function main() {
     const tradedAt = new Date().toISOString();
     db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
                 VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), alice.pk, carol.pk, tradedAt, tradedAt);
-    const proposed = await post('/api/commons/decisions', {
-        title: 'Remove PrivBob', description: 'A privacy test Decision about Bob', touches: 'member', effect: 'remove_member', subject: bob.pk,
-    }, alice);
-    const decisionId = proposed.body?.decision?.id as string | undefined;
-    assert(proposed.status === 200 && !!decisionId, `Alice proposes removing Bob (got ${proposed.status} ${proposed.text.slice(0, 160)})`);
+    // A removal Alice proposed before removal by vote S3 (since then only an admin's pause opens one), still open: what it
+    // records about Bob is what each reader is served below.
+    const { removalProposedFromBefore } = await import('./decisions-from-before-test-fixture.js');
+    const decisionId = removalProposedFromBefore({ authorPubkey: alice.pk, title: 'Remove PrivBob', description: 'A privacy test Decision about Bob', subject: bob.pk }).id as string | undefined;
+    const proposed = await get(`/api/commons/decisions/${decisionId}`, alice);
+    assert(proposed.status === 200 && !!decisionId, `Alice's removal of Bob is open (got ${proposed.status} ${proposed.text.slice(0, 160)})`);
     assert(proposed.body?.decision?.params?.balance === -12 && proposed.body?.decision?.params?.debt === 12,
         'Alice, who may vote in it, is answered with his balance and debt');
     await sleep(300);

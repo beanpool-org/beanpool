@@ -156,7 +156,7 @@ async function main() {
     moves('a tier set by an admin', () => se.adminSetTier(people[9].pk, 'trusted' as any));
     moves('a node role granted', () => grantNodeRole(people[10].pk, 'admin', owner.pk));
     moves('a node role revoked', () => revokeNodeRole(people[10].pk, 'admin', owner.pk));
-    moves('a member pruned by an admin', () => se.adminPruneUser(people[11].pk, owner.pk));
+    moves('a member removed', () => se.adminPruneUser(people[11].pk, se.COMMUNITY_DECISION_ACTOR));
     // The genesis seed (POST /api/admin/seed-invite on a node with no members; seedGenesisMember): a new member and owner,
     // or an owner made of a member already there. It moved no version before (found by a scan of every SQL write to
     // members and node_roles, 2026-10-03).
@@ -257,7 +257,7 @@ async function main() {
     snapshot.setMembersSnapshotForTests(undefined);
     const prunedPk = people[14].pk;
     assert((await get('/api/members', reader)).body.toString('utf8').includes(prunedPk), 'the member is in the answer');
-    se.adminPruneUser(prunedPk, owner.pk);
+    se.adminPruneUser(prunedPk, se.COMMUNITY_DECISION_ACTOR);
     const afterPrune = await get('/api/members', reader);
     assert(!afterPrune.body.toString('utf8').includes(prunedPk), 'pruned: gone from the answer');
     assert(afterPrune.body.toString('utf8') === unshared(undefined, null), 'and the answer is an unshared build');

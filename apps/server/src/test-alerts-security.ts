@@ -116,6 +116,7 @@ async function main(): Promise<void> {
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
     const { hashPassword, updateLocalConfig, getLocalConfig } = await import('./config/local-config.js');
+    const { setSwitchOverride } = await import('./config/node-profile.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken, enrolAdminOwnerKey, issueBreakGlassCode, retireBreakGlassCode, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
@@ -599,8 +600,11 @@ async function main(): Promise<void> {
     await told('an owner lifts it', () => call('POST', `/api/local/admin/users/${sue}/status`, { status: 'active' }, asOwner),
         /^Someone was made an admin again, the suspension lifted by an owner\./);
     assert(heldNodeRoleOf(sue) === 'admin', '5c. the role is back');
+    // An owner removes an admin outright only where community votes are switched off (removal by vote S3).
+    setSwitchOverride('decisions', false);
     await told('an owner removes an admin from the community', () => call('POST', `/api/local/admin/users/${pru}/prune`, {}, asOwner),
         /^An admin lost that role, removed from the community by an owner\./);
+    setSwitchOverride('decisions', true);
     db.prepare("INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, reason, status) VALUES ('report-5c', ?, ?, 'spam', 'pending')").run(member, rpt);
     await told('an admin suspends a moderator on a report', () => call('POST', '/api/local/admin/reports/report-5c/action', { suspendUser: true }, asAdmin),
         /^A moderator lost that role, suspended on a report by an admin\./);

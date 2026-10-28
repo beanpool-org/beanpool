@@ -433,7 +433,6 @@
   "🎉 FUNDED": "🎉 ПРОФИНАНСИРОВАНО",
   "🌱 PROJECT": "🌱 ПРОЕКТ",
   "🏛️ ENTERPRISE": "🏛️ ПРЕДПРИЯТИЕ",
-  "Enterprise Balance": "Баланс предприятия",
   "in deficit (keepers eat last)": "в дефиците (хранители получают в последнюю очередь)",
   "Pledge Beans": "Вложить бобы",
   "Word {n}: {word}": "Слово {n}: {word}",
@@ -2886,7 +2885,6 @@
   "PURPOSE STATEMENT *": "ЦЕЛЬ И НАЗНАЧЕНИЕ *",
   "Purpose statement": "Описание цели",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Ясно опишите, для чего создаётся предприятие (напр., «Строим и обслуживаем общественную теплицу к ноябрю»).",
-  "The purpose statement is what the community judges the initiative against.": "По этому описанию сообщество оценивает инициативу.",
   "FUNDING GOAL ({currency}) *": "ЦЕЛЬ СБОРА ({currency}) *",
   "Funding goal amount": "Сумма сбора",
   "Pledges are held safely in the enterprise account.": "Вклады надёжно хранятся на счёте предприятия.",
@@ -3216,7 +3214,6 @@
   "Post\u0004button: publish": "Опубликовать",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Используйте вкладку {ledger}, чтобы мгновенно отправлять кредиты соседям.",
   "Member\u0004what a Decision touches": "Участник",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Исключение с этого узла (квалифицированное большинство 66%, кворум 25%, льготный период 7 дней)",
   "Temporary freeze of trading and messaging": "Временная заморозка сделок и сообщений",
   "Restore member to active standing (simple majority)": "Восстановление активного статуса участника (простое большинство)",
   "Cancel pending removal and restore account (simple majority)": "Отмена готовящегося исключения и восстановление аккаунта (простое большинство)",
@@ -3244,12 +3241,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Пожалуйста, введите позывной или публичный ключ старшего хранителя или лидера.",
   "The lead keeper or leader to remove: callsign or public key": "Старший хранитель или лидер, которого нужно снять: позывной или публичный ключ",
   "Enter the lead keeper or leader's callsign or pubkey...": "Введите позывной или публичный ключ старшего хранителя или лидера...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} боб.",
-    "few": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} боба.",
-    "many": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} бобов.",
-    "other": "Балансы скрыты: вы не можете видеть баланс {name}. Когда открывается голосование, сообщество фиксирует баланс и долг, показывая их всем голосующим. При исключении долг списывается из Фонда общих проектов, где сейчас {n} бобов."
-  },
   "Missing Title": "Не указан заголовок",
   "Please enter a clear, concise title for this decision.": "Пожалуйста, укажите ясный и краткий заголовок для этого решения.",
   "Missing Description": "Не указано описание",
@@ -6596,6 +6587,7 @@
   "Turn on notifications?": "Включить уведомления?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Чтобы вы знали, когда кто-то ответит вам, напишет сообщение или попросит присоединиться. Больше ни для чего.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Уведомления BeanPool выключены в настройках телефона. Откройте настройки, чтобы включить их.",
+  "Cancel request": "Отменить запрос",
   "Nothing here yet. Be the first:": "Здесь пока ничего нет. Будьте первыми:",
   "Choose a banner photo, or keep this one": "Выберите фото для баннера или оставьте это",
   "Your picture, until you choose a banner.": "Ваше изображение, пока вы не выберете баннер.",
@@ -6611,5 +6603,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Сообщить, когда сообщество появится здесь, или помочь его создать",
   "Nothing within 250 km yet.": "В радиусе 250 км пока ничего нет.",
   "See what people post elsewhere ›": "Посмотреть публикации из других мест ›",
-  "Set your area": "Укажите свой район"
+  "Set your area": "Укажите свой район",
+  "The purpose statement is what the community judges the project or enterprise against.": "По этому описанию сообщество оценивает проект или предприятие."
 }

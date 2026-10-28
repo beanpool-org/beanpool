@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { AVATAR_PRESETS } from '@beanpool/core';
 import { resolveAvatarUrl } from './avatar';
 
 /**
@@ -22,7 +25,7 @@ describe('resolveAvatarUrl', () => {
     });
 
     it('maps a shipped picture to the app\'s own file, and reads nothing as no photo', () => {
-        expect(resolveAvatarUrl('bundled://leaf')).toBe('/avatars/avatar_leaf.jpg');
+        expect(resolveAvatarUrl('bundled://leaf')).toBe('/avatars/avatar_leaf.webp');
         expect(resolveAvatarUrl(null)).toBeNull();
         expect(resolveAvatarUrl(undefined)).toBeNull();
         expect(resolveAvatarUrl('')).toBeNull();
@@ -38,11 +41,26 @@ describe('resolveAvatarUrl', () => {
         const pkB = '22'.repeat(32);
         const resA = resolveAvatarUrl(null, pkA);
         const resB = resolveAvatarUrl(null, pkB);
-        expect(resA).toMatch(/^\/avatars\/avatar_[a-z_]+\.jpg$/);
-        expect(resB).toMatch(/^\/avatars\/avatar_[a-z_]+\.jpg$/);
+        expect(resA).toMatch(/^\/avatars\/avatar_[a-z_]+\.webp$/);
+        expect(resB).toMatch(/^\/avatars\/avatar_[a-z_]+\.webp$/);
         // Stability
         expect(resolveAvatarUrl(null, pkA)).toBe(resA);
         expect(resolveAvatarUrl('', pkA)).toBe(resA);
         expect(resolveAvatarUrl(undefined, pkA)).toBe(resA);
+    });
+
+    it('every preset id resolves to a file that exists and is under 40 KB', () => {
+        expect(AVATAR_PRESETS.length).toBe(24);
+        for (const preset of AVATAR_PRESETS) {
+            const url = resolveAvatarUrl(`bundled://${preset.id}`);
+            expect(url).toBeTruthy();
+            expect(url).toBe(`/avatars/avatar_${preset.id.replace(/-/g, '_')}.webp`);
+
+            const publicFilePath = path.resolve(__dirname, '../../public', url!.replace(/^\//, ''));
+            expect(fs.existsSync(publicFilePath)).toBe(true);
+
+            const stats = fs.statSync(publicFilePath);
+            expect(stats.size).toBeLessThan(40 * 1024);
+        }
     });
 });

@@ -15,7 +15,7 @@ describe('MemberAvatar (web) — no bare initials (Marty addition)', () => {
         const img = screen.getByRole('img');
         expect(img).toBeInTheDocument();
         expect(img).toHaveAttribute('src');
-        expect(img.getAttribute('src')).toMatch(/^\/avatars\/avatar_[a-z_]+\.jpg$/);
+        expect(img.getAttribute('src')).toMatch(/^\/avatars\/avatar_[a-z_]+\.webp$/);
     });
 
     it('renders the same deterministic preset for the same pubkey across renders', () => {

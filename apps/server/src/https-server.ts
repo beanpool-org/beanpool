@@ -131,6 +131,9 @@ import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate
 import { privatePreviewGate, privatePreviewEarlyGate, isPrivatePreview, type KeyedImageChecks } from './config/private-preview.js';
 import { avatarKeyMatches, groupPictureKeyMatches, shopPhotoKeyMatches } from './engine/avatar-keys.js';
 import { photoKeyMatches } from './engine/photo-keys.js';
+import { LISTINGS_MEMBERS_ONLY } from './listings-members-only.js';
+import { peekTicketOpens } from './engine/peek-tickets.js';
+import { createPeekRoutes } from './routes/peek.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
@@ -488,11 +491,7 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
 const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
-export const LISTINGS_MEMBERS_ONLY = {
-    error: word("This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org."),
-    code: 'members_only',
-    global: 'https://global.beanpool.org',
-} as const;
+export { LISTINGS_MEMBERS_ONLY };
 
 /**
  * The refusal of a local community's other members' reads (MEMBERS_ONLY_READS_*: its enterprises, Decisions, Commons
@@ -505,9 +504,32 @@ export const COMMUNITY_MEMBERS_ONLY = {
     global: 'https://global.beanpool.org',
 } as const;
 
+/**
+ * The one read a peek ticket opens (front doors S6, engine/peek-tickets.ts): one post by id, `GET
+ * /api/marketplace/posts/:id?peek=<ticket>`. Not on the allowlist: it is let through the gate by the ticket alone
+ * (peekReadAllowed), and only while that ticket opens that post. A link that opens nothing is answered as a stranger's
+ * read of a listing is (LISTINGS_MEMBERS_ONLY), whatever the reason, so a refusal never says which.
+ */
+export const PEEK_READ_PATH = /^\/api\/marketplace\/posts\/([^/]+)$/;
+
+/**
+ * Whether this request is a ticket's read of the one post it opens now: a GET (or HEAD) of PEEK_READ_PATH with one
+ * `peek` value, which the engine checks against the post the path names (peekTicketOpens: the ticket's hash, its post,
+ * not run out or stopped, the community's switch, the sharer still a member, the post one a visitor could be shown). The
+ * path is taken as sent: a post id is never encoded (an encoded one names no post), and anything but one single
+ * segment is no peek read. Nothing else about the request changes: a signature sent with it is still checked.
+ */
+function peekReadAllowed(ctx: { method: string; path: string; query: Record<string, unknown> }): boolean {
+    if (ctx.method !== 'GET' && ctx.method !== 'HEAD') return false;
+    const m = PEEK_READ_PATH.exec(ctx.path);
+    if (!m || typeof ctx.query.peek !== 'string') return false;
+    return peekTicketOpens(m[1], ctx.query.peek);
+}
+
 function isListingsRead(path: string): boolean {
     const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
-    return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed));
+    return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed))
+        || PEEK_READ_PATH.test(routed);
 }
 
 function isAllowlisted(path: string): boolean {
@@ -1586,7 +1608,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         // ENFORCE_READ_AUTH is on. Deny-by-default — every GET /api/* is gated
         // unless it is on the public allowlist. A HEAD too: the router answers it with the GET handler, so an ungated
         // HEAD ran any gated read for anyone and its Content-Length told them what the GET would not (4108354205).
-        const isGatedRead = ENFORCE_READ_AUTH && (ctx.method === 'GET' || ctx.method === 'HEAD') && isApiPath && !isPublicRead(ctx.path);
+        // A peek ticket's read of the post it opens (peekReadAllowed) is let through by the ticket, as a public read is.
+        const isGatedRead = ENFORCE_READ_AUTH && (ctx.method === 'GET' || ctx.method === 'HEAD') && isApiPath && !isPublicRead(ctx.path)
+            && !peekReadAllowed(ctx as unknown as { method: string; path: string; query: Record<string, unknown> });
         if (isSignatureBypassed(ctx.path)) {
             return await next();
         }
@@ -1891,6 +1915,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createSettingsRoutes(deps),
         createCommunityRoutes(deps),
         createCommunityCardRoutes(deps),
+        createPeekRoutes(deps),
         createAdminRoutes(deps),
         createBackupRoutes(deps),
         createOffboxBackupRoutes(deps),

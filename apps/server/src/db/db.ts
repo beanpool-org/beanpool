@@ -1613,6 +1613,9 @@ export function initSchema() {
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.
     try { db.prepare(`ALTER TABLE shops ADD COLUMN photo_ref TEXT`).run(); } catch { }
+    // idx_shops_owner_opened (schema.sql) leads on the same column and replaces it. A plain index: an older image booted
+    // back on the data makes its own again, and this drops it at the next boot.
+    try { db.prepare(`DROP INDEX IF EXISTS idx_shops_owner`).run(); } catch { }
     // A shop's kind becomes one of the Market's categories, once (moveShopKindsToCategories).
     moveShopKindsToCategories();
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
@@ -1958,6 +1961,11 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN closing_on TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN answers TEXT CHECK (answers IS NULL OR answers IN ('week', 'slow', 'none'))`).run(); } catch { }
+    // A request of their own the person a withdrawn message request was for made while its opener blocked them
+    // (engine/dm-requests.ts reachedOutRow). No table yet on a database from before message requests: schema.sql makes it.
+    try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reached_out_at TEXT`).run(); } catch { }
+    // Their cancel of that request of their own (engine/dm-requests.ts cancelReachOut).
+    try { db.prepare(`ALTER TABLE dm_requests ADD COLUMN reach_out_withdrawn_at TEXT`).run(); } catch { }
     // join_requests: status CHECK gains 'cancelled' (Front doors S1, cancelKnock).
     try {
         const jrSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='join_requests'").get() as any)?.sql as string | undefined;

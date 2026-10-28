@@ -32,6 +32,7 @@ import {
     approvePostRequest,
     completePostTransaction,
     adminPruneUser,
+    COMMUNITY_DECISION_ACTOR,
     usableFloor,
 } from './state-engine.js';
 import {
@@ -349,7 +350,7 @@ async function main() {
     votePoll(pollBob!.id, 'pub-frank', '1');
 
     // Prune Bob
-    adminPruneUser('pub-bob', 'owner:password');
+    adminPruneUser('pub-bob', COMMUNITY_DECISION_ACTOR);
 
     const bobPollAfter = getPosts({ id: pollBob!.id, includeInactive: true })[0];
     assert(bobPollAfter?.status === 'completed', 'Bob poll closed immediately upon author prune');

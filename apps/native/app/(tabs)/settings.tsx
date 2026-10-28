@@ -63,12 +63,12 @@ import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, t, word, formatNumber, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
-import { beansOn, effectiveFeatures } from '../../utils/node-profile';
+import { beansOn, effectiveFeatures, shareOutsideOn } from '../../utils/node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
@@ -1969,6 +1969,17 @@ export default function SettingsScreen() {
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
 
+                    {/* The links this member shared outside the community (front doors S6, app/shared-outside.tsx): only where it allows it. */}
+                    {shareOutsideOn(nodeProfile?.features) && (
+                        <Pressable style={styles.menuBtn} onPress={() => router.push('/shared-outside' as any)} accessibilityRole="button" testID="settings-shared-outside">
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔗</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>{t(PEEK_WORDS.sharedOutside)}</Text>
+                            </View>
+                            <Text style={styles.menuChevron}>›</Text>
+                        </Pressable>
+                    )}
+
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel={t('Link a device')} accessibilityHint={t('Copies your own account to a browser, to use BeanPool there as you')}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>
                         {/* Not "Manage this community from a computer" (NodeAdminEntry), which signs a browser into the community's Settings. Older apps: "Use your account on another device", before it "Link Another Device" (Marty, 16 Oct: renamed). */}
@@ -2410,6 +2421,17 @@ export default function SettingsScreen() {
 
                         {/* The sign-in row, second, once the key vault has answered (the words above never wait for it). */}
                         {waysBack && !protectionLoading && protectionPanel}
+
+                        {/* Every place a copy of this key is kept, as far as this phone can ask, since when, and removing
+                            them (vault rethink VR1, design §5.1): app/ways-back.tsx. In every build: a community's copies
+                            are listed there too. */}
+                        <Pressable style={[styles.menuBtn, { borderBottomWidth: 0, minHeight: 48 }]} onPress={() => router.push('/ways-back')} accessibilityRole="button">
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>{t('Where your account can be brought back from')}</Text>
+                                <Text style={styles.menuSub}>{t('Every copy, since when, and removing them')}</Text>
+                            </View>
+                            <Text style={styles.menuChevron} accessibilityElementsHidden importantForAccessibility="no">›</Text>
+                        </Pressable>
 
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginTop: 8 }}>

@@ -26,7 +26,7 @@ import {
     initStateEngine, createTreasury, createPost as rawCreatePost, completePostTransaction,
     requestPost, approvePostRequest, transfer, getBalance, getMemberTrustProfile,
     adminAssignTreasuryOperator, adminRevokeTreasuryOperator,
-    adminSetCreditFrozen, adminSetUserStatus, adminPruneUser,
+    adminSetCreditFrozen, adminSetUserStatus, adminPruneUser, COMMUNITY_DECISION_ACTOR,
     getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
     pledgeEnterpriseBacking, releaseEnterpriseBacking, clearEnterpriseFloorCache,
     runLedgerAudit, payFromCommons,
@@ -659,7 +659,7 @@ async function main() {
     assert(floorBeforePrune.floor === -40, 'Floor before prune is -40');
 
     // Prune keeper via adminPruneUser
-    adminPruneUser(KPrune, 'owner:password');
+    adminPruneUser(KPrune, COMMUNITY_DECISION_ACTOR);
 
     // Because setUserStatusRow clears enterpriseFloorCache, immediate read must not return stale 40
     const floorAfterPrune = getEnterpriseFloor(pruneEnt);

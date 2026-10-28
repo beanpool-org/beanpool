@@ -2669,6 +2669,20 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
+/**
+ * The offboarding wizard's gift out of a removal the community voted for (member-wizards.ts executeOffboard; removal by vote
+ * S3, design §2 row 5): an admin settles the Beans of a member who waits out that removal's grace window paused
+ * ('disabled'), so the sender is not active. Only that: the admin's own signature (offboardOverride), a member a passed
+ * removal holds, and no key waiting on a re-key.
+ */
+function isGiftOutOfARemoval(from: string, auth?: { signer: string; offboardOverride?: boolean }): boolean {
+    if (!auth?.offboardOverride || !auth.signer) return false;
+    if (!(auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer))) return false;
+    if ((db.prepare('SELECT status FROM members WHERE public_key = ?').get(from) as { status?: string } | undefined)?.status !== 'disabled') return false;
+    if (db.prepare('SELECT 1 FROM invalidated_keys WHERE public_key = ? COLLATE NOCASE').get(from)) return false;
+    return removalInGraceOf(from) !== null;
+}
+
 export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean; decisionPayOut?: boolean }): Transaction | null {
     if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // Before every other guard: on a node whose `beans` switch is off nothing moves, whoever asks (a member's send,
@@ -2677,7 +2691,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the visitor's or bridge's row
     // below is written.
     assertLedgerWritable();
-    if (from !== 'genesis' && from !== 'COMMONS_POOL') assertMemberActive(from);
+    if (from !== 'genesis' && from !== 'COMMONS_POOL' && !isGiftOutOfARemoval(from, auth)) assertMemberActive(from);
     if (!isSyntheticAccount(to) && to !== 'genesis' && to !== 'COMMONS_POOL') {
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
         if (dest?.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
@@ -8562,10 +8576,73 @@ export function pruneNeedsOwner(publicKey: string, actor: string): boolean {
 }
 
 /**
- * node_roles: only an owner may grant (so only an owner may take away) an owner or admin role, and pruning
- * takes it away for good. A plain admin gets a 403. Leaving yourself and a community Decision are allowed.
+ * What a removal an admin makes is answered where the community votes (removal by vote S3: scratch/fable-design/
+ * DESIGN-removal-by-vote-fable.md §2 row 1, §10 Q4): removing a member is the community's vote, and the admins' act is the
+ * pause that opens it. The operator's own words, to the owners and admins (routes/admin.ts, the manager).
  */
-export function assertMayPrune(publicKey: string, actor: string): void {
+export const REMOVAL_IS_THE_VOTE = "Removing a member is the community's vote here. Pause them instead: that opens the vote, and the community decides.";
+/**
+ * The same refusal for an owner or an admin (heldPrivilegedRole, a role a pause holds aside included). No vote removes one
+ * (decisions-engine NODE_OPERATOR_EFFECTS, docs/the-commons.md §3.8), so a pause would only park them until its vote closes:
+ * an owner takes the role away first, and then they are a member like any other (design §2 row 9; review 4397436971).
+ */
+export const REMOVAL_OF_A_ROLE_HOLDER = "Removing a member is the community's vote here, and no vote removes an owner or admin of this community's server. "
+    + 'An owner can take that role away first; after that, they are a member like any other, and pausing them opens the vote.';
+/** The `code` a refusal of a removal or an offboarding answers with where the community votes. */
+export const REMOVAL_IS_THE_VOTE_CODE = 'removal_is_the_vote';
+
+/**
+ * How a removal reaches adminPruneUser, for the rule where the community votes (removalVoteRefusal). Each way but the first
+ * is let through only on its own condition, checked there, never on the caller's word:
+ *  - 'direct': an admin's own removal (Prune, a burst's removal, the offboarding wizard where votes are off);
+ *  - 'owner-branch': an owner's prune branch (adminPruneBranch), the one exception kept until the branch vote (slice S5;
+ *    design §10 Q5), by an owner-level actor only, and for a branch of more than one member (branchPruneDoor);
+ *  - 'settles-removal': the offboarding wizard settling a removal the community voted for (§2 row 5, Q6), only while one
+ *    waits out its grace window for this member (member-wizards.ts executeOffboard).
+ */
+export type PruneDoor = 'direct' | 'owner-branch' | 'settles-removal';
+
+/** The removal the community voted for that is waiting out its grace window for this member, if there is one. */
+export function removalInGraceOf(publicKey: string): { id: string; gracePeriodEndsAt: string | null } | null {
+    const row = db.prepare(`
+        SELECT id, grace_period_ends_at FROM decisions
+        WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
+        ORDER BY created_at DESC LIMIT 1
+    `).get(publicKey) as { id: string; grace_period_ends_at: string | null } | undefined;
+    return row ? { id: row.id, gracePeriodEndsAt: row.grace_period_ends_at } : null;
+}
+
+/**
+ * Why this removal may not be made here, or null (removal by vote S3). Where the community votes (the `decisions` switch),
+ * only its vote removes a member: the vote carries it out as COMMUNITY_DECISION_ACTOR, at the end of the grace window or
+ * when an admin speeds it up. Nobody else removes a member there, an owner and the password included (Q4), but for the
+ * member's own leaving and the two ways PruneDoor names. With the switch off (the global node, or an operator who turned
+ * votes off: Q11) the admins remove members, as before. The routes ask it before an owner's fresh proof is spent.
+ */
+export function removalVoteRefusal(publicKey: string, actor: string, door: PruneDoor = 'direct'): string | null {
+    if (!getProfileSwitches().decisions) return null;
+    if (actor === COMMUNITY_DECISION_ACTOR || actor === publicKey) return null;
+    // A row stored under another spelling of a key is no member's account: nobody can sign for it, and the wizards send an
+    // operator to Prune it (member-wizards.ts MISSPELT_ROW_ERROR). Removing it removes nobody.
+    if (!isMemberKeySpelling(publicKey)) return null;
+    if (door === 'owner-branch' && isOwnerLevelActor(actor)) return null;
+    if (door === 'settles-removal' && removalInGraceOf(publicKey)) return null;
+    return heldPrivilegedRole(publicKey) ? REMOVAL_OF_A_ROLE_HOLDER : REMOVAL_IS_THE_VOTE;
+}
+
+/**
+ * Where the community votes, only its vote removes a member (removalVoteRefusal, 400 in words). Then node_roles: only an
+ * owner may grant (so only an owner may take away) an owner or admin role, and pruning takes it away for good. A plain
+ * admin gets a 403. Leaving yourself and a community Decision are allowed.
+ */
+export function assertMayPrune(publicKey: string, actor: string, door: PruneDoor = 'direct'): void {
+    const refusal = removalVoteRefusal(publicKey, actor, door);
+    if (refusal) {
+        const err: any = new Error(refusal);
+        err.status = 400;
+        err.code = REMOVAL_IS_THE_VOTE_CODE;
+        throw err;
+    }
     const role = heldPrivilegedRole(publicKey);
     if (!role || actor === publicKey || actor === COMMUNITY_DECISION_ACTOR || isOwnerLevelActor(actor)) return;
     // Not "propose a Decision instead": no community vote removes an owner or an admin (decisions-engine NODE_OPERATOR_EFFECTS).
@@ -8586,13 +8663,14 @@ const POLLS_A_PRUNE_CLOSES = "('active', 'paused')";
 
 /**
  * `actor` is the authenticated admin actor (a pubkey or 'owner:password'), the member themselves, or
- * COMMUNITY_DECISION_ACTOR — never one read from a request body.
+ * COMMUNITY_DECISION_ACTOR — never one read from a request body. `door` is how the removal comes here (PruneDoor): where
+ * the community votes, only its vote removes a member (assertMayPrune).
  */
-export function adminPruneUser(publicKey: string, actor: string) {
+export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor = 'direct') {
     if (isSoleOwner(publicKey)) {
         throw new Error('Cannot prune the sole node owner; appoint another owner first');
     }
-    assertMayPrune(publicKey, actor);
+    assertMayPrune(publicKey, actor, door);
 
     // `conservingTransaction`, not a bare `db.transaction` (review finding). Both branches below mutate the
     // in-memory ledger and the COMMONS_BALANCE global as well as the rows, and two statements run AFTER
@@ -8984,11 +9062,41 @@ export function inviteBranchOf(rootPublicKey: string): string[] {
     return branch;
 }
 
+/**
+ * The way an owner's prune branch reaches adminPruneUser (PruneDoor): 'owner-branch' only for a branch. A member who invited
+ * nobody, or whose invitees are all gone already, is a branch of one, and removing them alone is the direct removal that
+ * only the community's vote makes where it votes (§10 Q4), not the exception kept for a branch until the branch vote (Q5;
+ * review 4397436860). So it counts whom the prune would remove: the members' accounts in the subtree (a stray row is
+ * nobody's) that are not removed already.
+ */
+export function branchPruneDoor(branch: string[]): PruneDoor {
+    const removes = branch.filter((pubkey) => isMemberKeySpelling(pubkey)
+        && (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pubkey) as { status: string } | undefined)?.status !== 'pruned').length;
+    return removes > 1 ? 'owner-branch' : 'direct';
+}
+
+/** Why this owner's prune branch may not be made here, or null: the check adminPruneBranch makes, which the route asks first. */
+export function branchRemovalRefusal(rootPublicKey: string, actor: string): string | null {
+    const branch = inviteBranchOf(rootPublicKey);
+    const door = branchPruneDoor(branch);
+    for (const pubkey of branch) {
+        const refusal = removalVoteRefusal(pubkey, actor, door);
+        if (refusal) return refusal;
+    }
+    return null;
+}
+
+/**
+ * An owner removes a member and their whole invite subtree. Where the community votes, this is the one removal an owner
+ * still makes without it, until the branch vote (removal by vote S5; design §10 Q5): PruneDoor 'owner-branch', for a
+ * branch of more than one (branchPruneDoor).
+ */
 export function adminPruneBranch(rootPublicKey: string, actor: string) {
     // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
     // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
     const branch = inviteBranchOf(rootPublicKey);
-    for (const pubkey of branch) assertMayPrune(pubkey, actor);
+    const door = branchPruneDoor(branch);
+    for (const pubkey of branch) assertMayPrune(pubkey, actor, door);
     // The node must keep an active owner. Checked for the branch as a whole, not member by member: two
     // co-owners in one branch are each not the sole owner until the first is pruned.
     // Same terms as isSoleOwner: an owner in the branch (an active one, or one whose key waits on a re-key code), and no
@@ -9001,7 +9109,7 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
     if (owners.some(o => inBranch.has(o.member_pubkey)) && !owners.some(o => o.acts && !inBranch.has(o.member_pubkey))) {
         throw new Error("This branch holds the node's only owner, so nobody in it was pruned. Appoint another owner outside the branch first");
     }
-    for (const pubkey of branch) adminPruneUser(pubkey, actor);
+    for (const pubkey of branch) adminPruneUser(pubkey, actor, door);
 }
 
 export function adminBroadcastAnnouncement(title: string, body: string, severity: 'info'|'warning'|'critical') {

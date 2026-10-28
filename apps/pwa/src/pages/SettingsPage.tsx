@@ -26,9 +26,11 @@ import { useCommunityInfo, useReaderFeatures } from '../lib/features';
 import { globalCommunityLink, isAppsGlobal, phoneLaterLines, usePhoneBrowser } from '../lib/global-entry';
 import { isInstalled, useDeferredInstallPrompt, clearDeferredPrompt, DesktopInstallSteps } from '../components/InstallPrompt';
 import { StoreBadges, ApkDownloadLink } from '../components/UsePhoneAppCard';
+import { SharedOutsideSection } from '../components/SharedOutsideSection';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
+import { WaysBackSection } from '../components/WaysBackSection';
 import { MemberAvatar } from '../components/MemberAvatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
@@ -1013,6 +1015,15 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                                 <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} />
+                                {/* Where a copy of this account is kept, as far as this browser can ask, and removing this
+                                    server's (vault rethink VR1). After a removal the server's list is read again, so the
+                                    line above says what it keeps now. */}
+                                <WaysBackSection
+                                    enrolled={signInRecovery}
+                                    hasWords={hasWords}
+                                    onShowWords={() => setMode('seed')}
+                                    onChanged={() => { getSignInRecovery().then(setSignInRecovery); }}
+                                />
                             </div>
                         </div>
 
@@ -1142,6 +1153,10 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 </div>
                             </div>
                         </div>
+
+                        {/* ─── Shared outside (front doors S6): the links this member shared outside the community, and Stop
+                             sharing. Only where the community lets members share outside. ─── */}
+                        <SharedOutsideSection />
 
                         {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
                              not this community's node), the website. The same rows as the member app's Settings. ─── */}

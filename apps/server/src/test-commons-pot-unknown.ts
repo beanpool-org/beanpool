@@ -121,6 +121,12 @@ async function child(): Promise<void> {
             const { tickDecisions } = await import('./decisions-engine.js');
             return tickDecisions(a?.asOfMs);
         },
+        /** Community votes on or off (the operator's switch): an admin prunes only where they are off (removal by vote S3). */
+        votes: async (a: { on: boolean }) => {
+            const { setSwitchOverride } = await import('./config/node-profile.js');
+            setSwitchOverride('decisions', a.on);
+            return true;
+        },
         state: async (a: { k: Keys; setup?: Setup }) => {
             const se = await import('./state-engine.js');
             const core = await import('@beanpool/core');
@@ -285,15 +291,22 @@ async function main(): Promise<void> {
         // Members' money steps, and NB-4 of the re-review: the sweep answers in the pause words, not "please try again".
         const confirm = await signed(base, '/api/marketplace/transactions/complete', ids.ben, { transactionId: setup.heldDeal, confirmerPublicKey: k.ben });
         const purge = await signed(base, '/api/member/purge', ids.fay, {});
+        // An admin prunes only where community votes are switched off (removal by vote S3); where they are on, the removal
+        // an admin carries out is the settlement of one the community voted for (Dan's, waiting out its grace window).
+        await node.send('votes', { on: false });
         const prune = await post(base, `/api/local/admin/users/${k.ben}/prune`, {}, admin);
+        await node.send('votes', { on: true });
+        const settle = await post(base, `/api/local/admin/members/${k.dan}/offboard`, { resolution: 'donate_to_commons' }, owner);
         const accel = await post(base, '/api/local/admin/decisions/R1/accelerate', {}, admin);
         const sweep = await signed(base, `/api/treasury/${setup.treasury}/sweep`, ids.ivy, { amount: 5 });
         assert(confirm.status >= 400 && confirm.body?.error === PAUSED, `a buyer confirming a held deal: refused in the pause words (${brief(confirm)})`);
         assert(purge.status >= 400 && purge.body?.error === PAUSED, `a member deleting their account: refused in the pause words (${brief(purge)})`);
-        assert(prune.status >= 400 && prune.body?.error === PAUSED, `an admin's prune: refused in the pause words (${brief(prune)})`);
+        assert(prune.status >= 400 && prune.body?.error === PAUSED, `an admin's prune, with community votes off: refused in the pause words (${brief(prune)})`);
+        assert(settle.status >= 400 && settle.body?.error === PAUSED,
+            `an admin settling a removal the community voted for (the offboarding wizard): refused in the pause words (${brief(settle)})`);
         assert(accel.status === 503 && accel.body?.error === PAUSED, `an admin hurrying a removal: 503, in the pause words (${brief(accel)})`);
         assert(sweep.status === 503 && sweep.body?.error === PAUSED, `a keeper's sweep: 503, in the pause words (${brief(sweep)})`);
-        const answers = JSON.stringify([propose, heldDel, confirm, purge, prune, accel, sweep]);
+        const answers = JSON.stringify([propose, heldDel, confirm, purge, prune, settle, accel, sweep]);
         assert(!/finite number|NaN|Internal Server Error|try again/.test(answers), 'no answer says "finite number", "NaN", "Internal Server Error" or "try again"');
         const afterAll = await node.send('state', { k, setup });
         assert(JSON.stringify(afterAll.balances) === JSON.stringify(before.balances) && afterAll.txCount === before.txCount && afterAll.members.fay.status === 'active',

@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 FINANCÉ",
   "🌱 PROJECT": "🌱 PROJET",
   "🏛️ ENTERPRISE": "🏛️ ENTREPRISE",
-  "Enterprise Balance": "Solde de l'entreprise",
   "in deficit (keepers eat last)": "en déficit (les gérants passent en dernier)",
   "Pledge Beans": "S'engager en haricots",
   "Word {n}: {word}": "Mot {n} : {word}",
@@ -2663,10 +2662,9 @@
   "NAME / TITLE *": "NOM / TITRE *",
   "Enterprise name or project title": "Nom de l'entreprise ou titre du projet",
   "e.g. Community Tool Shed": "ex. Atelier d'outillage communautaire",
-  "PURPOSE STATEMENT *": "OBJECTIF DE L'INITIATIVE *",
+  "PURPOSE STATEMENT *": "DESCRIPTION DE L'OBJECTIF *",
   "Purpose statement": "Description de l'objectif",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Expliquez clairement la raison d'être de cette entreprise (ex. « Nous construisons et entretenons une serre commune d'ici novembre »).",
-  "The purpose statement is what the community judges the initiative against.": "L'objectif déclaré est le critère sur lequel la communauté évalue l'initiative.",
   "FUNDING GOAL ({currency}) *": "OBJECTIF DE FINANCEMENT ({currency}) *",
   "Funding goal amount": "Montant de l'objectif de financement",
   "Pledges are held safely in the enterprise account.": "Les promesses de contribution sont conservées en sécurité sur le compte de l'entreprise.",
@@ -2970,7 +2968,6 @@
   "Post\u0004button: publish": "Publier",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Utilisez l'onglet {ledger} pour envoyer instantanément des crédits à vos voisins.",
   "Member\u0004what a Decision touches": "Membre",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Exclusion de ce nœud (supermajorité de 66 %, quorum de 25 %, délai de grâce de 7 jours)",
   "Temporary freeze of trading and messaging": "Gel temporaire des échanges et de la messagerie",
   "Restore member to active standing (simple majority)": "Rétablir le statut actif du membre (majorité simple)",
   "Cancel pending removal and restore account (simple majority)": "Annuler l'exclusion en attente et rétablir le compte (majorité simple)",
@@ -2998,10 +2995,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Veuillez saisir le pseudonyme ou la clé publique du gérant principal ou responsable.",
   "The lead keeper or leader to remove: callsign or public key": "Le gérant principal ou responsable à retirer : pseudonyme ou clé publique",
   "Enter the lead keeper or leader's callsign or pubkey...": "Saisir le pseudonyme ou la clé publique du gérant principal ou responsable…",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "Les soldes sont privés : vous ne pouvez pas voir celui de {name}. Lorsque ce vote s'ouvre, la communauté enregistre son solde et toute dette éventuelle, et les montre à tous les votants. Si la personne est exclue, la dette est imputée au fonds des Communs, qui contient {n} haricot actuellement.",
-    "other": "Les soldes sont privés : vous ne pouvez pas voir celui de {name}. Lorsque ce vote s'ouvre, la communauté enregistre son solde et toute dette éventuelle, et les montre à tous les votants. Si la personne est exclue, la dette est imputée au fonds des Communs, qui contient {n} haricots actuellement."
-  },
   "Missing Title": "Titre manquant",
   "Please enter a clear, concise title for this decision.": "Veuillez saisir un titre clair et concis pour cette décision.",
   "Missing Description": "Description manquante",
@@ -6118,6 +6111,7 @@
   "Turn on notifications?": "Activer les notifications ?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Pour savoir quand quelqu'un vous répond, vous envoie un message ou demande à rejoindre. Rien d'autre.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Les notifications de BeanPool sont désactivées dans les réglages de votre téléphone. Ouvrez les paramètres pour les activer.",
+  "Cancel request": "Annuler la demande",
   "Nothing here yet. Be the first:": "Rien ici pour le moment. Soyez le premier :",
   "Choose a banner photo, or keep this one": "Choisissez une photo de bannière, ou gardez celle-ci",
   "Your picture, until you choose a banner.": "Votre photo, jusqu'à ce que vous choisissiez une bannière.",
@@ -6133,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Prévenez-moi quand une communauté démarre ici, ou proposez d'en créer une",
   "Nothing within 250 km yet.": "Rien dans un rayon de 250 km pour l'instant.",
   "See what people post elsewhere ›": "Voir ce que les gens publient ailleurs ›",
-  "Set your area": "Définissez votre zone"
+  "Set your area": "Définissez votre zone",
+  "The purpose statement is what the community judges the project or enterprise against.": "L'objectif déclaré est le critère sur lequel la communauté évalue le projet ou l'entreprise."
 }

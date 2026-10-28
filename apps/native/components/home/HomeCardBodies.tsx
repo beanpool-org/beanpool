@@ -338,9 +338,15 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
     );
 }
 
+/**
+ * A row's picture, or its category's tile. A picture that will not load gives way to the tile, never an empty box (an
+ * enterprise's banner from before it changed it, a weak connection: review of #2565, finding 8). The URL that failed is
+ * kept, not a flag, so a new one is tried.
+ */
 function Thumb({ uri, category, kind, colors }: { uri: string | null; category?: string | null; kind?: CategoryTileKind; colors: AppColors }) {
     const s = homeStyles(colors);
-    if (uri) return <Image source={{ uri }} style={s.thumb} contentFit="cover" accessibilityIgnoresInvertColors />;
+    const [failed, setFailed] = React.useState<string | null>(null);
+    if (uri && uri !== failed) return <Image source={{ uri }} style={s.thumb} contentFit="cover" accessibilityIgnoresInvertColors onError={() => setFailed(uri)} />;
     return (
         <View style={[s.thumb, { overflow: 'hidden' }]}>
             <CategoryTile category={category} kind={kind} size="thumb" />
@@ -395,7 +401,7 @@ function MarketRow({ p, nodeUrl, showsBeans, colors, testID }: { p: HomeMarketIt
             sub={facts || category}
             a11y={a11y}
             onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
-            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl))} category={p.category} kind="listing" colors={colors} />}
+            left={<Thumb uri={listPhotoUrl(onNode(nodeUrl, p.photoUrl || p.bannerUrl))} category={p.category} kind="listing" colors={colors} />}
             subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
             testID={testID}
         />

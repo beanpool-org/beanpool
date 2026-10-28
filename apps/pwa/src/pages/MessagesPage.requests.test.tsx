@@ -547,6 +547,30 @@ describe('the chat in request mode, for the person it is for', () => {
         expect(within(bar).getByRole('button', { name: 'Accept' })).toBeEnabled();
     });
 
+    it('after Cancel request, the person it was for cannot accept it, by Accept or by writing', async () => {
+        // Marty, 28 Oct 2026 (PR #2540): the node's state is the authority. Bo cancels while Ann has his request open: the
+        // node's next read has no line of his in it and still names his request, so the chat stays a request for her, with no
+        // composer to write in (a line of hers would accept it). Her Accept finds no request (404), and the chat leaves.
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        vi.mocked(decideMessageRequest).mockImplementation(async () => {
+            throw Object.assign(new Error('There is no message request for you in this chat.'), { status: 404, code: 'request_not_found' });
+        });
+        render(<MessagesPage identity={idOf(ann)} />);
+        await openFromCard();
+        node.list = annListWith([]);
+        node.reads[CONV] = readOf(pending(), []);
+        await ringDoorbell();
+        await waitFor(() => expect(screen.queryAllByText('Hello')).toHaveLength(0));
+        expect(screen.getByTestId('request-mode')).toHaveTextContent('Bo wants to message you');
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        fireEvent.click(within(screen.getByTestId('request-mode')).getByRole('button', { name: 'Accept' }));
+        await waitFor(() => expect(screen.queryByTestId('request-mode')).toBeNull());
+        expect(decideMessageRequest).toHaveBeenCalledWith(CONV, 'accept');
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
     it('a request opened by its id (a push) opens in request mode, never as a new chat', async () => {
         node.list = annListWith([requestEntry(bo, CONV)]);
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
@@ -697,6 +721,48 @@ describe('the sender\'s side', () => {
         expect(await screen.findByPlaceholderText('Edit message...')).toBeInTheDocument();
     });
 
+    it('a blocked member who reached out sees their request accepted when the blocker writes; nothing tells them they are blocked', async () => {
+        // Marty, 28 Oct 2026 (PR #2540, "B: shows as accepted"): Ann cancelled her request to Bo and blocked him; Bo wrote (his
+        // own request, kept for him alone, which he reads as his, waiting). Then Ann writes: the node answers Bo as it answers
+        // a member nobody blocked (test-dm-request-cancel step 11), his own request accepted, at the time he reached out, and
+        // her line an ordinary one in his chats. His page shows that and nothing else; hers shows her own request waiting.
+        const REACHED_AT = '2026-10-23T02:00:00.000Z';
+        const his = { state: 'pending', from: bo.publicKey, at: REACHED_AT, nextLineIsRequest: false };
+        const accepted = { state: 'accepted', from: bo.publicKey, at: REACHED_AT };
+        const hisLine = line(bo, 'Are you still there?', '2026-10-23T02:00:00.001Z');
+        const herLine = line(ann, 'Sorry, yes', '2026-10-23T02:05:00.000Z');
+        node.list = boList(his);
+        node.reads[CONV] = readOf(his, [hisLine]);
+        const first = render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        expect(await screen.findByTestId('request-waiting')).toBeInTheDocument();
+
+        node.list = boList(accepted);
+        node.reads[CONV] = readOf(accepted, [hisLine, herLine]);
+        await ringDoorbell();
+        expect(await screen.findByText('Sorry, yes')).toBeInTheDocument();
+        expect(await screen.findByPlaceholderText('Message...')).toBeEnabled();
+        expect(screen.queryByTestId('request-waiting')).toBeNull();
+        expect(screen.queryByTestId('request-mode')).toBeNull();
+        expect(screen.queryByTestId('request-first-line')).toBeNull();
+        expect(screen.queryByText(/wants to message you|as a request|ignored|blocked/i)).toBeNull();
+        first.unmount();
+
+        // His list: the chat among his chats, and no Requests at all.
+        const list = render(<MessagesPage identity={idOf(bo)} />);
+        expect((await screen.findAllByText('Ann')).length).toBeGreaterThan(0);
+        expect(within(await chips()).queryByRole('button', { name: /Requests/ })).toBeNull();
+        list.unmount();
+
+        // Ann, who blocks him, reads the request her line made as waiting: his lines never reach her.
+        const hers = { state: 'pending', from: ann.publicKey, at: '2026-10-23T02:05:00.000Z', nextLineIsRequest: false };
+        node.list = { ...boList(hers), conversations: [{ ...boList(hers).conversations[0], peerCallsign: 'Bo' }] };
+        node.reads[CONV] = readOf(hers, [herLine]);
+        render(<MessagesPage identity={idOf(ann)} openConversationId={CONV} />);
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Bo will see it under Requests. You can write more once they accept.');
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        expect(screen.queryByText('Are you still there?')).toBeNull();
+    });
+
     it('when Ann accepts, the doorbell brings the composer back', async () => {
         node.list = boList(pending());
         node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
@@ -707,6 +773,51 @@ describe('the sender\'s side', () => {
         await ringDoorbell();
         expect(await screen.findByPlaceholderText('Message...')).toBeEnabled();
         expect(screen.queryByTestId('request-waiting')).toBeNull();
+    });
+
+    it('shows Cancel request beside the waiting line and cancels it when clicked', async () => {
+        node.list = boList(pending());
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
+        vi.mocked(decideMessageRequest).mockResolvedValueOnce({
+            success: true,
+            request: { state: 'pending', from: bo.publicKey, at: REQUESTED_AT, nextLineIsRequest: true } as any,
+        });
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-waiting');
+        const cancelBtn = screen.getByTestId('request-cancel');
+        expect(cancelBtn).toHaveTextContent('Cancel request');
+        fireEvent.click(cancelBtn);
+        await waitFor(() => {
+            expect(decideMessageRequest).toHaveBeenCalledWith(CONV, 'cancel');
+        });
+        expect(await screen.findByPlaceholderText('Message...')).toBeEnabled();
+        expect(screen.queryByTestId('request-waiting')).toBeNull();
+    });
+
+    it('cancelling a waiting request disables the button while in flight to prevent duplicate submissions', async () => {
+        let resolveCancel!: (val: any) => void;
+        const cancelPromise = new Promise((resolve) => { resolveCancel = resolve; });
+        vi.mocked(decideMessageRequest).mockImplementationOnce(() => cancelPromise as any);
+
+        node.list = boList(pending());
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-waiting');
+        const cancelBtn = screen.getByTestId('request-cancel');
+        expect(cancelBtn).toBeEnabled();
+
+        fireEvent.click(cancelBtn);
+        expect(cancelBtn).toBeDisabled();
+        fireEvent.click(cancelBtn);
+        expect(decideMessageRequest).toHaveBeenCalledTimes(1);
+
+        resolveCancel({
+            success: true,
+            request: { state: 'pending', from: bo.publicKey, at: REQUESTED_AT, nextLineIsRequest: true },
+        });
+        await waitFor(() => {
+            expect(screen.queryByTestId('request-waiting')).toBeNull();
+        });
     });
 
     it('30 days on (expired), the next line is a new request: the composer is back, saying so', async () => {

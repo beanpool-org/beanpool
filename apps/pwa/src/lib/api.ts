@@ -333,6 +333,9 @@ export interface CommunityInfo {
         /** Present, and true, only where anyone can join in a minute (the worldwide community): the node refuses the whole
          *  directory and the whole invite tree, and an open group's roster to anyone outside it. Absent: as before. */
         openMembership?: true;
+        /** Present, and true, only where members may share a post outside the community (front doors S6, lib/peek.ts):
+         *  Share outside the community, and Settings' Shared outside. Absent (turned off, global, an older node): neither. */
+        shareOutside?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;
@@ -1050,10 +1053,10 @@ export async function getConversations(publicKey: string): Promise<Conversations
 }
 
 /**
- * Accept or ignore a message request waiting for the signer (POST /api/messages/request): the request as they now read
- * it. Only the person it was sent to may; ignoring tells the opener nothing.
+ * Accept or ignore a message request waiting for the signer, or cancel the signer's own pending request
+ * (POST /api/messages/request): the request as they now read it.
  */
-export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore'): Promise<{ success: boolean; request: DmRequest }> {
+export async function decideMessageRequest(conversationId: string, decision: 'accept' | 'ignore' | 'cancel'): Promise<{ success: boolean; request: DmRequest }> {
     return request('POST', '/api/messages/request', { conversationId, decision });
 }
 
@@ -1246,6 +1249,8 @@ export interface MarketplacePost {
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
     /** The author's face, carried on the row for a member's read (null for a visitor's, and for no photo). */
     authorAvatarUrl?: string | null;
+    /** The shop banner URL of the author enterprise (Pictures S6). */
+    authorBannerUrl?: string | null;
     pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
@@ -2913,6 +2918,25 @@ export async function getSignInRecovery(): Promise<string[] | null> {
         return Array.isArray(res?.enrolledSso) ? res.enrolledSso.filter((p): p is string => typeof p === 'string') : null;
     } catch {
         return null;
+    }
+}
+
+/**
+ * Remove this community's copy of the account for one sign-in ("Where your account can be brought back from", vault
+ * rethink VR1): the signed `DELETE /api/recovery/shares/sso/:provider`, as the phone sends it. True only on the server's
+ * own answer (routes/keepers.ts): a 2xx whose JSON names the copy removed, or a 404 with its JSON `error` (it keeps none
+ * for that sign-in). False for anything else: no answer, a refusal, or an answer that isn't the server's (a proxy's
+ * page, a 2xx naming nothing), as the phone's removeCommunityCopy (utils/vault-move.ts) counts them. Never throws.
+ */
+export async function removeSignInCopy(provider: string): Promise<boolean> {
+    try {
+        const res = await signedFetch('DELETE', `/api/recovery/shares/sso/${encodeURIComponent(provider)}`);
+        if (!res.ok && res.status !== 404) return false;
+        const body = await res.json().catch(() => null) as { removed?: unknown; error?: unknown } | null;
+        if (!body || typeof body !== 'object') return false;
+        return res.ok ? body.removed === provider : typeof body.error === 'string';
+    } catch {
+        return false;
     }
 }
 

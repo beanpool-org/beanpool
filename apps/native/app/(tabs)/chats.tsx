@@ -4,7 +4,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { setHelpContext } from '../../utils/tour-store';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useIdentity } from '../IdentityContext';
-import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal } from '../../utils/db';
+import { getConversations, getActionableDeals, createConversationApi, syncMessages, getFriendsLocal, getMessageRequests } from '../../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { MemberAvatar } from '../../components/MemberAvatar';
 import { palette } from '../../constants/colors';
@@ -22,6 +22,7 @@ import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState, rowTime } from '..
 import { chatPreviewWords } from '../../utils/chat-line-words';
 import { listingStatusWords } from '../../utils/listing-status-words';
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
+import { MessageRequestsPane } from '../../components/MessageRequestsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
 import { listPhotoUrl, t, tn, word, type WordKey } from '@beanpool/core';
@@ -80,10 +81,25 @@ export default function ChatsScreen() {
     }, [sortBy, nodeProfile]);
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'pending' | 'completed'>('all');
     const [readFilter, setReadFilter] = useState<'all' | 'unread'>('all');
+    // The message requests kept for this community (utils/db getMessageRequests): undefined until read, null for none kept
+    // (requests off on the node, a community not synced yet, or after Sign Out or Replace).
+    const [requests, setRequests] = useState<{ count: number; conversations: any[] } | null | undefined>(undefined);
+    const [messagesFilter, setMessagesFilter] = useState<'all' | 'requests'>('all');
+    // Requests with no list kept here: the pills go, so the list goes back to All, never to an empty Requests with no way
+    // back (the web's MessagesPage; PR #2540 review 4395541801). Not before the list is read, so a push tap still opens it.
+    React.useEffect(() => {
+        if (requests === null && messagesFilter === 'requests') setMessagesFilter('all');
+    }, [requests, messagesFilter]);
     // The header's message and group icons land here with view=messages&filter=unread, when there is more
     // than one chat to show. Both are cleared after use: the filter stays the member's own choice from then on,
     // and a leftover view=messages would reach People (mounted inside Talk, reading this route's params).
     React.useEffect(() => {
+        if (talkParams.filter === 'requests') {
+            setTalkView('messages');
+            setMessagesFilter('requests');
+            router.setParams({ filter: '', view: '' });
+            return;
+        }
         if (talkParams.filter !== 'unread') return;
         setReadFilter('unread');
         router.setParams({ filter: '', view: '' });
@@ -229,6 +245,49 @@ export default function ChatsScreen() {
         resetBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         closeBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.border.default },
         closeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },
+        requestsChipRow: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            paddingHorizontal: 16,
+            paddingBottom: 8,
+            gap: 8,
+        },
+        filterChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 6,
+            paddingHorizontal: 14,
+            borderRadius: 20,
+            backgroundColor: colors.surface.subtle,
+            minHeight: 36,
+        },
+        filterChipActive: {
+            backgroundColor: colors.text.body,
+        },
+        filterChipText: {
+            color: colors.text.secondary,
+            fontSize: 13,
+            fontWeight: '600',
+        },
+        filterChipTextActive: {
+            color: theme === 'dark' ? colors.surface.app : colors.text.inverse,
+            fontWeight: '700',
+        },
+        requestsBadge: {
+            backgroundColor: colors.accent.fill,
+            minWidth: 18,
+            height: 18,
+            borderRadius: 9,
+            paddingHorizontal: 5,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        requestsBadgeText: {
+            color: colors.text.onAccent,
+            fontSize: 10,
+            fontWeight: '800',
+        },
     }));
 
     // Partition conversations into "Action Required" and regular
@@ -363,6 +422,11 @@ export default function ChatsScreen() {
                         .catch(console.error);
                     // Sync nudges come in bursts; overlapping asks share one request (utils/your-groups-store).
                     yourGroupsLive.refresh();
+                    getMessageRequests(identity.publicKey)
+                        .then(reqs => {
+                            if (active) setRequests(prev => keepIfSame(prev, reqs));
+                        })
+                        .catch(console.error);
                     getFriendsLocal(identity.publicKey)
                         .then(res => {
                             if (active) setFriendPubkeys(prev => {
@@ -843,21 +907,64 @@ export default function ChatsScreen() {
                     <MaterialCommunityIcons name="pencil-outline" size={22} color={colors.accent.primary} />
                 </Pressable>
             </View>
-
+            {requests && (requests.count > 0 || messagesFilter === 'requests') && (
+                <View style={styles.requestsChipRow} data-testid="conversation-filter-chips">
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: messagesFilter === 'all' }}
+                        style={[styles.filterChip, messagesFilter === 'all' && styles.filterChipActive]}
+                        onPress={() => setMessagesFilter('all')}
+                    >
+                        <Text style={[styles.filterChipText, messagesFilter === 'all' && styles.filterChipTextActive]}>{t('All')}</Text>
+                    </Pressable>
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: messagesFilter === 'requests' }}
+                        accessibilityLabel={tn(requests.count, 'Requests, {n} person wants to message you', 'Requests, {n} people want to message you')}
+                        style={[styles.filterChip, messagesFilter === 'requests' && styles.filterChipActive]}
+                        onPress={() => setMessagesFilter('requests')}
+                    >
+                        <Text style={[styles.filterChipText, messagesFilter === 'requests' && styles.filterChipTextActive]}>{t('Requests')}</Text>
+                        {requests.count > 0 && (
+                            <View style={styles.requestsBadge} data-testid="conversation-filter-count-requests">
+                                <Text style={styles.requestsBadgeText}>{requests.count}</Text>
+                            </View>
+                        )}
+                    </Pressable>
+                </View>
+            )}
             </QuickReturnBlock>
-            <Animated.FlatList
-                ref={listRef}
-                {...qr.listProps}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
-                data={regularConversations}
-                keyExtractor={(item: any) => item.id}
-                renderItem={renderItem}
-                ListHeaderComponent={listHeader}
-                contentContainerStyle={[styles.list, { paddingTop: styles.list.paddingTop + qr.listInset }]}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={listEmpty}
-            />
+            {messagesFilter === 'requests' && requests ? (
+                <MessageRequestsPane
+                    entries={requests.conversations}
+                    count={requests.count}
+                    identity={identity}
+                    qr={qr}
+                    onOpen={(entry) => router.push(`/chat/${entry.id}`)}
+                    onAccepted={(entry) => {
+                        setMessagesFilter('all');
+                        router.push(`/chat/${entry.id}`);
+                        if (identity?.publicKey) void syncMessages(identity.publicKey);
+                    }}
+                    onChanged={() => {
+                        if (identity?.publicKey) void syncMessages(identity.publicKey);
+                    }}
+                />
+            ) : (
+                <Animated.FlatList
+                    ref={listRef}
+                    {...qr.listProps}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    data={regularConversations}
+                    keyExtractor={(item: any) => item.id}
+                    renderItem={renderItem}
+                    ListHeaderComponent={listHeader}
+                    contentContainerStyle={[styles.list, { paddingTop: styles.list.paddingTop + qr.listInset }]}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={listEmpty}
+                />
+            )}
             </View>
 
 

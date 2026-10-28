@@ -49,7 +49,7 @@ import http from 'node:http';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, createGroup, joinGroup, createPost as rawCreatePost, requestPost,
+    initStateEngine, seedGenesisMember, adminPruneUser, COMMUNITY_DECISION_ACTOR, exportSyncState, createGroup, joinGroup, createPost as rawCreatePost, requestPost,
     createConversation, sendMessage, transfer, getAdminPubkey, runMarketplaceHygiene,
 } from './state-engine.js';
 import { wrapCreatePost } from './post-test-helper.js';
@@ -596,7 +596,7 @@ async function main(): Promise<void> {
     const copy = JSON.stringify(await exportSyncState('test-node'));
     const withheldIds = [...boIds, d2id, farLine?.id, farConv?.id].filter(Boolean) as string[];
     assert(withheldIds.length === 6 && withheldIds.every(i => !copy.includes(i)), 'a copy for a standby carries no withheld line or conversation');
-    adminPruneUser(bo.pk, owner.pk);
+    adminPruneUser(bo.pk, COMMUNITY_DECISION_ACTOR);
     const boLeft = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM withheld_lines WHERE author_pubkey = ?').get(bo.pk) as { n: number }).n);
     assert(boLeft === 0, `a prune takes Bo's withheld lines (${boLeft})`);
     assert(!!photoKey && (await readObject(getImageStore(), photoKey)) === null, `and his withheld photo from the image store (${photoKey})`);

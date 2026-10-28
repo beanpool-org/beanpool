@@ -33,6 +33,7 @@ const createPost = wrapCreatePost(rawCreatePost);
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { createDecision, executeDecision, tickDecisions } from './decisions-engine.js';
+import { removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -152,7 +153,8 @@ async function main(): Promise<void> {
     const bought = await call('POST', dee, '/api/marketplace/posts/accept', { postId: basket, buyerPublicKey: dee.pk });
     if (bought.body?.transaction?.id) completePostTransaction(bought.body.transaction.id, dee.pk);
     assert(r2(rowBal(dee.pk)) === -200, `setup: Dee spends to -200 (${show(bought)})`);
-    executeDecision(createDecision({ authorPubkey: proposer().pk, title: 'Remove Dee', description: 'Left owing', touches: 'member', effect: 'remove_member', subject: dee.pk }).id);
+    // A removal proposed before removal by vote S3 (since then only an admin's pause opens one).
+    executeDecision(removalProposedFromBefore({ authorPubkey: proposer().pk, title: 'Remove Dee', description: 'Left owing', subject: dee.pk }).id);
     tickDecisions(Date.now() + 8 * DAY);
     const debt0 = debtOf(deeEntry);
     assert(debt0?.status === 'open' && debt0.amount === 200, `setup: an open 200 debt (${JSON.stringify(debt0)?.slice(0, 120)})`);

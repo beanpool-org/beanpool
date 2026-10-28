@@ -99,3 +99,12 @@ Tap **⋯** at the top right (**⋮** in a group's chat), then **Mute notificati
 ## Blocking someone from a chat
 
 Tap their name at the top of the chat to open their profile (an enterprise's page for an enterprise), on the phone and the web. Tap **Block**, then confirm: **Block User** in the phone app (**Block** on an enterprise's page), **OK** in the web app. In the web app you can also tap **Block** at the top of the chat, then **OK**. See "Blocking someone".
+
+## Message requests
+
+When someone you haven't added or messaged before sends you a first message, it arrives as a **message request**.
+
+- **On your phone**: in **Talk** under **Messages**, tap the **Requests** pill at the top. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Ignore** to dismiss it without letting them know. You can also tap **Block** to block them. If you have several requests waiting, you can tap **Ignore all**. A push notification that says someone wants to message you opens this Requests section directly when tapped.
+- **In the web app**: the same **Requests** pill appears above your list of chats.
+- **When you send a request**: your first message is sent as a request. While you wait for them to accept, you cannot send further messages or photos, and you see **Sent as a request. {name} will see it under Requests. You can write more once they accept.**
+- **Cancel request**: beside the waiting line on both the phone and the web, you can tap **Cancel request**. This withdraws your request and removes your first message for both of you. You can then write a fresh message if you wish.

@@ -1412,6 +1412,8 @@ async function main(): Promise<void> {
             'GET /api/local/status', 'POST /api/local/update-identity', 'POST /api/local/verify-password',
             'GET /api/map/enterprises',
             'POST /api/marketplace/polls/close', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
+            // A post shared outside (front doors S6, routes/peek.ts): the read opens only with a ticket (test-peek-ticket).
+            'GET /api/marketplace/posts/:id',
             'GET /api/marketplace/posts/:id/chat', 'POST /api/marketplace/posts/:id/chat/message', 'POST /api/marketplace/posts/:id/chat/remove',
             'POST /api/marketplace/posts/:id/close', 'GET /api/marketplace/posts/:id/photos/:orderNum', 'POST /api/marketplace/posts/:id/rsvp',
             'POST /api/marketplace/posts/:id/let-in',
@@ -1443,6 +1445,7 @@ async function main(): Promise<void> {
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
             'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/confirm', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
+            'POST /api/peek', 'GET /api/peek/mine', 'POST /api/peek/stop',
             'GET /api/pricing-guide', 'POST /api/pricing-guide/admin/aggregate', 'POST /api/pricing-guide/admin/config',
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
             'POST /api/pricing-guide/admin/reset', 'POST /api/pricing-guide/report', 'GET /api/pricing-guide/reports',

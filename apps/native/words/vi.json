@@ -418,7 +418,6 @@
   "🎉 FUNDED": "🎉 ĐÃ GÂY QUỸ ĐỦ",
   "🌱 PROJECT": "🌱 DỰ ÁN",
   "🏛️ ENTERPRISE": "🏛️ DỰ ÁN CỘNG ĐỒNG",
-  "Enterprise Balance": "Số dư dự án",
   "in deficit (keepers eat last)": "thâm hụt (người quản lý nhận sau cùng)",
   "Pledge Beans": "Cam kết góp đậu",
   "Word {n}: {word}": "Từ {n}: {word}",
@@ -2556,7 +2555,6 @@
   "PURPOSE STATEMENT *": "TUYÊN BỐ MỤC ĐÍCH *",
   "Purpose statement": "Tuyên bố mục đích",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Nêu rõ mục đích hoạt động của doanh nghiệp này (ví dụ: 'Chúng tôi xây dựng và duy trì một nhà lưới cộng đồng trước tháng 11').",
-  "The purpose statement is what the community judges the initiative against.": "Tuyên bố mục đích là cơ sở để cộng đồng đánh giá sáng kiến.",
   "FUNDING GOAL ({currency}) *": "MỤC TIÊU GÂY QUỸ ({currency}) *",
   "Funding goal amount": "Số tiền mục tiêu gây quỹ",
   "Pledges are held safely in the enterprise account.": "Các khoản cam kết đóng góp được giữ an toàn trong tài khoản doanh nghiệp.",
@@ -2847,7 +2845,6 @@
   "Post\u0004button: publish": "Đăng",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 Dùng thẻ {ledger} để gửi đậu cho hàng xóm ngay lập tức.",
   "Member\u0004what a Decision touches": "Thành viên",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "Khai trừ khỏi máy chủ này (đa số đặc biệt 66%, túc số 25%, thời gian ân hạn 7 ngày)",
   "Temporary freeze of trading and messaging": "Tạm thời đóng băng giao dịch và nhắn tin",
   "Restore member to active standing (simple majority)": "Khôi phục tư cách hoạt động của thành viên (đa số quá bán)",
   "Cancel pending removal and restore account (simple majority)": "Hủy bỏ việc khai trừ đang chờ và khôi phục tài khoản (đa số quá bán)",
@@ -2875,9 +2872,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "Vui lòng nhập tên gọi hoặc khóa công khai của người quản lý chính hoặc trưởng dự án.",
   "The lead keeper or leader to remove: callsign or public key": "Người quản lý chính hoặc trưởng dự án cần bãi nhiệm: tên gọi hoặc khóa công khai",
   "Enter the lead keeper or leader's callsign or pubkey...": "Nhập tên gọi hoặc khóa công khai của người quản lý chính hoặc trưởng dự án...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "other": "Số dư được bảo mật: bạn không thể thấy số dư của {name}. Khi cuộc bỏ phiếu này mở, cộng đồng sẽ ghi lại số dư cùng bất kỳ khoản nợ nào của họ, và hiển thị cho tất cả những ai có thể bỏ phiếu. Nếu họ bị khai trừ, khoản nợ sẽ được tính vào Quỹ Commons, hiện đang có {n} đậu."
-  },
   "Missing Title": "Thiếu tiêu đề",
   "Please enter a clear, concise title for this decision.": "Vui lòng nhập tiêu đề rõ ràng, ngắn gọn cho quyết định này.",
   "Missing Description": "Thiếu mô tả",
@@ -5879,6 +5873,7 @@
   "Turn on notifications?": "Bật thông báo?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "Để bạn biết khi ai đó trả lời bạn, nhắn tin cho bạn hoặc yêu cầu tham gia. Không có gì khác.",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "Thông báo của BeanPool đang tắt trong cài đặt điện thoại của bạn. Mở Cài đặt để bật.",
+  "Cancel request": "Hủy yêu cầu",
   "Nothing here yet. Be the first:": "Chưa có gì ở đây. Hãy là người đầu tiên:",
   "Choose a banner photo, or keep this one": "Chọn ảnh bìa, hoặc giữ lại ảnh này",
   "Your picture, until you choose a banner.": "Ảnh của bạn, cho đến khi bạn chọn ảnh bìa.",
@@ -5894,5 +5889,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Báo cho tôi khi có cộng đồng bắt đầu ở đây, hoặc ngỏ ý giúp bắt đầu một cộng đồng",
   "Nothing within 250 km yet.": "Chưa có gì trong phạm vi 250 km.",
   "See what people post elsewhere ›": "Xem mọi người đăng gì ở nơi khác ›",
-  "Set your area": "Thiết lập khu vực của bạn"
+  "Set your area": "Thiết lập khu vực của bạn",
+  "The purpose statement is what the community judges the project or enterprise against.": "Tuyên bố mục đích là cơ sở để cộng đồng đánh giá dự án hoặc doanh nghiệp."
 }

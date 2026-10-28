@@ -686,7 +686,6 @@
   "🎉 FUNDED": "🎉 資金調達完了",
   "🌱 PROJECT": "🌱 プロジェクト",
   "🏛️ ENTERPRISE": "🏛️ 事業体",
-  "Enterprise Balance": "事業体の残高",
   "in deficit (keepers eat last)": "赤字（管理者の取り分は最後）",
   "Pledge Beans": "豆をプレッジする",
   "Word {n}: {word}": "単語 {n}：{word}",
@@ -2556,7 +2555,6 @@
   "PURPOSE STATEMENT *": "活動目的 *",
   "Purpose statement": "活動目的",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "この事業体が何を行うためのものかを明確に記載してください（例：「11月までに共同の日よけ小屋を建設し維持する」）。",
-  "The purpose statement is what the community judges the initiative against.": "コミュニティはこの活動目的に照らして取り組みを評価します。",
   "FUNDING GOAL ({currency}) *": "資金目標 ({currency}) *",
   "Funding goal amount": "資金目標額",
   "Pledges are held safely in the enterprise account.": "プレッジは事業体のアカウントで安全に保管されます。",
@@ -2847,7 +2845,6 @@
   "Post\u0004button: publish": "投稿",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 {ledger}タブを使って、ご近所さんにすぐにクレジットを送ることができます。",
   "Member\u0004what a Decision touches": "メンバー",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "このノードからの除名（66%の特別多数、25%の定足数、7日間の猶予期間）",
   "Temporary freeze of trading and messaging": "取引とメッセージ送信の一時凍結",
   "Restore member to active standing (simple majority)": "メンバーを通常資格に復帰（単純過半数）",
   "Cancel pending removal and restore account (simple majority)": "保留中の除名を取り消してアカウントを復元（単純過半数）",
@@ -2875,9 +2872,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "代表運営者またはリーダーのコールサインまたは公開鍵を入力してください。",
   "The lead keeper or leader to remove: callsign or public key": "解任する代表運営者またはリーダー：コールサインまたは公開鍵",
   "Enter the lead keeper or leader's callsign or pubkey...": "代表運営者またはリーダーのコールサインまたは公開鍵を入力...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "other": "残高は非公開です。{name}の残高を見ることはできません。この投票が開始されると、コミュニティはその残高と債務を記録し、投票権を持つ全員に表示します。除名された場合、その債務は現在{n} 豆を保有するコモンズプールに請求されます。"
-  },
   "Missing Title": "タイトルが未入力です",
   "Please enter a clear, concise title for this decision.": "この決定のための明確で簡潔なタイトルを入力してください。",
   "Missing Description": "説明が未入力です",
@@ -5879,6 +5873,7 @@
   "Turn on notifications?": "通知をオンにしますか？",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "誰かが返信したとき、メッセージを送ったとき、または参加をリクエストしたときに通知が届きます。それ以外には届きません。",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "スマートフォンの設定で BeanPool の通知がオフになっています。オンにするには設定を開いてください。",
+  "Cancel request": "リクエストをキャンセル",
   "Nothing here yet. Be the first:": "ここにはまだ何もありません。最初になりましょう:",
   "Choose a banner photo, or keep this one": "バナー写真を選択するか、このままにします",
   "Your picture, until you choose a banner.": "バナーを選択するまでは、あなたの画像が表示されます。",
@@ -5894,5 +5889,6 @@
   "Tell me when a community starts here, or say you'd help start one": "ここでコミュニティが始まったら通知する、または立ち上げに参加する",
   "Nothing within 250 km yet.": "250 km以内にはまだ何もありません。",
   "See what people post elsewhere ›": "他の場所の投稿を見る ›",
-  "Set your area": "地域を設定"
+  "Set your area": "地域を設定",
+  "The purpose statement is what the community judges the project or enterprise against.": "コミュニティはこの活動目的に照らしてプロジェクトまたは事業体を評価します。"
 }

@@ -226,7 +226,7 @@ describe("GroupDetailModal roster's faces", () => {
         const srcs = Array.from(container.ownerDocument.querySelectorAll('img')).map(i => i.getAttribute('src'));
         expect(srcs).toContain(url(LEAD));
         expect(srcs).toContain(url(ASKING));
-        expect(srcs).toContain('/avatars/avatar_leaf.jpg');
+        expect(srcs).toContain('/avatars/avatar_leaf.webp');
         expect(srcs.filter(src => src?.startsWith('data:'))).toEqual([]);
         // No photo: the ready-made picture Nell's key picks, as the phone's roster draws it; the bare initial it drew
         // before is what Marty's rule forbids ("never a bare initial").

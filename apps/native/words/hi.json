@@ -425,7 +425,6 @@
   "🎉 FUNDED": "🎉 वित्तपोषित",
   "🌱 PROJECT": "🌱 परियोजना",
   "🏛️ ENTERPRISE": "🏛️ उपक्रम",
-  "Enterprise Balance": "उपक्रम शेष",
   "in deficit (keepers eat last)": "घाटे में (प्रबंधकों को अंत में मिलता है)",
   "Pledge Beans": "फलियों का संकल्प लें",
   "Word {n}: {word}": "शब्द {n}: {word}",
@@ -2668,7 +2667,6 @@
   "PURPOSE STATEMENT *": "उद्देश्य विवरण *",
   "Purpose statement": "उद्देश्य विवरण",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "साफ़ तौर पर बताएं कि यह उपक्रम क्या करने के लिए है (जैसे 'हम नवंबर तक एक सामुदायिक शेड हाउस बनाएंगे और उसकी देखरेख करेंगे')।",
-  "The purpose statement is what the community judges the initiative against.": "उद्देश्य विवरण के आधार पर ही समुदाय इस पहल का आकलन करता है।",
   "FUNDING GOAL ({currency}) *": "फ़ंडिंग लक्ष्य ({currency}) *",
   "Funding goal amount": "फ़ंडिंग लक्ष्य राशि",
   "Pledges are held safely in the enterprise account.": "संकल्प राशि उपक्रम खाते में सुरक्षित रखी जाती है।",
@@ -2972,7 +2970,6 @@
   "Post\u0004button: publish": "पोस्ट करें",
   "💳 Use the {ledger} tab to send credits to neighbors instantly.": "💳 पड़ोसियों को तुरंत क्रेडिट भेजने के लिए {ledger} टैब का उपयोग करें।",
   "Member\u0004what a Decision touches": "सदस्य",
-  "Expulsion from this node (66% supermajority, 25% quorum, 7-day grace window)": "इस नोड से निष्कासन (66% विशेष बहुमत, 25% कोरम, 7-दिवसीय छूट अवधि)",
   "Temporary freeze of trading and messaging": "व्यापार और संदेश सेवा पर अस्थायी रोक",
   "Restore member to active standing (simple majority)": "सदस्य को पुनः सक्रिय स्थिति में बहाल करें (साधारण बहुमत)",
   "Cancel pending removal and restore account (simple majority)": "लंबित निष्कासन रद्द करें और खाता बहाल करें (साधारण बहुमत)",
@@ -3000,10 +2997,6 @@
   "Please enter the lead keeper or leader's callsign or public key.": "कृपया मुख्य व्यवस्थापक या प्रमुख का कॉलसाइन या सार्वजनिक कुंजी दर्ज करें।",
   "The lead keeper or leader to remove: callsign or public key": "हटाए जाने वाले मुख्य व्यवस्थापक या प्रमुख: कॉलसाइन या सार्वजनिक कुंजी",
   "Enter the lead keeper or leader's callsign or pubkey...": "मुख्य व्यवस्थापक या प्रमुख का कॉलसाइन या pubkey दर्ज करें...",
-  "Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.|Balances are private: you can't see {name}'s. When this vote opens, the community records their balance and any debt, and shows them to everyone who can vote in it. If they are removed, a debt is charged to the Commons pool, which holds {n} beans now.": {
-    "one": "शेष राशियाँ निजी हैं: आप {name} का शेष नहीं देख सकते। जब यह वोट शुरू होता है, तो समुदाय उनके शेष और किसी भी ऋण को रिकॉर्ड करता है, और इसे उन सभी को दिखाता है जो इसमें वोट कर सकते हैं। यदि उन्हें हटा दिया जाता है, तो कॉमन्स पूल पर ऋण लगाया जाता है, जिसमें अभी {n} फली है।",
-    "other": "शेष राशियाँ निजी हैं: आप {name} का शेष नहीं देख सकते। जब यह वोट शुरू होता है, तो समुदाय उनके शेष और किसी भी ऋण को रिकॉर्ड करता है, और इसे उन सभी को दिखाता है जो इसमें वोट कर सकते हैं। यदि उन्हें हटा दिया जाता है, तो कॉमन्स पूल पर ऋण लगाया जाता है, जिसमें अभी {n} फलियाँ हैं।"
-  },
   "Missing Title": "शीर्षक दर्ज नहीं है",
   "Please enter a clear, concise title for this decision.": "कृपया इस निर्णय के लिए एक स्पष्ट, संक्षिप्त शीर्षक दर्ज करें।",
   "Missing Description": "विवरण दर्ज नहीं है",
@@ -6118,6 +6111,7 @@
   "Turn on notifications?": "सूचनाएं चालू करें?",
   "So you hear when someone answers you, messages you, or asks to join. Nothing else.": "ताकि जब कोई आपको उत्तर दे, संदेश भेजे, या जुड़ने का अनुरोध करे तो आपको पता चले। और कुछ नहीं।",
   "Notifications are off for BeanPool in your phone's settings. Open Settings to turn them on.": "आपके फ़ोन की सेटिंग में BeanPool की सूचनाएँ बंद हैं। उन्हें चालू करने के लिए सेटिंग खोलें।",
+  "Cancel request": "अनुरोध रद्द करें",
   "Nothing here yet. Be the first:": "यहाँ अभी कुछ नहीं है। पहले बनें:",
   "Choose a banner photo, or keep this one": "बैनर फ़ोटो चुनें, या इसे ही रहने दें",
   "Your picture, until you choose a banner.": "आपकी तस्वीर, जब तक कि आप कोई बैनर न चुन लें।",
@@ -6133,5 +6127,6 @@
   "Tell me when a community starts here, or say you'd help start one": "यहाँ समुदाय शुरू होने पर मुझे बताएँ, या एक शुरू करने में मदद की बात कहें",
   "Nothing within 250 km yet.": "अभी 250 किमी के भीतर कुछ नहीं है।",
   "See what people post elsewhere ›": "देखें कि लोग अन्यत्र क्या पोस्ट कर रहे हैं ›",
-  "Set your area": "अपना क्षेत्र सेट करें"
+  "Set your area": "अपना क्षेत्र सेट करें",
+  "The purpose statement is what the community judges the project or enterprise against.": "उद्देश्य विवरण के आधार पर ही समुदाय परियोजना या उपक्रम का आकलन करता है।"
 }

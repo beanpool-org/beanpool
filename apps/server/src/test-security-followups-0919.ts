@@ -43,7 +43,7 @@ import { issueRekeyCode } from './engine/member-wizards.js';
 import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedGroupLine } from './group-test-payload.js';
-import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.js';
+import { removalInGraceFromBefore, removalProposedFromBefore } from './decisions-from-before-test-fixture.js';
 import { setCommonsBalance } from '@beanpool/core';
 import type { RouteDeps } from './routes/types.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -205,7 +205,8 @@ async function run() {
     assert(accelFresh.status === 200 && statusOf(doomedOwner) === 'pruned', `an owner with a fresh proof (Manage just now) can (got ${accelFresh.status} ${JSON.stringify(accelFresh.body)})`);
 
     const plainMember = makeMember('PlainMember');
-    const removePlain = createDecision({ authorPubkey: owner, title: 'Remove PlainMember', description: 'Accelerate test', touches: 'member', effect: 'remove_member', subject: plainMember });
+    // One a member proposed before removal by vote S3 (since then only an admin's pause opens one).
+    const removePlain = removalProposedFromBefore({ authorPubkey: owner, title: 'Remove PlainMember', description: 'Accelerate test', subject: plainMember });
     decisionsEngine.executeDecision(removePlain.id);
     const accelPlainMember = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removePlain.id}/accelerate`, { actor: plainAdmin });
     assert(accelPlainMember.status === 200 && statusOf(plainMember) === 'pruned', 'a plain admin may still speed up the removal of a member with no role');

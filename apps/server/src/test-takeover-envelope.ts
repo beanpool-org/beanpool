@@ -64,6 +64,7 @@ async function main() {
 
     // Imported after the env above: the debounce is read at import.
     const { initStateEngine, grantNodeRole, revokeNodeRole, adminSetUserStatus, adminPruneUser, updateNodeConfig } = await import('./state-engine.js');
+    const { setSwitchOverride } = await import('./config/node-profile.js');
     const { db } = await import('./db/db.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { generateKeyPair, privateKeyToProtobuf } = await import('@libp2p/crypto/keys');
@@ -198,7 +199,11 @@ async function main() {
 
     grantNodeRole(dan.pub, 'owner', anna.pub);
     await afterChokepoint('grant Dan', [anna, dan]);
+    // Where the community votes nobody removes an owner outright (removal by vote S3): an owner does where community
+    // votes are switched off.
+    setSwitchOverride('decisions', false);
     adminPruneUser(dan.pub, 'owner:password');
+    setSwitchOverride('decisions', true);
     await afterChokepoint('prune Dan', [anna], [dan]);
 
     // An admin is never a recipient: only owners are.

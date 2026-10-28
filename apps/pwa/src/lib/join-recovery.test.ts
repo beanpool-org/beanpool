@@ -20,7 +20,7 @@ import {
 import { recoveryStored, sealJoinRecovery, signInNames } from './join-recovery';
 import { joinBody, type SignInProof } from './web-join';
 import { generateIdentity, importIdentity, isJoinProvider, type BeanPoolIdentity, type JoinProvider } from './identity';
-import { getSignInRecovery } from './api';
+import { getSignInRecovery, removeSignInCopy } from './api';
 import { memoryIndexedDB } from './memory-indexeddb';
 
 afterEach(() => {
@@ -167,6 +167,49 @@ describe("asking the node which sign-ins bring this account back (Settings)", ()
         vi.stubGlobal('indexedDB', memoryIndexedDB());
         vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
         expect(await getSignInRecovery()).toBeNull();
+    });
+});
+
+// PR #2570 review: any 2xx, or any 404, was taken for the server's word that the copy is gone.
+describe("removing this server's copy for one sign-in (Settings): removed only on the server's own answer", () => {
+    function answer(status: number, body: string, type: string) {
+        const fetchMock = vi.fn(async () => new Response(body, { status, headers: { 'Content-Type': type } }));
+        vi.stubGlobal('fetch', fetchMock);
+        return fetchMock;
+    }
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it("the signed DELETE, removed on the server's answer naming the copy", async () => {
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        const me = await generateIdentity('Me');
+        await importIdentity(me);
+        const fetchMock = answer(200, JSON.stringify({ removed: 'google', generation: 5, enrolledSso: ['apple'], keepers: [] }), 'application/json');
+        expect(await removeSignInCopy('google')).toBe(true);
+        const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        expect(url).toMatch(/\/api\/recovery\/shares\/sso\/google$/);
+        expect(init.method).toBe('DELETE');
+        expect((init.headers as Record<string, string>)['X-Public-Key']).toBe(me.publicKey);
+    });
+
+    it.each([
+        ["the server's 404: it keeps none for that sign-in", 404, JSON.stringify({ error: "Provider 'google' is not connected for this account." }), 'application/json', true],
+        ["a captive portal's 200 page", 200, '<html><body>Welcome to the hotel Wi-Fi.</body></html>', 'text/html', false],
+        ['a 404 page', 404, '<html><body>404 Not Found</body></html>', 'text/html', false],
+        ['a 2xx naming no copy', 200, JSON.stringify({ ok: true }), 'application/json', false],
+        ['a 2xx naming another', 200, JSON.stringify({ removed: 'apple' }), 'application/json', false],
+        ['a refusal', 503, JSON.stringify({ error: 'Try again later.' }), 'application/json', false],
+    ])('%s', async (_label, status, body, type, expected) => {
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        answer(status, body, type);
+        expect(await removeSignInCopy('google')).toBe(expected);
+    });
+
+    it('no answer at all', async () => {
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+        expect(await removeSignInCopy('google')).toBe(false);
     });
 });
 

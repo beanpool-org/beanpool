@@ -76,6 +76,7 @@ import { runLedgerAudit } from './engine/audit.js';
 import { ledger } from './engine/ledger.js';
 import { recordActivity } from './engine/members.js';
 import { createAdminRoutes } from './routes/admin.js';
+import { setSwitchOverride } from './config/node-profile.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
@@ -598,6 +599,10 @@ async function main() {
     // PART 2: OFFBOARDING WIZARD & TWO-PERSON RULE ENFORCEMENT
     // =========================================================================
     console.log('\n--- Part 2: Offboarding Wizard & Two-Person Rule ---');
+    // The wizard's own rules, on a community whose community votes are switched off, where offboarding is an admin's
+    // removal of its own. Where they are on it only settles a removal the community voted for (removal by vote S3), which
+    // test-removal-doors covers.
+    setSwitchOverride('decisions', false);
 
     // Member 1: Positive balance -> Donate to Commons
     const charlieKey = generateValidPubkey();

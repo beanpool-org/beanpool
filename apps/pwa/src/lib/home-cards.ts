@@ -129,7 +129,7 @@ export interface HomeFind {
     directoryFetchedAt: string | null;
 }
 
-export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
+export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null; bannerUrl?: string | null }
 /** A saved search as the node builds it (apps/server routes/home-answer.ts `searchCard`), keyed by its instance id. */
 export interface HomeSearchCard { q: string; kind: 'offer' | 'need' | 'any'; category: string | null; km: number | null; items: HomeMarketItem[]; more: boolean }
 export interface HomeEventItem {

@@ -180,7 +180,7 @@ async function child(): Promise<void> {
             const dm = se.createConversation('dm', [a.dee, a.bo], a.dee)!;
             const t = lockedDm(24);
             sendMessage(quiet, dm.id, a.dee, t.ciphertext, t.nonce);
-            se.adminPruneUser(a.dee, 'owner:password');
+            se.adminPruneUser(a.dee, se.COMMUNITY_DECISION_ACTOR);
             return { dmId: dm.id, status: se.getMember(a.dee)?.status ?? null };
         },
         /** Eli, an active member, in a DM with Bo: the conversation a forged tombstone line is sent into. */

@@ -13,6 +13,7 @@ Only an owner can change these settings. Admins can view every setting and its r
 
 - **Who can join**: Choose whether any member can invite new people, only admins can invite, or new members are paused for now. On a global server, the door is open to anyone.
 - **Requests to join**: Allow people who find your community on the global node to ask to join. A member or admin answers with an invite.
+- **Members may share listings outside the community**: On by default. A member can share one listing or event with someone outside BeanPool: the link shows that one post for 7 days, under the rules a visitor gets (what it is, its photos, its price and its area; never a name, a face or the exact place), and leads to your community's own card and Ask to join. Members stop their own links under **Settings**, **Shared outside**. Turned off, every link already shared stops at once and stays stopped if you turn it on again. Always off during a private preview. Your server keeps only a fingerprint of each link, never the link itself.
 - **Private preview**: Set on the server (PRIVATE_PREVIEW). While on, only people invited by an owner or admin can enter and visitors see nothing.
 
 ## Money

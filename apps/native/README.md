@@ -18,7 +18,6 @@ apps/native/
 │   ├── welcome.tsx              # Onboarding: Create / Recover identity
 │   ├── recover-identity.tsx     # Account restoration (SSO sign-in and 12-word mnemonic restore)
 │   ├── propose-project.tsx      # Propose enterprise / community project
-│   ├── project-detail.tsx       # Detailed view of a specific enterprise/project (routes to treasury-detail)
 │   ├── treasury-detail.tsx      # Enterprise detail and operator console
 │   ├── public-profile.tsx       # Public profile view for members
 │   ├── chat/[id].tsx            # Individual chat conversation

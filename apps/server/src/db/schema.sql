@@ -111,8 +111,9 @@ CREATE TABLE IF NOT EXISTS members (
     -- unlike updated_at, a bio, contact or mute never moves it. The one thing beyond the board: when an off-board
     -- enterprise's keepers changed (not who). That is public where /api/treasuries is (it lists keepers with grantedAt);
     -- on a node with the visitors' view and enterprises on, /api/treasuries is members-only and an unsigned delta still
-    -- shows that timing: accepted (#1252's review 4115723106; global has enterprises off). NULL: never changed since
-    -- this column came in.
+    -- shows that timing: accepted (#1252's review 4115723106; global has enterprises off). And when an enterprise's
+    -- banner was set, replaced or taken down, which its listings carry (engine/shops.ts enterpriseBannerMoved; Pictures
+    -- S6): the same kind of timing, about an enterprise, never a member. NULL: never changed since this column came in.
     -- NOT in members_touch_updated_at's list, and needn't be: every change of standing moves updated_at in the same
     -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
     -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.
@@ -2841,8 +2842,10 @@ CREATE TABLE IF NOT EXISTS shops (
     -- category's emoji. Last, as db.ts adds it to an older database, before this file runs.
     photo_ref     TEXT
 );
--- An account's shop (shopOf).
-CREATE INDEX IF NOT EXISTS idx_shops_owner ON shops(owner_pubkey);
+-- An account's shop (shopOf), and an enterprise's newest one, whose banner its listings carry (engine posts.ts
+-- POST_ROW_SELECT, ORDER BY opened_at DESC): in this order, so that read is a search with no sort in every row of a list
+-- or a sync page (test-posts-sync-paged-cost). It took the place of idx_shops_owner (owner_pubkey alone; db.ts drops it).
+CREATE INDEX IF NOT EXISTS idx_shops_owner_opened ON shops(owner_pubkey, opened_at);
 
 -- A shop's banner, exactly as it was set (a data URL, its metadata stripped, ≤ 2 MB of image bytes: @beanpool/core
 -- MAX_PICTURE_BYTES), out of its row so no read of shops reads it, as a group's picture is (group_pictures). Served by GET
@@ -2885,6 +2888,16 @@ CREATE TABLE IF NOT EXISTS dm_requests (
     -- The state it had when it was accepted ('pending', 'ignored' or 'expired'): what the person it is for reads while an
     -- acceptance of the opener's own act stays hidden from them, and 'ignored' once they ignore it then.
     state_before    TEXT CHECK (state_before IN ('pending', 'ignored', 'expired')),
+    -- When the person a request its opener withdrew was for reached out to the opener (their line, or their asking for the
+    -- chat) while the opener blocked them: a request of their own, kept for them alone as their lines then are, which only
+    -- they read, so the row stays as the opener left it (engine/dm-requests.ts reachedOutRow). It stays once anything
+    -- accepts the row, the opener's line among them (answerReachOut), so they read the acceptance as of their own. Null
+    -- otherwise.
+    reached_out_at  TEXT,
+    -- When they cancelled that request of their own (Cancel request, cancelReachOut): withdrawn then, as an opener's cancel
+    -- withdraws theirs (decided_at), so the opener's line answers it no more, and makes one of the opener's own instead.
+    -- Null while it stands, and whenever reached_out_at is.
+    reach_out_withdrawn_at TEXT,
     -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
     updated_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK (from_pubkey != to_pubkey)
@@ -2892,3 +2905,25 @@ CREATE TABLE IF NOT EXISTS dm_requests (
 -- The requests waiting for a member (their list, Ignore all, the folded push), and a member's own (a removal, a re-key).
 CREATE INDEX IF NOT EXISTS idx_dm_requests_to ON dm_requests(to_pubkey, state);
 CREATE INDEX IF NOT EXISTS idx_dm_requests_from ON dm_requests(from_pubkey);
+
+-- 31. Peek tickets (front doors S6, scratch/fable-design/DESIGN-entry-points-fable.md §2.5 C, §3.4; engine/peek-tickets.ts):
+-- a member shared ONE post outside the community, and whoever holds the link reads that post under the visitors' rules
+-- (the engine's guestPost) until it ends. One row per link made. The ticket itself is never stored: `ticket_hash` is its
+-- SHA-256, so a copy of this database opens no post. `id` is what the member's own list names, and Stop sharing too.
+-- Local to this server (engine/replication-manifest.ts): a standby that takes over starts with none, and every link made
+-- before then reads as stopped, never as open.
+CREATE TABLE IF NOT EXISTS peek_tickets (
+    id            TEXT PRIMARY KEY,
+    ticket_hash   TEXT NOT NULL UNIQUE,
+    -- The one post it opens, and the member who shared it (who alone lists and stops it).
+    post_id       TEXT NOT NULL,
+    sharer_pubkey TEXT NOT NULL,
+    created_at    TEXT NOT NULL,
+    -- Seven days after it was made (@beanpool/core PEEK_TICKET_DAYS); a row is deleted 30 days after this.
+    expires_at    TEXT NOT NULL,
+    -- Set when the member stops sharing it, or when the community turns outside sharing off: it opens nothing from then.
+    revoked_at    TEXT
+);
+-- A member's open links (their list, and the cap on how many), and the prune by when they ran out.
+CREATE INDEX IF NOT EXISTS idx_peek_tickets_sharer ON peek_tickets(sharer_pubkey, expires_at);
+CREATE INDEX IF NOT EXISTS idx_peek_tickets_expires ON peek_tickets(expires_at);

@@ -267,8 +267,7 @@ export interface ShownOptions {
     tipsUp?: boolean;
     /** The tour ended in this browser (Done or Skip) before the account's answer says so; absent: the answer's word. */
     tourOver?: boolean;
-    /** Context for whether a knock is open, so Find stays pinned (Lounge L1). */
-    knocked?: boolean;
+    /** Context for whether a knock is open, so Find stays pinned past its first 30 days (Lounge L1). */
     hasOpenKnock?: boolean;
     hasOpenWatch?: boolean;
     knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[];

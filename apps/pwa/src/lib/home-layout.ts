@@ -244,18 +244,21 @@ export function readMarkSent(raw: unknown): MarkSent[] {
 }
 
 /**
- * Whether `find` is pinned for this member: on the global node, while a knock or place watch is open,
- * not by the calendar (Lounge L1, DESIGN-global-lounge-fable.md §0.3, §6 L1: "follows the state of the wait, not the calendar").
+ * Whether `find` is pinned for this member: on the global node, in their first 30 days (or while their join date is unknown),
+ * and past them for as long as a knock or place watch is open: the pin follows the wait too, so day 31 does not hide the card
+ * that says what became of it (Lounge L1, DESIGN-global-lounge-fable.md §0.3, §6 L1).
  */
 export function findPinned(
     answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'>,
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
+    ctx?: { hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): boolean {
     if (answer.profile !== 'global') return false;
+    const joined = answer.me?.joinedAt ? Date.parse(answer.me.joinedAt) : NaN;
+    if (!Number.isFinite(joined) || now - joined < FIND_PINNED_DAYS * DAY_MS) return true;
     const hasOpenKnock = typeof ctx === 'boolean'
         ? ctx
-        : Boolean(ctx?.hasOpenKnock ?? ctx?.knocked ?? (ctx?.knocks ? ctx.knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now)) : false));
+        : Boolean(ctx?.hasOpenKnock ?? (ctx?.knocks ? ctx.knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now)) : false));
     const findCard = answer.cards?.find as { watches?: unknown[] | null } | undefined;
     const hasOpenWatch = typeof ctx === 'object' && typeof ctx?.hasOpenWatch === 'boolean'
         ? ctx.hasOpenWatch
@@ -267,7 +270,7 @@ export function findPinned(
 export function pinnedCards(
     answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined,
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
+    ctx?: { hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): string[] {
     return answer && findPinned(answer, now, ctx) ? ['find'] : [];
 }
@@ -276,7 +279,7 @@ export function pinnedCards(
 export function askPinned(
     answer: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined,
     now: number,
-    ctx?: { knocked?: boolean; hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
+    ctx?: { hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
 ): string[] {
     return answer ? pinnedCards(answer, now, ctx) : ['find'];
 }

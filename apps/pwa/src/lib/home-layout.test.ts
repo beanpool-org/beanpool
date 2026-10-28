@@ -9,7 +9,7 @@ import { HOME_FRAME_LIMITS, starterCards, translateV1 } from '@beanpool/core';
 /** The starter set as a saved Home (DESIGN-getting-started-fable.md §1): the list a newcomer's Home was before Getting started, and what Skip or Done leaves. */
 const starterLayout = () => ({ v: 2 as const, cards: starterCards(), dismissed: {}, updatedAt: null as string | null });
 import {
-    HOME_COLUMN_GAP, HOME_COLUMN_MIN, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
+    FIND_PINNED_DAYS, HOME_COLUMN_GAP, HOME_COLUMN_MIN, MARK_SENT_MAX, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, cardLabelName, cardOrder, cardRowName, cardsToAsk, changeCardSettings,
     columnsFor, fewerCardsNews, gridWidth, layoutPrint, layoutV1Of,
     moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, readMarkSent, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, searchEmptyLine, searchFirstLine, type HomeLayoutV2,
@@ -231,16 +231,47 @@ describe('what is drawn and asked', () => {
     });
 
     it('a pinned Find your community stands under Needs you, and under "Your way back in" while that one leads', () => {
-        const answer = { profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) }, cards: { find: { watches: [{ place: 'byron' }] } } };
+        const answer = { profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) } };
         expect(pinnedCards(answer, NOW)).toEqual(['find']);
-        // Knock open on day 40 -> still pinned (Fable L1 requirement)
-        expect(pinnedCards({ profile: 'global', me: { joinedAt: iso(NOW - 40 * 24 * H) } }, NOW, { hasOpenKnock: true })).toEqual(['find']);
-        // Without knock or watch, Find is not pinned
-        expect(pinnedCards({ profile: 'global', me: { joinedAt: iso(NOW - 2 * 24 * H) } }, NOW)).toEqual([]);
         expect(cardOrder(starterLayout(), ['find']).map(c => c.id).slice(0, 3)).toEqual(['needs', 'safety', 'find']);
         // A newcomer's Home (Getting started alone): the pin under Needs you, then the card.
         expect(cardOrder(null, ['find']).map(c => c.id)).toEqual(['needs', 'find', 'start', 'community']);
         expect(pinnedCards({ profile: 'local', me: null }, NOW)).toEqual([]);
+    });
+
+    it('a newcomer with no wait keeps Find as before L1: pinned, and asked for from the starter list, on day 3 and on the last day (Lounge L1, review of #2573)', () => {
+        for (const days of [3, FIND_PINNED_DAYS - 0.001, null]) {
+            const a = { profile: 'global', me: { joinedAt: days === null ? null : iso(NOW - days * 24 * H) } };
+            expect(pinnedCards(a, NOW)).toEqual(['find']);
+            // The starter list holds no `find`: the pin is the only thing that has it asked for.
+            expect(cardsToAsk(starterLayout(), askPinned(a, NOW), GLOBAL)).toContain('find');
+            expect(cardsToAsk(null, askPinned(a, NOW), GLOBAL)).toContain('find');
+        }
+    });
+
+    it('a wait keeps Find past day 30, and it is asked for from a list that does not hold it (Lounge L1, review of #2573)', () => {
+        const gone = { profile: 'global', me: { joinedAt: iso(NOW - (FIND_PINNED_DAYS + 10) * 24 * H) } };
+        expect(pinnedCards(gone, NOW)).toEqual([]);
+        expect(cardsToAsk(starterLayout(), askPinned(gone, NOW), GLOBAL)).not.toContain('find');
+
+        // A knock open on day 40: the knock the browser remembers pins it, and is passed on when asking, or `cards=` omits it
+        // and the node never builds the card that carries the waiting line.
+        const knocks = [{ url: 'https://byron.example.org', sentAt: iso(NOW - 5 * H) }];
+        expect(pinnedCards(gone, NOW, { knocks })).toEqual(['find']);
+        expect(askPinned(gone, NOW, { knocks })).toEqual(['find']);
+        expect(cardsToAsk(starterLayout(), askPinned(gone, NOW), GLOBAL)).not.toContain('find');
+        expect(cardsToAsk(starterLayout(), askPinned(gone, NOW, { knocks }), GLOBAL)).toContain('find');
+        expect(cardsToAsk(null, askPinned(gone, NOW, { hasOpenKnock: true }), GLOBAL)).toContain('find');
+
+        // A watch the answer carries pins it without a knock.
+        const watching = { ...gone, cards: { find: { watches: [{ place: 'byron' }] } } };
+        expect(pinnedCards(watching, NOW)).toEqual(['find']);
+        expect(cardsToAsk(starterLayout(), askPinned(watching, NOW), GLOBAL)).toContain('find');
+
+        // A cancelled knock, or one past the days it can be answered, is no wait; a local node never pins it.
+        expect(pinnedCards(gone, NOW, { knocks: [{ ...knocks[0], cancelledAt: iso(NOW - 2 * H) }] })).toEqual([]);
+        expect(pinnedCards(gone, NOW, { knocks: [{ url: knocks[0].url, sentAt: iso(NOW - 62 * 24 * H) }] })).toEqual([]);
+        expect(pinnedCards({ ...gone, profile: 'local' }, NOW, { knocks })).toEqual([]);
     });
 
     it('cards= is catalogue order then id, the same after a move; with an answer in hand the global node is asked no Beans, deals, enterprise or Decide (review of #1699, finding 5)', () => {

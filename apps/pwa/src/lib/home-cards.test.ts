@@ -380,30 +380,47 @@ describe('sun and moon (CARD-FRAME §4, §5.2 item 22): worked out here, from th
     });
 });
 
-describe('a pinned Find your community on the web (#1517, Lounge L1)', () => {
+describe('a pinned Find your community on the web (#1517)', () => {
     const written = (...types: string[]): HomeLayoutV2 => ({ v: 2, cards: types.map(id => ({ id, type: id })), dismissed: {}, updatedAt: daysAgo(0) });
     const global = (days: number, overFind: Record<string, unknown> = {}) => answer(
         { safety: { words: true, signInLinked: false }, find: { ...find, ...overFind }, steps: { ...steps, joinedAt: daysAgo(days) }, market, events, community: { name: null, members: 2310, communities: 38 } },
         { profile: 'global', features: GLOBAL_FEATURES, me: me({ joinedAt: daysAgo(days), interests: ['food'] }) },
     );
-    const watching = (days: number) => global(days, { watches: [{ point: 'area', radiusKm: 25 }] });
 
-    it('sits right under Needs you and "Your way back in", while a knock or watch is open (Lounge L1)', () => {
+    it('sits right under Needs you and "Your way back in", as the phone\'s cardOrder puts it, whatever layout another device wrote', () => {
         // Moved to the bottom, "Your way back in" further down: under Needs you.
-        expect(shown(watching(3), { now: NOW }, written('market', 'events', 'steps', 'safety', 'find'))).toEqual(['find', 'market', 'events', 'steps', 'safety', 'community']);
+        expect(shown(global(3), { now: NOW }, written('market', 'events', 'steps', 'safety', 'find'))).toEqual(['find', 'market', 'events', 'steps', 'safety', 'community']);
         // "Your way back in" keeps its place at the top: under it.
-        expect(shown(watching(3), { now: NOW }, written('safety', 'market', 'find'))).toEqual(['safety', 'find', 'market', 'community']);
+        expect(shown(global(3), { now: NOW }, written('safety', 'market', 'find'))).toEqual(['safety', 'find', 'market', 'community']);
         // Left out of the list (removed on a copy that saw no pin), or listed twice: once, at the top.
-        expect(shown(watching(3), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
-        expect(shown(watching(3), { now: NOW }, written('market', 'find', 'events', 'find'))).toEqual(['find', 'market', 'events', 'community']);
-        // The same on day 40 with an open knock: still pinned (L1 requirement).
-        expect(shown(global(40), { now: NOW, hasOpenKnock: true }, written('events', 'find', 'market'))).toEqual(['find', 'events', 'market', 'community']);
+        expect(shown(global(3), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        expect(shown(global(3), { now: NOW }, written('market', 'find', 'events', 'find'))).toEqual(['find', 'market', 'events', 'community']);
+        // The same as the phone's rule for the same list (apps/native utils/home-cards.ts cardOrder, held by its own suite).
+        expect(shown(global(29), { now: NOW }, written('events', 'find', 'market'))).toEqual(['find', 'events', 'market', 'community']);
     });
 
-    it('without an open knock or watch it is a card like any other: drawn where the list puts it', () => {
-        expect(shown(global(3), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
-        expect(shown(global(3), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
-        expect(shown(global(40), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
+    it('after 30 days it is a card like any other: drawn where the list puts it', () => {
+        expect(shown(global(30), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
+        expect(shown(global(30), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
+    });
+
+    it('a newcomer with no wait still sees it, from the newcomer\'s list and from the starter set (Lounge L1, review of #2573)', () => {
+        for (const days of [3, 29]) {
+            expect(shown(global(days), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+            expect(shown(global(days), { now: NOW, hasOpenKnock: false, knocks: [] }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        }
+        // Nothing saved yet: the newcomer's own Home, Getting started with the pin under it.
+        expect(shownFrame(global(3), null, { now: NOW }).map(c => c.type)).toContain('find');
+    });
+
+    it('a wait keeps it past day 30, from a list that does not hold it: an open knock, or a watch (Lounge L1, review of #2573)', () => {
+        const knocks = [{ url: 'https://byron.example.org', sentAt: daysAgo(0.2) }];
+        expect(shown(global(40), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
+        expect(shown(global(40), { now: NOW, hasOpenKnock: true }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        expect(shown(global(40), { now: NOW, knocks }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        expect(shown(global(40, { watches: [{ point: 'area', radiusKm: 25 }] }), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        // A cancelled knock is no wait.
+        expect(shown(global(40), { now: NOW, knocks: [{ ...knocks[0], cancelledAt: daysAgo(0.1) }] }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
     });
 });
 

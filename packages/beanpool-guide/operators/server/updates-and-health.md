@@ -30,13 +30,13 @@ While the older version runs, the key is in the database again, so it is in ever
 
 The repository's docker-compose.yml expects a Docker network called beanpool-shared. If the server will not start because it is missing, run once: docker network create beanpool-shared
 
-### Docker live-restore
-
-Docker can restart or update itself without stopping your community when live-restore is enabled. A new server gets this by default during install. On a server installed before this change, turn it on by adding {"live-restore": true} to /etc/docker/daemon.json (if the file already exists, merge the key in, keeping every other key), then run systemctl reload docker (never a restart) and check that docker info --format '{{.LiveRestoreEnabled}}' prints true.
-
 Take the new docker-compose.yml with each update, not only the image. The server needs no access to Docker itself: if your docker-compose.yml still has the line /var/run/docker.sock:/var/run/docker.sock, remove it, because anything that can use that file controls the whole machine. Settings shows a red warning under **Public Address** while it is there. If you added a cloudflared service to your docker-compose.yml yourself for a .beanpool.org name, remove that too: the tunnel now runs inside the server.
 
 The image carries its own copy of cloudflared, the program that runs your tunnel. Cloudflare supports each version for a year after its newer releases come out, so a server left without updates for about a year can stop connecting. Updating the server updates it.
+
+### Docker live-restore
+
+Docker can restart or update itself without stopping your community when live-restore is enabled. A new server gets this from the install block. A server installed before it, or set up by hand, needs it once. It takes root: as root, run the commands as they are, and otherwise put sudo in front of each one (type sudo -v and your password first, so a password prompt never lands in the middle of what you paste). Check first that the machine has systemd (command -v systemctl prints a path) and that Docker is running (docker info prints without an error). Without systemd, leave live-restore off: the server runs fine without it. With both, add {"live-restore": true} to /etc/docker/daemon.json. If the file is missing, create it with just that. If it exists, copy it to daemon.json.new with cp -p, which keeps its permissions (a file that holds proxy or registry passwords may be readable by root only), add the key to the copy and keep every other key, check that the copy is valid JSON, then move it over the original with mv, so a half-written file is never left for Docker to read. If the original is not valid JSON, leave it alone and fix it first. Then run systemctl reload docker (never a restart) and check that docker info --format '{{.LiveRestoreEnabled}}' prints true.
 
 ## Updating with deploy.sh
 

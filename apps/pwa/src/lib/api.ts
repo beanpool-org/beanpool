@@ -2916,6 +2916,20 @@ export async function getSignInRecovery(): Promise<string[] | null> {
     }
 }
 
+/**
+ * Remove this community's copy of the account for one sign-in ("Where your account can be brought back from", vault
+ * rethink VR1): the signed `DELETE /api/recovery/shares/sso/:provider`, as the phone sends it. True once the server said
+ * so, or said it keeps none for that sign-in (404); false for anything else: no answer, or a refusal. Never throws.
+ */
+export async function removeSignInCopy(provider: string): Promise<boolean> {
+    try {
+        const res = await signedFetch('DELETE', `/api/recovery/shares/sso/${encodeURIComponent(provider)}`);
+        return res.ok || res.status === 404;
+    } catch {
+        return false;
+    }
+}
+
 
 // ===================== NOTIFICATION PREFERENCES =====================
 

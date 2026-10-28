@@ -414,7 +414,7 @@ type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kep
 
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
 const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl', 'directory_promise'] as const;
-const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'] as const;
+const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours', 'areaName'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);
 
@@ -473,8 +473,9 @@ async function main(): Promise<void> {
         built('the community names itself, its place and its contacts', await A('/api/local/update-identity', {
             callsign: 'riverbend', communityName: 'Riverbend Commons', lat: -33.71, lng: 151.1, contactEmail: 'hello@riverbend.example', contactPhone: '+61 2 5550 0101',
         }));
-        built('it publishes its contact email, keeps its phone and member count out of the directory, and draws its service area', await A('/api/local/admin/node/config', {
+        built('it publishes its contact email, keeps its phone and member count out of the directory, and draws its service area and names it', await A('/api/local/admin/node/config', {
             publishContactEmail: true, publishMembers: false, serviceRadius: { lat: -33.71, lng: 151.1, radiusKm: 9 }, directoryPushIntervalHours: 6,
+            areaName: 'Riverbend and around',
         }));
         built('it sets its own thresholds', await A('/api/admin/thresholds', { inactiveMemberDays: 45, washTradingMinTxns: 6 }));
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));

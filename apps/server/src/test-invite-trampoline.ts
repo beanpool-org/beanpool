@@ -45,11 +45,14 @@ async function main() {
     const textInvite = await resInvite.text();
     assert(textInvite.includes('BeanPool'), 'GET /?invite=... contains BeanPool in HTML body');
 
-    // GET / (without invite) -> should redirect to /app
+    // GET / (without invite): a stranger at a local community's bare address gets the community's card (front doors S15,
+    // test-community-card.ts); a browser that keeps an account here (the web app's hint cookie) goes to /app as before.
     const resNoInvite = await fetch(`${BASE}/`, { redirect: 'manual' });
-    assert(resNoInvite.status === 302, 'GET / without invite returns 302 redirect');
-    const location = resNoInvite.headers.get('location') || '';
-    assert(location === '/app', 'GET / without invite redirects to /app');
+    assert(resNoInvite.status === 200 && (await resNoInvite.text()).includes('data-testid="community-card"'), 'GET / without invite, for a stranger, is the community card');
+    const resMember = await fetch(`${BASE}/`, { redirect: 'manual', headers: { Cookie: 'bp_account_here=1' } });
+    assert(resMember.status === 302, 'GET / without invite, for a browser with an account here, returns 302 redirect');
+    const location = resMember.headers.get('location') || '';
+    assert(location === '/app', 'GET / without invite, for a browser with an account here, redirects to /app');
 
     // GET /api/invite/check?code=BP-INVALID-CODE
     const resCheck = await fetch(`${BASE}/api/invite/check?code=BP-INVALID-CODE`);

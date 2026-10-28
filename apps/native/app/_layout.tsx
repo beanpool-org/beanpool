@@ -56,6 +56,7 @@ import { isUnlockLink } from '../utils/takeover-unlock';
 import { isPairLink } from '../utils/pair-link';
 import { isGlobalLink } from '../utils/global-link';
 import { doorLinkFromSystemPath } from '../utils/open-door';
+import { isCommunityCardPath } from '../utils/community-card-link';
 import * as WebBrowser from 'expo-web-browser';
 import { t } from '@beanpool/core';
 import { settingsLineWords } from '../components/settings/settings-lines';
@@ -345,6 +346,10 @@ function RootLayoutNav() {
         // route's name as one ("JOIN-OPEN-DOOR"), offer "Switch Nodes?" to the link's address, or put a welcome with that
         // "invite" over the first screen (PR #2131 review).
         if (doorLinkFromSystemPath(currentUrl)) return;
+        // A community's card, its bare address or `beanpool://community-card?node=…` (utils/community-card-link.ts, front
+        // doors S15): routed by +native-intent.ts. Not an invite: extractInviteToken reads the route's name as one
+        // ("COMMUNITY-CARD"), as it did the door screen's.
+        if (isCommunityCardPath(currentUrl)) return;
 
         // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
         // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).
@@ -924,6 +929,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="community-card" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />

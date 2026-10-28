@@ -229,8 +229,8 @@ describe('the root guard while a phone with no account looks around the global c
         for (const segments of NEEDS_A_KEY) expect(setupRedirect(segments, LOOKING), segments.join('/')).toEqual(DOOR);
     });
 
-    it('keeps the screens a phone with no account always had: welcome, guardian recovery, a re-key code, a claim', () => {
-        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community']) {
+    it('keeps the screens a phone with no account always had: welcome, guardian recovery, a re-key code, a claim, a community\'s card', () => {
+        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card']) {
             expect(setupRedirect([root], LOOKING), root).toBeNull();
         }
         // The bare root is the app's start: the first screen, as always (app/index.tsx redirects there too), never the door.

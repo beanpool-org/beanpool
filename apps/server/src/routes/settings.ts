@@ -40,6 +40,8 @@ import { countWebAppPageLoad } from '../engine/web-visits.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS, word } from '@beanpool/core';
 import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
+import { cleanLabel, AREA_NAME_MAX } from '../config/clean-label.js';
+import { serveCommunityCard } from './community-card.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -203,9 +205,12 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
 // could wipe or delete has a copy there. Settings is the manager.
 
 
-// ===================== ROOT REDIRECT =====================
-// Redirect root to the PWA app — existing users auto-login via IndexedDB identity
-// Preserve query params (e.g. ?invite=BP-XXXX-XXXX) for invite URL flow
+// ===================== ROOT =====================
+// The web app is at /app; the root sends a browser there, query and all (`?post=`, `?shop=`, a sign-in's return), and the
+// web app's identity gate decides the rest. Two exceptions, each plain HTML from THIS server: an invite link opened
+// without the app (below), and a stranger at a local community's bare address, who gets the community's public card
+// (routes/community-card.ts, front doors S15) rather than a sign-in form. A browser that keeps an account here says so
+// with the web app's hint cookie and goes to the web app as before, as does the global community's lobby.
 router.get('/', async (ctx) => {
     // An invite link opened on a device WITHOUT the app installed lands here (an
     // installed app intercepts the https link via verified App/Universal Links
@@ -221,6 +226,7 @@ router.get('/', async (ctx) => {
         ctx.body = renderInviteTrampoline({ webJoin });
         return;
     }
+    if (serveCommunityCard(ctx)) return;
     const query = ctx.querystring ? `?${ctx.querystring}` : '';
     ctx.redirect(`/app${query}`);
 });
@@ -244,6 +250,9 @@ router.get('/', async (ctx) => {
 function publicNodeConfig(config: NodeConfig, shown: PlaceShown) {
     return {
         serviceRadius: placeAs(config.serviceRadius, shown),
+        // The town or area a stranger's card names (routes/community-card.ts): the place in words, so it goes where the
+        // place goes, and nowhere it doesn't.
+        areaName: shown === 'none' ? null : config.areaName ?? null,
         publishLocation: config.publishLocation,
         publishMembers: config.publishMembers,
         publishContactEmail: config.publishContactEmail,
@@ -420,6 +429,14 @@ router.post('/api/local/admin/node/config', async (ctx) => {
     const body = (ctx as any).requestBody || {};
     // `publishContacts`, the old single switch for both contacts, is not read: a page that still sends it turns nothing on.
     const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours } = body;
+    // The town or area the community's card names (NodeConfig `areaName`): text, cut to AREA_NAME_MAX, or null (or nothing
+    // left once cleaned) for none. Anything else is refused before anything is written.
+    if (body.areaName !== undefined && body.areaName !== null && typeof body.areaName !== 'string') {
+        ctx.status = 400;
+        ctx.body = { error: 'areaName must be text, or null for none', code: 'bad_area_name' };
+        return;
+    }
+    const areaName = body.areaName === undefined ? undefined : (cleanLabel(body.areaName, AREA_NAME_MAX) ?? null);
     // Requests to join, message requests and who may invite are how this community works, changed only there, by an owner,
     // logged and told to the members (POST /api/local/admin/community-shape; the design's §3.4). Sent here, the whole
     // request is refused before anything in it is written: half a save would look like a whole one.
@@ -454,11 +471,11 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 1 to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}`, code: 'bad_interval' };
         return;
     }
-    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours });
+    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, areaName });
     // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and the
     // location, member count and health switches read unset as "publish": a request that changed one switch published
     // the member count the community had turned off. Settings sends every field (null clears the service area).
-    const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours })
+    const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, areaName })
         .filter(([, v]) => v !== undefined));
     // The public fields only, as GET /api/node/config answers: the stored config also holds the tunnel token, and an admin
     // (who may save these switches) must never read it. No caller reads more from this answer than ok or error.

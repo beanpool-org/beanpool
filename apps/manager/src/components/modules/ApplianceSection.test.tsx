@@ -515,6 +515,8 @@ describe('ApplianceSection Component', () => {
                     password: mockProfile.adminPassword,
                     directoryPushIntervalHours: 12,
                     serviceRadius: null,
+                    // The card's town or area (front doors S15), saved with the area: none typed clears it.
+                    areaName: null,
                 }),
             })
         );

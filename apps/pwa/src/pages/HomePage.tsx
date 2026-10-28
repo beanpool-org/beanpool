@@ -1033,7 +1033,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const currentPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
         const hasOpenKnock = (knocksRef.current ?? knocks).some(k => !k.cancelledAt && knockStillAnswerable(k, at));
         const hasOpenWatch = ((ans?.cards?.find as { watches?: unknown[] })?.watches?.length ?? 0) > 0;
-        return pinnedCards(ans, at, { hasOpenKnock, hasOpenWatch, knocks: knocksRef.current ?? knocks });
+        return pinnedCards(ans, at, { hasOpenKnock, hasOpenWatch });
     }, [knocks]);
 
     const [watchNote, setWatchNote] = useState<string | null>(null);

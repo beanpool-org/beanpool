@@ -318,7 +318,7 @@ describe('the sidebar\'s profile button shows the member\'s own picture', () => 
 
         await act(async () => { answer(profile('bundled://sun')); });
         // The stored picture, through lib/avatar's safe forms (a bundled one is the app's own file).
-        expect(await within(profileButton()).findByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_sun.jpg');
+        expect(await within(profileButton()).findByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_sun.webp');
         expect(within(profileButton()).queryByText('AL')).toBeNull();
 
         // Saved with a new photo (lib/api's updateMemberProfile rings PROFILE_SAVED_EVENT): read again, and shown.
@@ -342,9 +342,9 @@ describe('the sidebar\'s profile button shows the member\'s own picture', () => 
         await waitFor(() => expect(answers).toHaveLength(2));
 
         await act(async () => { answers[1](profile('bundled://moon')); });
-        expect(await within(profileButton()).findByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_moon.jpg');
+        expect(await within(profileButton()).findByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_moon.webp');
         await act(async () => { answers[0](profile('bundled://sun')); });
-        expect(within(profileButton()).getByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_moon.jpg');
+        expect(within(profileButton()).getByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_moon.webp');
     });
 
     it('no picture, or one that is not a safe form: the initials', async () => {

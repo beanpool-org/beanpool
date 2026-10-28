@@ -267,7 +267,7 @@ export default function GroupInviteLanding() {
                     onPress={act}
                     disabled={!action?.enabled || !!busy}
                     accessibilityRole="button"
-                    accessibilityLabel={action ? action.label : t('Loading')}
+                    accessibilityLabel={busy === 'join' ? t('Joining group...') : action ? action.label : t('Loading')}
                     accessibilityHint={action?.note || (viewerStatus === 'active' ? t('Opens the group chat') : t('Joins the group and opens its chat'))}
                     accessibilityState={{ disabled: !action?.enabled || !!busy, busy: busy === 'join' || loadingGroup }}
                     testID="invite-landing-join"

@@ -211,3 +211,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-23 - Add dynamic accessibilityLabel and hint to picture crop done button
 **Learning:** Action buttons in media crop flows whose text child is conditionally replaced by an `ActivityIndicator` during image cutting leave screen reader users without accessible text during loading states unless dynamic `accessibilityLabel` (`busy ? t('Cropping picture...') : t('Done')`) and `accessibilityHint` are explicitly provided.
 **Action:** Supply dynamic `accessibilityLabel` and `accessibilityHint` on image cropping submit buttons rendering `ActivityIndicator` when busy.
+
+## 2027-01-30 - Add dynamic accessibilityLabel to group join button
+**Learning:** Primary action buttons on group landing screens whose visible text is replaced by an `ActivityIndicator` when `busy === 'join'` leave screen readers with non-dynamic label text unless explicitly updated to `busy === 'join' ? t('Joining group...') : ...`.
+**Action:** Always provide dynamic `accessibilityLabel` handling `busy` state on primary action buttons that render `ActivityIndicator` when busy.

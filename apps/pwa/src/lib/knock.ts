@@ -224,3 +224,18 @@ export async function cancelKnock(
     writeStore(identity.publicKey, knocks.map(k => (k.url === origin ? { ...k, cancelledAt: now.toISOString() } : k)));
     return { ok: true };
 }
+
+export function cardKnockLines(
+    asked: readonly RememberedKnock[],
+    statuses: Readonly<Record<string, KnockStatusResult | null | undefined>>,
+): Array<{ url: string; text: string; invited: boolean }> {
+    const lines: Array<{ url: string; text: string; invited: boolean }> = [];
+    for (const k of asked) {
+        const s = statuses[k.url];
+        if (!s || !s.ok) continue;
+        const name = k.name ?? k.url.replace(/^https:\/\//, '');
+        if (s.value.status === 'approved') lines.push({ url: k.url, text: t('{name} said yes. Join now.', { name }), invited: true });
+        else if (s.value.status === 'pending') lines.push({ url: k.url, text: t('Waiting for {name}: usually a few days.', { name }), invited: false });
+    }
+    return lines;
+}

@@ -37,7 +37,7 @@ import {
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { cancelKnock, communityOrigin, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { cancelKnock, cardKnockLines, communityOrigin, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { AskedCommunity } from '../components/AskedCommunity';
@@ -1989,9 +1989,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const isCancelling = cancellingKnock === k.url;
 
                             if (st?.ok && st.value.status === 'approved') {
+                                const approved = cardKnockLines([k], knockStatuses)[0];
                                 return (
                                     <p key={k.url} className="m-0 mt-2 font-semibold text-sm text-text-primary" data-testid={`home-find-invited-${k.url}`}>
-                                        🎉 {t('{name} said yes. Join now.', { name })}
+                                        {'🎉 ' + (approved?.text ?? '')}
                                     </p>
                                 );
                             }

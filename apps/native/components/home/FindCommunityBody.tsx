@@ -7,7 +7,7 @@ import {
     communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
 import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
-import { cancelKnock, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
+import { cancelKnock, cardKnockLines, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
 /** Shown through t() in the member's language. */
@@ -135,9 +135,10 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 const isCancelling = cancellingUrl === k.url;
 
                 if (status?.ok && status.value.status === 'approved') {
+                    const approved = cardKnockLines([k], statuses)[0];
                     return (
                         <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
-                            🎉 {t('{name} said yes. Join now.', { name })}
+                            {'🎉 ' + (approved?.text ?? '')}
                         </Text>
                     );
                 }

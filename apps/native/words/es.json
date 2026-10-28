@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Añade una foto a tu perfil",
   "Pick a few things you like": "Elige algunas cosas que te gusten",
   "Post something free or for swap": "Publica algo gratis o para intercambio",
-  "Ask a community to let you in": "Pide a una comunidad que te dé acceso",
   "{n} day|{n} days": {
     "one": "{n} día",
     "other": "{n} días"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "Tu crédito se abre con un primer intercambio.",
   "Spending is paused for now. You can still receive and sell.": "El gasto está pausado por ahora. Aún puedes recibir y vender.",
   "{amount} · room to spend {room}": "{amount} · margen para gastar {room}",
-  "The worldwide community": "La comunidad mundial",
   "1 member. You're first. Invite someone.": "1 miembro. Eres el primero. Invita a alguien.",
   "1 member. You're first.": "1 miembro. Eres el primero.",
   "{n} trade this month|{n} trades this month": {
@@ -6130,5 +6128,15 @@
   "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner.",
   "You're looking around as a visitor. Nothing is saved until you join.": "Estás echando un vistazo como visitante. No se guarda nada hasta que te unas.",
   "Join to post": "Únete para publicar",
-  "Join to message": "Únete para enviar un mensaje"
+  "Join to message": "Únete para enviar un mensaje",
+  "The global community": "La comunidad global",
+  "Choose a name": "Elige un nombre",
+  "Say roughly where you are": "Indica aproximadamente dónde estás",
+  "Add a picture (a preset counts)": "Añade una foto (una predeterminada cuenta)",
+  "Look at an example Ledger": "Mira un libro de cuentas de ejemplo",
+  "Say hello to someone near you": "Saluda a alguien cerca de ti",
+  "Tell me when a community starts here, or say you'd help start one": "Avísame cuando empiece una comunidad aquí o indica que ayudarías a empezar una",
+  "Nothing within 250 km yet.": "Todavía no hay nada en un radio de 250 km.",
+  "See what people post elsewhere ›": "Mira lo que publica la gente en otros lugares ›",
+  "Set your area": "Define tu zona"
 }

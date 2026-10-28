@@ -190,7 +190,7 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
     { id: 'find', name: word('Find your community'), line: word('Communities near you, to join.'), group: 'start', asks: 'node', onNode: (a) => a.profile === 'global' },
     // A newcomer's Home until the tour ends (tour.ts): drawn by the apps while the account's `tour` says neither done nor skipped.
     { id: 'start', name: word('Getting started'), line: word('A one-minute look at the other tabs.'), group: 'start', asks: 'none', onNode: everywhere },
-    { id: 'steps', name: word('First steps'), line: word('Things to do in your first weeks.'), group: 'start', asks: 'node', onNode: everywhere },
+    { id: 'steps', name: word('First steps'), globalName: word('Your first week'), line: word('Things to do in your first weeks.'), group: 'start', asks: 'node', onNode: everywhere },
     { id: 'tips', name: word('Tips'), line: word('One tip at a time on how things work.'), group: 'start', asks: 'none', onNode: everywhere },
     { id: 'interests', name: word('What are you into?'), line: word('Star what you like to see it first.'), group: 'start', asks: 'none', onNode: everywhere },
     { id: 'deals', name: word('Your deals'), line: word('Open deals and ones waiting on you.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.escrow !== false },

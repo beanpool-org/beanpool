@@ -107,6 +107,7 @@ export const SUITES = [
     'test-home',
     'test-home-deal-step',
     'test-home-answer-parse-lands',
+    'test-home-steps',
     'test-knock',
     'test-knock-notices',
     'test-commons-conservation',

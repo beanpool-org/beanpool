@@ -186,7 +186,10 @@ export interface HomeCards {
     needs?: { items: NeedsItem[] };
     safety?: { words: true; signInLinked: false };
     find?: HomeFind;
-    steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
+    steps?: {
+        joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean;
+        invited: boolean | null; area: boolean; knocked: null; saidHello?: boolean; watch?: boolean; sawLedger?: boolean;
+    };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null; items?: DealItem[] };
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
     enterprise?: {
@@ -343,7 +346,7 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
 export const STEPS_NEW_DAYS = 14;
 
 export interface StepLine {
-    key: 'firstOffer' | 'photo' | 'interests' | 'invite' | 'firstPost' | 'ask';
+    key: 'firstOffer' | 'photo' | 'interests' | 'invite' | 'firstPost' | 'ask' | 'name' | 'area' | 'sawLedger' | 'saidHello' | 'watch';
     done: boolean;
     text: string;
     /** A line the web app can never tick: it keeps no card on its own. */
@@ -353,23 +356,21 @@ export interface StepLine {
 }
 
 /**
- * The lines First steps draws on the web (§3.1, §7). Local: a first Offer, a photo, interests (the chips' taps count at
- * once), and an invite once there is an Offer. Global: a first post, and "Ask X to let you in" where the nearest
- * community is within reach (@beanpool/core's NEAR_COMMUNITY_KM, 250 km: the radius the global node's listings use and
- * every "near you" on both apps, so a community 9,000 km away is never suggested, #1517). The web leaves out "Set your area" (it can't set the account's area), and can't tick the ask: a knock is kept on
- * the community knocked on, so it is a suggestion, never a step that holds the card.
+ * The lines First steps draws on the web (§3.1, §7; global L3 §3.2). Local: a first Offer, a photo, interests (the chips' taps count at
+ * once), and an invite once there is an Offer. Global: the first-week card with the seven steps of §3.2.
  */
 export function stepLines(answer: HomeAnswer, interests: readonly string[]): StepLine[] {
     const s = answer.cards.steps;
     if (!s) return [];
     if (answer.profile === 'global') {
-        const nearest = answer.cards.find?.communities[0];
-        const km = nearest?.distanceKm;
-        const near = isNearKm(km) ? nearest : undefined;
-        const ask = near?.name ? t('Ask {name} to let you in', { name: near.name }) : t('Ask a community to let you in');
         return [
-            { key: 'firstPost', done: s.firstPost, text: t('Post something free or for swap') },
-            ...(near?.url ? [{ key: 'ask' as const, done: false, text: ask, untracked: true as const, href: near.url }] : []),
+            { key: 'name', done: true, text: t('Choose a name') },
+            { key: 'area', done: !!s.area, text: t('Say roughly where you are') },
+            { key: 'photo', done: !!s.photo, text: t('Add a picture (a preset counts)') },
+            { key: 'sawLedger', done: !!s.sawLedger, text: t('Look at an example Ledger') },
+            { key: 'firstPost', done: !!s.firstPost, text: t('Post something free or for swap') },
+            { key: 'saidHello', done: !!s.saidHello, text: t('Say hello to someone near you') },
+            { key: 'watch', done: !!s.watch, text: t("Tell me when a community starts here, or say you'd help start one") },
         ];
     }
     return [
@@ -382,15 +383,19 @@ export function stepLines(answer: HomeAnswer, interests: readonly string[]): Ste
 
 /**
  * Whether First steps has something to say here (§6.1 "a card with nothing to say disappears", §3.1 "member < 14 days
- * or any line undone"): the member is new, a line the web can tick is undone, or the new-account limits apply. The node
- * keeps sending the card while the account's area is unset, which the web can't set, so the web decides by its own lines.
+ * or any line undone", §3.2 & §6 "the card ends after 14 days or all done" on global): the member is new, a line the web can tick is undone, or the new-account limits apply.
  */
 export function stepsSaySomething(answer: HomeAnswer, interests: readonly string[], now: number = Date.now()): boolean {
     const s = answer.cards.steps;
     if (!s) return false;
     const joined = Date.parse(s.joinedAt ?? answer.me?.joinedAt ?? '');
-    if (Number.isFinite(joined) && now - joined < STEPS_NEW_DAYS * DAY_MS) return true;
-    if (stepLines(answer, interests).some(l => !l.done && !l.untracked)) return true;
+    const young = Number.isFinite(joined) && now - joined < STEPS_NEW_DAYS * DAY_MS;
+    const lines = stepLines(answer, interests);
+    if (answer.profile === 'global') {
+        return young && lines.some(l => !l.done);
+    }
+    if (young) return true;
+    if (lines.some(l => !l.done && !l.untracked)) return true;
     return probationSentence(answer.me?.probation) !== null;
 }
 
@@ -446,6 +451,7 @@ export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & 
     if (visitor && id === 'market') return t('What people post');
     // "Coming up" says how near only when the node measured from a point (the card adds "· within 50 km").
     if (id === 'market' && answer.profile === 'global') return t('Near you');
+    if (id === 'steps' && answer.profile === 'global') return t('Your first week');
     return t(CARD_TITLES[id]);
 }
 
@@ -591,9 +597,9 @@ export function communityLine(c: NonNullable<HomeCards['community']>, profile: s
     return parts.join(' · ');
 }
 
-/** The community card's name: the community's own, or the global node's "The worldwide community". */
+/** The community card's name: the community's own, or the global node's "The global community". */
 export function communityName(c: NonNullable<HomeCards['community']>, profile: string): string {
-    if (profile === 'global') return t('The worldwide community');
+    if (profile === 'global') return t('The global community');
     return c.name || t(CARD_TITLES.community);
 }
 

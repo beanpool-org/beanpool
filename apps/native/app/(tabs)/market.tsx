@@ -1886,8 +1886,23 @@ export default function MarketScreen() {
                         <View style={{ width: '100%' }}>
                             <View style={{ paddingVertical: 20, alignItems: 'center' }}>
                                 <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
-                                    {t('Nothing here yet. Be the first:')}
+                                    {nodeProfile?.profile === 'global' ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                 </Text>
+                                {nodeProfile?.profile === 'global' && (
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        style={{ minHeight: 48, justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 16, marginBottom: 16 }}
+                                        onPress={() => {
+                                            qr.show();
+                                            searchInputRef.current?.focus();
+                                        }}
+                                        testID="market-see-elsewhere"
+                                    >
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.brand.primary, textAlign: 'center' }}>
+                                            {t('See what people post elsewhere ›')}
+                                        </Text>
+                                    </Pressable>
+                                )}
                                 <View testID="market-empty-tiles" style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 20 }}>
                                     {(['food', 'services', 'tools', 'garden'] as const).map(cat => (
                                         <View key={cat} style={{ width: 56, height: 56, borderRadius: 14, overflow: 'hidden' }}>

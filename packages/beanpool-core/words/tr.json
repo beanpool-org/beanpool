@@ -231,7 +231,6 @@
   "Tap + ADD POST to put up an Offer: bread, a lift, an hour of your time. Post an Offer before a Need, so everyone brings something.": "+ İLAN EKLE'ye dokunarak bir Teklif paylaş: ekmek, arabayla bırakma, bir saatlik zamanın. Bir İhtiyaçtan önce Teklif paylaş ki herkes bir şeyler getirsin.",
   "Tap + ADD POST to put up something free or for swap. A Need is something you're looking for.": "Ücretsiz veya takaslık bir şey koymak için + İLAN EKLE'ye dokun. İhtiyaç, aradığın bir şeydir.",
   "Beans count help given and received. Everyone starts at zero, and zero is a fine place to be: it means you've given as much as you've got.": "Fasulye verilen ve alınan yardımı sayar. Herkes sıfırdan başlar ve sıfır harika bir yerdir: aldığın kadar verdiğin anlamına gelir.",
-  "There are no Beans on the worldwide community. Say in your post what you'd like in return: free, a swap, or ask.": "Dünya çapındaki toplulukta fasulye yoktur. İlanında karşılığında ne istediğini belirt: ücretsiz, takas veya sor.",
   "A rough guide: 40 Beans is about an hour of someone's time. You and the other person agree the real price.": "Kaba bir kılavuz: 40 Fasulye birinin yaklaşık bir saatlik zamanıdır. Gerçek fiyatı sen ve diğer kişi kararlaştırırsınız.",
   "Your 12 words are the key to your account, and there is no password. Write them on paper and keep it safe: nobody can reset them for you.": "12 kelimen hesabının anahtarıdır ve şifre yoktur. Onları kağıda yaz ve güvende tut: kimse onları senin için sıfırlayamaz.",
   "The Map shows what's near you: green pins are Offers, orange are Needs, purple are events. Your own pin can sit near your home rather than on it.": "Harita yakınında neler olduğunu gösterir: yeşil iğneler Teklifler, turuncular İhtiyaçlar, morlar etkinliklerdir. Kendi iğnen tam evin yerine yakınına konabilir.",
@@ -784,5 +783,7 @@
   "Start a project or an enterprise →": "Bir proje ya da girişim başlatın →",
   "Social Circle": "Sosyal Çevre",
   "Working Group": "Çalışma Grubu",
-  "Guild": "Lonca"
+  "Guild": "Lonca",
+  "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Küresel toplulukta fasulye yoktur. İlanında karşılığında ne istediğini belirt: ücretsiz, takas veya sor.",
+  "Your first week": "İlk haftan"
 }

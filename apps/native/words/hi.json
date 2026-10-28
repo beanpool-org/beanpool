@@ -543,7 +543,6 @@
   "Add a photo to your profile": "अपनी प्रोफ़ाइल में फ़ोटो जोड़ें",
   "Pick a few things you like": "अपनी पसंद की कुछ चीज़ें चुनें",
   "Post something free or for swap": "मुफ़्त या अदला-बदली के लिए कुछ पोस्ट करें",
-  "Ask a community to let you in": "किसी समुदाय से जुड़ने का अनुरोध करें",
   "{n} day|{n} days": {
     "one": "{n} दिन",
     "other": "{n} दिन"
@@ -562,7 +561,6 @@
   "Your credit opens with a first trade.": "आपका क्रेडिट पहले व्यापार के साथ खुलता है।",
   "Spending is paused for now. You can still receive and sell.": "खर्च अभी रोका गया है। आप अभी भी प्राप्त और बेच सकते हैं।",
   "{amount} · room to spend {room}": "{amount} · खर्च करने की गुंजाइश {room}",
-  "The worldwide community": "वैश्विक समुदाय",
   "1 member. You're first. Invite someone.": "1 सदस्य। आप पहले हैं। किसी को आमंत्रित करें।",
   "1 member. You're first.": "1 सदस्य। आप पहले हैं।",
   "{n} trade this month|{n} trades this month": {
@@ -6125,5 +6123,15 @@
   "Your picture, until you choose a banner.": "आपकी तस्वीर, जब तक कि आप कोई बैनर न चुन लें।",
   "You're looking around as a visitor. Nothing is saved until you join.": "आप मेहमान के रूप में देख रहे हैं। शामिल होने तक कुछ भी सहेजा नहीं जाता।",
   "Join to post": "पोस्ट करने के लिए शामिल हों",
-  "Join to message": "संदेश भेजने के लिए शामिल हों"
+  "Join to message": "संदेश भेजने के लिए शामिल हों",
+  "The global community": "वैश्विक समुदाय",
+  "Choose a name": "एक नाम चुनें",
+  "Say roughly where you are": "बताएँ कि आप लगभग कहाँ हैं",
+  "Add a picture (a preset counts)": "एक तस्वीर जोड़ें (प्रीसेट भी मान्य है)",
+  "Look at an example Ledger": "एक उदाहरण बहीखाता देखें",
+  "Say hello to someone near you": "अपने नजदीकी किसी व्यक्ति को नमस्ते कहें",
+  "Tell me when a community starts here, or say you'd help start one": "यहाँ समुदाय शुरू होने पर मुझे बताएँ, या एक शुरू करने में मदद की बात कहें",
+  "Nothing within 250 km yet.": "अभी 250 किमी के भीतर कुछ नहीं है।",
+  "See what people post elsewhere ›": "देखें कि लोग अन्यत्र क्या पोस्ट कर रहे हैं ›",
+  "Set your area": "अपना क्षेत्र सेट करें"
 }

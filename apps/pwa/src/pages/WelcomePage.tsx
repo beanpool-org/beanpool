@@ -115,7 +115,7 @@ const FAQ_ITEMS = [
     },
     {
         q: word('Can I use this on my phone?'),
-        a: word('Yes! BeanPool is a Progressive Web App. Open the app link in your browser, then "Add to Home Screen" for the full native-like experience — works on Android, iOS, and desktop.'),
+        a: word('Yes! On a phone, get the app from Google Play, the App Store, or beanpool.org/android. On a desktop computer, open the app link in your browser, then "Add to Home Screen" to install it.'),
     },
 ];
 

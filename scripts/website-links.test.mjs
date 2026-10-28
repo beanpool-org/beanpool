@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,85 +109,376 @@ test('every internal href in apps/website/**/*.html resolves to a file in the tr
     assert.deepEqual(broken, [], `Broken internal links found: ${JSON.stringify(broken, null, 2)}`);
 });
 
-test('the "Start a community" install block enables Docker live-restore idempotently', () => {
-    // 1. Check README.md install block
-    const readmePath = path.join(ROOT, 'README.md');
-    assert.ok(fs.existsSync(readmePath), 'README.md exists');
-    const readmeContent = fs.readFileSync(readmePath, 'utf8');
+// ---------------------------------------------------------------------------------------------------------------------
+// The Docker live-restore step of the "Start a community" install block.
+//
+// Self-hosters copy this step onto their own servers, so it has to work for root and for a user with sudo, check that
+// systemd and Docker are there, never damage an existing /etc/docker/daemon.json, and be the same text everywhere it
+// appears: the README quickstart, the server README, the website block and its 24 translations (sources and built pages).
+// ---------------------------------------------------------------------------------------------------------------------
 
-    // Extract bash code block under "## Run a community"
-    const runCommunityMatch = readmeContent.match(/## Run a community[\s\S]*?```bash\n([\s\S]*?)```/);
-    assert.ok(runCommunityMatch, 'README has a bash code block under "## Run a community"');
-    const readmeBlock = runCommunityMatch[1];
+const STEP_FIRST_LINE = '# Docker live-restore:';
+const SOURCE_LANGS = fs.readdirSync(path.join(ROOT, 'apps/website-src/content')).sort();
+const ON_WINDOWS = process.platform === 'win32';
+const WINDOWS_NOTE = 'the step runs on Linux; Python on Windows has no fchmod or fchown';
 
-    // 2. Check apps/website/index.html install block
-    const indexPath = path.join(SITE, 'index.html');
-    assert.ok(fs.existsSync(indexPath), 'apps/website/index.html exists');
-    const indexContent = fs.readFileSync(indexPath, 'utf8');
-    const ctaMatch = indexContent.match(/<code class="cta-block">([\s\S]*?)<\/code>/);
-    assert.ok(ctaMatch, 'apps/website/index.html has <code class="cta-block">');
-    // Decode HTML entities
-    const indexBlock = ctaMatch[1]
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>');
+/** Decodes the HTML escapes used inside the site's <code> blocks. */
+const decodeHtml = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-    // 3. Verify step presence and properties in both blocks
-    for (const [sourceName, block] of [
-        ['README.md', readmeBlock],
-        ['apps/website/index.html', indexBlock],
-    ]) {
-        assert.ok(block.includes('/etc/docker/daemon.json'), `${sourceName} block references /etc/docker/daemon.json`);
-        assert.ok(block.includes('live-restore'), `${sourceName} block sets live-restore`);
-        assert.ok(block.includes('systemctl reload docker'), `${sourceName} block reloads docker via systemctl`);
-        assert.ok(!block.includes('systemctl restart docker'), `${sourceName} block never restarts docker`);
-        assert.ok(block.includes("docker info --format '{{.LiveRestoreEnabled}}'"), `${sourceName} block checks LiveRestoreEnabled`);
+/** The live-restore step in `text`: from its first comment line to the line that closes its heredoc (EOF). */
+function extractStep(text, where) {
+    const lines = text.split('\n');
+    const first = lines.findIndex((l) => l.startsWith(STEP_FIRST_LINE));
+    assert.ok(first >= 0, `${where} has the live-restore step`);
+    assert.equal(lines.findIndex((l, i) => i > first && l.startsWith(STEP_FIRST_LINE)), -1, `${where} has the step only once`);
+    const last = lines.indexOf('EOF', first);
+    assert.ok(last > first, `${where}: the step ends with a line holding only EOF`);
+    return lines.slice(first, last + 1).join('\n');
+}
 
-        // Check idempotent shape:
-        // Must check if file exists or handle missing file, and preserve other keys
-        assert.ok(
-            block.includes('d = json.load(open(p))') || block.includes('os.path.exists'),
-            `${sourceName} block has idempotent json loading logic`
-        );
+/** Every copy of the step in the tree, by file. */
+function stepCopies() {
+    const copies = new Map();
+    const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+    const quickstart = readme.match(/## Run a community[\s\S]*?```bash\n([\s\S]*?)```/);
+    assert.ok(quickstart, 'README has a bash code block under "## Run a community"');
+    copies.set('README.md', extractStep(quickstart[1], 'README.md'));
+    copies.set('apps/server/README.md', extractStep(fs.readFileSync(path.join(ROOT, 'apps/server/README.md'), 'utf8'), 'apps/server/README.md'));
+
+    const pages = [['apps/website/index.html', path.join(SITE, 'index.html')]];
+    for (const lang of SOURCE_LANGS) {
+        pages.push([`apps/website-src/content/${lang}/index.html`, path.join(ROOT, 'apps/website-src/content', lang, 'index.html')]);
+        pages.push([`apps/website/${lang}/index.html`, path.join(SITE, lang, 'index.html')]);
     }
+    for (const [name, file] of pages) {
+        assert.ok(fs.existsSync(file), `${name} exists`);
+        const block = fs.readFileSync(file, 'utf8').match(/<code class="cta-block">([\s\S]*?)<\/code>/);
+        assert.ok(block, `${name} has <code class="cta-block">`);
+        copies.set(name, extractStep(decodeHtml(block[1]), name));
+    }
+    return copies;
+}
 
-    // 4. Verify idempotent behavior by simulating the python3 snippet on temp files
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'live-restore-test-'));
+const CANONICAL = () => stepCopies().get('README.md');
+
+/** The Python program of the step, with its path to daemon.json replaced. */
+function pythonOf(step, daemonJson) {
+    const py = step.match(/python3 - <<'PY'[^\n]*\n([\s\S]*?)\nPY\n/);
+    assert.ok(py, 'the step runs a python3 program from a heredoc');
+    const quoted = '"/etc/docker/daemon.json"';
+    assert.ok(py[1].includes(quoted), 'the program names /etc/docker/daemon.json');
+    return py[1].replace(quoted, JSON.stringify(daemonJson.replaceAll('\\', '/')));
+}
+
+/** The script the step hands to sh (root, or sudo -n): the outer heredoc, with the path to daemon.json replaced. */
+function scriptOf(step, daemonJson) {
+    const lines = step.split('\n');
+    const open = lines.findIndex((l) => l.includes("<<'EOF'"));
+    assert.ok(open >= 0 && lines[lines.length - 1] === 'EOF', 'the step hands a heredoc to sh');
+    return lines.slice(open + 1, -1).join('\n').replace('"/etc/docker/daemon.json"', JSON.stringify(daemonJson.replaceAll('\\', '/'))) + '\n';
+}
+
+const sandbox = () => fs.mkdtempSync(path.join(os.tmpdir(), 'live-restore-test-'));
+
+test('the live-restore step is the same text in the README, the server README, the website block and all 24 translations', () => {
+    const copies = stepCopies();
+    assert.equal(SOURCE_LANGS.length, 24, 'there are 24 translation sources');
+    assert.equal(copies.size, 2 + 1 + 24 + 24, 'README, server README, English page, 24 sources and 24 built pages');
+    const canonical = copies.get('README.md');
+    const different = [...copies].filter(([, step]) => step !== canonical).map(([name]) => name);
+    assert.deepEqual(different, [], `these copies differ from the README quickstart: ${different.join(', ')}`);
+});
+
+test('the live-restore step reads systemd and Docker first, uses sudo only without a password prompt, and reloads, never restarts', () => {
+    const step = CANONICAL();
+    const commands = step.split('\n').filter((l) => !l.startsWith('#')).join('\n');
+
+    assert.ok(step.includes('/etc/docker/daemon.json'), 'names /etc/docker/daemon.json');
+    assert.ok(step.includes('live-restore'), 'sets live-restore');
+
+    // Root runs it as it is; anyone else goes through sudo -n, which fails at once instead of asking for a password in the
+    // middle of a paste (the lines after it would be typed into the prompt).
+    assert.ok(commands.includes('if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi'), 'root runs sh, others run sudo -n sh');
+    const bare = commands.replace(/"[^"\n]*"/g, '""'); // what the shell runs, without the words it prints
+    assert.deepEqual(bare.match(/\bsudo\b\s*\S*\s*\S*/g), ['sudo -n sh'], 'the only sudo is sudo -n sh, which cannot prompt');
+    assert.ok(step.split('\n')[1].includes('Not root?') && step.includes('sudo -v'), 'says in plain words what a non-root user does');
+
+    // The checks come before anything is written.
+    const at = (needle) => commands.indexOf(needle);
+    assert.ok(at('command -v systemctl') > 0, 'checks that systemd is there');
+    assert.ok(at('docker info >/dev/null') > at('command -v systemctl'), 'checks that Docker is running');
+    assert.ok(at('python3 - <<') > at('docker info >/dev/null'), 'writes only after the checks');
+    assert.ok(commands.includes('systemctl start docker'), 'says how to start Docker when it is not running');
+
+    // Atomic, key-keeping, mode-keeping write; refuses a file it cannot read as a JSON object.
+    for (const piece of ['json.loads', 'os.replace(tmp, p)', 'os.fsync', 'os.fchmod', 'os.fchown', 'os.path.realpath', 'isinstance(d, dict)']) {
+        assert.ok(step.includes(piece), `the write uses ${piece}`);
+    }
+    assert.ok(!step.includes('open(p, "w")'), 'daemon.json is never opened for writing in place');
+
+    // Reload, never restart; confirm.
+    assert.ok(commands.includes('systemctl reload docker'), 'reloads docker via systemctl');
+    assert.ok(!/systemctl restart|service docker restart/.test(step), 'never restarts docker');
+    assert.ok(step.includes("docker info --format '{{.LiveRestoreEnabled}}'"), 'checks LiveRestoreEnabled');
+    assert.ok(/"\$\(docker info --format '\{\{\.LiveRestoreEnabled\}\}'[^)]*\)" = true/.test(step), 'and requires it to be true');
+});
+
+test('the live-restore step parses in bash and zsh, and its script in sh', () => {
+    const step = CANONICAL();
+    const dir = sandbox();
     try {
-        const fakeDaemon = path.join(tmpDir, 'daemon.json');
-
-        // Extract the python snippet from readmeBlock, substituting the fake path
-        const pySnippetMatch = readmeBlock.match(/python3 -c '([^']+)'/);
-        assert.ok(pySnippetMatch, 'README block has a python3 -c snippet');
-        const originalSnippet = pySnippetMatch[1];
-        const runSnippet = (targetFile) => {
-            const normalizedTarget = targetFile.replaceAll('\\', '/');
-            const normalizedTmp = tmpDir.replaceAll('\\', '/');
-            const adapted = originalSnippet
-                .replaceAll('/etc/docker/daemon.json', normalizedTarget)
-                .replaceAll('/etc/docker', normalizedTmp);
-            execFileSync('python3', ['-c', adapted]);
-        };
-
-        // Test A: Missing daemon.json -> creates file with {"live-restore": true}
-        runSnippet(fakeDaemon);
-        let parsed = JSON.parse(fs.readFileSync(fakeDaemon, 'utf8'));
-        assert.equal(parsed['live-restore'], true, 'missing daemon.json creates {"live-restore": true}');
-
-        // Test B: Existing daemon.json with other keys -> preserves keys and sets live-restore
-        fs.writeFileSync(fakeDaemon, JSON.stringify({ 'log-driver': 'json-file', 'max-size': '10m' }, null, 2));
-        runSnippet(fakeDaemon);
-        parsed = JSON.parse(fs.readFileSync(fakeDaemon, 'utf8'));
-        assert.equal(parsed['live-restore'], true, 'existing daemon.json merges live-restore');
-        assert.equal(parsed['log-driver'], 'json-file', 'existing log-driver is preserved');
-        assert.equal(parsed['max-size'], '10m', 'existing max-size is preserved');
-
-        // Test C: Second run is idempotent (no-op change)
-        runSnippet(fakeDaemon);
-        parsed = JSON.parse(fs.readFileSync(fakeDaemon, 'utf8'));
-        assert.equal(parsed['live-restore'], true, 'idempotent rerun keeps live-restore true');
-        assert.equal(parsed['log-driver'], 'json-file', 'idempotent rerun keeps existing keys');
+        const script = scriptOf(step, path.join(dir, 'daemon.json'));
+        let checked = 0;
+        for (const [shell, input] of [['bash', step], ['zsh', step], ['sh', script], ['dash', script]]) {
+            const r = spawnSync(shell, ['-n'], { input, encoding: 'utf8' });
+            if (r.error?.code === 'ENOENT') continue; // not installed here
+            assert.equal(r.status, 0, `${shell} -n: ${r.stderr}`);
+            checked += 1;
+        }
+        assert.ok(checked >= 2, 'at least bash and sh are there to check with');
     } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('the live-restore program writes daemon.json atomically, keeps every key and the file mode, and refuses what is not JSON', { skip: ON_WINDOWS && WINDOWS_NOTE }, () => {
+    const step = CANONICAL();
+    const dir = sandbox();
+    try {
+        const run = (file) => spawnSync('python3', ['-c', pythonOf(step, file)], { encoding: 'utf8' });
+        const read = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+        const leftovers = () => fs.readdirSync(path.join(dir, 'docker')).filter((n) => n !== 'daemon.json');
+        const file = path.join(dir, 'docker', 'daemon.json');
+
+        // A: no file, and not even the folder
+        let r = run(file);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(read(file), { 'live-restore': true }, 'a missing daemon.json is created');
+        assert.equal(fs.statSync(file).mode & 0o777, 0o644, 'a new file is world-readable like Docker\'s own');
+        assert.deepEqual(leftovers(), [], 'no temporary file is left behind');
+
+        // B: an empty file and a blank one count as {}
+        for (const blank of ['', '  \n']) {
+            fs.writeFileSync(file, blank);
+            r = run(file);
+            assert.equal(r.status, 0, r.stderr);
+            assert.deepEqual(read(file), { 'live-restore': true }, `a ${JSON.stringify(blank)} file becomes {"live-restore": true}`);
+        }
+
+        // C: other keys, including nested ones, are all kept; a false is turned on
+        const others = { 'log-driver': 'json-file', 'log-opts': { 'max-size': '10m' }, proxies: { 'http-proxy': 'http://u:p@proxy:3128' }, 'live-restore': false };
+        fs.writeFileSync(file, JSON.stringify(others, null, 2));
+        r = run(file);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(read(file), { ...others, 'live-restore': true }, 'every existing key is kept');
+        assert.deepEqual(leftovers(), [], 'no temporary file is left behind after a merge');
+
+        // D: a second run changes nothing, not even the bytes
+        const before = fs.readFileSync(file);
+        r = run(file);
+        assert.equal(r.status, 0, r.stderr);
+        assert.ok(before.equals(fs.readFileSync(file)), 'a rerun leaves the file as it was');
+
+        // E: a file that already has it on, written by hand, is not reformatted
+        const byHand = '{"live-restore":true,\n "debug":   true}\n';
+        fs.writeFileSync(file, byHand);
+        r = run(file);
+        assert.equal(r.status, 0, r.stderr);
+        assert.equal(fs.readFileSync(file, 'utf8'), byHand, 'a file that is already right is not rewritten');
+
+        // F: the mode of a locked-down file survives the swap (it may hold proxy or registry passwords)
+        fs.writeFileSync(file, JSON.stringify({ proxies: { 'http-proxy': 'http://u:p@proxy:3128' } }));
+        fs.chmodSync(file, 0o600);
+        r = run(file);
+        assert.equal(r.status, 0, r.stderr);
+        assert.equal(fs.statSync(file).mode & 0o777, 0o600, 'a 0600 daemon.json stays 0600');
+        assert.equal(read(file).proxies['http-proxy'], 'http://u:p@proxy:3128');
+
+        // G: what is not a JSON object is left alone, with a message and a failing exit
+        for (const bad of ['{"log-driver": ', '[]', 'null', '"live-restore"', '{"a": 1} trailing', 'not json']) {
+            fs.writeFileSync(file, bad);
+            fs.chmodSync(file, 0o640);
+            r = run(file);
+            assert.notEqual(r.status, 0, `${JSON.stringify(bad)} is refused`);
+            assert.match(r.stderr, /not a JSON object, so it is left alone/, 'and says why');
+            assert.equal(fs.readFileSync(file, 'utf8'), bad, `${JSON.stringify(bad)} is not touched`);
+            assert.equal(fs.statSync(file).mode & 0o777, 0o640, 'nor its mode');
+            assert.deepEqual(leftovers(), [], 'and no temporary file is left');
+        }
+
+        // H: a symlinked daemon.json stays a symlink; the file it points to is updated
+        const real = path.join(dir, 'real-daemon.json');
+        fs.writeFileSync(real, JSON.stringify({ 'log-driver': 'local' }));
+        fs.rmSync(file);
+        fs.symlinkSync(real, file);
+        r = run(file);
+        assert.equal(r.status, 0, r.stderr);
+        assert.ok(fs.lstatSync(file).isSymbolicLink(), 'the symlink is still a symlink');
+        assert.deepEqual(read(real), { 'log-driver': 'local', 'live-restore': true }, 'the target was updated');
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+/** Stand-in docker, systemctl and sudo (and the real python3) in a folder of their own, for running the step without Docker. */
+function makeStubs(dir, { systemctl = true } = {}) {
+    const stubs = path.join(dir, 'bin');
+    fs.mkdirSync(stubs);
+    const script = (name, body) => fs.writeFileSync(path.join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+    script('docker', [
+        '[ -n "$FAKE_DOCKER_DOWN" ] && exit 1',
+        '[ "$1" = info ] && [ "$2" = --format ] && { echo "$FAKE_LIVE_RESTORE"; exit 0; }',
+        '[ "$1" = info ] && exit 0',
+        'exit 2',
+    ].join('\n'));
+    if (systemctl) script('systemctl', ['echo "systemctl $*" >> "$FAKE_LOG"', '[ -n "$FAKE_RELOAD_FAILS" ] && exit 1', 'exit 0'].join('\n'));
+    script('sudo', [
+        '[ "$1" = -n ] || { echo "stub sudo: only sudo -n is allowed" >&2; exit 2; }',
+        'echo "sudo $*" >> "$FAKE_LOG"',
+        '[ -n "$FAKE_SUDO_PASSWORD" ] && { echo "sudo: a password is required" >&2; exit 1; }',
+        'shift',
+        'exec "$@"',
+    ].join('\n'));
+    const python = spawnSync('sh', ['-c', 'command -v python3'], { encoding: 'utf8' }).stdout.trim();
+    fs.symlinkSync(fs.realpathSync(python), path.join(stubs, 'python3'));
+    return stubs;
+}
+
+/** Runs `shell` with `input` as its script, the stubs first on PATH, and returns the result plus what the stubs logged. */
+function runWithStubs(dir, shell, input, { path: pathValue, env = {} } = {}) {
+    const log = path.join(dir, 'log.txt');
+    fs.writeFileSync(log, '');
+    const r = spawnSync(shell, [], {
+        input,
+        encoding: 'utf8',
+        env: { PATH: pathValue, FAKE_LOG: log, FAKE_LIVE_RESTORE: 'true', ...env },
+    });
+    return { ...r, out: `${r.stdout}${r.stderr}`, calls: fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) };
+}
+
+test('the live-restore script stops with a plain message when systemd or Docker is missing, or daemon.json is bad, and reloads when all is well', { skip: ON_WINDOWS && WINDOWS_NOTE }, () => {
+    const step = CANONICAL();
+    const dir = sandbox();
+    try {
+        const file = path.join(dir, 'daemon.json');
+        const script = scriptOf(step, file);
+        const stubs = makeStubs(dir);
+        const noSystemd = makeStubs(fs.mkdtempSync(path.join(dir, 'nosystemd-')), { systemctl: false });
+        const run = (opts, pathValue = stubs) => runWithStubs(dir, '/bin/sh', script, { path: pathValue, ...opts });
+
+        // all well: written, reloaded (once, never restarted) and confirmed
+        let r = run({});
+        assert.equal(r.status, 0, r.out);
+        assert.match(r.out, /Docker live-restore is on\./);
+        assert.deepEqual(r.calls, ['systemctl reload docker']);
+        assert.equal(JSON.parse(fs.readFileSync(file, 'utf8'))['live-restore'], true);
+
+        // no systemd: says so, writes nothing
+        fs.rmSync(file);
+        r = run({}, noSystemd);
+        assert.equal(r.status, 1, r.out);
+        assert.match(r.out, /no systemd \(no systemctl\), so live-restore is skipped/);
+        assert.ok(!fs.existsSync(file), 'nothing is written without systemd');
+
+        // Docker not running: says how to start it, writes nothing, reloads nothing
+        r = run({ env: { FAKE_DOCKER_DOWN: '1' } });
+        assert.equal(r.status, 1, r.out);
+        assert.match(r.out, /Docker is not installed or not running \(start it with: sudo systemctl start docker\)/);
+        assert.ok(!fs.existsSync(file), 'nothing is written while Docker is down');
+        assert.deepEqual(r.calls, []);
+
+        // a daemon.json that is not JSON: left alone, nothing reloaded
+        fs.writeFileSync(file, '{"log-driver": ');
+        r = run({});
+        assert.equal(r.status, 1, r.out);
+        assert.match(r.out, /not a JSON object, so it is left alone/);
+        assert.equal(fs.readFileSync(file, 'utf8'), '{"log-driver": ');
+        assert.deepEqual(r.calls, []);
+        fs.rmSync(file);
+
+        // reload fails: not reported as done
+        r = run({ env: { FAKE_RELOAD_FAILS: '1' } });
+        assert.equal(r.status, 1, r.out);
+        assert.ok(!/live-restore is on/.test(r.out));
+        fs.rmSync(file);
+
+        // Docker still says false after the reload: says so
+        r = run({ env: { FAKE_LIVE_RESTORE: 'false' } });
+        assert.equal(r.status, 1, r.out);
+        assert.match(r.out, /Docker live-restore did not turn on\./);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('the whole live-restore step works as root and as a user with sudo, and a sudo password prompt cannot swallow the install', { skip: ON_WINDOWS && WINDOWS_NOTE }, () => {
+    const step = CANONICAL();
+    const dir = sandbox();
+    try {
+        const file = path.join(dir, 'daemon.json');
+        const pasted = step.replace('"/etc/docker/daemon.json"', JSON.stringify(file)) + '\necho AFTER-THE-STEP\n';
+        const stubs = makeStubs(dir);
+        const withSystemPath = `${stubs}:/usr/bin:/bin`;
+        const root = typeof process.getuid === 'function' && process.getuid() === 0;
+        const run = (env = {}) => runWithStubs(dir, 'bash', pasted, { path: withSystemPath, env });
+
+        // sudo works (or we are root): written, reloaded, and the lines after the step still run
+        let r = run();
+        assert.equal(r.status, 0, r.out);
+        assert.match(r.out, /Docker live-restore is on\./);
+        assert.match(r.out, /AFTER-THE-STEP/);
+        assert.equal(JSON.parse(fs.readFileSync(file, 'utf8'))['live-restore'], true);
+        assert.ok(r.calls.includes('systemctl reload docker') && r.calls.every((c) => !/restart/.test(c)));
+        assert.deepEqual(r.calls.filter((c) => c.startsWith('sudo ')), root ? [] : ['sudo -n sh'], root ? 'root does not need sudo' : 'a user goes through sudo -n');
+
+        // sudo wants a password: no prompt, nothing written, a message says what to type, and the install carries on
+        if (!root) {
+            fs.rmSync(file);
+            r = run({ FAKE_SUDO_PASSWORD: '1' });
+            assert.equal(r.status, 0, r.out);
+            assert.match(r.out, /a password is required/);
+            assert.match(r.out, /Docker live-restore is still off\. The install below carries on without it\. If sudo wanted a password, type: sudo -v/);
+            assert.match(r.out, /AFTER-THE-STEP/, 'the lines after the step still run');
+            assert.ok(!fs.existsSync(file), 'nothing is written');
+        }
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('each operator page says the same thing about live-restore, in one paragraph under its heading', () => {
+    const pages = ['setup/first-time-setup.md', 'setup/install-with-ai.md', 'server/updates-and-health.md'];
+    const required = [
+        'sudo',
+        'command -v systemctl',
+        'docker info',
+        '/etc/docker/daemon.json',
+        '{"live-restore": true}',
+        'every other key',
+        'cp -p',
+        'valid JSON',
+        'systemctl reload docker',
+        'never a restart',
+        "docker info --format '{{.LiveRestoreEnabled}}'",
+    ];
+    for (const page of pages) {
+        const text = fs.readFileSync(path.join(ROOT, 'packages/beanpool-guide/operators', page), 'utf8');
+        const lines = text.split('\n');
+        const heading = lines.findIndex((l) => /^### Docker (and )?live-restore$/.test(l));
+        assert.ok(heading >= 0, `${page} has a live-restore section`);
+        let end = lines.findIndex((l, i) => i > heading && l.startsWith('#'));
+        if (end < 0) end = lines.length;
+        const paragraphs = lines.slice(heading + 1, end).join('\n').trim().split(/\n\s*\n/);
+        // A heading that sits in the middle of a page takes over the paragraphs after it: the section must be this one only.
+        assert.equal(paragraphs.length, 1, `${page}: the live-restore section is one paragraph, so no other paragraph is filed under it`);
+        for (const phrase of required) {
+            assert.ok(paragraphs[0].includes(phrase), `${page}: the live-restore paragraph says "${phrase}"`);
+        }
+    }
+    const assistant = fs.readFileSync(path.join(ROOT, 'packages/beanpool-guide/operators/setup/install-with-ai.md'), 'utf8')
+        .split('\n').find((l) => l.startsWith('- Turn on Docker live-restore'));
+    assert.ok(assistant, 'the assistant is told to turn on live-restore');
+    for (const phrase of ['sudo', 'command -v systemctl', 'Docker is not running', '/etc/docker/daemon.json', 'every other key', 'cp -p', 'valid JSON', 'systemctl reload docker', 'never a restart', "docker info --format '{{.LiveRestoreEnabled}}'"]) {
+        assert.ok(assistant.includes(phrase), `the assistant's instruction says "${phrase}"`);
     }
 });

@@ -60,11 +60,45 @@ On that machine, paste this one block. It fetches the compose file, turns on Doc
 
 **Choose your address before you paste, and change the last line to match** (the choices are just below the block). If you already pasted, press Enter at its two questions, then run the last line again: the claim code waits for a phone.
 
+**The live-restore step needs root.** As root it runs as it is. As any other user it uses `sudo`, which must not ask for a password in the middle of the paste (the lines after it would be typed into the prompt), so type `sudo -v` and your password first. If the machine has no systemd, or Docker is not running, the step says so, skips live-restore, and the install carries on; the operator manual's Updates and health page has the steps for doing it by hand later.
+
 ```bash
 git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
-python3 -c 'import json, os; p="/etc/docker/daemon.json"; os.makedirs("/etc/docker", exist_ok=True); d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) > 0 else {}; d["live-restore"] = True; open(p, "w").write(json.dumps(d, indent=2) + "\n")'
-systemctl reload docker
-docker info --format '{{.LiveRestoreEnabled}}'
+# Docker live-restore: Docker can then restart or update without stopping the community.
+# Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
+# lines after it, so type  sudo -v  and your password before you paste, and this step won't ask.
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+command -v systemctl >/dev/null 2>&1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
+docker info >/dev/null 2>&1 </dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
+python3 - <<'PY' || exit 1
+import json, os, stat, sys
+p = os.path.realpath("/etc/docker/daemon.json")
+st = os.stat(p) if os.path.exists(p) else None
+try:
+    d = json.loads(open(p).read().strip() or "{}") if st else {}
+    if not isinstance(d, dict):
+        raise ValueError
+except ValueError:
+    sys.exit(p + " is not a JSON object, so it is left alone. Fix or remove it, then paste this step again.")
+if d.get("live-restore") is True:
+    sys.exit(0)
+d["live-restore"] = True
+os.makedirs(os.path.dirname(p), exist_ok=True)
+tmp = p + ".new"
+fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.fchmod(fd, stat.S_IMODE(st.st_mode) if st else 0o644)
+if st:
+    os.fchown(fd, st.st_uid, st.st_gid)
+with os.fdopen(fd, "w") as f:
+    f.write(json.dumps(d, indent=2) + "\n")
+    f.flush()
+    os.fsync(f.fileno())
+os.replace(tmp, p)
+PY
+systemctl reload docker </dev/null || exit 1
+if [ "$(docker info --format '{{.LiveRestoreEnabled}}' </dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
+EOF
 docker network create beanpool-shared
 docker compose pull
 docker compose up -d

@@ -1080,13 +1080,20 @@ const POST_ROW_SELECT = `
                       WHERE (mt.buyer_pubkey = m.public_key OR mt.seller_pubkey = m.public_key)
                         AND mt.status = 'completed'), 0)
                ) as author_trade_count,
-               CASE WHEN m.is_treasury = 1 THEN s.id ELSE NULL END as enterprise_shop_id,
-               CASE WHEN m.is_treasury = 1 THEN s.photo_ref ELSE NULL END as enterprise_shop_photo_ref
+               CASE WHEN m.is_treasury = 1 THEN (
+                   SELECT s.id FROM shops s
+                   WHERE s.owner_pubkey = p.author_pubkey
+                   ORDER BY s.opened_at DESC, s.rowid DESC LIMIT 1
+               ) ELSE NULL END as enterprise_shop_id,
+               CASE WHEN m.is_treasury = 1 THEN (
+                   SELECT s.photo_ref FROM shops s
+                   WHERE s.owner_pubkey = p.author_pubkey
+                   ORDER BY s.opened_at DESC, s.rowid DESC LIMIT 1
+               ) ELSE NULL END as enterprise_shop_photo_ref
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
-        LEFT JOIN groups g ON p.target_group_id = g.id
-        LEFT JOIN shops s ON s.owner_pubkey = p.author_pubkey`;
+        LEFT JOIN groups g ON p.target_group_id = g.id`;
 
 /**
  * POST_ROW_SELECT for a visitor's read (PostFilter.guest): the same rows, with none of the people in them. guestPost puts

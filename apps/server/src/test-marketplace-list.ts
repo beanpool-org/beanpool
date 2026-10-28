@@ -179,6 +179,20 @@ async function main(): Promise<void> {
     assert(entVisitorHomeItem?.bannerUrl === null,
         `visitor gets null bannerUrl on enterprise listing in home (got ${entVisitorHomeItem?.bannerUrl})`);
 
+    // 7. Standby sync delta import: multiple shops for an owner do NOT duplicate post rows in feed
+    db.prepare(`
+        INSERT INTO shops (id, owner_pubkey, opened_at, updated_at)
+        VALUES ('shop-standby-dup', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now', '-1 day'), strftime('%Y-%m-%dT%H:%M:%fZ','now', '-1 day'))
+    `).run(ent.publicKey);
+
+    const dupRes = await call('GET', alice, '/api/marketplace/posts');
+    assert(dupRes.status === 200, 'member GET /api/marketplace/posts with multiple shop rows returns 200');
+    const dupPosts: any[] = Array.isArray(dupRes.body) ? dupRes.body : dupRes.body?.posts;
+    const entDupListings = dupPosts.filter((p: any) => p.id === 'post-ent-1');
+    assert(entDupListings.length === 1, `post rows are not duplicated by multiple shops (got ${entDupListings.length})`);
+    assert(entDupListings[0].authorBannerUrl?.startsWith(`/api/shops/${entShop.id}/photo?v=`),
+        'enterprise listing still selects newest shop photo_ref');
+
     console.log(`\nAll ${passed}/${run} checks passed!\n`);
     process.exit(0);
 }

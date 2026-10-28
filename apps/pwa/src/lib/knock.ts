@@ -16,7 +16,6 @@ export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
 export const KNOCK_CANCEL_PATH = '/api/join/knock/cancel';
 export const KNOCK_CANCEL_BLOCK_HOURS = 24;
-export const KNOCK_ANSWERABLE_DAYS = 61;
 const TIMEOUT_MS = 20_000;
 const STORE_KEY = 'beanpool_knocks';
 
@@ -25,7 +24,7 @@ export const KNOCK_MESSAGES = {
     unreachable: word("Couldn't reach this community. Check your connection and try again."),
     unreadable: word("This community sent an answer the app couldn't read. Please try again later."),
     waiting: word('You asked to join. No answer yet: communities usually answer within a few days.'),
-    none: word('No answer came. You can ask again.'),
+    none: word('This request is no longer open. You can ask again.'),
     cancelled: word('You cancelled your request. You can ask again after 24 hours.'),
     invited: word('A member invited you. Join now to become a member.'),
 } as const;

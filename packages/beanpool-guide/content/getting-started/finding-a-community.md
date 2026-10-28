@@ -15,7 +15,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
-On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved, and after that for as long as you have an open request to join a community or a watch for a community near you; once those are over, you can move or remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved. After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, tap **Explore BeanPool worldwide** on the app's first screen: see "Joining BeanPool".
 
@@ -46,7 +46,7 @@ If you change your mind while waiting, tap **Cancel my request**. The request is
 
 When an admin or member invites you, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
 
-If nobody answers within 30 days, the card says **No answer came. You can ask again.**
+If nobody answers within 30 days, the card says **This request is no longer open. You can ask again.**
 
 If a community can't take your request, the card shows its own words, for example that too many requests came from your network today, or that it isn't taking requests to join right now.
 

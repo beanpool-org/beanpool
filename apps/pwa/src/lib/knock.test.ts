@@ -3,8 +3,9 @@ import {
     cancelKnock, cancelledKnocks, cardKnockLines, communityOrigin, forgetKnock, KNOCK_CANCEL_BLOCK_HOURS, KNOCK_MESSAGES,
     readKnockStatus, readStatus, rememberKnock, rememberedKnocks, type RememberedKnock,
 } from './knock';
+import * as knockLib from './knock';
 import type { BeanPoolIdentity } from './identity';
-import { formatDate, t } from '@beanpool/core';
+import { formatDate, KNOCK_ANSWERABLE_DAYS, t } from '@beanpool/core';
 
 const PUB = 'a'.repeat(64);
 const PRIV = '00'.repeat(32);
@@ -58,6 +59,21 @@ describe('rememberedKnocks & storage on web', () => {
 
         const list = await rememberedKnocks(PUB, now);
         expect(list).toHaveLength(0);
+    });
+
+    // PR #2573, decided 29 Oct 2026: one 61-day horizon, core's; the web file defines no copy of it.
+    it('forgets by core\'s horizon, which this file does not define again', async () => {
+        expect(knockLib).not.toHaveProperty('KNOCK_ANSWERABLE_DAYS');
+        expect(KNOCK_ANSWERABLE_DAYS).toBe(61);
+        const sent = new Date('2026-09-01T00:00:00Z');
+        await rememberKnock(PUB, { url: 'https://a.example.org', name: 'Alpha' }, sent);
+        expect((await rememberedKnocks(PUB, sent.getTime() + (KNOCK_ANSWERABLE_DAYS - 1) * 86_400_000)).map(k => k.url)).toEqual(['https://a.example.org']);
+        expect(await rememberedKnocks(PUB, sent.getTime() + KNOCK_ANSWERABLE_DAYS * 86_400_000)).toEqual([]);
+    });
+
+    it('says what a request nothing holds, and a cancelled one, mean, in the words the phone uses', () => {
+        expect(KNOCK_MESSAGES.none).toBe('This request is no longer open. You can ask again.');
+        expect(KNOCK_MESSAGES.cancelled).toBe('You cancelled your request. You can ask again after 24 hours.');
     });
 
     it('cancels a knock and records cancelledAt', async () => {

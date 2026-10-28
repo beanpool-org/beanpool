@@ -37,7 +37,7 @@ import {
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
+import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { AskedCommunity } from '../components/AskedCommunity';
@@ -995,6 +995,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [cancellingKnocks, setCancellingKnocks] = useState<ReadonlySet<string>>(() => new Set());
     /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
     const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
+    /**
+     * The requests whose Cancel worked in this Home visit (by URL): their cards stay, with the cancelled line and no button.
+     * Held here, never stored: the next visit reads the browser's memory, where `cancelKnock` has already marked the knock
+     * cancelled, and the card is not drawn.
+     */
+    const [cancelledKnocks, setCancelledKnocks] = useState<ReadonlySet<string>>(() => new Set());
 
     useEffect(() => {
         if (!publicKey) {
@@ -1036,11 +1042,23 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             : null;
         setCancellingKnocks(was => { const left = new Set(was); left.delete(k.url); return left; });
         if (res.ok) {
-            setKnocks(was => was.filter(item => item.url !== k.url));
+            // The card stays and says so. `knocks` keeps this request for the visit, so the pin holds and Find does not
+            // vanish under the line that says what happened.
+            setCancelledKnocks(was => new Set(was).add(k.url));
         } else {
             if (reread) setKnockStatuses(was => ({ ...was, [k.url]: reread }));
             setCancelErrors(was => ({ ...was, [k.url]: res.message }));
         }
+    };
+
+    /**
+     * "Got it" on a request the community says it no longer holds: the browser forgets the knock, the card goes, and `knocks`
+     * is the list without it, so the pin it held can go (a request nothing holds pins Find until this, or day 61).
+     */
+    const handleGotIt = async (k: RememberedKnock) => {
+        if (!publicKey) return;
+        await forgetKnock(publicKey, k.url);
+        setKnocks(was => was.filter(item => item.url !== k.url));
     };
 
     const knocksRef = useRef(knocks);
@@ -2030,8 +2048,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const st = knockStatuses[k.url];
                             const answersLine = communityAnswersLine(comm?.answers);
                             const isCancelling = cancellingKnocks.has(k.url);
+                            const cancelled = cancelledKnocks.has(k.url);
 
-                            if (st?.ok && st.value.status === 'approved') {
+                            if (!cancelled && st?.ok && st.value.status === 'approved') {
                                 const approved = cardKnockLines([k], knockStatuses)[0];
                                 return (
                                     <p key={k.url} dir="auto" className="m-0 mt-2 font-semibold text-sm text-text-primary break-words" data-testid={`home-find-invited-${k.url}`}>
@@ -2041,9 +2060,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             }
 
                             // What the community now says (the phone's knockCardState): only a pending request arrived and can be
-                            // taken back. Nothing open there (`none`: lapsed, cancelled elsewhere, an invite that expired), or an
-                            // answer that could not be read, is said as it is, with no Cancel. lib/knock words its own sentences.
+                            // taken back. An answer that could not be read is said as it is, with no Cancel. Nothing open there
+                            // (`none`: lapsed, cancelled elsewhere, an invite that expired) is the closed card: its three lines
+                            // and "Got it", which forgets the request (decided 29 Oct 2026). lib/knock words its own sentences.
                             const pending = !!st?.ok && st.value.status === 'pending';
+                            const closed = !!st?.ok && st.value.status === 'none';
                             let arrivedLine: string;
                             if (st === undefined || st === null) arrivedLine = t('Checking…');
                             else if (!st.ok) arrivedLine = st.message;
@@ -2055,15 +2076,38 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                     <p dir="auto" className="m-0 text-sm font-semibold text-text-primary break-words" data-testid={`home-waiting-sent-${k.url}`}>
                                         {t(FIND_COMMUNITY_WORDS.askedOnDate, { name, date: sentDate })}
                                     </p>
-                                    <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-arrived-${k.url}`}>
-                                        {arrivedLine}
-                                    </p>
-                                    {answersLine && (
+                                    {/* Always in the page, so a screen reader hears the line when it is put in (a region added
+                                        with its words in it is not always announced). */}
+                                    <div role="status">
+                                        {cancelled && (
+                                            <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-cancelled-${k.url}`}>
+                                                {t(KNOCK_MESSAGES.cancelled)}
+                                            </p>
+                                        )}
+                                    </div>
+                                    {!cancelled && (
+                                        <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-arrived-${k.url}`}>
+                                            {arrivedLine}
+                                        </p>
+                                    )}
+                                    {answersLine && !cancelled && !closed && (
                                         <p className="m-0 mt-1 text-xs italic text-nature-600 dark:text-nature-300 break-words" data-testid={`home-waiting-answers-${k.url}`}>
                                             {answersLine}
                                         </p>
                                     )}
-                                    {pending && (
+                                    {closed && !cancelled && (
+                                        <div className="mt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleGotIt(k)}
+                                                data-testid={`home-gotit-knock-${k.url}`}
+                                                className={FIND_ACTION}
+                                            >
+                                                {t(FIND_COMMUNITY_WORDS.gotIt)}
+                                            </button>
+                                        </div>
+                                    )}
+                                    {pending && !cancelled && (
                                         <div className="mt-2">
                                             <button
                                                 type="button"

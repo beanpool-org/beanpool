@@ -74,14 +74,16 @@ export function PeekPage({ postId, ticket, onWelcome }: {
 
     return (
         <main data-testid="peek-page" className="max-w-lg mx-auto">
-            <p data-testid="peek-shared" className="m-0 px-4 pt-4 text-sm font-semibold text-bp-ink-accent break-words">
-                {t(W.sharedWithYou, { community })}
-            </p>
             <VisitorPostDetail
                 post={loaded.post}
                 beans={beans}
                 distanceKm={null}
                 onJoin={() => onWelcome('invite')}
+                header={(
+                    <p data-testid="peek-shared" className="m-0 mb-3 text-sm font-semibold text-bp-ink-accent break-words">
+                        {t(W.sharedWithYou, { community })}
+                    </p>
+                )}
                 footer={(
                     <>
                         <p data-testid="peek-names-note" className="m-0 mb-4 text-sm text-text-primary break-words">{t(W.namesWhenJoin, { community })}</p>

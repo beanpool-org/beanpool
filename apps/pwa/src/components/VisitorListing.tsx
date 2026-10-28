@@ -104,13 +104,15 @@ interface DetailProps {
      * way in is that community's own doors, not the lobby's join.
      */
     footer?: ReactNode;
+    /** Above the listing, inside the sheet's top (which it scrolls to when it opens): who shared it, for a shared post. */
+    header?: ReactNode;
 }
 
 /**
  * The visitor's detail sheet: the listing's photos (a row that swipes), its words and category, the rough distance,
  * an event's time with its place held back, and one full-width button to join. No chat, no accept, no profile link.
  */
-export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pollsInformal = false, footer }: DetailProps) {
+export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pollsInformal = false, footer, header }: DetailProps) {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const typeColor = POST_TYPE_COLORS[post.type] || '#888';
     const photos = post.photos ?? [];
@@ -128,6 +130,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                     <span className="text-xl leading-none" aria-hidden="true">←</span> {t('Back to Market')}
                 </button>
             )}
+            {header}
 
             {post.type === 'poll' ? (
                 <PollCard post={post} visitor informal={pollsInformal} />

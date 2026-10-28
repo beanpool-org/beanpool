@@ -5,6 +5,8 @@
  * 1. An enterprise's photoless listing carries its shop's keyed photo URL (authorBannerUrl).
  * 2. A regular member's listing carries none (even if the member has a shop with a banner).
  * 3. A visitor (unsigned caller or non-member) gets none on any listing.
+ * 4. A banner a keeper replaces, takes down or closes with the shop moves the list's ETag, so a member's copy held from
+ *    before (its URL then opens nothing) is not confirmed with a 304 (engine/shops.ts changeShop, closeShop).
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -17,7 +19,7 @@ process.env.ADMIN_PASSWORD = 'MarketplaceListPass123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, createTreasury, createPost,
+    initStateEngine, seedGenesisMember, createTreasury, createPost, adminAssignTreasuryOperator,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -54,11 +56,11 @@ function member(name: string): Id {
 }
 
 type Method = 'GET' | 'PUT' | 'POST';
-interface Res { status: number; body: any; text: string }
-async function call(method: Method, id: Id | null, route: string, body?: unknown): Promise<Res> {
+interface Res { status: number; body: any; text: string; etag: string | null }
+async function call(method: Method, id: Id | null, route: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     resetGatewayRateLimit();
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...extra };
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     if (id) {
         const ts = Date.now();
@@ -72,7 +74,7 @@ async function call(method: Method, id: Id | null, route: string, body?: unknown
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty or not JSON */ }
-    return { status: res.status, body: parsed, text };
+    return { status: res.status, body: parsed, text, etag: res.headers.get('etag') };
 }
 
 function insertPhotolessPost(id: string, authorPubkey: string, title: string, category = 'food', credits = 5) {
@@ -83,6 +85,7 @@ function insertPhotolessPost(id: string, authorPubkey: string, title: string, ca
 }
 
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const OTHER_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGM4oQEEJwAHrwIxhE/biwAAAABJRU5ErkJggg==';
 
 async function main(): Promise<void> {
     console.log('\n=== test-marketplace-list: Pictures S6 enterprise banner on cards ===\n');
@@ -215,6 +218,62 @@ async function main(): Promise<void> {
     assert(entDupListings.length === 1, `post rows are not duplicated by multiple shops (got ${entDupListings.length})`);
     assert(entDupListings[0].authorBannerUrl?.startsWith(`/api/shops/${entShop.id}/photo?v=`),
         'enterprise listing still selects newest shop photo_ref');
+
+    // 8. A banner changed after a member read the list. The list is tagged by the node's posts version (routes/
+    // marketplace.ts), and the old URL's key is bound to the photo as it was (avatar-keys.ts shopPhotoKeyMatches), so a
+    // replace, a take-down and a close must each move the tag: a 304 would confirm a body naming a URL that opens nothing.
+    // Through the keeper's real routes. A second enterprise, so the rows above are left as they are.
+    const mill = createTreasury('Valley Mill', 'bundled://bean-green', 0, { purpose: 'Milling flour' });
+    const kit = member('Kit');
+    adminAssignTreasuryOperator(mill.publicKey, kit.pk, 'admin');
+    const millShop = openShop(mill.publicKey);
+    assert(setShopPhoto(millShop.id, TINY_PNG), 'the second enterprise\'s shop banner photo set');
+    insertPhotolessPost('post-mill-1', mill.publicKey, 'Mill Wholemeal');
+    const millListingOf = (res: Res) => ((Array.isArray(res.body) ? res.body : res.body?.posts) as any[] | undefined)?.find((p: any) => p.id === 'post-mill-1');
+    const shopRoute = `/api/treasury/${mill.publicKey}/shop`;
+
+    const heldRes = await call('GET', alice, '/api/marketplace/posts');
+    const heldUrl: string | undefined = millListingOf(heldRes)?.authorBannerUrl;
+    assert(heldRes.status === 200 && !!heldRes.etag && typeof heldUrl === 'string' && heldUrl.startsWith(`/api/shops/${millShop.id}/photo?v=`),
+        `a member reads the list with an ETag and the enterprise's banner URL (${heldRes.etag} ${heldUrl})`);
+    assert((await fetch(`${BASE}${heldUrl}`)).status === 200, 'that URL serves the banner');
+
+    const replaced = await call('PUT', kit, shopRoute, { photo: OTHER_PNG });
+    assert(replaced.status === 200, `a keeper replaces the banner through PUT /api/treasury/:t/shop (got ${replaced.status})`);
+    assert((await fetch(`${BASE}${heldUrl}`)).status === 404, 'the URL the member holds now opens nothing');
+    const afterReplace = await call('GET', alice, '/api/marketplace/posts', undefined, { 'If-None-Match': heldRes.etag! });
+    const replacedUrl: string | undefined = millListingOf(afterReplace)?.authorBannerUrl;
+    assert(afterReplace.status === 200 && afterReplace.etag !== heldRes.etag,
+        `revalidating with the ETag held from before the replace is not a 304 (got ${afterReplace.status}, ${afterReplace.etag})`);
+    assert(typeof replacedUrl === 'string' && replacedUrl.startsWith(`/api/shops/${millShop.id}/photo?v=`) && replacedUrl !== heldUrl,
+        `and the body names the new banner URL (${replacedUrl})`);
+    assert((await fetch(`${BASE}${replacedUrl}`)).status === 200, 'which serves the new banner');
+
+    const takenDown = await call('PUT', kit, shopRoute, { photo: null });
+    assert(takenDown.status === 200, `a keeper takes the banner down with { photo: null } (got ${takenDown.status})`);
+    const afterTakeDown = await call('GET', alice, '/api/marketplace/posts', undefined, { 'If-None-Match': afterReplace.etag! });
+    assert(afterTakeDown.status === 200 && afterTakeDown.etag !== afterReplace.etag,
+        `revalidating with the ETag held from before the take-down is not a 304 (got ${afterTakeDown.status}, ${afterTakeDown.etag})`);
+    const millDown = millListingOf(afterTakeDown);
+    assert(!!millDown && !('authorBannerUrl' in millDown), `and the listing names no banner (${millDown?.authorBannerUrl})`);
+
+    // A close: the listing was never in the shop (no listing is cleared), and loses the banner all the same, since it is
+    // read by the enterprise (engine posts.ts).
+    const putBack = await call('PUT', kit, shopRoute, { photo: TINY_PNG });
+    assert(putBack.status === 200, `a keeper puts a banner back up (got ${putBack.status})`);
+    const beforeClose = await call('GET', alice, '/api/marketplace/posts');
+    assert(typeof millListingOf(beforeClose)?.authorBannerUrl === 'string', `the listing carries it again (${millListingOf(beforeClose)?.authorBannerUrl})`);
+    const closed = await call('POST', kit, `${shopRoute}/close`, {});
+    assert(closed.status === 200 && closed.body?.cleared === 0, `a keeper closes the shop, which held none of the enterprise's listings (${closed.status} cleared ${closed.body?.cleared})`);
+    const afterClose = await call('GET', alice, '/api/marketplace/posts', undefined, { 'If-None-Match': beforeClose.etag! });
+    assert(afterClose.status === 200 && afterClose.etag !== beforeClose.etag,
+        `revalidating with the ETag held from before the close is not a 304 (got ${afterClose.status}, ${afterClose.etag})`);
+    const millClosed = millListingOf(afterClose);
+    assert(!!millClosed && !('authorBannerUrl' in millClosed), `and the listing names no banner (${millClosed?.authorBannerUrl})`);
+
+    // With nothing changed the tag holds, so the checks above do not pass on a tag that moves on every read.
+    const quiet = await call('GET', alice, '/api/marketplace/posts', undefined, { 'If-None-Match': afterClose.etag! });
+    assert(quiet.status === 304, `with nothing changed, the same ETag is answered 304 (got ${quiet.status})`);
 
     console.log(`\nAll ${passed}/${run} checks passed!\n`);
     process.exit(0);

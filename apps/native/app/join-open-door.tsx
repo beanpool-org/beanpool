@@ -223,11 +223,11 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                 if (door.global) rememberGlobalDoor(check);
                 if (cancelled) return;
                 if (check.ok) {
+                    // Where a copy made at this door goes, by its community's rule (vault rethink VR2).
+                    setDoorCopies(signInCopiesAt(check.profile.recoveryCopies));
                     // Two ways in where the door has the 12-words one; the sign-in alone where it doesn't, as before.
                     const words = wordsDoorOn(check.profile.features);
                     setWordsDoor(words);
-                    // Where a copy made at this door goes, by its community's rule (vault rethink VR2).
-                    setDoorCopies(signInCopiesAt(check.profile.recoveryCopies));
                     setPhase(words ? 'choose' : 'signIn');
                     return;
                 }

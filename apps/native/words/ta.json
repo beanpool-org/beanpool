@@ -602,7 +602,6 @@
   "Add a photo to your profile": "உங்கள் சுயவிவரத்தில் புகைப்படத்தைச் சேர்க்கவும்",
   "Pick a few things you like": "உங்களுக்குப் பிடித்த சிலவற்றைத் தேர்ந்தெடுக்கவும்",
   "Post something free or for swap": "இலவசமாகவோ அல்லது பரிமாற்றத்திற்கோ எதையாவது பகிருங்கள்",
-  "Ask a community to let you in": "ஒரு சமூகத்தில் உங்களை இணைக்கக் கேளுங்கள்",
   "{n} day|{n} days": {
     "one": "{n} நாள்",
     "other": "{n} நாட்கள்"
@@ -621,7 +620,6 @@
   "Your credit opens with a first trade.": "முதல் பரிமாற்றத்துடன் உங்கள் கடன் வரம்பு தொடங்குகிறது.",
   "Spending is paused for now. You can still receive and sell.": "செலவழிப்பது தற்போது இடைநிறுத்தப்பட்டுள்ளது. நீங்கள் இன்னும் பெறவும் விற்கவும் முடியும்.",
   "{amount} · room to spend {room}": "{amount} · செலவழிக்கும் வரம்பு {room}",
-  "The worldwide community": "உலகளாவிய சமூகம்",
   "1 member. You're first. Invite someone.": "1 உறுப்பினர். நீங்கள் முதலாமவர். ஒருவரை அழைக்கவும்.",
   "1 member. You're first.": "1 உறுப்பினர். நீங்கள் முதலாமவர்.",
   "{n} trade this month|{n} trades this month": {

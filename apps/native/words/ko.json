@@ -586,7 +586,6 @@
   "Add a photo to your profile": "프로필에 사진 추가하기",
   "Pick a few things you like": "관심 있는 분야 몇 가지 고르기",
   "Post something free or for swap": "나눔이나 교환할 물건 올리기",
-  "Ask a community to let you in": "커뮤니티에 가입 요청하기",
   "{n} day|{n} days": {
     "other": "{n}일"
   },
@@ -602,7 +601,6 @@
   "Your credit opens with a first trade.": "첫 거래를 마치면 신용 한도가 생겨요.",
   "Spending is paused for now. You can still receive and sell.": "현재 사용이 일시 중지되었어요. 받기와 판매는 계속 가능해요.",
   "{amount} · room to spend {room}": "{amount} · 쓸 수 있는 여유 한도 {room}",
-  "The worldwide community": "전 세계 커뮤니티",
   "1 member. You're first. Invite someone.": "멤버 1명. 첫 번째 멤버예요. 이웃을 초대해 보세요.",
   "1 member. You're first.": "멤버 1명. 첫 번째 멤버예요.",
   "{n} trade this month|{n} trades this month": {

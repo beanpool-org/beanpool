@@ -542,7 +542,6 @@
   "Add a photo to your profile": "افزودن عکس به نمایه خود",
   "Pick a few things you like": "چند مورد از علایق خود را انتخاب کنید",
   "Post something free or for swap": "موردی رایگان یا برای مبادله ثبت کنید",
-  "Ask a community to let you in": "درخواست پیوستن به یک جامعه",
   "{n} day|{n} days": {
     "one": "{n} روز",
     "other": "{n} روز"
@@ -561,7 +560,6 @@
   "Your credit opens with a first trade.": "اعتبار شما با اولین معامله باز می‌شود.",
   "Spending is paused for now. You can still receive and sell.": "خرج کردن فعلاً متوقف است. همچنان می‌توانید دریافت کنید و بفروشید.",
   "{amount} · room to spend {room}": "{amount} · سقف خرج کردن {room}",
-  "The worldwide community": "جامعه جهانی",
   "1 member. You're first. Invite someone.": "۱ عضو. شما اولین نفر هستید. کسی را دعوت کنید.",
   "1 member. You're first.": "۱ عضو. شما اولین نفر هستید.",
   "{n} trade this month|{n} trades this month": {

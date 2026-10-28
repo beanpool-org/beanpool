@@ -601,7 +601,6 @@
   "Add a photo to your profile": "പ്രൊഫൈലിൽ ഫോട്ടോ ചേർക്കുക",
   "Pick a few things you like": "നിങ്ങൾക്ക് ഇഷ്ടമുള്ള ചിലത് തിരഞ്ഞെടുക്കുക",
   "Post something free or for swap": "സൗജന്യമായോ കൈമാറ്റത്തിനായോ എന്തെങ്കിലും പോസ്റ്റ് ചെയ്യുക",
-  "Ask a community to let you in": "ഒരു കമ്മ്യൂണിറ്റിയിൽ പ്രവേശിക്കാൻ ആവശ്യപ്പെടുക",
   "{n} day|{n} days": {
     "one": "{n} ദിവസം",
     "other": "{n} ദിവസങ്ങൾ"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "ആദ്യ ഇടപാടിലൂടെ ക്രെഡിറ്റ് ആരംഭിക്കുന്നു.",
   "Spending is paused for now. You can still receive and sell.": "ചെലവഴിക്കൽ ഇപ്പോൾ താൽക്കാലികമായി നിർത്തിയിരിക്കുന്നു. നിങ്ങൾക്ക് ഇപ്പോഴും സ്വീകരിക്കാനും വിൽക്കാനും കഴിയും.",
   "{amount} · room to spend {room}": "{amount} · ചെലവഴിക്കാനുള്ള പരിധി {room}",
-  "The worldwide community": "ലോകമെമ്പാടുമുള്ള കമ്മ്യൂണിറ്റി",
   "1 member. You're first. Invite someone.": "1 അംഗം. നിങ്ങൾ ആദ്യത്തെ ആളാണ്. ആരെയെങ്കിലും ക്ഷണിക്കുക.",
   "1 member. You're first.": "1 അംഗം. നിങ്ങൾ ആദ്യത്തെ ആളാണ്.",
   "{n} trade this month|{n} trades this month": {

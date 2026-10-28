@@ -541,7 +541,6 @@
   "Add a photo to your profile": "আপনার প্রোফাইলে একটি ছবি যোগ করুন",
   "Pick a few things you like": "আপনার পছন্দের কয়েকটি বিষয় বেছে নিন",
   "Post something free or for swap": "বিনামূল্যে বা বিনিময়ের জন্য কিছু পোস্ট করুন",
-  "Ask a community to let you in": "একটি সম্প্রদায়ে যোগদানের অনুরোধ করুন",
   "{n} day|{n} days": {
     "one": "{n} দিন",
     "other": "{n} দিন"
@@ -560,7 +559,6 @@
   "Your credit opens with a first trade.": "প্রথম বাণিজ্যের সাথে আপনার ক্রেডিট খোলে।",
   "Spending is paused for now. You can still receive and sell.": "ব্যয় আপাতত স্থগিত। আপনি এখনও গ্রহণ ও বিক্রি করতে পারবেন।",
   "{amount} · room to spend {room}": "{amount} · ব্যয়ের সীমা {room}",
-  "The worldwide community": "বিশ্বব্যাপী সম্প্রদায়",
   "1 member. You're first. Invite someone.": "১ সদস্য। আপনি প্রথম। কাউকে আমন্ত্রণ জানান।",
   "1 member. You're first.": "১ সদস্য। আপনি প্রথম।",
   "{n} trade this month|{n} trades this month": {

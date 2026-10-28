@@ -601,7 +601,6 @@
   "Add a photo to your profile": "Añade una foto a tu perfil",
   "Pick a few things you like": "Elige algunas cosas que te gusten",
   "Post something free or for swap": "Publica algo gratis o para intercambio",
-  "Ask a community to let you in": "Pide a una comunidad que te dé acceso",
   "{n} day|{n} days": {
     "one": "{n} día",
     "other": "{n} días"
@@ -620,7 +619,6 @@
   "Your credit opens with a first trade.": "Tu crédito se abre con un primer intercambio.",
   "Spending is paused for now. You can still receive and sell.": "El gasto está pausado por ahora. Aún puedes recibir y vender.",
   "{amount} · room to spend {room}": "{amount} · margen para gastar {room}",
-  "The worldwide community": "La comunidad mundial",
   "1 member. You're first. Invite someone.": "1 miembro. Eres el primero. Invita a alguien.",
   "1 member. You're first.": "1 miembro. Eres el primero.",
   "{n} trade this month|{n} trades this month": {

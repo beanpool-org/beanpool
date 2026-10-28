@@ -631,7 +631,6 @@
   "Add a photo to your profile": "Добавьте фото в профиль",
   "Pick a few things you like": "Выберите несколько интересов",
   "Post something free or for swap": "Предложите что-то бесплатно или для обмена",
-  "Ask a community to let you in": "Попросите сообщество принять вас",
   "{n} day|{n} days": {
     "one": "{n} день",
     "few": "{n} дня",
@@ -656,7 +655,6 @@
   "Your credit opens with a first trade.": "Кредит открывается с первой сделкой.",
   "Spending is paused for now. You can still receive and sell.": "Траты временно приостановлены. Вы по-прежнему можете получать и продавать.",
   "{amount} · room to spend {room}": "{amount} · лимит на расходы {room}",
-  "The worldwide community": "Глобальное сообщество",
   "1 member. You're first. Invite someone.": "1 участник. Вы первый. Пригласите кого-нибудь.",
   "1 member. You're first.": "1 участник. Вы первый.",
   "{n} trade this month|{n} trades this month": {

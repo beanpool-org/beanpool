@@ -543,7 +543,6 @@
   "Add a photo to your profile": "अपनी प्रोफ़ाइल में फ़ोटो जोड़ें",
   "Pick a few things you like": "अपनी पसंद की कुछ चीज़ें चुनें",
   "Post something free or for swap": "मुफ़्त या अदला-बदली के लिए कुछ पोस्ट करें",
-  "Ask a community to let you in": "किसी समुदाय से जुड़ने का अनुरोध करें",
   "{n} day|{n} days": {
     "one": "{n} दिन",
     "other": "{n} दिन"
@@ -562,7 +561,6 @@
   "Your credit opens with a first trade.": "आपका क्रेडिट पहले व्यापार के साथ खुलता है।",
   "Spending is paused for now. You can still receive and sell.": "खर्च अभी रोका गया है। आप अभी भी प्राप्त और बेच सकते हैं।",
   "{amount} · room to spend {room}": "{amount} · खर्च करने की गुंजाइश {room}",
-  "The worldwide community": "वैश्विक समुदाय",
   "1 member. You're first. Invite someone.": "1 सदस्य। आप पहले हैं। किसी को आमंत्रित करें।",
   "1 member. You're first.": "1 सदस्य। आप पहले हैं।",
   "{n} trade this month|{n} trades this month": {

@@ -71,7 +71,7 @@ type Id = { pubKeyHex: string; privateKey: crypto.KeyObject; callsign: string; t
 function keypair(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    return { pubKeyHex, privateKey, callsign, token: `ExponentPushToken[rf-${callsign}-${pubKeyHex.slice(0, 6)}]` };
+    return { pubKeyHex, privateKey, callsign, token: `ExponentPushToken[rf-${pubKeyHex.slice(0, 12)}]` };
 }
 
 function signedHeaders(method: string, p: string, body: string, id: Id): Record<string, string> {
@@ -477,7 +477,7 @@ async function main() {
         const offReply = await signed('POST', `/api/commons/decisions/${adaLater.body?.decision?.id}/reply`, dave, { reply: 'Votes are off now' });
         assert(offReply.status === 404 && offReply.body?.code === 'feature_off', `a reply with votes off: 404 feature_off (${offReply.status} ${offReply.body?.code})`);
     } finally {
-        setSwitchOverride('decisions', null);
+        setSwitchOverride('decisions', true);
     }
     fresh();
     await admin(`/api/local/admin/users/${hal.pubKeyHex}/status`, adaSession, { status: 'active' });
@@ -489,16 +489,17 @@ async function main() {
     const olderTable = createTableText(schemaSql, 'decisions')!.split('\n')
         .filter(l => !newColumns.has(l.trim().split(/\s+/)[0]) && !l.trim().startsWith('--')).join('\n');
     const older = new Database(':memory:');
+    older.pragma('foreign_keys = OFF'); // as db.ts runs it
     older.exec(olderTable);
     older.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, closes_at)
         VALUES ('old-1', 'SYSTEM', 'Remove Old?', 'An admin paused Old.', 'member', 'remove_member', 'pk-old', '{"rule":2}', '1m1v', 'open', '2026-11-01T00:00:00.000Z')`).run();
     const hadBefore = (older.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name);
     const added = addRemovalCaseColumns(older);
     const hasAfter = (older.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name);
-    const kept = older.prepare('SELECT * FROM decisions WHERE id = ?').get('old-1') as any;
+    const oldRow = older.prepare('SELECT * FROM decisions WHERE id = ?').get('old-1') as any;
     assert(!hadBefore.some(c => newColumns.has(c)) && added === newColumns.size && [...newColumns].every(c => hasAfter.includes(c)),
         `a table from before gains the ${newColumns.size} columns (${added} added)`);
-    assert(kept?.title === 'Remove Old?' && kept.status === 'open' && kept.subject_reply === null && kept.case_hidden_at === null, 'its rows are kept, NULL in each');
+    assert(oldRow?.title === 'Remove Old?' && oldRow.status === 'open' && oldRow.subject_reply === null && oldRow.case_hidden_at === null, 'its rows are kept, NULL in each');
     assert(addRemovalCaseColumns(older) === 0, 'a second boot adds nothing');
     older.close();
 

@@ -12,6 +12,7 @@ import { dmNotLockedLine } from '../lib/dm-lock';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 
 // Polyfill scrollIntoView for jsdom
 if (typeof window !== 'undefined' && window.HTMLElement) {
@@ -113,6 +114,13 @@ vi.mock('../lib/api', () => ({
     // Groups' New group: the Commons form, opened on Messages.
     createGroup: vi.fn(),
     groupKeysNet: { get: vi.fn(async () => new Response('{}', { status: 404 })), post: vi.fn(async () => new Response('{}', { status: 404 })) },
+}));
+
+// The node's own word (/api/community/info): a node that cannot be asked, unless a test says what it answers. Beans then
+// count as on, as everywhere (lib/features useCommunityInfo).
+vi.mock('../lib/visitor-lobby-gate', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/visitor-lobby-gate')>()),
+    communityInfoOnce: vi.fn(async () => { throw new Error('offline'); }),
 }));
 
 const mockIdentity: BeanPoolIdentity = {
@@ -843,6 +851,36 @@ describe("MessagesPage: Groups, as the phone's Talk → Groups (Marty, 16 Oct: \
         fireEvent.click(bridge);
         expect(onNavigate).toHaveBeenCalledWith('projects', 'start');
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    const BRIDGE = /With Beans involved\?\s*Start a project or an enterprise →/;
+    const openNewGroup = async () => {
+        mockConversations = [];
+        render(<MessagesPage identity={mockIdentity} onNavigate={vi.fn()} />);
+        fireEvent.click(await chip('Groups'));
+        fireEvent.click(within(screen.getByTestId('groups-empty')).getByRole('button', { name: /New group/ }));
+        return screen.findByRole('dialog');
+    };
+    const nodeSays = (features: Record<string, unknown>) => {
+        vi.mocked(communityInfoOnce).mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: features.beans === false ? 'global' : 'local', features } as never);
+        onTestFinished(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => { throw new Error('offline'); }); });
+    };
+
+    it('the bridge to Start something stays where the node says Beans are on', async () => {
+        nodeSays({ beans: true });
+        const dialog = await openNewGroup();
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        expect(within(dialog).getByRole('button', { name: BRIDGE })).toBeInTheDocument();
+    });
+
+    it('no bridge on a node with Beans off (the global node): a project or an enterprise cannot be started there', async () => {
+        nodeSays({ beans: false, decisions: false });
+        const dialog = await openNewGroup();
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        // The node's answer lands after the form opens: the bridge goes, the form stays.
+        await waitFor(() => expect(within(dialog).queryByRole('button', { name: BRIDGE })).not.toBeInTheDocument());
+        expect(within(dialog).queryByText(/Start a project or an enterprise/)).not.toBeInTheDocument();
+        expect(within(dialog).getByPlaceholderText('e.g. Bindarrabi Garden Crew, Solar Guild')).toBeInTheDocument();
     });
 });
 

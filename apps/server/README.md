@@ -88,8 +88,8 @@ docker --version
 docker compose version
 
 # Enable Docker live-restore so Docker can restart or update without stopping containers:
-python3 -c 'import json, os; p="/etc/docker/daemon.json"; os.makedirs("/etc/docker", exist_ok=True); d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) > 0 else {}; d["live-restore"] = True; open(p, "w").write(json.dumps(d, indent=2) + "\n")'
-systemctl reload docker
+sudo python3 -c 'import json, os; p="/etc/docker/daemon.json"; os.makedirs("/etc/docker", exist_ok=True); d = json.load(open(p)) if os.path.exists(p) and os.path.getsize(p) > 0 else {}; d["live-restore"] = True; tmp=p+".tmp"; open(tmp, "w").write(json.dumps(d, indent=2) + "\n"); os.replace(tmp, p)'
+sudo systemctl reload docker
 docker info --format '{{.LiveRestoreEnabled}}'
 ```
 

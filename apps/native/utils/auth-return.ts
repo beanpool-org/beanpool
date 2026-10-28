@@ -24,7 +24,8 @@ export interface SetupState {
     claimOut?: boolean;
     /**
      * No identity, and the phone is looking around the global community as a visitor, chosen on the first screen
-     * (utils/look-around.ts `lookingAroundHere`, slice S12). Read only when there is no identity.
+     * (utils/look-around.ts `lookingAroundHere`, slice S12). Read only when there is no identity, and only then can the
+     * answer be the door ({@link LOOK_DOOR}).
      */
     lookingAround?: boolean;
 }
@@ -47,6 +48,8 @@ export type SetupLanding = '/welcome' | typeof LOOK_DOOR | null;
  * `isLookRoute`), and any other screen, each of which needs a key, is replaced with the door ({@link LOOK_DOOR}), whose
  * Back returns to the look. The key is made there, at Join, as before.
  */
+export function setupRedirect(segments: readonly string[], state: SetupState & { lookingAround: true }): SetupLanding;
+export function setupRedirect(segments: readonly string[], state: SetupState): '/welcome' | null;
 export function setupRedirect(segments: readonly string[], { hasIdentity, pendingOnboarding, claimOut = false, lookingAround = false }: SetupState): SetupLanding {
     const root = segments[0];
     // `rekey-code`: a new phone taking over an account with an admin's re-key code (app/rekey-code.tsx) holds no identity

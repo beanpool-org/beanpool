@@ -823,9 +823,12 @@ export default function WelcomeScreen() {
         openGlobalDoor();
     }, [params?.join]);
 
-    // Anywhere but the door, the look's way back is gone: the first screen's Back is its own.
+    // Once the screen leaves the door (an invite instead, a restore, the join's next steps), the look's way back is gone:
+    // the first screen's Back is its own. Only on leaving it: the door is opened in the same commit as the flag is set.
+    const modeBefore = useRef(mode);
     useEffect(() => {
-        if (mode !== 'globalJoin') setDoorFromLook(false);
+        if (modeBefore.current === 'globalJoin' && mode !== 'globalJoin') setDoorFromLook(false);
+        modeBefore.current = mode;
     }, [mode]);
 
     // The phone's back button at the door opened from the look: back to the look, as the door's own Back.

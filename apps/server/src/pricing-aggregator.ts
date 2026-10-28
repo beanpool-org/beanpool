@@ -8,6 +8,7 @@
 
 import { db } from './db/db.js';
 import { standbyWritesNothing } from './config/node-role.js';
+import { getProfileSwitches } from './config/node-profile.js';
 import { aggregateObservedPrice, normalizeCategory, type PricingTrend } from '@beanpool/core';
 import { getPricingConfig } from './db/pricing-guide-db.js';
 
@@ -26,13 +27,14 @@ function tokenize(text: string): string[] {
 
 /**
  * Runs one cycle of the auto-pricing feedback loop. On a standby, none: its guide is its main server's, priced there and
- * copied (a plain table, design G4).
+ * copied (a plain table, design G4). Nor where Beans are off: nothing there is priced in Beans, so the hourly read of
+ * every listing would aggregate prices that cannot exist (DESIGN-global-lounge-fable.md §5.2 item 5, slice L0).
  */
 export function runPricingAggregationCycle(): {
     updatedCount: number;
     totalEvaluated: number;
 } {
-    if (standbyWritesNothing()) return { updatedCount: 0, totalEvaluated: 0 };
+    if (standbyWritesNothing() || !getProfileSwitches().beans) return { updatedCount: 0, totalEvaluated: 0 };
     const config = getPricingConfig();
     const items = db.prepare('SELECT * FROM pricing_guide_items').all() as any[];
     if (!items.length) return { updatedCount: 0, totalEvaluated: 0 };

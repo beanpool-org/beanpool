@@ -100,6 +100,7 @@ export const SUITES = [
     'test-guest-view',
     'test-private-preview',
     'test-guest-board-cost',
+    'test-guest-edge-cache',
     'test-post-badge-once-a-read',
     'test-distance-search-perf',
     'test-global-directory',

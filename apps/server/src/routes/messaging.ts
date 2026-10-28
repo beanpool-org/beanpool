@@ -3,6 +3,7 @@
  * routes/groups.ts; the reads and writes here re-check group membership for it.
  */
 
+import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
     createConversation, sendMessage, editMessage, deleteOwnMessage,
@@ -29,6 +30,7 @@ import { assertNotMuted } from '../engine/auto-moderation.js';
 import { assertMayMessage } from '../engine/probation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { membersOnlyHere } from './viewer.js';
+import { READER_CACHE_CONTROL } from '../guest-cache.js';
 import type { RouteDeps } from './types.js';
 import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import {
@@ -423,12 +425,24 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const others = new Set<string>();
     for (const c of [...conversations, ...requests]) for (const p of c.participants) if (p !== publicKey) others.add(p);
     // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.
-    ctx.body = {
+    const body = {
         conversations,
         totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0),
         deletedAccounts: accountsDeletedAmong(others),
         ...(sorted.requests ? { requests: { count: sorted.count, conversations: requests } } : {}),
     };
+    // The phone's message backstop reads this list every 120 s and the web app on every change (slice L0): a tag of the
+    // reader and the answer itself, so a list that hasn't changed is a 304 and not the whole list again. Made of the
+    // answer, never a counter, so no change it shows (a line, a read, a mute, a request) can be missed. The signer's own.
+    const etag = `W/"convs-${crypto.createHash('sha256').update(`${viewer}\n${JSON.stringify(body)}`).digest('hex').slice(0, 24)}"`;
+    ctx.set('ETag', etag);
+    ctx.set('Cache-Control', READER_CACHE_CONTROL);
+    const inm = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (inm && inm.split(',').some((t: string) => t.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
+        ctx.status = 304;
+        return;
+    }
+    ctx.body = body;
 });
 
 /**

@@ -56,6 +56,7 @@ import { newListingCategory } from '../engine/shops.js';
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, readsAsAuthor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
+import { setReadCaching } from '../guest-cache.js';
 import { word } from '@beanpool/core';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
@@ -563,11 +564,14 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A node with two views says which this is; the phone keeps a visitor's view only where it is one
     // (apps/native utils/posts-view.ts). A node with one says nothing, as before.
     if (switches.guestListingsOnly) ctx.set(VIEW_HEADER, guestView ? 'guest' : 'member');
-    // `private`, not `public`: this response varies by viewer — an author sees their OWN paused
+    // `private` for every reader but one: this response varies by viewer — an author sees their OWN paused
     // posts and nobody else does (see getPosts below). The viewer is folded into the ETag, so a
     // shared cache that revalidates would be corrected, but a response keyed only on URL must
     // never be storable by one, because two members asking for the same URL get different bodies.
-    ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+    // The one: an unsigned visitor's board or map (guest-cache.ts, slice L0), which is the visitors' view, read for nobody,
+    // so the same for every unsigned reader of the URL, and which an edge in front may keep for a minute. Not a sync or a
+    // delta (its cursor and its heal are one phone's), nor a peer's read (beansOnly is forced for it).
+    setReadCaching(ctx, guestView && !isPeerRequest && !sync && !updatedAfter && !syncPage && !heal);
     // A phone's sync read says which identity epoch answered it, so a phone that synced from the main server before a
     // take-over replaces what it holds (services/identity-epoch.ts). Before the 304 below: a platform cache that
     // revalidates takes the 304's headers over the ones it stored.

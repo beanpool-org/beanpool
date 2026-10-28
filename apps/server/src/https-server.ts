@@ -190,6 +190,7 @@ import { requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMembe
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason, word } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
+import { sharedCachesKeepOnlyAnonymousReads } from './guest-cache.js';
 import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
 
@@ -1230,6 +1231,11 @@ export async function startHttpsServer(port: number): Promise<number> {
         ctx.request.ip = clientIp(ctx);
         await next();
     });
+
+    // Only an anonymous read's /api answer may say a shared cache can keep it (guest-cache.ts, slice L0): an answer to a
+    // signed request, an admin's or another web origin's, and every refusal or fault, leaves for the reader's own cache
+    // only, whatever its route said. Outside every middleware that sets an answer, so it reads the final one.
+    app.use(sharedCachesKeepOnlyAnonymousReads());
 
     // A large answer goes to a TLS connection 64 KB at a time, so an idle connection doesn't keep the answer's size in
     // memory after it has gone (tls-send-window.ts, #1746). Before every middleware that sets or changes a body, so it

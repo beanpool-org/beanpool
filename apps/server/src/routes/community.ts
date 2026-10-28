@@ -82,6 +82,7 @@ import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR, PhotoTooBigError, routePhotoValueRefusal, tooManyPixelsText } from '../engine/avatar.js';
 import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
 import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
+import { READER_CACHE_CONTROL } from '../guest-cache.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
@@ -824,8 +825,9 @@ router.get('/api/community/info', async (ctx) => {
     // or ?publicKey= gets the node-wide figures, like any anonymous caller. The node-wide counts are cached for a few
     // seconds (state-engine communityCountsCached): this read is exempt from the gateway's usual buckets (a peer protocol
     // read), and ran three full-table counts on every hit (DoS review F4).
-    ctx.body = {
-        ...getPublicCommunityInfo(ctx.state.actor as string | undefined),
+    const actor = ctx.state.actor as string | undefined;
+    const body = {
+        ...getPublicCommunityInfo(actor),
         // Request binding (@beanpool/core request-signing.ts): this server verifies format 2, so an app signs its
         // requests here for the host it connects to. A server that doesn't say gets the old format. `addresses`: this
         // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
@@ -843,6 +845,17 @@ router.get('/api/community/info', async (ctx) => {
         // unless the operator names another, absent when they switched it off.
         globalCommunityUrl: getGlobalCommunityUrl() ?? undefined,
     };
+    // A tag of the reader and the answer, so an app asking again for what it holds gets a 304 (slice L0). Never shared:
+    // a signer's answer carries their own count, and nobody's needs an edge (the counts are cached here already).
+    const etag = `W/"info-${crypto.createHash('sha256').update(`${actor ?? ''}\n${JSON.stringify(body)}`).digest('hex').slice(0, 24)}"`;
+    ctx.set('ETag', etag);
+    ctx.set('Cache-Control', READER_CACHE_CONTROL);
+    const inm = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+    if (inm && inm.split(',').some((t: string) => t.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
+        ctx.status = 304;
+        return;
+    }
+    ctx.body = body;
 });
 
 /**

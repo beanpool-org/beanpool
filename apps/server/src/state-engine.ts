@@ -845,15 +845,14 @@ export function initStateEngine(): void {
     // nothing, silently. Moved to index.ts step 8.05, immediately after the connector manager. See the note
     // there — it is the sixth instance of this feature shipping code that nothing ever executed.
 
-    // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes)
+    // Start periodic persistence of commons balance + demurrage ledger rows (every 5 minutes, where Beans are on:
+    // decayFlushTick)
     //
     // ONE commit, not two (review finding). These used to be separate autocommits under separate catches,
     // so a crash — or just the first one succeeding and the second throwing — left the decay debits durable
     // with their matching Commons credit missing, which boot then rebuilds from as the truth. The pair is
     // the unit; half of it is worse than none of it.
-    setInterval(() => {
-        try { persistDecayAndCommons(); } catch (e) { console.warn('[Ledger] Failed to persist the demurrage flush:', e); }
-    }, 5 * 60 * 1000);
+    setInterval(decayFlushTick, 5 * 60 * 1000);
 
     // Pledges a project took after reaching its goal, stuck in its escrow for good until pledges stopped at the goal
     // (db.ts pledgeToProject), go back to their backers: exactly what each pledged, through transfer() inside
@@ -9530,6 +9529,23 @@ export function persistDecayEvents(): void {
  */
 export function persistDecayAndCommons(): void {
     persistDecayAndCommonsEngine();
+}
+
+/**
+ * The 5-minute demurrage flush (initStateEngine's timer): persistDecayAndCommons, where Beans are on. Where they are off
+ * nothing can decay (the switch can only be off on a ledger that never moved, config/node-profile.ts), so the tick writes
+ * nothing and costs the one core nothing (DESIGN-global-lounge-fable.md §5.2 item 5, slice L0). The switch is read on
+ * every tick: Beans switched back on are flushed from the next one. Whether it flushed.
+ */
+export function decayFlushTick(): boolean {
+    if (!getProfileSwitches().beans) return false;
+    try {
+        persistDecayAndCommons();
+        return true;
+    } catch (e) {
+        console.warn('[Ledger] Failed to persist the demurrage flush:', e);
+        return false;
+    }
 }
 
 /**

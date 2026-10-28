@@ -296,7 +296,8 @@ vi.mock('../../components/WordsDoor', async (importOriginal) => {
     const real = await importOriginal<typeof import('../../components/WordsDoor')>();
     return {
         ...real,
-        DoorChoices: () => createElement('span', { 'data-later-sweep': 'DoorChoices' }),
+        // The note the screen hands it, beside the sign-in buttons: the screen's own sentence (its rule's, VR2).
+        DoorChoices: ({ signInNote }: { signInNote?: string }) => createElement('span', { 'data-later-sweep': 'DoorChoices' }, signInNote ?? null),
         DoorWorkProgress: () => null,
         WordsBackupNote: () => createElement('span', { 'data-later-sweep': 'WordsBackupNote' }),
     };
@@ -581,6 +582,41 @@ describe("the global community's door in the pseudo-locale", () => {
         expect(host!.querySelector('[data-later-sweep="DoorChoices"]')).toBeTruthy();
         check('the door, two ways');
     });
+
+    // Who keeps a copy for the sign-in follows the global community's rule (vault rethink VR2), as the join does, in a
+    // build with the key vault: above the sign-in alone, and beside the sign-in buttons where the door has both ways in.
+    const NO_COPIES = "{name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.";
+    const KEEPER_LINES = {
+        vault: {
+            alone: 'To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.',
+            beside: 'BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.',
+        },
+        server: {
+            alone: 'To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into your account if you lose this phone: the global community keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.',
+            beside: 'The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.',
+        },
+        none: { alone: `To keep out fake accounts, sign in once with an account you already have. ${NO_COPIES}`, beside: NO_COPIES },
+    } as const;
+    const said = (english: string) => pseudoLocalise(english).replace('{name}', pseudoLocalise('The global community'));
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`a global community whose rule is ${rule}: the sign-in's sentence says who keeps a copy, alone and beside both ways in`, async () => {
+            useVault();
+            door.check = { ok: true, profile: { features: {}, recoveryCopies: rule } };
+            await mount('xx');
+            await press('🌍 Explore BeanPool worldwide', 'xx');
+            expect(host!.textContent).toContain(said(KEEPER_LINES[rule].alone));
+            for (const other of (['vault', 'server', 'none'] as const).filter((r) => r !== rule)) {
+                expect(host!.textContent, `not ${other}'s words`).not.toContain(said(KEEPER_LINES[other].alone));
+            }
+            check(`the door, the sign-in alone, ${rule}`);
+            act(() => root?.unmount());
+            host?.remove();
+            door.check = { ok: true, profile: { features: { wordsDoor: true }, recoveryCopies: rule } };
+            await mount('xx');
+            await press('🌍 Explore BeanPool worldwide', 'xx');
+            expect(host!.querySelector('[data-later-sweep="DoorChoices"]')?.textContent).toBe(said(KEEPER_LINES[rule].beside));
+        });
+    }
 });
 
 describe('restoring an account in the pseudo-locale', () => {

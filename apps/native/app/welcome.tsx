@@ -37,6 +37,7 @@ import { type LinkAnswer } from '../utils/join-link';
 import { startOneWayBack } from '../utils/one-way-back';
 import { signInCopiesAt, type SignInCopies } from '../utils/vault-config';
 import { copiesRuleForScreen } from '../utils/copies-rule';
+import { doorKeeperWords, globalPlace } from '../utils/open-door-words';
 import { anchorUrl as currentAnchorUrl } from '../utils/node-post';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -405,6 +406,8 @@ export default function WelcomeScreen() {
      * Backup. A door without it looks exactly as before: the sign-in alone.
      */
     const [wordsDoor, setWordsDoor] = useState(false);
+    /** Where a copy made at this door goes (the global community's rule, VR2), from the door check; this build's place until then. */
+    const [globalDoorCopies, setGlobalDoorCopies] = useState<SignInCopies>(() => signInCopiesAt());
     const [doorWay, setDoorWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
     /**
@@ -944,6 +947,9 @@ export default function WelcomeScreen() {
                     return;
                 }
                 setJoinBeansOn(beansOn(check.profile.features));
+                // Where a copy made at this door goes, by the global community's rule (vault rethink VR2): the join follows
+                // this same answer, kept (global-join.ts doorCopiesAt), and so do the sign-in's sentences.
+                setGlobalDoorCopies(signInCopiesAt(check.profile.recoveryCopies));
                 // Two ways in, side by side, where the door has the 12-words one; the sign-in alone where it doesn't.
                 const words = wordsDoorOn(check.profile.features);
                 setWordsDoor(words);
@@ -2980,9 +2986,17 @@ export default function WelcomeScreen() {
         const doorWays = doorWaysOut(globalPhase, loading);
         const wordsWay = doorWay === 'words';
         const wordsState = doorWork.state('words');
-        const signInNote = signInCopiesAt() === 'vault'
-            ? t('BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
-            : t('The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');
+        // Who keeps a copy for the sign-in, by the door's rule (VR2). Where the global community keeps none, and above the
+        // sign-in alone where it keeps the copy itself, in the open door's own words (utils/open-door-words.ts).
+        const doorKeeper = doorKeeperWords(globalPlace(GLOBAL_NODE_URL), globalDoorCopies);
+        const signInNote = globalDoorCopies === 'none'
+            ? doorKeeper.choose
+            : globalDoorCopies === 'vault'
+                ? t('BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
+                : t('The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');
+        const signInLine = globalDoorCopies === 'vault'
+            ? t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
+            : doorKeeper.signIn;
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -3069,7 +3083,7 @@ export default function WelcomeScreen() {
                                         {t('Meet people from everywhere and find a community near you. No invite needed.')}
                                     </Text>
                                     <Text style={[styles.subtitle, { marginTop: -12 }]}>
-                                        {t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')}
+                                        {signInLine}
                                     </Text>
 
                                     {loading && (

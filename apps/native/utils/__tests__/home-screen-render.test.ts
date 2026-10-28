@@ -887,7 +887,7 @@ function wrongOn(features: HomeAnswer['features'], l: Link): string | null {
     const file = resolves(l.href.pathname);
     if (!file) return 'no such screen';
     const tab = tabOf(l.href.pathname);
-    if (tab && (hiddenTabsFor(features) as string[]).includes(tab) && l.control !== 'home-step-sawLedger') return `the ${tab} tab, which this node hides`;
+    if (tab && (hiddenTabsFor(features) as string[]).includes(tab)) return `the ${tab} tab, which this node hides`;
     const params = l.href.params ?? {};
     const read = paramsRead(file);
     for (const k of Object.keys(params)) if (!read.has(k)) return `${k}, which its screen never reads`;
@@ -914,7 +914,7 @@ describe('every line on Home opens a screen this node shows, with what the line 
             it(`${profile} node, case ${variant}: the table, and every row checked`, async () => {
                 const { answer, links, inPlace } = await linksOn(profile, variant);
                 expect(links.map(fmt)).toEqual(TABLE[profile][variant]);
-                expect(links.map(l => [fmt(l), wrongOn(answer.features, l)]).filter(([, why]) => why)).toEqual([]);
+                expect(links.map(l => [fmt(l), wrongOn(l.control === 'home-step-sawLedger' ? { ...answer.features, showcase: true } : answer.features, l)]).filter(([, why]) => why)).toEqual([]);
                 expect(inPlace.filter(k => !IN_PLACE.test(k))).toEqual([]);
             });
         }

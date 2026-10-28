@@ -201,7 +201,7 @@ async function main() {
     assert(daveStepsPrimary?.area === true, 'primary reports area true');
     assert(hasStepPref(dave.pubKeyHex, 'step_area'), 'primary persisted step_area preference');
     const daveMemberPrimary = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(dave.pubKeyHex) as { updated_at: string };
-    assert(daveMemberPrimary.updated_at >= daveMemberBefore.updated_at, 'primary bumped members.updated_at on step persist');
+    assert(daveMemberPrimary.updated_at > daveMemberBefore.updated_at, 'primary bumped members.updated_at on step persist');
 
     // ── 4. End Rule on Global Community (young && undone) ───────────────────
     console.log('\n── 4. End Rule on Global Community (young && undone) ──');
@@ -234,8 +234,16 @@ async function main() {
     setMemberPreferences(grace.pubKeyHex, { interests: ['food', 'garden'] });
     db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('code-grace', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`).run(grace.pubKeyHex);
 
+    const graceMemberBefore = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(grace.pubKeyHex) as { updated_at: string };
     const graceSteps = await getHomeSteps(grace);
     assert(graceSteps !== undefined, 'local first-steps card stays while member is young even when all steps are done');
+    const graceMemberAfter = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(grace.pubKeyHex) as { updated_at: string };
+    assert(graceMemberAfter.updated_at === graceMemberBefore.updated_at, 'local read left members.updated_at untouched');
+    assert(!hasStepPref(grace.pubKeyHex, 'step_post'), 'local node wrote NO step_post preference');
+    assert(!hasStepPref(grace.pubKeyHex, 'step_photo'), 'local node wrote NO step_photo preference');
+    assert(graceSteps.saidHello === false, 'local steps saidHello is false');
+    assert(graceSteps.watch === false, 'local steps watch is false');
+    assert(graceSteps.sawLedger === false, 'local steps sawLedger is false');
 
     // 5b. Older local member (>14 days) with undone steps: card stays while undone
     const heidi = makeMember('HeidiLocalOld', fourteenDaysAgo);

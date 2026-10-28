@@ -27,6 +27,7 @@ import {
     checkGlobalDoor,
     hiddenTabsFor,
     beansOn,
+    shareOutsideOn,
     pollsInformal,
     INFORMAL_POLL_NOTE,
 } from '../node-profile';
@@ -94,6 +95,15 @@ describe('readNodeProfile', () => {
         expect(readNodeProfile({ profile: 'global', features: { membersOnDemand: true } })!.features).toEqual({ membersOnDemand: true });
         expect(readNodeProfile({ profile: 'local', features: { membersOnDemand: 'yes' } })!.features).toEqual({});
         expect(readNodeProfile({ profile: 'local', features: {} })!.features.membersOnDemand).toBeUndefined();
+    });
+
+    it('keeps shareOutside, which a local community reports while members may share a post outside (front doors S6)', () => {
+        const local = readNodeProfile({ profile: 'local', features: { shareOutside: true } })!;
+        expect(local.features).toEqual({ shareOutside: true });
+        expect(shareOutsideOn(local.features)).toBe(true);
+        expect(shareOutsideOn(readNodeProfile({ profile: 'local', features: {} })!.features)).toBe(false);
+        expect(shareOutsideOn(readNodeProfile({ profile: 'local', features: { shareOutside: 'yes' } })!.features)).toBe(false);
+        expect(shareOutsideOn(null)).toBe(false);
     });
 
     it('is null for an answer that is not an info answer', () => {

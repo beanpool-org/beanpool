@@ -18,10 +18,18 @@ import { shareOutsideOn } from '../utils/node-profile';
 import { eventLink } from '../utils/event-extras';
 import { makePeekLink } from '../utils/peek';
 
-/** Whether a post may be offered for sharing outside: one everyone here sees, on the board. The node decides in the end. */
-export function shareableOutside(post: any): boolean {
+/**
+ * Whether a post may be offered for sharing outside: one everyone here sees, on the board, and not an event that has
+ * ended or was cancelled (an ended event stays 'active' until the 30-day scrub; the node refuses it all the same). The
+ * node decides in the end (apps/server engine/peek-tickets.ts visitorsPost).
+ */
+export function shareableOutside(post: any, now = Date.now()): boolean {
     const scope = post?.audience_scope ?? post?.audienceScope ?? 'public';
     const active = post?.active === undefined || post?.active === true || post?.active === 1;
+    if (post?.type === 'event') {
+        const endAt = post?.eventEndAt ?? post?.event_end_at;
+        if ((post?.eventState ?? post?.event_state) === 'cancelled' || (typeof endAt === 'string' && Date.parse(endAt) <= now)) return false;
+    }
     return scope === 'public' && active && (post?.status === 'active' || post?.status === 'pending');
 }
 

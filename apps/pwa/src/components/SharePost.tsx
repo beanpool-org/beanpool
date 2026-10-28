@@ -20,9 +20,17 @@ const BUTTON = 'flex-1 min-w-[8rem] min-h-[48px] px-3 rounded-xl border text-sm 
     + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-info focus-visible:ring-offset-1 '
     + 'border-bp-ink-info text-bp-ink-info disabled:opacity-60 disabled:cursor-not-allowed';
 
-/** Whether a post may be offered for sharing outside: one everyone here sees, on the board. The node decides in the end. */
-export function shareableOutside(post: Pick<MarketplacePost, 'audienceScope' | 'status' | 'active'>): boolean {
+/**
+ * Whether a post may be offered for sharing outside: one everyone here sees, on the board, and not an event that has
+ * ended or was cancelled (an ended event stays 'active' until the 30-day scrub; the node refuses it all the same). The
+ * node decides in the end (apps/server engine/peek-tickets.ts visitorsPost).
+ */
+export function shareableOutside(
+    post: Pick<MarketplacePost, 'audienceScope' | 'status' | 'active'> & Partial<Pick<MarketplacePost, 'type' | 'eventEndAt' | 'eventState'>>,
+    now = Date.now(),
+): boolean {
     const scope = post.audienceScope ?? 'public';
+    if (post.type === 'event' && (post.eventState === 'cancelled' || (!!post.eventEndAt && Date.parse(post.eventEndAt) <= now))) return false;
     return scope === 'public' && post.active !== false && (post.status === 'active' || post.status === 'pending');
 }
 

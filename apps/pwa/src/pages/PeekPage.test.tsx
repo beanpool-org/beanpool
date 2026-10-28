@@ -152,6 +152,17 @@ describe('sharing outside, and the member\'s list', () => {
         expect(shareableOutside({ audienceScope: undefined, status: 'pending', active: true })).toBe(true);
     });
 
+    it('is not offered for an event that has ended or was cancelled: it stays active until the scrub, and the node refuses it', async () => {
+        const { shareableOutside } = await import('../components/SharePost');
+        const now = Date.parse('2026-10-29T00:00:00Z');
+        const event = { type: 'event' as const, audienceScope: 'public' as const, status: 'active', active: true };
+        expect(shareableOutside({ ...event, eventEndAt: '2026-11-01T00:00:00Z' }, now)).toBe(true);
+        expect(shareableOutside({ ...event, eventEndAt: '2026-10-28T00:00:00Z' }, now)).toBe(false);
+        expect(shareableOutside({ ...event, eventEndAt: '2026-11-01T00:00:00Z', eventState: 'cancelled' }, now)).toBe(false);
+        expect(shareableOutside({ ...event }, now)).toBe(true);
+        expect(shareableOutside({ type: 'offer', audienceScope: 'public', status: 'active', active: true, eventEndAt: '2026-10-28T00:00:00Z' }, now)).toBe(true);
+    });
+
     it('Settings → Shared outside lists the open links and Stop sharing stops one', async () => {
         const { SharedOutsideSection } = await import('../components/SharedOutsideSection');
         const shares = [{ id: 'r1', postId: POST_ID, title: 'Ladder to lend', createdAt: '2026-10-29T00:00:00Z', expiresAt: '2026-11-05T00:00:00Z' }];

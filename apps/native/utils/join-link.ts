@@ -27,7 +27,7 @@ import { signedPost } from './node-post';
 import { extractSub } from './sso-sheet-connect';
 import { enrolmentFromJoin, sealSsoShares, type KeeperEnrolmentResult } from './keeper-enrolment';
 import { signInCopiesAt } from './vault-config';
-import { depositDoorCopy, doorTicketKeys, doorVaultTicket, providerSignIn, retryAfterSeconds, tryAgainIn, JOIN_TIMEOUT_MS, type DoorSignIn } from './global-join';
+import { depositDoorCopy, doorCopiesAt, doorTicketKeys, doorVaultTicket, providerSignIn, retryAfterSeconds, tryAgainIn, JOIN_TIMEOUT_MS, type DoorSignIn } from './global-join';
 import type { BeanPoolIdentity } from './identity';
 
 export const LINK_NONCE_PATH = '/api/join/link/sso-nonce';
@@ -39,8 +39,11 @@ export type LinkRefusal =
     | 'door_key_missing' | 'rate_limited' | 'sign_in_again' | 'sign_in_unavailable' | 'unsupported' | 'try_again' | 'unreachable';
 
 export type LinkAnswer =
-    /** Added: this sign-in is a second way back, and the new-account limits are the usual ones from now. */
-    | { kind: 'linked'; provider: SsoProvider; enrolment: KeeperEnrolmentResult | null }
+    /**
+     * Added: this sign-in is a second way back, and the new-account limits are the usual ones from now. `noCopies`: the
+     * door's community keeps no copies (its rule, vault rethink VR2), so none was made, by design rather than by a failure.
+     */
+    | { kind: 'linked'; provider: SsoProvider; enrolment: KeeperEnrolmentResult | null; noCopies?: true }
     | { kind: 'refused'; reason: LinkRefusal; message: string };
 
 /** What the member reads when a sign-in isn't added. `{provider}` is the sign-in's name. */
@@ -164,9 +167,10 @@ export async function linkSignIn(o: LinkSignInOptions): Promise<LinkAnswer> {
     const asked = await askForLink(url, identity, provider);
     if (asked.kind === 'answer') return asked.answer;
 
-    // A build without a vault: the door's nonce, and the copy rides in the link, as at the door.
+    // A build without a vault, or a door whose community keeps copies itself or none (its rule, vault rethink VR2): the
+    // door's nonce, and a copy, where kept, rides in the link, as at the door.
     let signin: DoorSignIn;
-    if (signInCopiesAt() === 'community') {
+    if (await doorCopiesAt(url) !== 'vault') {
         const done = await signInWithProvider(provider, asked.nonce);
         signin = { provider, idToken: done.idToken, nonce: done.nonce, sub: '', email: done.email };
         try {
@@ -203,7 +207,8 @@ export async function linkSignIn(o: LinkSignInOptions): Promise<LinkAnswer> {
 async function sendLink(url: string, identity: BeanPoolIdentity, signin: DoorSignIn): Promise<{ answer: LinkAnswer; status: number | null }> {
     let recovery: { shares: unknown[] } | null = null;
     let wordsSealed = false;
-    if (signInCopiesAt() === 'community') {
+    const place = await doorCopiesAt(url);
+    if (place === 'community') {
         try {
             const sealed = await sealSsoShares(identity, signin.provider, signin.sub);
             recovery = { shares: sealed.shares };
@@ -234,16 +239,23 @@ async function sendLink(url: string, identity: BeanPoolIdentity, signin: DoorSig
         return { answer: { ...answer, enrolment: enrolmentFromJoin((answerBody as { recovery?: unknown }).recovery, signin.provider, wordsSealed) }, status: res.status };
     }
     if (signin.vaultTicket) return { answer: { ...answer, enrolment: await depositDoorCopy(identity, signin) }, status: res.status };
-    return { answer, status: res.status };
+    return { answer: place === 'none' ? { ...answer, noCopies: true } : answer, status: res.status };
+}
+
+/** Whether a linked sign-in's copy is at the key vault: where the deposit said, else this build's place. */
+export function linkedAtVault(answer: Extract<LinkAnswer, { kind: 'linked' }>): boolean {
+    return answer.enrolment?.keptAt ? answer.enrolment.keptAt === 'vault' : signInCopiesAt() === 'vault';
 }
 
 /** What Safety Backup and Settings say once a sign-in was added. */
 export function linkedNotice(answer: Extract<LinkAnswer, { kind: 'linked' }>): string {
     const name = SSO_PROVIDER_NAMES[answer.provider] ?? 'Your sign-in';
     const copy = answer.enrolment
-        ? (signInCopiesAt() === 'vault'
+        ? (linkedAtVault(answer)
             ? ` If you lose this phone, sign in with ${name} to get back in.`
             : ` If you lose this phone, sign in with ${name} to get back into the global community.`)
-        : ' It couldn\'t keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.';
+        : answer.noCopies
+            ? ' The global community keeps no copies of members\' accounts, so your 12 words are still your way back.'
+            : ' It couldn\'t keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.';
     return `Your ${name} sign-in is added: your account now has the usual new-account limits.${copy}`;
 }

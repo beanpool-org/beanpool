@@ -35,7 +35,9 @@ import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } fro
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
 import { type LinkAnswer } from '../utils/join-link';
 import { startOneWayBack } from '../utils/one-way-back';
-import { signInCopiesAt } from '../utils/vault-config';
+import { signInCopiesAt, type SignInCopies } from '../utils/vault-config';
+import { copiesRuleForScreen } from '../utils/copies-rule';
+import { anchorUrl as currentAnchorUrl } from '../utils/node-post';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
@@ -362,6 +364,11 @@ export default function WelcomeScreen() {
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
+    /**
+     * Where a copy made at Safety Backup goes: the joined community's rule (vault rethink VR2, utils/copies-rule.ts),
+     * read as the step opens; this build's place until then and when the community never said.
+     */
+    const [backupCopiesAt, setBackupCopiesAt] = useState<SignInCopies>(() => signInCopiesAt());
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
@@ -370,6 +377,17 @@ export default function WelcomeScreen() {
     // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
     // name, join; then the same steps as an invite. `joinFlow` says which door this wizard came in by. ---
     const [joinFlow, setJoinFlow] = useState<OnboardingFlow>('invite');
+    // Safety Backup's copies: where the community just joined keeps them (the sign-in row's words and what it offers).
+    useEffect(() => {
+        if (mode !== 'seedBackup') return;
+        let live = true;
+        void (async () => {
+            const url = await currentAnchorUrl().catch(() => null);
+            const rule = url ? await copiesRuleForScreen(url) : null;
+            if (live) setBackupCopiesAt(signInCopiesAt(rule));
+        })();
+        return () => { live = false; };
+    }, [mode]);
     const [globalPhase, setGlobalPhase] = useState<DoorPhase>('checking');
     /** What the member reads on the `unavailable`, `restore` and `closed` screens. */
     const [globalMessage, setGlobalMessage] = useState<string | null>(null);
@@ -2228,6 +2246,7 @@ export default function WelcomeScreen() {
                             protection={protection}
                             hasWords={hasMnemonic(pendingIdentity)}
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
+                            copiesAt={backupCopiesAt}
                             communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
                             onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                 if (prov) setSsoProvider(prov);
@@ -2263,6 +2282,7 @@ export default function WelcomeScreen() {
                             identity={pendingIdentity}
                             askPhoneLock={!pendingWordsAreNew}
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
+                            copiesAt={backupCopiesAt}
                             onClose={() => setShowSsoSheet(false)}
                             onEnrolled={(result) => {
                                 setEnrolment(result);

@@ -26,6 +26,15 @@
  *
  * A build without a vault (vault.ts `signInCopiesAt`) connects exactly as the app did before the vault: the member's
  * community's nonce (sso-signin.ts `startSsoSignIn`), the provider, and the deposit at that community (`url`).
+ *
+ * ## The community's rule (vault rethink VR2, design §5.3)
+ *
+ * In a build with the vault, the community the phone is on (`url`) says where members' copies go (utils/copies-rule.ts),
+ * asked at this moment: `server` connects at the community as a build without a vault does, so the vault is never
+ * contacted; `none` links nothing and opens no sheet, in the community's words; `vault` goes to the vault. Not answered
+ * and never heard: nothing is linked, as the phone can't tell the community wants a copy made. With no community at all
+ * (`url` null), the vault, as before the rule. A build without a vault asks nothing new: every copy goes to the
+ * community, whose server refuses one it keeps none of (409 `no_copies_here`).
  */
 
 import { signInWithProvider, startSsoSignIn, SsoSignInError } from './sso-signin';
@@ -33,6 +42,16 @@ import type { SsoProvider } from './sso-signin';
 import { enrolSsoKeeper, type KeeperEnrolmentResult } from './keeper-enrolment';
 import type { BeanPoolIdentity } from './identity';
 import { rememberConnectWanted, signInCopiesAt, vaultTicket, VaultError, VAULT_MESSAGES, type VaultFailure } from './vault';
+import { copiesRuleNow } from './copies-rule';
+
+/**
+ * What a member reads when the community keeps no copies, or can't be asked where it keeps them. Plain English (this
+ * file is beside the 12 words' key path); the screens translate them (components/welcome/welcome-lines.ts).
+ */
+export const CONNECT_RULE_MESSAGES = {
+    none: "Your community keeps no copies of members' accounts, so no sign-in was linked. Your 12 words are your way back there.",
+    unknown: "Your community couldn't be asked where it keeps copies, so no sign-in was linked. Try again when you're connected.",
+} as const;
 
 /**
  * Decode the `sub` claim from a JWT id_token without signature verification. The copy is sealed to it, and the vault
@@ -52,6 +71,11 @@ export function extractSub(idToken: string): string {
         }
     } catch {}
     throw new Error('ID token missing subject claim (sub).');
+}
+
+/** Nothing linked and nothing to offer again: the community's rule said no, or couldn't be asked. */
+function nothingLinked(error: string): KeeperEnrolmentResult {
+    return { enrolled: [], generation: null, skipped: [], available: 0, error };
 }
 
 /** Nothing linked, in the member's words: the vault's refusal, or ours. A paused vault is offered again later. */
@@ -92,7 +116,18 @@ export async function connectAndDeposit(options: {
     }
     // Closed while the check was up: nothing starts.
     if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    // A build without a vault, and an account a claim made: the copy goes to the community, exactly as before the rule,
+    // with exactly the requests it always made. The community's own server holds its rule there: under `none` its nonce
+    // answers 409 `no_copies_here`, in its words, and nothing is kept. A claim's community was claimed a moment ago, so
+    // its rule is the default, and nothing of ours is in its path (Marty, 24 Oct).
     if (signInCopiesAt() === 'community' || options.copyAt === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
+    // A build with the vault: the community's rule, asked now (the header's "The community's rule").
+    const rule = options.url ? await copiesRuleNow(options.url) : undefined;
+    if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    if (rule === null) return nothingLinked(CONNECT_RULE_MESSAGES.unknown);
+    const at = signInCopiesAt(rule);
+    if (at === 'none') return nothingLinked(CONNECT_RULE_MESSAGES.none);
+    if (at === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
 
     let grant: { ticket: string; nonce: string };
     try {

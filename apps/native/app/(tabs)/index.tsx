@@ -19,6 +19,7 @@ import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressFollowCard } from '../../components/AddressFollowCard';
+import { CopiesRuleCard } from '../../components/CopiesRuleCard';
 import { NotificationPermissionCard } from '../../components/NotificationPermissionCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
@@ -1100,6 +1101,8 @@ export default function HomeScreen() {
                     {lookingAround && <LookAroundCard colors={colors} />}
                     <KeyMovedCard colors={colors} />
                     <AddressFollowCard colors={colors} />
+                    {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
+                    {!lookingAround && <CopiesRuleCard colors={colors} />}
                     <NotificationPermissionCard colors={colors} />
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">

@@ -205,7 +205,8 @@ export function joinedGlobalNotice(enrolment: KeeperEnrolmentResult | null): { t
     const provider = enrolment?.enrolledSso?.[0] as keyof typeof SSO_PROVIDER_NAMES | undefined;
     const name = provider && SSO_PROVIDER_NAMES[provider];
     if (!enrolment || !name) return { title: "You're in the global community", body: came };
-    const linked = signInCopiesAt() === 'vault'
+    // Where the copy went (the door's community may keep it itself, vault rethink VR2), else this build's place.
+    const linked = (enrolment.keptAt ? enrolment.keptAt === 'vault' : signInCopiesAt() === 'vault')
         ? `Your ${name} sign-in is now also a way back into your account, in every community.`
         : `Your ${name} sign-in is now also a way back into your account here.`;
     const replaced = enrolment.replaced ? `\n\n${signInReplacedNote(name)}` : '';

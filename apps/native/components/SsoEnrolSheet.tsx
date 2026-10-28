@@ -3,7 +3,7 @@ import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Pla
 import { type AppColors } from '../constants/colors';
 import { useOnboardingColors } from '../app/ThemeContext';
 import { anchorUrl } from '../utils/node-post';
-import { hasVault } from '../utils/vault-config';
+import { hasVault, type SignInCopies } from '../utils/vault-config';
 import { t } from '@beanpool/core';
 import { SsoSignInError, returnToApp } from '../utils/sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -23,6 +23,7 @@ export function SsoEnrolSheet({
     identity: passedIdentity,
     askPhoneLock = true,
     copyAt,
+    copiesAt,
 }: {
     visible: boolean;
     onClose: () => void;
@@ -39,15 +40,21 @@ export function SsoEnrolSheet({
     /**
      * `community`: the copy goes to the community the phone is set to, whatever the build, never to BeanPool's key vault.
      * For an account a claim made (app/welcome.tsx, DESIGN-account-without-global-fable.md §2.2): nothing of ours in a
-     * self-hosted community's first owner's path (Marty, 24 Oct). Otherwise where this build keeps copies.
+     * self-hosted community's first owner's path (Marty, 24 Oct). Otherwise where the community's rule sends it.
      */
     copyAt?: 'community';
+    /**
+     * Where the screen that opened the sheet said the copy goes (utils/vault-config.ts signInCopiesAt with the community's
+     * rule, vault rethink VR2), for the words while it works. The connect asks the rule again itself, and the result says
+     * where the copy went. Absent: where this build keeps copies.
+     */
+    copiesAt?: SignInCopies;
 }): React.JSX.Element | null {
     const { colors } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors), [colors]);
     const PROVIDER_NAME = SSO_PROVIDER_NAMES[provider];
-    /** Where this build keeps the copy (utils/vault.ts `signInCopiesAt`): fixed when the app is built, unless `copyAt` says. */
-    const atVault = hasVault() && copyAt !== 'community';
+    /** Where the copy goes, as the screen said it: the community's rule, or this build's place, unless `copyAt` says. */
+    const atVault = (copiesAt ? copiesAt === 'vault' : hasVault()) && copyAt !== 'community';
     const { identity: contextIdentity } = useIdentity();
     const identity = passedIdentity ?? contextIdentity;
     /** `saving`: the provider is done and the deposit is going ahead, so no Cancel (utils/sso-sheet-connect.ts). */
@@ -87,10 +94,10 @@ export function SsoEnrolSheet({
         const abort = new AbortController();
         abortRef.current = abort;
         try {
-            // With a key vault in this build: to the vault, whatever community this phone is on. Without one: to the
-            // community this phone is set to, as before the vault (utils/sso-sheet-connect.ts).
-            const url = atVault ? null : await anchorUrl();
-            if (!atVault && !url) {
+            // The community this phone is set to: its rule says where the copy goes (utils/sso-sheet-connect.ts), at the
+            // vault or at the community. A build without a vault needs it either way.
+            const url = await anchorUrl();
+            if (!url && !hasVault()) {
                 setErrorMessage(t('No node configured yet.'));
                 setStep('error');
                 return;
@@ -216,7 +223,7 @@ export function SsoEnrolSheet({
                             </View>
                             <Text style={styles.title} accessibilityRole="header">{t("You're covered")}</Text>
                             <Text style={styles.body}>
-                                {atVault
+                                {(enrolResult?.keptAt ? enrolResult.keptAt === 'vault' : atVault)
                                     // Another phone, never a computer: only the phone app can answer a restore (the web app has no vault client).
                                     ? t("Your {name} sign-in is now linked, in every community. If you lose this phone, sign in with {name} to get back in: it takes a day, or less if another phone of yours says it's you.", { name: PROVIDER_NAME })
                                     : t('Your {name} sign-in is now linked. If you lose this phone, sign in with {name} to get back in.', { name: PROVIDER_NAME })}

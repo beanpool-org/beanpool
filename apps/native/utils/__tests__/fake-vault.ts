@@ -377,9 +377,19 @@ export class CommunityKeepingCopies {
     publicKey: string | null = null;
     constructor(readonly callsign: string) {}
 
+    /**
+     * Where it keeps members' copies, as its info says it (vault rethink VR2): null says nothing, as a community from
+     * before the rule (the default, the key vault's).
+     */
+    recoveryCopies: string | null = null;
+
     handle(req: SentRequest): { status: number; body: unknown } {
         const b = req.body ?? {};
         const ok = (body: unknown) => ({ status: 200, body });
+        // Its public info, as every community answers it (a build with a vault asks it for the rule when it connects).
+        if (req.method === 'GET' && req.path === '/api/community/info') {
+            return ok({ profile: 'local', features: {}, requestSigning: 2, ...(this.recoveryCopies ? { recoveryCopies: this.recoveryCopies } : {}) });
+        }
         if (req.method === 'POST' && req.path === '/api/recovery/sso-nonce') {
             const nonce = `community-nonce-${++this.seq}`;
             this.nonces.add(nonce);

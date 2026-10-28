@@ -738,7 +738,15 @@ describe('the source: only a build without a vault asks a community for a nonce,
         expect(offenders).toEqual(['utils/keeper-enrolment.ts', 'utils/sso-recovery.ts', 'utils/sso-signin.ts']);
     });
 
-    it('each is reached only when the build has no vault', () => {
+    it('each is reached only when the build has no vault, or (vault rethink VR2) where the community\'s rule keeps copies itself', () => {
+        // VR2 (design §5.3, Marty's pick 5): in a build with a vault, a community whose rule is `server` keeps the copies
+        // made from its screens. The connect asks that rule at the moment of connecting, and only then goes to the
+        // community; Account Protection disconnects there what it listed there. Recovery is unchanged (below).
+        const ruled = src('utils/sso-sheet-connect.ts');
+        expect(body(ruled, 'connectAndDeposit')).toMatch(
+            /const rule = options\.url \? await copiesRuleNow\(options\.url\) : undefined;[^]*?const at = signInCopiesAt\(rule\);[^]*?if \(at === 'community'\) return connectAtCommunity\(/,
+        );
+        expect(body(src('utils/keeper-enrolment.ts'), 'disconnectSsoKeeper')).toMatch(/if \(at === 'community'\) return disconnectAtCommunity\(/);
         // The community's nonce: only through startSsoSignIn, which only the community connect calls, after the switch.
         const signin = src('utils/sso-signin.ts');
         expect(signin.match(/fetchSsoNonce\(/g)).toHaveLength(2);

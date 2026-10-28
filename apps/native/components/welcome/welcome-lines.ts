@@ -103,6 +103,9 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'ID token missing subject claim (sub).': word('ID token missing subject claim (sub).'),
     "The phone's lock was not passed, so no sign-in was linked.": word("The phone's lock was not passed, so no sign-in was linked."),
     "That sign-in didn't say which account it was, so nothing was linked. Try again.": word("That sign-in didn't say which account it was, so nothing was linked. Try again."),
+    // utils/sso-sheet-connect.ts CONNECT_RULE_MESSAGES: the community's rule for copies said no, or couldn't be asked (VR2).
+    "Your community keeps no copies of members' accounts, so no sign-in was linked. Your 12 words are your way back there.": word("Your community keeps no copies of members' accounts, so no sign-in was linked. Your 12 words are your way back there."),
+    "Your community couldn't be asked where it keeps copies, so no sign-in was linked. Try again when you're connected.": word("Your community couldn't be asked where it keeps copies, so no sign-in was linked. Try again when you're connected."),
     'No node configured yet.': word('No node configured yet.'),
     'The sign-in could not be linked.': word('The sign-in could not be linked.'),
     // utils/protection-state.ts KEEPER_LABELS: what holds a piece, on the covered panel.
@@ -266,9 +269,14 @@ export function linkedNoticeWords(answer: Extract<LinkAnswer, { kind: 'linked' }
     // linkedNotice's own fallback for a provider it has no name for, as it says it.
     const name = SSO_PROVIDER_NAMES[answer.provider] ?? t('Your sign-in');
     if (!answer.enrolment) {
+        // The door's community keeps no copies (its rule, vault rethink VR2): none was made, by design.
+        if (answer.noCopies) {
+            return t("Your {name} sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back.", { name });
+        }
         return t("Your {name} sign-in is added: your account now has the usual new-account limits. It couldn't keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.", { name });
     }
-    return signInCopiesAt() === 'vault'
+    // As utils/join-link.ts linkedAtVault: where the deposit said, else this build's place.
+    return (answer.enrolment.keptAt ? answer.enrolment.keptAt === 'vault' : signInCopiesAt() === 'vault')
         ? t('Your {name} sign-in is added: your account now has the usual new-account limits. If you lose this phone, sign in with {name} to get back in.', { name })
         : t('Your {name} sign-in is added: your account now has the usual new-account limits. If you lose this phone, sign in with {name} to get back into the global community.', { name });
 }

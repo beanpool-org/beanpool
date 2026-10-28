@@ -237,6 +237,8 @@ vi.mock('../vault', async (importOriginal) => {
     return {
         ...real,
         hasVault: () => vault.on,
+        // Where a copy goes (vault-config.ts signInCopiesAt, with a community's rule since vault rethink VR2): from the same switch.
+        signInCopiesAt: (rule?: string | null) => (rule === 'none' ? 'none' : rule === 'server' ? 'community' : vault.on ? 'vault' : 'community'),
         vaultCopyKnowledge: async () => 'known',
         vaultStatus: async () => ({ holds: vault.holds }),
         approvedHolds: async () => [],

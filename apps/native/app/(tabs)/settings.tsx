@@ -59,7 +59,8 @@ import { RecoveryAlertBanner } from '../../components/RecoveryAlertBanner';
 import { SsoEnrolSheet } from '../../components/SsoEnrolSheet';
 import { protectionFrom } from '../../utils/protection-state';
 import { enrolmentFromVault, vaultProtection, type KeeperEnrolmentResult } from '../../utils/keeper-enrolment';
-import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
+import { hasVault, signInCopiesAt, VAULT_MESSAGES, VaultError, type SignInCopies } from '../../utils/vault';
+import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
@@ -328,6 +329,8 @@ export default function SettingsScreen() {
     const [protectionLoading, setProtectionLoading] = useState(false);
     /** Why the key vault couldn't say what protects this account (paused, unreachable, none in this build), or null. */
     const [protectionNote, setProtectionNote] = useState<string | null>(null);
+    /** Where a copy made from this community goes, by its rule (vault rethink VR2): this build's place until it is read. */
+    const [copiesAt, setCopiesAt] = useState<SignInCopies>(() => signInCopiesAt());
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     /** Set before an SSO flow leaves the app, so the return trip does not reset the section. */
     const skipNextFocusResetRef = React.useRef(false);
@@ -422,8 +425,19 @@ export default function SettingsScreen() {
     }, []);
 
     const fetchProtectionStatus = async () => {
-        // A build without a key vault: the community keeps the sign-in copies, as before the vault.
-        if (!hasVault()) return fetchCommunityProtectionStatus();
+        // Where a copy made here goes: the community's rule (vault rethink VR2, utils/copies-rule.ts), else this build's
+        // place. A community that keeps none shows its sentence and offers nothing; one that keeps them itself, or a build
+        // without a key vault, lists the community's copies, as before the vault.
+        const anchor = await getAnchorUrl().catch(() => null);
+        const at = signInCopiesAt(anchor ? await copiesRuleForScreen(anchor) : undefined);
+        setCopiesAt(at);
+        if (at === 'none') {
+            setProtectionResult(null);
+            setProtectionNote(null);
+            resolveCommunityLabel().then(setProtectionNodeLabel).catch(() => {});
+            return;
+        }
+        if (at === 'community') return fetchCommunityProtectionStatus();
         setProtectionLoading(true);
         try {
             if (!identity) return;
@@ -485,7 +499,10 @@ export default function SettingsScreen() {
         if (!identity) return;
         const provName = SSO_PROVIDER_NAMES[provider];
         let message: string;
-        if (hasVault()) {
+        // The copies Account Protection listed: the key vault's, or (a build without one, or a community that keeps them
+        // itself) the community's.
+        const at = copiesAt === 'vault' ? 'vault' : 'community';
+        if (at === 'vault') {
             // One copy covers every community (the key vault's), so disconnecting it does too: say so plainly. It removes
             // only the vault's copy (keeper-enrolment.ts disconnectSsoKeeper): one a community's server still keeps for
             // this sign-in (from before the vault, or a web-app join) stays, so the words never say nothing brings the
@@ -513,7 +530,7 @@ export default function SettingsScreen() {
                         setProtectionLoading(true);
                         try {
                             const { disconnectSsoKeeper } = await import('../../utils/keeper-enrolment');
-                            const res = await disconnectSsoKeeper(provider, identity);
+                            const res = await disconnectSsoKeeper(provider, identity, at);
                             if (!res.success && res.error) {
                                 Alert.alert(t('Error'), settingsLineWords(res.error));
                             }
@@ -1774,6 +1791,7 @@ export default function SettingsScreen() {
             communityName={protectionNodeLabel || undefined}
             hasWords={hasMnemonic(identity)}
             waysBack={waysBack}
+            copiesAt={copiesAt}
             onProtectSso={Platform.OS !== 'web' ? (prov) => {
                 if (prov) setSsoEnrolProvider(prov);
                 skipNextFocusResetRef.current = true;
@@ -2419,11 +2437,14 @@ export default function SettingsScreen() {
             <SsoEnrolSheet
                 visible={showSsoSheet}
                 provider={ssoEnrolProvider}
+                copiesAt={copiesAt}
                 onClose={() => setShowSsoSheet(false)}
                 onEnrolled={(result) => {
                     setShowSsoSheet(false);
-                    // Without a vault the community answers the deposit with every sign-in it keeps, as before.
-                    if (!hasVault()) {
+                    // Kept at the community (a build without a vault, or a community that keeps copies itself): it answers
+                    // the deposit with every sign-in it keeps, as before.
+                    if (result.keptAt === 'community' || !hasVault()) {
+                        setCopiesAt('community');
                         setProtectionResult(result);
                         return;
                     }

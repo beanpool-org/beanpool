@@ -11,6 +11,8 @@
  *    why, and the work starts only there.
  * 3. Join from the look (`/welcome?join=look`, utils/look-around.ts LOOK_DOOR): the door opens, its work starts at that
  *    tap, and its Back returns to the look, not to the first screen.
+ * 4. A phone that looked around, back on the first screen (a restart): the community in use is the look's, and never
+ *    fills an invite's address. An invite's own server is the one used, and a bare code asks for its community.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -162,6 +164,8 @@ const door = vi.hoisted(() => ({
     answer: null as any,
     signIn: null as any,
     cachedFeatures: null as any,
+    /** The saved profile of the community in use, whole (look-around.ts lookingAroundHere reads it). */
+    cachedProfile: null as any,
 }));
 const vaultState = vi.hoisted(() => ({ waiting: null as any, check: null as any, candidates: [] as any[] }));
 
@@ -242,7 +246,7 @@ vi.mock('../restore-account', async (importOriginal) => {
 });
 vi.mock('../node-profile', async (importOriginal) => {
     const real = await importOriginal<typeof import('../node-profile')>();
-    return { ...real, checkGlobalDoor: async () => door.check, getCachedNodeProfile: async () => (door.cachedFeatures ? { features: door.cachedFeatures } : null) };
+    return { ...real, checkGlobalDoor: async () => door.check, getCachedNodeProfile: async () => door.cachedProfile ?? (door.cachedFeatures ? { features: door.cachedFeatures } : null) };
 });
 vi.mock('../global-door-offer', async (importOriginal) => {
     const real = await importOriginal<typeof import('../global-door-offer')>();
@@ -344,7 +348,7 @@ beforeEach(() => {
     phone.stored = null; phone.pending = null;
     // An open door with both ways in: opened, it would draft the key and start the 12-words work at once.
     door.check = { ok: true, profile: { profile: 'global', features: { openJoin: true, wordsDoor: true, guestListingsOnly: true } } };
-    door.answer = null; door.signIn = null; door.cachedFeatures = null;
+    door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedProfile = null;
     noVault();
     setLanguage('en');
 });
@@ -376,6 +380,24 @@ async function press(name: string) {
     const b = button(name);
     await act(async () => { b.click(); });
     await settle();
+}
+const type = async (label: string, text: string) => {
+    const input = all('input').find((i) => i.getAttribute('aria-label') === label) as HTMLInputElement | undefined;
+    expect(input, `a field "${label}"`).toBeTruthy();
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+        input!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settle();
+};
+const communityField = () => (all('input').find((i) => i.getAttribute('aria-label') === 'Community name or node address') as HTMLInputElement | undefined)?.value;
+const GLOBAL = 'https://global.beanpool.org';
+const MULLUM = 'https://mullum.beanpool.org';
+/** What the look leaves on the phone (global-guest-visit.ts with no identity): global in use, marked a guest visit. */
+function lookedAround() {
+    store.map.set('beanpool_anchor_url', GLOBAL);
+    store.map.set('beanpool_guest_nodes', JSON.stringify([GLOBAL]));
+    door.cachedProfile = { profile: 'global', features: { openJoin: true, guestListingsOnly: true } };
 }
 /** The door's own screen is up: its two ways in (WordsDoor's DoorChoices, a stand-in here). */
 const doorOpen = () => all('[data-later-sweep="DoorChoices"]').length > 0;
@@ -421,5 +443,28 @@ describe('look before you join on a new phone (slice S12)', () => {
         expect(nav.replaced).toEqual([]);
         expect(doorOpen()).toBe(false);
         expect(button('Explore BeanPool worldwide')).toBeTruthy();
+    });
+
+    it('4a. a phone that looked around, then sent an invite with its server: the invite\'s server is the one used, not the look\'s', async () => {
+        lookedAround();
+        params.now = { invite: 'MULL-1234', server: MULLUM };
+        await mount();
+        expect(communityField()).toBe(MULLUM);
+    });
+
+    it('4b. a phone that looked around, a bare invite code: the community field is empty, as on a new phone, never the look\'s', async () => {
+        lookedAround();
+        await mount();
+        await press('Join with an invite');
+        await type('Invite link or code', 'MULL-1234');
+        expect(communityField()).toBe('');
+    });
+
+    it('4c. not looking around (the community in use is no guest visit): the field holds the phone\'s community, as before', async () => {
+        store.map.set('beanpool_anchor_url', MULLUM);
+        await mount();
+        await press('Join with an invite');
+        await type('Invite link or code', 'MULL-1234');
+        expect(communityField()).toBe(MULLUM);
     });
 });

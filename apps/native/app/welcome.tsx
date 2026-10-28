@@ -73,7 +73,7 @@ import { holdEndsWords } from '../components/RecoveryAlertBanner';
 import { VAULT_WORDS } from '../utils/vault-words';
 import { landNextOn } from '../utils/member-landing';
 import { visitGlobalAsGuest } from '../utils/global-guest-visit';
-import { LOOK_JOIN, LOOK_LANDING } from '../utils/look-around';
+import { LOOK_JOIN, LOOK_LANDING, lookingAroundHere } from '../utils/look-around';
 import { MemberAvatar } from '../components/MemberAvatar';
 import {
     declineNotifications, readNotificationPermissionRecord, readOsNotificationPermission,
@@ -704,13 +704,17 @@ export default function WelcomeScreen() {
     };
 
     React.useEffect(() => {
-        AsyncStorage.getItem('beanpool_anchor_url').then(val => {
-            if (val) {
-                setCreateAnchorUrl(val);
-                setRecoveryAnchorUrl(val);
-            }
-        });
-        
+        // The community this phone last used fills the invite's and the restore's address, unless one is there already (an
+        // invite's own server, set below, often before this read lands, wins) or the phone with no account is looking around
+        // (utils/look-around.ts): that address is the look's, the global community's, not one the member chose to join or
+        // restore from. Left in, a bare invite code was redeemed against the global community.
+        (async () => {
+            const val = await AsyncStorage.getItem('beanpool_anchor_url');
+            if (!val || (!accountOnPhone && await lookingAroundHere())) return;
+            setCreateAnchorUrl(cur => cur || val);
+            setRecoveryAnchorUrl(cur => cur || val);
+        })().catch(() => {});
+
         let mounted = true;
 
         const checkAutoIntercept = async () => {

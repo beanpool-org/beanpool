@@ -60,21 +60,41 @@ async function handOver(title: string, link: string): Promise<'shared' | 'copied
     }
 }
 
-/** "Share outside the community", with the line that says what it does, and what became of the tap. */
+/**
+ * "Share outside the community", with the line that says what it does, and what became of the tap.
+ *
+ * The node makes the link before it is handed over, so a hand-over that fails (no share sheet and no clipboard, or a
+ * browser that refuses either once the tap has waited on the node: Safari's share() and clipboard need the tap itself)
+ * leaves a live link, seven days and one of the member's 50. It is never lost: it is shown to copy by hand, and Try
+ * again (or the button again) hands the same link over inside that tap, with no wait before it; no second link is made.
+ */
 export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
     const info = useCommunityInfo();
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
+    // The link whose hand-over failed, for the post it was made for (the same button may be drawn for another post next).
+    const [kept, setKept] = useState<{ postId: string; link: string } | null>(null);
     if (info?.features?.shareOutside !== true || !shareableOutside(post)) return null;
+    const keptLink = kept?.postId === post.id ? kept.link : null;
+
+    const handOverNow = async (link: string) => {
+        const how = await handOver(post.title, link);
+        if (how === 'failed') {
+            setKept({ postId: post.id, link });
+            setNote({ text: t('Could not copy the link.'), ok: false });
+            return;
+        }
+        if (how === 'cancelled') return;
+        setKept(null);
+        if (how === 'copied') setNote({ text: t('Link copied.'), ok: true });
+    };
 
     const share = async () => {
         setBusy(true);
         setNote(null);
         try {
-            const { link } = await makePeekLink(post.id, nodeOrigin());
-            const how = await handOver(post.title, link);
-            if (how === 'copied') setNote({ text: t('Link copied.'), ok: true });
-            else if (how === 'failed') setNote({ text: t('Could not copy the link.'), ok: false });
+            // A kept link goes straight to the hand-over, still inside the tap; only a new one waits on the node.
+            await handOverNow(keptLink ?? (await makePeekLink(post.id, nodeOrigin())).link);
         } catch (e) {
             setNote({ text: (e as Error)?.message || t(W.notShared), ok: false });
         } finally {
@@ -92,6 +112,16 @@ export function ShareOutsideButton({ post }: { post: MarketplacePost }) {
                 <p role="status" data-testid="share-outside-note" className={`m-0 text-sm font-semibold break-words ${note.ok ? 'text-bp-ink-accent' : 'text-red-700 dark:text-red-300'}`}>
                     {note.text}
                 </p>
+            )}
+            {keptLink && (
+                <div className="flex flex-wrap gap-2 items-center">
+                    <input type="text" readOnly value={keptLink} data-testid="share-outside-link" aria-label={t('The link to share')}
+                        onFocus={e => e.currentTarget.select()}
+                        className="flex-1 min-w-0 basis-48 min-h-[48px] px-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-950 dark:text-white text-sm" />
+                    <button type="button" data-testid="share-outside-retry" onClick={share} disabled={busy} className={BUTTON}>
+                        {t('Try again')}
+                    </button>
+                </div>
             )}
         </div>
     );

@@ -179,6 +179,55 @@ describe('sharing outside, and the member\'s list', () => {
         expect(writeText).not.toHaveBeenCalled();
     });
 
+    it('a hand-over that fails keeps the link the node made: shown to copy by hand, and Try again copies that one, never a second', async () => {
+        const { ShareOutsideButton } = await import('../components/SharePost');
+        const writeText = vi.fn(async (): Promise<void> => { throw Object.assign(new Error('not allowed'), { name: 'NotAllowedError' }); });
+        vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText }, userAgent: DESKTOP, share: undefined });
+        apiMocks.request.mockImplementation(async (method: string, path: string) => {
+            if (method === 'GET' && path === '/api/community/info') return { features: { shareOutside: true } };
+            if (method === 'POST' && path === '/api/peek') return { ticket: T, postId: POST_ID, expiresAt: '2026-11-05T00:00:00Z' };
+            throw new Error('unexpected');
+        });
+        const link = `${window.location.origin}/?post=${POST_ID}&peek=${T}`;
+        render(<ShareOutsideButton post={GUEST_POST as any} />);
+        fireEvent.click(await screen.findByTestId('share-outside-button'));
+        await waitFor(() => expect(screen.getByTestId('share-outside-note').textContent).toBe('Could not copy the link.'));
+        const field = screen.getByTestId('share-outside-link') as HTMLInputElement;
+        expect(field.value).toBe(link);
+        expect(field.readOnly).toBe(true);
+
+        writeText.mockImplementation(async () => {});
+        fireEvent.click(screen.getByTestId('share-outside-retry'));
+        await waitFor(() => expect(screen.getByTestId('share-outside-note').textContent).toBe('Link copied.'));
+        expect(writeText).toHaveBeenLastCalledWith(link);
+        expect(apiMocks.request.mock.calls.filter(([m, p]) => m === 'POST' && p === '/api/peek')).toHaveLength(1);
+        expect(screen.queryByTestId('share-outside-link')).toBeNull();
+    });
+
+    it('a share sheet refused once the tap has waited on the node (Safari): the next tap hands the kept link over inside itself', async () => {
+        const { ShareOutsideButton } = await import('../components/SharePost');
+        const share = vi.fn(async (): Promise<void> => { throw Object.assign(new Error('not allowed'), { name: 'NotAllowedError' }); });
+        const writeText = vi.fn(async (): Promise<void> => { throw Object.assign(new Error('not allowed'), { name: 'NotAllowedError' }); });
+        vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText }, userAgent: DESKTOP, share });
+        apiMocks.request.mockImplementation(async (method: string, path: string) => {
+            if (method === 'GET' && path === '/api/community/info') return { features: { shareOutside: true } };
+            if (method === 'POST' && path === '/api/peek') return { ticket: T, postId: POST_ID, expiresAt: '2026-11-05T00:00:00Z' };
+            throw new Error('unexpected');
+        });
+        render(<ShareOutsideButton post={GUEST_POST as any} />);
+        fireEvent.click(await screen.findByTestId('share-outside-button'));
+        await screen.findByTestId('share-outside-link');
+        expect(share).toHaveBeenCalledTimes(1);
+
+        share.mockImplementation(async () => {});
+        fireEvent.click(screen.getByTestId('share-outside-button'));
+        // Called during the click itself, before anything is awaited: the browser still counts it as the member's tap.
+        expect(share).toHaveBeenCalledTimes(2);
+        expect(share).toHaveBeenLastCalledWith({ title: GUEST_POST.title, text: GUEST_POST.title, url: `${window.location.origin}/?post=${POST_ID}&peek=${T}` });
+        await waitFor(() => expect(screen.queryByTestId('share-outside-link')).toBeNull());
+        expect(apiMocks.request.mock.calls.filter(([m, p]) => m === 'POST' && p === '/api/peek')).toHaveLength(1);
+    });
+
     it('is not offered for a group\'s post, a paused one, or where the community says nothing of it', async () => {
         const { shareableOutside } = await import('../components/SharePost');
         expect(shareableOutside({ audienceScope: 'public', status: 'active', active: true })).toBe(true);

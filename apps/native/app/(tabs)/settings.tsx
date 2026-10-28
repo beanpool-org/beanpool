@@ -68,7 +68,8 @@ import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
-import { beansOn } from '../../utils/node-profile';
+import { beansOn, effectiveFeatures } from '../../utils/node-profile';
+import { useReaderFeatures } from '../../utils/use-reader-features';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
 import { howThisCommunityWorksLabelWords, howThisCommunityWorksSubtitleWords } from '../../components/settings/settings-lines';
@@ -343,6 +344,8 @@ export default function SettingsScreen() {
     const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     // The pricing guide is estimates in Beans: not offered on a community with Beans off (the worldwide one).
     const nodeProfile = useNodeProfile();
+    const readerFeatures = useReaderFeatures();
+    const activeFeatures = effectiveFeatures(nodeProfile?.features, readerFeatures.reader ?? readerFeatures.effective);
     const showsBeans = beansOn(nodeProfile?.features);
     // Your area (design DESIGN-global-sync-by-area §3.5): only on a community that gives each member the listings near
     // their area. The line is the node's value, read each time Settings comes into view (app/your-area.tsx changes it).
@@ -3512,7 +3515,7 @@ export default function SettingsScreen() {
             />
 
             <CommunityShapeSheet
-                features={nodeProfile?.features}
+                features={activeFeatures}
                 visible={shapeSheetOpen}
                 onClose={() => setShapeSheetOpen(false)}
             />

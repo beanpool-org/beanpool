@@ -9,7 +9,7 @@
  *     unsigned (`GET /api/marketplace/posts/:id?peek=`).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { peekLink, readCommunityCard, readPeekShares, type PeekShare } from '@beanpool/core';
+import { peekLink, readCommunityCard, readPeekShares, t, type PeekShare } from '@beanpool/core';
 import { signedGet, signedRequestWithMethod } from './db';
 
 const TIMEOUT_MS = 15_000;
@@ -95,11 +95,26 @@ export async function fetchPeekCommunityName(origin: string, fetchImpl: typeof f
     }
 }
 
+/**
+ * A signed write to this phone's community. An answer without the node's words (`unsaid`: a proxy's 502 page, an empty
+ * 500) is "Request failed: 502", in English: said in words instead, as utils/shop.ts says it, with its status, code and
+ * `unsaid` kept, so a screen can still tell it from a refusal. A refusal keeps the node's own words.
+ */
+async function signedWrite(path: string, body: unknown): Promise<any> {
+    try {
+        return await signedRequestWithMethod('POST', path, body, { withStatus: true });
+    } catch (e) {
+        const err = e as { unsaid?: unknown; status?: unknown; code?: unknown } | null;
+        if (err?.unsaid !== true) throw e;
+        throw Object.assign(new Error(t("Your community couldn't be reached. Try again.")), { status: err.status, unsaid: true }, typeof err.code === 'string' ? { code: err.code } : {});
+    }
+}
+
 /** A new link to share `postId` outside this phone's community. Throws the node's refusal in its own words. */
 export async function makePeekLink(postId: string): Promise<{ link: string; expiresAt: string }> {
     const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchor) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
-    const made = await signedRequestWithMethod('POST', '/api/peek', { postId }, { withStatus: true }) as { ticket: string; postId: string; expiresAt: string };
+    const made = await signedWrite('/api/peek', { postId }) as { ticket: string; postId: string; expiresAt: string };
     return { link: peekLink(anchor, made.postId || postId, made.ticket), expiresAt: made.expiresAt };
 }
 
@@ -112,5 +127,5 @@ export async function fetchPeekShares(): Promise<PeekShare[]> {
 
 /** Stop one of them: it opens nothing from now. */
 export async function stopPeekShare(id: string): Promise<void> {
-    await signedRequestWithMethod('POST', '/api/peek/stop', { id }, { withStatus: true });
+    await signedWrite('/api/peek/stop', { id });
 }

@@ -136,6 +136,7 @@ import { setLanguage } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { MarketBody } from '../../components/home/HomeCardBodies';
 import { lightColors } from '../../constants/colors';
+import type { HomeMarketItem } from '../home-cards';
 import MarketScreen from '../../app/(tabs)/market';
 
 const NODE = 'https://mullum.example';
@@ -196,7 +197,7 @@ async function show(screen: unknown) {
 }
 /** The card (its outermost button) that shows `title`. */
 function cardOf(title: string): HTMLElement {
-    const card = [...host.querySelectorAll('button')].find(b => b.textContent?.includes(title) && !b.parentElement?.closest('button'));
+    const card = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes(title) && !b.parentElement?.closest('button'));
     expect(card, `a card for "${title}"`).toBeTruthy();
     return card as HTMLElement;
 }
@@ -244,9 +245,9 @@ describe("the Market's cards: a banner that will not load gives way to the tile"
 });
 
 describe("Home's Market row: a banner that will not load gives way to the tile", () => {
-    const items = [
-        { id: 'h-bread', type: 'offer' as const, title: 'Sourdough from the bakery', category: 'food', credits: 5, photoUrl: null, bannerUrl: '/api/shops/shop-1/photo?v=ref1&k=Yq' },
-        { id: 'h-tools', type: 'need' as const, title: 'Borrow a long ladder', category: 'tools', credits: 2, photoUrl: null },
+    const items: HomeMarketItem[] = [
+        { id: 'h-bread', type: 'offer', title: 'Sourdough from the bakery', category: 'food', credits: 5, photoUrl: null, bannerUrl: '/api/shops/shop-1/photo?v=ref1&k=Yq' },
+        { id: 'h-tools', type: 'need', title: 'Borrow a long ladder', category: 'tools', credits: 2, photoUrl: null },
     ];
     const body = (list = items) => createElement(MarketBody, { items: list, examples: false, nodeUrl: NODE, showsBeans: true, colors: lightColors, onSeeAll: () => {} });
     const row = (id: string) => host.querySelector(`[data-testid="home-market-${id}"]`) as HTMLElement;

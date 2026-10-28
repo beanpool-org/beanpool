@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
-import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
+import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
 import { requestSync, applyLivePostChange } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
@@ -25,6 +25,8 @@ class WebSocketSyncClient {
     private reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
     /** The member this socket signed in as, so a pushed change about their own listing takes the full sync. */
     private memberPubkey: string | null = null;
+    /** Whether the socket being opened carries the member's signature: only such a socket gets `new_message`. */
+    private signed = false;
     /** Pushed listing changes are written one at a time, in the order the node sent them. */
     private liveQueue: Promise<void> = Promise.resolve();
     private dataUpdatedTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -124,6 +126,7 @@ class WebSocketSyncClient {
 
             this.currentUrl = anchorUrl;
             this.memberPubkey = identity?.publicKey ?? null;
+            this.signed = false;
             let wsUrl = anchorUrl.replace(/^http/, 'ws');
             if (!wsUrl.endsWith('/ws')) {
                 wsUrl = wsUrl.replace(/\/$/, '') + '/ws';
@@ -139,6 +142,7 @@ class WebSocketSyncClient {
                 try {
                     // Signed over the URL the socket opens: its host (request binding) and its path.
                     params.push(await buildSignedWsParams(wsUrl, identity.privateKey, identity.publicKey));
+                    this.signed = true;
                 } catch (err) {
                     // An address that isn't plain (node-url.ts) reaches another host than it names on iOS: no socket
                     // at all, signed or not.
@@ -404,6 +408,15 @@ class WebSocketSyncClient {
         }
     }
 
+    /**
+     * Whether this socket brings the member's new messages as they arrive (@beanpool/core socketAlive): open, signed, and
+     * answered a ping within the watchdog's limit. The tabs' message backstop reads every 120 s while it does, else 30 s.
+     */
+    public isAlive(now: number = Date.now()): boolean {
+        const socket = this.ws;
+        return socketAlive(!!socket && socket.readyState === WebSocket.OPEN, this.signed, this.lastPongAt, now, WebSocketSyncClient.PONG_TIMEOUT_MS);
+    }
+
     public getWatchdogArmedForTest(): boolean {
         return this.watchdogArmed;
     }
@@ -434,4 +447,6 @@ class WebSocketSyncClient {
 const clientInstance = new WebSocketSyncClient();
 export function startWebSocketSync() { clientInstance.start(); }
 export function stopWebSocketSync() { clientInstance.stop(); }
+/** Whether the member's socket is alive now (WebSocketSyncClient.isAlive). */
+export function webSocketAlive(): boolean { return clientInstance.isAlive(); }
 export { WebSocketSyncClient };

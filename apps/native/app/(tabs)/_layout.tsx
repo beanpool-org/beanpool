@@ -7,7 +7,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
-import { dealsNeedingMe, helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { dealsNeedingMe, helpSheetFor, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps, word } from '@beanpool/core';
+import { webSocketAlive } from '../../services/ws-client';
 import { useWords } from '../../components/LanguageProvider';
 import { TourBar, tourSceneInset } from '../../components/TourBar';
 import { HelpSheet } from '../../components/HelpSheet';
@@ -233,10 +234,13 @@ export default function TabLayout() {
         const startPolling = () => {
             if (!iv) {
                 checkUnread(true);
-                // Local badge refresh every 5s; full network message-sync only as a 30s
-                // backstop — real-time arrival is covered by the ws_activity nudge below
+                // Local badge refresh every 5s; full network message-sync only as a backstop — real-time arrival is
+                // covered by the ws_activity nudge below. Every 120 s while the member's socket is alive, every 30 s
+                // while it is not (@beanpool/core messageBackstopDue, slice L0).
                 iv = setInterval(() => checkUnread(false), withJitter(5000));
-                netIv = setInterval(() => checkUnread(true), withJitter(30000));
+                netIv = setInterval(() => {
+                    if (messageBackstopDue(lastNetSyncAtRef.current, Date.now(), webSocketAlive())) checkUnread(true);
+                }, withJitter(MESSAGE_BACKSTOP_TICK_MS));
             }
         };
 

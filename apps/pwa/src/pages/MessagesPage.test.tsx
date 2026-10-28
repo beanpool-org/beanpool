@@ -19,6 +19,8 @@ if (typeof window !== 'undefined' && window.HTMLElement) {
 }
 
 let syncActivityListeners: Array<() => void | Promise<void>> = [];
+/** Whether the member's socket is alive (lib/sync socketIsAlive): the backstop is 120 s while it is, 30 s while not. */
+let socketAliveNow = false;
 
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn((cb: () => void | Promise<void>) => {
@@ -27,6 +29,7 @@ vi.mock('../lib/sync', () => ({
             syncActivityListeners = syncActivityListeners.filter(l => l !== cb);
         };
     }),
+    socketIsAlive: vi.fn(() => socketAliveNow),
 }));
 
 vi.mock('../lib/blocklist', () => ({
@@ -188,6 +191,7 @@ describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+        socketAliveNow = false;
         vi.mocked(getConversationMessages).mockImplementation(async (convId: string) => ({
             conversation: mockConversationDetails[convId] || {
                 id: convId,
@@ -324,6 +328,50 @@ describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
 
         // Backstop poll executed and recovered the message
         expect(screen.getByText('Recovered via 30s backstop poll')).toBeInTheDocument();
+    });
+
+    it('3b. while the member\'s socket is alive the backstop reads every 120 s, not every 30 s (slice L0)', async () => {
+        vi.useFakeTimers();
+        socketAliveNow = true;
+
+        render(
+            <MessagesPage
+                identity={mockIdentity}
+                openConversationId="conv-1"
+            />
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(100);
+        });
+        expect(screen.getByText('Hello Alice!')).toBeInTheDocument();
+        const reads = () => vi.mocked(getConversationMessages).mock.calls.filter(([id]) => id === 'conv-1').length;
+        const opened = reads();
+
+        mockMessagesByConv['conv-1'] = [
+            ...mockMessagesByConv['conv-1'],
+            {
+                id: 'msg-late',
+                conversationId: 'conv-1',
+                authorPubkey: 'peer-pubkey',
+                ciphertext: 'Missed by the doorbell, caught at 120 s',
+                nonce: '00000',
+                timestamp: '2026-09-14T00:00:20.000Z',
+            },
+        ];
+
+        // Three ticks of the 30 s backstop (36 s each at most, jittered): none reads while the socket is alive.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3 * 24_000);
+        });
+        expect(reads()).toBe(opened);
+        expect(screen.queryByText('Missed by the doorbell, caught at 120 s')).not.toBeInTheDocument();
+
+        // By 120 s and one tick more (at most 36 s), it has read once and found the line.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(120_000 + 36_000 - 3 * 24_000);
+        });
+        expect(reads()).toBe(opened + 1);
+        expect(screen.getByText('Missed by the doorbell, caught at 120 s')).toBeInTheDocument();
     });
 
     it('4. unread counts update for a conversation that is not open', async () => {

@@ -38,7 +38,7 @@ import { resizePhotoFile } from '../lib/photo-resize';
 import { searchShownLines, GROUP_LINE_UNVERIFIED_NAME, type DisplayRosterRow } from '../lib/group-line-display';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
-import { onSyncActivity } from '../lib/sync';
+import { onSyncActivity, socketIsAlive } from '../lib/sync';
 import { registerLivePostTie, conversationTie } from '../lib/live-posts';
 import { consumeChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -53,7 +53,7 @@ import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute
 import { EventChat } from '../components/EventChat';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { bundledGroupEmblem, formatDate, listPhotoUrl, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn } from '../lib/features';
 
@@ -564,11 +564,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
             }
 
-            // Poll for new messages every 30 seconds (backstop), paused when tab is hidden
+            // Poll for new messages as a backstop, paused when tab is hidden: every 120 s while the member's socket is
+            // alive (its doorbell below brings each new line at once), every 30 s while it is not (@beanpool/core
+            // messageBackstopDue, slice L0).
+            let lastReadAt = 0;
             const startPolling = () => {
                 if (!pollRef.current) {
+                    lastReadAt = Date.now();
                     loadMessages(activeConv.id);
-                    pollRef.current = window.setInterval(() => loadMessages(activeConv.id), withJitter(30000));
+                    pollRef.current = window.setInterval(() => {
+                        if (!messageBackstopDue(lastReadAt, Date.now(), socketIsAlive())) return;
+                        lastReadAt = Date.now();
+                        loadMessages(activeConv.id);
+                    }, withJitter(MESSAGE_BACKSTOP_TICK_MS));
                 }
             };
 
@@ -597,6 +605,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // immediately, instead of waiting for the next poll tick.
             const unsubscribe = onSyncActivity(() => {
                 if (document.hidden) return;
+                lastReadAt = Date.now();
                 return loadMessages(activeConv.id);
             });
             return () => {

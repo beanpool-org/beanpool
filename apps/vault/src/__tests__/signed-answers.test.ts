@@ -156,7 +156,8 @@ describe('every answer the phone acts on is signed; refusals too; a 5xx never', 
         expect({ copies: statusSays.copies, holds: statusSays.holds }).toEqual({ copies: status.body.copies, holds: status.body.holds });
         expect(statusSays.copies).toEqual([{ provider: 'google', lastReleasedAt: null, updatedDay: expect.any(String), since: expect.any(String) }]);
         // `since` (vault rethink VR1) is signed with the rest, and is the row's day (status.test.ts holds what moves it).
-        expect(statusSays.copies[0].since).toBe(statusSays.copies[0].updatedDay);
+        const [said] = statusSays.copies as { since: unknown; updatedDay: unknown }[];
+        expect(said.since).toBe(said.updatedDay);
 
         const token = await ask('/v1/push-token', { token: 'ExponentPushToken[member-tablet]' }, member.seed);
         expect(verified(token, ['push-token'], member.seed)).toMatchObject({ updated: 1 });

@@ -140,9 +140,9 @@ export function communityShapeLines(features: CommunityShapeFeatures | null | un
     }
 
     // 6. Decisions
-    if (features?.decisions === true || (features?.decisions === undefined && !features?.openJoin)) {
+    if (features?.decisions === true || (features?.decisions === undefined && !features?.openJoin && features?.door !== 'open')) {
         lines.push(t('**Decisions:** members vote; anyone who has completed a trade, and the admins, can propose'));
-    } else if (features?.decisions === false) {
+    } else if (features?.decisions === false || features?.openJoin || features?.door === 'open') {
         lines.push(t('**Decisions:** off — the moderators look after this community'));
     }
 

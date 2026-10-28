@@ -149,6 +149,14 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             ]);
         });
 
+        it('open door without explicit decisions defaults decisions off', () => {
+            const f: CommunityShapeFeatures = {
+                door: 'open',
+                beans: false,
+            };
+            expect(communityShapeLines(f)).toContain('**Decisions:** off — the moderators look after this community');
+        });
+
         it('private preview on', () => {
             const f: CommunityShapeFeatures = {
                 door: 'members',

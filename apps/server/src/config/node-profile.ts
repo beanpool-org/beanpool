@@ -339,6 +339,9 @@ export interface NodeFeatures {
      *  conversation in the lists says whether it is one (`request`), and a member's list holds the requests waiting for
      *  them apart (`requests`). Absent (a local community, or a server from before it): every message arrives as before. */
     dmRequests?: true;
+    /** Present only on member-authenticated reads (GET /api/community/me, GET /api/home) when Beans and the confirmation
+     *  dial are on: the community's known floor amount (design §4.2, §4.3, §6.2, S5). Absent for non-members and on public info. */
+    knownFloor?: number;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';

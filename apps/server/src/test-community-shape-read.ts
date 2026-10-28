@@ -602,9 +602,17 @@ async function main(): Promise<void> {
         const after = await answers();
         assert(isDeepStrictEqual(before, after), `${label}: node/config, community/info, community/me, home's features and known-floor answer the same after the shape is read`);
         const features = after.me?.features ?? {};
-        const want = Object.keys({ ...np.getNodeFeatures(), door: getDoor() }).sort();
-        assert(isDeepStrictEqual(Object.keys(features).sort(), want) && !('knownFloor' in features),
-            `${label}: a member's features carry exactly the node's, and no knownFloor (${Object.keys(features).length} fields)`);
+        const nodeBase = { ...np.getNodeFeatures(), door: getDoor() };
+        const expectsFloor = label === 'a local community';
+        const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: 1000 } : nodeBase).sort();
+        assert(isDeepStrictEqual(Object.keys(features).sort(), want),
+            `${label}: a member's features carry expected fields (${Object.keys(features).length} fields)`);
+        if (expectsFloor) {
+            assert(features.knownFloor === 1000, `${label}: knownFloor is 1000 for member`);
+        } else {
+            assert(!('knownFloor' in features), `${label}: no knownFloor when dial or beans off`);
+        }
+        assert(!('knownFloor' in (after.info?.features ?? {})), `${label}: public info never carries knownFloor`);
         assert(isDeepStrictEqual(Object.keys(after.homeFeatures ?? {}).sort(), want), `${label}: and so do Home's`);
         assert(after.nodeConfig?.acceptKnocks === np.getProfileSwitches().knocks && after.nodeConfig?.door === getDoor(),
             `${label}: node/config still answers acceptKnocks and door (${after.nodeConfig?.acceptKnocks}, ${after.nodeConfig?.door})`);

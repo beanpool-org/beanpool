@@ -6,11 +6,17 @@
  */
 import { getNodeFeatures, type NodeFeatures } from './node-profile.js';
 import { getDoor, type Door } from './door.js';
+import { db } from '../db/db.js';
+import { confirmationDialOn, knownFloor, isNodeMember } from '@beanpool/engine';
 
 export type ReaderFeatures = NodeFeatures & { door: Door };
 
-/** The reader's effective features: the node's today, whoever reads. `actor` is the verified signer, or none. */
+/** The reader's effective features: what `features` says on GET /api/community/me and GET /api/home. */
 export function featuresFor(actor: string | null | undefined): ReaderFeatures {
-    void actor;
-    return { ...getNodeFeatures(), door: getDoor() };
+    const nodeFeatures = getNodeFeatures();
+    const res: ReaderFeatures = { ...nodeFeatures, door: getDoor() };
+    if (actor && isNodeMember(db, actor) && nodeFeatures.beans && confirmationDialOn(db)) {
+        res.knownFloor = knownFloor(db);
+    }
+    return res;
 }

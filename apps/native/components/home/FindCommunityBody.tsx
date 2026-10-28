@@ -43,7 +43,8 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     const [watched, setWatched] = useState(false);
     const [activeKnocks, setActiveKnocks] = useState<readonly RememberedKnock[]>(knocks);
     const [cancellingUrl, setCancellingUrl] = useState<string | null>(null);
-    const [cancelError, setCancelError] = useState<string | null>(null);
+    /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
+    const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
         setActiveKnocks(knocks);
@@ -72,7 +73,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                     style: 'destructive',
                     onPress: async () => {
                         setCancellingUrl(k.url);
-                        setCancelError(null);
+                        setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
                         const res = await cancelKnock(k.url, identity);
                         setCancellingUrl(null);
                         if (res.ok) {
@@ -80,7 +81,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                             setActiveKnocks(next);
                             onKnocksChange?.(next as RememberedKnock[]);
                         } else {
-                            setCancelError(res.message);
+                            setCancelErrors(was => ({ ...was, [k.url]: res.message }));
                         }
                     },
                 },
@@ -169,14 +170,15 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                             <HomeButton
                                 colors={colors}
                                 text={isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
-                                a11y={t(FIND_COMMUNITY_WORDS.cancelRequest)}
-                                onPress={isCancelling ? () => {} : () => onCancelKnock(k)}
+                                a11y={isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                busy={isCancelling}
+                                onPress={() => onCancelKnock(k)}
                                 testID={`home-find-cancel-${k.url}`}
                             />
                         </View>
-                        {!!cancelError && (
-                            <Text style={[s.rowSub, { marginTop: 4, color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="home-find-cancel-error">
-                                {cancelError}
+                        {!!cancelErrors[k.url] && (
+                            <Text style={[s.rowSub, { marginTop: 4, color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID={`home-find-cancel-error-${k.url}`}>
+                                {cancelErrors[k.url]}
                             </Text>
                         )}
                     </View>

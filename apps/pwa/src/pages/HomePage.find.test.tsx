@@ -340,4 +340,108 @@ describe('the honest waiting card on the web find card (Lounge L1)', () => {
         cancelSpy.mockRestore();
         confirmSpy.mockRestore();
     });
+
+    it('a failed cancel says so under the knock it was for, not under another waiting beside it', async () => {
+        const first = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+        const second = { key: 'lismore', name: 'Lismore BeanPool', url: 'https://lismore.example.org', memberCount: 30, distanceKm: 40 };
+        await rememberKnock(ME.publicKey, first, new Date(Date.now() - 5 * 3_600_000));
+        await rememberKnock(ME.publicKey, second, new Date(Date.now() - 4 * 3_600_000));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [first, second] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: false, message: 'Node could not be reached' });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-cancel-knock-https://byron.example.org'));
+
+        const failed = await screen.findByTestId('home-cancel-error-https://byron.example.org');
+        expect(failed).toHaveTextContent('Node could not be reached');
+        expect(within(screen.getByTestId('home-waiting-card-https://byron.example.org')).getByTestId('home-cancel-error-https://byron.example.org')).toBe(failed);
+        // The other request was not touched: no message under it, and its own Cancel is still live.
+        expect(screen.queryByTestId('home-cancel-error-https://lismore.example.org')).toBeNull();
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(screen.getByTestId('home-cancel-knock-https://lismore.example.org')).toBeEnabled();
+
+        readSpy.mockRestore();
+        cancelSpy.mockRestore();
+        confirmSpy.mockRestore();
+    });
+
+    it('a community name or a node\'s own words that will not break wrap inside the card (320 dp, 130%)', async () => {
+        const long = { key: 'long', name: 'A'.repeat(80), url: 'https://long.example.org', memberCount: 9, distanceKm: 30 };
+        await rememberKnock(ME.publicKey, long, new Date(Date.now() - 3_600_000));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [long] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: false, kind: 'refused', status: 500, code: 'x', message: 'B'.repeat(90) });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const sent = await screen.findByTestId('home-waiting-sent-https://long.example.org');
+        const arrived = await screen.findByText('B'.repeat(90));
+        for (const line of [sent, arrived]) {
+            expect(line).toHaveClass('break-words');
+            expect(line).toHaveAttribute('dir', 'auto');
+        }
+
+        readSpy.mockRestore();
+    });
+});
+
+/** What a global node answers, built only for the cards asked (`cards=`), as the real one does. */
+function answerFor(asked: readonly string[] | undefined, over: { joinedDaysAgo: number; listed: string[]; find: Partial<HomeFind> }): HomeAnswer {
+    const joinedAt = new Date(Date.now() - over.joinedDaysAgo * 86_400_000).toISOString();
+    const all: Record<string, unknown> = { find: { ...NONE_NEAR, ...over.find }, market: { items: [], total14d: 0, more: false } };
+    const cards = Object.fromEntries(Object.entries(all).filter(([id]) => !asked || asked.includes(id)));
+    return {
+        generatedAt: NOW, profile: 'global', welcome: false,
+        features: { beans: false, guestListingsOnly: true, invites: false },
+        me: { joinedAt, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: { v: 1, state: 'skipped', at: '2026-10-01T00:00:00.000Z' } },
+        layout: { v: 2, cards: over.listed.map(id => ({ id, type: id })), dismissed: {}, updatedAt: null },
+        cards,
+    } as unknown as HomeAnswer;
+}
+
+describe('Find your community stays on Home where the list does not hold it (Lounge L1, review of #2573)', () => {
+    const BYRON = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12, answers: 'week' as const };
+    const asks = () => vi.mocked(api.getHome).mock.calls.map(c => (c[0] as { cards?: string[] }).cards ?? []);
+    let joinedDaysAgo = 3;
+
+    beforeEach(() => {
+        joinedDaysAgo = 3;
+        vi.mocked(api.getHome).mockImplementation(async (params) => fresh(answerFor((params as { cards?: string[] }).cards, {
+            joinedDaysAgo, listed: ['market'], find: { communities: [BYRON] },
+        })));
+    });
+
+    it('a newcomer on day 3 with no wait: Find is asked for and drawn, as on main', async () => {
+        joinedDaysAgo = 3;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('home-card-find')).toBeInTheDocument();
+        expect(asks().flat()).toContain('find');
+        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+    });
+
+    it('past day 30 with no wait it is a card like any other: not asked for, not drawn', async () => {
+        joinedDaysAgo = 40;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(api.getHome).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByTestId('home-card-market')).toBeInTheDocument());
+        expect(asks().flat()).not.toContain('find');
+        expect(screen.queryByTestId('home-card-find')).toBeNull();
+    });
+
+    it('past day 30 with an open knock, from a list without Find: it is asked for, and the waiting card is drawn', async () => {
+        joinedDaysAgo = 40;
+        await rememberKnock(ME.publicKey, BYRON, new Date(Date.now() - 5 * 3_600_000));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-waiting-card-https://byron.example.org');
+        expect(within(card).getByTestId('home-waiting-sent-https://byron.example.org')).toHaveTextContent('You asked to join Byron Shire BeanPool');
+        // The node was told to build it, and the card has no "…" while the request waits.
+        expect(asks().some(cards => cards.includes('find'))).toBe(true);
+        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+
+        readSpy.mockRestore();
+    });
 });

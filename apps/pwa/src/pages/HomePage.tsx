@@ -985,7 +985,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
     const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
     const [cancellingKnock, setCancellingKnock] = useState<string | null>(null);
-    const [cancelError, setCancelError] = useState<string | null>(null);
+    /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
+    const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (!publicKey) {
@@ -1017,18 +1018,25 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const ok = window.confirm(t(FIND_COMMUNITY_WORDS.cancelConfirmText, { name }));
         if (!ok) return;
         setCancellingKnock(k.url);
-        setCancelError(null);
+        setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
         const res = await cancelKnock(k.url, identity);
         setCancellingKnock(null);
         if (res.ok) {
             setKnocks(was => was.filter(item => item.url !== k.url));
         } else {
-            setCancelError(res.message);
+            setCancelErrors(was => ({ ...was, [k.url]: res.message }));
         }
     };
 
     const knocksRef = useRef(knocks);
     knocksRef.current = knocks;
+
+    // The pins to ask by, with the knocks this browser remembers: a member whose list lacks `find` and whose request waits
+    // asks for the card that carries the waiting line, or the node never builds it (Lounge L1, review of #2573).
+    const askPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
+        const hasOpenKnock = knocksRef.current.some(k => !k.cancelledAt && knockStillAnswerable(k, at));
+        return askPinned(ans, at, { hasOpenKnock });
+    }, []);
 
     const currentPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
         const hasOpenKnock = (knocksRef.current ?? knocks).some(k => !k.cancelledAt && knockStillAnswerable(k, at));
@@ -1202,7 +1210,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }, [publicKey, keep, holds, landedEpoch]);
 
     // The cards an answer read with no `cards=` was built for: the node's own choice from the account's list.
-    const builtFor = (a: HomeAnswer): string[] => cardsToAsk(readLayout(a.layout), askPinned(a, Date.now()), frameOf(a));
+    const builtFor = (a: HomeAnswer): string[] => cardsToAsk(readLayout(a.layout), askPins(a), frameOf(a));
 
     const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point' | 'layout') => {
         // Signed out, here or in another tab: nothing more is read as that account. Cleared since the page landed: it
@@ -1219,7 +1227,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             // left off after that: the node would build its whole old catalogue every read (review of #1701, finding 6).
             const held = answerRef.current;
             const sent = drawnRef.current || (held?.me && !held.welcome)
-                ? cardsToAsk(drawnRef.current, askPinned(held, Date.now()), held ? frameOf(held) : null) : undefined;
+                ? cardsToAsk(drawnRef.current, askPins(held), held ? frameOf(held) : null) : undefined;
             const readPromise = getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
                 answerRef.current ? etagRef.current : null);
             markHomeInflight(readPromise);
@@ -1304,7 +1312,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             const built = builtForRef.current ?? [];
             const goes = sentPoint(pointRef.current, pick.layout);
             const moved = !!p && !!goes && (goes.lat !== p.lat || goes.lng !== p.lng);
-            if (member && !extraRead.current && (moved || cardsToAsk(pick.layout, askPinned(a, Date.now()), frameOf(a)).some(id => !built.includes(id)))) {
+            if (member && !extraRead.current && (moved || cardsToAsk(pick.layout, askPins(a), frameOf(a)).some(id => !built.includes(id)))) {
                 extraRead.current = true;
                 if (saving) void saving.then(() => fetchHomeRef.current?.('layout'));
                 else again.current = true;
@@ -1341,6 +1349,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }, [keep, saveLayout, publicKey, holds, landedEpoch]);
     const fetchHomeRef = useRef(fetchHome);
     fetchHomeRef.current = fetchHome;
+
+    // The knocks are read after the first answer may be in: a request that waits pins Find, and a list without it never asked
+    // for it, so the card that carries the waiting line is read for now (a read that knows the knocks asks for it by itself).
+    useEffect(() => {
+        const held = answerRef.current;
+        const built = builtForRef.current;
+        if (!held?.me || held.welcome || !built || !knocks.length) return;
+        if (cardsToAsk(drawnRef.current, askPins(held), frameOf(held)).some(id => !built.includes(id))) void fetchHomeRef.current('layout');
+    }, [knockKey]);
 
     // Landing: the copy this browser kept, drawn at once, then the node.
     useEffect(() => {
@@ -1674,7 +1691,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const saving = refusedLanding.current ? Promise.resolve() : saveLayout(next);
         // An add, a card's settings, Reset, or a card the answer wasn't built for: read Home again once the save is
         // answered (the node builds an instance from the settings it keeps). A move or a remove reads nothing.
-        const pins = askPinned(answered, Date.now());
+        const pins = askPins(answered);
         const had = builtForRef.current ?? cardsToAsk(before, pins, frameOf(answered));
         if (opts.reread || cardsToAsk(next, pins, frameOf(answered)).some(id => !had.includes(id))) void saving.then(() => fetchHomeRef.current('layout')).then(opts.afterRead);
         else opts.afterRead?.();
@@ -2000,7 +2017,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             if (st?.ok && st.value.status === 'approved') {
                                 const approved = cardKnockLines([k], knockStatuses)[0];
                                 return (
-                                    <p key={k.url} className="m-0 mt-2 font-semibold text-sm text-text-primary" data-testid={`home-find-invited-${k.url}`}>
+                                    <p key={k.url} dir="auto" className="m-0 mt-2 font-semibold text-sm text-text-primary break-words" data-testid={`home-find-invited-${k.url}`}>
                                         {'🎉 ' + (approved?.text ?? '')}
                                     </p>
                                 );
@@ -2017,14 +2034,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
                             return (
                                 <div key={k.url} data-testid={`home-waiting-card-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
-                                    <p className="m-0 text-sm font-semibold text-text-primary" data-testid={`home-waiting-sent-${k.url}`}>
+                                    <p dir="auto" className="m-0 text-sm font-semibold text-text-primary break-words" data-testid={`home-waiting-sent-${k.url}`}>
                                         {t(FIND_COMMUNITY_WORDS.askedOnDate, { name, date: sentDate })}
                                     </p>
-                                    <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200" data-testid={`home-waiting-arrived-${k.url}`}>
+                                    <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-arrived-${k.url}`}>
                                         {arrivedLine}
                                     </p>
                                     {answersLine && (
-                                        <p className="m-0 mt-1 text-xs italic text-nature-600 dark:text-nature-300" data-testid={`home-waiting-answers-${k.url}`}>
+                                        <p className="m-0 mt-1 text-xs italic text-nature-600 dark:text-nature-300 break-words" data-testid={`home-waiting-answers-${k.url}`}>
                                             {answersLine}
                                         </p>
                                     )}
@@ -2039,9 +2056,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                             {isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
                                         </button>
                                     </div>
-                                    {cancelError && (
-                                        <p role="alert" className="m-0 mt-1 text-xs text-red-600 dark:text-red-400" data-testid={`home-cancel-error-${k.url}`}>
-                                            {cancelError}
+                                    {cancelErrors[k.url] && (
+                                        <p role="alert" dir="auto" className="m-0 mt-1 text-xs text-red-600 dark:text-red-400 break-words" data-testid={`home-cancel-error-${k.url}`}>
+                                            {cancelErrors[k.url]}
                                         </p>
                                     )}
                                 </div>

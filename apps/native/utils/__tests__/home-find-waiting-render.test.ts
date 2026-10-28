@@ -26,6 +26,8 @@ vi.mock('react-native', () => {
         const attrs: Record<string, unknown> = {};
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (props.accessibilityState?.busy) attrs['aria-busy'] = 'true';
+        if (props.accessibilityState?.disabled || disabled) attrs['aria-disabled'] = 'true';
         if (testID) attrs['data-testid'] = testID;
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
@@ -185,7 +187,60 @@ describe('FindCommunityBody honest waiting card (Lounge L1)', () => {
             await destructiveBtn.onPress();
         });
 
-        expect(host.querySelector('[data-testid="home-find-cancel-error"]')?.textContent).toBe('Network offline');
+        expect(host.querySelector('[data-testid="home-find-cancel-error-https://byron.example.org"]')?.textContent).toBe('Network offline');
         expect(host.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')).not.toBeNull();
+    });
+
+    it('a failed cancel says so under the knock it was for, not under another waiting beside it', async () => {
+        const other: RememberedKnock = { url: 'https://lismore.example.org', name: 'Lismore BeanPool', key: 'lismore', sentAt: '2026-10-26T00:00:00.000Z' };
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'Network offline' });
+
+        const host = await render([knock, other]);
+
+        await act(async () => {
+            (host.querySelector('[data-testid="home-find-cancel-https://byron.example.org"]') as HTMLButtonElement).click();
+        });
+        const destructiveBtn = alertMock.mock.calls[0][2].find((b: any) => b.style === 'destructive');
+        await act(async () => {
+            await destructiveBtn.onPress();
+        });
+
+        const failed = host.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')!;
+        expect(failed.querySelector('[data-testid="home-find-cancel-error-https://byron.example.org"]')?.textContent).toBe('Network offline');
+        const untouched = host.querySelector('[data-testid="home-find-waiting-https://lismore.example.org"]')!;
+        expect(untouched).not.toBeNull();
+        expect(untouched.querySelector('[data-testid^="home-find-cancel-error"]')).toBeNull();
+        expect(host.querySelectorAll('[data-testid^="home-find-cancel-error"]')).toHaveLength(1);
+    });
+
+    it('while the cancel is out the button says so to a screen reader too, is busy and disabled, and a second press does nothing', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'pending' } });
+        let finish: (r: { ok: boolean; message?: string }) => void = () => {};
+        cancelKnockMock.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+
+        const host = await render([knock]);
+        const button = () => host.querySelector('[data-testid="home-find-cancel-https://byron.example.org"]') as HTMLButtonElement;
+        expect(button().getAttribute('aria-label')).toBe('Cancel my request');
+        expect(button().getAttribute('aria-busy')).toBeNull();
+
+        await act(async () => { button().click(); });
+        const destructiveBtn = alertMock.mock.calls[0][2].find((b: any) => b.style === 'destructive');
+        let pending!: Promise<void>;
+        await act(async () => { pending = destructiveBtn.onPress(); });
+
+        expect(button().textContent).toBe('Cancelling…');
+        expect(button().getAttribute('aria-label')).toBe('Cancelling…');
+        expect(button().getAttribute('aria-busy')).toBe('true');
+        expect(button().getAttribute('aria-disabled')).toBe('true');
+        await act(async () => { button().click(); });
+        expect(alertMock).toHaveBeenCalledTimes(1);
+        expect(cancelKnockMock).toHaveBeenCalledTimes(1);
+
+        // It failed: the button is itself again, and says why.
+        await act(async () => { finish({ ok: false, message: 'Network offline' }); await pending; });
+        expect(button().textContent).toBe('Cancel my request');
+        expect(button().getAttribute('aria-label')).toBe('Cancel my request');
+        expect(button().getAttribute('aria-busy')).toBeNull();
     });
 });

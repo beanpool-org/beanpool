@@ -575,9 +575,28 @@ describe('MemberDetailModal', () => {
             }
         });
 
+        it("and the suspension's words for them say the vote can't remove them: it lifts when the vote closes", async () => {
+            vi.spyOn(nodeClient, 'emergencySuspendMember').mockResolvedValue({
+                success: true,
+                decision: { id: 'dec-4', closesAt: '2026-09-26T00:00:00.000Z', effect: 'remove_member', params: { serverRole: 'admin' } },
+            });
+            draw({ nodeRole: 'admin' });
+            await screen.findByTestId('removal-is-the-vote');
+            expect(screen.getByText(/^Suspend now: members then vote, but no vote removes an owner or admin, so it lifts when the vote closes\.$/)).toBeInTheDocument();
+            await userEvent.click(screen.getByText('⏸️ Suspend'));
+            expect(screen.getByText(/Members then vote for 7 days, but no vote removes an owner or admin: the suspension lifts when the vote closes, whatever it decides\.$/))
+                .toBeInTheDocument();
+            await userEvent.type(screen.getByLabelText('Reason (members will see this)'), 'threats at the market, twice');
+            await userEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
+            expect(await screen.findByText(/^Suspended until .+\. Members vote on removing them, but no vote removes an owner or admin: the suspension lifts when the vote closes, whatever it decides\.$/))
+                .toBeInTheDocument();
+            expect(screen.queryByText(/if the vote doesn't pass/)).toBeNull();
+        });
+
         it('for a moderator, a member with a job whom a vote can remove, the suspension opens the vote', async () => {
             draw({ nodeRole: 'moderator' });
             expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+            expect(screen.getByText(/^Suspend now: the community then votes on removing them\.$/)).toBeInTheDocument();
         });
 
         it('offers Offboard inside a removal the community voted for, and still no Prune', async () => {

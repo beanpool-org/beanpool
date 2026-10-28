@@ -187,8 +187,11 @@ export function MemberDetailModal({
             setSuspendReason('');
             // A node with formal Decisions off (global) opens no vote: the server marks the row noVote (#1243). Since removal
             // by vote S2 the vote it opens is on removing the member; a node before it opened "Keep this suspension?".
+            // An owner or admin (the server's params.serverRole): no vote removes one, so whatever it decides the pause ends.
             setSuspendDone(res.decision?.params?.noVote === true
                 ? `Suspended until ${closes}. It lifts by itself then, or sooner if you lift it.`
+                : res.decision?.params?.serverRole
+                    ? `Suspended until ${closes}. Members vote on removing them, but no vote removes an owner or admin: the suspension lifts when the vote closes, whatever it decides.`
                 : res.decision?.effect === 'remove_member'
                     ? `Suspended. Members now vote until ${closes} on removing them; if the vote doesn't pass, the suspension lifts by itself.`
                     : `Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
@@ -230,6 +233,8 @@ export function MemberDetailModal({
     }, [nodeRole, member?.nodeRole]);
 
     const currentRole = localRole;
+    // No vote removes an owner or an admin (the server's §3.8 refusal): suspending one only parks them until its vote closes.
+    const holdsServerRole = currentRole === 'owner' || currentRole === 'admin';
     const effectiveViewerRole: MemberNodeRole | null = viewerRole !== undefined ? viewerRole : 'owner';
 
     // Counts the OTHER owners, and lets this member's live role stand for them: the members list and ownerCount were
@@ -655,6 +660,11 @@ export function MemberDetailModal({
                                         <p className="m-0 text-nature-300">
                                             Suspends <strong>{displayName}</strong> now, for 7 days. It lifts by itself then, or sooner if you lift it.
                                         </p>
+                                    ) : holdsServerRole ? (
+                                        <p className="m-0 text-nature-300">
+                                            Suspends <strong>{displayName}</strong> now. Members then vote for 7 days, but no vote removes an owner or
+                                            admin: the suspension lifts when the vote closes, whatever it decides.
+                                        </p>
                                     ) : (
                                         <p className="m-0 text-nature-300">
                                             Suspends <strong>{displayName}</strong> now. Members then vote for 7 days on removing them; if the
@@ -696,7 +706,9 @@ export function MemberDetailModal({
                                     <span className="text-nature-400">
                                         {doors?.votesOn === false
                                             ? 'Emergency: suspend now, for 7 days.'
-                                            : 'Suspend now: the community then votes on removing them.'}
+                                            : holdsServerRole
+                                                ? 'Suspend now: members then vote, but no vote removes an owner or admin, so it lifts when the vote closes.'
+                                                : 'Suspend now: the community then votes on removing them.'}
                                     </span>
                                     <button
                                         onClick={() => { setShowSuspend(true); setSuspendDone(null); }}
@@ -821,12 +833,11 @@ export function MemberDetailModal({
                             )}
                         </div>
                     )}
-                    {/* No vote removes an owner or an admin (the server's §3.8 refusal): suspending one only parks them until its vote closes. */}
                     {removalIsTheVote && (
                         <p className="m-0 text-[11px] text-nature-400" data-testid="removal-is-the-vote">
                             {doors?.settlesRemoval
                                 ? "Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now."
-                                : currentRole === 'owner' || currentRole === 'admin'
+                                : holdsServerRole
                                     ? "Removing a member is the community's vote here, and no vote removes an owner or admin. An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote."
                                     : "Removing a member is the community's vote here. Suspending them opens it."}
                         </p>

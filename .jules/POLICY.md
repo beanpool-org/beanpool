@@ -1142,3 +1142,26 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 ### 2026-10-27 — Flow: loading state in AgentSuggestionsPanel, third filing (#2522) — CLOSED, RE-FILE OF #1957/#2076
 - **Category:** RE-FILE (third filing)
 - **Why not to re-file:** the spinner card flashes and vanishes on the many nodes with no suggestions. See #1957.
+
+### 2026-10-28 — Atlas: unit test for getEngineVolumeCap (#2544) — CLOSED, RE-FILE OF #1506 (TAUTOLOGICAL)
+- **Category:** CLAIM FALSE
+- **Claim:** `getEngineVolumeCap()` in the manager has no unit test.
+- **Why not to re-file:** the function is `return PER_COUNTERPARTY_VOLUME_CAP`, so the test asserts a constant equals itself and fails for no change anyone could make. Same as #1506.
+
+### 2026-10-28 — Forge: catch errors in the group decision vote route (#2545) — CLOSED, DELIBERATE DECISION
+- **Category:** DELIBERATE DECISION
+- **Claim:** the vote route should catch errors from `castDecisionVote` and answer 400.
+- **Why not to re-file:** Koa already answers a throw with 500. A 400 tells the member their request was wrong when the server failed (.jules/forge.md: a thrown domain error is a server fault), and the PR moved the vote inside the try that maps ScopedNotFoundError to 404. No failure was reproduced. Re-file only with a reproduced failure and a test that fails on main.
+
+### 2026-10-28 — Bolt: Map lookup for groups in the PWA ProjectsPage (#2547) — CLOSED, RE-FILE OF #1754/#2072
+- **Category:** RE-FILE (see #1754, #2072)
+- **Why not to re-file:** no more Map-for-find swaps without a profile of a real screen. A community has a handful of groups; nothing measurable is saved.
+
+### 2026-10-28 — Flow: typed catch blocks in TakeoverLockPanel (#2548) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** `catch (e)` in the manager's TakeoverLockPanel is untyped and should be `unknown`.
+- **Why not to re-file:** `useUnknownInCatchVariables` already makes `e` `unknown`, so the type change is a no-op. The PR also changed the panel's fallback text (identity: take-over keys and recovery codes) with no test.
+
+### 2026-10-28 — Expo: first of repeated params in rekey-code.tsx, seventh filing (#2549) — CLOSED, DECIDED (#1753, #2073, #2118, #2174, #2343, #2517)
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** a link that repeats a parameter is ambiguous and refused on purpose, on EVERY screen, the re-key screen included (see #2343). Re-file only with a real link that produces the array AND Marty's decision.

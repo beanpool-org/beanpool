@@ -14,7 +14,11 @@ import { randomBytes } from 'node:crypto';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const alertMock = vi.fn();
+const { alertMock, readKnockStatusMock, cancelKnockMock } = vi.hoisted(() => ({
+    alertMock: vi.fn(),
+    readKnockStatusMock: vi.fn(),
+    cancelKnockMock: vi.fn(),
+}));
 
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
@@ -37,8 +41,6 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
 
-const readKnockStatusMock = vi.fn();
-const cancelKnockMock = vi.fn();
 vi.mock('../../utils/knock', () => ({
     readKnockStatus: (...args: unknown[]) => readKnockStatusMock(...args),
     cancelKnock: (...args: unknown[]) => cancelKnockMock(...args),

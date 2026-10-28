@@ -64,11 +64,11 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
         const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
         Alert.alert(
             t(FIND_COMMUNITY_WORDS.cancelRequest),
-            t(FIND_COMMUNITY_WORDS.cancelConfirmBody, { name }),
+            t(FIND_COMMUNITY_WORDS.cancelConfirmText, { name }),
             [
                 { text: t(FIND_COMMUNITY_WORDS.keepIt), style: 'cancel' },
                 {
-                    text: t(FIND_COMMUNITY_WORDS.cancelConfirmText),
+                    text: t(FIND_COMMUNITY_WORDS.cancelRequest),
                     style: 'destructive',
                     onPress: async () => {
                         setCancellingUrl(k.url);

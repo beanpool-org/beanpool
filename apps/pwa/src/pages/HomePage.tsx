@@ -1014,7 +1014,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const handleCancelKnock = async (k: RememberedKnock) => {
         if (!identity) return;
         const name = k.name ?? k.url.replace(/^https:\/\//, '');
-        const ok = window.confirm(t(FIND_COMMUNITY_WORDS.cancelConfirmBody, { name }));
+        const ok = window.confirm(t(FIND_COMMUNITY_WORDS.cancelConfirmText, { name }));
         if (!ok) return;
         setCancellingKnock(k.url);
         setCancelError(null);

@@ -5,9 +5,12 @@ import '../src/index.css';
 const params = new URLSearchParams(window.location.search);
 
 if (params.get('dark') === '1') {
-    document.documentElement.classList.add('dark');
+    document.documentElement.classList.add('dark', 'dark-theme');
+    document.documentElement.style.colorScheme = 'dark';
 } else {
-    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.remove('dark', 'dark-theme');
+    document.documentElement.classList.add('light-theme');
+    document.documentElement.style.colorScheme = 'light';
 }
 
 function Harness() {
@@ -62,16 +65,16 @@ function Harness() {
                     </div>
                 </div>
 
-                <div className="flex gap-2 mt-3">
+                <div className="flex flex-col gap-2 mt-3">
                     <button
                         type="button"
-                        className="min-h-[44px] px-4 py-2 text-sm font-medium rounded-lg bg-nature-800 text-white dark:bg-nature-100 dark:text-nature-900"
+                        className="w-full min-h-[44px] px-4 py-2 text-sm font-medium rounded-lg bg-nature-800 text-white dark:bg-nature-100 dark:text-nature-900"
                     >
                         {t('Communities near you')}
                     </button>
                     <button
                         type="button"
-                        className="min-h-[44px] px-4 py-2 text-sm font-medium rounded-lg border border-nature-300 dark:border-nature-700 bg-transparent text-text-primary"
+                        className="w-full min-h-[44px] px-4 py-2 text-sm font-medium rounded-lg border border-nature-300 dark:border-nature-700 bg-transparent text-text-primary"
                     >
                         {t(FIND_COMMUNITY_WORDS.start)}
                     </button>

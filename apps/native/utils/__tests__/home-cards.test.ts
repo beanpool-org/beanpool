@@ -881,7 +881,14 @@ describe('the global node\'s Home (H4)', () => {
     const hidesFind = layout({ hidden: ['find'], order: ['market', 'events', 'find'] });
 
     it('Find your community is first, and can\'t be hidden or moved, while a knock or watch is open (Lounge L1, wait-based pin)', () => {
-        const a = member(40, { cards: { find: find({ watches: [{ point: 'area', radiusKm: 25 }] }) } });
+        const a = member(40, {
+            cards: {
+                find: find({ watches: [{ point: 'area', radiusKm: 25 }] }),
+                market: market(2),
+                events,
+                community: { name: 'BeanPool', members: 2310, communities: 38 },
+            },
+        });
         expect(findPinned(a, NOW)).toBe(true);
         const pins = pinnedCards(a, NOW);
         expect(pins).toEqual(['find']);

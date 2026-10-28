@@ -158,7 +158,7 @@ const result = await build({
     resolveExtensions: ['.web.tsx', '.web.ts', '.web.js', '.tsx', '.ts', '.js', '.mjs', '.json'],
     nodePaths: [path.join(ROOT, 'node_modules'), path.join(NATIVE, 'node_modules')],
     define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"' },
-    banner: { js: 'globalThis.process = globalThis.process || { env: {} };' },
+    banner: { js: 'globalThis.process = globalThis.process || { env: {} }; globalThis.global = globalThis;' },
     logLevel: 'error',
     plugins: [{
         name: 'stubs',
@@ -176,6 +176,7 @@ const result = await build({
 
 const bundle = result.outputFiles[0].text;
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=${WIDTH}">
+<script>window.process = window.process || { env: {} }; window.global = window;</script>
 <style>html,body,#root{margin:0;height:100%} body{font-family:sans-serif}</style></head>
 <body><div id="root"></div><script type="module" src="/app.js"></script></body></html>`;
 
@@ -194,7 +195,8 @@ try {
     await context.route('**/*', (route) => (route.request().url().startsWith(base) ? route.continue() : route.abort()));
     const page = await context.newPage();
     const errors = [];
-    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('pageerror', (e) => { console.error('PAGE ERROR:', e); errors.push(String(e)); });
+    page.on('console', (msg) => console.log('BROWSER LOG:', msg.text()));
 
     const measure = async (label) => {
         states++;

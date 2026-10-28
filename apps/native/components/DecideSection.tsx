@@ -14,17 +14,19 @@ import {
     type DecisionWithTally,
     type MyPoolVoting,
     castDecisionVote,
+    reportRemovalCase,
 } from '../utils/db';
 import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
-    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline,
-    poolVoteBlocker, turnoutLine, voiceCreditsLine,
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
+    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, turnoutLine, voiceCreditsLine,
 } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
 import { signedRequestWords } from './signed-request-lines';
+import { RemovalReplySheet } from './RemovalReplySheet';
 
 /**
  * The question Decide's button and the Commons "+" ask before a Decision can be proposed, whole, in the member's language.
@@ -103,6 +105,11 @@ export function DecideSection({
     const [votingId, setVotingId] = useState<string | null>(null);
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
+    // The vote on removing this member whose case they are replying to (removal by vote, Amendment A point 2), and the
+    // reply the node has, to start a change from.
+    const [replyTarget, setReplyTarget] = useState<{ id: string; current: string | null } | null>(null);
+    // Votes whose case the member has reported as false (Amendment A point 4).
+    const [reportedCases, setReportedCases] = useState<Record<string, boolean>>({});
 
     const openDecisions = decisions.filter(d => d.status === 'open');
     const pastDecisions = decisions.filter(d => d.status !== 'open');
@@ -642,10 +649,135 @@ export function DecideSection({
             marginTop: 4,
             lineHeight: 15,
         },
+        // A vote on removing a member (removal by vote, Amendment A): its case hidden as false, who proposed it, the
+        // member's reply, and the member's own ways to reply and to report the case.
+        caseHiddenText: {
+            fontSize: 13,
+            color: colors.feedback.warning.fg,
+            fontWeight: '700',
+            lineHeight: 18,
+            marginBottom: 12,
+        },
+        proposedByText: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            marginBottom: 8,
+        },
+        replyBox: {
+            backgroundColor: colors.feedback.info.bg,
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: colors.feedback.info.border,
+            gap: 4,
+        },
+        replyHeading: {
+            fontSize: 13,
+            fontWeight: '800',
+            color: colors.feedback.info.fg,
+        },
+        replyText: {
+            fontSize: 14,
+            color: colors.text.heading,
+            lineHeight: 20,
+        },
+        caseLinkBtn: {
+            minHeight: 44,
+            justifyContent: 'center',
+            alignSelf: 'flex-start',
+        },
+        caseLinkText: {
+            fontSize: 13,
+            fontWeight: '800',
+            color: colors.feedback.info.fg,
+            textDecorationLine: 'underline',
+        },
+        reportLinkText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.feedback.danger.fg,
+            textDecorationLine: 'underline',
+        },
+        reportedText: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: colors.feedback.success.fg,
+            marginBottom: 8,
+        },
     }));
+
+    const handleReportCase = (decision: DecisionWithTally) => {
+        Alert.alert(
+            t('Report this case as false'),
+            t('Report this case as a false accusation? The admins and owners see your report, and who brought the case.'),
+            [
+                { text: t('Cancel'), style: 'cancel' },
+                {
+                    text: t('Report'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await reportRemovalCase(decision.id);
+                            setReportedCases(prev => ({ ...prev, [decision.id]: true }));
+                        } catch (err: any) {
+                            Alert.alert(t('Error'), err?.message ? signedRequestWords(err.message) : t('Your report could not be sent.'));
+                        }
+                    },
+                },
+            ],
+        );
+    };
+
+    /**
+     * A vote on removing a member, beside its case (removal by vote, Amendment A): who proposed it (a member's own, from
+     * before; a pause's names its admin in its box), the member's reply, and to the member themself the way to reply while
+     * it is open (a sheet, RemovalReplySheet) and to report the case as false. Nothing for any other Decision.
+     */
+    const removalCaseParts = (item: DecisionWithTally, open: boolean) => {
+        if (item.effect !== 'remove_member') return null;
+        const mine = !preview && isOwnRemoval(item, identity?.publicKey);
+        const proposedBy = proposedByLine(item);
+        return (
+            <>
+                {!!proposedBy && <Text style={styles.proposedByText} testID="removal-proposed-by">{proposedBy}</Text>}
+                {!!item.subjectReply && (
+                    <View style={styles.replyBox} testID="removal-reply">
+                        <Text style={styles.replyHeading}>{replyHeading(item.params, item.subject?.slice(0, 8) || t('a member'), mine)}</Text>
+                        <Text style={styles.replyText}>{item.subjectReply}</Text>
+                    </View>
+                )}
+                {mine && open && (
+                    <Pressable
+                        accessibilityRole="button"
+                        style={styles.caseLinkBtn}
+                        onPress={() => setReplyTarget({ id: item.id, current: item.subjectReply ?? null })}
+                        testID="removal-reply-open"
+                    >
+                        <Text style={styles.caseLinkText}>{item.subjectReply ? t('Change your reply') : t('Reply to this case')}</Text>
+                    </Pressable>
+                )}
+                {mine && item.proposer?.kind !== 'password' && (
+                    reportedCases[item.id] ? (
+                        <Text style={styles.reportedText} testID="removal-case-reported">{t('Reported. The admins and owners will look at it.')}</Text>
+                    ) : (
+                        <Pressable accessibilityRole="button" style={styles.caseLinkBtn} onPress={() => handleReportCase(item)} testID="removal-case-report">
+                            <Text style={styles.reportLinkText}>{t('Report this case as false')}</Text>
+                        </Pressable>
+                    )
+                )}
+            </>
+        );
+    };
 
     return (
         <View style={styles.container} testID={preview ? 'decide-preview' : undefined}>
+            <RemovalReplySheet
+                decisionId={replyTarget?.id ?? null}
+                current={replyTarget?.current ?? null}
+                onClose={() => setReplyTarget(null)}
+                onSent={onRefresh}
+            />
             {preview && (
                 <View style={{ marginBottom: 16 }}>
                     <View style={{ marginHorizontal: -16 }}>
@@ -809,9 +941,11 @@ export function DecideSection({
                                         </View>
                                     </View>
 
-                                    {/* Title & Description */}
+                                    {/* Title & Description; a case an admin hid as false, in its place (Amendment A point 4) */}
                                     <Text style={styles.decisionTitle}>{item.title}</Text>
-                                    <Text style={styles.decisionDesc}>{item.description}</Text>
+                                    {item.caseHiddenAt
+                                        ? <Text style={styles.caseHiddenText} testID="removal-case-hidden">{caseHiddenLine(item.caseHiddenReason)}</Text>
+                                        : <Text style={styles.decisionDesc}>{item.description}</Text>}
 
                                     {/* Emergency suspension: the node opened this vote when an admin suspended someone (answer L) */}
                                     {item.effect === 'keep_suspension' && (
@@ -829,13 +963,15 @@ export function DecideSection({
                                     {isPauseVote(item) && (
                                         <View style={styles.keepBox} testID="pause-vote-box">
                                             <Text style={styles.keepHeadline}>
-                                                {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                                {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'), item.proposer)}
                                             </Text>
                                             <Text style={styles.keepBody}>
                                                 {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                             </Text>
                                         </View>
                                     )}
+
+                                    {removalCaseParts(item, true)}
 
                                     {/* §3.8 Removal Ballot debt-write-off line */}
                                     {showsBeans && item.effect === 'remove_member' && (
@@ -1075,7 +1211,11 @@ export function DecideSection({
                                     </View>
 
                                     <Text style={styles.decisionTitle}>{item.title}</Text>
-                                    <Text style={styles.decisionDesc}>{item.description}</Text>
+                                    {item.caseHiddenAt
+                                        ? <Text style={styles.caseHiddenText} testID="removal-case-hidden">{caseHiddenLine(item.caseHiddenReason)}</Text>
+                                        : <Text style={styles.decisionDesc}>{item.description}</Text>}
+
+                                    {removalCaseParts(item, false)}
 
                                     {/* Final Tally Summary */}
                                     <View style={styles.metricsContainer}>

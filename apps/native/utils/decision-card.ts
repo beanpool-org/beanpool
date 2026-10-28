@@ -4,7 +4,7 @@
  */
 
 import { formatDate, t, tn, word } from '@beanpool/core';
-import type { DecisionTally, MyPoolVoting } from './db';
+import type { DecisionTally, MyPoolVoting, RemovalProposer } from './db';
 
 /** The card's sentences that are also the node's own answers: word() keys, shown through t(). */
 export const DECISION_CARD_WORDS = {
@@ -61,13 +61,47 @@ export function isOwnRemoval(decision: { effect: string; subject?: string | null
     return decision.effect === 'remove_member' && !!me && decision.subject === me;
 }
 
-/** The pause vote card's first line: who was paused, and when (core's formatDate, "22 Oct 2026"). */
-export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: string } | null | undefined, fallbackName: string): string {
+/**
+ * The pause vote card's first line: who paused whom, and when (core's formatDate, "22 Oct 2026"). The admin who paused is
+ * named (removal by vote, Amendment A point 3: the node sends `proposer`); an owner who paused with the server's password
+ * is named as an owner, since the password names nobody; a node from before names no one, as before.
+ */
+export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: string } | null | undefined, fallbackName: string, proposer?: RemovalProposer | null): string {
     const name = params?.memberName || fallbackName;
     const at = params?.pausedAt ? Date.parse(params.pausedAt) : NaN;
-    return Number.isFinite(at)
-        ? t('An admin paused {name} on {date}.', { name, date: formatDate(new Date(at), 'day-month-year') })
-        : t('An admin paused {name}.', { name });
+    const date = Number.isFinite(at) ? formatDate(new Date(at), 'day-month-year') : null;
+    if (proposer?.kind === 'admin' && proposer.name) {
+        return date
+            ? t('{admin}, an admin, paused {name} on {date}.', { admin: proposer.name, name, date })
+            : t('{admin}, an admin, paused {name}.', { admin: proposer.name, name });
+    }
+    if (proposer?.kind === 'password') {
+        return date
+            ? t("An owner paused {name} on {date}, signed in with the server's password.", { name, date })
+            : t("An owner paused {name}, signed in with the server's password.", { name });
+    }
+    return date ? t('An admin paused {name} on {date}.', { name, date }) : t('An admin paused {name}.', { name });
+}
+
+/**
+ * Who proposed a removal a member proposed, before proposing one closed (Amendment A point 3), or null for any other card:
+ * a pause's own vote names its admin in its headline instead.
+ */
+export function proposedByLine(decision: { effect: string; proposer?: RemovalProposer | null }): string | null {
+    if (decision.effect !== 'remove_member' || decision.proposer?.kind !== 'member') return null;
+    return decision.proposer.name ? t('Proposed by {name}.', { name: decision.proposer.name }) : t('Proposed by a member who has since left.');
+}
+
+/** Over the member's reply to the case (Amendment A point 2): "Dave's reply", and to Dave himself "Your reply". */
+export function replyHeading(params: { memberName?: string } | null | undefined, fallbackName: string, mine: boolean): string {
+    return mine ? t('Your reply') : t("{name}'s reply", { name: params?.memberName || fallbackName });
+}
+
+/** In place of a case an admin hid as shown to be false (Amendment A point 4), with their public reason. */
+export function caseHiddenLine(reason: string | null | undefined): string {
+    return reason
+        ? t('An admin hid the case for this vote, as one shown to be false. Their reason: {reason}', { reason })
+        : t('An admin hid the case for this vote, as one shown to be false.');
 }
 
 /**

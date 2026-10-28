@@ -2892,6 +2892,12 @@ export interface AdminDecisionItem {
     opensAt: string;
     closesAt: string;
     gracePeriodEndsAt: string | null;
+    /**
+     * A vote on removing a member whose case an admin hid as shown to be false (removal by vote, Amendment A point 4): when,
+     * and the public reason members read in its place. Absent from a node from before.
+     */
+    caseHiddenAt?: string | null;
+    caseHiddenReason?: string | null;
     /** Totals only — the node never serves who voted how. */
     tally: {
         totalVoters: number;
@@ -2941,6 +2947,24 @@ export async function fetchKnownFloorMarks(nodeUrl: string, adminPassword?: stri
 export async function fetchAdminDecisions(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AdminDecisionItem[]> {
     const data = await postAdmin<{ decisions?: AdminDecisionItem[] }>(nodeUrl, '/api/local/admin/decisions', {}, adminPassword, tfaToken);
     return Array.isArray(data?.decisions) ? data.decisions : [];
+}
+
+/**
+ * The community's votes on removing a member that have closed, newest first (the node's `pastRemovals`, removal by vote,
+ * Amendment A point 4): an admin can still hide the case of one, which is most often shown false after its vote. None from
+ * a node from before.
+ */
+export async function fetchPastRemovalVotes(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AdminDecisionItem[]> {
+    const data = await postAdmin<{ pastRemovals?: AdminDecisionItem[] }>(nodeUrl, '/api/local/admin/decisions', {}, adminPassword, tfaToken);
+    return Array.isArray(data?.pastRemovals) ? data.pastRemovals : [];
+}
+
+/**
+ * Hide the case of a vote on removing a member, as one shown to be false (Amendment A point 4): members read the reason
+ * (10+ characters) in its place. The vote itself is unchanged; halting it is the brake.
+ */
+export async function hideDecisionCase(nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/hide-case`, { reason }, adminPassword, tfaToken);
 }
 
 /**

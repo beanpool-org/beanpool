@@ -64,6 +64,8 @@ describe('DecisionsAdminPanel', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         vi.spyOn(nodeClient, 'fetchNodeDecisionsOn').mockResolvedValue(true);
+        // No closed removal votes unless a test lists some (the hide-case tests below).
+        vi.spyOn(nodeClient, 'fetchPastRemovalVotes').mockResolvedValue([]);
     });
 
     it('shows loading indicator while fetching decisions', async () => {

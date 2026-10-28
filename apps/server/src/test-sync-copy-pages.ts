@@ -129,6 +129,11 @@ async function child(): Promise<void> {
             return true;
         },
         /** This process's environment, live (the copy reads its bounds and times at each open); '' removes one. */
+        'reset-tarpit': async () => {
+            const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+            resetAdminAuthTarpit();
+            return true;
+        },
         'set-env': async (a: { vars: Record<string, string> }) => {
             for (const [k, v] of Object.entries(a.vars)) {
                 if (v === '') delete process.env[k];
@@ -377,7 +382,7 @@ async function main(): Promise<void> {
     const started = Date.now();
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = {
-        ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', NODE_ENV: 'test',
+        ADMIN_PASSWORD: PW, BEANPOOL_SUITE_ENV_PASSWORD: '1', NODE_ROLE: 'primary', NODE_ENV: 'test',
         SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
     };
     const gwen = newId('Gwen');
@@ -692,6 +697,7 @@ async function main(): Promise<void> {
         assert(byPassword.status === 401 && oldByPassword.status === 401 && byPassword.text === oldPwText,
             `the admin password is answered as the old routes answer it (${byPassword.status} ${byPassword.text.slice(0, 80)}; sync-snapshot ${oldByPassword.status} ${oldPwText.slice(0, 80)})`);
         await main.send('token-only', { on: false });
+        await main.send('reset-tarpit');
         const byPasswordNow = await get(o.page.copyId, 2, { 'X-Admin-Password': PW });
         const wrongPassword = await get(o.page.copyId, 2, { 'X-Admin-Password': `${PW}x` });
         await main.send('token-only', { on: true });
@@ -857,6 +863,8 @@ async function main(): Promise<void> {
         const rssWide = (await main.send('lag-read')).rss;
         console.log(`  (written in ${((Date.now() - tWide) / 1000).toFixed(1)} s; state.db and its WAL ${(wideDb / 1e6).toFixed(0)} MB; M's RSS ${(rssWide / 1e6).toFixed(0)} MB)`);
         const widePages: { n: number; rows: number; mb: number; ms: number; lag: number }[] = [];
+        const wideMemberCounts: Record<string, number> = {};
+        let wideMembers = 0;
         await main.send('peak-reset');
         await main.send('lag-reset');
         const tWideCopy = Date.now();
@@ -864,9 +872,16 @@ async function main(): Promise<void> {
         let wideError = '';
         try {
             wide = await copy({
+                lean: true,
                 onPage: async (g) => {
                     const l = await main.send('lag-read');
                     const rows = rowsOf(g.page);
+                    for (const { key, row } of rows) {
+                        wideMemberCounts[key] = (wideMemberCounts[key] ?? 0) + 1;
+                        if (key === 'members' && /^0wide\d-/.test(row.publicKey ?? row.public_key ?? '')) {
+                            wideMembers++;
+                        }
+                    }
                     widePages.push({ n: g.page.n, rows: rows.length, mb: rows.reduce((a, r) => a + r.bytes, 0) / 1e6, ms: g.ms, lag: l.maxMs });
                     await main.send('lag-reset');
                 },
@@ -882,12 +897,10 @@ async function main(): Promise<void> {
             const peak = await main.send('peak-read');
             const worst = widePages.reduce((a, p) => (p.lag > a.lag ? p : a), widePages[0]);
             const opening = widePages[0];
-            const ws = merged(wide.pages);
-            const wideMembers = (ws.members ?? []).filter((r: any) => /^0wide\d-/.test(r.publicKey ?? r.public_key ?? '')).length;
             console.log(`  pages ${widePages.length}; the open (page 0): ${opening.rows} rows, ${opening.mb.toFixed(2)} MB, loop blocked up to ${opening.lag.toFixed(0)} ms;`
                 + ` worst page ${worst.n}: ${worst.rows} rows, ${worst.mb.toFixed(2)} MB, loop blocked up to ${worst.lag.toFixed(0)} ms;`
                 + ` peak RSS ${(peak.rss / 1e6).toFixed(0)} MB (before ${(rssWide / 1e6).toFixed(0)} MB), peak heap ${(peak.heap / 1e6).toFixed(0)} MB of ${(peak.heapLimit / 1e6).toFixed(0)} MB`);
-            assert(sortKeys(flat(wide.pages[0].rowCounts)) === sortKeys(countsOf(ws)) && wideMembers === 6000,
+            assert(sortKeys(flat(wide.pages[0].rowCounts)) === sortKeys(wideMemberCounts) && wideMembers === 6000,
                 `it carries every row its opening page counts, the 6,000 wide members among them (${wideMembers})`);
             assert(widePages.every((p) => p.rows <= 25_000 && (p.mb * 1e6 <= 8 * 1024 * 1024 || p.rows === 1)), 'each page within 8 MB and 25,000 rows');
             assert(opening.lag < WIDE_LAG_MS && worst.lag < WIDE_LAG_MS,

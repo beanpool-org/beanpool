@@ -62,3 +62,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Failure:** [Which test, what error]\n**Root 
 **Root Cause:** All 508 server test suites ran and passed cleanly without regressions on `main`.
 **Fix:** N/A - no code changes required.
 **Learning:** All test-*.ts server suites pass when executed with clean environment configurations and workspace builds.
+
+## 2026-10-28 - [test-sync-copy-pages]
+**Failure:** `test-sync-copy-pages.ts` failed with `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`.
+**Root Cause:** Step 11 replicated 6,000 wide members without `lean: true`, causing all full page objects and 420MB+ of inline photo data to be retained in V8 heap memory in the test runner process. Additionally, `BEANPOOL_SUITE_ENV_PASSWORD: '1'` was omitted from child process spawn env.
+**Fix:** Set `lean: true` on step 11 copy stream, count member rows in `onPage`, pass `BEANPOOL_SUITE_ENV_PASSWORD: '1'`, and reset admin auth tarpit before password verification.
+**Learning:** High-volume replica test suites should stream page results using `lean: true` rather than building merged payload arrays in memory to prevent orchestrator process heap allocation limits from triggering OOM crashes.

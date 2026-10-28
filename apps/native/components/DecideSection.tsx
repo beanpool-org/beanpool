@@ -312,9 +312,13 @@ export function DecideSection({
             gap: 6,
             marginBottom: 10,
         },
+        // Shrinks to the card, so its pills wrap rather than run past the edge at 320 dp and 1.3x text (measured on main:
+        // "1m1v" ran 59 px past it on a removal vote's card).
         tagRow: {
             flexDirection: 'row',
             flexWrap: 'wrap',
+            flexShrink: 1,
+            minWidth: 0,
             gap: 6,
             alignItems: 'center',
         },

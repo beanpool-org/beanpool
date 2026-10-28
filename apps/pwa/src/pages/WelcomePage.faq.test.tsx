@@ -43,7 +43,11 @@ describe('WelcomePage FAQ (front doors S4)', () => {
         const answer = await screen.findByText(/On a phone, get the app from Google Play/i);
         expect(answer).toBeInTheDocument();
         expect(answer.textContent).toContain('beanpool.org/android');
-        expect(answer.textContent).toContain('desktop');
+        expect(answer.textContent).toContain('On a computer');
+        expect(answer.textContent).toContain('Install');
+        expect(answer.textContent).toContain('Add to Dock');
+        // A computer has no "Add to Home Screen" (review of #2561, WelcomePage.tsx:118).
+        expect(answer.textContent).not.toContain('Add to Home Screen');
         expect(answer.textContent).not.toContain('works on Android, iOS, and desktop');
     });
 });

@@ -47,7 +47,7 @@ function Harness() {
                         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', transform: 'rotate(90deg)' }}>▶</span>
                     </div>
                     <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: '0.4rem', textAlign: 'left' }}>
-                        {t('Yes! On a phone, get the app from Google Play, the App Store, or beanpool.org/android. On a desktop computer, open the app link in your browser, then "Add to Home Screen" to install it.')}
+                        {t('Yes! On a phone, get the app from Google Play, the App Store, or beanpool.org/android. On a computer, open the app link in Chrome or Edge and choose Install in the address bar or the menu; in Safari on a Mac, choose File, then Add to Dock.')}
                     </p>
                 </div>
             </div>

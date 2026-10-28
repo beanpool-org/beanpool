@@ -115,7 +115,7 @@ const FAQ_ITEMS = [
     },
     {
         q: word('Can I use this on my phone?'),
-        a: word('Yes! On a phone, get the app from Google Play, the App Store, or beanpool.org/android. On a desktop computer, open the app link in your browser, then "Add to Home Screen" to install it.'),
+        a: word('Yes! On a phone, get the app from Google Play, the App Store, or beanpool.org/android. On a computer, open the app link in Chrome or Edge and choose Install in the address bar or the menu; in Safari on a Mac, choose File, then Add to Dock.'),
     },
 ];
 

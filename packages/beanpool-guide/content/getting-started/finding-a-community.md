@@ -15,7 +15,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
-On the global community, the **Find your community** card on **Home** shows the communities nearest you. While you have an open request to join a community, or a watch for a community near you, the card stays pinned near the top of Home and can't be removed or moved; once no request or watch is open, you can move or remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved, and after that for as long as you have an open request to join a community or a watch for a community near you; once those are over, you can move or remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, tap **Explore BeanPool worldwide** on the app's first screen: see "Joining BeanPool".
 

@@ -15,7 +15,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
-On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. While you have an open request to join a community, or a watch for a community near you, the card stays pinned near the top of Home and can't be removed or moved; once no request or watch is open, you can move or remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, tap **Explore BeanPool worldwide** on the app's first screen: see "Joining BeanPool".
 
@@ -40,9 +40,9 @@ A community whose server stays silent for a week is no longer listed, and comes 
 
 Your request goes straight to that community, not through the global community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
 
-While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
+While you wait, the waiting card on **Home** and the community's card show when you asked (**You asked to join {name} on {date}.**), whether your request arrived (**Your request arrived.**), and how quickly that community usually answers: **Usually answers within a week**, **Hasn't answered requests lately**, or **Not taking requests right now** (measured from how the community has answered requests over its last 90 days, once it has received at least 3 requests). You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
 
-If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours.
+If you change your mind while waiting, tap **Cancel my request**. The request is really withdrawn, and you can ask again after 24 hours.
 
 When an admin or member invites you, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
 

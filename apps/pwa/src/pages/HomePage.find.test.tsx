@@ -42,6 +42,8 @@ vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}), onSocketO
 
 import * as api from '../lib/api';
 import { HomePage, WATCH_WORDS } from './HomePage';
+import { rememberKnock } from '../lib/knock';
+import * as knockModule from '../lib/knock';
 
 const { done: WATCH_DONE, joinFirst: WATCH_JOIN_FIRST, needsPlace: WATCH_NEEDS_PLACE } = WATCH_WORDS;
 import { resetHomeCacheForTest } from '../lib/home-cache';
@@ -253,5 +255,85 @@ describe('a community gone quiet on the web find card (front doors S13)', () => 
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-find-body');
         expect(screen.queryByTestId('home-find-not-answering-l')).toBeNull();
+    });
+});
+
+describe('the honest waiting card on the web find card (Lounge L1)', () => {
+    it('shows sent date, arrived status, and measured line for a waiting knock', async () => {
+        const comm = {
+            key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org',
+            memberCount: 40, distanceKm: 12, answers: 'week' as const,
+        };
+        await rememberKnock(ME.publicKey, comm, new Date('2026-10-25T00:00:00.000Z'));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [comm] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({
+            ok: true, value: { status: 'pending' },
+        });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-waiting-card-https://byron.example.org');
+        expect(within(card).getByTestId('home-waiting-sent-https://byron.example.org')).toHaveTextContent('You asked to join Byron Shire BeanPool on 25 Oct 2026.');
+        expect(await within(card).findByTestId('home-waiting-arrived-https://byron.example.org')).toHaveTextContent('Your request arrived.');
+        expect(within(card).getByTestId('home-waiting-answers-https://byron.example.org')).toHaveTextContent('Usually answers within a week');
+        expect(within(card).getByTestId('home-cancel-knock-https://byron.example.org')).toHaveTextContent('Cancel my request');
+
+        readSpy.mockRestore();
+    });
+
+    it('cancels knock with confirmation and withdraws it', async () => {
+        const comm = {
+            key: 'mullum', name: 'Mullumbimby BeanPool', url: 'https://mullum.example.org',
+            memberCount: 20, distanceKm: 15, answers: 'slow' as const,
+        };
+        await rememberKnock(ME.publicKey, comm, new Date('2026-10-26T00:00:00.000Z'));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [comm] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({
+            ok: true, value: { status: 'pending' },
+        });
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: true });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const cancelBtn = await screen.findByTestId('home-cancel-knock-https://mullum.example.org');
+        fireEvent.click(cancelBtn);
+
+        expect(confirmSpy).toHaveBeenCalledWith('Cancel your request to join Mullumbimby BeanPool? You can ask again after 24 hours.');
+        expect(cancelSpy).toHaveBeenCalledWith('https://mullum.example.org', ME);
+
+        await waitFor(() => {
+            expect(screen.queryByTestId('home-waiting-card-https://mullum.example.org')).toBeNull();
+        });
+
+        readSpy.mockRestore();
+        cancelSpy.mockRestore();
+        confirmSpy.mockRestore();
+    });
+
+    it('shows error note when cancellation fails (never false success)', async () => {
+        const comm = {
+            key: 'bangalow', name: 'Bangalow BeanPool', url: 'https://bangalow.example.org',
+            memberCount: 15, distanceKm: 25,
+        };
+        await rememberKnock(ME.publicKey, comm, new Date('2026-10-27T00:00:00.000Z'));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [comm] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({
+            ok: true, value: { status: 'pending' },
+        });
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: false, message: 'Node could not be reached' });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const cancelBtn = await screen.findByTestId('home-cancel-knock-https://bangalow.example.org');
+        fireEvent.click(cancelBtn);
+
+        expect(await screen.findByTestId('home-cancel-error-https://bangalow.example.org')).toHaveTextContent('Node could not be reached');
+        expect(screen.getByTestId('home-waiting-card-https://bangalow.example.org')).toBeInTheDocument();
+
+        readSpy.mockRestore();
+        cancelSpy.mockRestore();
+        confirmSpy.mockRestore();
     });
 });

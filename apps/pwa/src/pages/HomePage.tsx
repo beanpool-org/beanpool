@@ -34,9 +34,10 @@ import {
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    currentLanguage, formatCount, t, tn, word,
+    communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { cancelKnock, communityOrigin, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { AskedCommunity } from '../components/AskedCommunity';
@@ -980,6 +981,52 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     useEffect(() => {
         if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
     }, [publicKey]);
+
+    const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
+    const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
+    const [cancellingKnock, setCancellingKnock] = useState<string | null>(null);
+    const [cancelError, setCancelError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!publicKey) {
+            setKnocks([]);
+            return;
+        }
+        let alive = true;
+        rememberedKnocks(publicKey).then(list => {
+            if (alive) setKnocks(list);
+        });
+        return () => { alive = false; };
+    }, [publicKey]);
+
+    const knockKey = knocks.map(k => k.url).join(' ');
+    useEffect(() => {
+        if (!identity || !knocks.length) return;
+        let alive = true;
+        knocks.forEach(k => {
+            readKnockStatus(k.url, identity).then(r => {
+                if (alive) setKnockStatuses(was => ({ ...was, [k.url]: r }));
+            });
+        });
+        return () => { alive = false; };
+    }, [knockKey, identity?.publicKey]);
+
+    const handleCancelKnock = async (k: RememberedKnock) => {
+        if (!identity) return;
+        const name = k.name ?? k.url.replace(/^https:\/\//, '');
+        const ok = window.confirm(t(FIND_COMMUNITY_WORDS.cancelConfirmBody, { name }));
+        if (!ok) return;
+        setCancellingKnock(k.url);
+        setCancelError(null);
+        const res = await cancelKnock(k.url, identity);
+        setCancellingKnock(null);
+        if (res.ok) {
+            setKnocks(was => was.filter(item => item.url !== k.url));
+        } else {
+            setCancelError(res.message);
+        }
+    };
+
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
@@ -1463,7 +1510,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
-    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver }) : [];
+    const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
+    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver, hasOpenKnock, knocks }) : [];
     /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
     const startUp = shown.some(c => c.type === 'start');
@@ -1930,6 +1978,63 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                         : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
                                     {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
                                 </Fragment>
+                            );
+                        })}
+                        {knocks.map(k => {
+                            const comm = f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
+                            const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+                            const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
+                            const st = knockStatuses[k.url];
+                            const answersLine = communityAnswersLine(comm?.answers);
+                            const isCancelling = cancellingKnock === k.url;
+
+                            if (st?.ok && st.value.status === 'approved') {
+                                return (
+                                    <p key={k.url} className="m-0 mt-2 font-semibold text-sm text-text-primary" data-testid={`home-find-invited-${k.url}`}>
+                                        🎉 {t('{name} said yes. Join now.', { name })}
+                                    </p>
+                                );
+                            }
+
+                            let arrivedLine: string;
+                            if (st === undefined || st === null) {
+                                arrivedLine = t('Checking…');
+                            } else if (st.ok) {
+                                arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
+                            } else {
+                                arrivedLine = st.message;
+                            }
+
+                            return (
+                                <div key={k.url} data-testid={`home-waiting-card-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                    <p className="m-0 text-sm font-semibold text-text-primary" data-testid={`home-waiting-sent-${k.url}`}>
+                                        {t(FIND_COMMUNITY_WORDS.askedOnDate, { name, date: sentDate })}
+                                    </p>
+                                    <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200" data-testid={`home-waiting-arrived-${k.url}`}>
+                                        {arrivedLine}
+                                    </p>
+                                    {answersLine && (
+                                        <p className="m-0 mt-1 text-xs italic text-nature-600 dark:text-nature-300" data-testid={`home-waiting-answers-${k.url}`}>
+                                            {answersLine}
+                                        </p>
+                                    )}
+                                    <div className="mt-2">
+                                        <button
+                                            type="button"
+                                            disabled={isCancelling}
+                                            onClick={() => void handleCancelKnock(k)}
+                                            data-testid={`home-cancel-knock-${k.url}`}
+                                            className="min-h-[44px] px-3 py-2 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 bg-transparent text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                        >
+                                            {isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                        </button>
+                                    </div>
+                                    {cancelError && (
+                                        <p role="alert" className="m-0 mt-1 text-xs text-red-600 dark:text-red-400" data-testid={`home-cancel-error-${k.url}`}>
+                                            {cancelError}
+                                        </p>
+                                    )}
+                                </div>
                             );
                         })}
                         {/* Nothing listed within 250 km, and the list has loaded (findOffersStart): Start leads, as on the

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Text } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import type { AppColors } from '../../constants/colors';
 import type { BeanPoolIdentity } from '../../utils/identity';
 import {
-    communityFacts, communityLabel, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
+    communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
-import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, findCommunityState, t } from '@beanpool/core';
-import { cardKnockLines, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
+import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
+import { cancelKnock, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
 /** Shown through t() in the member's language. */
@@ -25,7 +25,7 @@ const LINKS = { typeTown: TYPE_YOUR_TOWN };
  * With no place yet, one quiet link under them, "or type your town ›" (Marty, 14 Oct): Home's own trailing link (48dp, and
  * the "+ ADD POST" steps aside for it too), opening the find screen with its town box open.
  */
-export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colors }: {
+export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colors, onKnocksChange }: {
     home: GlobalHome;
     /** The knocks this phone sent for the account, newest first (utils/knock.ts `rememberedKnocks`). */
     knocks: readonly RememberedKnock[];
@@ -35,20 +35,58 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     /** Where "here" is for a place watch: the phone's place, else the account's own area; null: the screen asks. */
     point: Point | null;
     colors: AppColors;
+    onKnocksChange?: (knocks: RememberedKnock[]) => void;
 }) {
     const s = homeStyles(colors);
     const [statuses, setStatuses] = useState<Record<string, KnockStatusResult | null>>({});
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [watched, setWatched] = useState(false);
+    const [activeKnocks, setActiveKnocks] = useState<readonly RememberedKnock[]>(knocks);
+    const [cancellingUrl, setCancellingUrl] = useState<string | null>(null);
+    const [cancelError, setCancelError] = useState<string | null>(null);
+
+    useEffect(() => {
+        setActiveKnocks(knocks);
+    }, [knocks]);
 
     // Only the communities this phone asked, once per knock it remembers.
-    const knockKey = knocks.map(k => k.url).join(' ');
+    const knockKey = activeKnocks.map(k => k.url).join(' ');
     useEffect(() => {
-        if (!identity || !knocks.length) return;
+        if (!identity || !activeKnocks.length) return;
         let alive = true;
-        knocks.forEach(k => readKnockStatus(k.url, identity).then(r => { if (alive) setStatuses(was => ({ ...was, [k.url]: r })); }));
+        activeKnocks.forEach(k => readKnockStatus(k.url, identity).then(r => { if (alive) setStatuses(was => ({ ...was, [k.url]: r })); }));
         return () => { alive = false; };
     }, [knockKey, identity?.publicKey]);
+
+    const onCancelKnock = (k: RememberedKnock) => {
+        if (!identity) return;
+        const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
+        const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+        Alert.alert(
+            t(FIND_COMMUNITY_WORDS.cancelRequest),
+            t(FIND_COMMUNITY_WORDS.cancelConfirmBody, { name }),
+            [
+                { text: t(FIND_COMMUNITY_WORDS.keepIt), style: 'cancel' },
+                {
+                    text: t(FIND_COMMUNITY_WORDS.cancelConfirmText),
+                    style: 'destructive',
+                    onPress: async () => {
+                        setCancellingUrl(k.url);
+                        setCancelError(null);
+                        const res = await cancelKnock(k.url, identity);
+                        setCancellingUrl(null);
+                        if (res.ok) {
+                            const next = activeKnocks.filter(item => item.url !== k.url);
+                            setActiveKnocks(next);
+                            onKnocksChange?.(next as RememberedKnock[]);
+                        } else {
+                            setCancelError(res.message);
+                        }
+                    },
+                },
+            ],
+        );
+    };
 
     const copy = findCommunityCardCopy({ ok: true, value: home }, !!point);
     const named = findCardNamed(home);
@@ -60,7 +98,6 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
         const quiet = notAnsweringLine(c);
         return quiet ? <Text style={[s.rowSub, { fontStyle: 'italic' }]} testID={`home-find-not-answering-${c.key}`}>{quiet}</Text> : null;
     };
-    const lines = cardKnockLines(knocks, statuses);
     const watching = watched || (home.watches?.length ?? 0) > 0;
     // Nothing listed near (and the list loaded): Start a community leads, as the web's card does (rehearsal B2).
     const state = findCommunityState(home);
@@ -89,9 +126,61 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 </React.Fragment>
             ))}
             {!!nearby && <Text style={[s.rowSub, { marginTop: 4 }]} testID="home-find-nearby">{nearby}</Text>}
-            {lines.map(l => (
-                <Text key={l.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]}>{l.invited ? '🎉 ' : '⏳ '}{l.text}</Text>
-            ))}
+            {activeKnocks.map(k => {
+                const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
+                const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+                const status = statuses[k.url];
+                const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
+                const answersLine = communityAnswersLine(comm?.answers);
+                const isCancelling = cancellingUrl === k.url;
+
+                if (status?.ok && status.value.status === 'approved') {
+                    return (
+                        <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
+                            🎉 {t('{name} said yes. Join now.', { name })}
+                        </Text>
+                    );
+                }
+
+                let arrivedLine: string;
+                if (status === undefined || status === null) {
+                    arrivedLine = t('Checking…');
+                } else if (status.ok) {
+                    arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
+                } else {
+                    arrivedLine = status.message;
+                }
+
+                return (
+                    <View key={k.url} style={[s.card, { marginHorizontal: 0, marginTop: 8, marginBottom: 8, paddingVertical: 10 }]} testID={`home-find-waiting-${k.url}`}>
+                        <Text style={[s.rowLine, s.rowStrong]} testID={`home-find-waiting-sent-${k.url}`}>
+                            {t(FIND_COMMUNITY_WORDS.askedOnDate, { name, date: sentDate })}
+                        </Text>
+                        <Text style={[s.rowSub, { marginTop: 4 }]} testID={`home-find-waiting-arrived-${k.url}`}>
+                            {arrivedLine}
+                        </Text>
+                        {!!answersLine && (
+                            <Text style={[s.rowSub, { marginTop: 4, fontStyle: 'italic' }]} testID={`home-find-waiting-answers-${k.url}`}>
+                                {answersLine}
+                            </Text>
+                        )}
+                        <View style={{ marginTop: 8 }}>
+                            <HomeButton
+                                colors={colors}
+                                text={isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                a11y={t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                onPress={isCancelling ? () => {} : () => onCancelKnock(k)}
+                                testID={`home-find-cancel-${k.url}`}
+                            />
+                        </View>
+                        {!!cancelError && (
+                            <Text style={[s.rowSub, { marginTop: 4, color: colors.feedback.error.text }]} accessibilityLiveRegion="polite" testID="home-find-cancel-error">
+                                {cancelError}
+                            </Text>
+                        )}
+                    </View>
+                );
+            })}
             {!!watchNote && <Text style={[s.rowLine, { marginTop: 6 }]} accessibilityLiveRegion="polite" testID="home-find-watch-note">{watchNote}</Text>}
             <FabAware id="find:actions" style={s.buttonRow}>
                 {startFirst && start}

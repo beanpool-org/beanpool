@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    cancelKnock, cancelledKnocks, communityOrigin, forgetKnock, KNOCK_CANCEL_BLOCK_HOURS, KNOCK_MESSAGES,
+    cancelKnock, cancelledKnocks, cardKnockLines, communityOrigin, forgetKnock, KNOCK_CANCEL_BLOCK_HOURS, KNOCK_MESSAGES,
     readKnockStatus, readStatus, rememberKnock, rememberedKnocks, type RememberedKnock,
 } from './knock';
 import type { BeanPoolIdentity } from './identity';
@@ -94,5 +94,30 @@ describe('rememberedKnocks & storage on web', () => {
         expect(list).toHaveLength(1);
 
         fetchSpy.mockRestore();
+    });
+
+    it('formats cardKnockLines for approved and pending knocks', () => {
+        const knocks: RememberedKnock[] = [
+            { url: 'https://approved.example.org', name: 'Approved Town' },
+            { url: 'https://pending.example.org', name: 'Pending Town' },
+            { url: 'https://offline.example.org', name: 'Offline Town' },
+        ];
+        const lines = cardKnockLines(knocks, {
+            'https://approved.example.org': { ok: true, value: { status: 'approved', invite: 'bp:123', expiresAt: null } },
+            'https://pending.example.org': { ok: true, value: { status: 'pending' } },
+            'https://offline.example.org': { ok: false, error: 'network' },
+        });
+
+        expect(lines).toHaveLength(2);
+        expect(lines[0]).toEqual({
+            url: 'https://approved.example.org',
+            text: 'Approved Town said yes. Join now.',
+            invited: true,
+        });
+        expect(lines[1]).toEqual({
+            url: 'https://pending.example.org',
+            text: 'Waiting for Pending Town: usually a few days.',
+            invited: false,
+        });
     });
 });

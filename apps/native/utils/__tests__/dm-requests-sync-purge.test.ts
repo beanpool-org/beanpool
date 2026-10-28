@@ -179,4 +179,43 @@ describe('syncSingleConversation request purge', () => {
 
         expect(deletes()).toHaveLength(0);
     });
+
+    // The reader's own request, accepted by the other person's line, which they withdrew since (PR #2540 review 4399348635):
+    // the one who reached out after the opener withdrew hers, while she blocked him, reads the row turned round (`from` is
+    // his own), her line answered it, and her Cancel request took that line back. Each of these deleted nothing before.
+    it('my own request accepted, the other\'s line withdrawn since: it goes, and my own line stays', async () => {
+        currentIdentity = { publicKey: 'recipient-pub', privateKey: 'bb', callsign: 'Recipient' };
+        local.lines = [{ id: 'hers-withdrawn', author: 'opener-pub' }, { id: 'mine-1', author: 'recipient-pub' }];
+        nodeAnswers('conv-recipient', { state: 'accepted', from: 'recipient-pub', at: '2026-10-27T00:00:00Z' }, [line('mine-1', 'recipient-pub')]);
+
+        await syncSingleConversation('conv-recipient');
+
+        expect(deletes()).toHaveLength(1);
+        expect(deletes()[0][0]).toContain('AND author_pubkey = ?');
+        expect(deletes()[0][1]).toEqual(['conv-recipient', 'opener-pub', 'mine-1']);
+    });
+
+    it('my own request accepted, a full page: only the stretch it covers is judged', async () => {
+        currentIdentity = { publicKey: 'recipient-pub', privateKey: 'bb', callsign: 'Recipient' };
+        local.lines = [{ id: 'hers-withdrawn', author: 'opener-pub' }];
+        const page = Array.from({ length: 50 }, (_, i) => ({ ...line(`mine-${i}`, 'recipient-pub'), timestamp: `2026-10-27T01:${String(i).padStart(2, '0')}:00.000Z` }));
+        nodeAnswers('conv-recipient', { state: 'accepted', from: 'recipient-pub', at: '2026-10-27T00:00:00Z' }, page);
+
+        await syncSingleConversation('conv-recipient');
+
+        expect(deletes()).toHaveLength(1);
+        expect(deletes()[0][0]).toContain('timestamp > ?');
+        expect(deletes()[0][1].at(-1)).toBe('2026-10-27T01:00:00.000Z');
+    });
+
+    it('my own request accepted, nothing withdrawn: nothing deleted', async () => {
+        currentIdentity = { publicKey: 'recipient-pub', privateKey: 'bb', callsign: 'Recipient' };
+        local.lines = [{ id: 'hers', author: 'opener-pub' }, { id: 'mine-1', author: 'recipient-pub' }];
+        nodeAnswers('conv-recipient', { state: 'accepted', from: 'recipient-pub', at: '2026-10-27T00:00:00Z' },
+            [line('mine-1', 'recipient-pub'), line('hers', 'opener-pub')]);
+
+        await syncSingleConversation('conv-recipient');
+
+        expect(deletes()).toHaveLength(0);
+    });
 });

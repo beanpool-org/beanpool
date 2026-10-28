@@ -4898,6 +4898,20 @@ async function syncSingleConversationOnce(conversationId: string): Promise<boole
             } catch (e: any) {
                 console.warn(`[Sync] Could not drop my request's withdrawn lines: ${e?.message || e}`);
             }
+        } else if (!pollPinsUnread && myIdentity?.publicKey && msgData.conversation?.type === 'dm' && req?.from === myIdentity.publicKey && req.state === 'accepted') {
+            // My own request, accepted: none of the other person's lines the node withdrew stay here either (review
+            // 4399348635). The one I made after they withdrew theirs, while they blocked me, reads as mine (the node turns
+            // the row round for me); their line answered it, and their Cancel request took that line back. The stretch the
+            // page covers alone, as for a request I accepted (above).
+            const others = (Array.isArray(msgData.conversation.participants) ? msgData.conversation.participants : [])
+                .filter((pk: unknown): pk is string => typeof pk === 'string' && pk !== '' && pk !== myIdentity.publicKey);
+            if (others.length === 1) {
+                try {
+                    withdrawn = await dropWithdrawnRequestLines(database, conversationId, { from: others[0], state: 'accepted' }, messages);
+                } catch (e: any) {
+                    console.warn(`[Sync] Could not drop the other's withdrawn lines: ${e?.message || e}`);
+                }
+            }
         }
         const cursors = msgData.conversation?.readCursors;
         let cursorAdvances: Array<{ publicKey: string; lastReadAt: string }> = [];
@@ -4979,6 +4993,8 @@ const NODE_PAGE_LINES = 50;
  * While it isn't accepted every line in it is the opener's, one a request, so the newest page holds them all; once
  * accepted, only the stretch the page covers is judged, as a line older than the page's oldest is still theirs. Only the
  * opener's lines go, never one of this reader's (their unsent ones neither). Their photos' decrypted copies go with them.
+ * Also the other person's lines in the reader's own request once it is accepted (`req.from` is then that person; review
+ * 4399348635).
  */
 async function dropWithdrawnRequestLines(database: SQLite.SQLiteDatabase, conversationId: string, req: { from: string; state?: string }, messages: any[]): Promise<number> {
     const { where, args } = linesNotOnPage(conversationId, req.from, messages, req.state === 'accepted');

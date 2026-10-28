@@ -94,3 +94,43 @@ describe('visitGlobalAsGuest', () => {
         expect(calls.every((c) => c.includes(saved))).toBe(true);
     });
 });
+
+describe('visitGlobalAsGuest with no account on the phone (the first screen\'s Explore BeanPool worldwide, slice S12)', () => {
+    const VISITORS: GlobalDoorCheck = { ok: true, profile: { profile: 'global', features: { openJoin: true, guestListingsOnly: true } } as unknown as NodeProfile };
+
+    it('an open door that shows visitors its view: marked, saved, switched, a guest; no probe, so no key is named or signed for', async () => {
+        const { d, calls, asked } = deps(VISITORS, stranger);
+        expect(await visitGlobalAsGuest(null, GLOBAL, d)).toEqual({ kind: 'guest' });
+        expect(calls).toEqual([`door ${GLOBAL}`, `mark ${GLOBAL}`, `save ${GLOBAL} Global community`, `switch ${GLOBAL}`]);
+        expect(asked).toEqual([]);
+    });
+
+    it('an open door without the visitors\' view (a key would be needed to read anything): nothing moves; the door', async () => {
+        for (const features of [{ openJoin: true }, { openJoin: true, guestListingsOnly: false }]) {
+            const { d, calls } = deps({ ok: true, profile: { profile: 'global', features } as unknown as NodeProfile }, stranger);
+            expect(await visitGlobalAsGuest(null, GLOBAL, d)).toEqual({ kind: 'door' });
+            expect(calls).toEqual([`door ${GLOBAL}`]);
+        }
+    });
+
+    for (const reason of ['unreachable', 'not_global', 'door_closed', 'private_preview'] as const) {
+        it(`the door ${reason} (an offline first open among them): nothing written, nothing moved; the door says why`, async () => {
+            const { d, calls, asked } = deps({ ok: false, reason }, stranger);
+            expect(await visitGlobalAsGuest(null, GLOBAL, d)).toEqual({ kind: 'door' });
+            expect(calls).toEqual([`door ${GLOBAL}`]);
+            expect(asked).toEqual([]);
+        });
+    }
+
+    it('the door check throws: nothing moved', async () => {
+        const { d, calls } = deps(new TypeError('Network request failed'), stranger);
+        expect(await visitGlobalAsGuest(null, GLOBAL, d)).toEqual({ kind: 'door' });
+        expect(calls).toEqual([`door ${GLOBAL}`]);
+    });
+
+    it('the switch fails: it throws, after the mark and the list, as with an account', async () => {
+        const { d, calls } = deps(VISITORS, stranger, true);
+        await expect(visitGlobalAsGuest(null, GLOBAL, d)).rejects.toThrow('disk full');
+        expect(calls.at(-1)).toBe(`switch ${GLOBAL}`);
+    });
+});

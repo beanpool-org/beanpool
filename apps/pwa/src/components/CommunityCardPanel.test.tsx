@@ -29,7 +29,10 @@ describe('the card on the welcome page', () => {
         expect(screen.getByTestId('community-card-area').textContent).toBe('Castlemaine and around, within about 15 km');
         expect(screen.getByTestId('community-card-joining').textContent).toBe('Takes requests to join');
         expect(screen.getByTestId('community-card-ask').getAttribute('href')).toBe(CARD.askUrl);
-        expect(screen.getByText('You join the global community first, then ask Castlemaine BeanPool from there.')).toBeTruthy();
+        expect(screen.getByText('Look around global first, join there to get an account, then find Castlemaine BeanPool in Find a community.')).toBeTruthy();
+        expect(screen.queryByText(/Explore BeanPool worldwide/)).toBeNull();
+        expect(screen.queryByText(/You join the global community first/)).toBeNull();
+        expect(screen.queryByText(/To ask, you need a BeanPool account first/)).toBeNull();
         expect(screen.getByTestId('community-card-global').getAttribute('href')).toBe('https://global.beanpool.org');
     });
 

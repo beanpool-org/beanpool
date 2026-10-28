@@ -37,7 +37,7 @@ export const COMMUNITY_CARD_WORDS = {
     invite: word('Takes new members by invite'),
     ask: word('Ask to join'),
     /** Under Ask to join where it opens the global community's lobby. */
-    askViaGlobal: word('You join the global community first, then ask {name} from there.'),
+    askViaGlobal: word('Look around global first, join there to get an account, then find {name} in Find a community.'),
     /** Where Ask to join has nowhere to go from a browser: the node names no global community, or isn't listed. */
     askInApp: word('Ask to join from the BeanPool app.'),
     join: word('Join', 'button: join a community anyone may join'),

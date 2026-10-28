@@ -79,13 +79,13 @@ describe('HomePage community shape line and modal (S5)', () => {
 
     it('renders the shape summary line on the community card and opens modal on click', async () => {
         vi.mocked(api.getHome).mockResolvedValueOnce({
-            status: 200,
-            tag: 'tag-1',
-            home: HOME_ANSWER_WITH_SHAPE,
+            notModified: false,
+            etag: 'tag-1',
+            answer: HOME_ANSWER_WITH_SHAPE,
         });
 
         const onNavigate = vi.fn();
-        render(<HomePage identity={ME} visitor={false} onNavigate={onNavigate} onSeeWords={() => {}} />);
+        render(<HomePage identity={ME} onNavigate={onNavigate} onSeeWords={() => {}} />);
 
         await waitFor(() => {
             expect(screen.getByTestId('home-community-shape-summary')).toBeInTheDocument();
@@ -110,15 +110,15 @@ describe('HomePage community shape line and modal (S5)', () => {
 
     it('does NOT render the shape summary line on an old node without shape features', async () => {
         vi.mocked(api.getHome).mockResolvedValueOnce({
-            status: 200,
-            tag: 'tag-old',
-            home: {
+            notModified: false,
+            etag: 'tag-old',
+            answer: {
                 ...HOME_ANSWER_WITH_SHAPE,
                 features: {},
             },
         });
 
-        render(<HomePage identity={ME} visitor={false} onNavigate={() => {}} onSeeWords={() => {}} />);
+        render(<HomePage identity={ME} onNavigate={() => {}} onSeeWords={() => {}} />);
 
         await waitFor(() => {
             expect(screen.getByTestId('home-community-body')).toBeInTheDocument();

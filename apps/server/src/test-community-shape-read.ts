@@ -603,7 +603,7 @@ async function main(): Promise<void> {
         assert(isDeepStrictEqual(before, after), `${label}: node/config, community/info, community/me, home's features and known-floor answer the same after the shape is read`);
         const features = after.me?.features ?? {};
         const nodeBase = { ...np.getNodeFeatures(), door: getDoor() };
-        const expectsFloor = label === 'a local community';
+        const expectsFloor = Boolean(np.getNodeFeatures().beans && confirmationDialOn(db));
         const want = Object.keys(expectsFloor ? { ...nodeBase, knownFloor: 1000 } : nodeBase).sort();
         assert(isDeepStrictEqual(Object.keys(features).sort(), want),
             `${label}: a member's features carry expected fields (${Object.keys(features).length} fields)`);

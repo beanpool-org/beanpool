@@ -3,6 +3,24 @@
  * Tests for the members' community shape sheet and Home summary line (design §4, slice S5).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.hoisted(() => {
+    const Loader = (process as any).getBuiltinModule?.('node:module');
+    if (Loader?._extensions) {
+        Loader._extensions['.jpg'] = (m: { exports: unknown }) => { m.exports = 1; };
+        Loader._extensions['.webp'] = (m: { exports: unknown }) => { m.exports = 1; };
+        Loader._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
+    }
+    (globalThis as any).expo = (globalThis as any).expo ?? {
+        EventEmitter: class EventEmitter {
+            addListener() { return { remove() {} }; }
+            removeListener() {}
+            emit() {}
+        },
+        modules: {},
+    };
+});
+
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { darkColors, lightColors } from '../../constants/colors';
@@ -39,6 +57,9 @@ vi.mock('react-native', () => {
 });
 
 const routes = vi.hoisted(() => ({ pushed: [] as unknown[] }));
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
+vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(len)) }));
+vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('expo-router', () => ({
     router: {
         push: (to: unknown) => routes.pushed.push(to),
@@ -74,7 +95,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
 
     const render = async (element: React.ReactElement) => {
         await act(async () => {
-            root.render(element);
+            root.render(element as any);
         });
     };
 
@@ -153,8 +174,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
         const onOpenShape = vi.fn();
         await render(createElement(CommunityBody, {
             card: {
-                type: 'community',
-                id: 'comm-1',
+                name: 'Riverside Commons',
                 members: 15,
                 joined7d: 2,
                 tradesThisMonth: 5,
@@ -188,8 +208,7 @@ describe('CommunityShapeSheet and Home summary (S5)', () => {
     it('CommunityBody does NOT render summary row for an old node that says nothing', async () => {
         await render(createElement(CommunityBody, {
             card: {
-                type: 'community',
-                id: 'comm-1',
+                name: 'Riverside Commons',
                 members: 15,
                 joined7d: 2,
                 tradesThisMonth: 5,

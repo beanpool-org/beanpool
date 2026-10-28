@@ -3,7 +3,7 @@
  * Generates the member-facing facts from `features` (+ `door`), the Home summary line,
  * and handles an old node that says nothing (produces no line).
  */
-import { formatNumber, t, word } from './words.js';
+import { formatCount, t, word } from './words.js';
 
 export interface CommunityShapeFeatures {
     beans?: boolean;
@@ -129,7 +129,7 @@ export function communityShapeLines(features: CommunityShapeFeatures | null | un
 
     // 4. Known floor (only drawn when present, i.e. dial and beans are on)
     if (typeof features?.knownFloor === 'number') {
-        lines.push(t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatNumber(features.knownFloor) }));
+        lines.push(t('**Confirmed members** can owe up to {amount} Beans (the known floor)', { amount: formatCount(features.knownFloor) }));
     }
 
     // 5. Messages / dmRequests

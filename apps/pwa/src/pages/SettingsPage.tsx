@@ -2016,7 +2016,6 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     phoneLater?: string[] | null;
     onOpenShape?: () => void;
 }) {
-}) {
     const isPhone = usePhoneBrowser();
     const installed = isInstalled();
     const deferredPrompt = useDeferredInstallPrompt();

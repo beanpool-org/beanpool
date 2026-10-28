@@ -8,9 +8,9 @@ const params = new URLSearchParams(window.location.search);
 const view = params.get('view') || 'card';
 
 if (params.get('dark') === '1') {
-    document.documentElement.classList.add('dark');
+    document.documentElement.classList.add('dark', 'dark-theme');
 } else {
-    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.remove('dark', 'dark-theme');
 }
 
 const sampleFeatures: CommunityShapeFeatures = {

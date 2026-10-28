@@ -56,21 +56,22 @@ The members' guide explains each of these step by step.
 
 The software is free. A community runs on a spare computer that stays on at home (a Mini PC, a NAS, or a Raspberry Pi with a 64-bit system) or on a small rented server, about US$6 a month. You need Docker installed first; a freshly rented server has none. The published image runs on Intel/AMD and ARM64.
 
-On that machine, paste this one block. It fetches the compose file, turns on Docker live-restore so Docker can restart or update without stopping the community, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
+On that machine, paste this one block. It fetches the compose file, turns on Docker live-restore (unless Docker already has it on) so Docker can restart, or take a patch update, without stopping the community, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
 
 **Choose your address before you paste, and change the last line to match** (the choices are just below the block). If you already pasted, press Enter at its two questions, then run the last line again: the claim code waits for a phone.
 
-**The live-restore step needs root.** As root it runs as it is. As any other user it uses `sudo`, which must not ask for a password in the middle of the paste (the lines after it would be typed into the prompt), so type `sudo -v` and your password first. If the machine has no systemd, or Docker is not running, the step says so, skips live-restore, and the install carries on; the operator manual's Updates and health page has the steps for doing it by hand later.
+**The live-restore step needs root.** As root it runs as it is. As any other user it uses `sudo`, which must not ask for a password in the middle of the paste (the lines after it would be typed into the prompt), so type `sudo -v` and your password first. If the machine has no systemd, or Docker is not running, the step says so, skips live-restore, and the install carries on; the operator manual's Updates and health page has the steps for doing it by hand later. Live-restore covers a restart and a patch update (the last number of Docker's version, for example 27.3.1 to 27.3.2). A new version number in the first two places (27.3 to 27.4) can still stop the community, so update Docker in a quiet hour, as before. If Docker already has live-restore on, for example as a flag in its systemd unit, the step leaves it alone.
 
 ```bash
 git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
-# Docker live-restore: Docker can then restart or update without stopping the community.
+# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
 # Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
 # lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
 if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. The install below carries on without it. If sudo wanted a password, type: sudo -v  then paste this step again."
 command -v systemctl >/dev/null 2>&1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
 docker info >/dev/null 2>&1 </dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
+[ "$(docker info --format '{{.LiveRestoreEnabled}}' </dev/null)" = true ] && { echo "Docker live-restore is already on."; exit 0; }
 python3 - <<'PY' || exit 1
 import json, os, stat, sys
 p = os.path.realpath("/etc/docker/daemon.json")

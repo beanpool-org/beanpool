@@ -218,6 +218,17 @@ test('the live-restore step reads systemd and Docker first, uses sudo only witho
     assert.ok(at('python3 - <<') > at('docker info >/dev/null'), 'writes only after the checks');
     assert.ok(commands.includes('systemctl start docker'), 'says how to start Docker when it is not running');
 
+    // Docker takes a setting from a dockerd flag or from daemon.json, never both: a host with --live-restore in its unit and
+    // the key in the file fails at the next start. So the step asks Docker first and, when it is already on, stops without
+    // an error and before anything is written or reloaded.
+    const askedFirst = commands.indexOf("docker info --format '{{.LiveRestoreEnabled}}'");
+    assert.ok(askedFirst > at('docker info >/dev/null') && askedFirst < at('python3 - <<'), 'asks Docker whether live-restore is already on, after Docker is known to run and before anything is written');
+    assert.ok(/ = true \] && \{ echo "[^"\n]*already on[^"\n]*"; exit 0; \}/.test(commands), 'and stops with exit 0, not an error, when it is');
+
+    // Live-restore covers a restart and a patch update (YY.MM.x), not a new YY.MM, so the step must not promise more.
+    assert.ok(step.split('\n')[0].includes('take a patch update'), 'says live-restore covers a patch update');
+    assert.ok(!/restart or update/.test(step), 'does not say any update leaves the community running');
+
     // Atomic, key-keeping, mode-keeping write; refuses a file it cannot read as a JSON object.
     for (const piece of ['json.loads', 'os.replace(tmp, p)', 'os.fsync', 'os.fchmod', 'os.fchown', 'os.path.realpath', 'isinstance(d, dict)']) {
         assert.ok(step.includes(piece), `the write uses ${piece}`);
@@ -335,7 +346,13 @@ function makeStubs(dir, { systemctl = true } = {}) {
     const script = (name, body) => fs.writeFileSync(path.join(stubs, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
     script('docker', [
         '[ -n "$FAKE_DOCKER_DOWN" ] && exit 1',
-        '[ "$1" = info ] && [ "$2" = --format ] && { echo "$FAKE_LIVE_RESTORE"; exit 0; }',
+        // `docker info --format` says false until the log holds the reload (as a real dockerd does when live-restore is only in
+        // daemon.json), then true; FAKE_LIVE_RESTORE fixes the answer instead (true: a --live-restore flag or an earlier run).
+        // Shell builtins only: one test runs the script with nothing but these stand-ins on PATH.
+        '[ "$1" = info ] && [ "$2" = --format ] && {',
+        '  reloaded=; while IFS= read -r line; do [ "$line" = "systemctl reload docker" ] && reloaded=1; done < "$FAKE_LOG"',
+        '  if [ -n "$FAKE_LIVE_RESTORE" ]; then echo "$FAKE_LIVE_RESTORE"; elif [ -n "$reloaded" ]; then echo true; else echo false; fi',
+        '  exit 0; }',
         '[ "$1" = info ] && exit 0',
         'exit 2',
     ].join('\n'));
@@ -359,7 +376,7 @@ function runWithStubs(dir, shell, input, { path: pathValue, env = {} } = {}) {
     const r = spawnSync(shell, [], {
         input,
         encoding: 'utf8',
-        env: { PATH: pathValue, FAKE_LOG: log, FAKE_LIVE_RESTORE: 'true', ...env },
+        env: { PATH: pathValue, FAKE_LOG: log, ...env },
     });
     return { ...r, out: `${r.stdout}${r.stderr}`, calls: fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) };
 }
@@ -414,6 +431,34 @@ test('the live-restore script stops with a plain message when systemd or Docker 
         r = run({ env: { FAKE_LIVE_RESTORE: 'false' } });
         assert.equal(r.status, 1, r.out);
         assert.match(r.out, /Docker live-restore did not turn on\./);
+        fs.rmSync(file, { force: true });
+
+        // Docker already has it on (a --live-restore flag in its unit, or an earlier run): daemon.json must not get a second
+        // copy of the setting, because Docker refuses a directive given both as a flag and in the file, and the next start
+        // fails. Nothing is created, nothing is reloaded, and it is not reported as a failure.
+        r = run({ env: { FAKE_LIVE_RESTORE: 'true' } });
+        assert.equal(r.status, 0, r.out);
+        assert.match(r.out, /Docker live-restore is already on\./);
+        assert.ok(!/did not turn on|is skipped/.test(r.out), 'no failure message');
+        assert.ok(!fs.existsSync(file), 'no daemon.json is created');
+        assert.deepEqual(r.calls, [], 'nothing is reloaded');
+
+        // ... and a daemon.json that is there is left byte for byte as it is, even one that is not valid JSON.
+        for (const bytes of ['{"log-driver":"local"}', '{"log-driver": ']) {
+            fs.writeFileSync(file, bytes);
+            r = run({ env: { FAKE_LIVE_RESTORE: 'true' } });
+            assert.equal(r.status, 0, r.out);
+            assert.equal(fs.readFileSync(file, 'utf8'), bytes, 'daemon.json is untouched');
+            assert.deepEqual(r.calls, []);
+        }
+        fs.rmSync(file);
+
+        // Not on yet: the stand-in says false until the reload, so the step writes, reloads once and then sees true.
+        r = run({});
+        assert.equal(r.status, 0, r.out);
+        assert.match(r.out, /Docker live-restore is on\./);
+        assert.ok(!/already on/.test(r.out));
+        assert.deepEqual(r.calls, ['systemctl reload docker']);
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -449,6 +494,17 @@ test('the whole live-restore step works as root and as a user with sudo, and a s
             assert.match(r.out, /AFTER-THE-STEP/, 'the lines after the step still run');
             assert.ok(!fs.existsSync(file), 'nothing is written');
         }
+
+        // Docker already has live-restore on: the step leaves daemon.json alone, says so, is not an error (so the "still off"
+        // message does not fire), and the install carries on.
+        fs.rmSync(file, { force: true });
+        r = run({ FAKE_LIVE_RESTORE: 'true' });
+        assert.equal(r.status, 0, r.out);
+        assert.match(r.out, /Docker live-restore is already on\./);
+        assert.ok(!/still off/.test(r.out), 'not reported as a failure');
+        assert.match(r.out, /AFTER-THE-STEP/, 'the lines after the step still run');
+        assert.ok(!fs.existsSync(file), 'nothing is written');
+        assert.ok(r.calls.every((c) => !/reload|restart/.test(c)), 'nothing is reloaded');
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -468,6 +524,14 @@ test('each operator page says the same thing about live-restore, in one paragrap
         'systemctl reload docker',
         'never a restart',
         "docker info --format '{{.LiveRestoreEnabled}}'",
+        // Docker promises live-restore across patch updates only, not a new YY.MM, so the page says so ...
+        'patch update',
+        'quiet hour',
+        // ... and when Docker already has it on (a flag), the file is left alone: a second copy stops Docker from starting.
+        'already prints true',
+        '--live-restore flag',
+        'leave daemon.json alone',
+        'a second copy',
     ];
     for (const page of pages) {
         const text = fs.readFileSync(path.join(ROOT, 'packages/beanpool-guide/operators', page), 'utf8');
@@ -482,11 +546,12 @@ test('each operator page says the same thing about live-restore, in one paragrap
         for (const phrase of required) {
             assert.ok(paragraphs[0].includes(phrase), `${page}: the live-restore paragraph says "${phrase}"`);
         }
+        assert.ok(!/restart or update/.test(text), `${page} does not say any update leaves the community running`);
     }
     const assistant = fs.readFileSync(path.join(ROOT, 'packages/beanpool-guide/operators/setup/install-with-ai.md'), 'utf8')
         .split('\n').find((l) => l.startsWith('- Turn on Docker live-restore'));
     assert.ok(assistant, 'the assistant is told to turn on live-restore');
-    for (const phrase of ['sudo', 'command -v systemctl', 'Docker is not running', '/etc/docker/daemon.json', 'every other key', 'cp -p', 'valid JSON', 'systemctl reload docker', 'never a restart', "docker info --format '{{.LiveRestoreEnabled}}'"]) {
+    for (const phrase of ['sudo', 'command -v systemctl', 'Docker is not running', '/etc/docker/daemon.json', 'every other key', 'cp -p', 'valid JSON', 'systemctl reload docker', 'never a restart', "docker info --format '{{.LiveRestoreEnabled}}'", 'patch update', 'already says true', '--live-restore flag', 'a second copy']) {
         assert.ok(assistant.includes(phrase), `the assistant's instruction says "${phrase}"`);
     }
 });

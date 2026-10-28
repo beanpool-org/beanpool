@@ -187,11 +187,11 @@ describe("a member's request to join, on the community's card", () => {
         expect(alerts[0]?.[0]).toBe("You're in Riverside");
     });
 
-    it('none (it lapsed, or a no): no answer came, and Ask to join again (fails before: read "waiting", no Ask)', async () => {
+    it('none (it lapsed, or a no): the request is no longer open, and Ask to join again (fails before: read "waiting", no Ask)', async () => {
         remember();
         scene.answer = { status: 'none' };
         await open();
-        expect(asked()).toBe('No answer came. You can ask again.');
+        expect(asked()).toBe('This request is no longer open. You can ask again.');
         expect(byTestId('community-card-ask')).not.toBeNull();
     });
 

@@ -7,7 +7,7 @@ import {
     communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
 import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
-import { cancelKnock, cardKnockLines, knockCardState, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
+import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { findLineWords } from '../find-community-lines';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
@@ -50,6 +50,12 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     const [cancellingUrls, setCancellingUrls] = useState<ReadonlySet<string>>(() => new Set());
     /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
     const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
+    /**
+     * The requests whose Cancel worked in this Home visit (by URL): their cards stay, with the cancelled line and no button.
+     * Held here, never stored: the next visit reads the phone's memory, where `cancelKnock` has already marked the knock
+     * cancelled, and the card is not drawn.
+     */
+    const [cancelledUrls, setCancelledUrls] = useState<ReadonlySet<string>>(() => new Set());
 
     useEffect(() => {
         showKnocks(knocks);
@@ -88,9 +94,9 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                             : null;
                         setCancellingUrls(was => { const left = new Set(was); left.delete(k.url); return left; });
                         if (res.ok) {
-                            const next = latestKnocks.current.filter(item => item.url !== k.url);
-                            showKnocks(next);
-                            onKnocksChange?.(next as RememberedKnock[]);
+                            // The card stays and says so (Home is not told: the list it pins by keeps this request for the
+                            // visit, so Find does not vanish under the line that says what happened).
+                            setCancelledUrls(was => new Set(was).add(k.url));
                         } else {
                             if (reread) setStatuses(was => ({ ...was, [k.url]: reread }));
                             setCancelErrors(was => ({ ...was, [k.url]: res.message }));
@@ -99,6 +105,18 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 },
             ],
         );
+    };
+
+    /**
+     * "Got it" on a request the community says it no longer holds: the phone forgets the knock, the card goes, and Home is
+     * told the list without it, so the pin it held can go (a request nothing holds pins Find until this, or day 61).
+     */
+    const onGotIt = async (k: RememberedKnock) => {
+        if (!identity) return;
+        await forgetKnock(identity.publicKey, k.url);
+        const next = latestKnocks.current.filter(item => item.url !== k.url);
+        showKnocks(next);
+        onKnocksChange?.(next as RememberedKnock[]);
     };
 
     const copy = findCommunityCardCopy({ ok: true, value: home }, !!point);
@@ -146,8 +164,9 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                 const answersLine = communityAnswersLine(comm?.answers);
                 const isCancelling = cancellingUrls.has(k.url);
+                const cancelled = cancelledUrls.has(k.url);
 
-                if (status?.ok && status.value.status === 'approved') {
+                if (!cancelled && status?.ok && status.value.status === 'approved') {
                     const approved = cardKnockLines([k], statuses)[0];
                     return (
                         <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
@@ -157,9 +176,12 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                 }
 
                 // What the community now says, as MyJoinRequests reads it: only a waiting request arrived and can be taken
-                // back. Nothing open there (`none`), or an answer that could not be read, is said as it is, with no Cancel.
+                // back. An answer that could not be read is said as it is, with no Cancel. Nothing open there (`none`:
+                // lapsed, cancelled elsewhere, an invite that expired) is the closed card: its three lines and "Got it",
+                // which forgets the request (decided 29 Oct 2026).
                 const state = knockCardState(true, true, status);
                 const waiting = state.kind === 'waiting';
+                const closed = status?.ok === true && status.value.status === 'none';
                 let arrivedLine: string;
                 if (state.kind === 'checking') arrivedLine = t('Checking…');
                 else if (waiting) arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
@@ -170,15 +192,32 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                         <Text style={[s.rowLine, s.rowStrong]} testID={`home-find-waiting-sent-${k.url}`}>
                             {t(FIND_COMMUNITY_WORDS.askedOnDate, { name, date: sentDate })}
                         </Text>
-                        <Text style={[s.rowSub, { marginTop: 4 }]} testID={`home-find-waiting-arrived-${k.url}`}>
-                            {arrivedLine}
-                        </Text>
-                        {!!answersLine && (
+                        {cancelled ? (
+                            // Said once, under the sent line, for this visit; polite, so a screen reader hears it without losing its place.
+                            <Text style={[s.rowSub, { marginTop: 4 }]} accessibilityLiveRegion="polite" testID={`home-find-waiting-cancelled-${k.url}`}>
+                                {t(KNOCK_MESSAGES.cancelled)}
+                            </Text>
+                        ) : (
+                            <Text style={[s.rowSub, { marginTop: 4 }]} testID={`home-find-waiting-arrived-${k.url}`}>
+                                {arrivedLine}
+                            </Text>
+                        )}
+                        {!!answersLine && !cancelled && !closed && (
                             <Text style={[s.rowSub, { marginTop: 4, fontStyle: 'italic' }]} testID={`home-find-waiting-answers-${k.url}`}>
                                 {answersLine}
                             </Text>
                         )}
-                        {waiting && (
+                        {closed && !cancelled && (
+                            <View style={{ marginTop: 8 }}>
+                                <HomeButton
+                                    colors={colors}
+                                    text={t(FIND_COMMUNITY_WORDS.gotIt)}
+                                    onPress={() => void onGotIt(k)}
+                                    testID={`home-find-gotit-${k.url}`}
+                                />
+                            </View>
+                        )}
+                        {waiting && !cancelled && (
                             <View style={{ marginTop: 8 }}>
                                 <HomeButton
                                     colors={colors}

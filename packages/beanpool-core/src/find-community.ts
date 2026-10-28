@@ -105,7 +105,8 @@ export const FIND_COMMUNITY_WORDS = {
     cancelRequest: word('Cancel my request'),
     cancelling: word('Cancelling…'),
     keepIt: word('Keep it'),
-    cancelConfirmBody: word('You can ask again after 24 hours.'),
+    /** The waiting card's button once the community says it no longer holds the request: forgets it, so the card can go. */
+    gotIt: word('Got it'),
     cancelConfirmText: word('Cancel your request to join {name}? You can ask again after 24 hours.'),
 } as const;
 
@@ -125,6 +126,10 @@ export function communityAnswersLine(answers?: 'week' | 'slow' | 'none' | null):
 /**
  * How long after a knock its community could still say yes: the node keeps it open 30 days and an invite made for
  * it lasts 30 days, so no status read can say approved after that; and a day for the clocks.
+ *
+ * The one definition: the phone (`utils/knock.ts`) and the web app (`lib/knock.ts`) both take it from here. It is also the
+ * outer end of Find your community's pin for a request the community no longer holds (`none`): the card stays until the
+ * member taps Got it, or day 61 after the send (Lounge L1, decided 29 Oct 2026).
  */
 export const KNOCK_ANSWERABLE_DAYS = 61;
 

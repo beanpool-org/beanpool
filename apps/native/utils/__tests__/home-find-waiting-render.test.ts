@@ -4,7 +4,10 @@
  * - Sent date: "You asked to join {name} on {date}."
  * - Whether it arrived: "Your request arrived."
  * - Measured line from directory push: e.g. "Usually answers within a week"
- * - "Cancel my request": confirmation, real withdrawal, never false success.
+ * - "Cancel my request": confirmation, real withdrawal, never false success; once it worked the card STAYS for this visit,
+ *   its button gone, with "You cancelled your request..." under the sent line (decided 29 Oct 2026).
+ * - A request the community no longer holds (`none`): the three lines and "Got it", which forgets the knock and so
+ *   lets the pin go; no Cancel.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -14,10 +17,11 @@ import { randomBytes } from 'node:crypto';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { alertMock, readKnockStatusMock, cancelKnockMock } = vi.hoisted(() => ({
+const { alertMock, readKnockStatusMock, cancelKnockMock, forgetKnockMock } = vi.hoisted(() => ({
     alertMock: vi.fn(),
     readKnockStatusMock: vi.fn(),
     cancelKnockMock: vi.fn(),
+    forgetKnockMock: vi.fn(),
 }));
 
 vi.mock('react-native', () => {
@@ -27,6 +31,7 @@ vi.mock('react-native', () => {
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (props.accessibilityState?.busy) attrs['aria-busy'] = 'true';
+        if (props.accessibilityLiveRegion) attrs['aria-live'] = props.accessibilityLiveRegion;
         if (props.accessibilityState?.disabled || disabled) attrs['aria-disabled'] = 'true';
         if (testID) attrs['data-testid'] = testID;
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
@@ -47,9 +52,11 @@ vi.mock('../../utils/knock', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../utils/knock')>()),
     readKnockStatus: (...args: unknown[]) => readKnockStatusMock(...args),
     cancelKnock: (...args: unknown[]) => cancelKnockMock(...args),
+    forgetKnock: (...args: unknown[]) => forgetKnockMock(...args),
     cardKnockLines: () => [],
 }));
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setLanguage } from '@beanpool/core';
 import { lightColors } from '../../constants/colors';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
@@ -106,6 +113,9 @@ beforeEach(() => {
     alertMock.mockReset();
     readKnockStatusMock.mockReset();
     cancelKnockMock.mockReset();
+    forgetKnockMock.mockReset();
+    forgetKnockMock.mockResolvedValue(undefined);
+    vi.mocked(AsyncStorage.setItem).mockClear();
 });
 afterEach(() => setLanguage('en'));
 
@@ -166,8 +176,9 @@ describe('FindCommunityBody honest waiting card (Lounge L1)', () => {
 
         expect(cancelKnockMock).toHaveBeenCalledWith('https://byron.example.org', ME);
 
-        // Knock block removed
-        expect(host.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')).toBeNull();
+        // The card stays for this visit: the button is gone, and the card says what happened.
+        expect(host.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')).not.toBeNull();
+        expect(host.querySelector('[data-testid="home-find-cancel-https://byron.example.org"]')).toBeNull();
     });
 
     it('shows error note when cancellation fails (never false success)', async () => {
@@ -247,12 +258,18 @@ describe('FindCommunityBody honest waiting card (Lounge L1)', () => {
     });
 });
 
+/** KNOCK_MESSAGES.cancelled: under the sent line of a card whose cancel worked, for the rest of that Home visit. */
+const CANCELLED_LINE = 'You cancelled your request. You can ask again after 24 hours.';
+/** KNOCK_MESSAGES.none: what the Home card and the community's own card say of a request nothing holds (decided 29 Oct 2026). */
+const NONE_LINE = 'This request is no longer open. You can ask again.';
+
 describe('FindCommunityBody tells the truth about what the community now answers (Lounge L1, review of #2573)', () => {
     const byron = 'https://byron.example.org';
     const lismore = 'https://lismore.example.org';
     const other: RememberedKnock = { url: lismore, name: 'Lismore BeanPool', key: 'lismore', sentAt: '2026-10-26T00:00:00.000Z' };
     const arrived = (host: HTMLElement, url = byron) => host.querySelector(`[data-testid="home-find-waiting-arrived-${url}"]`)?.textContent;
     const cancelButton = (host: HTMLElement, url = byron) => host.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLButtonElement | null;
+    const cancelledLine = (host: HTMLElement, url = byron) => host.querySelector(`[data-testid="home-find-waiting-cancelled-${url}"]`)?.textContent;
     const confirmCancel = async (host: HTMLElement, url: string, alertCall: number) => {
         await act(async () => { cancelButton(host, url)!.click(); });
         const destructive = alertMock.mock.calls[alertCall][2].find((b: any) => b.style === 'destructive');
@@ -262,15 +279,16 @@ describe('FindCommunityBody tells the truth about what the community now answers
         return { pending };
     };
 
-    it('a community with nothing open (lapsed, cancelled elsewhere) says "No answer came", with no Cancel under it', async () => {
+    it('a community with nothing open (lapsed, cancelled elsewhere) says it is no longer open, with no Cancel under it', async () => {
         readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'none' } });
         const host = await render([knock]);
         await act(async () => { await Promise.resolve(); });
 
         expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).not.toBeNull();
-        expect(arrived(host)).toBe('No answer came. You can ask again.');
+        expect(arrived(host)).toBe(NONE_LINE);
         expect(arrived(host)).not.toBe('Your request arrived.');
         expect(cancelButton(host)).toBeNull();
+        expect(host.textContent).not.toContain('No answer came');
     });
 
     it('a read that could not be made says why in the member\'s language, with no Cancel', async () => {
@@ -322,7 +340,8 @@ describe('FindCommunityBody tells the truth about what the community now answers
 
         expect(readKnockStatusMock).toHaveBeenCalledTimes(2);
         expect(cancelButton(host)).toBeNull();
-        expect(arrived(host)).toBe('No answer came. You can ask again.');
+        expect(arrived(host)).toBe(NONE_LINE);
+        expect(host.querySelector(`[data-testid="home-find-gotit-${byron}"]`)?.textContent).toBe('Got it');
         expect(host.querySelector(`[data-testid="home-find-cancel-error-${byron}"]`)?.textContent).toBe('There is no open request from you here.');
     });
 
@@ -374,7 +393,7 @@ describe('FindCommunityBody tells the truth about what the community now answers
         expect(alertMock).toHaveBeenCalledTimes(1);
 
         await act(async () => { finishRead({ ok: true, value: { status: 'none' } }); await pending; });
-        expect(arrived(host)).toBe('No answer came. You can ask again.');
+        expect(arrived(host)).toBe(NONE_LINE);
         expect(cancelButton(host)).toBeNull();
     });
 
@@ -399,16 +418,140 @@ describe('FindCommunityBody tells the truth about what the community now answers
         expect(alertMock).toHaveBeenCalledTimes(2);
         expect(cancelKnockMock).toHaveBeenCalledTimes(2);
 
-        // A finishes first: it goes, B stays busy.
+        // A finishes first: its card stays and says so, its button is gone, B stays busy.
         await act(async () => { finishA({ ok: true }); await pendingA; });
-        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).not.toBeNull();
+        expect(cancelledLine(host, byron)).toBe(CANCELLED_LINE);
+        expect(cancelButton(host, byron)).toBeNull();
+        expect(cancelledLine(host, lismore)).toBeUndefined();
         expect(cancelButton(host, lismore)!.getAttribute('aria-busy')).toBe('true');
+
+        // B finishes: both say so, neither has a button, and A's line did not go when B's came.
+        await act(async () => { finishB({ ok: true }); await pendingB; });
+        expect(cancelledLine(host, byron)).toBe(CANCELLED_LINE);
+        expect(cancelledLine(host, lismore)).toBe(CANCELLED_LINE);
+        expect(cancelButton(host, byron)).toBeNull();
+        expect(cancelButton(host, lismore)).toBeNull();
+        // Home is not told: the cards stay for this visit, and with them the pin.
+        expect(changes).toEqual([]);
+    });
+});
+
+describe('the card of a request the community no longer holds, and the card after a Cancel that worked (decided 29 Oct 2026, PR #2573)', () => {
+    const byron = 'https://byron.example.org';
+    const lismore = 'https://lismore.example.org';
+    const other: RememberedKnock = { url: lismore, name: 'Lismore BeanPool', key: 'lismore', sentAt: '2026-10-26T00:00:00.000Z' };
+    const card = (host: HTMLElement, url = byron) => host.querySelector(`[data-testid="home-find-waiting-${url}"]`) as HTMLElement | null;
+    const gotIt = (host: HTMLElement, url = byron) => host.querySelector(`[data-testid="home-find-gotit-${url}"]`) as HTMLButtonElement | null;
+    const confirmCancel = async (host: HTMLElement, url: string, alertCall: number) => {
+        await act(async () => { (host.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLButtonElement).click(); });
+        const destructive = alertMock.mock.calls[alertCall][2].find((b: any) => b.style === 'destructive');
+        await act(async () => { await destructive.onPress(); });
+    };
+
+    it('the none card is three lines and Got it: when it was asked, that it is no longer open, that the member can ask again; no Cancel, no measured line', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'none' } });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(card(host)!.textContent).toBe('You asked to join Byron Shire BeanPool on 25 Oct 2026.' + NONE_LINE + 'Got it');
+        expect(gotIt(host)!.tagName).toBe('BUTTON');
+        expect(host.querySelector(`[data-testid="home-find-cancel-${byron}"]`)).toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-waiting-answers-${byron}"]`)).toBeNull();
+        expect(host.textContent).not.toContain('No answer came');
+    });
+
+    it('Got it forgets the knock, and the card goes; Home is told the list without it, so the pin can go', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'none' } });
+        const changes: string[][] = [];
+        const host = await render([knock, other], list => changes.push(list.map(k => k.url)));
+        await act(async () => { await Promise.resolve(); });
+
+        await act(async () => { gotIt(host, byron)!.click(); });
+
+        expect(forgetKnockMock).toHaveBeenCalledTimes(1);
+        expect(forgetKnockMock).toHaveBeenCalledWith(ME.publicKey, byron);
+        expect(card(host, byron)).toBeNull();
+        expect(card(host, lismore)).not.toBeNull();
         expect(changes).toEqual([[lismore]]);
 
-        // B finishes with the list as A left it: nothing of A is back, and Home is told neither is open.
-        await act(async () => { finishB({ ok: true }); await pendingB; });
-        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).toBeNull();
-        expect(host.querySelector(`[data-testid="home-find-waiting-${lismore}"]`)).toBeNull();
+        await act(async () => { gotIt(host, lismore)!.click(); });
+        expect(forgetKnockMock).toHaveBeenLastCalledWith(ME.publicKey, lismore);
+        expect(card(host, lismore)).toBeNull();
         expect(changes).toEqual([[lismore], []]);
+        expect(cancelKnockMock).not.toHaveBeenCalled();
+    });
+
+    it('a request that waits, or whose answer could not be read, has no Got it', async () => {
+        readKnockStatusMock
+            .mockResolvedValueOnce({ ok: true, value: { status: 'pending' } })
+            .mockResolvedValueOnce({ ok: false, kind: 'unreachable', message: KNOCK_MESSAGES.unreachable });
+        const host = await render([knock, other]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(host.querySelectorAll('[data-testid^="home-find-gotit-"]')).toHaveLength(0);
+    });
+
+    it('the none card is worded in the member\'s language', async () => {
+        setLanguage('fr', [{ [KNOCK_MESSAGES.none]: 'Cette demande n\'est plus ouverte. Vous pouvez la renouveler.', 'Got it': 'Compris' }]);
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'none' } });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(host.querySelector(`[data-testid="home-find-waiting-arrived-${byron}"]`)?.textContent).toBe('Cette demande n\'est plus ouverte. Vous pouvez la renouveler.');
+        expect(gotIt(host)!.textContent).toBe('Compris');
+    });
+
+    it('a Cancel that worked keeps the card for this visit: no button, the cancelled line under the sent line, announced politely, nothing stored, Home not told', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: true });
+        const changes: string[][] = [];
+        const host = await render([knock], list => changes.push(list.map(k => k.url)));
+        await act(async () => { await Promise.resolve(); });
+        expect(host.querySelector(`[data-testid="home-find-waiting-arrived-${byron}"]`)?.textContent).toBe('Your request arrived.');
+
+        await confirmCancel(host, byron, 0);
+
+        const cardEl = card(host)!;
+        expect(cardEl).not.toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-cancel-${byron}"]`)).toBeNull();
+        const children = Array.from(cardEl.children);
+        expect(children[0].getAttribute('data-testid')).toBe(`home-find-waiting-sent-${byron}`);
+        expect(children[1].getAttribute('data-testid')).toBe(`home-find-waiting-cancelled-${byron}`);
+        expect(children[1].textContent).toBe('You cancelled your request. You can ask again after 24 hours.');
+        expect(children[1].getAttribute('aria-live')).toBe('polite');
+        // No "arrived" line over it, no measured line, no Got it: it is a withdrawn request, not a closed one.
+        expect(host.querySelector(`[data-testid="home-find-waiting-arrived-${byron}"]`)).toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-waiting-answers-${byron}"]`)).toBeNull();
+        expect(gotIt(host)).toBeNull();
+        // This visit only: nothing written by the card, Home's list unchanged (so the pin holds while the card shows).
+        expect(forgetKnockMock).not.toHaveBeenCalled();
+        expect(AsyncStorage.setItem).not.toHaveBeenCalled();
+        expect(changes).toEqual([]);
+    });
+
+    it('a Cancel that failed still shows the error and the button, and no cancelled line', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'Network offline' });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        await confirmCancel(host, byron, 0);
+
+        expect(host.querySelector(`[data-testid="home-find-waiting-cancelled-${byron}"]`)).toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-cancel-${byron}"]`)).not.toBeNull();
+        expect(host.querySelector(`[data-testid="home-find-cancel-error-${byron}"]`)?.textContent).toBe('Network offline');
+    });
+
+    it('the cancelled line is worded in the member\'s language', async () => {
+        setLanguage('fr', [{ [KNOCK_MESSAGES.cancelled]: 'Vous avez annulé votre demande. Vous pourrez la renouveler dans 24 heures.' }]);
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: true });
+        const host = await render([knock]);
+        await act(async () => { await Promise.resolve(); });
+
+        await confirmCancel(host, byron, 0);
+
+        expect(host.querySelector(`[data-testid="home-find-waiting-cancelled-${byron}"]`)?.textContent).toBe('Vous avez annulé votre demande. Vous pourrez la renouveler dans 24 heures.');
     });
 });

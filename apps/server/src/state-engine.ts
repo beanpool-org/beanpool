@@ -154,6 +154,8 @@ import {
     announcePause,
     mayBePaused,
     suspendReasonProblem,
+    removalCoolDownRefusal,
+    REMOVAL_COOL_DOWN_CODE,
     ENTERPRISE_NOT_PAUSED,
     type Decision,
     type DecisionVote,
@@ -7605,6 +7607,19 @@ export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
     return !!reportSuspensionTakesRole(reportId);
 }
 
+/**
+ * Why actioning this report with suspendUser can't pause its member for `actor` (the cool-down, decisions-engine.ts
+ * removalCoolDownRefusal), or null: asked by the route before any fresh proof, as actionReport asks it again. Only for a
+ * member the action would pause (not a closed account, an enterprise, or one already paused or held).
+ */
+export function reportPauseCoolDown(reportId: string, actor: string | null | undefined): string | null {
+    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+    const subject = report ? reportSubjectOf(report) : null;
+    const member = subject && !isClosedAccountKey(subject) ? getMember(subject) : undefined;
+    return member && !member.isTreasury && mayBePaused(member) ? removalCoolDownRefusal(member.publicKey, actor) : null;
+}
+
 /** The owner's or admin's role actioning this report with suspendUser would take away, or null (reportSuspensionTakesPrivilegedRole). */
 export function reportSuspensionTakesRole(reportId: string): 'owner' | 'admin' | null {
     const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
@@ -7686,6 +7701,15 @@ export function actionReport(
         if (reasonProblem) {
             const err: any = new Error(reasonProblem);
             err.status = 400;
+            throw err;
+        }
+        // Whoever brought a vote on removing them that ended without removing them waits out the cool-down (removal by vote,
+        // Amendment A point 5), as adminEmergencySuspend refuses it: 403, before any write. Only for a pause this would make.
+        const coolDown = toPause && mayBePaused(toPause) ? removalCoolDownRefusal(toPause.publicKey, opts?.actor) : null;
+        if (coolDown) {
+            const err: any = new Error(coolDown);
+            err.status = 403;
+            err.code = REMOVAL_COOL_DOWN_CODE;
             throw err;
         }
         const wasOpen = report.status === 'pending' || report.status == null;

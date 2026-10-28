@@ -1223,6 +1223,33 @@ function moveShopKindsToCategories(): void {
     }
 }
 
+/**
+ * The columns a vote on removing a member carries for removal by vote's Amendment A (schema.sql `decisions`): the member's
+ * own reply to its case, and a case an admin hid as shown to be false.
+ */
+export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
+    ['subject_reply', 'TEXT'],
+    ['subject_replied_at', 'DATETIME'],
+    ['case_hidden_at', 'DATETIME'],
+    ['case_hidden_by', 'TEXT'],
+    ['case_hidden_reason', 'TEXT'],
+];
+
+/**
+ * Adds REMOVAL_CASE_COLUMNS to a `decisions` table from before them (initSchema, every boot): each one it lacks, NULL on
+ * every row, and every row kept as it was. Returns how many it added; 0 once they are all there. An older image booted
+ * back on the table reads past them (it names its columns), and a standby's copy writes only the columns it has
+ * (engine/plain-tables.ts).
+ */
+export function addRemovalCaseColumns(targetDb: Database.Database): number {
+    const has = new Set((targetDb.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name));
+    const missing = REMOVAL_CASE_COLUMNS.filter(([column]) => !has.has(column));
+    targetDb.transaction(() => {
+        for (const [column, type] of missing) targetDb.exec(`ALTER TABLE decisions ADD COLUMN ${column} ${type}`);
+    })();
+    return missing.length;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -2344,6 +2371,11 @@ export function initSchema() {
         if (addDecisionScope(db, schemaSql) === 'rebuilt') console.log('[DB] ✅ Migrated decisions to carry a scope');
     } catch (err: any) {
         console.error('[DB] ❌ Failed to give decisions a scope:', err?.message || err);
+    }
+    try {
+        if (addRemovalCaseColumns(db) > 0) console.log("[DB] ✅ Decisions carry a member's reply and a hidden case");
+    } catch (err: any) {
+        console.error("[DB] ❌ Failed to give decisions the member's reply and a hidden case:", err?.message || err);
     }
     try {
         db.exec(`

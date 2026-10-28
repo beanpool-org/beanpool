@@ -246,6 +246,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     //     keeper, or a pay-out's recipient)
     move('decisions', 'author_pubkey');
     move('decisions', 'admin_halted_by');
+    move('decisions', 'case_hidden_by');
     move('decisions', 'subject', "touches = 'member' OR touches = 'pool' OR touches = 'scope'");
     move('decision_votes', 'voter_pubkey');
     move('decision_electors', 'member_pubkey');

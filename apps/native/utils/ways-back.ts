@@ -109,7 +109,7 @@ export async function removeVaultCopy(identity: BeanPoolIdentity, provider: SsoP
 export async function removeCommunityCopyFrom(
     identity: BeanPoolIdentity, community: CommunityPart, provider: SsoProvider,
 ): Promise<Removal> {
-    const gone = await deleteOrRemember(identity, community.url, provider, community.status?.generation ?? null);
+    const { gone } = await deleteOrRemember(identity, community.url, provider, community.status?.generation ?? null);
     return gone ? { removed: true } : { removed: false, why: 'remembered' };
 }
 
@@ -133,8 +133,14 @@ export async function removeEverything(identity: BeanPoolIdentity, w: WaysBack):
         : Promise.resolve(null);
     const communities = Promise.all(w.communities.filter(c => c.status).map(async c => {
         const done: EverythingRemoved['communities'] = [];
+        // A delete that doesn't land is remembered with the generation the member saw, moved on by each of these deletes
+        // that lands (the community's answer one above it is this phone's own change, utils/vault-move.ts): a second copy's
+        // retry is never dropped as if someone had changed the copies there.
+        let seen = c.status!.generation;
         for (const provider of c.status!.providers) {
-            done.push({ url: c.url, name: c.name, provider, removal: await removeCommunityCopyFrom(identity, c, provider) });
+            const d = await deleteOrRemember(identity, c.url, provider, seen);
+            if (d.gone && seen !== null && d.generation === seen + 1) seen = d.generation;
+            done.push({ url: c.url, name: c.name, provider, removal: d.gone ? { removed: true } : { removed: false, why: 'remembered' } });
         }
         return done;
     }));

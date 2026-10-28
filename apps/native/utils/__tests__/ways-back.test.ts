@@ -66,19 +66,25 @@ interface Community {
     down: boolean;
     /** Answers its status, but its deletes fail (a 5xx). */
     deletesFail: boolean;
+    /** Only the deletes of these sign-ins' copies fail (a 5xx). */
+    deletesFailFor: Set<string>;
 }
 
 interface Net {
     vault: FakeVault;
     communities: Record<string, Community>;
     sent: SentRequest[];
+    /** While set, every community's status answer waits for it. */
+    statusGate: Promise<void> | null;
 }
 
 let kim: BeanPoolIdentity;
 
 function network(): Net {
-    const community = (copies: string[], generation: number): Community => ({ copies: new Set(copies), generation, down: false, deletesFail: false });
-    const net: Net = { vault: new FakeVault(), communities: { [MULLUM]: community(['google'], 4), [GLOBAL]: community([], 0) }, sent: [] };
+    const community = (copies: string[], generation: number): Community => ({
+        copies: new Set(copies), generation, down: false, deletesFail: false, deletesFailFor: new Set(),
+    });
+    const net: Net = { vault: new FakeVault(), communities: { [MULLUM]: community(['google'], 4), [GLOBAL]: community([], 0) }, sent: [], statusGate: null };
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         const u = new URL(url);
@@ -102,14 +108,16 @@ function network(): Net {
             return json(401, { error: 'This request must be signed by an active member of this node.' });
         }
         if (req.method === 'POST' && u.pathname === '/api/recovery/shares/status') {
+            if (net.statusGate) await net.statusGate;
             return json(200, { generation: c.generation, enrolledSso: [...c.copies], keepers: [], total: c.copies.size, threshold: 1 });
         }
         const del = /^\/api\/recovery\/shares\/sso\/([a-z]+)$/.exec(u.pathname);
         if (req.method === 'DELETE' && del) {
-            if (c.deletesFail) return json(503, { error: 'Try again later.' });
+            if (c.deletesFail || c.deletesFailFor.has(del[1])) return json(503, { error: 'Try again later.' });
             if (!c.copies.delete(del[1])) return json(404, { error: `Provider '${del[1]}' is not connected for this account.` });
+            // As the node answers: the new generation its copies are at, or 0 once it removed the last one.
             c.generation = c.copies.size ? c.generation + 1 : 0;
-            return json(200, { removed: del[1], enrolledSso: [...c.copies] });
+            return json(200, { removed: del[1], generation: c.generation, enrolledSso: [...c.copies] });
         }
         throw new Error(`No request expected: ${req.method} ${url}`);
     });
@@ -343,6 +351,149 @@ describe('a community that can\'t be reached: "not yet removed", remembered, and
 
         expect(net.communities[MULLUM].copies.size).toBe(0);
         expect((await listWaysBack(kim)).pending).toEqual([{ url: GLOBAL, provider: 'facebook' }]);
+    });
+
+    // PR #2570 review: the node writes a new generation for every single-sign-in delete that leaves another copy, so the
+    // member's own first delete made every sibling's remembered generation stale, and the retry dropped them unsent.
+    describe("two copies at one community: the member's own deletes are never taken for a change made there since", () => {
+        const mullumPending = async () => (await listWaysBack(kim)).pending.filter((p) => p.url === MULLUM);
+
+        it('Remove everything while it is down: at the next open both deletes are sent and land', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].down = true;
+            await removeEverything(kim, ways);
+            net.communities[MULLUM].down = false;
+
+            await retryCommunityRemovals(kim);
+
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
+
+        it('the first delete lands and the second gets a 5xx: the second goes at the next open', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].deletesFailFor.add('facebook');
+            const done = await removeEverything(kim, ways);
+            expect(done.communities.map((c) => [c.provider, c.removal.removed])).toEqual([['google', true], ['facebook', false]]);
+            net.communities[MULLUM].deletesFailFor.clear();
+
+            await retryCommunityRemovals(kim);
+
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
+
+        it('the first delete gets a 5xx and the second lands: the first goes at the next open', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].deletesFailFor.add('google');
+            const done = await removeEverything(kim, ways);
+            expect(done.communities.map((c) => [c.provider, c.removal.removed])).toEqual([['google', false], ['facebook', true]]);
+            net.communities[MULLUM].deletesFailFor.clear();
+
+            await retryCommunityRemovals(kim);
+
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
+
+        it('in one retry the first lands and the second fails: the second waits at the generation the first moved to, and goes at the next', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].down = true;
+            await removeEverything(kim, ways);
+            net.communities[MULLUM].down = false;
+            net.communities[MULLUM].deletesFailFor.add('facebook');
+
+            await retryCommunityRemovals(kim);
+            expect([...net.communities[MULLUM].copies]).toEqual(['facebook']);
+            expect(JSON.parse(mem.async.get(vaultMoveUnfinishedStoreKey(kim.publicKey))!)).toEqual([{ url: MULLUM, provider: 'facebook', generation: 5 }]);
+
+            net.communities[MULLUM].deletesFailFor.clear();
+            await retryCommunityRemovals(kim);
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
+
+        it('a change someone made there since (Google linked again from another device): neither delete is sent, both copies are listed as kept', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].down = true;
+            await removeEverything(kim, ways);
+            net.communities[MULLUM].down = false;
+            net.communities[MULLUM].generation = 5;
+            const tried = deletesAt(net, MULLUM).length;
+
+            await retryCommunityRemovals(kim);
+
+            expect(deletesAt(net, MULLUM).length - tried).toBe(0);
+            expect([...net.communities[MULLUM].copies]).toEqual(['google', 'facebook']);
+            const after = await listWaysBack(kim);
+            expect(after.pending).toEqual([]);
+            expect(knownCopies(after).filter((c) => c.at === 'community')).toEqual([
+                { at: 'community', url: MULLUM, provider: 'google' },
+                { at: 'community', url: MULLUM, provider: 'facebook' },
+            ]);
+        });
+
+        it("one status read for each community however many deletes wait there, and every community at once", async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            net.communities[GLOBAL].copies.add('google');
+            net.communities[GLOBAL].generation = 2;
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].down = true;
+            net.communities[GLOBAL].down = true;
+            await removeEverything(kim, ways);
+            net.communities[MULLUM].down = false;
+            net.communities[GLOBAL].down = false;
+            const from = net.sent.length;
+            const statusAsked = () => net.sent.slice(from).filter((s) => s.path === '/api/recovery/shares/status').map((s) => s.origin).sort();
+            let open!: () => void;
+            net.statusGate = new Promise<void>((r) => { open = r; });
+
+            const retry = retryCommunityRemovals(kim);
+            try {
+                // Both are asked before either answers: a community that hangs holds the others up no longer than itself.
+                await vi.waitFor(() => expect(statusAsked()).toEqual([GLOBAL, MULLUM]));
+            } finally {
+                open();
+            }
+            await retry;
+
+            expect(statusAsked()).toEqual([GLOBAL, MULLUM]);
+            expect(net.communities[MULLUM].copies.size + net.communities[GLOBAL].copies.size).toBe(0);
+        });
+
+        it('two retries at once (app open, and the screen opening): each delete is sent once', async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].copies.add('facebook');
+            const ways = await listWaysBack(kim);
+            net.communities[MULLUM].down = true;
+            await removeEverything(kim, ways);
+            net.communities[MULLUM].down = false;
+            const tried = deletesAt(net, MULLUM).length;
+
+            await Promise.all([retryCommunityRemovals(kim), retryCommunityRemovals(kim)]);
+
+            expect(deletesAt(net, MULLUM).length - tried).toBe(2);
+            expect(net.communities[MULLUM].copies.size).toBe(0);
+            expect(await mullumPending()).toEqual([]);
+        });
     });
 
     it('the move card never offers to move a copy that is waiting to be removed', async () => {

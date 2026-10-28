@@ -43,7 +43,8 @@ const STUBS = {
         };
         export const Text = React.forwardRef((p, ref) => React.createElement(RNW.Text, { ...p, ref, style: scaled(p.style) }));
         export const Platform = { ...RNW.Platform, OS: 'android', select: (o) => o['android'] ?? o.default };
-        export const Alert = { alert: () => {} };
+        // Cancel's confirmation: the harness presses the destructive button, as a member does.
+        export const Alert = { alert: (_title, _message, buttons) => { const b = (buttons ?? []).find((x) => x.style === 'destructive'); if (b && b.onPress) void b.onPress(); } };
         export default { ...RNW, Text, Platform, Alert };
     `,
     'expo-router': `export const router = { back() {}, push() {}, replace() {}, canDismiss: () => false, dismissAll() {} };`,
@@ -57,17 +58,13 @@ const STUBS = {
     '@react-native-async-storage/async-storage': `
         export default { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} };
     `,
-    '../knock': `
-        export const cancelKnock = async () => ({ ok: true });
-        export const readKnockStatus = async () => ({ ok: true, value: { status: 'pending' } });
-        export const cardKnockLines = () => [];
-        export const KNOCK_CANCEL_BLOCK_HOURS = 24;
-    `,
+    // The real utils/knock (its words, knockCardState, cardKnockLines), with only the three calls that reach a community
+    // or the phone's memory replaced. A local export wins over the star: the card is the app's own.
     '../../utils/knock': `
+        export * from ${JSON.stringify(path.join(NATIVE, 'utils/knock.ts'))};
+        export const readKnockStatus = async () => ({ ok: true, value: { status: globalThis.__knockStatus ?? 'pending' } });
         export const cancelKnock = async () => ({ ok: true });
-        export const readKnockStatus = async () => ({ ok: true, value: { status: 'pending' } });
-        export const cardKnockLines = () => [];
-        export const KNOCK_CANCEL_BLOCK_HOURS = 24;
+        export const forgetKnock = async () => {};
     `,
 };
 
@@ -88,6 +85,8 @@ import { FindCommunityBody } from ${JSON.stringify(path.join(NATIVE, 'components
 const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
 const colors = scheme === 'dark' ? darkColors : lightColors;
+// What the community answers to the status read: pending (the Cancel card) or none (nothing open: the Got it card).
+globalThis.__knockStatus = q.get('status') === 'none' ? 'none' : 'pending';
 
 const comm = {
     key: 'byron',
@@ -253,8 +252,19 @@ try {
 
     for (const scheme of ['light', 'dark']) {
         await open(`scheme=${scheme}`);
-        await page.getByText('You asked to join Byron Shire BeanPool').waitFor();
+        await page.getByText('Your request arrived.').waitFor();
         await measure(`native-waiting-card-${scheme}`);
+
+        // The community holds nothing: when it was asked, that it is no longer open, that the member can ask again, and Got it.
+        await open(`scheme=${scheme}&status=none`);
+        await page.getByRole('button', { name: 'Got it' }).waitFor();
+        await measure(`native-none-card-${scheme}`);
+
+        // A Cancel that worked: the card stays, the button gone, the cancelled line under the sent line.
+        await open(`scheme=${scheme}`);
+        await page.getByRole('button', { name: 'Cancel my request' }).click();
+        await page.getByText('You cancelled your request. You can ask again after 24 hours.').waitFor();
+        await measure(`native-cancelled-card-${scheme}`);
     }
     for (const e of errors) problems.push(`page error: ${e}`);
 } finally {

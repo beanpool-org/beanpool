@@ -185,17 +185,6 @@ export default function WelcomeScreen() {
     const [callsignSuggestions, setCallsignSuggestions] = useState<string[]>([]);
     const [recoveryWords, setRecoveryWords] = useState<string[]>(Array(12).fill(''));
     const [recoveryAnchorUrl, setRecoveryAnchorUrl] = useState('');
-    // Another community's door sent the member here to restore (app/join-open-door.tsx, "🔑 Restore my account"): the
-    // address field starts with that community's, the one under the door's title (utils/open-door.ts restoreAtDoorHref),
-    // and the phone's anchor, read after it, never replaces it.
-    const restoreAtDoor = useRef<string | null>(null);
-    useEffect(() => {
-        if (params?.mode !== 'member') return;
-        const at = takeRestoreAt();
-        if (!at) return;
-        restoreAtDoor.current = at;
-        setRecoveryAnchorUrl(at);
-    }, [params?.mode]);
     const [notifVisible, setNotifVisible] = useState(false);
     const [notifBusy, setNotifBusy] = useState(false);
     useEffect(() => {
@@ -449,6 +438,21 @@ export default function WelcomeScreen() {
             if (state === 'active') ask();
         });
         return () => { cancelled = true; sub.remove(); };
+    }, [mode]));
+
+    // Another community's door sent the member here to restore (app/join-open-door.tsx, "🔑 Restore my account"): the
+    // address field starts with that community's, the one under the door's title (utils/open-door.ts restoreAtDoorHref),
+    // and the phone's anchor, read after it, never replaces it. Taken by the welcome in view only: a door the welcome
+    // screen pushed leaves that one under the new one, and the params are global, so both see `mode` (PR #2564 review).
+    // Read at the restore step itself, not at its param: the router runs a focus effect once its navigation has loaded,
+    // after the param is consumed (the `mode` effect above).
+    const restoreAtDoor = useRef<string | null>(null);
+    useFocusEffect(useCallback(() => {
+        if (mode !== 'member') return;
+        const at = takeRestoreAt();
+        if (!at) return;
+        restoreAtDoor.current = at;
+        setRecoveryAnchorUrl(at);
     }, [mode]));
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone

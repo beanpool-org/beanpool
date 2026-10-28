@@ -84,14 +84,20 @@ vi.mock('react-native', () => {
     };
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
+// Whether the screen is the one in view: every case's single welcome is; a case with two in the stack provides it.
+const focus = vi.hoisted(() => ({ ctx: null as unknown as ReactAll.Context<boolean> }));
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
+    const { useEffect: effect, createContext, useContext } = await import('react');
+    focus.ctx = createContext(true);
     return {
         router: { push() {}, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
         useGlobalSearchParams: () => params.now,
         useLocalSearchParams: () => params.now,
-        useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
-        useIsFocused: () => true,
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            const focused = useContext(focus.ctx);
+            effect(() => (focused ? cb() : undefined), [cb, focused]);
+        },
+        useIsFocused: () => useContext(focus.ctx),
         ErrorBoundary: () => null,
     };
 });
@@ -717,5 +723,35 @@ describe("another community's door sent the member here to restore", () => {
         await mount('en');
         await press('🔑 Recover with 12 Words', 'en');
         expect(field()?.value).toBe('https://mullum.beanpool.org');
+    });
+
+    it("from a door the welcome screen pushed: the welcome in view takes the address, never the one under it", async () => {
+        // welcome → the door (router.push) → its Restore (router.replace): the stack is [welcome, welcome], both mounted,
+        // and the params are global, so both read mode=member. The one under it, earlier in the tree, took the hand-over
+        // first, and the one in view showed the phone's anchor (PR #2564 review). The router runs the one in view's focus
+        // effects once its navigation has loaded, after welcome has consumed the param (router.setParams({ mode: '' })).
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        const screen = (name: string, focused: boolean) => createElement('div', { key: name, 'data-screen': name }, createElement(focus.ctx.Provider, { value: focused }, createElement(WelcomeScreen)));
+        const stack = (...screens: unknown[]) => createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, ...(screens as any[]));
+        await act(async () => { root!.render(stack(screen('under', true)) as any); });
+        await settle();
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', false)) as any); });
+        await settle();
+        params.now = { mode: '' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', true)) as any); });
+        await settle();
+        const inView = host.querySelector('[data-screen="in-view"]') as HTMLElement;
+        expect(inView.textContent).toContain('🔑 Restore your account');
+        const recover = Array.from(inView.querySelectorAll('button, [role="button"]')).find((b) => (b.textContent ?? '').includes('🔑 Recover with 12 Words')) as HTMLElement;
+        expect(recover, 'a button "🔑 Recover with 12 Words"').toBeTruthy();
+        await act(async () => { recover.click(); });
+        await settle();
+        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)');
+        expect(address?.value).toBe(SELF);
     });
 });

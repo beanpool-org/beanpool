@@ -34,7 +34,7 @@ import {
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    currentLanguage, formatCount, t, tn, word,
+    currentLanguage, formatCount, t, tn, word, communityShapeSummary, type CommunityShapeFeatures,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
@@ -82,6 +82,7 @@ import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../components/HomeCard';
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
+import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
@@ -838,16 +839,21 @@ function CommunityBody({
     cm,
     profile,
     isVisitor,
+    features,
+    onOpenShape,
     onAddCard,
     onEditHome,
 }: {
     cm: NonNullable<HomeCards['community']>;
     profile: string;
     isVisitor: boolean;
+    features?: CommunityShapeFeatures | null;
+    onOpenShape?: () => void;
     onAddCard: () => void;
     onEditHome: () => void;
 }) {
     const { wide } = useCardContainer();
+    const shapeSummary = communityShapeSummary(features);
     const isGlobal = profile === 'global';
     const hasDetailedStats = !isGlobal
         ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
@@ -927,6 +933,17 @@ function CommunityBody({
                     </p>
                 </div>
             )}
+            {shapeSummary && (
+                <button
+                    type="button"
+                    onClick={onOpenShape}
+                    className="w-full text-left p-0 mb-3 bg-transparent border-none cursor-pointer flex items-center justify-between gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+                    data-testid="home-community-shape-summary"
+                >
+                    <span className="break-words">{shapeSummary}</span>
+                    <span className="text-text-muted text-base shrink-0 select-none">›</span>
+                </button>
+            )}
             {!isVisitor && (
                 <div className="flex flex-wrap justify-end gap-x-4">
                     <HomeMore onClick={onAddCard} testId="home-add-open" label={t('Add a card to Home')}>{t('Add a card ›')}</HomeMore>
@@ -962,6 +979,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     });
     const [editOpen, setEditOpen] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [shapeModalOpen, setShapeModalOpen] = useState(false);
     // A card's Settings… (from its "…" or Edit home).
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
     // The node refused the version-2 layout (a node from before the frame): Edit home says the cards stay here (§2.3).
@@ -2269,6 +2287,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             cm={cm}
                             profile={profile}
                             isVisitor={isVisitor}
+                            features={a?.features}
+                            onOpenShape={() => setShapeModalOpen(true)}
                             onAddCard={() => setPickerOpen(true)}
                             onEditHome={() => setEditOpen(true)}
                         />
@@ -2476,6 +2496,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         }}
                     />
                 )}
+                <CommunityShapeModal
+                    isOpen={shapeModalOpen}
+                    onClose={() => setShapeModalOpen(false)}
+                    features={answer?.features}
+                    onOpenGuide={() => onNavigate('guide', 'how-this-community-works')}
+                />
             </div>
         </div>
     );

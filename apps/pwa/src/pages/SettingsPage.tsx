@@ -3,7 +3,8 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
-import { AREA_STEP_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, t, tn } from '@beanpool/core';
+import { AREA_STEP_WORDS, COMMUNITY_SHAPE_CARD_WORDS, LANGS, describeArea, formatNumber, isLang, knockSwitchShown, t, tn } from '@beanpool/core';
+import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { AreaStep, areaFailureWords } from '../components/AreaStep';
 import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
@@ -174,6 +175,8 @@ function LanguageRow() {
 
 export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, initialGuidePage, onReRunSetup, nodeVersion, openOwnerWordsCheck, linkResult }: Props) {
     const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area'>(initialMode || 'menu');
+    const [guidePage, setGuidePage] = useState<string | null>(initialGuidePage ?? null);
+    const [shapeModalOpen, setShapeModalOpen] = useState(false);
     // Your area (design DESIGN-global-sync-by-area §3.5): only on a community that gives each member the listings near
     // their area. The line is the node's value (GET /api/community/me), with the town typed in this browser.
     const areaLimits = useNearbyLimits();
@@ -737,7 +740,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     if (mode === 'guide') {
         // The members' sheet and manual, full screen. Its Suggest a change opens the same form as the Settings row.
         // From Home's Tips card it opens at the tip's page; Back from there walks to the guide's front page, then Settings.
-        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} initialPage={initialGuidePage ?? undefined} />;
+        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} initialPage={guidePage ?? undefined} />;
     }
 
     return (
@@ -1127,7 +1130,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── BEANPOOL: the members' guide, Suggest a change (only while FEEDBACK_LIVE; goes to beanpool.org,
                              not this community's node), the website. The same rows as the member app's Settings. ─── */}
-                        <BeanPoolSettingsGroup onHelp={() => setMode('guide')} onSuggest={() => setMode('suggest')} globalCommunity={globalCommunity} phoneLater={phoneLater} />
+                        <BeanPoolSettingsGroup
+                            onHelp={() => setMode('guide')}
+                            onSuggest={() => setMode('suggest')}
+                            globalCommunity={globalCommunity}
+                            phoneLater={phoneLater}
+                            onOpenShape={() => setShapeModalOpen(true)}
+                        />
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
@@ -1978,6 +1987,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                     onClose={() => setShowQuizModal(false)}
                     onComplete={handleQuizComplete}
                 />
+
+                <CommunityShapeModal
+                    isOpen={shapeModalOpen}
+                    onClose={() => setShapeModalOpen(false)}
+                    features={communityInfo?.features as any}
+                    onOpenGuide={() => {
+                        setShapeModalOpen(false);
+                        setGuidePage('how-this-community-works');
+                        setMode('guide');
+                    }}
+                />
             </div>
         </div>
     );
@@ -1988,12 +2008,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
  * Use the phone app (both), Install on this computer (desktop only).
  * The rows come from beanPoolSettingsEntries in @beanpool/core, the same list the member app's Settings uses.
  */
-export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null, phoneLater = null }: {
+export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBACK_LIVE, globalCommunity = null, phoneLater = null, onOpenShape }: {
     onHelp: () => void; onSuggest: () => void; feedbackLive?: boolean;
     /** The global community this node names (lib/global-entry.ts globalCommunityLink): a row of its own. Null: none. */
     globalCommunity?: { href: string; host: string } | null;
     /** How to restore on phone (lib/global-entry.ts phoneLaterLines) */
     phoneLater?: string[] | null;
+    onOpenShape?: () => void;
+}) {
 }) {
     const isPhone = usePhoneBrowser();
     const installed = isInstalled();
@@ -2071,6 +2093,22 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                     </a>
                 )}
+                <button
+                    type="button"
+                    onClick={onOpenShape}
+                    className={rowClass}
+                    data-testid="settings-how-this-community-works"
+                    aria-label={t(COMMUNITY_SHAPE_CARD_WORDS.title)}
+                >
+                    <span className="text-xl" aria-hidden="true">🧭</span>
+                    <span className="flex-1 min-w-0">
+                        <span className="block">{t(COMMUNITY_SHAPE_CARD_WORDS.title)}</span>
+                        <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">
+                            {t(COMMUNITY_SHAPE_CARD_WORDS.settingsRowSubtitle)}
+                        </span>
+                    </span>
+                    <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
+                </button>
                 {/* Use the phone app (front doors S4): both phone and computer */}
                 <div>
                     <button

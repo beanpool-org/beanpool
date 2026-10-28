@@ -40,7 +40,7 @@ A community whose server stays silent for a week is no longer listed, and comes 
 
 Your request goes straight to that community, not through the global community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
 
-While you wait, the waiting card on **Home** and the community's card show when you asked (**You asked to join {name} on {date}.**), whether your request arrived (**Your request arrived.**), and how quickly that community usually answers: **Usually answers within a week**, **Hasn't answered requests lately**, or **Not taking requests right now** (measured from how the community has answered requests over its last 90 days, once it has received at least 3 requests). You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
+While you wait, the waiting card on **Home** and the community's card show when you asked (**You asked to join {name} on {date}.**) and whether your request arrived (**Your request arrived.**). You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
 
 If you change your mind while waiting, tap **Cancel my request**. The request is really withdrawn, and you can ask again after 24 hours.
 

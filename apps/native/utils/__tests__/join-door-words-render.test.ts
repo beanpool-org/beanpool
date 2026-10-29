@@ -100,9 +100,18 @@ vi.mock('../../components/WordsDoor', async (importOriginal) => ({
     DoorWorkProgress: () => null,
 }));
 const KEY = { publicKey: 'ab'.repeat(32), privateKey: 'not-used', callsign: 'Wren' };
+// The account on the phone (null: none; KEY unless a case says so), read as the screen reads it, as
+// open-door-screen-render.test.ts reads it: the global community's door through accountKeyForDoor, another community's
+// through the key rule at its address (utils/open-door-key.ts → door-key.ts, which reads the stored identity). Since S2 a
+// phone with none joins another community's door with a key made there for it.
+const phone = vi.hoisted(() => ({ key: null as null | { publicKey: string; privateKey: string; callsign: string } }));
+vi.mock('../identity', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../identity')>()),
+    loadIdentity: async () => phone.key,
+}));
 vi.mock('../global-join-existing', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../global-join-existing')>()),
-    accountKeyForDoor: async () => ({ identity: KEY, createdHere: false }),
+    accountKeyForDoor: async () => (phone.key ? { identity: phone.key, createdHere: false } : null),
 }));
 vi.mock('../global-join', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../global-join')>()),
@@ -180,6 +189,7 @@ beforeEach(() => {
     route.params = {};
     work.hook.failed = false;
     lock.prompts.length = 0;
+    phone.key = KEY;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
@@ -317,6 +327,40 @@ describe("the two ways in by the door's rule, in the pseudo-locale", () => {
                 expect(bypassing()).toEqual([]);
             });
         }
+    }
+
+    // The same rule at another community's door on a phone with no account (slice S2): the join makes the account there,
+    // and what the door says of a copy is that community's rule, as for an account the phone has. Under `none` no copy is
+    // kept, so neither the note nor the new account's line above it calls the sign-in a way back; `server` is the control,
+    // where the community keeps the copy and the line says so.
+    const KEPT_ALONE = 'To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into your account if you lose this phone: {name} keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.';
+    const NONE_ALONE = `To keep out fake accounts, sign in once with an account you already have. ${NO_COPIES}`;
+    for (const rule of ['none', 'server'] as const) {
+        it(`another community's door on a phone with no account (S2), its rule ${rule}: the new account's two ways in say a copy is kept only where one is`, async () => {
+            phone.key = null;
+            route.params = { node: SELF };
+            globalThis.fetch = network({ [SELF]: { ...OPEN, recoveryCopies: rule } });
+            await renderIn('xx');
+            expect(host.textContent, 'the door speaks to a new account').toContain(pseudoLocalise('Join {name} with a new BeanPool account on this phone: 12 words, or a sign-in.').replace('{name}', 'Riverbend Open'));
+            expect(button(DOOR_CHOICE_TEXT.words), 'the two ways in, for a new account').not.toBeNull();
+            expect(lines(), 'the note beside the sign-in buttons').toContain(pseudoLocalise(rule === 'none' ? NO_COPIES : DOORS[1].kept).replace('{name}', 'Riverbend Open'));
+            const wayBack = pseudoLocalise(DOOR_CHOICE_TEXT.signInLine);
+            if (rule === 'none') expect(host.textContent, 'no copy, so no way back').not.toContain(wayBack);
+            else expect(lines(), 'a kept copy is a way back').toContain(wayBack);
+            expect(bypassing()).toEqual([]);
+        });
+
+        it(`another community's door on a phone with no account (S2), a sign-in only, its rule ${rule}: the line above the buttons says who keeps a copy, or that none is kept`, async () => {
+            phone.key = null;
+            route.params = { node: SELF };
+            globalThis.fetch = network({ [SELF]: { ...SIGN_IN_ONLY, recoveryCopies: rule } });
+            await renderIn('xx');
+            expect(host.textContent, 'the door speaks to a new account').toContain(pseudoLocalise('Join {name} with a new BeanPool account on this phone.').replace('{name}', 'Riverbend Open'));
+            expect(host.querySelector('[data-sso="google"]'), 'the sign-in alone').not.toBeNull();
+            expect(lines()).toContain(pseudoLocalise(rule === 'none' ? NONE_ALONE : KEPT_ALONE).replace('{name}', 'Riverbend Open'));
+            expect(lines()).not.toContain(pseudoLocalise(rule === 'none' ? KEPT_ALONE : NONE_ALONE).replace('{name}', 'Riverbend Open'));
+            expect(bypassing()).toEqual([]);
+        });
     }
 });
 

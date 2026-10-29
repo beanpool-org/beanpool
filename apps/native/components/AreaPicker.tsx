@@ -144,7 +144,8 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
                 disabled={busy !== null}
                 onPress={useMyLocation}
                 accessibilityRole="button"
-                accessibilityLabel={t(AREA_WORDS.useLocation)}
+                accessibilityLabel={busy === 'location' ? t('Reading location...') : t(AREA_WORDS.useLocation)}
+                accessibilityHint={t('Reads your location and saves your area')}
                 accessibilityState={{ disabled: busy !== null, busy: busy === 'location' }}
                 testID="area-use-location"
             >

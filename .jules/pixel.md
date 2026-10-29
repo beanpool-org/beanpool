@@ -211,3 +211,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-23 - Add dynamic accessibilityLabel and hint to picture crop done button
 **Learning:** Action buttons in media crop flows whose text child is conditionally replaced by an `ActivityIndicator` during image cutting leave screen reader users without accessible text during loading states unless dynamic `accessibilityLabel` (`busy ? t('Cropping picture...') : t('Done')`) and `accessibilityHint` are explicitly provided.
 **Action:** Supply dynamic `accessibilityLabel` and `accessibilityHint` on image cropping submit buttons rendering `ActivityIndicator` when busy.
+
+## 2027-01-30 - Add dynamic accessibilityLabel and hint to AreaPicker location button
+**Learning:** Location reading buttons in area picker flows whose child text is replaced by an `ActivityIndicator` during location acquisition leave screen readers without accessible text during loading states unless explicit dynamic `accessibilityLabel` (`busy === 'location' ? t('Reading location...') : t(AREA_WORDS.useLocation)`) and `accessibilityHint` attributes are provided.
+**Action:** Always supply dynamic `accessibilityLabel` and `accessibilityHint` on location acquisition buttons rendering `ActivityIndicator` when busy.

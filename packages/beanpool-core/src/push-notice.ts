@@ -85,6 +85,9 @@ export const PUSH_NOTICE_KINDS = {
     'decision.removal': { body: word('Your community opened a vote on removing a member.'), tab: 'home' },
     // To the member that vote is about, at once (Amendment A point 2): its details open the vote, where they can reply.
     'account.removal-vote': { body: word('Your community opened a vote about your account. Open BeanPool to read it and reply.'), tab: 'home' },
+    // To that member when an admin takes down their reply (server decisions-engine.ts adminHideReply): its details open the
+    // vote, where the admin's reason stands in the reply's place.
+    'account.reply-taken-down': { body: word('An admin took down your reply on a vote about your account. Open BeanPool to read why.'), tab: 'home' },
     'market.request': { body: word('Someone answered one of your listings.'), tab: 'market' },
     'market.answer': { body: word('There is news on one of your requests.'), tab: 'market' },
     'market.listing': { body: word('There is news on one of your listings.'), tab: 'market' },

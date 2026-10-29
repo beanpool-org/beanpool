@@ -42,6 +42,14 @@ describe('the kinds', () => {
         });
     });
 
+    it("a reply taken down is a kind of its own, landing on Home, that says neither who took it down nor why (the deciding review of #2585)", () => {
+        expect(isPushNoticeKind('account.reply-taken-down')).toBe(true);
+        expect(PUSH_NOTICE_KINDS['account.reply-taken-down'].tab).toBe('home');
+        expect(pushNoticeWords('account.reply-taken-down')).toEqual({
+            title: PUSH_NOTICE_TITLE, body: 'An admin took down your reply on a vote about your account. Open BeanPool to read why.',
+        });
+    });
+
     it('a knock notice lands on People with fixed generic words, and the answer is no push kind (the phone posts it)', () => {
         expect(isPushNoticeKind('community.knock')).toBe(true);
         expect(PUSH_NOTICE_KINDS['community.knock'].tab).toBe('people');

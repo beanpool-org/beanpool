@@ -1225,7 +1225,7 @@ function moveShopKindsToCategories(): void {
 
 /**
  * The columns a vote on removing a member carries for removal by vote's Amendment A (schema.sql `decisions`): the member's
- * own reply to its case, and a case an admin hid as shown to be false.
+ * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down.
  */
 export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['subject_reply', 'TEXT'],
@@ -1233,6 +1233,9 @@ export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['case_hidden_at', 'DATETIME'],
     ['case_hidden_by', 'TEXT'],
     ['case_hidden_reason', 'TEXT'],
+    ['reply_hidden_at', 'DATETIME'],
+    ['reply_hidden_by', 'TEXT'],
+    ['reply_hidden_reason', 'TEXT'],
 ];
 
 /**
@@ -2373,9 +2376,9 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to give decisions a scope:', err?.message || err);
     }
     try {
-        if (addRemovalCaseColumns(db) > 0) console.log("[DB] ✅ Decisions carry a member's reply and a hidden case");
+        if (addRemovalCaseColumns(db) > 0) console.log("[DB] ✅ Decisions carry a member's reply, a hidden case and a hidden reply");
     } catch (err: any) {
-        console.error("[DB] ❌ Failed to give decisions the member's reply and a hidden case:", err?.message || err);
+        console.error("[DB] ❌ Failed to give decisions the member's reply, a hidden case and a hidden reply:", err?.message || err);
     }
     try {
         db.exec(`

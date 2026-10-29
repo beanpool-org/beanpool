@@ -1353,7 +1353,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/bursts/:id/undo', 'POST /api/local/admin/commons/projects',
             'POST /api/local/admin/commons/reject', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data', 'POST /api/local/admin/decisions',
             'POST /api/local/admin/decisions/:id/accelerate', 'POST /api/local/admin/decisions/:id/halt', 'POST /api/local/admin/decisions/:id/hide-case',
-            'GET /api/local/admin/diagnostics',
+            'POST /api/local/admin/decisions/:id/hide-reply', 'GET /api/local/admin/diagnostics',
             'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/directory/promise',
             'POST /api/local/admin/directory/promise', 'GET /api/local/admin/disputes',
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',

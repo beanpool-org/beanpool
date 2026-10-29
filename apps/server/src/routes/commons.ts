@@ -15,7 +15,7 @@ import {
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
     checkProposalStanding, isNodeMember,
     payToCommons, noticeProjectEndDateMoved,
-    submitReport, findPendingReport, isReportRateLimited,
+    submitReport, findPendingReport, updatePendingReportReason, isReportRateLimited,
 } from '../state-engine.js';
 import { projectEndDate } from '../engine/unfunded-pledges.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
@@ -342,10 +342,26 @@ router.post('/api/commons/decisions/:id/report', async (ctx) => {
         ctx.body = { error: about.error };
         return;
     }
-    // On file already, as the reports route answers a repeat.
-    if (findPendingReport(actor, about.target)) {
+    const pending = findPendingReport(actor, about.target);
+    // This case on file already, as the reports route answers a repeat.
+    if (pending && pending.reason.includes(about.ref)) {
         ctx.body = { success: true, duplicate: true };
         return;
+    }
+    // A report about whoever brought the case was waiting already, about something else: the member reported the admin,
+    // and the admin paused them (the retaliation Amendment A point 4 is for). The queue keeps one report a member has
+    // pending about one person, so this case goes on that report, and the owners and admins are told as of a new one. Not
+    // a duplicate: something new is on file. The report keeps its own words first, as its kind is read from how they
+    // start (core report-kind.ts), cut short if need be so the case fits in the 500 characters the queue keeps.
+    if (pending) {
+        const room = Math.max(0, 500 - about.reason.length - 2);
+        const updated = updatePendingReportReason(pending.id, `${pending.reason.slice(0, room)}\n\n${about.reason}`);
+        if (updated) {
+            // Told by what is new on it, the case, not by the report it joined (a child-safety one would raise that again).
+            noteNewReport(about.reason, actor).catch((e) => console.warn(`[Alerts] A report could not be told: ${e instanceof Error ? e.message : String(e)}`));
+            ctx.body = { success: true };
+            return;
+        }
     }
     if (isReportRateLimited(actor)) {
         ctx.status = 429;

@@ -25,12 +25,20 @@
  *     brought it and the reply stay; the admin's list keeps the case and who hid it. Once only; a reason of 10+
  *     characters; only a removal vote; only an admin. A closed vote's case too, from the admin list's past removals.
  *  5. The member reports the case as a false accusation: a report about whoever brought it, in Reports; the answer names
- *     nobody; once while it waits; only the member; a password's case names nobody to report.
+ *     nobody; once while it waits; only the member; a password's case names nobody to report. A member who already had a
+ *     report waiting about that admin (the retaliation it is for) has the case added to it, and the owners are told.
  *  6. The cool-down: whoever brought a vote on removing someone that ended without removing them (No, too few voting, or
  *     stopped before it closed) can't pause them again for 90 days, by the route or through a report, and nothing is
  *     written; another admin can; a removal the community passed and an admin halted in its grace window doesn't count;
  *     after 90 days it lifts; with votes off it doesn't apply.
- *  7. The upgrade: a decisions table from before gains the five columns, every row kept.
+ *  7. The upgrade: a decisions table from before gains the eight columns, every row kept.
+ *  8. A reply that harms someone is taken down (the deciding review of #2585): an owner or admin takes it down with a public
+ *     reason; never a moderator, a member, a short reason, a vote with no reply, nor twice. Its words are gone from every
+ *     read: Decide's list and the vote itself (to a voter, the member it names, and the member), a member's open app, Home,
+ *     the admins' list, the vote's row, a standby's next copy and a whole copy; members read the reason in its place, never
+ *     who. The member is told (a push of its own kind and a kept notice, neither saying why or who) and can't write another,
+ *     open or closed. A closed vote's reply comes down too. On a standby, hiding a case and taking down a reply are refused
+ *     with its JSON answer, and nothing is written.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-removal-fairness.ts
  */
@@ -45,7 +53,8 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
-import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE } from '@beanpool/core';
+import WebSocket from 'ws';
+import { PUSH_NOTICE_KINDS, PUSH_NOTICE_TITLE, reportKind } from '@beanpool/core';
 
 // Expo is answered here, so every push is measured without leaving this machine; nothing else off it is reached.
 const realFetch = globalThis.fetch;
@@ -122,6 +131,22 @@ async function admin(p: string, session: Record<string, string>, payload?: unkno
     }));
 }
 
+/** A member's open app: their live socket, signed as the apps sign it, and every event it is sent, as sent. */
+function memberSocket(id: Id): Promise<{ ws: WebSocket; raw: string[] }> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.privateKey).toString('base64');
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url, { rejectUnauthorized: false });
+        const raw: string[] = [];
+        ws.on('message', (d) => raw.push(d.toString()));
+        ws.on('open', () => resolve({ ws, raw }));
+        ws.on('error', reject);
+        setTimeout(() => reject(new Error('socket did not open')), 3000);
+    });
+}
+
 /** Waits (up to 3 s) for the pushes a request set off: Expo is called after the answer. */
 async function settle(done: () => boolean): Promise<void> {
     for (let i = 0; i < 60 && !done(); i++) await new Promise(r => setTimeout(r, 50));
@@ -150,6 +175,8 @@ async function main() {
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
+    const { setNodeRole, STANDBY_CODE } = await import('./config/node-role.js');
+    const alerts = await import('./services/alerts.js');
     const fixture: any = await import('./decisions-from-before-test-fixture.js');
 
     await initTls();
@@ -460,6 +487,31 @@ async function main() {
     const unsignedReport = await unsigned('POST', `/api/commons/decisions/${daveVote}/report`, {});
     assert(byOther.status === 403 && pwCase.status === 409 && notCase.status === 404 && unsignedReport.status === 401,
         `only the member: a voter 403; a password's case names nobody 409; not a removal 404; unsigned 401 (${byOther.status} ${pwCase.status} ${notCase.status} ${unsignedReport.status})`);
+    // The retaliation the report is for: Kit reported Abe first, about something else, and then Abe paused Kit. The queue
+    // keeps one report a member has pending about one person, so the case goes on the one waiting, after its own words.
+    const kit = seed('KitKane');
+    const KIT_EARLIER = 'Offensive content: Abe shouted at me at the market stall';
+    const earlier = se.submitReport(kit.pubKeyHex, abe.pubKeyHex, KIT_EARLIER)!;
+    const kitVote = (await pause(abeSession, kit, 'Shouted back at an admin at the market stall')).body?.decision?.id as string;
+    const kitReports = () => db.prepare('SELECT * FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?').all(kit.pubKeyHex, abe.pubKeyHex) as any[];
+    const reportsTold = () => alerts.getAlertsStatus().history.filter((e: any) => e.key === 'reports.new');
+    alerts.resetAlertsForTests();
+    fresh();
+    const kitReported = await signed('POST', `/api/commons/decisions/${kitVote}/report`, kit, { words: 'Abe paused me for reporting him' });
+    await settle(() => reportsTold().length > 0);
+    const [kitRow] = kitReports();
+    assert(kitReported.status === 200 && kitReported.body?.duplicate !== true && kitReports().length === 1 && kitRow?.id === earlier.id && kitRow.status === 'pending'
+        && kitRow.reason.startsWith(KIT_EARLIER) && /false accusation/i.test(kitRow.reason) && kitRow.reason.includes(kitVote.slice(0, 8))
+        && kitRow.reason.includes('Abe paused me for reporting him'),
+        `Kit's report already waiting about Abe gains the case, after its own words: something new is on file, not "on file already" (${kitReported.status} ${kitReported.text.slice(0, 80)}; ${JSON.stringify(kitRow?.reason)})`);
+    assert(reportKind(kitRow?.reason) === 'offensive content', `the report keeps its kind (${reportKind(kitRow?.reason)})`);
+    assert(reportsTold().length === 1 && reportsTold()[0].detail.includes('(other)'),
+        `the owners and admins are told, as of a new report, by the case's kind (${reportsTold().map((e: any) => e.detail).join(' | ')})`);
+    fresh();
+    const kitAgain = await signed('POST', `/api/commons/decisions/${kitVote}/report`, kit, { words: 'And again' });
+    await settle(() => false);
+    assert(kitAgain.status === 200 && kitAgain.body?.duplicate === true && kitReports().length === 1 && kitReports()[0].reason === kitRow?.reason && reportsTold().length === 1,
+        `reported again, the same case is a repeat: nothing new on file, nobody told (${kitAgain.status})`);
 
     // ── 6. The cool-down ────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n6. The cool-down');
@@ -579,9 +631,149 @@ async function main() {
     const oldRow = older.prepare('SELECT * FROM decisions WHERE id = ?').get('old-1') as any;
     assert(!hadBefore.some(c => newColumns.has(c)) && added === newColumns.size && [...newColumns].every(c => hasAfter.includes(c)),
         `a table from before gains the ${newColumns.size} columns (${added} added)`);
-    assert(oldRow?.title === 'Remove Old?' && oldRow.status === 'open' && oldRow.subject_reply === null && oldRow.case_hidden_at === null, 'its rows are kept, NULL in each');
+    assert(oldRow?.title === 'Remove Old?' && oldRow.status === 'open' && oldRow.subject_reply === null && oldRow.case_hidden_at === null && oldRow.reply_hidden_at === null,
+        'its rows are kept, NULL in each');
     assert(addRemovalCaseColumns(older) === 0, 'a second boot adds nothing');
     older.close();
+
+    // ── 8. A reply taken down ───────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n8. A reply that harms someone is taken down, with a public reason');
+    const kai = seed('KaiKnox');
+    const mo = seed('ModMo');
+    grantNodeRole(mo.pubKeyHex, 'moderator', gen.pubKeyHex);
+    const moSession = sessionOf(mo);
+    const KAI_REPLY = 'Erin is lying. She lives at 12 Example Street and her number is 0400 000 000. Go and ask her yourselves.';
+    const DOXX = ['12 Example Street', '0400 000 000'];
+    const TAKE_DOWN_WHY = "It gave a member's home address and phone number";
+    const holdsWords = (text: string) => DOXX.some(w => text.includes(w));
+    const kaiVote = (await pause(adaSession, kai, 'Shouted at Erin at the market stall, twice')).body?.decision?.id as string;
+    fresh();
+    const kaiReplied = await signed('POST', `/api/commons/decisions/${kaiVote}/reply`, kai, { reply: KAI_REPLY });
+    const kaiCaseHidden = await admin(`/api/local/admin/decisions/${kaiVote}/hide-case`, adaSession, { reason: 'Wu saw Erin start it, not Kai' });
+    const erinReads = await cardFor(erin, kaiVote);
+    assert(kaiReplied.status === 200 && kaiCaseHidden.status === 200 && erinReads.card?.subjectReply === KAI_REPLY,
+        `Kai, paused, replies with Erin's address and number; hiding his case leaves it, and Erin reads it (${kaiReplied.status} ${kaiCaseHidden.status})`);
+    fresh();
+    const shortWhy = await admin(`/api/local/admin/decisions/${kaiVote}/hide-reply`, abeSession, { reason: 'address' });
+    const notRemovalVote = await admin(`/api/local/admin/decisions/${freeze.id}/hide-reply`, abeSession, { reason: TAKE_DOWN_WHY });
+    const nothingToTake = await admin(`/api/local/admin/decisions/${kitVote}/hide-reply`, abeSession, { reason: TAKE_DOWN_WHY });
+    const byModerator = await admin(`/api/local/admin/decisions/${kaiVote}/hide-reply`, moSession, { reason: TAKE_DOWN_WHY });
+    const byMemberSigned = await signed('POST', `/api/local/admin/decisions/${kaiVote}/hide-reply`, erin, { reason: TAKE_DOWN_WHY });
+    const moderatorEngine = de.adminHideReply(kaiVote, mo.pubKeyHex, TAKE_DOWN_WHY, () => {});
+    const memberEngine = de.adminHideReply(kaiVote, erin.pubKeyHex, TAKE_DOWN_WHY, () => {});
+    assert(shortWhy.status === 400 && notRemovalVote.status === 404 && nothingToTake.status === 409,
+        `a reason under 10 characters 400, a Decision that removes nobody 404, a vote with no reply 409 (${shortWhy.status} ${notRemovalVote.status} ${nothingToTake.status})`);
+    assert(byModerator.status === 403 && byModerator.body?.moderator === true && [401, 403].includes(byMemberSigned.status)
+        && !moderatorEngine.success && moderatorEngine.status === 403 && !memberEngine.success && memberEngine.status === 403,
+        `never a moderator (${byModerator.status}) or a member (${byMemberSigned.status}): by the route, and by the engine underneath`);
+    assert(row(kaiVote).subject_reply === KAI_REPLY && !row(kaiVote).reply_hidden_at, 'nothing was taken down');
+
+    const viApp = await memberSocket(vi);
+    await new Promise(r => setTimeout(r, 300)); // its greeting
+    viApp.raw.length = 0;
+    expo.length = 0;
+    const beforeTakingDown = new Date().toISOString();
+    await new Promise(r => setTimeout(r, 5));
+    fresh();
+    const takenDown = await admin(`/api/local/admin/decisions/${kaiVote}/hide-reply`, abeSession, { reason: `  ${TAKE_DOWN_WHY}  ` });
+    await settle(() => expo.length >= 1 && viApp.raw.some(m => m.includes('"decision_updated"')));
+    const kaiRow = row(kaiVote);
+    assert(takenDown.status === 200 && kaiRow.subject_reply === null && kaiRow.subject_replied_at === null && !!kaiRow.reply_hidden_at
+        && kaiRow.reply_hidden_by === abe.pubKeyHex && kaiRow.reply_hidden_reason === TAKE_DOWN_WHY,
+        `Abe takes Kai's reply down: its words are gone from the vote's row; when, who and why are kept (${takenDown.status} ${takenDown.text.slice(0, 120)})`);
+    for (const reader of [vi, erin, kai]) {
+        const c = await cardFor(reader, kaiVote);
+        fresh();
+        const detail = await signed('GET', `/api/commons/decisions/${kaiVote}`, reader);
+        const d = detail.body?.decision;
+        assert(c.card?.subjectReply === null && c.card?.subjectRepliedAt === null && c.card?.replyHiddenReason === TAKE_DOWN_WHY && !!c.card?.replyHiddenAt
+            && !('replyHiddenBy' in c.card) && !JSON.stringify(c.card).includes(abe.pubKeyHex)
+            && detail.status === 200 && d?.subjectReply === null && d?.replyHiddenReason === TAKE_DOWN_WHY && !('replyHiddenBy' in d)
+            && !holdsWords(c.text) && !holdsWords(detail.text),
+            `${reader.callsign} reads the reason in the reply's place, on Decide's list and on the vote itself; the words, and who took it down, are gone`);
+    }
+    const sent = viApp.raw.map(m => { try { return JSON.parse(m); } catch { return null; } })
+        .filter((e: any) => e?.type === 'decision_updated' && e.decision?.id === kaiVote);
+    assert(sent.length >= 1 && sent.every((e: any) => e.decision.subjectReply === null && e.decision.replyHiddenReason === TAKE_DOWN_WHY && !('replyHiddenBy' in e.decision))
+        && !holdsWords(viApp.raw.join('\n')),
+        `a member's open app is sent the vote as it reads now, without the words (${sent.length} decision_updated)`);
+    viApp.ws.close();
+    // Home lists the vote (the soonest to close), and none of its words.
+    db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(new Date(Date.now() + 1800_000).toISOString(), kaiVote);
+    fresh();
+    const kaiHome = await signed('GET', '/api/home?cards=needs,decide', vi);
+    assert(kaiHome.status === 200 && (kaiHome.body?.cards?.decide?.items ?? []).some((i: any) => i.id === kaiVote) && !holdsWords(kaiHome.text),
+        `Home's cards list the vote and none of the words (${kaiHome.status})`);
+    fresh();
+    const adminList8 = await admin('/api/local/admin/decisions', adaSession);
+    const adminRow8 = (adminList8.body?.decisions ?? []).find((d: any) => d.id === kaiVote);
+    assert(adminRow8?.subjectReply === null && adminRow8?.replyHiddenBy === abe.pubKeyHex && adminRow8?.replyHiddenReason === TAKE_DOWN_WHY && !holdsWords(adminList8.text),
+        "the admins' list keeps who took it down and why, and holds no copy of the words either");
+    const delta8 = await se.exportSyncState('removal-fairness', beforeTakingDown) as { plainTables?: Record<string, any[]> };
+    const carried8 = (delta8.plainTables?.decisions ?? []).find((d: any) => d.id === kaiVote);
+    assert(!!carried8 && carried8.subject_reply === null && carried8.subject_replied_at === null && carried8.reply_hidden_reason === TAKE_DOWN_WHY
+        && carried8.reply_hidden_by === abe.pubKeyHex && !holdsWords(JSON.stringify(delta8)),
+        "a standby's next copy carries the vote without the words, and the takedown with it");
+    assert(!holdsWords(JSON.stringify(await se.exportSyncState('removal-fairness'))), 'and a whole copy holds none of the words');
+    // The member is told: a push of its own kind, which always comes through, and a notice the web app keeps; neither says
+    // why or who, which the card does. Nobody else is pushed.
+    const toKai = pushesTo(kai);
+    assert(toKai.length === 1 && kindOf(toKai[0]) === 'account.reply-taken-down' && toKai[0].title === PUSH_NOTICE_TITLE
+        && toKai[0].body === PUSH_NOTICE_KINDS['account.reply-taken-down'].body && expo.every(m => m.to === kai.token),
+        `Kai gets one push, account.reply-taken-down, with its fixed words; nobody else is pushed (${expo.map(kindOf).join(', ')})`);
+    fresh();
+    const kaiPushDetails = await signed('GET', `/api/notices/push/${toKai[0]?.data?.i}`, kai);
+    const kaiKept = await signed('GET', '/api/notices?unseen=1', kai);
+    const keptTakeDown = (kaiKept.body?.notices ?? []).find((n: any) => n.title === de.REPLY_TAKEN_DOWN_NOTICE_TITLE);
+    assert(kaiPushDetails.status === 200 && kaiPushDetails.body?.data?.screen === 'decide' && Object.keys(kaiPushDetails.body.data).length === 1 && !!keptTakeDown
+        && ![TAKE_DOWN_WHY, abe.callsign, ...DOXX].some(w => kaiPushDetails.text.includes(w) || kaiKept.text.includes(w)),
+        `its details open Decide, and the web app keeps him a notice; neither says why or who (${kaiPushDetails.status} ${keptTakeDown?.body})`);
+    // Kai can't put it back: not by writing another, open or closed, nor can it be taken down twice.
+    fresh();
+    const kaiAgain = await signed('POST', `/api/commons/decisions/${kaiVote}/reply`, kai, { reply: 'Erin is still lying. 12 Example Street, go and see.' });
+    const twiceDown = await admin(`/api/local/admin/decisions/${kaiVote}/hide-reply`, adaSession, { reason: 'Taking it down a second time' });
+    assert(kaiAgain.status === 409 && kaiAgain.body?.error === de.REPLY_TAKEN_DOWN && twiceDown.status === 409
+        && row(kaiVote).subject_reply === null && row(kaiVote).reply_hidden_by === abe.pubKeyHex && row(kaiVote).reply_hidden_reason === TAKE_DOWN_WHY,
+        `Kai can't write another while the vote is open (${kaiAgain.status} ${kaiAgain.text.slice(0, 100)}), and a second takedown is refused (${twiceDown.status})`);
+    voteAndClose(kaiVote, null);
+    const kaiClosed = await cardFor(erin, kaiVote);
+    fresh();
+    const kaiAfterClose = await signed('POST', `/api/commons/decisions/${kaiVote}/reply`, kai, { reply: 'Now that the vote is over.' });
+    assert(row(kaiVote).status === 'unresolved' && kaiClosed.card?.subjectReply === null && kaiClosed.card?.replyHiddenReason === TAKE_DOWN_WHY
+        && !holdsWords(kaiClosed.text) && kaiAfterClose.status === 409 && row(kaiVote).subject_reply === null,
+        `the vote closes (${row(kaiVote).status}): the closed card reads the reason, and the reply stays down (${kaiAfterClose.status})`);
+    // A closed vote's reply comes down too, from the admins' list of closed votes: here by an owner with the server's password.
+    const lia = seed('LiaLane');
+    const LIA_REPLY = 'Ring Erin on 0400 111 222 and ask her what she did.';
+    const liaVote = (await pause(adaSession, lia, 'Took a deposit for a market stall and kept it')).body?.decision?.id as string;
+    fresh();
+    const liaReplied = await signed('POST', `/api/commons/decisions/${liaVote}/reply`, lia, { reply: LIA_REPLY });
+    voteAndClose(liaVote, false);
+    fresh();
+    const closedList = await admin('/api/local/admin/decisions', password());
+    const liaListed = (closedList.body?.pastRemovals ?? []).find((d: any) => d.id === liaVote);
+    fresh();
+    const liaDown = await admin(`/api/local/admin/decisions/${liaVote}/hide-reply`, password(), { reason: "It gave another member's phone number" });
+    const liaCard = await cardFor(vi, liaVote);
+    assert(liaReplied.status === 200 && row(liaVote).status === 'failed' && liaListed?.subjectReply === LIA_REPLY && liaDown.status === 200
+        && row(liaVote).reply_hidden_by === 'owner:password' && row(liaVote).subject_reply === null
+        && liaCard.card?.subjectReply === null && !liaCard.text.includes('0400 111 222'),
+        `a closed vote's reply, listed with the closed votes, comes down too: by an owner with the password (${liaDown.status} ${liaDown.text.slice(0, 120)})`);
+    // On a standby, both are refused with its JSON answer, before anything is written.
+    let onStandby: Answer[] = [];
+    setNodeRole('backup');
+    try {
+        fresh();
+        onStandby = [
+            await admin(`/api/local/admin/decisions/${gusVote}/hide-case`, abeSession, { reason: 'Hidden on a standby, which it must not be' }),
+            await admin(`/api/local/admin/decisions/${daveVote}/hide-reply`, abeSession, { reason: 'Taken down on a standby, which it must not be' }),
+        ];
+    } finally {
+        setNodeRole('primary');
+    }
+    assert(onStandby.length === 2 && onStandby.every(a => a.status === 409 && a.body?.code === STANDBY_CODE && typeof a.body?.error === 'string')
+        && !row(gusVote).case_hidden_at && row(daveVote).subject_reply === REPLY2 && !row(daveVote).reply_hidden_at,
+        `on a standby, hiding a case and taking down a reply answer the standby's JSON refusal, and nothing is written (${onStandby.map(a => `${a.status} ${a.text.slice(0, 70)}`).join('; ')})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

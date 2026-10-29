@@ -69,6 +69,9 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/groups\/[^/]+\/succession\/(propose|[^/]+\/vote)\/?$/,
     // An admin's emergency suspension and its lift (a Decision, and the role it holds aside), and a replacement phone's code.
     /^\/api\/local\/admin\/users\/[^/]+\/(suspend|status)\/?$/,
+    // A vote on removing a member: its case hidden as false, or the member's reply taken down (decisions-engine.ts). No
+    // Beans move, so not with the halt above.
+    /^\/api\/local\/admin\/decisions\/[^/]+\/(hide-case|hide-reply)\/?$/,
     /^\/api\/local\/admin\/members\/[^/]+\/rekey\/(issue-code|cancel|proposals\/[^/]+\/decline)\/?$/,
     // A recovery fragment released: the log of which fragments left the community.
     /^\/api\/recovery\/collect\/(hub|sso)\/?$/,

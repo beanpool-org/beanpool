@@ -243,7 +243,7 @@ export interface Decision {
     /**
      * A vote on removing a member: their own reply to the case, in their words, and when they last wrote it (removal by
      * vote, Amendment A point 2: replyToRemovalCase). Shown beside the case to everyone who reads the vote; erased when
-     * they delete their account (eraseRepliesOf).
+     * they delete their account (eraseRepliesOf), or when an admin takes it down (adminHideReply).
      */
     subjectReply: string | null;
     subjectRepliedAt: string | null;
@@ -254,6 +254,13 @@ export interface Decision {
     caseHiddenAt: string | null;
     caseHiddenBy: string | null;
     caseHiddenReason: string | null;
+    /**
+     * A vote on removing a member whose reply an admin took down (adminHideReply), kept as a hidden case is: when, which
+     * admin (never served to members) and the public reason members read in the reply's place. The words are gone.
+     */
+    replyHiddenAt: string | null;
+    replyHiddenBy: string | null;
+    replyHiddenReason: string | null;
 }
 
 export interface DecisionVote {
@@ -325,6 +332,9 @@ function rowToDecision(r: any): Decision {
         caseHiddenAt: r.case_hidden_at || null,
         caseHiddenBy: r.case_hidden_by || null,
         caseHiddenReason: r.case_hidden_reason || null,
+        replyHiddenAt: r.reply_hidden_at || null,
+        replyHiddenBy: r.reply_hidden_by || null,
+        replyHiddenReason: r.reply_hidden_reason || null,
     };
 }
 
@@ -340,7 +350,7 @@ export interface RemovalProposer {
 }
 
 /** A Decision as members see it: see publicDecision. */
-export type PublicDecision = Omit<Decision, 'adminHaltedBy' | 'caseHiddenBy'> & { proposer?: RemovalProposer };
+export type PublicDecision = Omit<Decision, 'adminHaltedBy' | 'caseHiddenBy' | 'replyHiddenBy'> & { proposer?: RemovalProposer };
 
 /**
  * The params of a Decision that are a member's balance: a vote to remove someone records their balance and debt when it
@@ -354,17 +364,20 @@ function carriesMemberBalance(params: unknown): params is Record<string, unknown
 }
 
 /**
- * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote, hid a case,
- * made an emergency suspension or paused a member is an admin key: members get the public reason on the card, not the key.
- * A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's voters.
- * Admin routes (/api/local/admin/*) serve decisionForAdmin.
+ * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote, hid a case
+ * or a reply, made an emergency suspension or paused a member is an admin key: members get the public reason on the card,
+ * not the key. A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's
+ * voters. Admin routes (/api/local/admin/*) serve decisionForAdmin.
  *
  * A vote on removing a member also says who brought it (`proposer`, Amendment A point 3): the admin who paused them by
  * name, never by key. Once an admin has hidden its case (adminHideCase), the case is gone from what members read (the
- * description, the reason in its params, a member's own title) and the admin's public reason stands in its place.
+ * description, the reason in its params, a member's own title) and the admin's public reason stands in its place. A reply
+ * an admin took down (adminHideReply) is gone from the row itself; members read the admin's reason (replyHiddenReason).
  */
 export function publicDecision(decision: Decision): PublicDecision {
-    const { adminHaltedBy: _haltedBy, caseHiddenBy: _hiddenBy, ...rest } = decision;
+    const { adminHaltedBy: _haltedBy, caseHiddenBy: _hiddenBy, replyHiddenBy: _replyHiddenBy, ...kept } = decision;
+    // adminHideReply erased the words with the mark; a row that somehow holds both still never serves them.
+    const rest = kept.replyHiddenAt ? { ...kept, subjectReply: null, subjectRepliedAt: null } : kept;
     let shown: PublicDecision = rest;
     if (rest.params && typeof rest.params === 'object'
         && ('suspendedBy' in rest.params || 'pausedBy' in rest.params || carriesMemberBalance(rest.params))) {
@@ -2442,13 +2455,15 @@ export const REPLY_ONLY_BY_SUBJECT = word('Only the member this vote is about ca
 export const REPLY_AFTER_CLOSE = word('This vote has closed, so the reply to its case stays as it is.');
 export const REPLY_EMPTY = word('Write your reply first.');
 export const REPLY_TOO_LONG = word('A reply can be at most 1,000 characters. Please shorten it.');
+export const REPLY_TAKEN_DOWN = word('An admin took down your reply to this case, so it stays down for this vote.');
 
 /**
  * The member a vote on removing them is about replies to its case (Amendment A point 2), in their own words, shown beside
  * the case to everyone who reads the vote. While the vote is open, when it can still change a vote; written again, it
  * replaces the last, and once the vote closes it stays as it was. Only the member themself, signed: a paused member
  * included, since a pause's own vote is always about one. The words go on the Decision and nowhere else: no log, no push,
- * no alert. They go with the member's account when they delete it (eraseRepliesOf).
+ * no alert. They go with the member's account when they delete it (eraseRepliesOf). Once an admin has taken a reply down
+ * (adminHideReply) the member can't write another on that vote: a new one would put back what was taken down.
  */
 export function replyToRemovalCase(decisionId: string, actor: string, reply: unknown): FairVoteResult {
     assertPlainTablesWritable();
@@ -2456,6 +2471,7 @@ export function replyToRemovalCase(decisionId: string, actor: string, reply: unk
     const decision = communityRemovalVote(decisionId);
     if (!decision) return { success: false, status: 404, error: word('Decision not found') };
     if (!actor || actor !== decision.subject) return { success: false, status: 403, error: REPLY_ONLY_BY_SUBJECT };
+    if (decision.replyHiddenAt) return { success: false, status: 409, error: REPLY_TAKEN_DOWN };
     if (decision.status !== 'open' || parseDbTime(decision.closesAt) <= Date.now()) {
         return { success: false, status: 409, error: REPLY_AFTER_CLOSE };
     }
@@ -2463,7 +2479,8 @@ export function replyToRemovalCase(decisionId: string, actor: string, reply: unk
     if (!text) return { success: false, status: 400, error: REPLY_EMPTY };
     if (text.length > REMOVAL_REPLY_MAX_CHARS) return { success: false, status: 400, error: REPLY_TOO_LONG };
     const now = new Date().toISOString();
-    db.prepare('UPDATE decisions SET subject_reply = ?, subject_replied_at = ?, updated_at = ? WHERE id = ?').run(text, now, now, decisionId);
+    db.prepare('UPDATE decisions SET subject_reply = ?, subject_replied_at = ?, updated_at = ? WHERE id = ? AND reply_hidden_at IS NULL')
+        .run(text, now, now, decisionId);
     announceDecisionUpdated(decisionId);
     return { success: true };
 }
@@ -2512,6 +2529,40 @@ export function adminHideCase(decisionId: string, adminActor: string, reason: un
     return { success: true };
 }
 
+/**
+ * An admin takes down the member's reply to the case of a vote on removing them, with a public reason members read in its
+ * place: for a reply that harms someone else, an address or a phone number, a threat (the deciding review of #2585). As a
+ * case is hidden (adminHideCase): any admin or owner, never a moderator; a reason of HIDE_CASE_REASON_MIN_CHARS or more;
+ * at any status, since a reply stays on the closed vote; once. Kept as a hidden case is kept: when, which admin (members
+ * never get the key) and why. Unlike a case, the words themselves go, from the vote's row and so from a standby's next
+ * copy, as when the member deletes their account (eraseRepliesOf): what a reply is taken down for is what it says about
+ * someone else, and the case stays the record of what was alleged. The member is told (noticeReplyTakenDown), and can't
+ * write another on that vote (replyToRemovalCase). The vote itself is unchanged.
+ */
+export function adminHideReply(decisionId: string, adminActor: string, reason: unknown, push: RemovalVotePush = dispatchPushNotification): FairVoteResult {
+    assertPlainTablesWritable();
+    if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can take down a reply' };
+    const clean = typeof reason === 'string' ? replaceLoneSurrogates(reason).trim() : '';
+    if (clean.length < HIDE_CASE_REASON_MIN_CHARS) {
+        return { success: false, status: 400, error: 'A public reason (at least 10 characters) is required to take down a reply' };
+    }
+    if (clean.length > 1000) return { success: false, status: 400, error: 'Reason is too long (1000 characters at most)' };
+    const decision = communityRemovalVote(decisionId);
+    if (!decision) return { success: false, status: 404, error: 'Only a vote on removing a member has a reply to take down' };
+    if (decision.replyHiddenAt) return { success: false, status: 409, error: 'This reply is already taken down' };
+    if (!decision.subjectReply) return { success: false, status: 409, error: 'The member has written no reply on this vote' };
+    const now = new Date().toISOString();
+    const taken = db.prepare(`
+        UPDATE decisions SET subject_reply = NULL, subject_replied_at = NULL,
+            reply_hidden_at = ?, reply_hidden_by = ?, reply_hidden_reason = ?, updated_at = ?
+        WHERE id = ? AND reply_hidden_at IS NULL AND subject_reply IS NOT NULL
+    `).run(now, adminActor, clean, now, decisionId);
+    if (taken.changes === 0) return { success: false, status: 409, error: 'This reply is already taken down' };
+    announceDecisionUpdated(decisionId);
+    noticeReplyTakenDown(decision, push);
+    return { success: true };
+}
+
 export const REPORT_CASE_ONLY_BY_SUBJECT = word('Only the member this vote is about can report its case as false.');
 export const REPORT_CASE_NAMES_NOBODY = word("This case was brought with the server's password, so it names nobody to report.");
 
@@ -2523,7 +2574,7 @@ export const REPORT_CASE_NAMES_NOBODY = word("This case was brought with the ser
  * a case, not a pile-on. A case brought with the server's password names nobody to report.
  */
 export function removalCaseReport(decisionId: string, reporter: string, words: unknown):
-    { success: true; target: string; reason: string } | { success: false; status: number; error: string } {
+    { success: true; target: string; reason: string; ref: string } | { success: false; status: number; error: string } {
     const decision = communityRemovalVote(decisionId);
     if (!decision) return { success: false, status: 404, error: word('Decision not found') };
     if (!reporter || reporter !== decision.subject) return { success: false, status: 403, error: REPORT_CASE_ONLY_BY_SUBJECT };
@@ -2533,8 +2584,10 @@ export function removalCaseReport(decisionId: string, reporter: string, words: u
     }
     const name = (typeof decision.params?.memberName === 'string' && decision.params.memberName) || reporter.slice(0, 8);
     const own = typeof words === 'string' ? replaceLoneSurrogates(words).trim().slice(0, 300) : '';
-    const said = tr('A false accusation, in the vote on removing {name} ({ref})', { name, ref: decision.id.slice(0, 8) });
-    return { success: true, target, reason: own ? `${said}: ${own}` : said };
+    const ref = decision.id.slice(0, 8);
+    const said = tr('A false accusation, in the vote on removing {name} ({ref})', { name, ref });
+    // `ref` is how the reason names the vote, in any language: the route finds a report already about it by it.
+    return { success: true, target, reason: own ? `${said}: ${own}` : said, ref: `(${ref})` };
 }
 
 /**
@@ -2602,7 +2655,7 @@ function removalVoters(decision: Decision): string[] {
 /** What sends a removal vote's pushes (state-engine dispatchPushNotification); a suite passes a spy. */
 export type RemovalVotePush = (
     targets: string[], actor: string, title: string, body: string, data: Record<string, any>,
-    category: 'chat' | 'recovery', kind: 'decision.removal' | 'account.removal-vote',
+    category: 'chat' | 'recovery', kind: 'decision.removal' | 'account.removal-vote' | 'account.reply-taken-down',
 ) => unknown;
 
 /** What the member a vote on removing them is about is told at once (noticeRemovalVoteOpened): no case, no name. */
@@ -2645,6 +2698,36 @@ export function noticeRemovalVoteOpened(decision: Decision, push: RemovalVotePus
         push([decision.subject], SYSTEM_AUTHOR, REMOVAL_VOTE_NOTICE_TITLE, body, { screen: 'decide' }, 'recovery', 'account.removal-vote');
     } catch (err) {
         console.warn('[Decisions] the removal vote push to its member failed:', err);
+    }
+}
+
+/** What the member is told when an admin takes down their reply (noticeReplyTakenDown): no reason, no name. */
+export const REPLY_TAKEN_DOWN_NOTICE_TITLE = 'Your reply on a vote was taken down';
+export const REPLY_TAKEN_DOWN_NOTICE_BODY = 'An admin took down your reply to the case on the vote about your account. '
+    + 'Open Commons, then Decide, to read their reason.';
+
+/**
+ * An admin took down the member's reply (adminHideReply): the member is told as they were told the vote opened
+ * (noticeRemovalVoteOpened), a notice kept and sent live, and a push of its own kind that always comes through
+ * ('recovery'). Neither says the reason or who: the card does, beside the case. Nobody else is told; the vote's card
+ * changes for them (announceDecisionUpdated). A member the vote removed can hold no notice here (keepNotice). Call once
+ * the takedown is written; a notice that fails never undoes it.
+ */
+function noticeReplyTakenDown(decision: Decision, push: RemovalVotePush): void {
+    if (!decision.subject) return;
+    try {
+        const noticeId = keepNotice(decision.subject, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { kind: 'reply_taken_down', screen: 'decide' });
+        broadcast({
+            type: 'system_announcement', title: REPLY_TAKEN_DOWN_NOTICE_TITLE, body: REPLY_TAKEN_DOWN_NOTICE_BODY, severity: 'info', kind: 'reply_taken_down',
+            ...(noticeId ? { noticeId } : {}),
+        }, [decision.subject]);
+    } catch (err) {
+        console.warn('[Decisions] the notice of a reply taken down failed:', err);
+    }
+    try {
+        push([decision.subject], SYSTEM_AUTHOR, REPLY_TAKEN_DOWN_NOTICE_TITLE, REPLY_TAKEN_DOWN_NOTICE_BODY, { screen: 'decide' }, 'recovery', 'account.reply-taken-down');
+    } catch (err) {
+        console.warn('[Decisions] the push of a reply taken down failed:', err);
     }
 }
 

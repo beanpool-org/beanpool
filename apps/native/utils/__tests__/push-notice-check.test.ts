@@ -632,8 +632,8 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('decision.open', null)).toBe('/(tabs)');
     });
 
-    it('a removal vote, to its voters and to the member it is about, lands on Commons, Decide; without it, on Home (removal by vote, Amendment A)', () => {
-        for (const kind of ['decision.removal', 'account.removal-vote'] as const) {
+    it('a removal vote, to its voters and to the member it is about, and their reply taken down, land on Commons, Decide; without it, on Home (removal by vote, Amendment A)', () => {
+        for (const kind of ['decision.removal', 'account.removal-vote', 'account.reply-taken-down'] as const) {
             expect(noticeRoute(kind, { screen: 'decide' })).toBe('/(tabs)/projects?section=decide');
             for (const d of [null, { screen: 'nowhere' }, ...FORGED.map((x) => ({ screen: x }))]) expect(noticeRoute(kind, d)).toBe('/(tabs)');
         }

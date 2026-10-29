@@ -42,7 +42,7 @@ import {
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
 import {
-    decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, removalCoolDownRefusal, REMOVAL_COOL_DOWN_CODE,
+    decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply, removalCoolDownRefusal, REMOVAL_COOL_DOWN_CODE,
     type OwnerOnlyAdminAction,
 } from '../decisions-engine.js';
 import {
@@ -2303,6 +2303,23 @@ router.post('/api/local/admin/decisions/:id/hide-case', async (ctx) => {
     if (!signedActor) return;
     const { reason } = (ctx as any).requestBody || {};
     const result = adminHideCase(ctx.params.id, signedActor, reason);
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = { error: result.error };
+        return;
+    }
+    ctx.body = { success: true };
+});
+
+// Admin: take down the member's reply to the case of a vote on removing them, with a public reason members read in its
+// place (decisions-engine adminHideReply): the words are deleted, the member is told and can't write another on that vote.
+// Kept on the Decision as a hidden case is.
+router.post('/api/local/admin/decisions/:id/hide-reply', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const signedActor = resolveAdminActor(ctx);
+    if (!signedActor) return;
+    const { reason } = (ctx as any).requestBody || {};
+    const result = adminHideReply(ctx.params.id, signedActor, reason);
     if (!result.success) {
         ctx.status = result.status;
         ctx.body = { error: result.error };

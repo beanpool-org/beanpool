@@ -343,7 +343,7 @@ import { LanguageSwitch } from '../../components/LanguagePicker';
 import WelcomeScreen from '../../app/welcome';
 import { noVault, useVault } from './fake-vault';
 import { DOOR_MESSAGES } from '../global-join';
-import { DOOR_CHOICE_TEXT } from '../../components/WordsDoor';
+import { DOOR_CHOICE_TEXT, WORDS_BACKUP_TEXT } from '../../components/WordsDoor';
 import { CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
@@ -594,6 +594,25 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         expect(all('[data-sso]'), 'and offers no sign-in').toEqual([]);
         check('Safety Backup, the community keeps none now');
     });
+
+    // In by 12 words at the global community's door, Safety Backup's one button is a sign-in: a second way back only where
+    // the community keeps a copy for it. Under `none` it says only what it adds, as the web's button does and as the sheet
+    // it opens (LinkSignInSheet) then says; in the member's language whatever the rule.
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`Safety Backup for a member in by 12 words, the global community's rule ${rule}: the button calls a sign-in a way back only where a copy is kept`, async () => {
+            useVault();
+            store.map.set('beanpool_anchor_url', 'https://global.beanpool.org');
+            door.cachedRule = rule;
+            phone.stored = SALLY;
+            phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, joinDoor: 'words' };
+            await mount('xx');
+            const [said, notSaid] = rule === 'none' ? ['Add a sign-in', WORDS_BACKUP_TEXT.addSignIn] : [WORDS_BACKUP_TEXT.addSignIn, 'Add a sign-in'];
+            const buttons = all('button').map((b) => b.textContent);
+            expect(buttons).toContain(pseudoLocalise(said));
+            expect(buttons).not.toContain(pseudoLocalise(notSaid));
+            check(`Safety Backup, in by 12 words, ${rule}`);
+        });
+    }
 });
 
 describe("the global community's door in the pseudo-locale", () => {

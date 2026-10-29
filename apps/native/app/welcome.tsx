@@ -2427,14 +2427,15 @@ export default function WelcomeScreen() {
 
                         {/* The one secondary action for a 12-words member: skippable, like the tickbox above. In by a
                             claim, the sign-in's copy is kept by the community claimed, never by us: no global community,
-                            no key vault (Marty, 24 Oct). */}
+                            no key vault (Marty, 24 Oct). Where the community keeps no copies (its rule `none`, VR2), a
+                            sign-in is no way back, so the button doesn't call it one, as the web's doesn't. */}
                         {wordsMember && Platform.OS !== 'web' && (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginTop: 8 }]}
                                 onPress={() => (joinFlow === 'claim' ? setShowSsoSheet(true) : setShowLinkSheet(true))}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.secondaryBtnText}>{WORDS_BACKUP_TEXT.addSignIn}</Text>
+                                <Text style={styles.secondaryBtnText}>{backupCopiesAt === 'none' ? t('Add a sign-in') : t(WORDS_BACKUP_TEXT.addSignIn)}</Text>
                             </Pressable>
                         )}
                         <LinkSignInSheet

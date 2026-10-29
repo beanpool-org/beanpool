@@ -296,7 +296,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     return (
         <div className="p-4 md:p-6 max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto w-full">
             {/* Sub-nav pills */}
-            <div className="flex gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label={t('People navigation')}>
+            <div className="flex flex-wrap gap-1 mb-5 bg-oat-100 dark:bg-nature-900 rounded-xl p-1 shadow-inner border border-nature-200 dark:border-nature-800" role="tablist" aria-label={t('People navigation')}>
                 {SUB_VIEWS.map(v => (
                     <button
                         key={v}
@@ -309,9 +309,12 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         tabIndex={view === v ? 0 : -1}
                         onClick={() => setView(v)}
                         onKeyDown={onTabKeyDown}
-                        // min-w-0 and break-words: a longer language's pane name wraps in its tab, never off a 320 px screen.
-                        // flex-auto, not equal thirds: each tab starts from its own words, so English's "Community" stays whole.
-                        className={`flex-auto min-w-0 break-words leading-tight min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                        // A tab never goes narrower than its longest word (no min-w-0; break-keep keeps a Chinese, Japanese or Korean
+                        // name whole too), so a word is never split. Each tab starts from that width and shares what is left; where
+                        // the three cannot sit side by side (130 % text, a longer language) the row wraps, so all three stay in view.
+                        // break-words is only the backstop for one word wider than the whole row. The phone's rule (people.tsx): a name
+                        // is never broken mid-word.
+                        className={`grow basis-[min-content] break-words break-keep leading-tight min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                             view === v 
                                 ? 'bg-white dark:bg-nature-800 text-rainbow shadow-sm border border-nature-200/50 dark:border-nature-700/50 scale-95 drop-shadow-sm' 
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'

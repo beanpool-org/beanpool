@@ -38,6 +38,8 @@ vi.mock('react-native', () => {
     return {
         Platform: { OS: 'android' }, StyleSheet: { create: <T,>(s: T) => s, hairlineWidth: 1 },
         View: el('div'), Text: el('span'), Pressable: el('div'), TextInput: el('textarea'), ActivityIndicator: el('span'),
+        // The bubble measures a long message against the window (components/chat/ChatFold.tsx).
+        useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
 const theme = vi.hoisted(() => ({ colors: null as any }));

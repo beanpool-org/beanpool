@@ -7,6 +7,7 @@ import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { indexedDbGroupLockStore, resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys } from '../lib/group-chat-keys';
 import { GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
+import { installFoldLayout, removeFoldLayout } from '../chat-fold-layout.test-support';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -562,5 +563,42 @@ describe('EventChat: a group held locked here never leaves readable by this scre
         await indexedDbGroupLockStore.markLocked(`${identity.publicKey}/another-group`);
         await trySend('See you there');
         await waitFor(() => expect(api.postEventChatMessage).toHaveBeenCalledWith('ev-1', 'See you there'));
+    });
+});
+
+describe('EventChat: a long message folds with …more, as in every chat', () => {
+    beforeEach(() => {
+        installFoldLayout();
+        vi.mocked(api.getEventChat).mockReset();
+    });
+    afterEach(removeFoldLayout);
+
+    const fortyLines = Array.from({ length: 40 }, (_, i) => `Job ${i + 1} for the working bee`).join('\n');
+
+    it('a 40-line message folds, opens in place and folds again; a 3-line one never shows the control', async () => {
+        vi.mocked(api.getEventChat).mockResolvedValue(view({
+            messages: [
+                message({ id: 'long', ciphertext: b64(fortyLines) }),
+                message({ id: 'short', ciphertext: b64('Gloves\nSpades\nBarrow') }),
+            ],
+        }));
+        renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        const folded = await screen.findByTestId('chat-text');
+        expect(folded.dataset.fold).toBe('folded');
+        expect(screen.getAllByTestId('chat-fold-toggle')).toHaveLength(1);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' }));
+        expect(screen.getByTestId('chat-text').dataset.fold).toBe('open');
+        expect(screen.getByTestId('chat-text').textContent).toBe(fortyLines);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
+        expect(screen.getByTestId('chat-text').dataset.fold).toBe('folded');
+    });
+
+    it('a removed line is never folded', async () => {
+        vi.mocked(api.getEventChat).mockResolvedValue(view({ messages: [message({ type: 'removed', ciphertext: b64(fortyLines) })] }));
+        renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        expect(await screen.findByText('removed by the host')).toBeTruthy();
+        expect(screen.queryByTestId('chat-fold-toggle')).toBeNull();
     });
 });

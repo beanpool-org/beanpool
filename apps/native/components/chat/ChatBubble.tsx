@@ -5,6 +5,9 @@
  * badge, "edited · 12:14", and whatever the screen hands it as a status (the DM's ✓/✓✓, a clock, or
  * "! not delivered"). A DM adds a photo through `attachment`; a group chat adds the author's name through
  * `authorLabel`. A deleted or removed message renders as a tombstone with nothing to tap.
+ *
+ * Words that run past twelve lines fold with a "…more" button (ChatFold.tsx; the rule is core's chat-fold.ts). A folded
+ * message moves its time and status out of the words, to the line with the button, or the clamp would cut them off.
  */
 
 import React from 'react';
@@ -13,7 +16,8 @@ import type { ChatMessage, ChatKind, ChatRemovedRun } from '../../utils/chat-act
 import { isTombstone, messageTime, tombstoneWords, reactionSummary, removedRunLineText } from '../../utils/chat-actions';
 import { splitTextWithLinks } from '../../utils/chat-links';
 import { chatLineWords } from '../../utils/chat-line-words';
-import { t, tn } from '@beanpool/core';
+import { CHAT_FOLD_LINES, t, tn } from '@beanpool/core';
+import { useChatFold } from './ChatFold';
 import type { ChatStyles } from './styles';
 
 export interface ChatQuote {
@@ -41,6 +45,8 @@ interface Props {
     status?: React.ReactNode;
     /** Under the bubble when there are no words to trail (a photo on its own). */
     footer?: React.ReactNode;
+    /** The member is editing this message: it shows whole, never folded. */
+    editing?: boolean;
 }
 
 function renderTextWithLinks(text: string, linkStyle: any, onPressUrl: (url: string) => void) {
@@ -52,8 +58,9 @@ function renderTextWithLinks(text: string, linkStyle: any, onPressUrl: (url: str
     );
 }
 
-export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPress, onPressUrl, attachment, status, footer }: Props) {
+export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPress, onPressUrl, attachment, status, footer, editing }: Props) {
     const removed = isTombstone(item);
+    const fold = useChatFold(item.id, item.text ?? '', !removed && !editing);
     const { emojis, total } = removed ? { emojis: [] as string[], total: 0 } : reactionSummary(item.metadata);
     const textStyle = isMe ? styles.messageTextMe : styles.messageTextOther;
     const timeStyle = isMe ? styles.messageTimeMe : styles.messageTimeOther;
@@ -102,14 +109,39 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
                     <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>{messageTime(item)}</Text>
                 </Text>
             ) : (!!item.text || !attachment) ? (
-                <Text style={[styles.messageText, textStyle, attachment ? { marginTop: 6 } : null]}>
-                    {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl)}
-                    {'  '}
-                    <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>
-                        {item.edited ? t('edited · {time}', { time: messageTime(item) }) : messageTime(item)}
+                fold.long ? (
+                    <>
+                        <Text style={[styles.messageText, textStyle, attachment ? { marginTop: 6 } : null]} numberOfLines={fold.open ? undefined : CHAT_FOLD_LINES}>
+                            {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl)}
+                        </Text>
+                        <View style={styles.foldRow}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={fold.open ? t('Show less') : t('Show the whole message')}
+                                accessibilityState={{ expanded: fold.open }}
+                                onPress={fold.toggle}
+                                style={styles.foldButton}
+                            >
+                                <Text style={[styles.foldText, isMe ? styles.foldTextMe : styles.foldTextOther]}>
+                                    {fold.open ? t('less', undefined, 'folds a long message again') : t('…more', undefined, 'shows the rest of a long message')}
+                                </Text>
+                            </Pressable>
+                            <Text style={[styles.messageTime, timeStyle, styles.foldTime, { fontSize: 10 }]}>
+                                {item.edited ? t('edited · {time}', { time: messageTime(item) }) : messageTime(item)}
+                                {status}
+                            </Text>
+                        </View>
+                    </>
+                ) : (
+                    <Text style={[styles.messageText, textStyle, attachment ? { marginTop: 6 } : null]} {...fold.measure}>
+                        {renderTextWithLinks(item.text, isMe ? styles.linkMe : styles.linkOther, onPressUrl)}
+                        {'  '}
+                        <Text style={[styles.messageTime, timeStyle, { fontSize: 10 }]}>
+                            {item.edited ? t('edited · {time}', { time: messageTime(item) }) : messageTime(item)}
+                        </Text>
+                        {status}
                     </Text>
-                    {status}
-                </Text>
+                )
             ) : null}
 
             {!removed && footer}

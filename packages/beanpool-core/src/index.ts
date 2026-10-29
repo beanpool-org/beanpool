@@ -72,6 +72,7 @@ export * from './scoped-decision.js';
 export * from './group-words.js';
 export * from './place-privacy.js';
 export * from './removed-line-runs.js';
+export * from './chat-fold.js';
 export * from './tour.js';
 export * from './help-map.js';
 export * from './brand-colours.js';

@@ -43,6 +43,13 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     messageTime: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
     messageTimeMe: { color: colors.chat.messageTimeMe },
     messageTimeOther: { color: colors.text.muted },
+    /** A long message's "…more" / "less" button (ChatFold.tsx), with the time on the same line. The button is 44dp tall. */
+    foldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    foldButton: { minHeight: 44, minWidth: 44, justifyContent: 'center' },
+    foldTime: { alignSelf: 'center', marginTop: 0 },
+    foldText: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
+    foldTextMe: { color: colors.chat.messageTextMe, textDecorationLine: 'underline' },
+    foldTextOther: { color: colors.text.link },
 
     systemMessageContainer: { width: '100%', alignItems: 'center', marginVertical: 8 },
     systemMessageBubble: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },

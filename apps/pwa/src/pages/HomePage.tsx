@@ -29,10 +29,10 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
+    HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardType, listPhotoUrl, readSearchSettings,
+    homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
 } from '@beanpool/core';
@@ -735,7 +735,8 @@ function DecideBody({
 
     return (
         <div>
-            {items.slice(0, 3).map(item => {
+            {/* As many rows as the node sent for the card's setting (core HOME_DECIDE_ROWS): three, or five for "All open" and "My votes". */}
+            {items.slice(0, HOME_DECIDE_ROWS_MAX).map(item => {
                 const when = closesIn(item.closesAt, now);
                 const votedStatus = item.voted ? t('You voted') : t('Not yet');
                 const sub = [when, votedStatus].filter(Boolean).join(' · ');
@@ -2382,12 +2383,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             case 'decide': {
                 const d = c.decide;
                 if (!d) return null;
-                const hasItems = (d.items && d.items.length > 0) || !!d.poll;
+                // "My votes" sends `open` as the number of the member's own Decisions, not of all that are open: the counts would read
+                // as the community's, so the aside is left off there (the phone draws none either). Its rows say when each closes.
+                const showAside = ((d.items && d.items.length > 0) || !!d.poll) && readDecideSettings(card.settings).show !== 'mine';
                 return (
                     <HomeCard
                         key={id}
                         {...common}
-                        titleAside={hasItems ? (
+                        titleAside={showAside ? (
                             <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">
                                 {decideLine(d, now)}
                             </span>

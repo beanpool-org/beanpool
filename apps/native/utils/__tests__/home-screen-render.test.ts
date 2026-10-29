@@ -55,6 +55,8 @@ vi.mock('react-native', () => {
 });
 const nav = vi.hoisted(() => ({
     focus: null as null | (() => void | (() => void)),
+    /** What the screen's focus effect handed back when it ran on landing: Home losing focus (a tab left). */
+    blur: null as null | (() => void),
     params: {} as Record<string, string>,
     router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), setParams: vi.fn() },
 }));
@@ -63,7 +65,12 @@ vi.mock('expo-router', () => ({
     useLocalSearchParams: () => nav.params,
     useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
     useFocusEffect: (cb: () => void | (() => void)) => {
-        useEffect(() => { nav.focus = cb; return cb() ?? undefined; }, [cb]);
+        useEffect(() => {
+            nav.focus = cb;
+            const leave = cb();
+            nav.blur = typeof leave === 'function' ? leave : null;
+            return leave ?? undefined;
+        }, [cb]);
     },
 }));
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) }));
@@ -1606,6 +1613,91 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
         expect(cards()[0]).toBe('find');
         expect(node.requests.filter(r => new URL(r.url).pathname === '/api/join/knock/cancel')).toHaveLength(1);
+    });
+
+    // LG-L1-W (review of #2573): the next read of that visit re-reads the phone's knocks, where the cancelled one is no longer
+    // listed. The line and the pin stay until Home loses focus (Fable's pick: the Cancel's line is for THIS Home visit).
+    describe('a Cancel that worked: its line stays for the whole Home visit, and goes when Home loses focus', () => {
+        const url = 'https://byron.example.org';
+        const waitingCard = () => document.querySelector(`[data-testid="home-find-waiting-${url}"]`);
+        const CANCELLED = 'You cancelled your request. You can ask again after 24 hours.';
+        /** Home read again within the visit: the app coming back to the front while Home is shown. */
+        const refreshInVisit = async () => {
+            const onChange = vi.mocked(AppState.addEventListener).mock.calls.filter(c => c[0] === 'change').at(-1)![1] as (s: string) => void;
+            await act(async () => { onChange('active'); });
+            await settle();
+        };
+        const cancelIt = async () => {
+            await act(async () => { (document.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLElement).click(); });
+            const confirm = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!.find(b => b.style === 'destructive')!;
+            await act(async () => { await confirm.onPress!(); });
+            await settle();
+        };
+        const leaveAndReturn = async () => {
+            await act(async () => { nav.blur!(); });
+            await act(async () => { nav.focus!(); });
+            await settle();
+        };
+
+        it('past day 30 (pinned by the wait alone): the next read keeps the card, its line and the pin; leaving Home and coming back drops them', async () => {
+            node.answer = globalMember(40);
+            node.knockStatus = 'pending';
+            await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+            await render();
+            await settle();
+            await cancelIt();
+            expect(waitingCard()?.textContent).toContain(CANCELLED);
+
+            const reads = homeReads().length;
+            await refreshInVisit();
+            expect(homeReads().length).toBeGreaterThan(reads);
+            expect(waitingCard()?.textContent).toContain(CANCELLED);
+            expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
+            expect(cards()[0]).toBe('find');
+            expect(byLabel('Card options for Find your community')).toBeNull();
+            // The line is for the visit alone: the phone has the request cancelled, and the next visit draws no card for it.
+            expect(JSON.parse(mem.store.get(KNOCKS_STORE_KEY)!).knocks[0].cancelledAt).toEqual(expect.any(String));
+
+            await leaveAndReturn();
+            expect(waitingCard()).toBeNull();
+            expect(document.body.textContent).not.toContain(CANCELLED);
+            // Nothing open there any more, so Find is a card like any other again: its "…" is back (the pin went with the visit).
+            expect(byLabel('Card options for Find your community')).not.toBeNull();
+        });
+
+        it('in the first 30 days (pinned anyway): the line also stays through the read, and goes with the visit', async () => {
+            node.answer = globalMember(3);
+            node.knockStatus = 'pending';
+            await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+            await render();
+            await settle();
+            await cancelIt();
+            await refreshInVisit();
+            expect(waitingCard()?.textContent).toContain(CANCELLED);
+            expect(cards()[0]).toBe('find');
+
+            await leaveAndReturn();
+            expect(waitingCard()).toBeNull();
+            expect(cards()[0]).toBe('find');
+        });
+
+        it('a Cancel that finishes after Home lost focus leaves no line for the next visit', async () => {
+            node.answer = globalMember(40);
+            node.knockStatus = 'pending';
+            await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+            await render();
+            await settle();
+            await act(async () => { (document.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLElement).click(); });
+            const confirm = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!.find(b => b.style === 'destructive')!;
+            let done!: Promise<void>;
+            await act(async () => { done = confirm.onPress!() as Promise<void>; nav.blur!(); });
+            await act(async () => { await done; });
+            await settle();
+            await act(async () => { nav.focus!(); });
+            await settle();
+            expect(waitingCard()).toBeNull();
+            expect(document.body.textContent).not.toContain(CANCELLED);
+        });
     });
 
     // A list that does not hold Find, as the newcomer's and the starter set are (Lounge L1, review of #2573). The stub node

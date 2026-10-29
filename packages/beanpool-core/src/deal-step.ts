@@ -4,6 +4,7 @@
  */
 
 import { formatNumber, t } from './words.js';
+import { amountRefusalWords, isAmbiguousAmount, type ParsedAmount } from './amount-input.js';
 
 export type DealRole = 'payer' | 'payee';
 
@@ -329,4 +330,53 @@ export const listingDealLines = {
     hadBefore: (date: string) => t("You've had this before · done {date}", { date }),
     /** Rate that finished deal, from the listing. */
     review: () => t('⭐ Review'),
+    /**
+     * A deal a door named that is over (an alert for a request declined, a deal cancelled, released or settled): what
+     * became of it, from its status, above the listing as it stands for the reader now. Null while it is open.
+     */
+    finished: (status: string): string | null => {
+        if (status === 'pending' || status === 'requested') return null;
+        if (status === 'completed') return t('That deal is done.');
+        if (status === 'rejected' || status === 'declined') return t('That request was declined.');
+        return t('That deal was cancelled.');
+    },
 };
+
+/** A deal as Release reads it: what it holds, and the time it was struck for (none on a fixed price). */
+export interface ReleaseDeal {
+    credits?: number | null;
+    hours?: number | null;
+}
+
+/** The listing as Release reads it: how it is priced, and whether it is lent. */
+export interface ReleaseListing {
+    priceType?: string | null;
+    lendable?: boolean | number | null;
+}
+
+/**
+ * What a payer's Release moves, as the node pays it (apps/server engine/escrow.ts completePostTransaction): a deal
+ * struck for a time pays at its own rate (what it holds over the time it was struck for) for the time confirmed; a fixed
+ * price, a loan for one fee, or a deal with no time on it pays what it holds. `units` is the time confirmed, undefined
+ * when none is asked for; a time that is not above 0 releases nothing (Release is off for it).
+ */
+export function releaseAmount(deal: ReleaseDeal, units: number | undefined, listing: ReleaseListing): number {
+    const held = Number(deal.credits ?? 0);
+    const booked = Number(deal.hours);
+    const oneFeeLoan = !!listing.lendable && (listing.priceType || 'fixed') === 'fixed';
+    if (!(Number.isFinite(booked) && booked > 0) || oneFeeLoan || units === undefined) return held;
+    if (!(Number.isFinite(units) && units > 0)) return 0;
+    return units === booked ? held : (held / booked) * units;
+}
+
+/**
+ * The line in a payer's Release confirm, both apps, the panel's and each row's: the Beans it moves (releaseAmount, to the
+ * cent) and to whom, or, for a time typed that could mean two numbers, why it can't be read. `typed` is the time as
+ * parsed (parseAmount), null where none is asked for (a fixed price).
+ */
+export function releaseLine(deal: ReleaseDeal, listing: ReleaseListing, typed: ParsedAmount | null, payeeName: string): string {
+    if (typed && !typed.ok && isAmbiguousAmount(typed.refusal)) return amountRefusalWords(typed.refusal);
+    const units = typed ? (typed.ok ? typed.value : NaN) : undefined;
+    const n = Math.round(releaseAmount(deal, units, listing) * 100) / 100;
+    return t('Transferring {n} B to {name}', { n, name: payeeName });
+}

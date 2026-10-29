@@ -4,7 +4,8 @@
  * real in apps/server test-deal-listing-keepers.ts; here the rule's own matrix.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { dealMoves, dealSideOf, listingChips, listingChipWords, listingDealLines, listingDeals, type DealRow } from '../deal-step.js';
+import { dealMoves, dealSideOf, listingChips, listingChipWords, listingDealLines, listingDeals, releaseAmount, releaseLine, type DealRow } from '../deal-step.js';
+import { ANY_DECIMALS, parseAmount } from '../amount-input.js';
 import { readFileSync } from 'node:fs';
 import { setLanguage, type Catalog } from '../words.js';
 
@@ -209,5 +210,50 @@ describe("listingDealLines.helping: a helper's deal by its own amount, and nothi
         expect(listingDealLines.helping(0)).toBe("You're helping with this · no Beans held");
         setLanguage('fr', [fr]);
         expect(listingDealLines.helping(0)).toBe('Vous aidez pour ceci · aucun Haricot retenu');
+    });
+});
+
+describe("releaseAmount and releaseLine: what a payer's Release moves, as the node pays it (review on #2588)", () => {
+    const fr = JSON.parse(readFileSync(new URL('../../words/fr.json', import.meta.url), 'utf8')) as Catalog;
+    afterEach(() => setLanguage('en'));
+    const daily = { priceType: 'daily' };
+    // A daily Need at 20 Beans a day, struck for 3 days: 60 held.
+    const held3 = { credits: 60, hours: 3 };
+    it('a deal struck for a time pays its own rate for the time confirmed: 3 days changed to 5 releases 100, not the 60 held', () => {
+        expect(releaseAmount(held3, 5, daily)).toBe(100);
+        expect(releaseAmount(held3, 3, daily)).toBe(60);
+        expect(releaseAmount(held3, 1.5, daily)).toBe(30);
+        expect(releaseLine(held3, daily, parseAmount('5', 'en', ANY_DECIMALS), 'Helper')).toBe('Transferring 100 B to Helper');
+        expect(releaseLine(held3, daily, parseAmount('2', 'en', ANY_DECIMALS), 'Helper')).toBe('Transferring 40 B to Helper');
+    });
+    it('its own rate, never the listing price: a deal struck at 15 a day pays 15 a day', () => {
+        expect(releaseAmount({ credits: 45, hours: 3 }, 4, daily)).toBe(60);
+    });
+    it('a fixed price, a loan for one fee, or a deal with no time on it pays what it holds, whatever is typed', () => {
+        expect(releaseAmount({ credits: 45, hours: null }, undefined, { priceType: 'fixed' })).toBe(45);
+        expect(releaseLine({ credits: 45, hours: null }, { priceType: 'fixed' }, null, 'Damo')).toBe('Transferring 45 B to Damo');
+        expect(releaseAmount({ credits: 10, hours: 7 }, 9, { priceType: 'fixed', lendable: 1 })).toBe(10);
+        expect(releaseAmount({ credits: 30, hours: null }, 4, daily)).toBe(30);
+    });
+    it('a time that is not above 0 releases nothing (Release is off for it); one that could mean two numbers says why', () => {
+        expect(releaseLine(held3, daily, parseAmount('', 'en', ANY_DECIMALS), 'Helper')).toBe('Transferring 0 B to Helper');
+        expect(releaseLine(held3, daily, parseAmount('0', 'en', ANY_DECIMALS), 'Helper')).toBe('Transferring 0 B to Helper');
+        expect(releaseLine(held3, daily, parseAmount('1,000', 'en', ANY_DECIMALS), 'Helper')).toBe('Type the amount without thousands separators, like 1000.5.');
+    });
+    it("to the cent, in the language's way", () => {
+        const thirds = { credits: 100, hours: 3 };
+        expect(releaseLine(thirds, daily, parseAmount('2', 'en', ANY_DECIMALS), 'Mo')).toBe('Transferring 66.67 B to Mo');
+        setLanguage('fr', [fr]);
+        expect(releaseLine(thirds, daily, parseAmount('2', 'fr', ANY_DECIMALS), 'Mo')).toBe('Transfert de 66,67 B à Mo');
+    });
+});
+
+describe('listingDealLines.finished: what became of a deal an alert named, from its status (review on #2588)', () => {
+    it('one line for each way a deal ends; none while it is open', () => {
+        expect(listingDealLines.finished('rejected')).toBe('That request was declined.');
+        expect(listingDealLines.finished('cancelled')).toBe('That deal was cancelled.');
+        expect(listingDealLines.finished('completed')).toBe('That deal is done.');
+        expect(listingDealLines.finished('pending')).toBeNull();
+        expect(listingDealLines.finished('requested')).toBeNull();
     });
 });

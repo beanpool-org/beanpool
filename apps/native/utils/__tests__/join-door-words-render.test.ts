@@ -6,8 +6,10 @@
  * (utils/open-door-words.ts) real; the door's network is stubbed as open-door-screen-render.test.ts stubs it.
  *
  * In the pseudo-locale (`xx`) any text, label or placeholder with letters outside a bracket bypassed t(). Shown as
- * written: a community's own name and address. The two ways in (components/WordsDoor) and the sign-in buttons
- * (components/SsoButton) are shared with the first screen, so they are stand-ins that draw what this screen hands them.
+ * written: a community's own name and address. The sign-in buttons (components/SsoButton) are shared with the first
+ * screen, so they are stand-ins that draw what this screen hands them. The two ways in (components/WordsDoor's
+ * DoorChoices, swept with the key components) are drawn for real, so what they say by the door's rule is read as the
+ * member reads it.
  *
  * The phone's own door sentences are written in global-join.ts, global-join-existing.ts and door-work.ts, which sign the
  * join and hold the key and so stay off the words layer; open-door-words.ts translates them by their exact English. The
@@ -92,11 +94,9 @@ vi.mock('../../components/SsoButton', () => ({
     AppleButton: ({ title }: { title: string }) => createElement('button', { 'data-sso': 'apple' }, title),
     FacebookButton: ({ title }: { title: string }) => createElement('button', { 'data-sso': 'facebook' }, title),
 }));
-vi.mock('../../components/WordsDoor', () => ({
-    DoorChoices: ({ onWords, signInNote, wordsProblem }: { onWords: () => void; signInNote: string; wordsProblem: string | null }) => createElement('div', null,
-        createElement('button', { onClick: onWords, 'data-testid': 'words-way' }, '⇢'),
-        createElement('span', null, signInNote),
-        wordsProblem ? createElement('span', { 'data-testid': 'words-problem' }, wordsProblem) : null),
+// The two ways in are the real ones; only the work's progress bar is left out.
+vi.mock('../../components/WordsDoor', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../components/WordsDoor')>()),
     DoorWorkProgress: () => null,
 }));
 const KEY = { publicKey: 'ab'.repeat(32), privateKey: 'not-used', callsign: 'Wren' };
@@ -147,6 +147,7 @@ import { ACCOUNT_DOOR_MESSAGES, joinedGlobalNotice } from '../global-join-existi
 import { DOOR_WORK_MESSAGES } from '../door-work';
 import { GLOBAL_DOOR_MESSAGES } from '../node-profile';
 import { doorKeeperWords, doorNameCheckWords, doorRefusalWords, globalPlace, joinedGlobalBodyWords, phoneDoorLineWords } from '../open-door-words';
+import { DOOR_CHOICE_TEXT } from '../../components/WordsDoor';
 
 const GLOBAL = 'https://global.beanpool.org';
 const SELF = 'https://open.riverbend.example';
@@ -188,6 +189,8 @@ async function renderIn(lang: UiLang) {
     await settle();
 }
 const button = (english: string) => Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(pseudoLocalise(english))) ?? null;
+/** Each line on screen, whole. */
+const lines = () => Array.from(host.querySelectorAll('span')).map((s) => s.textContent);
 const click = async (el: Element | null | undefined, what: string) => {
     expect(el, what).toBeTruthy();
     await act(async () => { (el as HTMLElement).click(); });
@@ -225,10 +228,10 @@ describe('the global community\'s door in the pseudo-locale: every word came thr
         await renderIn('xx');
         expect(host.querySelector('[role="heading"]')?.textContent).toBe(pseudoLocalise('Global community'));
         expect(host.textContent).toContain(pseudoLocalise('🌍 Join the global community'));
-        expect(host.querySelector('[data-testid="words-problem"]')?.textContent).toBe(pseudoLocalise(DOOR_WORK_MESSAGES.solverUnavailable));
+        expect(lines()).toContain(pseudoLocalise(DOOR_WORK_MESSAGES.solverUnavailable));
         expect(bypassing(), 'choose').toEqual([]);
 
-        await click(host.querySelector('[data-testid="words-way"]'), 'the 12-words way');
+        await click(button(DOOR_CHOICE_TEXT.wordsExisting), 'the 12-words way');
         expect(host.textContent).toContain(pseudoLocalise('🔑 With your 12 words: the ones this phone already has. No sign-in needed.'));
         expect(host.textContent).toContain(pseudoLocalise('This is how people there see you. You can change it later.'));
         expect(host.querySelector('input')?.getAttribute('placeholder')).toBe(pseudoLocalise('Your name or nickname'));
@@ -286,6 +289,37 @@ describe('another community\'s door, and an address the screen refuses, in the p
     });
 });
 
+// Where the door's community keeps no copies of members' accounts (its rule `none`, vault rethink VR2), the two ways in
+// never call the sign-in a way back: the rule's sentence beside the buttons says what it does there. Where a copy is
+// kept (here `server`, by the community itself), the line is drawn as before.
+describe("the two ways in by the door's rule, in the pseudo-locale", () => {
+    const NO_COPIES = "{name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.";
+    const DOORS = [
+        {
+            door: 'the global community', node: undefined, base: GLOBAL, name: pseudoLocalise('The global community'),
+            kept: 'The global community keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.',
+        },
+        {
+            door: 'another community', node: SELF, base: SELF, name: 'Riverbend Open',
+            kept: 'The sign-in also becomes a way back into your account if you lose this phone: {name} keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.',
+        },
+    ] as const;
+    for (const d of DOORS) {
+        for (const rule of ['none', 'server'] as const) {
+            it(`${d.door}'s door, its rule ${rule}: the rule's note, and "a way back" only where a copy is kept`, async () => {
+                route.params = d.node ? { node: d.node } : {};
+                globalThis.fetch = network({ [d.base]: { ...OPEN, recoveryCopies: rule } });
+                await renderIn('xx');
+                expect(lines(), 'the note beside the sign-in buttons').toContain(pseudoLocalise(rule === 'none' ? NO_COPIES : d.kept).replace('{name}', d.name));
+                const wayBack = pseudoLocalise(DOOR_CHOICE_TEXT.signInLineExisting);
+                if (rule === 'none') expect(host.textContent, 'no copy, so no way back').not.toContain(wayBack);
+                else expect(lines(), 'a kept copy is a way back').toContain(wayBack);
+                expect(bypassing()).toEqual([]);
+            });
+        }
+    }
+});
+
 // ── 320 dp with text at 1.3× (checked with the pseudo-locale) ─────────────────────────────────────────────────────────
 const SCALE = 1.3;
 const glyphEm = (c: string) => (/\p{M}/u.test(c) || /[\uFE0F\u200B\u200C\u200D]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : 0.62);
@@ -313,7 +347,7 @@ describe('the door at 320 dp with 1.3× text, in the pseudo-locale', () => {
         globalThis.fetch = network({ [GLOBAL]: OPEN });
         await renderIn('xx');
         expect(unfit(), 'choose').toEqual([]);
-        await click(host.querySelector('[data-testid="words-way"]'), 'the 12-words way');
+        await click(button(DOOR_CHOICE_TEXT.wordsExisting), 'the 12-words way');
         expect(host.textContent).toContain(pseudoLocalise('Choose another way'));
         expect(unfit(), 'name').toEqual([]);
     });

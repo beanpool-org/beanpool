@@ -3075,6 +3075,7 @@ export default function WelcomeScreen() {
                                         busy={doorWork.busy}
                                         wordsProblem={wordsState?.phase === 'failed' ? welcomeLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                         signInNote={signInNote}
+                                        keepsNoCopies={globalDoorCopies === 'none'}
                                         colors={colors}
                                     />
                                 </>

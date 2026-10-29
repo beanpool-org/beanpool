@@ -13,9 +13,10 @@
  * compares it) and the sign-ins' brand names.
  *
  * Components welcome shares with screens not yet swept are stand-ins here (their sweeps are the screens they share):
- * WordsDoor's door choices and progress, LinkSignInSheet, AvatarPickerSheet, RecoveryWordsEntry, SavedNodePicker (its
- * stand-in draws the label, action and hint welcome hands it, so those are checked), MemberAvatar and the sign-in
- * buttons' logos (the buttons draw the title welcome hands them).
+ * WordsDoor's progress and Safety Backup note, LinkSignInSheet, AvatarPickerSheet, RecoveryWordsEntry, SavedNodePicker
+ * (its stand-in draws the label, action and hint welcome hands it, so those are checked), MemberAvatar and the sign-in
+ * buttons' logos (the buttons draw the title welcome hands them). The door's two ways in (WordsDoor's DoorChoices, swept
+ * with the key components) are drawn for real, so what they say by the door's rule is read as the member reads it.
  *
  * Then 320 dp at 1.3×: on every step, no word of a button's words is wider than the card's line, in the pseudo-locale's
  * longer words. And a language picked while Safety Backup is open redraws it from the real French catalog.
@@ -291,13 +292,11 @@ vi.mock('../sso-recovery', async (importOriginal) => {
 });
 vi.mock('../bundled-avatars', () => ({ BUNDLED_AVATARS: [], resolveBundledAvatar: () => 1 }));
 
-// Shared with screens not swept yet: stand-ins (see the note above).
+// Shared with screens not swept yet: stand-ins (see the note above). The two ways in (DoorChoices) are the real ones.
 vi.mock('../../components/WordsDoor', async (importOriginal) => {
     const real = await importOriginal<typeof import('../../components/WordsDoor')>();
     return {
         ...real,
-        // The note the screen hands it, beside the sign-in buttons: the screen's own sentence (its rule's, VR2).
-        DoorChoices: ({ signInNote }: { signInNote?: string }) => createElement('span', { 'data-later-sweep': 'DoorChoices' }, signInNote ?? null),
         DoorWorkProgress: () => null,
         WordsBackupNote: () => createElement('span', { 'data-later-sweep': 'WordsBackupNote' }),
     };
@@ -330,6 +329,7 @@ import { LanguageSwitch } from '../../components/LanguagePicker';
 import WelcomeScreen from '../../app/welcome';
 import { noVault, useVault } from './fake-vault';
 import { DOOR_MESSAGES } from '../global-join';
+import { DOOR_CHOICE_TEXT } from '../../components/WordsDoor';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
@@ -575,16 +575,18 @@ describe("the global community's door in the pseudo-locale", () => {
         check('the door, already joined');
     });
 
-    it('a door with the 12-words way: the two ways side by side (WordsDoor is a stand-in), and the sign-in again', async () => {
+    it('a door with the 12-words way: the two ways side by side, drawn for real', async () => {
         door.check = { ok: true, profile: { features: { wordsDoor: true } } };
         await mount('xx');
         await press('🌍 Explore BeanPool worldwide', 'xx');
-        expect(host!.querySelector('[data-later-sweep="DoorChoices"]')).toBeTruthy();
+        expect(host!.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.words));
+        expect(host!.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInHeading));
         check('the door, two ways');
     });
 
     // Who keeps a copy for the sign-in follows the global community's rule (vault rethink VR2), as the join does, in a
     // build with the key vault: above the sign-in alone, and beside the sign-in buttons where the door has both ways in.
+    // There the line above the note calls the sign-in a way back only where a copy is kept: never under `none`.
     const NO_COPIES = "{name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.";
     const KEEPER_LINES = {
         vault: {
@@ -614,7 +616,14 @@ describe("the global community's door in the pseudo-locale", () => {
             door.check = { ok: true, profile: { features: { wordsDoor: true }, recoveryCopies: rule } };
             await mount('xx');
             await press('🌍 Explore BeanPool worldwide', 'xx');
-            expect(host!.querySelector('[data-later-sweep="DoorChoices"]')?.textContent).toBe(said(KEEPER_LINES[rule].beside));
+            const lines = all('span').map((s) => s.textContent);
+            expect(lines, 'the note beside the sign-in buttons').toContain(said(KEEPER_LINES[rule].beside));
+            for (const other of (['vault', 'server', 'none'] as const).filter((r) => r !== rule)) {
+                expect(lines, `not ${other}'s note`).not.toContain(said(KEEPER_LINES[other].beside));
+            }
+            if (rule === 'none') expect(host!.textContent, 'no copy, so no way back').not.toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInLine));
+            else expect(lines, 'a kept copy is a way back').toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInLine));
+            check(`the door, two ways, ${rule}`);
         });
     }
 });

@@ -547,6 +547,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                                 busy={doorWork.busy}
                                 wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                 signInNote={keeper.choose}
+                                keepsNoCopies={doorCopies === 'none'}
                                 account="existing"
                             />
                         </>

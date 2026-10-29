@@ -269,6 +269,20 @@ describe('the 2FA code, the 12 boxes, the door\'s two ways in, Safety Backup\'s 
         expect(unfit(host, 320 - 32 - 34)).toEqual([]);
     });
 
+    // The door's community keeps no copies of members' accounts (its rule `none`, vault rethink VR2): the sign-in is no
+    // way back there, so neither door's line says it is; the note the screen hands it says what the sign-in does.
+    it('a door whose community keeps no copies: no "way back" line, a new account or this one; the note stays', async () => {
+        for (const account of ['new', 'existing'] as const) {
+            await renderIn('xx', createElement(DoorChoices, { account, keepsNoCopies: true, onWords() {}, onSignIn() {}, signInNote: pseudoLocalise('A note the screen hands it.') }));
+            expect(host.textContent, account).toContain(pseudoLocalise(account === 'new' ? DOOR_CHOICE_TEXT.signInHeading : DOOR_CHOICE_TEXT.signInHeadingExisting));
+            expect(host.textContent, account).not.toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInLine));
+            expect(host.textContent, account).not.toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInLineExisting));
+            expect(host.textContent, account).toContain(pseudoLocalise('A note the screen hands it.'));
+            expect(bypassing(host, WRITTEN)).toEqual([]);
+            expect(unfit(host, 320 - 32 - 34)).toEqual([]);
+        }
+    });
+
     it('welcome.tsx\'s door (DoorChoices default mode) still shows "Create an account with 12 secret words"', async () => {
         await renderIn('en', createElement(DoorChoices, { onWords() {}, onSignIn() {} }));
         expect(host.textContent).toContain('Create an account with 12 secret words');

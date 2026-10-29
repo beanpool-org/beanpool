@@ -189,12 +189,56 @@ describe('the root guard while the member is still setting up', () => {
         expect(setupRedirect(['claim-community'], { ...CLAIM_OUT, claimOut: false })).toBe('/welcome');
     });
 
-    it('the root layout reads the claim from the wizard\'s record, inside the flag the guard already waits for', () => {
+    it('the root layout reads the claim and the door from the wizard\'s record, inside the flag the guard already waits for', () => {
         const layout = fs.readFileSync(path.join(APP, '_layout.tsx'), 'utf8');
-        expect(layout).toMatch(/setPendingOnboardingFlag\(!p \? false : claimInFlight\(p\) \? 'claim' : 'wizard'\);/);
-        expect(layout).toMatch(/setupRedirect\(segments, \{ hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim' \}\)/);
+        // onboarding-state.ts wizardHold: false, 'claim' (claimInFlight), 'door' (doorJoinOut) or 'wizard'; tested in
+        // onboarding-resume.test.ts. Before S2 this line read `!p ? false : claimInFlight(p) ? 'claim' : 'wizard'`.
+        expect(layout).toMatch(/setPendingOnboardingFlag\(wizardHold\(p\)\);/);
+        expect(layout).toMatch(/setupRedirect\(segments, \{\s*hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim', doorOut: pendingOnboarding === 'door',\s*\}\)/);
         // No claim kept beside the record any more (#2412's detour): the claim makes the account.
         expect(layout).not.toMatch(/getPendingClaim|landOnClaim|pendingClaimLanding/);
+    });
+
+    /**
+     * Another community's open door (DESIGN-account-without-global-fable.md §2.3, slice S2): its link on a phone with no account
+     * opens the door, whose join makes the account there. Every root-guard path the door meets, in turn.
+     */
+    describe("another community's open door (S2)", () => {
+        const DOOR_OUT = { hasIdentity: true, pendingOnboarding: true, doorOut: true };
+
+        it('a fresh install (no identity): the door screen stays, before Join and while its join is out in this session; every other root as before', () => {
+            // Before S2 the guard sent it to welcome, and a self-hoster's open community could take no new phone.
+            expect(setupRedirect(['join-open-door'], NO_IDENTITY)).toBeNull();
+            for (const segments of OTHER_ROOTS) {
+                expect(setupRedirect(segments, NO_IDENTITY), segments.join('/') || '(empty)').toBe('/welcome');
+            }
+            // Its old name, the global community's door with no address, is not let through: with no account that door is
+            // the first screen's ("Explore BeanPool worldwide"), unchanged.
+            expect(setupRedirect(['join-global'], NO_IDENTITY)).toBe('/welcome');
+            // The app's identity is set only once the wizard ends, so a join out in this session is still "no identity".
+            expect(setupRedirect(['join-open-door'], { hasIdentity: false, pendingOnboarding: true, doorOut: true })).toBeNull();
+        });
+
+        it('a restart while the door\'s join was out (its key on the phone, the node may hold it): the door screen and welcome stay, every other root goes to welcome', () => {
+            expect(setupRedirect(['join-open-door'], DOOR_OUT)).toBeNull();
+            expect(setupRedirect(['welcome'], DOOR_OUT)).toBeNull();
+            for (const segments of [...OTHER_ROOTS, ['recover-identity'], ['claim-community'], ['join-global'], ...PROVIDERS.map((p) => ['auth', p])]) {
+                expect(setupRedirect(segments, DOOR_OUT), segments.join('/') || '(empty)').toBe('/welcome');
+            }
+            // Once in, the wizard's other steps are welcome's alone, as every join's.
+            expect(setupRedirect(['join-open-door'], { ...DOOR_OUT, doorOut: false })).toBe('/welcome');
+        });
+
+        it('any other wizard half done (an invite\'s, the global community\'s door, a claim): the door screen goes to welcome, as before', () => {
+            expect(setupRedirect(['join-open-door'], WIZARD_PENDING)).toBe('/welcome');
+            expect(setupRedirect(['join-open-door'], { hasIdentity: true, pendingOnboarding: true, claimOut: true })).toBe('/welcome');
+        });
+
+        it('a returning member (set up): the door screen is the account\'s, as since P5; restore with no identity unchanged', () => {
+            expect(setupRedirect(['join-open-door'], SET_UP)).toBeNull();
+            expect(setupRedirect(['recover-identity'], NO_IDENTITY)).toBeNull();
+            expect(setupRedirect(['recover-identity'], DOOR_OUT)).toBe('/welcome');
+        });
     });
 
     it('does not act once the member is set up: the node-recognition checks decide, as before', () => {
@@ -214,10 +258,11 @@ describe('the root guard while a phone with no account looks around the global c
         ['post', '[id]'], ['guide', '[slug]'], ['guide', 'section', '[id]'], ['beanpool'], ['start-community'],
     ];
     // Each needs a key: a message, people, Settings, asking a community, a profile, the not-recognised screen, a sign-in return.
+    // Another community's open door is not one since S2: its join makes the key there (the merged guard's test, below).
     const NEEDS_A_KEY: string[][] = [
         ['(tabs)', 'chats'], ['(tabs)', 'people'], ['(tabs)', 'pulse'], ['(tabs)', 'settings'],
         ['chat', '[id]'], ['new-message'], ['channels'], ['group', '[id]'], ['find-community'], ['profile-setup'],
-        ['public-profile'], ['join-global'], ['join-open-door'], ['node-mismatch'], ['settings-signin'],
+        ['public-profile'], ['join-global'], ['node-mismatch'], ['settings-signin'],
         ...PROVIDERS.map((p) => ['auth', p]),
     ];
 
@@ -230,7 +275,7 @@ describe('the root guard while a phone with no account looks around the global c
     });
 
     it('keeps the screens a phone with no account always had: welcome, guardian recovery, a re-key code, a claim, a community\'s card', () => {
-        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card']) {
+        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card', 'peek']) {
             expect(setupRedirect([root], LOOKING), root).toBeNull();
         }
         // The bare root is the app's start: the first screen, as always (app/index.tsx redirects there too), never the door.
@@ -248,6 +293,28 @@ describe('the root guard while a phone with no account looks around the global c
             expect(setupRedirect(segments, { ...SET_UP, lookingAround: true }), segments.join('/')).toBeNull();
             expect(setupRedirect(segments, { ...WIZARD_PENDING, lookingAround: true }), segments.join('/')).toBe('/welcome');
         }
+    });
+
+    it('another community\'s door (S2) and a community\'s card (S15) stay ahead of the look (S12), looking around or not', () => {
+        // Looking around global, another community's door link opens that door, not global's: the look's door would send the
+        // phone to join the global community instead. The card stays as it does for any stranger.
+        for (const state of [LOOKING, NO_IDENTITY]) {
+            expect(setupRedirect(['join-open-door'], state), `door, looking ${state === LOOKING}`).toBeNull();
+            expect(setupRedirect(['community-card'], state), `card, looking ${state === LOOKING}`).toBeNull();
+            expect(setupRedirect(['peek'], state), `peek, looking ${state === LOOKING}`).toBeNull();
+        }
+        // The rest of the merged guard as each slice left it: a screen that needs a key opens the look's door while looking
+        // and the first screen otherwise; the global community's door is not let through with no account (S2).
+        expect(setupRedirect(['(tabs)', 'chats'], LOOKING)).toEqual(DOOR);
+        expect(setupRedirect(['join-global'], LOOKING)).toEqual(DOOR);
+        expect(setupRedirect(['(tabs)', 'chats'], NO_IDENTITY)).toBe('/welcome');
+        expect(setupRedirect(['join-global'], NO_IDENTITY)).toBe('/welcome');
+        expect(setupRedirect(['(tabs)', 'market'], LOOKING)).toBeNull();
+        expect(setupRedirect([], LOOKING)).toBe('/welcome');
+        // A door join out (the wizard's record, its key on the phone) keeps its door whatever the look says.
+        const DOOR_OUT = { hasIdentity: true, pendingOnboarding: true, doorOut: true };
+        expect(setupRedirect(['join-open-door'], { ...DOOR_OUT, lookingAround: true })).toBeNull();
+        expect(setupRedirect(['(tabs)', 'market'], { ...DOOR_OUT, lookingAround: true })).toBe('/welcome');
     });
 
     it('the root layout asks whether the phone is looking around only with no identity, and drops an answer for a screen it has left', () => {

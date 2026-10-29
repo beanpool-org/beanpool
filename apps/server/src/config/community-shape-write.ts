@@ -35,6 +35,9 @@
  *   knownFloor  { on, floor, cap }, the known floor's own checks (400); refused wherever Beans are off once this request
  *               is written (`beans_off`).
  *   listed      refused on the global kind (`profile`); on refused while DIRECTORY_UNLISTED holds every push back.
+ *   shareOutside refused on while the private preview is on (it shows visitors nothing). Set off, every link a member
+ *               shared outside stops at once (engine/peek-tickets.ts stopAllPeekTickets), in the same transaction: set on
+ *               again, none of them opens anything.
  *   dmRequests, decisions, probation, autoHide, autoMute, shareLocation, shareMemberCount, shareEmail, sharePhone,
  *   shareHealth: no lock.
  *   recoveryCopies  'vault' | 'server' | 'none' (config/recovery-copies.ts, vault rethink VR2): no lock. Only where new
@@ -59,6 +62,7 @@ import { checkKnownFloorSettings, writeKnownFloorSettings, KnownFloorError, type
 import { readShape, configuredJoinOf, LOCKS_AFTER_A_CHANGE, type JoinState, type Shape, type ShapeLock } from './community-shape.js';
 import { directoryUnlistedByEnv, initDirectoryPublisher, listedSwitchedOff } from '../services/directory-publisher.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
+import { stopAllPeekTickets } from '../engine/peek-tickets.js';
 
 const { t: tr } = wordsFor('en');
 
@@ -87,7 +91,7 @@ const bad = (setting: string | undefined, message: string, code = 'bad_setting')
 
 /** Each a profile switch's override, in the shape's name. The 12-words door is `ssoRequiredForJoin` the other way up. */
 const SWITCH_OF = {
-    knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', listed: 'publishToDirectory',
+    knocks: 'knocks', beans: 'beans', dmRequests: 'dmRequests', decisions: 'decisions', shareOutside: 'shareOutside', listed: 'publishToDirectory',
     probation: 'probation', autoHide: 'autoHideReports', autoMute: 'autoMute',
 } as const satisfies Record<string, ProfileSwitch>;
 type SwitchSetting = keyof typeof SWITCH_OF;
@@ -101,7 +105,7 @@ type ShareSetting = keyof typeof SHARE_FIELD_OF;
 
 /** Checked and written in this order, so a request with two refusals is always refused for the same one. */
 const SETTINGS_IN_ORDER = [
-    'join', 'wordsDoor', 'knocks', 'beans', 'knownFloor', 'dmRequests', 'decisions', 'listed',
+    'join', 'wordsDoor', 'knocks', 'beans', 'knownFloor', 'dmRequests', 'decisions', 'shareOutside', 'listed',
     'shareLocation', 'shareMemberCount', 'shareEmail', 'sharePhone', 'shareHealth', 'probation', 'autoHide', 'autoMute',
     'recoveryCopies',
 ] as const;
@@ -119,7 +123,8 @@ const NOT_CHANGED_HERE: Record<string, string> = {
 const SETTING_NAMES: Record<ShapeSettingName, string> = {
     join: 'Who can join', wordsDoor: '12 words at the open door', knocks: 'Requests to join', beans: 'Beans',
     knownFloor: 'Known floor for confirmed members', dmRequests: 'First message from someone new',
-    decisions: 'Community votes (Decisions)', listed: 'Listed in the BeanPool directory',
+    decisions: 'Community votes (Decisions)', shareOutside: 'Members may share listings outside the community',
+    listed: 'Listed in the BeanPool directory',
     shareLocation: 'Share location & radius', shareMemberCount: 'Share member count', shareEmail: 'Share email',
     sharePhone: 'Share phone', shareHealth: 'Share health', probation: 'Limits on new accounts',
     autoHide: 'Reported posts hidden automatically', autoMute: 'Repeat offenders muted automatically',
@@ -146,6 +151,8 @@ const NOTICE = {
     dmOff: word("Your community's owners changed how it works: every message now arrives straight away."),
     decisionsOn: word("Your community's owners changed how it works: community votes are on."),
     decisionsOff: word("Your community's owners changed how it works: community votes are off; the moderators look after things."),
+    shareOutsideOn: word("Your community's owners changed how it works: you can share a listing or an event outside the community for 7 days."),
+    shareOutsideOff: word("Your community's owners changed how it works: posts are no longer shared outside the community, and every link shared outside has stopped."),
     probationOn: word("Your community's owners changed how it works: new accounts have limits for their first days."),
     probationOff: word("Your community's owners changed how it works: new accounts no longer have limits for their first days."),
     autoHideOn: word("Your community's owners changed how it works: reported posts are hidden until a moderator looks."),
@@ -171,6 +178,7 @@ function memberSentence(change: PlannedChange): string | null {
         case 'beans': return on ? tr(NOTICE.beansOn) : tr(NOTICE.beansOff);
         case 'dmRequests': return on ? tr(NOTICE.dmOn) : tr(NOTICE.dmOff);
         case 'decisions': return on ? tr(NOTICE.decisionsOn) : tr(NOTICE.decisionsOff);
+        case 'shareOutside': return on ? tr(NOTICE.shareOutsideOn) : tr(NOTICE.shareOutsideOff);
         case 'probation': return on ? tr(NOTICE.probationOn) : tr(NOTICE.probationOff);
         case 'autoHide': return on ? tr(NOTICE.autoHideOn) : tr(NOTICE.autoHideOff);
         case 'autoMute': return on ? tr(NOTICE.autoMuteOn) : tr(NOTICE.autoMuteOff);
@@ -355,6 +363,16 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
         }
     }
 
+    // Sharing outside: never set on while the private preview shows visitors nothing.
+    if (asked.shareOutside !== undefined) {
+        const v = boolOf('shareOutside', asked.shareOutside);
+        if (v !== S.shareOutside.configured) {
+            if (v && S.shareOutside.lock) refuse('shareOutside', S.shareOutside.lock);
+            planned.push({ setting: 'shareOutside', from: onOff(S.shareOutside.configured), to: onOff(v) });
+            switches.push(['shareOutside', v]);
+        }
+    }
+
     // Votes and the three safety switches: no lock.
     for (const setting of ['decisions', 'probation', 'autoHide', 'autoMute'] as const satisfies readonly SwitchSetting[]) {
         if (asked[setting] === undefined) continue;
@@ -404,6 +422,8 @@ export function applyShapeChanges(by: ShapeActor, body: unknown): { shape: Shape
                                    VALUES (?, ?, ?, ?, ?, ?, ?)`);
     db.transaction(() => {
         for (const [name, on] of switches) setSwitchOverride(name, on);
+        // Outside sharing turned off stops every link shared until now: turned on again later, none of them reopens.
+        if (switches.some(([name, on]) => name === 'shareOutside' && on === false)) stopAllPeekTickets(at);
         if (door) setDoor(door);
         if (floorPlan) writeKnownFloorSettings(by.actor, floorPlan, at);
         if (Object.keys(share).length > 0) updateNodeConfig(share);

@@ -89,6 +89,13 @@ export interface NodeFeatures {
      * let in" starts ticked, and the form says who reads the note. A node that doesn't say is a local community.
      */
     openMembership?: boolean;
+    /**
+     * Members may share a listing or an event outside the community (front doors S6, utils/peek.ts): a link that opens that
+     * one post, without names or faces, for seven days. The phone offers "Share outside the community" and Settings'
+     * Shared outside only then. A node that doesn't say (turned off, the worldwide one, a node from before it) offers
+     * only the members' link, as before.
+     */
+    shareOutside?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -97,7 +104,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'shareOutside',
 ];
 
 export interface NodeProfile {
@@ -382,6 +389,11 @@ export function privatePreviewOn(features: NodeFeatures | null | undefined): boo
 }
 
 /** Whether the event form may offer "Online": only when the node says it carries one (absent = off). */
+/** Whether members may share a post outside this community (front doors S6): only where the node says so. */
+export function shareOutsideOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.shareOutside === true;
+}
+
 export function onlineEventsOn(features: NodeFeatures | null | undefined): boolean {
     return features?.onlineEvents === true;
 }

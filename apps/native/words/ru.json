@@ -433,7 +433,6 @@
   "🎉 FUNDED": "🎉 ПРОФИНАНСИРОВАНО",
   "🌱 PROJECT": "🌱 ПРОЕКТ",
   "🏛️ ENTERPRISE": "🏛️ ПРЕДПРИЯТИЕ",
-  "Enterprise Balance": "Баланс предприятия",
   "in deficit (keepers eat last)": "в дефиците (хранители получают в последнюю очередь)",
   "Pledge Beans": "Вложить бобы",
   "Word {n}: {word}": "Слово {n}: {word}",
@@ -2886,7 +2885,6 @@
   "PURPOSE STATEMENT *": "ЦЕЛЬ И НАЗНАЧЕНИЕ *",
   "Purpose statement": "Описание цели",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Ясно опишите, для чего создаётся предприятие (напр., «Строим и обслуживаем общественную теплицу к ноябрю»).",
-  "The purpose statement is what the community judges the initiative against.": "По этому описанию сообщество оценивает инициативу.",
   "FUNDING GOAL ({currency}) *": "ЦЕЛЬ СБОРА ({currency}) *",
   "Funding goal amount": "Сумма сбора",
   "Pledges are held safely in the enterprise account.": "Вклады надёжно хранятся на счёте предприятия.",
@@ -6605,5 +6603,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Сообщить, когда сообщество появится здесь, или помочь его создать",
   "Nothing within 250 km yet.": "В радиусе 250 км пока ничего нет.",
   "See what people post elsewhere ›": "Посмотреть публикации из других мест ›",
-  "Set your area": "Укажите свой район"
+  "Set your area": "Укажите свой район",
+  "The purpose statement is what the community judges the project or enterprise against.": "По этому описанию сообщество оценивает проект или предприятие."
 }

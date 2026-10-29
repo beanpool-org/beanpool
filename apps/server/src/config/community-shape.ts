@@ -129,6 +129,9 @@ export interface ShapeSettings {
     /** Message requests (#2392): only on a build that has the switch. */
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
+    /** Members may share one post outside the community (front doors S6, engine/peek-tickets.ts): off while the private
+     *  preview is on, which shows visitors nothing. */
+    shareOutside: ShapeSetting<boolean>;
     listed: ShapeSetting<boolean>;
     shareLocation: ShapeSetting<boolean>;
     shareMemberCount: ShapeSetting<boolean>;
@@ -197,6 +200,7 @@ export const SHAPE_SWITCH_PLACES: Readonly<Record<ProfileSwitch | 'dmRequests', 
     crowdfund: 'beans',
     dmRequests: 'dmRequests',
     decisions: 'decisions',
+    shareOutside: 'shareOutside',
     publishToDirectory: 'listed',
     guestListingsOnly: 'visitors',
     probation: 'probation',
@@ -215,6 +219,7 @@ const LOCK_WORDS = {
     previewJoin: 'While the private preview is on, only owners and admins invite, and nobody can ask to join.',
     previewDoor: "While the private preview is on, the open door takes nobody: only an owner's or admin's invite gets in.",
     previewVisitors: 'While the private preview is on, a visitor sees nothing but its message.',
+    previewShareOutside: 'While the private preview is on, no post is shared outside: a visitor sees nothing but its message.',
     invitesOff: 'Off while no new members are taken: a request to join is answered with an invite, and this community makes none.',
     unlockInvites: 'Take new members again, with any member or only admins inviting, and requests to join follow their own setting.',
     beansOffFloor: 'This community has no Beans, so it has no known floor.',
@@ -468,6 +473,11 @@ export function readShape(): Shape {
         knownFloor,
         ...(dmRequests ? { dmRequests } : {}),
         decisions: plain('decisions'),
+        shareOutside: {
+            ...plain('shareOutside'),
+            value: s.shareOutside && !preview,
+            lock: preview ? lock('private_preview', LOCK_WORDS.previewShareOutside, UNLOCK_PREVIEW) : null,
+        },
         listed: listed(kind, standby, cfg, s, sourceOf('publishToDirectory')),
         shareLocation: share('publishLocation'),
         shareMemberCount: share('publishMembers'),

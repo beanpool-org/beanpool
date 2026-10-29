@@ -127,10 +127,12 @@ describe('the model is the app', () => {
 
     it('app/_layout.tsx reads the claim from the wizard\'s record into the guard\'s flag, and sweeps the old kept claim', () => {
         const layout = read('../../app/_layout.tsx');
-        const at = layout.indexOf('const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | \'wizard\' | \'claim\' | null>(null);');
+        // Since S2 the flag also holds another community's door join (`door`), and the record is read by onboarding-state.ts
+        // wizardHold, which answers `claim` for claimInFlight as this line did (onboarding-resume.test.ts tests it).
+        const at = layout.indexOf('const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | \'wizard\' | \'claim\' | \'door\' | null>(null);');
         expect(at).toBeGreaterThan(0);
         const effect = layout.slice(at, layout.indexOf('}, []);', at));
-        expect(effect).toMatch(/getPendingOnboarding\(\)\.then\(\(p\) => \{\s*if \(!mounted\) return;\s*setPendingOnboardingFlag\(!p \? false : claimInFlight\(p\) \? 'claim' : 'wizard'\);/);
+        expect(effect).toMatch(/getPendingOnboarding\(\)\.then\(\(p\) => \{\s*if \(!mounted\) return;\s*setPendingOnboardingFlag\(wizardHold\(p\)\);/);
         expect(effect).toContain('void forgetOldPendingClaim();');
         expect(effect).toContain('subscribePendingOnboarding(refresh)');
     });

@@ -41,6 +41,10 @@ const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
     'This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.': word('This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.'),
     'This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.': word('This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.'),
     "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
+    // door-key.ts commitDoorKey and keepJoinedIdentity: since S2 a phone with no account joins at another community's door
+    // too (utils/open-door-key.ts), and a key the phone stored meanwhile is never written over.
+    'This phone holds a different BeanPool account, so the join was not sent.': word('This phone holds a different BeanPool account, so the join was not sent.'),
+    'This phone holds a different BeanPool account, so the join was not saved here.': word('This phone holds a different BeanPool account, so the join was not saved here.'),
     "You're in the global community": word("You're in the global community"),
     'Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.': word('Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.'),
     [GLOBAL_DOOR_MESSAGES.unreachable]: GLOBAL_DOOR_MESSAGES.unreachable,
@@ -103,6 +107,27 @@ export function doorScreenWords(place: DoorPlace) {
             joining: t('Joining {name}…', { name }),
             notOpened: t('You joined {name}, but the app could not open it. Open it from Your communities in the BeanPool sheet (tap the bean).', { name }),
         };
+}
+
+/**
+ * What another community's door says to a phone with no account (DESIGN-account-without-global-fable.md §4, slice S2): the
+ * join makes a new BeanPool account on this phone, there (utils/open-door-key.ts). Never said at the global community's
+ * door, which with no account is the first screen's.
+ */
+export function newPhoneDoorWords(place: DoorPlace) {
+    const name = place.name;
+    return {
+        /** Under the title, above the two ways in. */
+        intro: t('Join {name} with a new BeanPool account on this phone: 12 words, or a sign-in.', { name }),
+        /** A door that takes a sign-in only. */
+        introSignIn: t('Join {name} with a new BeanPool account on this phone.', { name }),
+        /** The name step, the 12-words way: the words are new, and come after the photo (as at the first screen's door). */
+        wordsName: t('🔑 An account with 12 secret words. They come next, after your photo.'),
+        /** 409 `already_joined`: this sign-in has an account there already, made on another phone. */
+        alreadyJoined: t('This sign-in already has a BeanPool account in {name}. Restore it with your 12 words or your sign-in instead.', { name }),
+        /** In, but the phone couldn't write the wizard's next step. */
+        notSaved: t("{name} let you in, but this phone couldn't save that yet. Try again.", { name }),
+    };
 }
 
 /**

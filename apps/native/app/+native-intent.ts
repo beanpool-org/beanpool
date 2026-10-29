@@ -9,6 +9,7 @@ import { holdStartUpLinkRoute } from '../utils/member-landing';
 import { globalLinkRoute, isGlobalLink, isGlobalPath, type PhoneAtLink } from '../utils/global-link';
 import { doorLinkFromSystemPath, doorLinkRoute, type DoorLink } from '../utils/open-door';
 import { cardRouteFromSystemPath, isCommunityCardPath } from '../utils/community-card-link';
+import { isPeekPath, peekRouteFromSystemPath } from '../utils/peek-link';
 
 /**
  * What the global community's link needs to know about the phone: whether it keeps a key, whether a join wizard was left
@@ -52,8 +53,8 @@ export async function routeGlobalLink(
 }
 
 /**
- * A link to a door screen (utils/open-door.ts): the global community's as its own link; another community's door for an
- * account, with its work held for the member's tap. Read as {@link routeGlobalLink} reads the phone.
+ * A link to a door screen (utils/open-door.ts): the global community's as its own link; another community's door, with or
+ * without an account, its work held for the member's tap. Read as {@link routeGlobalLink} reads the phone.
  */
 export async function routeDoorLink(
     link: DoorLink, initial: boolean, readPhone: () => Promise<PhoneAtLink> = phoneAtLink, nowMs: () => number = Date.now,
@@ -96,6 +97,12 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
         return initial ? '/' : null;
     }
 
+    // Legacy project screens deleted in Fable 5.1 §5 S6: deep links land on Commons (/(tabs)/projects).
+    if (foregroundPath === 'project-detail' || foregroundPath === 'edit-project') {
+        if (initial) holdStartUpLinkRoute();
+        return '/(tabs)/projects';
+    }
+
     // The web app's pairing QR, scanned with the phone's camera app (utils/pair-link.ts): the pairing screen, given the
     // whole link to read as a scan would. Before the sign-in checks below, so a pair link is never taken for a
     // provider's return. Cold start and warm alike: the screen is pushed over wherever the member is, or opens on it. On a
@@ -119,8 +126,9 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     }
 
     // A link straight to the door screen, `beanpool://join-open-door[?node=…]` (utils/open-door.ts): it only opens the screen.
-    // With no node, or the global community's, it goes as the global link does; another community's opens its door for an
-    // account with the signed work held until the member taps (`from=link`), never with any other param a link carried.
+    // With no node, or the global community's, it goes as the global link does; another community's opens its door, for an
+    // account or a phone with none (whose account the door makes at Join), with the signed work held until the member taps
+    // (`from=link`), never with any other param a link carried.
     const doorLink = doorLinkFromSystemPath(path);
     if (doorLink) return routeDoorLink(doorLink, initial);
 
@@ -160,6 +168,18 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     // their checks. The screen itself offers the claim only when that node answers that it has no owner.
     const claimRoute = claimRouteFromSystemPath(path);
     if (claimRoute) return claimRoute;
+
+    // A post shared outside its community (front doors S6, utils/peek-link.ts): `https://<community>/?post=<id>&peek=<t>`, or
+    // `beanpool://peek?node=…&post=…&peek=…` from the node's share page. The peek screen reads that one post as a visitor
+    // (a member of that community on this phone is sent on to the post itself). Before the shared post below, which would
+    // open it as a member's read. A `beanpool://peek` that names nothing this phone may read opens as from the icon (cold)
+    // or stays where it is (warm); an https one falls through to the shared post, as before.
+    const peekRouteFound = peekRouteFromSystemPath(path);
+    if (peekRouteFound) {
+        if (initial) holdStartUpLinkRoute();
+        return peekRouteFound;
+    }
+    if (isPeekPath(path) && !/^https:\/\//i.test(path.trim())) return initial ? '/' : null;
 
     // A shared event: `https://<node>/?post=<id>` (apps/native/utils/event-extras.ts). Path "/" is what the
     // app links claim on every node host, so a link a member sends from the event screen opens the event

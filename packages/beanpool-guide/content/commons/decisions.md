@@ -7,7 +7,7 @@ related: proposing-a-decision, rules, polls, commons-fund, the-top-bar, beans-an
 
 ## Where
 
-Tap **Commons**, then **Decide**. Open Decisions are under **Open Decisions**.
+Tap **Commons**, then **Decide**. Open Decisions are under **Open Decisions**. To propose one, tap **Start something** (on the phone, the round **+** button) on **Commons**, then pick **Decision** (or tap **+ Propose a Decision** on **Decide**). See "Proposing a Decision".
 
 A Decision is binding: if it passes, your community's server carries it out by itself. An admin can stop one only by giving a written reason that members can read. The rules for who can vote, how much turnout is needed and how much Yes is needed are in "Rules and how decisions work".
 

@@ -371,6 +371,9 @@ describe('the global door\'s sentences from the files that sign the join: each o
         DOOR_MESSAGES.signInAnotherWay, ...Object.values(WORK_MESSAGES), PRIVATE_PREVIEW_MESSAGE,
         ...Object.values(ACCOUNT_DOOR_MESSAGES), DOOR_WORK_MESSAGES.solverUnavailable,
         joinedGlobalNotice(null).title, joinedGlobalNotice(null).body,
+        // door-key.ts's: since S2 another community's door makes a new phone's key too (utils/open-door-key.ts).
+        'This phone holds a different BeanPool account, so the join was not sent.',
+        'This phone holds a different BeanPool account, so the join was not saved here.',
     ];
 
     it('in English each is exactly as those files write it; in the pseudo-locale each is translated', () => {
@@ -412,8 +415,6 @@ describe('the global door\'s sentences from the files that sign the join: each o
             [nameCheckMessage('Wren', { kind: 'timed_out' })]: 'doorNameCheckWords says it (the next test)',
             [DOOR_WORK_MESSAGES.settingUp]: "components/WordsDoor's, with the first screen's sweep",
             "That sign-in did not say who you are, so it can't be used. Try again.": "providerSignIn's exception, shown as it came",
-            'This phone holds a different BeanPool account, so the join was not sent.': "commitJoinKey's (door-key.ts commitDoorKey): the first screen's join, never this door's",
-            'This phone holds a different BeanPool account, so the join was not saved here.': "keepJoinedIdentity's: the first screen's join, never this door's",
         };
         setLanguage('xx');
         expect(written.filter((line) => phoneDoorLineWords(line) === line && !(line in elsewhere))).toEqual([]);

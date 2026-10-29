@@ -334,6 +334,43 @@ export function CommunityShapeSection({
                         </div>
                     </ShapeRow>
 
+                    {/* shareOutside: next to who can join (front doors S6), on a server that has it */}
+                    {settings.shareOutside !== undefined && (
+                        <ShapeRow
+                            id="shareOutside"
+                            icon="🔗"
+                            name={t('Members may share listings outside the community')}
+                            summary={t('A shared link shows one post for 7 days, without names or faces.')}
+                            displayValue={settings.shareOutside.value ? t('On') : t('Off')}
+                            lock={settings.shareOutside.lock}
+                            isOwner={isOwner && !standby}
+                            isOpen={openSetting === 'shareOutside'}
+                            onToggle={() => handleOpenRow('shareOutside', settings.shareOutside?.value)}
+                        >
+                            <div className="space-y-3 pt-2">
+                                <label className="flex items-center gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={Boolean(draftValue)}
+                                        onChange={(e) => setDraftValue(e.target.checked)}
+                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra accent-terra-500"
+                                    />
+                                    <span>{t('Let members share a post outside')}</span>
+                                </label>
+                                <RowControls
+                                    onSave={() => handleSave('shareOutside')}
+                                    onCancel={handleCancel}
+                                    consequence={consequenceText}
+                                    note={note}
+                                    onNoteChange={setNote}
+                                    saving={saving}
+                                    error={rowError}
+                                    saveDisabled={draftValue === settings.shareOutside?.value}
+                                />
+                            </div>
+                        </ShapeRow>
+                    )}
+
                     {/* preview */}
                     <ShapeRow
                         id="preview"
@@ -1131,6 +1168,7 @@ export function logSettingName(setting: string): string {
         'knownFloor.floor': t('Confirmed members owe up to'),
         'knownFloor.cap': t('Floor cap'),
         dmRequests: t('First message from someone new'),
+        shareOutside: t('Members may share listings outside the community'),
         decisions: t('Community votes (Decisions)'),
         listed: t('Listed in the BeanPool directory'),
         shareLocation: t('Share location & radius'),

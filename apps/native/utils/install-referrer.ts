@@ -5,12 +5,18 @@
  * - an invite (the invite trampoline, routes/invite-trampoline.ts): `invite=…&server=…`, so the invite survives the install
  *   with no clipboard or retyping;
  * - the global community (beanpool.org/global, apps/website/global.html): `global=1`, which names no one and opens the first
- *   screen's door (DESIGN-global-entry-fable.md §A row 5).
+ *   screen's door (DESIGN-global-entry-fable.md §A row 5);
+ * - a post a member shared outside their community (front doors S6, the node's share page's Get the app, apps/server
+ *   routes/peek.ts): `peek=<ticket>&post=<id>&server=<community>`, so the app opens on that post after the install
+ *   (app/peek.tsx), read from that community as a visitor. Only a community address the phone may read, a post id and a
+ *   ticket of their shapes: anything else is no peek.
  *
- * An invite in the same referrer wins over `global=1`. Android only; on iOS the App Store hands nothing over, and the first
+ * An invite in the same referrer wins over a peek, and a peek over `global=1`. Android only; on iOS the App Store hands nothing over, and the first
  * screen shows both doors. No lock-in: with no referrer, or a store that isn't Google Play, the first screen is as it was.
  */
+import { isPeekPostId, isPeekTicket } from '@beanpool/core';
 import { shouldBlockCleartextNodeUrl } from './node-url';
+import { communityOrigin } from './community-origin';
 
 /** Set once the referrer has been read, so it is acted on once ever. Left unset when it couldn't be read, to try again. */
 export const INSTALL_REFERRER_CHECKED_KEY = 'beanpool_install_referrer_checked';
@@ -19,6 +25,7 @@ export const INSTALL_REFERRER_CHECKED_KEY = 'beanpool_install_referrer_checked';
 export type InstallReferrer =
     | { kind: 'invite'; invite: string; server: string | null }
     | { kind: 'global' }
+    | { kind: 'peek'; origin: string; postId: string; ticket: string }
     | null;
 
 /** One `name=value` from the referrer, decoded once more as the trampoline encodes it, or null when absent or unreadable. */
@@ -43,6 +50,12 @@ export function readInstallReferrer(referrer: unknown): InstallReferrer {
     if (invite && invite.trim()) {
         const server = referrerValue(referrer, 'server');
         return { kind: 'invite', invite, server: server && !shouldBlockCleartextNodeUrl(server) ? server : null };
+    }
+    const ticket = referrerValue(referrer, 'peek');
+    if (ticket !== null) {
+        const postId = referrerValue(referrer, 'post');
+        const origin = communityOrigin(referrerValue(referrer, 'server'));
+        if (origin && isPeekTicket(ticket) && isPeekPostId(postId)) return { kind: 'peek', origin, postId, ticket };
     }
     if (/(?:^|&)global=1(?:&|$)/.test(referrer)) return { kind: 'global' };
     return null;

@@ -23,6 +23,11 @@ export interface SetupState {
      */
     claimOut?: boolean;
     /**
+     * That wizard is a join at another community's open door that has not finished (onboarding-state.ts `doorJoinOut`): its
+     * key may be on the phone, and the node may hold it. The door screen is left where it is, so the node can say.
+     */
+    doorOut?: boolean;
+    /**
      * No identity, and the phone is looking around the global community as a visitor, chosen on the first screen
      * (utils/look-around.ts `lookingAroundHere`, slice S12). Read only when there is no identity, and only then can the
      * answer be the door ({@link LOOK_DOOR}).
@@ -35,10 +40,10 @@ export type SetupLanding = '/welcome' | typeof LOOK_DOOR | null;
 
 /**
  * The first two checks of the root guard in app/_layout.tsx: while the member has no identity yet or a join wizard
- * pending, every root except welcome (and, with no identity, guardian recovery, a re-key code and a claim, which run
- * without one; with a claim whose answer is not in, the claim screen) is replaced with welcome. Null means leave the
- * screen where it is. Once the member is set up this is always null, and the guard's node-recognition checks decide as
- * before.
+ * pending, every root except welcome (and, with no identity, guardian recovery, a re-key code, a claim and another
+ * community's open door, which run without one; with a claim whose answer is not in, the claim screen; with another
+ * community's door join not finished, the door screen) is replaced with welcome. Null means leave the screen where it is.
+ * Once the member is set up this is always null, and the guard's node-recognition checks decide as before.
  *
  * A sign-in return screen (app/auth/*) gets no exemption. On a phone it never mounts, because the return link does
  * not navigate. Anywhere it does mount (the web preview), the guard replaces it before its own 300 ms timer can open
@@ -50,22 +55,33 @@ export type SetupLanding = '/welcome' | typeof LOOK_DOOR | null;
  */
 export function setupRedirect(segments: readonly string[], state: SetupState & { lookingAround: true }): SetupLanding;
 export function setupRedirect(segments: readonly string[], state: SetupState): '/welcome' | null;
-export function setupRedirect(segments: readonly string[], { hasIdentity, pendingOnboarding, claimOut = false, lookingAround = false }: SetupState): SetupLanding {
+export function setupRedirect(segments: readonly string[], { hasIdentity, pendingOnboarding, claimOut = false, doorOut = false, lookingAround = false }: SetupState): SetupLanding {
     const root = segments[0];
     // `rekey-code`: a new phone taking over an account with an admin's re-key code (app/rekey-code.tsx) holds no identity
     // until the admin binds it (utils/rekey-redeem.ts).
     // `claim-community`: the `beanpool claim` QR scanned on a phone with no account yet (Dax, 23 Oct 2026). The claim makes
     // the account there, on the member's tap: a self-hosted community's first owner needs nothing of ours.
+    // `join-open-door`: another community's open door, from its link on a phone with no account yet (DESIGN-account-without-
+    // global-fable.md §2.3). The door makes the account there, at Join: a self-hoster's open community needs nothing of
+    // ours. The global community's own door, with no account, is the first screen's (app/join-open-door.tsx sends it there).
     // `community-card`: a community's public card from its bare address (front doors S15, app/community-card.tsx). It reads
     // the community's public card and nothing else, and its doors lead to welcome; a stranger with no account is who it is for.
+    // `peek`: one post a member shared outside their community (front doors S6, app/peek.tsx), read from it as a visitor,
+    // with Ask to join leading to that community's card. A stranger with no account is who it is for too.
     if (!hasIdentity) {
-        if (root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' || root === 'community-card') return null;
+        // These stay ahead of the look's check, looking around or not: another community's door link opened while the
+        // phone looks around global goes to that door, not global's (S2), a community's card stays (S15), and a shared post's peek stays (S6).
+        if (root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' || root === 'community-card'
+            || root === 'join-open-door' || root === 'peek') return null;
         // The bare root is the app's start: the first screen, looking around or not (a restart lands there).
         if (lookingAround && root !== undefined) return isLookRoute(segments) ? null : LOOK_DOOR;
         return '/welcome';
     }
-    // A claim whose answer is not in: its screen stays, where the node says whether it landed (app/claim-community.tsx).
-    if (pendingOnboarding) return root === 'welcome' || (claimOut && root === 'claim-community') ? null : '/welcome';
+    // A claim whose answer is not in, or a door join not finished: its screen stays, where the node says whether it landed
+    // (app/claim-community.tsx, app/join-open-door.tsx).
+    if (pendingOnboarding) {
+        return root === 'welcome' || (claimOut && root === 'claim-community') || (doorOut && root === 'join-open-door') ? null : '/welcome';
+    }
     return null;
 }
 

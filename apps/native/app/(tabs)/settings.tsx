@@ -64,12 +64,12 @@ import { copiesRuleForScreen } from '../../utils/copies-rule';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, t, word, formatNumber, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, knockSwitchShown, PEEK_WORDS, t, word, formatNumber, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
-import { beansOn } from '../../utils/node-profile';
+import { beansOn, shareOutsideOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { askNodeRole } from '../../utils/node-admin';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
@@ -1958,6 +1958,17 @@ export default function SettingsScreen() {
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
+
+                    {/* The links this member shared outside the community (front doors S6, app/shared-outside.tsx): only where it allows it. */}
+                    {shareOutsideOn(nodeProfile?.features) && (
+                        <Pressable style={styles.menuBtn} onPress={() => router.push('/shared-outside' as any)} accessibilityRole="button" testID="settings-shared-outside">
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🔗</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>{t(PEEK_WORDS.sharedOutside)}</Text>
+                            </View>
+                            <Text style={styles.menuChevron}>›</Text>
+                        </Pressable>
+                    )}
 
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/pair-device')} accessibilityRole="button" accessibilityLabel={t('Link a device')} accessibilityHint={t('Copies your own account to a browser, to use BeanPool there as you')}>
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📲</Text></View>

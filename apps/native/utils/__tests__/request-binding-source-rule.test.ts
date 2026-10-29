@@ -253,6 +253,9 @@ describe('the phone\'s community address is written only after the plain-address
         // it is, the global community's (enterGlobalCommunity passes GLOBAL_NODE_URL) or any other's (slice P5). The door's
         // address came through utils/open-door.ts doorNodeAt; this is the write's own check.
         'utils/global-join-existing.ts enterOpenDoorCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
+        // Another community's door on a phone with no account, once it is in (utils/open-door-key.ts, slice S2): the door's
+        // address came through utils/open-door.ts doorNodeAt on the screen; this is the write's own check.
+        'utils/open-door-key.ts finishOpenDoorJoin': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
     };
     /** Writers of a fixed address. */
     const CONSTANT: Record<string, string> = {

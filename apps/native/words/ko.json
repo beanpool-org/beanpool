@@ -418,7 +418,6 @@
   "🎉 FUNDED": "🎉 펀딩 완료",
   "🌱 PROJECT": "🌱 프로젝트",
   "🏛️ ENTERPRISE": "🏛️ 공동체 사업",
-  "Enterprise Balance": "사업 잔액",
   "in deficit (keepers eat last)": "적자 상태 (운영자가 마지막에 정산)",
   "Pledge Beans": "콩 약정하기",
   "Word {n}: {word}": "단어 {n}: {word}",
@@ -2556,7 +2555,6 @@
   "PURPOSE STATEMENT *": "설립 목적 *",
   "Purpose statement": "설립 목적",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "이 기업이 무엇을 위해 존재하는지 명확히 적어주세요 (예: '11월까지 마을 공동 그늘막을 짓고 유지보수합니다').",
-  "The purpose statement is what the community judges the initiative against.": "설립 목적은 커뮤니티가 이 이니셔티브를 평가하는 기준이 돼요.",
   "FUNDING GOAL ({currency}) *": "모금 목표 ({currency}) *",
   "Funding goal amount": "모금 목표 금액",
   "Pledges are held safely in the enterprise account.": "후원금은 기업 계정에 안전하게 보관돼요.",
@@ -5891,5 +5889,6 @@
   "Tell me when a community starts here, or say you'd help start one": "여기서 커뮤니티가 시작되면 알림 받기 또는 시작 돕기",
   "Nothing within 250 km yet.": "아직 250km 이내에 등록된 항목이 없어요.",
   "See what people post elsewhere ›": "다른 지역 게시물 보기 ›",
-  "Set your area": "내 지역 설정"
+  "Set your area": "내 지역 설정",
+  "The purpose statement is what the community judges the project or enterprise against.": "설립 목적은 커뮤니티가 이 프로젝트나 기업을 평가하는 기준이 돼요."
 }

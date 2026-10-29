@@ -227,7 +227,7 @@ try {
                 const cs = getComputedStyle(el);
                 const fg = rgb(cs.color);
                 if (!fg) continue;
-                if (/^[\\p{Extended_Pictographic}\\uFE0F\\u200D\\s←↗↙›⏱]+$/u.test(what)) continue;
+                if (/^[\p{Extended_Pictographic}️‍\s←↗↙›⏱]+$/u.test(what)) continue;
                 const bg = backdrop(el);
                 const [a, b] = [lum(over(fg, bg)), lum(bg)].sort((x, y) => y - x);
                 const ratio = (a + 0.05) / (b + 0.05);

@@ -55,7 +55,7 @@ import { EventChat } from '../components/EventChat';
 import { FoldedChatText } from '../components/FoldedChatText';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { bundledGroupEmblem, dealMoves, dealStateWords, dealStep, dealsNeedingMe, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 
@@ -2033,135 +2033,143 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </div>
                 )}
 
-                {/* The deals with this person, both sides (the phone's pinned strip): Release / Cancel for the payer, "Awaiting
-                    release" for the payee, Review once it is done. Each card opens its listing at that deal. */}
-                {activeConv.type === 'dm' && (
-                    <ChatDealStrip
-                        deals={stripDeals}
-                        me={identity.publicKey}
-                        peerName={getConversationTitle(activeConv)}
-                        showsBeans={beansOn}
-                        busy={actionLoading}
-                        onOpen={tx => { if (tx.postId) onNavigate?.('marketplace', tx.postId, tx.id); }}
-                        onRelease={tx => handleReleaseCredits(tx.id, tx.credits)}
-                        onCancel={tx => handleCancelCredits(tx.id)}
-                        onReview={tx => onNavigate?.('marketplace-review', tx.id)}
-                    />
-                )}
+                {/* The pinned block above the thread: the deal strip, the listing header, the Trust Hold banner and the pinned Rate
+                    banner. It takes what the column leaves once the header, the composer and the thread's floor are in, and scrolls
+                    inside that (the phone's dmKeyBannerMaxHeight idea), so at 320 px and 1.3x text the thread keeps 120 px and the
+                    composer stays above the bottom nav. Every card stays reachable by scrolling and by Tab. */}
+                <div data-testid="chat-pinned" style={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+                    {/* The deals with this person, both sides (the phone's pinned strip): Release / Cancel for the payer, "Awaiting
+                        release" for the payee, Review once it is done. Each card opens its listing at that deal. */}
+                    {activeConv.type === 'dm' && (
+                        <ChatDealStrip
+                            deals={stripDeals}
+                            me={identity.publicKey}
+                            peerName={getConversationTitle(activeConv)}
+                            showsBeans={beansOn}
+                            busy={actionLoading}
+                            onOpen={tx => { if (tx.postId) onNavigate?.('marketplace', tx.postId, tx.id); }}
+                            onRelease={tx => handleReleaseCredits(tx.id, tx.credits)}
+                            onCancel={tx => handleCancelCredits(tx.id)}
+                            onReview={tx => onNavigate?.('marketplace-review', tx.id)}
+                        />
+                    )}
 
-                {/* Sticky Marketplace Header */}
-                {activeConv.postId && (
-                    <div style={{
-                        background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
-                    }} onClick={() => {}}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span style={{ fontSize: '1.2rem' }}>🛍️</span>
-                            <div>
-                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>{t('View Attached Listing')}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>{t('Marketplace Transaction Thread')}</div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Active Trust Hold / Escrow Banner */}
-                {(() => {
-                    const pendingTx = activePendingTransaction;
-
-                    if (!pendingTx) return null;
-                    const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;
-
-                    return (
+                    {/* Sticky Marketplace Header */}
+                    {activeConv.postId && (
                         <div style={{
-                            background: isBuyer ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                            borderBottom: `1px solid ${isBuyer ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-                            padding: '0.75rem 1rem',
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '0.75rem'
-                        }}>
-                            <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
-                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
-                                    {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                    {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
+                            background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
+                        }} onClick={() => {}}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <span style={{ fontSize: '1.2rem' }}>🛍️</span>
+                                <div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>{t('View Attached Listing')}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>{t('Marketplace Transaction Thread')}</div>
                                 </div>
                             </div>
-                            {isBuyer ? (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
-                                    <button
-                                        onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
-                                        disabled={actionLoading}
-                                        style={{
-                                            background: 'var(--bp-commit-fill)',
-                                            color: 'var(--bp-commit-on)',
-                                            border: 'none',
-                                            borderRadius: '8px',
-                                            padding: '0.4rem 0.75rem',
-                                            fontWeight: 'bold',
-                                            fontSize: '0.8rem',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        {actionLoading ? '…' : t('✅ Release Credits')}
-                                    </button>
-                                    <button
-                                        onClick={() => handleCancelCredits(pendingTx.id)}
-                                        disabled={actionLoading}
-                                        style={{
-                                            background: 'rgba(239, 68, 68, 0.15)',
-                                            color: '#ef4444',
-                                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                                            borderRadius: '8px',
-                                            padding: '0.4rem 0.6rem',
-                                            fontWeight: 'bold',
-                                            fontSize: '0.8rem',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        {t('Cancel')}
-                                    </button>
-                                </div>
-                            ) : (
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('⏳ Pending')}</span>
-                            )}
                         </div>
-                    );
-                })()}
+                    )}
 
-                {/* The list's "Action Needed" always has its way to rate here: when the unrated trade's own release line
-                    isn't among the lines loaded (an older page), the same Rate your partner, pinned. */}
-                {(() => {
-                    if (activeConv?.type !== 'dm' || !activePeerPubkey || loadedDmId !== activeConv.id) return null;
-                    const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
-                    if (!unrated) return null;
-                    const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
-                        try { return tradeOfReleaseLine(userTransactions, JSON.parse(m.metadata!), m.timestamp) === unrated; } catch { return false; }
-                    })());
-                    if (lineShown) return null;
-                    return (
-                        <div data-testid="chat-rate-banner" style={{
-                            borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
-                        }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Your trade is finished. How did it go?')}</span>
-                            <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
-                                background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
-                                padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
+                    {/* Active Trust Hold / Escrow Banner */}
+                    {(() => {
+                        const pendingTx = activePendingTransaction;
+
+                        if (!pendingTx) return null;
+                        const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;
+
+                        return (
+                            <div style={{
+                                background: isBuyer ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                borderBottom: `1px solid ${isBuyer ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                padding: '0.75rem 1rem',
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '0.75rem'
                             }}>
-                                <span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span>
-                            </button>
-                        </div>
-                    );
-                })()}
+                                <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
+                                        {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
+                                    </div>
+                                </div>
+                                {isBuyer ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
+                                        <button
+                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
+                                            disabled={actionLoading}
+                                            style={{
+                                                background: 'var(--bp-commit-fill)',
+                                                color: 'var(--bp-commit-on)',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                padding: '0.4rem 0.75rem',
+                                                fontWeight: 'bold',
+                                                fontSize: '0.8rem',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {actionLoading ? '…' : t('✅ Release Credits')}
+                                        </button>
+                                        <button
+                                            onClick={() => handleCancelCredits(pendingTx.id)}
+                                            disabled={actionLoading}
+                                            style={{
+                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                color: '#ef4444',
+                                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                borderRadius: '8px',
+                                                padding: '0.4rem 0.6rem',
+                                                fontWeight: 'bold',
+                                                fontSize: '0.8rem',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {t('Cancel')}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('⏳ Pending')}</span>
+                                )}
+                            </div>
+                        );
+                    })()}
 
-                {/* Messages */}
-                <div style={{
-                    flex: 1, overflowY: 'auto', padding: '1rem',
+                    {/* The list's "Action Needed" always has its way to rate here: when the unrated trade's own release line
+                        isn't among the lines loaded (an older page), the same Rate your partner, pinned. */}
+                    {(() => {
+                        if (activeConv?.type !== 'dm' || !activePeerPubkey || loadedDmId !== activeConv.id) return null;
+                        const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
+                        if (!unrated) return null;
+                        // The strip's Review card is already the way to this trade's rating form: one door, not two.
+                        if (stripDeals.some(d => d.id === unrated.id)) return null;
+                        const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
+                            try { return tradeOfReleaseLine(userTransactions, JSON.parse(m.metadata!), m.timestamp) === unrated; } catch { return false; }
+                        })());
+                        if (lineShown) return null;
+                        return (
+                            <div data-testid="chat-rate-banner" style={{
+                                borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
+                            }}>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Your trade is finished. How did it go?')}</span>
+                                <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
+                                    background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
+                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
+                                }}>
+                                    <span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span>
+                                </button>
+                            </div>
+                        );
+                    })()}
+                </div>
+
+                {/* Messages. The floor is what the pinned block above leaves it at the least (120 px, whatever the text size). */}
+                <div data-testid="chat-thread" style={{
+                    flex: 1, minHeight: '120px', overflowY: 'auto', padding: '1rem',
                     display: 'flex', flexDirection: 'column', gap: '0.3rem',
                 }}>
                     {messages.length === 0 && (

@@ -247,6 +247,54 @@ describe('Chat deal strip: each card opens the listing at its deal', () => {
     });
 });
 
+// Review of #2607: on a 360 x 640 screen at 1.3x text the strip, the Trust Hold banner and the pinned Rate banner left the
+// thread 20 px and put the composer under the bottom nav. jsdom lays nothing out, so what is pinned here is the structure the
+// real-Chromium measurement (in the PR) rests on: one scroll box for everything pinned, a floor for the thread, one door to a
+// rating form.
+describe('Chat deal strip: the pinned block never takes the thread or the composer', () => {
+    it('a deal in trust and an older finished one I never rated: the Review card is the only door to its rating form', async () => {
+        const onNavigate = vi.fn();
+        mockTxs = [
+            deal('tx-new', { createdAt: '2026-10-22T00:00:00Z' }),
+            deal('tx-old', { status: 'completed', createdAt: '2026-10-16T00:00:00Z', completedAt: '2026-10-17T00:00:00Z' }),
+        ];
+        await openChat(onNavigate);
+        await screen.findByText('🔒 Trust Hold: 5 Beans');
+        const card = await screen.findByTestId('chat-deal-tx-old');
+        await new Promise(r => setTimeout(r, 50));   // the pinned banner waits for the chat's lines
+        expect(screen.queryByTestId('chat-rate-banner')).toBeNull();
+        expect(screen.queryByRole('button', { name: /Rate your partner/ })).toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: /Leave a review for Bread tx-old/ }));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace-review', 'tx-old');
+    });
+
+    it('the strip and the Trust Hold banner sit in one scroll box that can shrink, above a thread with a floor', async () => {
+        mockTxs = [
+            deal('tx-new', { createdAt: '2026-10-22T00:00:00Z' }),
+            deal('tx-old', { createdAt: '2026-10-19T00:00:00Z' }),
+        ];
+        await openChat();
+        const pinned = await screen.findByTestId('chat-pinned');
+        expect(within(pinned).getByTestId('chat-deal-strip')).toBeInTheDocument();
+        expect(within(pinned).getByText('🔒 Trust Hold: 5 Beans')).toBeInTheDocument();
+        // Content-sized when there is room, and the one thing that gives way when there is not.
+        expect(pinned).toHaveStyle({ flexGrow: '0', flexShrink: '1', minHeight: '0px', overflowY: 'auto' });
+        const thread = screen.getByTestId('chat-thread');
+        expect(thread).toHaveStyle({ minHeight: '120px', overflowY: 'auto' });
+        // The box comes before the thread, so the thread (and with it the composer) is the last thing in the column.
+        expect(pinned.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('every card and its buttons stay in the tab order inside the box', async () => {
+        mockTxs = [deal('tx-new', { createdAt: '2026-10-22T00:00:00Z' }), deal('tx-old', { createdAt: '2026-10-19T00:00:00Z' }), sold('tx-d', { status: 'completed' })];
+        await openChat();
+        const pinned = await screen.findByTestId('chat-pinned');
+        const buttons = within(pinned).getAllByRole('button');
+        expect(buttons.length).toBeGreaterThanOrEqual(6);   // the banner's two, then each card's open + its own control(s)
+        for (const b of buttons) expect(b.getAttribute('tabindex')).not.toBe('-1');
+    });
+});
+
 describe('Chat list: Action Required counts the deals whose step is mine', () => {
     const chip = () => screen.queryByTestId('deal-action-chip');
 

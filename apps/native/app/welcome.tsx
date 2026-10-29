@@ -1145,6 +1145,8 @@ export default function WelcomeScreen() {
         await runNext(nextOutRef, setLoading, async () => {
             setError(null);
             let undoCommunity = false;
+            // Set once Next writes a record for a knock's key (below): puts back the record it wrote over, with the community.
+            let undoKnockRecord: (() => Promise<void>) | null = null;
             try {
                 const parsedCode = normaliseInviteCode(rawInvite);
                 const { checkInvite, redeemInvite } = await import('../utils/db');
@@ -1164,9 +1166,9 @@ export default function WelcomeScreen() {
                 let inAlready = false;
                 if (check && !check.valid) {
                     // A spent invite may have been spent by this phone's key: a first redeem that landed with its answer lost,
-                    // or a member back at this step from a later one. The node says whether the key is in, and the record read
-                    // above whether this join made it (utils/invite-next.ts).
-                    const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord) : 'spent';
+                    // or a member back at this step from a later one. The node says whether the key is in, and the record and the
+                    // knock's mark read above whether this join made it (utils/invite-next.ts).
+                    const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord, knockMade) : 'spent';
                     if (spent === 'enterApp' && storedIdentity) {
                         // A key the phone already had, an established account already in this community: into the app, as
                         // before. Its words stay behind Settings' lock. Into the app on this community: the anchor is the app's
@@ -1215,16 +1217,20 @@ export default function WelcomeScreen() {
                 }
                 setCallsignSuggestions([]);
 
+                const identity = storedIdentity
+                    ? { ...storedIdentity, callsign: callsign.trim() }
+                    : await createIdentity(callsign.trim());
+                // A key made here, or the knock's, says so in the record now, before the community and the redeem: a redeem that
+                // fails, or an app stopped before its answer, still knows at the next Next or after a restart that these are
+                // the member's own new words. Never a community with no record for the knock's key, not even for a moment:
+                // that reads as a key that has joined, and the root layout takes its mark off (app/_layout.tsx).
+                if (knockMade) undoKnockRecord = () => (joinRecord ? setPendingOnboarding(joinRecord) : clearPendingOnboarding());
+                if (!storedIdentity || knockMade) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
+
                 await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
                 // The update screen asks the community now in use (utils/community-switch.ts).
                 communitySwitched();
 
-                const identity = storedIdentity
-                    ? { ...storedIdentity, callsign: callsign.trim() }
-                    : await createIdentity(callsign.trim());
-                // A key made here says so in the record now, before the redeem: a redeem that fails, or an app stopped before
-                // its answer, still knows at the next Next or after a restart that these are the member's own new words.
-                if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
                 // A key made here is the member's own new account; the phone's own key is an established account, whose words
                 // Safety Backup shows only once the phone's lock has passed.
                 const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey) || knockMade;
@@ -1284,6 +1290,9 @@ export default function WelcomeScreen() {
                     await AsyncStorage.removeItem('beanpool_anchor_url').catch(() => {});
                     // No community on the phone again: the update screen asks none (utils/community-switch.ts).
                     communitySwitched();
+                    // Nor the record Next wrote for a knock's key: the phone waits again as it did, with the knock's mark, which
+                    // tells the next Next its words are new (utils/invite-next.ts). After the community, never before it.
+                    if (undoKnockRecord) await undoKnockRecord();
                 }
                 // An account this phone holds but can't read is never replaced by a new one (identity.ts KEY-04).
                 if (err instanceof StoredKeyUnreadableError) {

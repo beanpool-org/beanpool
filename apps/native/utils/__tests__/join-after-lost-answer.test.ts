@@ -527,9 +527,11 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
             'const joinRecord = storedIdentity ? await getPendingOnboarding() : null;',
             'const check = await checkInvite(parsedCode, nodeUrl);',
             'let inAlready = false;',
-            "const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord) : 'spent';",
+            // With the knock's mark since review 4413166460 (knock-join-after-lost-answer.test.ts).
+            "const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord, knockMade) : 'spent';",
             ": await createIdentity(callsign.trim());",
-            'if (!storedIdentity) await recordJoinKeyMade(',
+            // And the knock's key is recorded as this one is (knock-join-after-lost-answer.test.ts).
+            'if (!storedIdentity || knockMade) await recordJoinKeyMade(',
             // Since S3 a key a knock made (utils/knock-key.ts) is new too: its first join shows its words.
             'const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey) || knockMade;',
             'if (storedIdentity) await adoptJoinKey(storedIdentity.publicKey);',

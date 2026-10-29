@@ -19,7 +19,9 @@
  * in (an invite, or the invite a member's yes sends) shows them at Safety Backup as a new account's words, with no lock
  * first, as every door's new key does (onboarding-state.ts `newKey`). The mark names that exact key and nothing else, and
  * it goes as soon as the key is in a community (welcome.tsx handleCreate once its record says so, and the root guard
- * whenever the phone has a community and no wizard part-way: app/_layout.tsx). So an established account's words always
+ * whenever the phone has a community and no wizard part-way: app/_layout.tsx). handleCreate writes its record before it
+ * sets the community, and a lost answer's retry reads the mark (invite-next.ts `afterSpentInvite`): a join whose answer
+ * never came, or an app stopped during it, still shows the words. So an established account's words always
  * stay behind the phone's lock: a key that has joined anywhere is never read as new again, even after a wipe that keeps it.
  * The mark is app storage beside the account, and goes with it (identity.ts `wipeIdentityScopedStorage`).
  */

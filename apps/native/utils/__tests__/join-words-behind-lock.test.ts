@@ -342,11 +342,11 @@ describe('a first Next whose redeem fails: the key it made is still the member\'
 });
 
 describe('welcome.tsx: Next writes that record once the key it made is on the phone, before the redeem', () => {
-    it('after createIdentity, before redeemInvite, only for a key Next made', () => {
+    it('after createIdentity, before redeemInvite, only for a key Next made (or the knock\'s: knock-join-after-lost-answer.test.ts)', () => {
         const create = slice(welcome(), 'async function handleCreate() {', '\n    }\n');
         const made = create.indexOf(': await createIdentity(callsign.trim());');
         const recorded = create.indexOf(
-            'if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);',
+            'if (!storedIdentity || knockMade) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);',
         );
         const redeemed = create.indexOf('await redeemInvite(parsedCode, identity.callsign, identity, { timeoutMs: NEXT_REQUEST_TIMEOUT_MS });');
         expect(made).toBeGreaterThan(-1);

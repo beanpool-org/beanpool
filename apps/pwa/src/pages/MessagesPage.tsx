@@ -3543,7 +3543,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     {dealsToAct.length > 0 && (
                                         <div style={{ marginTop: '0.25rem' }}>
                                             <span data-testid="deal-action-chip" style={{
-                                                display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '2px 8px', borderRadius: '999px',
+                                                display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '2px 8px', borderRadius: '12px',
                                                 fontSize: '0.75rem', fontWeight: 700, background: 'var(--bp-chip-warn-tint)', color: 'var(--bp-chip-warn-ink)',
                                             }}>
                                                 <span aria-hidden="true">⚡</span><span>{dealsToActWords}</span>

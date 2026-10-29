@@ -258,6 +258,25 @@ export function MemberDetailModal({
         return true;
     }, [currentRole, isSoleOwner, ownerCount, members, pubkey, nodeRole, member?.nodeRole]);
 
+    // The removal note's words (removal by vote S3, RV-S3-W): what stands between this member and the vote, true for each page.
+    //  - A removal the community voted for: Offboard settles it.
+    //  - 'suspended', which a pause never writes (it writes 'disabled'): a re-key code holds their key (member-wizards.ts
+    //    issueRekeyCode), or a report suspended them before reports made pauses. No vote is open and the page offers no Suspend.
+    //    The members list names no role for them (listNodeRoles reads active members only) and no pause vote carries one, so
+    //    the note cannot tell an owner or admin from a member: it says both.
+    //  - The only owner: the server takes the last owner's role away for no one and suspends them for no one.
+    //  - An owner or admin, live or held aside by a pause: no vote removes one; an owner takes the role away first.
+    //  - Anyone else, a moderator included: the suspension opens the vote.
+    const removalNote = doors?.settlesRemoval
+        ? t("Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now.")
+        : memberStatus === 'suspended'
+            ? t("Removing a member is the community's vote here. They are suspended with no vote open, usually because a re-key code waits on their key. End that first (cancel the code on Re-Key, or use Lift suspension if no code waits); after that, suspending them opens the vote. No vote removes an owner or admin.")
+            : effectiveIsSoleOwner
+                ? t("Removing a member is the community's vote here, and no vote removes an owner or admin. This is the community's only owner, so the role cannot be taken away, and they cannot be suspended, until another owner is added.")
+                : holdsServerRole
+                    ? t("Removing a member is the community's vote here, and no vote removes an owner or admin. An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote.")
+                    : t("Removing a member is the community's vote here. Suspending them opens it.");
+
     const canGrantRole = (role: MemberNodeRole): boolean => {
         if (effectiveViewerRole === 'owner') return true;
         if (effectiveViewerRole === 'admin') {
@@ -840,11 +859,7 @@ export function MemberDetailModal({
                     )}
                     {removalIsTheVote && (
                         <p className="m-0 text-[11px] text-nature-400" data-testid="removal-is-the-vote">
-                            {doors?.settlesRemoval
-                                ? "Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now."
-                                : holdsServerRole
-                                    ? "Removing a member is the community's vote here, and no vote removes an owner or admin. An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote."
-                                    : "Removing a member is the community's vote here. Suspending them opens it."}
+                            {removalNote}
                         </p>
                     )}
                     <FreshProofBox proof={pruneProof} testId="prune-proof" />

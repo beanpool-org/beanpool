@@ -566,13 +566,53 @@ describe('MemberDetailModal', () => {
         // No vote removes an owner or an admin (the server's §3.8 refusal): suspending one only parks them until its vote closes,
         // so the note says what does work instead (review 4397436971).
         it('for an owner or an admin, says no vote removes one and that an owner takes the role away first', async () => {
+            // `isSoleOwner: false`: an owner with other owners. The modal counts an owner nobody says is not alone as the only one.
             for (const role of ['owner', 'admin'] as const) {
-                const { unmount } = draw({ nodeRole: role });
+                const { unmount } = draw({ nodeRole: role, isSoleOwner: false });
                 const note = await screen.findByTestId('removal-is-the-vote');
-                expect(note).toHaveTextContent(/no vote removes an owner or admin/);
-                expect(note).toHaveTextContent(/An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote\.$/);
+                expect(note).toHaveTextContent(/^Removing a member is the community's vote here, and no vote removes an owner or admin\. An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote\.$/);
                 unmount();
             }
+        });
+
+        // The only owner: the server takes the last owner's role away for no one and suspends them for no one (revokeNodeRole,
+        // SOLE_OWNER_SUSPEND_REFUSAL), so neither "an owner can take that role away first" nor "suspending them opens the vote"
+        // is true until a second owner is added (RV-S3-W).
+        it('for the only owner, says the role cannot be taken away and they cannot be suspended until another owner is added', async () => {
+            draw({ nodeRole: 'owner', isSoleOwner: true });
+            const note = await screen.findByTestId('removal-is-the-vote');
+            expect(note).toHaveTextContent(/^Removing a member is the community's vote here, and no vote removes an owner or admin\. This is the community's only owner, so the role cannot be taken away, and they cannot be suspended, until another owner is added\.$/);
+            expect(note).not.toHaveTextContent(/take that role away first/);
+        });
+
+        // A key waiting on a re-key code (RV-S3-W, review 4398650630): the code made them 'suspended', not paused. No vote is open
+        // and the page offers no Suspend (it shows Suspended). The members list names no role for them (listNodeRoles reads active
+        // members only), so the note cannot tell an owner or admin from a member and says both.
+        describe('for someone suspended with no vote open, usually a key waiting on a re-key code', () => {
+            const held = { ...active, status: 'suspended' };
+
+            it('says no vote is open, what ends the suspension first, and that no vote removes an owner or admin', async () => {
+                draw({ member: held, nodeRole: null });
+                const note = await screen.findByTestId('removal-is-the-vote');
+                expect(note).toHaveTextContent(/^Removing a member is the community's vote here\. They are suspended with no vote open, usually because a re-key code waits on their key\. End that first \(cancel the code on Re-Key, or use Lift suspension if no code waits\); after that, suspending them opens the vote\. No vote removes an owner or admin\.$/);
+                expect(note).not.toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
+                expect(screen.getByText('⏸️ Suspended')).toBeInTheDocument();
+                expect(screen.queryByText('⏸️ Suspend')).toBeNull();
+            });
+
+            it('does not read a role the node never named: the same words with or without one', async () => {
+                for (const role of [null, 'admin'] as const) {
+                    const { unmount } = draw({ member: held, nodeRole: role });
+                    expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/They are suspended with no vote open, usually because a re-key code waits on their key\./);
+                    unmount();
+                }
+            });
+        });
+
+        it('inside a removal the community voted for, says Offboard settles their Beans and completes it now', async () => {
+            vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([removalInGrace(KEY)]);
+            draw();
+            expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now\.$/);
         });
 
         it("and the suspension's words for them say the vote can't remove them: it lifts when the vote closes", async () => {

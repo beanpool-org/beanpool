@@ -356,6 +356,26 @@ describe('DecideSection: a fair vote on removing a member', () => {
         expect(screen.getByTestId('removal-case-hidden').textContent).toContain('Their reason: Wu confirmed every repair');
     });
 
+    it("a reply an admin took down: their reason in its place, open and in the history; the member can't write another", () => {
+        const takenDown = pauseCard({ subjectReply: null, replyHiddenAt: '2026-10-25T10:00:00.000Z', replyHiddenReason: "It gave a neighbour's address" });
+        const first = renderAs('viewer', [takenDown]);
+        expect(screen.getByTestId('removal-reply-taken-down').textContent).toBe("An admin took down Dave's reply. Their reason: It gave a neighbour's address");
+        expect(screen.queryByTestId('removal-reply')).toBeNull();
+        first.unmount();
+
+        // To the member: their reply, with no form, no Reply or Change button; reporting the case stays.
+        const second = renderAs('dave-key', [takenDown]);
+        expect(screen.getByTestId('removal-reply-taken-down').textContent).toBe("An admin took down your reply. Their reason: It gave a neighbour's address");
+        expect(screen.queryByTestId('removal-reply-form')).toBeNull();
+        expect(screen.queryByText('Reply to this case')).toBeNull();
+        expect(screen.queryByText('Change your reply')).toBeNull();
+        expect(screen.getByTestId('removal-case-report')).toBeTruthy();
+        second.unmount();
+
+        renderAs('viewer', [{ ...takenDown, status: 'failed' }], 'history');
+        expect(screen.getByTestId('removal-reply-taken-down').textContent).toBe("An admin took down Dave's reply. Their reason: It gave a neighbour's address");
+    });
+
     it('the member reports the case as false, after saying yes; not offered on a password\'s case, nor to anyone else', async () => {
         const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
         const first = renderAs('dave-key', [pauseCard()]);

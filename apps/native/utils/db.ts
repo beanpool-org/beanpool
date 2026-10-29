@@ -3376,6 +3376,9 @@ export interface Decision {
     /** A vote on removing a member whose case an admin hid as shown to be false: when, and their public reason. */
     caseHiddenAt?: string | null;
     caseHiddenReason?: string | null;
+    /** A vote on removing a member whose reply an admin took down: when, and their public reason (the reply itself is gone). */
+    replyHiddenAt?: string | null;
+    replyHiddenReason?: string | null;
     /** A vote on removing a member: who brought it, by name (absent from a node from before). */
     proposer?: RemovalProposer;
 }

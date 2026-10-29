@@ -21,7 +21,7 @@ import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/de
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
     DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
-    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, turnoutLine, voiceCreditsLine,
+    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, turnoutLine, voiceCreditsLine,
 } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
@@ -735,23 +735,30 @@ export function DecideSection({
 
     /**
      * A vote on removing a member, beside its case (removal by vote, Amendment A): who proposed it (a member's own, from
-     * before; a pause's names its admin in its box), the member's reply, and to the member themself the way to reply while
-     * it is open (a sheet, RemovalReplySheet) and to report the case as false. Nothing for any other Decision.
+     * before; a pause's names its admin in its box), the member's reply or, once an admin took it down, their reason in its
+     * place, and to the member themself the way to reply while it is open (a sheet, RemovalReplySheet; not after a
+     * takedown) and to report the case as false. Nothing for any other Decision.
      */
     const removalCaseParts = (item: DecisionWithTally, open: boolean) => {
         if (item.effect !== 'remove_member') return null;
         const mine = !preview && isOwnRemoval(item, identity?.publicKey);
         const proposedBy = proposedByLine(item);
+        const takenDown = !!item.replyHiddenAt;
         return (
             <>
                 {!!proposedBy && <Text style={styles.proposedByText} testID="removal-proposed-by">{proposedBy}</Text>}
+                {takenDown && (
+                    <Text style={styles.caseHiddenText} testID="removal-reply-taken-down">
+                        {replyTakenDownLine(item.params, item.subject?.slice(0, 8) || t('a member'), mine, item.replyHiddenReason)}
+                    </Text>
+                )}
                 {!!item.subjectReply && (
                     <View style={styles.replyBox} testID="removal-reply">
                         <Text style={styles.replyHeading}>{replyHeading(item.params, item.subject?.slice(0, 8) || t('a member'), mine)}</Text>
                         <Text style={styles.replyText}>{item.subjectReply}</Text>
                     </View>
                 )}
-                {mine && open && (
+                {mine && open && !takenDown && (
                     <Pressable
                         accessibilityRole="button"
                         style={styles.caseLinkBtn}

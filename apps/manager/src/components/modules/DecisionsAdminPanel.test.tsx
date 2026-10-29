@@ -287,4 +287,54 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.click(within(screen.getByRole('dialog', { name: 'Hide case' })).getByRole('button', { name: 'Hide case' }));
         expect(await screen.findByText('This case is already hidden')).toBeInTheDocument();
     });
+
+    // The deciding review of #2585: a member's reply that harms someone else is taken down, with a reason members read in its place.
+    it("takes down a member's reply, open or closed, with a public reason of 10+ characters, showing the words first; none to take down before they write one", async () => {
+        const replied: nodeClient.AdminDecisionItem = { ...pauseVote, subjectReply: 'Erin lives at 12 Example Street. Ask her.' };
+        const closed: nodeClient.AdminDecisionItem = { ...pauseVote, id: 'dec-closed-2', title: 'Remove Ola?', subjectName: 'Ola', status: 'failed', subjectReply: 'Ring 0400 000 000.' };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([replied, keepVote]);
+        vi.mocked(nodeClient.fetchPastRemovalVotes).mockResolvedValue([closed]);
+        const takeDown = vi.spyOn(nodeClient, 'takeDownDecisionReply').mockResolvedValue({ success: true });
+        render(<DecisionsAdminPanel activeNode={node} />);
+        const [pauseRow, keepRow] = await screen.findAllByTestId('admin-decision-row');
+        expect(keepRow.textContent).not.toContain('Take down reply');
+        fireEvent.click(within(pauseRow).getByRole('button', { name: 'Take down reply' }));
+        const dialog = screen.getByRole('dialog', { name: 'Take down reply' });
+        expect(dialog).toHaveTextContent("Take down Troll's reply?");
+        expect(within(dialog).getByTestId('take-down-reply-text')).toHaveTextContent('Erin lives at 12 Example Street. Ask her.');
+        expect(dialog).toHaveTextContent("The member is told, and can't write another reply on this vote.");
+        const confirm = within(dialog).getByRole('button', { name: 'Take down reply' });
+        expect(confirm).toBeDisabled();
+        fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: 'address' } });
+        expect(confirm).toBeDisabled();
+        fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: "  It gave a neighbour's address  " } });
+        expect(confirm).not.toBeDisabled();
+        fireEvent.click(confirm);
+        await waitFor(() => expect(takeDown).toHaveBeenCalledWith('https://test-node.local', 'dec-pause-1', "It gave a neighbour's address", 'pw', undefined));
+
+        const pastRow = within(screen.getByTestId('past-removal-votes')).getByTestId('past-removal-row');
+        fireEvent.click(within(pastRow).getByRole('button', { name: 'Take down reply' }));
+        fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'It gave a phone number' } });
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Take down reply' })).getByRole('button', { name: 'Take down reply' }));
+        await waitFor(() => expect(takeDown).toHaveBeenCalledWith('https://test-node.local', 'dec-closed-2', 'It gave a phone number', 'pw', undefined));
+    });
+
+    it('a reply taken down shows the reason members read, not the button; no button with no reply; the refusal shows when it fails', async () => {
+        const takenDown: nodeClient.AdminDecisionItem = { ...pauseVote, subjectReply: null, replyHiddenAt: '2026-09-21T00:00:00.000Z', replyHiddenReason: "It gave a neighbour's address" };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([takenDown, { ...pauseVote, id: 'dec-pause-2' }]);
+        const first = render(<DecisionsAdminPanel activeNode={node} />);
+        const [downRow, bareRow] = await screen.findAllByTestId('admin-decision-row');
+        expect(within(downRow).getByTestId('admin-reply-taken-down')).toHaveTextContent("Reply taken down. Members read: “It gave a neighbour's address”");
+        expect(within(downRow).queryByRole('button', { name: 'Take down reply' })).toBeNull();
+        expect(within(bareRow).queryByRole('button', { name: 'Take down reply' })).toBeNull();
+        first.unmount();
+
+        vi.mocked(nodeClient.fetchAdminDecisions).mockResolvedValue([{ ...pauseVote, subjectReply: 'Ring 0400 000 000.' }]);
+        vi.spyOn(nodeClient, 'takeDownDecisionReply').mockRejectedValue(new Error('This reply is already taken down'));
+        render(<DecisionsAdminPanel activeNode={node} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Take down reply' }));
+        fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'A long enough reason' } });
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Take down reply' })).getByRole('button', { name: 'Take down reply' }));
+        expect(await screen.findByText('This reply is already taken down')).toBeInTheDocument();
+    });
 });

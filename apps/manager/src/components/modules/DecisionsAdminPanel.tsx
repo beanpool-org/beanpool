@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { fetchAdminDecisions, fetchNodeDecisionsOn, fetchPastRemovalVotes, haltDecision, hideDecisionCase, type AdminDecisionItem } from '../../lib/node-client';
+import {
+    fetchAdminDecisions, fetchNodeDecisionsOn, fetchPastRemovalVotes, haltDecision, hideDecisionCase, takeDownDecisionReply, type AdminDecisionItem,
+} from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
 
@@ -69,11 +71,35 @@ function CaseControl({ d, onHide }: { d: AdminDecisionItem; onHide: (d: AdminDec
 }
 
 /**
+ * A removal vote's reply from the member: taken down, with the reason members read, or the button that takes it down; none
+ * until they write one.
+ */
+function ReplyControl({ d, onTakeDown }: { d: AdminDecisionItem; onTakeDown: (d: AdminDecisionItem) => void }) {
+    if (d.replyHiddenAt) {
+        return (
+            <p className="text-xs text-amber-300 m-0 break-words" data-testid="admin-reply-taken-down">
+                Reply taken down. Members read: “{d.replyHiddenReason}”
+            </p>
+        );
+    }
+    if (!d.subjectReply) return null;
+    return (
+        <button
+            onClick={() => onTakeDown(d)}
+            className="px-3 py-2 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+        >
+            Take down reply
+        </button>
+    );
+}
+
+/**
  * Community Decisions an admin can still act on — open votes and removals in their 7-day grace window —
  * with the admin brake: halt, with a written reason members will see. Totals only; the node never serves
  * who voted how. An emergency suspension nobody votes on (the global node) shows as a suspension with its
  * end date, and the brake as lifting it now. A vote on removing a member, open or closed, can have its case hidden as
- * one shown to be false, with a reason members read in its place (removal by vote, Amendment A point 4).
+ * one shown to be false, with a reason members read in its place (removal by vote, Amendment A point 4), and the member's
+ * reply taken down when it harms someone else, the same way.
  */
 export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPanelProps) {
     const [decisions, setDecisions] = useState<AdminDecisionItem[]>([]);
@@ -90,6 +116,11 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
     const [hideReason, setHideReason] = useState('');
     const [hiding, setHiding] = useState(false);
     const [hideError, setHideError] = useState<string | null>(null);
+    // A member's reply taken down, open vote or closed.
+    const [takeDownTarget, setTakeDownTarget] = useState<AdminDecisionItem | null>(null);
+    const [takeDownReason, setTakeDownReason] = useState('');
+    const [takingDown, setTakingDown] = useState(false);
+    const [takeDownError, setTakeDownError] = useState<string | null>(null);
 
     const load = async () => {
         if (!activeNode?.url) return;
@@ -151,6 +182,31 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
             setHideError(err instanceof Error ? err.message : 'Failed to hide the case');
         } finally {
             setHiding(false);
+        }
+    };
+
+    const takeDownTrimmed = takeDownReason.trim();
+    const takeDownReasonOk = takeDownTrimmed.length >= MIN_HALT_REASON;
+    const openTakeDown = (d: AdminDecisionItem) => { setTakeDownTarget(d); setTakeDownReason(''); setTakeDownError(null); };
+    const closeTakeDown = () => {
+        if (takingDown) return;
+        setTakeDownTarget(null);
+        setTakeDownReason('');
+        setTakeDownError(null);
+    };
+    const confirmTakeDown = async () => {
+        if (!takeDownTarget || !takeDownReasonOk) return;
+        setTakingDown(true);
+        setTakeDownError(null);
+        try {
+            await takeDownDecisionReply(activeNode.url, takeDownTarget.id, takeDownTrimmed, nodeCredential(activeNode), tfaToken);
+            setTakeDownTarget(null);
+            setTakeDownReason('');
+            await load();
+        } catch (err: unknown) {
+            setTakeDownError(err instanceof Error ? err.message : 'Failed to take down the reply');
+        } finally {
+            setTakingDown(false);
         }
     };
 
@@ -250,6 +306,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             </p>
                             <div className="flex flex-wrap items-center justify-end gap-2">
                                 {hasCase(d, decisionsOn) && <CaseControl d={d} onHide={openHide} />}
+                                {hasCase(d, decisionsOn) && <ReplyControl d={d} onTakeDown={openTakeDown} />}
                                 <button
                                     onClick={() => { setHaltTarget(d); setReason(''); setHaltError(null); }}
                                     className="px-3 py-2 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-xs font-bold text-bp-chip-danger-ink border border-red-800"
@@ -267,7 +324,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                     <div>
                         <h4 className="text-sm font-bold text-white m-0">Closed votes on removing a member ({pastRemovals.length})</h4>
                         <p className="text-xs text-nature-400 m-0 mt-0.5">
-                            A case shown to be false can be hidden: members read your reason in its place.
+                            A case shown to be false can be hidden, and a reply that harms someone taken down: members read your reason in its place.
                         </p>
                     </div>
                     {pastRemovals.map((d) => (
@@ -284,6 +341,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             {d.subjectName && <p className="text-xs text-nature-400 m-0">About: {d.subjectName}</p>}
                             <div className="flex flex-wrap items-center justify-end gap-2">
                                 <CaseControl d={d} onHide={openHide} />
+                                <ReplyControl d={d} onTakeDown={openTakeDown} />
                             </div>
                         </div>
                     ))}
@@ -323,6 +381,49 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                                 className="px-3 py-2 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {hiding ? 'Hiding…' : 'Hide case'}
+                            </button>
+                        </div>
+                    </div>
+                </ModalBackdrop>
+            )}
+
+            {takeDownTarget && (
+                <ModalBackdrop onClose={closeTakeDown} dismissable={!takingDown} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Take down reply">
+                    <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-800 rounded-3xl p-6 shadow-2xl space-y-3">
+                        <h3 className="text-base font-bold text-white m-0 break-words">Take down {suspendedName(takeDownTarget)}'s reply?</h3>
+                        <blockquote className="m-0 p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-nature-200 whitespace-pre-wrap break-words" data-testid="take-down-reply-text">
+                            {takeDownTarget.subjectReply}
+                        </blockquote>
+                        <p className="text-xs text-nature-400 m-0">
+                            For a reply that harms someone else: an address, a phone number, a threat. The reply is deleted from the server,
+                            so nobody can read it again, here included, and members read your reason in its place. The member is told, and
+                            can't write another reply on this vote. The vote itself carries on.
+                        </p>
+                        <label className="block text-xs font-bold text-nature-300" htmlFor="take-down-reply-reason">
+                            Reason (members will see this)
+                        </label>
+                        <textarea
+                            id="take-down-reply-reason"
+                            value={takeDownReason}
+                            onChange={(e) => setTakeDownReason(e.target.value)}
+                            rows={3}
+                            className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2"
+                            placeholder="Why the reply is taken down"
+                        />
+                        <p className={`text-[11px] m-0 ${takeDownReasonOk ? 'text-nature-500' : 'text-amber-400'}`}>
+                            {takeDownReasonOk ? `${takeDownTrimmed.length} characters` : `At least ${MIN_HALT_REASON} characters (${takeDownTrimmed.length} so far)`}
+                        </p>
+                        {takeDownError && <div className="p-2 rounded-lg bg-red-950/60 border border-red-800 text-xs text-red-300">{takeDownError}</div>}
+                        <div className="flex justify-end gap-2 pt-1">
+                            <button onClick={closeTakeDown} disabled={takingDown} className="px-3 py-2 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmTakeDown}
+                                disabled={!takeDownReasonOk || takingDown}
+                                className="px-3 py-2 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {takingDown ? 'Taking down…' : 'Take down reply'}
                             </button>
                         </div>
                     </div>

@@ -10,6 +10,7 @@ import {
     poolVoteBlocker,
     proposedByLine,
     replyHeading,
+    replyTakenDownLine,
     turnoutLine,
     voiceCreditsLine,
 } from '../decision-card';
@@ -79,5 +80,15 @@ describe('Decision card wording (native)', () => {
 
         expect(caseHiddenLine('Wu confirmed every repair')).toBe('An admin hid the case for this vote, as one shown to be false. Their reason: Wu confirmed every repair');
         expect(caseHiddenLine(null)).toBe('An admin hid the case for this vote, as one shown to be false.');
+    });
+
+    // The deciding review of #2585: a reply an admin took down, its reason in the reply's place.
+    it("says what stands in for a reply an admin took down: to everyone, whose; to the member, theirs", () => {
+        const params = { memberName: 'Dave' };
+        expect(replyTakenDownLine(params, 'abc', false, 'It gave an address')).toBe("An admin took down Dave's reply. Their reason: It gave an address");
+        expect(replyTakenDownLine(null, 'abcd1234', false, 'It gave an address')).toBe("An admin took down abcd1234's reply. Their reason: It gave an address");
+        expect(replyTakenDownLine(params, 'abc', false, null)).toBe("An admin took down Dave's reply.");
+        expect(replyTakenDownLine(params, 'abc', true, 'It gave an address')).toBe('An admin took down your reply. Their reason: It gave an address');
+        expect(replyTakenDownLine(params, 'abc', true, null)).toBe('An admin took down your reply.');
     });
 });

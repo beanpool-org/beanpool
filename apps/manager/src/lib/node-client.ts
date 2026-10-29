@@ -2898,6 +2898,14 @@ export interface AdminDecisionItem {
      */
     caseHiddenAt?: string | null;
     caseHiddenReason?: string | null;
+    /**
+     * A vote on removing a member: the member's own reply to its case (Amendment A point 2), null until they write one; and,
+     * once an admin took it down, when and the public reason members read in its place (the reply itself is then gone).
+     * Absent from a node from before.
+     */
+    subjectReply?: string | null;
+    replyHiddenAt?: string | null;
+    replyHiddenReason?: string | null;
     /** Totals only — the node never serves who voted how. */
     tally: {
         totalVoters: number;
@@ -2965,6 +2973,15 @@ export async function fetchPastRemovalVotes(nodeUrl: string, adminPassword?: str
  */
 export async function hideDecisionCase(nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
     return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/hide-case`, { reason }, adminPassword, tfaToken);
+}
+
+/**
+ * Take down the member's reply to the case of a vote on removing them, for one that harms someone else: the reply is
+ * deleted, members read the reason (10+ characters) in its place, and the member is told and can't write another on that
+ * vote. The vote itself is unchanged.
+ */
+export async function takeDownDecisionReply(nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/hide-reply`, { reason }, adminPassword, tfaToken);
 }
 
 /**

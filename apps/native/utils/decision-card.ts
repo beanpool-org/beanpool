@@ -105,6 +105,20 @@ export function caseHiddenLine(reason: string | null | undefined): string {
 }
 
 /**
+ * In place of a reply an admin took down (the deciding review of #2585), with their public reason: "{name}'s reply", and to
+ * the member themself "your reply". The reply itself is gone from the node.
+ */
+export function replyTakenDownLine(
+    params: { memberName?: string } | null | undefined, fallbackName: string, mine: boolean, reason: string | null | undefined,
+): string {
+    if (mine) return reason ? t('An admin took down your reply. Their reason: {reason}', { reason }) : t('An admin took down your reply.');
+    const name = params?.memberName || fallbackName;
+    return reason
+        ? t("An admin took down {name}'s reply. Their reason: {reason}", { name, reason })
+        : t("An admin took down {name}'s reply.", { name });
+}
+
+/**
  * What each answer does (design §8.2): Yes removes them after the 7-day grace window, No brings them back when the vote
  * closes. No vote removes someone who holds an owner or admin role (§3.8): then the pause ends with the vote, whatever it says.
  */

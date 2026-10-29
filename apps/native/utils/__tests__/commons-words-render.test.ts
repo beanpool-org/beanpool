@@ -280,6 +280,9 @@ const OPEN = [
         proposer: { kind: 'password', name: null }, caseHiddenAt: iso(Date.now() - DAY), caseHiddenReason: 'Two witnesses showed it false',
         description: 'An admin hid the case for this vote, as one shown to be false. Their reason: Two witnesses showed it false' }),
     decision('24242424', { effect: 'remove_member', params: { memberName: 'Lou' }, proposer: { kind: 'member', name: 'Tia' } }),
+    // A reply an admin took down (the deciding review of #2585): their reason in its place.
+    decision('25252525', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Rex', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) },
+        proposer: { kind: 'admin', name: 'Ada' }, subjectReply: null, replyHiddenAt: iso(Date.now() - DAY), replyHiddenReason: "It gave a neighbour's address" }),
 ];
 const PAST = [
     decision('77777777', { status: 'executed', effect: 'freeze_credit', executionReason: 'Credit floor set to 0', tally: tally({ quorumMet: true, passed: true }) }),
@@ -301,6 +304,7 @@ const OTHERS = [
     ...[...OPEN, ...PAST].flatMap((d) => [d.title, d.description]),
     'Dave', 'Mia', 'Kofi', 'Ana', 'Ola', 'Abe', 'Zed', 'Credit floor set to 0', 'Duplicate of last week', 'Reach The Moon', 'sky', 'PAUSED BY STORM', 'system:decision:',
     'Uma', 'Ada', 'Ivy', 'Lou', 'Tia', 'I refunded the deposit the same day.', 'Two witnesses showed it false', 'It was a misunderstanding.',
+    'Rex', "It gave a neighbour's address",
     'Example Valley', ...SAMPLE_COMMUNITY.decisions.flatMap((d) => [d.question, (d as { body?: string }).body ?? '']),
     ...sampleDecisions().flatMap((d) => [d.title, d.description]), ...sampleEnterprises().flatMap((e) => [e.name ?? '', e.purpose ?? '']),
 ].filter(Boolean).sort((a, b) => b.length - a.length);
@@ -520,6 +524,8 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(host.querySelector('[data-testid="removal-case-hidden"]')?.textContent)
             .toBe(pseudoLocalise('An admin hid the case for this vote, as one shown to be false. Their reason: {reason}').replace('{reason}', 'Two witnesses showed it false'));
         expect(host.textContent).toContain(pseudoLocalise('Proposed by {name}.').replace('{name}', 'Tia'));
+        expect(host.querySelector('[data-testid="removal-reply-taken-down"]')?.textContent)
+            .toBe(pseudoLocalise("An admin took down {name}'s reply. Their reason: {reason}").replace('{name}', 'Rex').replace('{reason}', "It gave a neighbour's address"));
         expect(bypassing(), 'cards').toEqual([]);
         // The member's own vote: Reply to this case opens the sheet, and Send reply sends their words, trimmed.
         await click(button('Reply to this case'), 'Reply to this case');
@@ -539,6 +545,22 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(node.reports).toEqual(['20202020']);
         expect(host.querySelector('[data-testid="removal-case-reported"]')?.textContent).toBe(pseudoLocalise('Reported. The admins and owners will look at it.'));
         expect(bypassing(), 'report').toEqual([]);
+    });
+
+    it("Decide: the member's own reply taken down: the admin's reason in its place, and no way to write another", async () => {
+        node.decisions = [decision('20202020', {
+            authorPubkey: 'SYSTEM', effect: 'remove_member', subject: KEY, params: { memberName: 'Zed', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) },
+            proposer: { kind: 'admin', name: 'Ada' }, subjectReply: null, replyHiddenAt: iso(Date.now() - DAY), replyHiddenReason: "It gave a neighbour's address",
+        })];
+        await renderIn('xx');
+        await click(byLabel(pseudoLocalise('Decide Section')), 'Decide');
+        expect(host.querySelector('[data-testid="removal-reply-taken-down"]')?.textContent)
+            .toBe(pseudoLocalise('An admin took down your reply. Their reason: {reason}').replace('{reason}', "It gave a neighbour's address"));
+        expect(host.querySelector('[data-testid="removal-reply-open"]')).toBeNull();
+        expect(button('Reply to this case')).toBeNull();
+        expect(button('Change your reply')).toBeNull();
+        expect(button('Report this case as false')).toBeTruthy();
+        expect(bypassing()).toEqual([]);
     });
 
     it('Decide: a member with no trade yet is told before voting on money, and asked to trade before proposing', async () => {

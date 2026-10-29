@@ -11,7 +11,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import {
     DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
-    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, turnoutLine, voiceCreditsLine,
+    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, turnoutLine, voiceCreditsLine,
 } from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
@@ -179,19 +179,26 @@ export function DecideSection({
 
     /**
      * A vote on removing a member, beside its case (removal by vote, Amendment A): who proposed it (a member's own, from
-     * before; a pause's names its admin in its box), the member's reply, and to the member themself the way to reply while
-     * it is open and to report the case as false. Nothing for any other Decision.
+     * before; a pause's names its admin in its box), the member's reply or, once an admin took it down, their reason in its
+     * place, and to the member themself the way to reply while it is open (not after a takedown) and to report the case as
+     * false. Nothing for any other Decision.
      */
     const removalCaseParts = (item: DecisionWithTally, open: boolean) => {
         if (item.effect !== 'remove_member') return null;
         const mine = !preview && isOwnRemoval(item, identity?.publicKey);
         const proposedBy = proposedByLine(item);
-        const editing = mine && open && (!item.subjectReply || !!replyEditing[item.id]);
+        const takenDown = !!item.replyHiddenAt;
+        const editing = mine && open && !takenDown && (!item.subjectReply || !!replyEditing[item.id]);
         const draft = replyDrafts[item.id] ?? '';
         const name = item.subject?.slice(0, 8) || t('a member');
         return (
             <>
                 {proposedBy && <p className="text-xs text-nature-400" data-testid="removal-proposed-by">{proposedBy}</p>}
+                {takenDown && (
+                    <p className="text-sm text-amber-200 leading-relaxed break-words" data-testid="removal-reply-taken-down">
+                        {replyTakenDownLine(item.params, name, mine, item.replyHiddenReason)}
+                    </p>
+                )}
                 {item.subjectReply && !editing && (
                     <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3 space-y-1" data-testid="removal-reply">
                         <div className="text-xs font-bold text-sky-200">{replyHeading(item.params, name, mine)}</div>

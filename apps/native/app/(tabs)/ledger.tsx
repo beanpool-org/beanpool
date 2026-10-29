@@ -338,7 +338,7 @@ export default function LedgerScreen() {
         walletHero: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
         walletBigBalance: { fontSize: 42, fontWeight: '900', letterSpacing: -2, marginVertical: 8 },
         walletMetricRow: { flexDirection: 'row', backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 14, overflow: 'hidden', marginTop: 16 },
-        walletMetric: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 44, paddingVertical: 10, gap: 3 },
+        walletMetric: { flex: 1, alignItems: 'center', minHeight: 44, paddingVertical: 10, gap: 3 },
         walletMetricDivider: { width: 1, backgroundColor: colors.border.default },
         walletMetricVal: { fontSize: 15, fontWeight: '800', color: colors.text.heading },
         walletMetricLabel: { fontSize: 10, fontWeight: '700', color: colors.text.muted, letterSpacing: 0.5, textAlign: 'center' },

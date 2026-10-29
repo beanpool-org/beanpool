@@ -245,6 +245,16 @@ try {
                     if (r.height < 43.5) out.push(what + ' is ' + Math.round(r.height) + 'dp tall');
                 }
             };
+            // The metrics of the wallet strip start together: each one's icon, value and label sit at the top whatever the neighbours' labels do
+            // (a label that wraps to two lines beside one that doesn't must not push the shorter one's content down).
+            const metrics = [...document.querySelectorAll('div[dir]')]
+                .filter((el) => el.children.length === 0 && /^(COMMONS|CREDIT FLOOR|IN ESCROW)/.test(el.textContent.trim()))
+                .map((label) => label.parentElement);
+            if (metrics.length < 2) out.push('the wallet strip: expected two or three metrics, found ' + metrics.length);
+            for (let i = 0; i < 3; i++) {
+                const tops = metrics.filter((m) => m.children[i]).map((m) => m.children[i].getBoundingClientRect().top);
+                if (tops.length && Math.max(...tops) - Math.min(...tops) > 1) out.push('the wallet strip metrics do not start together: part ' + (i + 1) + ' of each sits ' + (Math.max(...tops) - Math.min(...tops)).toFixed(1) + 'px apart');
+            }
             door('ledger-in-escrow', 'the IN ESCROW total', total);
             door('ledger-held-row', 'a Held in Trust row with a deal', heldRow);
             return out;

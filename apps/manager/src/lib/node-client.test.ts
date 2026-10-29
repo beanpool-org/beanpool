@@ -48,6 +48,7 @@ import {
     COMMUNITY_ADMIN,
     emergencySuspendMember,
     haltDecision,
+    takeDownDecisionReply,
     liftMemberSuspension,
     acknowledgeShutdownStatus,
     fetchDiskHealth,
@@ -572,6 +573,15 @@ describe('node admin decisions and suspensions', () => {
         expect(url).toContain('/api/local/admin/decisions/dec-456/halt');
         expect(init.method).toBe('POST');
         expect(JSON.parse(init.body)).toEqual({ reason: 'Quorum error identified', password: 'adminpw' });
+    });
+
+    it("takeDownDecisionReply sends POST to take down a removal vote's reply with reason", async () => {
+        await takeDownDecisionReply('https://node.test', 'dec-789', "It gave a member's address", 'adminpw', 'tfa-1');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/decisions/dec-789/hide-reply');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+        expect(JSON.parse(init.body)).toEqual({ reason: "It gave a member's address", password: 'adminpw' });
     });
 
     it('liftMemberSuspension sends POST to reactivate member', async () => {

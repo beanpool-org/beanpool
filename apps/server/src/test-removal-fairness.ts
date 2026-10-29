@@ -732,7 +732,7 @@ async function main() {
     fresh();
     const kaiAgain = await signed('POST', `/api/commons/decisions/${kaiVote}/reply`, kai, { reply: 'Erin is still lying. 12 Example Street, go and see.' });
     const twiceDown = await admin(`/api/local/admin/decisions/${kaiVote}/hide-reply`, adaSession, { reason: 'Taking it down a second time' });
-    assert(kaiAgain.status === 409 && kaiAgain.body?.error === de.REPLY_TAKEN_DOWN && twiceDown.status === 409
+    assert(kaiAgain.status === 409 && kaiAgain.body?.error === de.REPLY_TAKEN_DOWN && twiceDown.status === 409 && twiceDown.body?.error === 'This reply is already taken down'
         && row(kaiVote).subject_reply === null && row(kaiVote).reply_hidden_by === abe.pubKeyHex && row(kaiVote).reply_hidden_reason === TAKE_DOWN_WHY,
         `Kai can't write another while the vote is open (${kaiAgain.status} ${kaiAgain.text.slice(0, 100)}), and a second takedown is refused (${twiceDown.status})`);
     voteAndClose(kaiVote, null);
@@ -760,7 +760,7 @@ async function main() {
         && liaCard.card?.subjectReply === null && !liaCard.text.includes('0400 111 222'),
         `a closed vote's reply, listed with the closed votes, comes down too: by an owner with the password (${liaDown.status} ${liaDown.text.slice(0, 120)})`);
     // On a standby, both are refused with its JSON answer, before anything is written.
-    let onStandby: Answer[] = [];
+    let onStandby: Answer[];
     setNodeRole('backup');
     try {
         fresh();

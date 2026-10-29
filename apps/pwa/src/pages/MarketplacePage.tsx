@@ -574,8 +574,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             const found = posts.find(p => p.id === openPostId);
             if (found) {
                 setSelectedPost(found);
-                // At the deal the door named (a recurring listing's author has several): its row comes first.
-                setSelectedTxId(openTxId ?? null);
+                // At the deal the door named (a recurring listing's author has several): its row comes first. A door that
+                // names none leaves a pin as it is (a deal_open refusal's, on this listing).
+                if (openTxId) setSelectedTxId(openTxId);
                 onPostOpened?.();
             } else if (deepLinkFetched.current !== openPostId) {
                 // Not in the feed: an event that has ended or been cancelled has left it, but its host and the
@@ -588,7 +589,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     onPostOpened?.();
                 };
                 getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
-                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); setSelectedTxId(openTxId ?? null); onPostOpened?.(); } else notReadable(); })
+                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); if (openTxId) setSelectedTxId(openTxId); onPostOpened?.(); } else notReadable(); })
                     // A failed read is not an answer: say so, and let the next View Post ask again (review #1980 N1).
                     .catch(() => {
                         deepLinkFetched.current = null;

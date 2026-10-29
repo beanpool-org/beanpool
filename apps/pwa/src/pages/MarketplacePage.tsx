@@ -1403,10 +1403,24 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 setAccepting(false);
             }
         };
+        // A deal's other side, from its row (design §3.2 keeps Message beside the deal's buttons; a recurring listing has one each).
+        const messageRow = async (peer: string) => {
+            if (!identity) return;
+            setMessaging(true);
+            try {
+                const result = await createConversationApi('dm', [identity.publicKey, peer], identity.publicKey, undefined, selectedPost.id);
+                if (onNavigate) onNavigate('messages', result.conversation.id);
+            } catch (e: any) {
+                setError(e.message || t('Failed to start conversation'));
+            } finally {
+                setMessaging(false);
+            }
+        };
         const renderOwnDeal = (m: DealMoves<MarketplaceTransaction>) => {
             const tx = m.tx;
             const payer = tx.buyerPublicKey === m.actingAs;
             const otherName = (payer ? tx.sellerCallsign : tx.buyerCallsign) || t('Peer');
+            const otherKey = payer ? tx.sellerPublicKey : tx.buyerPublicKey;
             const confirming = showCompleteConfirm && releaseRowId === tx.id;
             return (
                 <div
@@ -1477,6 +1491,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             className="w-full py-2 rounded-lg border border-red-300 text-red-600 dark:text-red-300 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/30"
                         >
                             {t('❌ Cancel Hold')}
+                        </button>
+                    )}
+                    {!!otherKey && otherKey !== me && (
+                        <button
+                            type="button"
+                            onClick={() => messageRow(otherKey)}
+                            disabled={messaging}
+                            className="w-full py-2 rounded-lg font-bold text-white text-sm bg-nature-800 hover:bg-nature-900 disabled:opacity-60"
+                        >
+                            <span aria-hidden="true">💬</span> {t('Message {name}', { name: otherName })}
                         </button>
                     )}
                 </div>
@@ -1932,6 +1956,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <p className="text-xs text-nature-600 dark:text-nature-400 text-center">{listingDealLines.actingFor(selectedPost.authorCallsign)}</p>
                         )}
                         {ownRows.map(renderOwnDeal)}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setDealsInitialTab('pending');
+                                setShowDealsModal(true);
+                            }}
+                            className="text-xs text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white font-medium text-center mt-1 py-1 transition-colors"
+                        >
+                            {t('All your deals ›')}
+                        </button>
                     </div>
                 )}
 

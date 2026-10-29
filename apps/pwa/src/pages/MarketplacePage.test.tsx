@@ -1196,6 +1196,21 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         noTakeUp();
     });
 
+    it("the author messages each deal's other side from its row, and reaches all their deals", async () => {
+        const chat = vi.spyOn(api, 'createConversationApi').mockResolvedValue({ conversation: { id: 'conv-1' } } as any);
+        const onNavigate = vi.fn();
+        await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
+            deal({ id: 'tx-a', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME }),
+            deal({ id: 'tx-b', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME }),
+        ], { onNavigate });
+        const rows = await screen.findByTestId('deals-under-way');
+        expect(within(screen.getByTestId('deal-row-tx-b')).getByRole('button', { name: 'Message Kofi' })).toBeInTheDocument();
+        expect(within(rows).getByRole('button', { name: 'All your deals ›' })).toBeInTheDocument();
+        fireEvent.click(within(screen.getByTestId('deal-row-tx-a')).getByRole('button', { name: 'Message Marty' }));
+        await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('messages', 'conv-1'));
+        expect(chat).toHaveBeenCalledWith('dm', [ME, 'marty-pk'], ME, undefined, 'p');
+    });
+
     it('the author opened at one deal (Home, the header): that row comes first', async () => {
         await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
             deal({ id: 'tx-a', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME, createdAt: '2026-10-26T10:00:00.000Z' }),
@@ -1248,6 +1263,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(within(row).getByText('Mo · 20 Beans held · since 24 Oct')).toBeInTheDocument();
         // The node has no door for a keeper to cancel the enterprise's hold: none shown (Mo cancels as himself).
         expect(within(row).queryByRole('button', { name: /Cancel Hold/ })).not.toBeInTheDocument();
+        // The keeper messages Mo as themselves.
+        expect(within(row).getByRole('button', { name: 'Message Mo' })).toBeInTheDocument();
         noTakeUp();
         fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
         fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));

@@ -157,7 +157,11 @@ const deal = (over: Record<string, unknown>) => ({
     sellerCallsign: 'Damo', credits: 45, hours: null, createdAt: AT, ...over,
 });
 
-const node = { mine: [] as Array<Record<string, unknown>>, kept: [] as Array<Record<string, unknown>>, keeperOf: [] as string[] };
+const node = {
+    mine: [] as Array<Record<string, unknown>>, kept: [] as Array<Record<string, unknown>>, keeperOf: [] as string[],
+    /** Messages unread on this listing, by the one who wrote them; and every chat the page opened (its arguments). */
+    unread: {} as Record<string, number>, chats: [] as unknown[][],
+};
 function answers(post: Record<string, unknown>) {
     const snake = (d: Record<string, any>) => ({ id: d.id, post_id: d.postId, status: d.status, buyer_pubkey: d.buyerPublicKey, buyer_callsign: d.buyerCallsign,
         seller_pubkey: d.sellerPublicKey, seller_callsign: d.sellerCallsign, credits: d.credits, hours: d.hours, created_at: d.createdAt });
@@ -172,11 +176,15 @@ function answers(post: Record<string, unknown>) {
             ? node.mine.map(snake).filter(d => d.post_id === args[0] && d.status === 'requested') : []),
     };
     const table: Record<string, unknown> = {
-        getPost: post, getDb: database, getMemberRatings: { average: 4.5, count: 3 }, getUnreadCountForPost: 0,
+        getPost: post, getDb: database, getMemberRatings: { average: 4.5, count: 3 },
         getBalance: { isBlockedFromTrading: false, keeperOf: node.keeperOf }, fetchGroupDetails: { group: { viewerRole: null } },
         getMarketplaceTransactions: node.mine, getDealsFor: node.kept, treasuryComplete: { success: true }, completeMarketplaceTransaction: { success: true },
     };
-    return (name: string) => (name in table ? Promise.resolve(table[name]) : undefined);
+    return (name: string, args: unknown[]) => {
+        if (name === 'getUnreadCountForPost') return Promise.resolve(node.unread[String(args[2])] ?? 0);
+        if (name === 'createConversationApi') { node.chats.push(args); return Promise.resolve({ id: 'conv-1' }); }
+        return name in table ? Promise.resolve(table[name]) : undefined;
+    };
 }
 
 let host: HTMLDivElement;
@@ -188,7 +196,7 @@ beforeEach(() => {
     net.calls.length = 0;
     nav.to.length = 0;
     alerts.said.length = 0;
-    node.mine = []; node.kept = []; node.keeperOf = [];
+    node.mine = []; node.kept = []; node.keeperOf = []; node.unread = {}; node.chats = [];
     events.listeners.clear();
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
@@ -235,6 +243,23 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.textContent).not.toContain('🤝 Accept Offer');
         });
 
+        it("the author messages each deal's other side from its row (its unread on it), and reaches all their deals", async () => {
+            node.mine = [
+                deal({ id: 'tx-a', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, createdAt: '2026-10-26T10:00:00.000Z' }),
+                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 30, createdAt: AT }),
+            ];
+            node.unread = { 'kofi-key': 2 };
+            await open(listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
+            const list = host.querySelector('[data-testid="deals-under-way"]') as HTMLElement;
+            const message = (id: string) => Array.from(row(id)!.querySelectorAll('button')).find(b => b.textContent?.startsWith('💬 Message'))?.textContent;
+            expect(message('tx-a')).toBe('💬 Message Marty');
+            expect(message('tx-b')).toBe('💬 Message Kofi2');
+            expect(Array.from(list.querySelectorAll('button')).some(b => b.textContent === 'All your deals ›')).toBe(true);
+            await press(row('tx-a')!, '💬 Message Marty');
+            expect(node.chats).toEqual([['dm', ['marty-key', ME.publicKey], ME.publicKey, undefined, 'p-1']]);
+            expect(nav.to).toContain('/chat/conv-1');
+        });
+
         it('a lender with a free loan out: the row says no Beans are held, never "0 Beans held"', async () => {
             node.mine = [deal({ id: 'tx-l', credits: 0, buyerPublicKey: 'mo-key', buyerCallsign: 'Mo', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign })];
             await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0, credits: 0, status: 'pending', author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
@@ -251,6 +276,8 @@ for (const theme of ['light', 'dark'] as const) {
             const r = row('tx-f')!;
             expect(r.textContent).toContain('Mo · 20 Beans held · since 24 Oct');
             expect(r.textContent).not.toContain('❌ Cancel Trust Hold');
+            // The keeper messages Mo as themselves (the panel this replaced did too).
+            expect(r.textContent).toContain('💬 Message Mo');
             await press(r, '✅ Release Credits');
             await press(r, 'Release Credits');
             expect(net.calls).toContain('db.treasuryComplete');

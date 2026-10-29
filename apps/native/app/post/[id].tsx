@@ -40,7 +40,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, type DealMoves, type DealRow } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, type DealMoves, type DealRow } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -542,6 +542,8 @@ export default function PostDetailModal() {
     const requests = keptRequests.length > 0 ? [...localRequests, ...keptRequests.filter(k => !localRequests.some(r => r.id === k.id))] : localRequests;
     // The row whose Release is being confirmed, on a listing with several deals under way (its own people's rows).
     const [releaseRowId, setReleaseRowId] = useState<string | null>(null);
+    // Messages unread from the other side of each of those deals, by deal.
+    const [rowUnread, setRowUnread] = useState<Record<string, number>>({});
 
     const [authorAvgRating, setAuthorAvgRating] = useState<number | null>(null);
     const [authorRatingCount, setAuthorRatingCount] = useState<number>(0);
@@ -604,13 +606,24 @@ export default function PostDetailModal() {
                             const own = (await getMarketplaceTransactions(reader).catch(() => [])).filter(tx => tx.postId === singleId);
                             const listed = await getPost(singleId);
                             let kept: DealRow[] = [];
+                            let keeps: string[] = [];
                             if (listed?.author_pubkey && listed.author_pubkey !== reader && await readsOwn('enterprises', reader) && await readsOwn('escrow', reader)) {
                                 const b = await getBalance(reader).catch(() => null);
                                 if (Array.isArray((b as any)?.keeperOf) && (b as any).keeperOf.includes(listed.author_pubkey)) {
+                                    keeps = (b as any).keeperOf;
                                     kept = (await getDealsFor(listed.author_pubkey)).filter(tx => tx.postId === singleId);
                                 }
                             }
                             setListingTxs([...own, ...kept] as DealRow[]);
+                            // Each deal held on it: what its other side has written unread, for the Message button on its row.
+                            const unread: Record<string, number> = {};
+                            for (const tx of [...own, ...kept] as DealRow[]) {
+                                const side = tx.status === 'pending' && tx.id && !(tx.id in unread) ? dealSideOf(tx, reader, keeps) : null;
+                                if (!side) continue;
+                                const other = tx.buyerPublicKey === side ? tx.sellerPublicKey : tx.buyerPublicKey;
+                                unread[tx.id!] = await getUnreadCountForPost(singleId, reader, other).catch(() => 0);
+                            }
+                            setRowUnread(unread);
                             // Its requests, in the shape the phone's own rows have, for the keepers who answer them.
                             setKeptRequests(kept.filter(tx => tx.status === 'requested').map((tx: any) => ({
                                 id: tx.id, post_id: tx.postId, status: tx.status, buyer_pubkey: tx.buyerPublicKey, seller_pubkey: tx.sellerPublicKey,
@@ -912,10 +925,22 @@ export default function PostDetailModal() {
             } },
         ]);
     };
+    // A deal's other side, from its row: the Message the panel it replaced had (a recurring listing has one for each).
+    const messageRow = async (peer: string) => {
+        if (!identity) return;
+        try {
+            const conv = await createConversationApi('dm', [peer, identity.publicKey], identity.publicKey, undefined, post.id);
+            if (conv) router.push(`/chat/${conv.id}`);
+        } catch (e: any) {
+            Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
+        }
+    };
     const renderOwnDeal = (m: DealMoves) => {
         const tx = m.tx;
         const payer = tx.buyerPublicKey === m.actingAs;
         const otherName = (payer ? tx.sellerCallsign : tx.buyerCallsign) || t('Peer');
+        const otherKey = payer ? tx.sellerPublicKey : tx.buyerPublicKey;
+        const unread = rowUnread[tx.id!] ?? 0;
         const confirming = showCompleteConfirm && releaseRowId === tx.id;
         const since = tx.createdAt ? formatDate(new Date(tx.createdAt), 'day-month') : '';
         return (
@@ -950,6 +975,18 @@ export default function PostDetailModal() {
                 {m.cancelHold && (
                     <Pressable accessibilityRole="button" accessibilityHint={t('Cancels the transaction and returns the post to the market')} style={styles.cancelTxBtn} disabled={accepting} onPress={() => cancelRow(m)}>
                         <Text style={styles.cancelTxBtnText}>{t('❌ Cancel Trust Hold')}</Text>
+                    </Pressable>
+                )}
+                {!!otherKey && otherKey !== me && (
+                    <Pressable accessibilityRole="button" style={styles.messageBtn} onPress={() => messageRow(otherKey)}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={styles.messageBtnText}>{t('💬 Message {name}', { name: otherName })}</Text>
+                            {unread > 0 && (
+                                <View style={styles.unreadBadge}>
+                                    <Text style={styles.unreadBadgeText}>{unread}</Text>
+                                </View>
+                            )}
+                        </View>
                     </Pressable>
                 )}
             </View>
@@ -1518,6 +1555,16 @@ export default function PostDetailModal() {
                             </Text>
                         )}
                         {ownRows.map(renderOwnDeal)}
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t('All your deals')}
+                            onPress={() => setShowDealsSheet(true)}
+                            style={{ alignItems: 'center', marginTop: 4, paddingVertical: 4 }}
+                        >
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, fontWeight: '500' }}>
+                                {t('All your deals ›')}
+                            </Text>
+                        </Pressable>
                     </View>
                 )}
 

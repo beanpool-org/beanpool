@@ -36,7 +36,7 @@ import { memberShop, newListingCategory, shopOf, visitorShop } from '../engine/s
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { pledgesReturnedAt as pledgesReturnedAtFor } from '../engine/unfunded-pledges.js';
-import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
+import { db, pledgeToProject, getCrowdfundProject, mayCancelProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, PROJECT_DEADLINE_PASSED_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -505,6 +505,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // Every known pledge as one total, unless the reader is an owner or admin (getEnterprisePledgesForReader).
             pledges: getEnterprisePledgesForReader(treasury, backingReader),
             isLeadOrSoleKeeperOrAdmin: actor ? isLeadOrSoleKeeperOrAdmin(treasury, actor) : false,
+            // Whether this reader may cancel the project, as its cancel asks (db.ts mayCancelProject): a node admin, its lead,
+            // its only keeper when nobody leads it, or its maker when no keeper was ever bound to it. Both apps draw Cancel
+            // from this alone, never from the keepers list, which can't say who is an admin or whether a keeper ever left.
+            mayCancel: actor && m.lifecycle === 'bounded' ? mayCancelProject(treasury, actor) : false,
             availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
             keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
                 ? getKeeperRequests(treasury, 'pending').map(r => keeperRequestForReader(r, backingReader))

@@ -62,6 +62,8 @@ export interface Project {
     enterprise_pubkey?: string | null;
     created_at: string;
     updated_at?: string | null;
+    /** When a keeper first left it (apps/server db.ts noteKeeperLeftProject): its maker's cancel asks it. Absent from an older server. */
+    keeper_left_at?: string | null;
 }
 
 export interface SyncAccount {

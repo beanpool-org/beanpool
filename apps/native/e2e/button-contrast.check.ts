@@ -14,7 +14,7 @@ import { formatReport, scanTree, topSkips } from '../utils/button-contrast';
  */
 const ROOT = process.env.BUTTON_CONTRAST_ROOT ?? join(__dirname, '..');
 
-// The pairs measured on main when this was written were 6,499 (3,244 light, 3,255 dark); a scanner that stops reading
+// The pairs measured when this was last set were 6,541 (3,265 light, 3,276 dark); a scanner that stops reading
 // styles (a renamed StyleSheet helper, a changed hook) measures far fewer and would pass for the wrong reason. About
 // two thirds of that, so deleting or reworking a few screens does not trip it.
 const MIN_PAIRS_MEASURED = 4300;

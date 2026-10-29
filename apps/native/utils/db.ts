@@ -3598,14 +3598,17 @@ async function ownProfileRowWouldChange(
 ): Promise<boolean> {
     if (!selfPubkey || pk !== selfPubkey) return false;
     const before = await txn.getFirstAsync(
-        'SELECT callsign, avatar_url, profile_updated_at FROM members WHERE public_key = ?',
+        'SELECT callsign, avatar_url FROM members WHERE public_key = ?',
         [pk]
-    ) as { callsign: string | null; avatar_url: string | null; profile_updated_at?: string | null } | null;
+    ) as { callsign: string | null; avatar_url: string | null } | null;
     if (!before) return Boolean(incomingCallsign || incomingAvatar);
     if (incomingCallsign !== (before.callsign ?? '')) return true;
     if (incomingAvatar !== null && incomingAvatar !== before.avatar_url) return true;
     if (incomingAvatar === null && avatarClears && before.avatar_url !== null) return true;
-    if (incomingUpdatedAt !== null && incomingUpdatedAt !== (before.profile_updated_at ?? null)) return true;
+    if (incomingUpdatedAt !== null) {
+        const held = await txn.getFirstAsync('SELECT profile_updated_at FROM members WHERE public_key = ?', [pk]) as { profile_updated_at: string | null } | null;
+        if (incomingUpdatedAt !== (held?.profile_updated_at ?? null)) return true;
+    }
     return false;
 }
 

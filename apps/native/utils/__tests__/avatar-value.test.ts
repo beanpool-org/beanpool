@@ -1099,17 +1099,22 @@ describe('applyDelta emits profile_updated for the viewer\'s own row', () => {
 
     // Profile S1, Damo (b): a node from before versioned face URLs keeps one address for every photo, so only its stamp
     // says the photo is new; the header busts its image cache with it (MemberAvatar `updatedAt`) once it re-reads.
+    /** The row as before, and the stamp it holds (read on its own, only when the node sends one). */
+    const localRowWithStamp = (stamp: string) => {
+        h.getFirstAsync.mockImplementation(async (sql: string) => (/SELECT callsign, avatar_url FROM members/.test(sql)
+            ? { callsign: 'Damo', avatar_url: '/api/avatar/x?size=thumb' }
+            : /SELECT profile_updated_at FROM members/.test(sql) ? { profile_updated_at: stamp } : null));
+    };
+
     it('emits when only the node\'s stamp for the viewer\'s card moves, at the same face address', async () => {
-        h.getFirstAsync.mockImplementation(async (sql: string) => (/SELECT callsign, avatar_url/.test(sql)
-            ? { callsign: 'Damo', avatar_url: '/api/avatar/x?size=thumb', profile_updated_at: '2026-10-28T09:00:00.000Z' } : null));
+        localRowWithStamp('2026-10-28T09:00:00.000Z');
         expect(await syncMember({
             publicKey: SELF_PK, callsign: 'Damo', avatarUrl: '/api/avatar/x?size=thumb', profileUpdatedAt: '2026-10-29T09:00:00.000Z',
         })).toHaveLength(1);
     });
 
     it('stays silent when the stamp is the one the row holds, or the node sends none', async () => {
-        h.getFirstAsync.mockImplementation(async (sql: string) => (/SELECT callsign, avatar_url/.test(sql)
-            ? { callsign: 'Damo', avatar_url: '/api/avatar/x?size=thumb', profile_updated_at: '2026-10-28T09:00:00.000Z' } : null));
+        localRowWithStamp('2026-10-28T09:00:00.000Z');
         expect(await syncMember({
             publicKey: SELF_PK, callsign: 'Damo', avatarUrl: '/api/avatar/x?size=thumb', profileUpdatedAt: '2026-10-28T09:00:00.000Z',
         })).toHaveLength(0);

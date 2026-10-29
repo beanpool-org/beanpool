@@ -338,6 +338,9 @@ importers:
       vitest:
         specifier: ^3.0.5
         version: 3.2.7(patch_hash=yo5egcshjmvo4ng2hdugexw424)(@types/node@22.19.15)(jiti@1.21.7)(jsdom@30.0.1(@noble/hashes@2.0.1))(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2)
+      yoga-layout:
+        specifier: 3.2.1
+        version: 3.2.1
 
   apps/pwa:
     dependencies:
@@ -8075,6 +8078,9 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
+
+  yoga-layout@3.2.1:
+    resolution: {integrity: sha512-0LPOt3AxKqMdFBZA3HBAt/t/8vIKq7VaQYbuA8WxCgung+p9TVyKRYdpvCb80HcdTN2NkbIKbhNwKUfm3tQywQ==}
 
   youch@3.3.4:
     resolution: {integrity: sha512-UeVBXie8cA35DS6+nBkls68xaBBXCye0CNznrhszZjTbRVnJKQuNsyLKBTTL4ln1o1rh2PKtv35twV7irj5SEg==}
@@ -17040,6 +17046,8 @@ snapshots:
   ylru@1.4.0: {}
 
   yocto-queue@0.1.0: {}
+
+  yoga-layout@3.2.1: {}
 
   youch@3.3.4:
     dependencies:

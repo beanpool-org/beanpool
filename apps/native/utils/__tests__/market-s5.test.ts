@@ -22,9 +22,12 @@ describe('Phone Market S5 requirements (app/(tabs)/market.tsx)', () => {
     });
 
     it('list row thumbnail is 80 dp (not 96 dp)', () => {
-        // Thumbnail image and CategoryTile wrapper width & minHeight are 80
-        expect(marketSrc).toContain('width: 80, height: \'100%\', minHeight: 80');
-        expect(marketSrc).not.toContain('width: 96, height: \'100%\', minHeight: 96');
+        // Thumbnail image and CategoryTile wrapper width & minHeight are 80. The height is the row's (alignSelf: 'stretch'),
+        // not `height: '100%'`, which this assertion used to pin: Yoga read that against the whole list and a lone card
+        // filled the screen (market-card-height-layout.test.ts measures it).
+        expect(marketSrc).toContain('width: 80, minHeight: 80, alignSelf: \'stretch\'');
+        expect(marketSrc).not.toContain('width: 96, minHeight: 96');
+        expect(marketSrc).not.toContain('width: 80, height: \'100%\'');
     });
 
     it('EventCard list thumbnail is 80 dp (not 96 dp)', () => {

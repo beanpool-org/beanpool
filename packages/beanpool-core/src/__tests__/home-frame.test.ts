@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_TYPES, HOME_COLUMN_CHOICES, HOME_DECIDE_ROWS, HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES,
+    HOME_CARD_TYPES, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS, HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES,
     HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardSettings, cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard,
     readDecideSettings, readHomeLayout, readSearchSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
@@ -319,6 +319,13 @@ describe('home frame §5.2 (4): the default and the words', () => {
         // Today's card is 3 rows; the two new choices send more, and an app never draws more than the most a node sends.
         expect(HOME_DECIDE_ROWS).toEqual({ counts: 3, open: 5, mine: 5 });
         expect(HOME_DECIDE_ROWS_MAX).toBe(5);
+        // The sheet's choices on both apps are one list: every setting once, in order, in plain words (shown through t()).
+        expect(HOME_DECIDE_CHOICES.map(c => [c.show, t(c.label), t(c.note)])).toEqual([
+            ['counts', 'Summary', 'The Decisions closing soonest, and the first poll.'],
+            ['open', 'All open', 'Up to five open Decisions, and the first poll.'],
+            ['mine', 'My votes', 'Open Decisions you voted in or proposed.'],
+        ]);
+        expect(HOME_DECIDE_CHOICES.map(c => c.show)).toEqual([...HOME_DECIDE_SHOWS]);
         const added = addCard(layout([one('steps')]), 'decide', { settings: { show: 'mine', extra: 1 }, now: NOW });
         expect(added.ok && added.layout.cards[0]).toEqual({ id: 'decide', type: 'decide', settings: { show: 'mine' } });
         expect(added.ok && cardSettings(added.layout.cards[0])).toEqual({ show: 'mine' });

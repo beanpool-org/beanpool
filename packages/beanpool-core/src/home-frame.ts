@@ -177,6 +177,16 @@ export type HomeDecideSettings = { show: HomeDecideShow };
 export const HOME_DECIDE_ROWS: Readonly<Record<HomeDecideShow, number>> = { counts: 3, open: 5, mine: 5 };
 export const HOME_DECIDE_ROWS_MAX = Math.max(...Object.values(HOME_DECIDE_ROWS));
 
+/**
+ * The Decide card's choices as the settings sheet offers them on both apps (one text, so the phone and the web never
+ * drift): the chip and a line under the chosen one saying what it shows. word() keys: shown through t().
+ */
+export const HOME_DECIDE_CHOICES: ReadonlyArray<{ show: HomeDecideShow; label: WordKey; note: WordKey }> = [
+    { show: 'counts', label: word('Summary'), note: word('The Decisions closing soonest, and the first poll.') },
+    { show: 'open', label: word('All open'), note: word('Up to five open Decisions, and the first poll.') },
+    { show: 'mine', label: word('My votes'), note: word('Open Decisions you voted in or proposed.') },
+];
+
 /** The Decide card's settings, tolerant: anything but `open` or `mine` is `counts` (today's card, the default). */
 export function readDecideSettings(raw: unknown): HomeDecideSettings {
     const show = isPlainObject(raw) ? raw.show : undefined;

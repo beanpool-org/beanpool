@@ -29,7 +29,7 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
+    HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
@@ -734,7 +734,8 @@ function DecideBody({
 
     return (
         <div>
-            {items.slice(0, 3).map(item => {
+            {/* As many rows as the node sent for the card's setting (core HOME_DECIDE_ROWS): three, or five for "All open" and "My votes". */}
+            {items.slice(0, HOME_DECIDE_ROWS_MAX).map(item => {
                 const when = closesIn(item.closesAt, now);
                 const votedStatus = item.voted ? t('You voted') : t('Not yet');
                 const sub = [when, votedStatus].filter(Boolean).join(' · ');

@@ -2258,8 +2258,118 @@ describe('sun and moon: worked out in the browser, from the place the answer hol
     });
 });
 
+describe('the Decide card shows just the votes that are yours: one setting on the card (My votes)', () => {
+    const decideRow = (id: string, title: string, voted: boolean, inHours: number) => ({ id, title, closesAt: new Date(Date.now() + inHours * 3_600_000).toISOString(), voted });
+    const ALL = [
+        decideRow('d1', 'Compost bay', false, 2), decideRow('d2', 'Bus shelter', true, 5), decideRow('d3', 'Tool library', false, 9),
+        decideRow('d4', 'Seed fund', false, 20), decideRow('d5', 'Hall roof', false, 30),
+    ];
+    /** What the node's decideCard answers for each setting (apps/server routes/home-answer.ts): three rows, five, or the member's own. */
+    const decideFor = (show: unknown): HomeAnswer['cards']['decide'] => show === 'mine'
+        ? { open: 1, soonestClosesAt: ALL[1].closesAt, polls: 0, pollsMore: false, items: [ALL[1]], poll: null }
+        : { open: 5, soonestClosesAt: ALL[0].closesAt, polls: 0, pollsMore: false, items: show === 'open' ? ALL : ALL.slice(0, 3), poll: null };
+    const layoutWith = (settings?: Record<string, unknown>, onHome = true) => ({
+        v: 2 as const, dismissed: {}, updatedAt: AT,
+        cards: [{ id: 'market', type: 'market' }, ...(onHome ? [{ id: 'decide', type: 'decide', ...(settings ? { settings } : {}) }] : []), { id: 'events', type: 'events' }],
+    });
+    /** A node that keeps the newer list and builds the Decide card from the setting stored for it, as the real one does. */
+    function nodeDeciding(start: ReturnType<typeof layoutWith>) {
+        let account: ReturnType<typeof layoutWith> = start;
+        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
+            const l = prefs['home.layout'] as unknown as typeof account | undefined;
+            if (l && Date.parse(l.updatedAt!) >= Date.parse(account.updatedAt!)) account = l;
+            return { success: true, 'home.layout': account } as never;
+        });
+        vi.mocked(api.getHome).mockImplementation(async () => {
+            const stored = account.cards.find(c => c.type === 'decide') as { settings?: { show?: unknown } } | undefined;
+            const base = answer();
+            return fresh({ ...base, layout: account as never, cards: { ...base.cards, ...(stored ? { decide: decideFor(stored.settings?.show) } : {}) } });
+        });
+        return { account: () => account };
+    }
+    const rows = () => screen.queryAllByTestId('home-decide-item').map(r => r.textContent);
+    const chips = () => within(screen.getByTestId('home-settings-show')).getAllByRole('button').map(b => [b.textContent, b.getAttribute('aria-pressed')]);
+
+    it('Settings… from the card\'s "…": the three choices, the stored one pressed; My votes and Save keep the card where it is, save it, read after the save, and draw only the voted row', async () => {
+        const node = nodeDeciding(layoutWith({ show: 'open' }));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-card-decide');
+        // "All open" sends five rows, and the card draws all five.
+        await waitFor(() => expect(rows()).toHaveLength(5));
+        expect(cardIds().slice(0, 3)).toEqual(['market', 'decide', 'events']);
+        fireEvent.click(within(card).getByTestId('home-card-menu'));
+        fireEvent.click(within(card).getByTestId('home-menu-settings'));
+        const dialog = await screen.findByTestId('home-settings-dialog');
+        expect(within(dialog).queryByTestId('home-settings-q')).toBeNull();
+        expect(chips()).toEqual([['Summary', 'false'], ['All open', 'true'], ['My votes', 'false']]);
+        expect(screen.getByTestId('home-settings-show-note')).toHaveTextContent('Up to five open Decisions, and the first poll.');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'My votes' }));
+        expect(chips()).toEqual([['Summary', 'false'], ['All open', 'false'], ['My votes', 'true']]);
+        expect(screen.getByTestId('home-settings-show-note')).toHaveTextContent('Open Decisions you voted in or proposed.');
+        const reads = vi.mocked(api.getHome).mock.calls.length;
+        fireEvent.click(within(dialog).getByTestId('home-settings-submit'));
+        await waitFor(() => expect(rows()).toHaveLength(1));
+        expect(rows()[0]).toContain('Bus shelter');
+        expect(rows()[0]).toContain('You voted');
+        expect(cardIds().slice(0, 3)).toEqual(['market', 'decide', 'events']);
+        expect(node.account().cards.map(c => c.id)).toEqual(['market', 'decide', 'events']);
+        expect(node.account().cards[1]).toEqual({ id: 'decide', type: 'decide', settings: { show: 'mine' } });
+        // Saved, then Home read again with the Decide card asked for.
+        expect(vi.mocked(api.getHome).mock.calls.length).toBeGreaterThan(reads);
+        expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
+        expect(vi.mocked(api.getHome).mock.calls.at(-1)![0]!.cards).toContain('decide');
+    });
+
+    it('a card with no setting, or one this build cannot read, opens on Summary and draws three rows', async () => {
+        for (const settings of [undefined, { show: 'watching', ids: ['d1'] }]) {
+            cleanup();
+            vi.stubGlobal('indexedDB', memoryIndexedDB());
+            resetHomeCacheForTest();
+            nodeDeciding(layoutWith(settings));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const card = await screen.findByTestId('home-card-decide');
+            await waitFor(() => expect(rows()).toHaveLength(3));
+            fireEvent.click(within(card).getByTestId('home-card-menu'));
+            fireEvent.click(within(card).getByTestId('home-menu-settings'));
+            await screen.findByTestId('home-settings-dialog');
+            expect(chips().find(c => c[1] === 'true'), JSON.stringify(settings)).toEqual(['Summary', 'true']);
+            expect(screen.getByTestId('home-settings-show-note')).toHaveTextContent('The Decisions closing soonest, and the first poll.');
+        }
+    });
+
+    it('Add a card: Decide asks what it shows first (Summary pressed); My votes and Add to Home save it first on Home, read after the save, and draw the voted row', async () => {
+        const node = nodeDeciding(layoutWith(undefined, false));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(cardIds()).not.toContain('decide');
+        fireEvent.click(screen.getByTestId('home-add-open'));
+        fireEvent.click(screen.getByRole('button', { name: 'Add Decide to Home' }));
+        const dialog = await screen.findByTestId('home-settings-dialog');
+        expect(chips().find(c => c[1] === 'true')).toEqual(['Summary', 'true']);
+        expect(within(dialog).getByTestId('home-settings-submit')).toHaveTextContent('Add to Home');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'My votes' }));
+        const reads = vi.mocked(api.getHome).mock.calls.length;
+        fireEvent.click(within(dialog).getByTestId('home-settings-submit'));
+        await waitFor(() => expect(rows()).toHaveLength(1));
+        expect(cardIds()[0]).toBe('decide');
+        expect(node.account().cards[0]).toEqual({ id: 'decide', type: 'decide', settings: { show: 'mine' } });
+        expect(vi.mocked(api.getHome).mock.calls.length).toBeGreaterThan(reads);
+        expect(lastCall(vi.mocked(api.getHome))).toBeGreaterThan(lastCall(vi.mocked(api.saveHomePreferences)));
+        expect(vi.mocked(api.getHome).mock.calls.at(-1)![0]!.cards).toContain('decide');
+        expect(screen.getByTestId('home-live')).toHaveTextContent('Decide added to Home');
+    });
+
+    it('a node from before the setting answers the Summary card whatever is stored: the page draws the rows it was sent', async () => {
+        nodeDeciding(layoutWith({ show: 'mine' }));
+        vi.mocked(api.getHome).mockImplementation(async () => fresh({ ...answer(), layout: layoutWith({ show: 'mine' }) as never, cards: { ...answer().cards, decide: decideFor('counts') } }));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-decide');
+        await waitFor(() => expect(rows()).toHaveLength(3));
+    });
+});
+
 // ── Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1–§3) ──────────────────────────────────────
-describe('Getting started in the web app: a newcomer\'s Home is the card alone, the tour is theirs to start, its end is kept on the account', () => {
+describe('Getting started in the web app:a newcomer\'s Home is the card alone, the tour is theirs to start, its end is kept on the account', () => {
     /** A member here for the first time: never saved a Home, never ended the tour. */
     const newcomer = (over: Partial<HomeAnswer> = {}) => {
         const a = answer({ layout: null });

@@ -40,7 +40,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, type DealMoves, type DealRow } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, type DealMoves, type DealRow } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -902,6 +902,15 @@ export default function PostDetailModal() {
     const deals = listingDeals(listingTxs, { id: post.id, authorPublicKey: post.author_pubkey, type: post.type, status: post.status }, me, operatedTreasuries);
     const pinnedTxId = Array.isArray(txId) ? txId[0] : txId;
     const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === pinnedTxId) - Number(a.tx.id === pinnedTxId)) : [];
+    // The reader's own request, by core's one rule (dealMoves), as on the web: theirs to withdraw, a keeper's too (the node
+    // lets a keeper ask for their enterprise's lendable Offer or offer to help with its Need), and never on its own people's
+    // list to approve or deny as the enterprise. Every other request stays on that list, as it always did (an older row on
+    // the phone can lack a side).
+    const requestMoves = (r: any) => dealMoves({
+        id: r.id, postId: post.id, status: r.status, buyerPublicKey: r.buyer_pubkey, sellerPublicKey: r.seller_pubkey,
+        postAuthorPublicKey: post.author_pubkey, postType: post.type,
+    }, me, operatedTreasuries);
+    const toAnswer = requests.filter(r => !requestMoves(r)?.withdraw);
     const afterDealStep = () => { DeviceEventEmitter.emit('sync_data_updated'); };
     // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
     const releaseRow = async (m: DealMoves) => {
@@ -1122,7 +1131,7 @@ export default function PostDetailModal() {
         ]);
     };
 
-    const myRequest = requests.find(r => r.buyer_pubkey === identity?.publicKey || r.seller_pubkey === identity?.publicKey);
+    const myRequest = requests.find(r => requestMoves(r)?.withdraw);
 
     const handleApprove = async (transactionId: string) => {
         if (!identity) return;
@@ -1217,6 +1226,38 @@ export default function PostDetailModal() {
         } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
         setAccepting(false);
     };
+
+    // The reader's own request waiting (one who asked, a keeper on their enterprise's listing too): whom it waits on, what it
+    // commits, and Withdraw, theirs.
+    const renderMyRequest = (req: any) => (
+        <View style={styles.confirmBox}>
+            <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>{isLoan ? t('Asked to borrow') : t('Deal Established')}</Text>
+            {(isLoan || !isOffer) && (
+                <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>
+                    {isLoan ? listingDealLines.askedToBorrow(cardAuthor) : listingDealLines.offeredToHelp(cardAuthor)}
+                </Text>
+            )}
+            <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
+                {isLoan ? (
+                    t('Nothing is held until the lender says yes.')
+                ) : isOffer ? (
+                    req.hours
+                        ? committedOfferWords(dealQuantityUnit(post.price_type), req.hours, req.credits)
+                        : t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits: req.credits })
+                ) : (
+                    <Sentence
+                        text={req.hours
+                            ? requestedNeedWords(dealQuantityUnit(post.price_type, post.lendable), req.hours, req.credits, formatNumber(req.credits * 0.985, 2))
+                            : t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: req.credits, net: formatNumber(req.credits * 0.985, 2) })}
+                        parts={{ owned: <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}>{t('(100% community owned)')}</Text> }}
+                    />
+                )}
+            </Text>
+            <Pressable accessibilityRole="button" style={[styles.cancelActionBtn, { width: '100%' }]} onPress={handleWithdraw} disabled={accepting}>
+                <Text style={styles.cancelActionBtnText}>{accepting ? t('Withdrawing...') : t('Withdraw Request')}</Text>
+            </Pressable>
+        </View>
+    );
 
     const pickEditPhoto = () => {
         if (editPhotos.length >= 5) return;
@@ -1794,35 +1835,7 @@ export default function PostDetailModal() {
                     </View>
                 ) : !isOwnPost && post.status === 'active' && !isAcceptedByMe && escrowOn && (
                     <View style={styles.otherPostActions}>
-                        {myRequest ? (
-                            <View style={styles.confirmBox}>
-                                <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>{isLoan ? t('Asked to borrow') : t('Deal Established')}</Text>
-                                {(isLoan || !isOffer) && (
-                                    <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>
-                                        {isLoan ? listingDealLines.askedToBorrow(cardAuthor) : listingDealLines.offeredToHelp(cardAuthor)}
-                                    </Text>
-                                )}
-                                <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
-                                    {isLoan ? (
-                                        t('Nothing is held until the lender says yes.')
-                                    ) : isOffer ? (
-                                        myRequest.hours
-                                            ? committedOfferWords(dealQuantityUnit(post.price_type), myRequest.hours, myRequest.credits)
-                                            : t('You have committed {credits} credits to a Trust Wallet for this offer.', { credits: myRequest.credits })
-                                    ) : (
-                                        <Sentence
-                                            text={myRequest.hours
-                                                ? requestedNeedWords(dealQuantityUnit(post.price_type, post.lendable), myRequest.hours, myRequest.credits, formatNumber(myRequest.credits * 0.985, 2))
-                                                : t('You have requested to earn {credits} credits ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.', { credits: myRequest.credits, net: formatNumber(myRequest.credits * 0.985, 2) })}
-                                            parts={{ owned: <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}>{t('(100% community owned)')}</Text> }}
-                                        />
-                                    )}
-                                </Text>
-                                <Pressable accessibilityRole="button" style={[styles.cancelActionBtn, { width: '100%' }]} onPress={handleWithdraw} disabled={accepting}>
-                                    <Text style={styles.cancelActionBtnText}>{accepting ? t('Withdrawing...') : t('Withdraw Request')}</Text>
-                                </Pressable>
-                            </View>
-                        ) : showAcceptConfirm ? (
+                        {myRequest ? renderMyRequest(myRequest) : showAcceptConfirm ? (
                             <View style={styles.confirmBox}>
                                 <Text style={styles.confirmBoxTitle}>{isLoan ? t('Ask to borrow this?') : isOffer ? t('Accept this Offer?') : t('Offer to Fulfill?')}</Text>
                                 
@@ -1945,11 +1958,17 @@ export default function PostDetailModal() {
                     </View>
                 )}
 
+                {/* A keeper's own request on their enterprise's listing (the node lets them ask): theirs to withdraw, as anyone's,
+                    never on its people's list to answer. An author never has one. */}
+                {isOwnPost && !!myRequest && post.status === 'active' && escrowOn && (
+                    <View style={styles.otherPostActions}>{renderMyRequest(myRequest)}</View>
+                )}
+
                 {/* 3.5 Author Requests Display */}
-                {isOwnPost && post.status === 'active' && requests.length > 0 && (
+                {isOwnPost && post.status === 'active' && toAnswer.length > 0 && (
                     <View style={styles.requestsContainer}>
-                        <Text style={styles.requestsTitle}>{t('✋ Fulfillment Requests ({n})', { n: requests.length })}</Text>
-                        {requests.map(req => {
+                        <Text style={styles.requestsTitle}>{t('✋ Fulfillment Requests ({n})', { n: toAnswer.length })}</Text>
+                        {toAnswer.map(req => {
                             const reqPubkey = req.resolvedReqPubkey || ((post.type === 'need' && req.seller_pubkey) ? req.seller_pubkey : req.buyer_pubkey);
                             // Fallback gracefully if pubkey is somehow still empty
                             const safePubkeyStr = reqPubkey ? reqPubkey.slice(0, 8) : t('Unknown');

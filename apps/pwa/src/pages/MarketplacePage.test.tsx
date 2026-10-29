@@ -1358,6 +1358,23 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(ownYes).not.toHaveBeenCalled();
     });
 
+    it("a keeper's own offer to help on the enterprise's Need: theirs to withdraw, never on the farm's list to approve or deny", async () => {
+        keeperOf = [ENT];
+        const mine = deal({ id: 'tx-mine', status: 'requested', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME, sellerCallsign: 'Guest' });
+        entDeals = [mine, deal({ id: 'tx-mo', status: 'requested', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo', createdAt: '2026-10-25T10:00:00.000Z' })];
+        const withdraw = vi.spyOn(api, 'cancelMarketplaceRequest').mockResolvedValue({ success: true } as any);
+        const deny = vi.spyOn(api, 'treasuryReject');
+        await open(farmNeed, [mine]);
+        // Mo's offer is the farm's to answer; the keeper's own is not.
+        expect(await screen.findByText('✋ Fulfillment Requests (1)')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Approve & Hold in Trust' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Deny' })).toHaveLength(1);
+        expect(screen.getByText('You offered to help · waiting on Farm Co-op')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Offer' }));
+        await waitFor(() => expect(withdraw).toHaveBeenCalledWith('tx-mine', ME));
+        expect(deny).not.toHaveBeenCalled();
+    });
+
     for (const [who, kept] of [['a keeper of another enterprise', ['other-co-pk']], ['a member who keeps nothing', []]] as const) {
         it(`${who}: a stranger to the farm's deals, never read for them, and may offer to help`, async () => {
             keeperOf = [...kept];

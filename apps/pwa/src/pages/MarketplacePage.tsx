@@ -23,7 +23,7 @@ import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCom
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
-    dealsNeedingMe, listingDeals, listingDealLines, listingChips, listingChipWords, type DealMoves,
+    dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, type DealMoves,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -1367,6 +1367,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const deals = listingDeals(keptDeals.length > 0 ? [...myTransactions, ...keptDeals] : myTransactions,
             { id: selectedPost.id, authorPublicKey: selectedPost.authorPublicKey, type: selectedPost.type, status: selectedPost.status }, me, keeperOf);
         const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === selectedTxId) - Number(a.tx.id === selectedTxId)) : [];
+        // The reader's own request, by core's one rule (dealMoves), as on the phone: theirs to withdraw, a keeper's too (the node
+        // lets a keeper ask for their enterprise's lendable Offer or offer to help with its Need), and never on its own people's
+        // list to approve or deny as the enterprise. Every other request stays on that list.
+        const requestMoves = (r: MarketplaceTransaction) => dealMoves({ ...r, postAuthorPublicKey: selectedPost.authorPublicKey, postType: selectedPost.type }, me, keeperOf);
+        const myRequest = requests.find(r => requestMoves(r)?.withdraw);
+        const toAnswer = requests.filter(r => !requestMoves(r)?.withdraw);
         const afterDealStep = () => {
             refresh();
             onRefreshTransactions?.();
@@ -1980,13 +1986,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
 
                 {/* 1.5 Pending Requests (For Authors of Needs or Lendable Offers, and the keepers of an enterprise that wrote one) */}
-                {deals.own && (selectedPost.type === 'need' || selectedPost.lendable) && selectedPost.status === 'active' && requests.length > 0 && (
+                {deals.own && (selectedPost.type === 'need' || selectedPost.lendable) && selectedPost.status === 'active' && toAnswer.length > 0 && (
                     <div className="mt-4 bg-oat-50 dark:bg-nature-950 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 shadow-sm">
                         <p className="font-bold text-amber-800 dark:text-amber-500 text-sm mb-2 text-center">
-                            {t('✋ Fulfillment Requests ({n})', { n: requests.length })}
+                            {t('✋ Fulfillment Requests ({n})', { n: toAnswer.length })}
                         </p>
                         <div className="flex flex-col gap-2">
-                            {requests.map((req: any) => {
+                            {toAnswer.map((req: any) => {
                                 const isNeed = selectedPost.type === 'need';
                                 const requesterKey = isNeed ? req.sellerPublicKey : (req.buyerPublicKey || req.sellerPublicKey);
                                 const requesterCallsign = isNeed ? (req.sellerCallsign || req.buyerCallsign) : (req.buyerCallsign || req.sellerCallsign);
@@ -2109,7 +2115,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <span aria-hidden="true">🗞️ </span>{t('Daily Pulse — a daily thought for the post-extraction economy')}
                         </p>
                     </div>
-                ) : !deals.own && selectedPost.status === 'active' && !isAcceptedByMe && (
+                ) : (!deals.own || myRequest) && selectedPost.status === 'active' && !isAcceptedByMe && (
                     <div style={{
                         display: 'flex', flexDirection: 'column', gap: '0.5rem',
                         marginTop: '0.75rem',
@@ -2118,8 +2124,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             // A lendable Offer is asked for, never taken in one step: the lender says yes first (the node refuses a
                             // one-step accept).
                             const isLoan = selectedPost.type === 'offer' && !!selectedPost.lendable;
-                            // The one asking: on a loan the borrower (the buyer), on a Need the helper (the seller).
-                            const myRequest = requests.find(r => (isLoan ? r.buyerPublicKey : r.sellerPublicKey) === identity?.publicKey);
+                            // The reader's own request (on a loan the borrower's, on a Need the helper's), a keeper's on their
+                            // enterprise's listing too: here, with Withdraw, never on its people's list to answer.
                             if (myRequest) {
                                 return (
                                     <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 shadow-sm text-center">

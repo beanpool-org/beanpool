@@ -354,6 +354,22 @@ for (const theme of ['light', 'dark'] as const) {
             expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent === 'Approve & Commit')).toBe(false);
         });
 
+        it("a keeper's own offer to help on the enterprise's Need: theirs to withdraw, never on the farm's list to approve or deny", async () => {
+            node.keeperOf = [ENT];
+            const mine = deal({ id: 'tx-mine', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20 });
+            node.mine = [mine];
+            node.kept = [mine, deal({ id: 'tx-mo', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];
+            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', credits: 20 }));
+            // Mo's offer is the farm's to answer; the keeper's own is not.
+            expect(host.textContent).toContain('✋ Fulfillment Requests (1)');
+            expect(Array.from(host.querySelectorAll('button')).filter(b => b.textContent === 'Approve & Commit')).toHaveLength(1);
+            expect(Array.from(host.querySelectorAll('button')).filter(b => b.textContent === 'Deny')).toHaveLength(1);
+            expect(host.textContent).toContain('You offered to help · waiting on Farm Co-op');
+            await press(host, 'Withdraw Request');
+            expect(net.calls).toContain('db.cancelMarketplaceRequest');
+            expect(net.calls).not.toContain('db.treasuryReject');
+        });
+
         it('a helper on a Need, approved: the Beans held for them, the payer named, Cancel; no Release', async () => {
             node.mine = [deal({ buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 20 })];
             await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20 }));

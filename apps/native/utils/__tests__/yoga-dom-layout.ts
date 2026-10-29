@@ -9,7 +9,7 @@
  *
  * What it models, and what it does not:
  *  - Every element is a node with its `data-style` (View, Pressable, FlatList's content, a cell). A top-level <span> is
- *    Text: a leaf, measured by a plain character-count rule (about half a font size a character, a line a font size and a
+ *    Text: a leaf, measured by a plain character-count rule (a little over half a font size a character, a line a font size and a
  *    quarter, both times the font scale), wrapped to the width Yoga offers and cut at `data-lines` (numberOfLines). An
  *    <img> is a picture with no size of its own (expo-image has none), and an <i> an icon. This is not Android's text:
  *    fonts differ, so a text-heavy height is an estimate. Use it for what a style does to a box, not for pixels of words.
@@ -120,7 +120,7 @@ function textMeasure(el: Element, fontScale: number) {
     const lineHeight = (typeof s.lineHeight === 'number' ? s.lineHeight * fontScale : fontSize * 1.25);
     const chars = (el.textContent ?? '').length;
     const maxLines = Number(el.getAttribute('data-lines')) || Infinity;
-    const natural = chars * fontSize * 0.5;
+    const natural = chars * fontSize * 0.56;
     return (width: number, widthMode: number) => {
         if (chars === 0) return { width: 0, height: 0 };
         const room = widthMode === Yoga.MEASURE_MODE_UNDEFINED ? Infinity : width;

@@ -340,7 +340,10 @@ export default function SettingsScreen() {
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
     const [copiedWords, setCopiedWords] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
-    const [hasRole, setHasRole] = useState(false);
+    // Whether this member holds a role, as NodeAdminEntry's ask of the node answered it. 'unknown' until it answers (or the
+    // ask fails): a role holder's "How this community works" row sits in the Community admin group, so the plain COMMUNITY
+    // section is drawn only on 'none', never while the question is still open.
+    const [roleAsk, setRoleAsk] = useState<'unknown' | 'role' | 'none'>('unknown');
     const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     // The pricing guide is estimates in Beans: not offered on a community with Beans off (the worldwide one).
     const nodeProfile = useNodeProfile();
@@ -1886,10 +1889,10 @@ export default function SettingsScreen() {
                 {/* A sign-in copy a community still keeps, moved to BeanPool's key vault with one sign-in (utils/vault-move.ts). */}
                 <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                 {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
-                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} onRoleChange={(r) => setHasRole(!!r && canManageNode(r))} activeFeatures={activeFeatures} />
+                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} onRoleChange={(r) => setRoleAsk(canManageNode(r) ? 'role' : 'none')} activeFeatures={activeFeatures} />
                 {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
                 <OwnerWordsCard styles={styles} />
-                {!hasRole && (
+                {roleAsk === 'none' && (
                     <>
                         <Text style={styles.sectionHeader}>{t("COMMUNITY")}</Text>
                         <View style={styles.menuGroup}>

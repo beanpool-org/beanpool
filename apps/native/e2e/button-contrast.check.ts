@@ -5,7 +5,7 @@ import { formatReport, scanTree, topSkips } from '../utils/button-contrast';
 /**
  * Every button and label the phone draws, light and dark (scripts/test-all.sh, `native_dark_contrast`).
  *
- * Reads apps/native/app and apps/native/components, finds each piece of words with the background its own screen sets
+ * Reads apps/native/app, apps/native/components and apps/native/tools, finds each piece of words with the background its own screen sets
  * behind it, and fails below 4.5:1 (3:1 for 24px, or 18.66px bold, words), naming file:line and both colours. The method,
  * and what it leaves out, is at the top of utils/button-contrast.ts; the reviewed exceptions (none to start) are in
  * utils/button-contrast-exceptions.ts. No device, no node, no browser; a few seconds.
@@ -21,11 +21,12 @@ const MIN_PAIRS_MEASURED = 4300;
 
 // The other half of the same guard, on what was NOT read. A style the scanner cannot follow (a prop, a table built in
 // another file, `styles` handed to a child component) adds no colours, so a screen that moves into such a shape stops being
-// measured and still looks clean. On main: 1,538 style expressions in 87 files, and 28 files whose `styles` table could not
-// be found (the report prints both lists). Either number rising is a screen going dark: teach utils/button-contrast.ts
-// the new shape, or, if it truly cannot be read, raise the number here in the same change so a reviewer sees it.
-const MAX_UNREAD_STYLES = 1600;
-const MAX_UNREAD_TABLE_FILES = 28;
+// measured and still looks clean. As measured then: 1,720 style expressions in 90 files, and 42 files that read a style from a
+// local table (`styles`, `s`, `chat`, whatever it is called) the scanner could not find (the report prints both lists).
+// Either number rising is a screen going dark: teach utils/button-contrast.ts the new shape, or, if it truly cannot be read,
+// raise the number here in the same change so a reviewer sees it. The style ceiling has the same margin it had before (about 60).
+const MAX_UNREAD_STYLES = 1780;
+const MAX_UNREAD_TABLE_FILES = 42;
 
 describe('the phone\'s buttons and labels reach 4.5:1 in light and in dark', () => {
     const report = scanTree(ROOT);

@@ -5,7 +5,7 @@
  * Why: Save Profile was white on white in dark for two weeks after the colour library moved (settings.tsx: background
  * `colors.text.heading` with words `colors.text.inverse`, both #ffffff in darkColors). text-ink-contrast.test.ts holds the
  * grey inks to the standard grounds, and the web has pwa_dark_classes; nothing read a button's own fill against its own
- * label. This does, without a device: it parses app/ and components/ with the TypeScript compiler, and for every JSX
+ * label. This does, without a device: it parses app/, components/ and tools/ with the TypeScript compiler, and for every JSX
  * element whose style sets a `color` (a <Text>) it finds the nearest enclosing element that sets a `backgroundColor`
  * (or the element's own), resolves both through lightColors and darkColors, and measures them with core's contrastRatio.
  *
@@ -27,7 +27,8 @@
  * (`tone.fg`, `rgbaOf(...)`, a prop), words with no background set above them on the same screen (text-ink-contrast covers
  * the standard grounds), icons, and anything behind a component boundary (a custom component's own background).
  * Styles it cannot follow add nothing, so they are counted too: `stats.opaqueStyles` (with the files that have most), and
- * `stats.unreadTables`, the files whose `styles` table was not found (a spec function imported from another file,
+ * `stats.unreadTables`, the files that read a style from a local declaration, whatever it is called (`styles`, `s`, `chat`), whose
+ * StyleSheet.create table was not found (a spec function imported from another file, `const s = homeStyles(colors)`,
  * `StyleSheet.create(spec(colors))`, `styles` handed to a child as a prop). formatReport prints both, and
  * e2e/button-contrast.check.ts fails when either rises past its ceiling.
  * Translucent fills are laid over the page, then over the card, and the worse result counts.
@@ -508,7 +509,10 @@ function evalStyle(e0: ts.Expression, ctx: Ctx, depth = 0): Alt[] {
         const table = decl ? findCreate(decl, 0, isPatternInit(decl) ? p.root : undefined) : undefined;
         const entry = table?.properties.find((q) => propName(q) === p.path[0]);
         if (entry && ts.isPropertyAssignment(entry)) return evalStyle(entry.initializer, ctx, depth + 1);
-        if (!table && /styles$/i.test(p.root)) ctx.unreadTables.add(p.root);
+        // A table nobody could find: a local declaration (`const s = homeStyles(colors)`, `const chat = useStyles(makeChatStyles)` with
+        // the spec imported), whatever it is called, or a name that says it is one (`styles` imported). `StyleSheet.absoluteFill`
+        // and `props.style` are neither.
+        if (!table && (decl || /styles$/i.test(p.root))) ctx.unreadTables.add(p.root);
     }
     if (ts.isIdentifier(e)) {
         const decl = findDecl(e.text, e);
@@ -823,6 +827,9 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
 
 // ── The tree, the exceptions, the report ─────────────────────────────────────────────────────────────────────────
 
+/** The folders of apps/native that draw the phone: `lint` in package.json covers the same three, and tools/ holds the shared ToolButton. */
+const SCANNED_DIRS = ['app', 'components', 'tools'];
+
 function walk(dir: string, out: string[] = []): string[] {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
         const p = join(dir, e.name);
@@ -885,11 +892,11 @@ export function scanSource(file: string, text: string, exceptions: readonly Cont
     return report(found, stats, exceptions);
 }
 
-/** Scan app/ and components/ under `nativeRoot` (apps/native). */
+/** Scan app/, components/ and tools/ (the shared tool button, chips and frame) under `nativeRoot` (apps/native). */
 export function scanTree(nativeRoot: string, exceptions: readonly ContrastException[] = BUTTON_CONTRAST_EXCEPTIONS): ContrastReport {
     const stats = newStats();
     const found = new Map<string, Finding>();
-    for (const dir of ['app', 'components']) {
+    for (const dir of SCANNED_DIRS) {
         for (const abs of walk(join(nativeRoot, dir))) {
             const rel = relative(nativeRoot, abs).split(sep).join('/');
             scanFile(rel, readFileSync(abs, 'utf8'), stats, found);

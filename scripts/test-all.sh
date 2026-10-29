@@ -296,7 +296,7 @@ run_check "native_phone_width" run_native_phone_width
 
 # The phone's buttons and labels in light AND dark, read from the source (Save Profile was white on white in dark for two
 # weeks after the colour library moved: settings.tsx set text.heading under text.inverse, the same #ffffff in darkColors).
-# apps/native/utils/button-contrast.ts parses app/ and components/ with the TypeScript compiler, finds each piece of words
+# apps/native/utils/button-contrast.ts parses app/, components/ and tools/ with the TypeScript compiler, finds each piece of words
 # with the background its own screen sets behind it, resolves both through lightColors and darkColors, and fails below
 # 4.5:1 (3:1 for 24px, or 18.66px bold), naming file:line and both colours. Reviewed exceptions, none to start, are in
 # utils/button-contrast-exceptions.ts. The scanner's own canaries are in the native unit tests (utils/__tests__/button-contrast.test.ts).

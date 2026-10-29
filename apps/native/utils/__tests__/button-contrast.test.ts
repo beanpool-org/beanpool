@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { scanSource, parseColour, formatReport, topOpaqueFiles, type ContrastReport } from '../button-contrast';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { scanSource, scanTree, parseColour, formatReport, topOpaqueFiles, type ContrastReport } from '../button-contrast';
 
 /**
  * The button-contrast scanner (utils/button-contrast.ts) on small fixture screens. The whole-tree run is
@@ -502,6 +505,46 @@ describe('what it could not read is counted and named, never silently clean', ()
         expect(text).toContain(`style table not found: ${FILE} (styles)`);
         expect(text).toContain(`most unread: ${FILE} (${r.stats.opaqueStyles})`);
         expect(topOpaqueFiles(r)).toEqual([`${FILE} (${r.stats.opaqueStyles})`]);
+    });
+
+    it.each([
+        ['a table called `s` made by an imported function (the home cards)', `const s = homeStyles(colors);`, 's'],
+        ['a table called `chat` from an imported spec (the chat screen)', `const chat = useStyles(makeChatStyles);`, 'chat'],
+        ['a local object of styles', `const tone = pick ? { btn: { backgroundColor: colors.brand.fill } } : { btn: {} };`, 'tone'],
+    ])('%s is a missing table whatever it is called', (_why, decl, name) => {
+        const r = scanRaw(`
+            export function Screen() {
+                const { colors } = useTheme();
+                ${decl}
+                return <Pressable style={${name}.btn}><Text style={${name}.btnText}>Save</Text></Pressable>;
+            }`);
+        expect(r.stats.unreadTables.get(FILE)).toEqual([name]);
+        expect(r.stats.opaqueStyles).toBeGreaterThan(0);
+        expect(formatReport(r)).toContain(`style table not found: ${FILE} (${name})`);
+    });
+
+    it('a table called `s` that IS found is not reported, and `StyleSheet.absoluteFill` is not a table', () => {
+        const r = scanRaw(`
+            export function Screen() {
+                const { colors } = useTheme();
+                const s = useStyles(({ colors }) => StyleSheet.create({ btn: { backgroundColor: colors.brand.fill }, btnText: { color: colors.text.onBrand } }));
+                return <Pressable style={[s.btn, StyleSheet.absoluteFill]}><Text style={s.btnText}>Save</Text></Pressable>;
+            }`);
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.checked).toEqual({ light: 1, dark: 1 });
+    });
+
+    it('scanTree reads tools/ as well as app/ and components/ (the shared ToolButton is there)', () => {
+        const root = mkdtempSync(join(tmpdir(), 'button-contrast-'));
+        try {
+            for (const dir of ['app', 'components', 'tools']) {
+                mkdirSync(join(root, dir));
+                writeFileSync(join(root, dir, 'x.tsx'), SAVE_PROFILE);
+            }
+            expect(scanTree(root, []).findings.map((f) => f.file).sort()).toEqual(['app/x.tsx', 'components/x.tsx', 'tools/x.tsx']);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     it('a prop that is not a style table (`style`, `props.style`) is counted as unread styles but is not a missing table', () => {

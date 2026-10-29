@@ -52,6 +52,9 @@ function member(ctx: any): string | undefined {
     return actor;
 }
 
+/** Maximum total payload size for a notices seen request body (64 KB). */
+export const MAX_NOTICES_SEEN_PAYLOAD_BYTES = 64 * 1024;
+
 export function createNoticeRoutes(_deps: RouteDeps): Router {
     const router = new Router();
 
@@ -82,6 +85,17 @@ export function createNoticeRoutes(_deps: RouteDeps): Router {
         if (getNodeRole() !== 'primary') {
             ctx.status = 503;
             ctx.body = { error: word('This server is a standby copy of the community, not its main server. Notices are marked seen on the main server.'), code: 'standby' };
+            return;
+        }
+        const payloadBytes = (ctx as any).rawBody
+            ? Buffer.byteLength((ctx as any).rawBody)
+            : Buffer.byteLength(JSON.stringify((ctx as any).requestBody || {}));
+        if (payloadBytes > MAX_NOTICES_SEEN_PAYLOAD_BYTES) {
+            ctx.status = 413;
+            ctx.body = {
+                error: 'payload_too_large',
+                message: `Notices seen payload exceeds maximum allowed size of ${MAX_NOTICES_SEEN_PAYLOAD_BYTES} bytes.`,
+            };
             return;
         }
         const ids = ((ctx as any).requestBody || {}).ids;

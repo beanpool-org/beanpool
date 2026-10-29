@@ -457,6 +457,7 @@ export const SUITES = [
     'test-live-post-payloads',
     'test-moderation-notifications',
     'test-moderation-notices-kept',
+    'test-notices-seen-boundary',
     'test-member-blocks',
     'test-member-blocks-standby',
     'test-tool-store',

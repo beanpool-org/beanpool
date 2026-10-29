@@ -30,17 +30,22 @@ const MINE: Record<string, MarketplaceTransaction[]> = {
         deal({ id: 'tx-b', postId: 'p-mine', credits: 30, buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Ana' }),
     ],
     keeper: [],
+    // A daily Need's author releasing a 3-day deal from its row, with 5 typed (review on #2588).
+    release: [deal({ id: 'tx-d', postId: 'p-olives', credits: 60, hours: 3, buyerPublicKey: ME, buyerCallsign: 'Ana', sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })],
+    // A door that named a deal that is over by now: the listing as it is, and what became of that deal.
+    over: [deal({ id: 'tx-c', postId: 'p-other', status: 'cancelled', credits: 6 })],
     feed: [
         deal({ id: 'tx-1', postId: 'p-course' }),
         deal({ id: 'tx-2', postId: 'p-ladder', status: 'requested' }),
     ],
 };
-const OPEN: Record<string, string | undefined> = { payer: 'p-course', payee: 'p-stall', author: 'p-mine', keeper: 'p-farm' };
+const OPEN: Record<string, string | undefined> = { payer: 'p-course', payee: 'p-stall', author: 'p-mine', keeper: 'p-farm', release: 'p-olives', over: 'p-other' };
+const PINNED: Record<string, string | undefined> = { author: 'tx-b', over: 'tx-c' };
 const view = q.get('view') || 'feed';
 
 createRoot(document.getElementById('root')!).render(
     <div className="max-w-[320px]">
         <MarketplacePage identity={identity} isMember={true} openPostId={OPEN[view] ?? null} onPostOpened={() => {}}
-            openTxId={view === 'author' ? 'tx-b' : null} transactions={MINE[view] ?? []} />
+            openTxId={PINNED[view] ?? null} transactions={MINE[view] ?? []} />
     </div>,
 );

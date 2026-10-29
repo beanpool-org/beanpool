@@ -35,6 +35,7 @@ const POSTS = [
     post({ id: 'p-farm', type: 'need', category: 'labour', title: 'Mend the polytunnel', credits: 20, authorPublicKey: ENT, authorCallsign: 'Farm Co-op' }),
     post({ id: 'p-ladder', category: 'tools', title: 'Long ladder', repeatable: false, lendable: true, credits: 0, createdAt: '2026-10-25T10:00:00.000Z' }),
     post({ id: 'p-other', category: 'food', title: 'Duck eggs', credits: 6 }),
+    post({ id: 'p-olives', type: 'need', category: 'food', title: 'Pick the olives', credits: 20, priceType: 'daily', authorPublicKey: ME, authorCallsign: 'Ana' }),
 ];
 const FARM_DEALS = [{ id: 'tx-f', postId: 'p-farm', postTitle: 'Mend the polytunnel', credits: 20, status: 'pending', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', createdAt: AT }];
 
@@ -44,12 +45,25 @@ const cases = [
     { id: 'author', wait: '[data-testid="deals-under-way"]' },
     { id: 'keeper', wait: '[data-testid="deals-under-way"]' },
     { id: 'feed', wait: '[data-testid="card-deal-chip"]' },
+    // A row's Release opened, 3 days changed to 5: the Beans that will go (review on #2588).
+    {
+        id: 'release', wait: '[data-testid="deal-row-tx-d"]', target: '[data-testid="release-line-tx-d"]',
+        act: async (page) => {
+            await page.locator('[data-testid="deal-row-tx-d"] button', { hasText: 'Release Credits' }).first().click();
+            await page.locator('[data-testid="deal-row-tx-d"] input').fill('5');
+        },
+    },
+    { id: 'over', wait: '[data-testid="pinned-deal-over"]' },
 ];
+// --only release,over: just those views.
+const onlyAt = process.argv.indexOf('--only');
+const only = onlyAt > 0 ? new Set(process.argv[onlyAt + 1].split(',')) : null;
 
 const browser = await chromium.launch();
 try {
     for (const theme of ['light', 'dark']) {
         for (const c of cases) {
+            if (only && !only.has(c.id)) continue;
             const context = await browser.newContext({ viewport: { width: 320, height: 860 }, colorScheme: theme, deviceScaleFactor: 1 });
             const page = await context.newPage();
             await page.addInitScript(() => {
@@ -77,8 +91,9 @@ try {
             await page.goto(`${base}?view=${c.id}${theme === 'dark' ? '&dark=1' : ''}`);
             await page.waitForSelector(c.wait, { timeout: 20000 }).catch(() => console.log(`${c.id} ${theme}: ${c.wait} not found`));
             await page.waitForTimeout(600);
+            if (c.act) { await c.act(page); await page.waitForTimeout(300); }
             // The deal's own panel in view: the rows for its people, the taker's panel, or the first chip.
-            const target = c.id === 'feed' ? '[data-testid="card-deal-chip"]' : (c.id === 'author' || c.id === 'keeper') ? '[data-testid="deals-under-way"]' : `${c.wait}`;
+            const target = c.target ?? (c.id === 'feed' ? '[data-testid="card-deal-chip"]' : (c.id === 'author' || c.id === 'keeper') ? '[data-testid="deals-under-way"]' : `${c.wait}`);
             await page.locator(target).first().evaluate((el) => el.scrollIntoView({ block: 'center' })).catch(() => {});
             const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
             const outPath = path.join(OUT_DIR, `deals-s4-${c.id}-320-x1.3-${theme}.png`);

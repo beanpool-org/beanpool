@@ -865,15 +865,16 @@ async function main(): Promise<void> {
     {
         const builds = () => ({ ...homeCardBuilds });
         const vera = member('HomeVotesVera'); // voted in one Decision, proposed none
-        const pat = member('HomeVotesPat');   // proposed Decisions, voted in none
+        const pat = member('HomeVotesPat');   // proposed one Decision, voted in none
         const zoe = member('HomeVotesZoe');   // neither
-        // Four more open Decisions, all Pat's, so six are open (more than counts' three and open's five); taken out again at the
-        // end so the next section's two stay the two. One closes soonest of all, which Vera votes in.
-        const tempIds = [1, 2, 3, 4].map(i => `dec-home-mine-${i}`);
+        // Five more open Decisions beside Bob's, so six are open (more than counts' three and open's five); taken out again at
+        // the end so the next section's two stay the two. A member opens one at a time (idx_decisions_member_author_open), so
+        // four are the node's own (SYSTEM: nobody's proposal) and the fourth to close is Pat's.
+        const tempIds = [1, 2, 3, 4, 5].map(i => `dec-home-mine-${i}`);
         tempIds.forEach((id, i) => db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, franchise, status, opens_at, closes_at)
                 VALUES (?, ?, ?, 'x', 'pool', 'grant', '1m1v', 'open', ?, ?)`)
-            .run(id, pat.pk, `HomeVotes proposal ${i + 1}`, new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + (i + 1) * 3600_000).toISOString()));
-        db.prepare("INSERT INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used) VALUES ('dec-home-2', ?, 1, 1, 1)").run(vera.pk);
+            .run(id, i === 3 ? pat.pk : 'SYSTEM', `HomeVotes proposal ${i + 1}`, new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + (i + 1) * 3600_000).toISOString()));
+        db.prepare("INSERT INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used) VALUES ('dec-home-1', ?, 1, 1, 1)").run(vera.pk);
         db.prepare("INSERT INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used) VALUES ('dec-home-mine-4', ?, 0, 1, 1)").run(vera.pk);
         let stamp = 100_000;
         const show = (who: Id, settings: unknown) => postJson('/api/members/preferences', who, { publicKey: who.pk, preferences: {
@@ -902,35 +903,29 @@ async function main(): Promise<void> {
             assert(saved.status === 200 && open?.open === 6 && open.items.length === 5 && open.polls === 1 && open.poll?.title === 'HomeSentinel which day'
                 && (after.decide ?? 0) === (before.decide ?? 0) + 1,
                 `open: five of the six open Decisions, the poll as in counts, built once (${open?.items?.length} rows, builds ${before.decide ?? 0} → ${after.decide ?? 0})`);
-            assert(rowsOf(open) === JSON.stringify([['dec-home-mine-1', false], ['dec-home-mine-2', false], ['dec-home-mine-3', false], ['dec-home-mine-4', true], ['dec-home-1', false]]),
-                `open: soonest closing first, the sixth (closing last) left out, and Vera's own ballot on the fourth (${rowsOf(open)})`);
+            assert(rowsOf(open) === JSON.stringify([['dec-home-mine-1', false], ['dec-home-mine-2', false], ['dec-home-mine-3', false], ['dec-home-mine-4', true], ['dec-home-mine-5', false]]),
+                `open: soonest closing first, the sixth (Bob's, closing last) left out, and Vera's own ballot on the fourth (${rowsOf(open)})`);
         }
-        // mine: only what Vera voted in (two Decisions) — Bob's and Carol's open ones she did not vote in, and Pat's others, absent.
+        // mine: only what Vera voted in (two Decisions): the four others open, none hers, are absent.
         await show(vera, { show: 'mine' });
         const veras = await decide(vera);
-        assert(veras?.open === 2 && rowsOf(veras) === JSON.stringify([['dec-home-mine-4', true], ['dec-home-2', true]]) && veras.poll === null && veras.polls === 0 && veras.pollsMore === false,
+        assert(veras?.open === 2 && rowsOf(veras) === JSON.stringify([['dec-home-mine-4', true], ['dec-home-1', true]]) && veras.poll === null && veras.polls === 0 && veras.pollsMore === false,
             `mine, voted: only the two she voted in, soonest first, no poll and no polls count (${rowsOf(veras)} open ${veras?.open} poll ${JSON.stringify(veras?.poll)})`);
         const veraText = JSON.stringify(veras);
-        assert(['dec-home-1', 'dec-home-mine-1', 'dec-home-mine-2', 'dec-home-mine-3'].every(id => !veraText.includes(id)) && !veraText.includes('HomeSentinel which day'),
-            'and no other member\'s open vote, and no poll, is anywhere in her card');
-        // mine: proposed. Pat voted in none, and the four are his; the rows say Not yet (voted false) and are capped at five.
+        assert(['dec-home-mine-1', 'dec-home-mine-2', 'dec-home-mine-3', 'dec-home-mine-5'].every(id => !veraText.includes(id)) && !veraText.includes('HomeSentinel which day'),
+            'and no open vote of hers or nobody\'s, and no poll, is anywhere in her card');
+        // mine: proposed. Pat voted in none, and one is his; the row says Not yet (voted false). The three the node opened itself are
+        // nobody's proposal, so not his.
         await show(pat, { show: 'mine' });
         const pats = await decide(pat);
-        assert(pats?.open === 4 && rowsOf(pats) === JSON.stringify([['dec-home-mine-1', false], ['dec-home-mine-2', false], ['dec-home-mine-3', false], ['dec-home-mine-4', false]]),
-            `mine, proposed: his four, none voted (${rowsOf(pats)})`);
+        assert(pats?.open === 1 && rowsOf(pats) === JSON.stringify([['dec-home-mine-4', false]]),
+            `mine, proposed: his one, not voted, and none the node opened (${rowsOf(pats)})`);
         // mine: nothing yours is no card (as when nothing is open), though six are open; Zoe's own `counts` still has them.
         await show(zoe, { show: 'mine' });
         const zoeAsked = await get('/api/home?cards=needs,decide', zoe);
         assert(zoeAsked.status === 200 && JSON.stringify(cardsOf(zoeAsked)) === '["needs"]', `mine, none yours: no Decide card (${cardsOf(zoeAsked).join(',')})`);
         await show(zoe, { show: 'counts' });
         assert((await decide(zoe))?.open === 6, 'while her counts card still says six are open');
-        // A Decision the node opened itself is nobody's proposal: the system author is never "mine".
-        db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, franchise, status, opens_at, closes_at)
-                    VALUES ('dec-home-mine-sys', 'SYSTEM', 'HomeVotes node-opened', 'x', 'pool', 'grant', '1m1v', 'open', ?, ?)`)
-            .run(new Date(Date.now() - 3600_000).toISOString(), new Date(Date.now() + 30 * 60_000).toISOString());
-        await show(zoe, { show: 'mine' });
-        assert(!JSON.stringify(await decide(zoe) ?? null).includes('dec-home-mine-sys'), 'a node-opened Decision is not anyone\'s proposal: not in "mine"');
-        db.prepare("DELETE FROM decisions WHERE id = 'dec-home-mine-sys'").run();
 
         // The tag moves when the setting moves what the card shows, and a 304 still answers an unchanged Home.
         await show(vera, { show: 'counts' });

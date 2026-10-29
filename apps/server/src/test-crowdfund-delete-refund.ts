@@ -182,13 +182,14 @@ check(after.ok && Math.abs(after.drift - before.drift) < 0.0001, `the ledger aud
 const again = refusal(() => deleteCrowdfundProject(gate, kim));
 check(again !== null && near(balanceOf(ann), before.ann + 13) && outRows().length === gatePledges.length, `a second cancel pays nobody again (${again ?? 'it ran again'})`);
 
-// ── 9. Only a lead who may act cancels it: not the keeper left when nobody leads it, nor a stopped lead (review of #2554) ──
+// ── 9. Only a keeper who may act cancels it: not the keeper left switched off when nobody leads it, nor one of two keepers
+// with no lead, nor a stopped lead (review of #2554; its ONLY keeper who may act now can, CF-Q1, part 10) ──
 // The cancel is the project's wind-up (docs/the-commons.md: its lead keeper starts one) and can't be undone. Its edit's rule
 // falls back to the first keeper when no keeper leads it. That happens when the lead left and no keeper was active with
 // operator access to take over (promoteOrPauseAfterLeadLeft paused it), so the fallback named a keeper the engine had just
 // passed over. And a keeper whose account is suspended, or whose operator access an admin switched off, acts for no
 // enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up already ask.
-console.log('\n── Only a lead who may act cancels it ──');
+console.log('\n── Only a keeper who may act cancels it ──');
 const lia = makeMember('lia');
 const ola = makeMember('ola');
 const max = makeMember('max');

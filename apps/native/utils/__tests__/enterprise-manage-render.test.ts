@@ -438,7 +438,7 @@ for (const dark of [false, true]) {
             expect(host.textContent).not.toContain('OPERATOR CONTROLS');
             expect(cancel()).not.toBeNull();
             expect(styleOf(cancel()).borderColor).toBe(colors().feedback.danger.solid);
-            // That admin when the node says no (a funded project's, or one of its makers who left): none.
+            // The same reader when the node says no (say, no longer an admin): none.
             net.answer = community({ getTreasuryDetail: quietProject({ ...admin, mayCancel: false }), getBalance: { balance: 10, keeperOf: [] } });
             await render('console');
             expect(byId('manage-screen')).not.toBeNull();

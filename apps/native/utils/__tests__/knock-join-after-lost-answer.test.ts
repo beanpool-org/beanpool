@@ -372,7 +372,9 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
         expect(s.match(/AsyncStorage\.setItem\('beanpool_anchor_url', nodeUrl\)/g)).toHaveLength(2);
         const enterApp = slice(s, "if (spent === 'enterApp' && storedIdentity) {", 'return;');
         expect(enterApp).toContain("await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);");
-        const recorded = s.indexOf('if (!storedIdentity || knockMade) await recordJoinKeyMade(');
+        // Whichever key the record is written for, it is written before the community.
+        const recorded = s.indexOf('await recordJoinKeyMade(');
+        expect(recorded).toBeGreaterThan(s.indexOf(enterApp) + enterApp.length);
         expect(s.indexOf("await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);", s.indexOf(enterApp) + enterApp.length)).toBeGreaterThan(recorded);
     });
 

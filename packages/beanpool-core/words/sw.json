@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -785,5 +785,16 @@
   "Working Group": "Kikundi Kazi",
   "Guild": "Chama cha Wataalamu",
   "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Hakuna maharagwe kwenye jumuiya ya kimataifa. Eleza katika tangazo lako unachotaka kwa malipo: bure, kubadilishana, au omba.",
-  "Your first week": "Wiki yako ya kwanza"
+  "Your first week": "Wiki yako ya kwanza",
+  "🤝 IN TRUST": "🤝 KWA AMANA",
+  "✋ ASKED": "✋ IMEOMBWA",
+  "{name} · {n} Beans held · since {date}": "{name} · Maharagwe {n} yameshikiliwa · tangu {date}",
+  "Deals under way: {n}": "Mikataba inayoendelea: {n}",
+  "You act for {name} here.": "Hapa unatenda kwa niaba ya {name}.",
+  "You're helping with this · {n} Beans held for you": "Unasaidia na hili · Maharagwe {n} yameshikiliwa kwa ajili yako",
+  "You offered to help · waiting on {name}": "Umejitolea kusaidia · unamsubiri {name}",
+  "You asked to borrow it · nothing is held until {name} says yes": "Umeomba kuazima · hakuna kinachoshikiliwa hadi {name} akubali",
+  "Taken up by someone else for now.": "Mtu mwingine amechukua kwa sasa.",
+  "You've had this before · done {date}": "Umewahi kupata hiki · kilikamilika {date}",
+  "⭐ Review": "⭐ Maoni"
 }

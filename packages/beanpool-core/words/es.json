@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, front doors S15: the community card); gemini-3.8-flash-high (machine draft, front doors S15 words: look around global first)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, tool shed and shop); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, front doors S15: the community card); gemini-3.8-flash-high (machine draft, front doors S15 words: look around global first); claude-opus-5-5 (machine draft, deals S4: a listing by who you are)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -800,5 +800,16 @@
   "Already a member": "Ya soy miembro",
   "🌍 Look around the global community": "🌍 Echa un vistazo a la comunidad global",
   "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "No hay frijoles en la comunidad global. Di en tu publicación qué te gustaría a cambio: gratis, intercambio o preguntar.",
-  "Your first week": "Tu primera semana"
+  "Your first week": "Tu primera semana",
+  "🤝 IN TRUST": "🤝 EN CUSTODIA",
+  "✋ ASKED": "✋ PEDIDO",
+  "{name} · {n} Beans held · since {date}": "{name} · {n} Frijoles retenidos · desde el {date}",
+  "Deals under way: {n}": "Tratos en curso: {n}",
+  "You act for {name} here.": "Aquí actúas en nombre de {name}.",
+  "You're helping with this · {n} Beans held for you": "Estás ayudando con esto · {n} Frijoles retenidos para ti",
+  "You offered to help · waiting on {name}": "Ofreciste ayudar · esperando a {name}",
+  "You asked to borrow it · nothing is held until {name} says yes": "Pediste que te lo presten · no se retiene nada hasta que {name} diga que sí",
+  "Taken up by someone else for now.": "Otra persona lo ha tomado por ahora.",
+  "You've had this before · done {date}": "Ya lo tuviste antes · terminado el {date}",
+  "⭐ Review": "⭐ Reseña"
 }

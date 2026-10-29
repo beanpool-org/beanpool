@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-20",
@@ -933,5 +933,16 @@
   "Working Group": "مجموعة عمل",
   "Guild": "نقابة",
   "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "لا توجد فاصوليا في المجتمع العالمي. اذكر في منشورك ما تريده بالمقابل: مجانًا، مبادلة، أو بالاتفاق.",
-  "Your first week": "أسبوعك الأول"
+  "Your first week": "أسبوعك الأول",
+  "🤝 IN TRUST": "🤝 في الضمان",
+  "✋ ASKED": "✋ مطلوب",
+  "{name} · {n} Beans held · since {date}": "{name} · {n} فاصوليا محفوظة · منذ {date}",
+  "Deals under way: {n}": "صفقات جارية: {n}",
+  "You act for {name} here.": "أنت تتصرف باسم {name} هنا.",
+  "You're helping with this · {n} Beans held for you": "أنت تساعد في هذا · {n} فاصوليا محفوظة لك",
+  "You offered to help · waiting on {name}": "عرضت المساعدة · بانتظار {name}",
+  "You asked to borrow it · nothing is held until {name} says yes": "طلبت استعارته · لا شيء محفوظ حتى يوافق {name}",
+  "Taken up by someone else for now.": "أخذه شخص آخر حاليًا.",
+  "You've had this before · done {date}": "سبق أن حصلت على هذا · اكتمل في {date}",
+  "⭐ Review": "⭐ تقييم"
 }

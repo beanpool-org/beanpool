@@ -1160,7 +1160,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             deal({ id: 'tx-new', status: 'completed', completedAt: '2026-10-20T10:00:00.000Z', ratedByBuyer: false }),
         ]);
         expect(await screen.findByText("You've had this before · done 20 Oct")).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Leave Review' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '⭐ Review' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Accept Offer/ })).toBeInTheDocument();
     });
 

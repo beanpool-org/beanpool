@@ -320,4 +320,6 @@ export const listingDealLines = {
     askedToBorrow: (name: string) => t('You asked to borrow it · nothing is held until {name} says yes', { name }),
     takenByOther: () => t('Taken up by someone else for now.'),
     hadBefore: (date: string) => t("You've had this before · done {date}", { date }),
+    /** Rate that finished deal, from the listing. */
+    review: () => t('⭐ Review'),
 };

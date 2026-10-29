@@ -1694,7 +1694,7 @@ export default function PostDetailModal() {
                                     targetCallsign: (iPaid ? done.sellerCallsign : done.buyerCallsign) || t('Peer'),
                                 });
                             }}>
-                                <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' }}>{t('Leave Review')}</Text>
+                                <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' }}>{listingDealLines.review()}</Text>
                             </Pressable>
                         )}
                     </View>

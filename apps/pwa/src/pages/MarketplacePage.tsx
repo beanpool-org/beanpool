@@ -2037,7 +2037,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 onClick={() => { setReviewStars(5); setReviewComment(''); setPromptReviewForTx(reviewTargetOf(deals.lastDone!.tx, me)); }}
                                 className="text-xs font-bold text-emerald-700 dark:text-emerald-400 underline underline-offset-2 py-1"
                             >
-                                {t('Leave Review')}
+                                {listingDealLines.review()}
                             </button>
                         )}
                     </div>

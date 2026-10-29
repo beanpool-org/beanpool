@@ -135,7 +135,7 @@ const result = await build({
     loader: { '.js': 'jsx', '.png': 'empty', '.ttf': 'empty' },
     resolveExtensions: ['.web.tsx', '.web.ts', '.web.js', '.tsx', '.ts', '.js', '.mjs', '.json'],
     nodePaths: [path.join(ROOT, 'node_modules'), path.join(NATIVE, 'node_modules')],
-    define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"' },
+    define: { 'process.env.NODE_ENV': '"production"', __DEV__: 'false', 'process.env.EXPO_OS': '"web"', global: 'globalThis' },
     banner: { js: 'globalThis.process = globalThis.process || { env: {} };' },
     logLevel: 'error',
     plugins: [{
@@ -172,7 +172,7 @@ try {
     await context.route('**/*', (route) => (route.request().url().startsWith(base) ? route.continue() : route.abort()));
     const page = await context.newPage();
     const errors = [];
-    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('pageerror', (e) => { errors.push(String(e)); console.error('PAGE ERROR', String(e)); });
 
     /** One state's checks, run in the page. */
     const measure = async (label) => {

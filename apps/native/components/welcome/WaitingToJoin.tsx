@@ -3,6 +3,9 @@ import { useWords } from '../LanguageProvider';
 import { findLineWords } from '../find-community-lines';
 import type { WaitingLine } from '../../utils/waiting-to-join';
 
+/** A button's words, wrapped over two lines in a long language or at 1.3× text, stay in the middle of the button. */
+const CENTRED = { textAlign: 'center' as const };
+
 /** The welcome screen's styles these are drawn with (app/welcome.tsx makeStyles), so the waiting mode matches the screen. */
 export interface WaitingToJoinStyles {
     homeDoors: object;
@@ -46,6 +49,8 @@ export function WaitingToJoin({ lines, checking, joining, onCheckAgain, onJoin, 
 }) {
     const { t } = useWords();
     const busy = !!joining;
+    // A yes on the card: its Join is the one primary button, and Check again steps back beside the others.
+    const hasYes = lines.some(l => l.kind === 'invited');
     return (
         <View style={styles.homeDoors} testID="welcome-waiting">
             <View style={[styles.card, { padding: 16, marginBottom: 16 }]}>
@@ -82,7 +87,7 @@ export function WaitingToJoin({ lines, checking, joining, onCheckAgain, onJoin, 
                                 accessibilityRole="button"
                                 testID="welcome-waiting-got-it"
                             >
-                                <Text style={styles.secondaryBtnText}>{t('Got it')}</Text>
+                                <Text style={[styles.secondaryBtnText, CENTRED]}>{t('Got it')}</Text>
                             </Pressable>
                         )}
                     </View>
@@ -91,21 +96,24 @@ export function WaitingToJoin({ lines, checking, joining, onCheckAgain, onJoin, 
 
             {lines.length > 0 && (
                 <Pressable
-                    style={[styles.memberBtn, (checking || busy) && { opacity: 0.6 }]}
+                    style={[hasYes ? [styles.secondaryBtn, { marginBottom: 12, minHeight: 48 }] : styles.memberBtn, (checking || busy) && { opacity: 0.6 }]}
                     onPress={onCheckAgain}
                     disabled={checking || busy}
                     accessibilityRole="button"
+                    accessibilityLabel={t('Check again')}
                     accessibilityState={{ busy: checking, disabled: checking || busy }}
                     testID="welcome-waiting-check"
                 >
-                    {checking ? <ActivityIndicator color={accent} /> : <Text style={styles.memberBtnText}>{t('Check again')}</Text>}
+                    {checking && !hasYes
+                        ? <ActivityIndicator color={accent} />
+                        : <Text style={[hasYes ? styles.secondaryBtnText : styles.memberBtnText, CENTRED]}>{t('Check again')}</Text>}
                 </Pressable>
             )}
             <Pressable style={[styles.secondaryBtn, { marginBottom: 12, minHeight: 48 }]} onPress={onAskAnother} disabled={busy} accessibilityRole="button" testID="welcome-waiting-ask">
-                <Text style={styles.secondaryBtnText}>{lines.length > 0 ? t('Ask another community') : t('Ask a community to let you in')}</Text>
+                <Text style={[styles.secondaryBtnText, CENTRED]}>{lines.length > 0 ? t('Ask another community') : t('Ask a community to let you in')}</Text>
             </Pressable>
             <Pressable style={[styles.secondaryBtn, { minHeight: 48 }]} onPress={onJoinWithInvite} disabled={busy} accessibilityRole="button" testID="welcome-waiting-invite">
-                <Text style={styles.secondaryBtnText}>{t('🎟️ Join with an invite')}</Text>
+                <Text style={[styles.secondaryBtnText, CENTRED]}>{t('🎟️ Join with an invite')}</Text>
             </Pressable>
             <Pressable
                 style={styles.restoreSecondaryBtn}

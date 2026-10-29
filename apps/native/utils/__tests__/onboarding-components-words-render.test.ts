@@ -339,28 +339,31 @@ describe('the sign-in sheet (SsoEnrolSheet)', () => {
     }
     // The connect makes the copy only where the screen said (utils/sso-sheet-connect.ts `shownAt`). When the community's
     // rule moved on since, nothing is linked: no Try again (it would link where the member hasn't read), and the screen is
-    // told as the sheet closes, so it reads where a copy goes before they link one.
-    for (const shown of ['vault', 'community'] as const) {
-        it(`the screen said ${shown === 'vault' ? 'the key vault' : 'the community'} and the rule moved on: its sentence, no Try again, the screen told on Cancel`, async () => {
-            useVault();
-            sheet.answer = Promise.resolve({ enrolled: [], generation: null, skipped: [], available: 0, error: CONNECT_RULE_MESSAGES.changed });
-            let closed = 0;
-            let changed = 0;
-            await mount(createElement(SsoEnrolSheet, {
-                visible: true, provider: 'google', askPhoneLock: false, copiesAt: shown,
-                onClose() { closed++; }, onEnrolled() {}, onCopiesChanged() { changed++; },
-            }));
-            expect(sheet.options?.shownAt).toBe(shown);
-            expect(host!.textContent).toContain(pseudoLocalise(CONNECT_RULE_MESSAGES.changed));
-            const labels = all('button').map((b) => b.textContent);
-            expect(labels).not.toContain(pseudoLocalise('Try again'));
-            expect(labels).toContain(pseudoLocalise('Cancel'));
-            check(`the sheet, the rule moved on, ${shown}`);
-            expect(changed).toBe(0);
-            await click(all('button').find((b) => b.textContent === pseudoLocalise('Cancel')), 'Cancel');
-            expect(closed).toBe(1);
-            expect(changed).toBe(1);
-        });
+    // told as the sheet closes, so it reads where a copy goes before they link one. A rule that moved to `none` since is
+    // such a change too: Try again could only say so again, and the screen, told, stops offering sign-ins.
+    for (const [moved, error] of [['moved on', CONNECT_RULE_MESSAGES.changed], ['moved to none', CONNECT_RULE_MESSAGES.none]] as const) {
+        for (const shown of ['vault', 'community'] as const) {
+            it(`the screen said ${shown === 'vault' ? 'the key vault' : 'the community'} and the rule ${moved}: its sentence, no Try again, the screen told on Cancel`, async () => {
+                useVault();
+                sheet.answer = Promise.resolve({ enrolled: [], generation: null, skipped: [], available: 0, error });
+                let closed = 0;
+                let changed = 0;
+                await mount(createElement(SsoEnrolSheet, {
+                    visible: true, provider: 'google', askPhoneLock: false, copiesAt: shown,
+                    onClose() { closed++; }, onEnrolled() {}, onCopiesChanged() { changed++; },
+                }));
+                expect(sheet.options?.shownAt).toBe(shown);
+                expect(host!.textContent).toContain(pseudoLocalise(error));
+                const labels = all('button').map((b) => b.textContent);
+                expect(labels).not.toContain(pseudoLocalise('Try again'));
+                expect(labels).toContain(pseudoLocalise('Cancel'));
+                check(`the sheet, the rule ${moved}, ${shown}`);
+                expect(changed).toBe(0);
+                await click(all('button').find((b) => b.textContent === pseudoLocalise('Cancel')), 'Cancel');
+                expect(closed).toBe(1);
+                expect(changed).toBe(1);
+            });
+        }
     }
     it('any other refusal keeps Try again, and closing it tells the screen nothing', async () => {
         useVault();

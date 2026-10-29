@@ -52,8 +52,9 @@ export function SsoEnrolSheet({
      */
     copiesAt?: SignInCopies;
     /**
-     * The community's rule now sends the copy somewhere other than `copiesAt` said, so nothing was linked: told as the
-     * sheet closes, for the screen to read where a copy goes again before the member links one.
+     * The community's rule now sends the copy somewhere other than `copiesAt` said, or nowhere (`none`, where `copiesAt`
+     * said somewhere), so nothing was linked: told as the sheet closes, for the screen to read where a copy goes again
+     * before the member links one, and to offer no sign-in where the community keeps none.
      */
     onCopiesChanged?: () => void;
 }): React.JSX.Element | null {
@@ -70,7 +71,8 @@ export function SsoEnrolSheet({
     const [enrolResult, setEnrolResult] = useState<KeeperEnrolmentResult | null>(null);
     /**
      * The connect found the community's rule moved on from `copiesAt`, and linked nothing: no Try again (it would link
-     * where the member hasn't read), and the screen is told as the sheet closes (`onCopiesChanged`).
+     * where the member hasn't read, or, moved to `none`, could only say so again), and the screen is told as the sheet
+     * closes (`onCopiesChanged`).
      */
     const [copiesChanged, setCopiesChanged] = useState(false);
     /** Closing the sheet mid-sign-in: the sign-in, once done, deposits nothing (utils/sso-sheet-connect.ts). */
@@ -145,7 +147,9 @@ export function SsoEnrolSheet({
                 // The lower layers' sentences in the member's language (components/welcome/welcome-lines.ts); a node's
                 // or the key vault's own words as they came.
                 setErrorMessage(welcomeLineWords(result.error));
-                setCopiesChanged(result.error === CONNECT_RULE_MESSAGES.changed);
+                // The rule moved on since the screen read it: elsewhere, or to `none` where the screen said somewhere.
+                setCopiesChanged(result.error === CONNECT_RULE_MESSAGES.changed
+                    || (result.error === CONNECT_RULE_MESSAGES.none && copiesAt !== 'none'));
                 setStep('error');
             } else {
                 setEnrolResult(result);

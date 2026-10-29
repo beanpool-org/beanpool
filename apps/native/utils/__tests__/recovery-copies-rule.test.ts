@@ -68,7 +68,7 @@ import { sealSeedToSso } from '@beanpool/core';
 import { connectAndDeposit, CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 import { readNodeProfile } from '../node-profile';
 import { readRecoveryCopiesRule, signInCopiesAt, type SignInCopies } from '../vault-config';
-import { copiesRuleChange, copiesRuleNow, copiesRuleSeen, knownCopiesRule } from '../copies-rule';
+import { copiesAtFor, copiesRuleChange, copiesRuleNow, copiesRuleSeen, knownCopiesRule } from '../copies-rule';
 import { finishMove, vaultMoveOffer } from '../vault-move';
 import type { KeeperEnrolmentResult } from '../keeper-enrolment';
 import { COMMUNITY, CommunityKeepingCopies, installNetwork, noVault, useVault, VAULT, type Network } from './fake-vault';
@@ -283,6 +283,27 @@ describe('linking a sign-in, by the community\'s rule, in a build with the key v
         const { value } = await connect(COMMUNITY, 'vault');
         expect(value?.error).toBe(CONNECT_RULE_MESSAGES.none);
         expect(atVault()).toEqual([]);
+    });
+
+    // A screen reads the rule as kept within the hour (copies-rule.ts copiesRuleForScreen), so after the owners set `none`
+    // it alone still says the key vault. The connect links nothing and keeps the fresh answer: the screen, told as the sheet
+    // closes (components/SsoEnrolSheet.tsx), reads `none` when it looks again, and offers no sign-in.
+    it('the screen read the key vault, the community keeps none since: nothing linked, and the screen\'s next read is none', async () => {
+        const screenReads = async (): Promise<SignInCopies> => {
+            const read = copiesAtFor(COMMUNITY);
+            await vi.advanceTimersByTimeAsync(30_000);
+            return read;
+        };
+        community.rule = 'vault';
+        expect(await screenReads()).toBe('vault');
+        community.rule = 'none';
+        expect(await screenReads(), 'kept within the hour').toBe('vault');
+        facebookSaysYes();
+        const { value } = await connect(COMMUNITY, 'vault');
+        expect(value?.error).toBe(CONNECT_RULE_MESSAGES.none);
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+        expect(atVault()).toEqual([]);
+        expect(await screenReads()).toBe('none');
     });
 });
 

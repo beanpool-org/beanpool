@@ -170,7 +170,11 @@ const door = vi.hoisted(() => ({
     answer: null as any,
     signIn: null as any,
     cachedFeatures: null as any,
+    /** The community's rule for copies as this phone kept it just now (fresh), or null when it never heard one. */
+    cachedRule: null as null | string,
 }));
+/** The sign-in sheet's connect, when a case answers it (utils/sso-sheet-connect.ts); otherwise the real one. */
+const sheetConnect = vi.hoisted(() => ({ answer: null as null | ((options: Record<string, unknown>) => Promise<unknown>) }));
 const vaultState = vi.hoisted(() => ({ waiting: null as any, check: null as any, candidates: [] as any[] }));
 
 vi.mock('../identity', async (importOriginal) => {
@@ -250,7 +254,17 @@ vi.mock('../restore-account', async (importOriginal) => {
 });
 vi.mock('../node-profile', async (importOriginal) => {
     const real = await importOriginal<typeof import('../node-profile')>();
-    return { ...real, checkGlobalDoor: async () => door.check, getCachedNodeProfile: async () => (door.cachedFeatures ? { features: door.cachedFeatures } : null) };
+    return {
+        ...real,
+        checkGlobalDoor: async () => door.check,
+        getCachedNodeProfile: async () => (door.cachedRule
+            ? { features: door.cachedFeatures ?? {}, recoveryCopies: door.cachedRule, checkedAt: new Date().toISOString() }
+            : door.cachedFeatures ? { features: door.cachedFeatures } : null),
+    };
+});
+vi.mock('../sso-sheet-connect', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../sso-sheet-connect')>();
+    return { ...real, connectAndDeposit: (options: any) => (sheetConnect.answer ? sheetConnect.answer(options) : real.connectAndDeposit(options)) };
 });
 vi.mock('../global-door-offer', async (importOriginal) => {
     const real = await importOriginal<typeof import('../global-door-offer')>();
@@ -330,6 +344,7 @@ import WelcomeScreen from '../../app/welcome';
 import { noVault, useVault } from './fake-vault';
 import { DOOR_MESSAGES } from '../global-join';
 import { DOOR_CHOICE_TEXT } from '../../components/WordsDoor';
+import { CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
@@ -347,7 +362,8 @@ beforeEach(() => {
     lock.none = true;
     phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null; phone.redeemFails = null;
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' };
-    door.check = { ok: true, profile: { features: {} } }; door.answer = null; door.signIn = null; door.cachedFeatures = null;
+    door.check = { ok: true, profile: { features: {} } }; door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedRule = null;
+    sheetConnect.answer = null;
     vaultState.waiting = null; vaultState.check = null; vaultState.candidates = [];
     noVault();
     setLanguage('en');
@@ -548,6 +564,35 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         expect(host!.textContent).toContain(pseudoLocalise('🌍 A place to meet'));
         expect(host!.textContent).not.toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
         check('How it Works, no Beans');
+    });
+
+    // Vault rethink VR2: Safety Backup read the community's rule as the key vault, and its owners set `none` since. The
+    // connect links nothing (and keeps the fresh answer, as copies-rule.ts copiesRuleNow does); the sheet offers no Try
+    // again, which could only say so again, and closing it has the step read the rule again: no sign-in is offered.
+    it('Safety Backup, the rule moved to none since the step read it: no Try again, and closing the sheet puts the sign-ins away', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        door.cachedRule = 'vault';
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        let shownAt: unknown;
+        sheetConnect.answer = async (options) => {
+            shownAt = options.shownAt;
+            door.cachedRule = 'none';
+            return { enrolled: [], generation: null, skipped: [], available: 0, error: CONNECT_RULE_MESSAGES.none };
+        };
+        await mount('xx');
+        expect(all('[data-sso]').length, 'a sign-in is offered where the key vault keeps the copy').toBeGreaterThan(0);
+        await press('Protect with Google', 'xx');
+        expect(shownAt).toBe('vault');
+        expect(host!.textContent).toContain(pseudoLocalise(CONNECT_RULE_MESSAGES.none));
+        expect(all('[data-modal] button').map((b) => b.textContent)).not.toContain(pseudoLocalise('Try again'));
+        check('Safety Backup, the sheet, the rule moved to none');
+        await press('Cancel', 'xx');
+        expect(host!.querySelector('[data-modal]')).toBeNull();
+        expect(host!.querySelector('[data-testid="no-copies-row"]'), 'the step says the community keeps none').toBeTruthy();
+        expect(all('[data-sso]'), 'and offers no sign-in').toEqual([]);
+        check('Safety Backup, the community keeps none now');
     });
 });
 

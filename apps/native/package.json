@@ -10,7 +10,8 @@
     "ios": "expo run:ios",
     "lint": "eslint app components constants services utils tools --no-error-on-unmatched-pattern",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:contrast": "vitest run --config vitest.contrast.config.ts"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",

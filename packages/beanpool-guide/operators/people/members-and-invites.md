@@ -54,13 +54,13 @@ A standby copies these records (all but the connection's reference), and so does
 
 ## Who may invite
 
-Open **How this community works** (under Setting up, or Settings → How this community works). Under **Who can join**, pick one of three choices for who can bring people into the community (make an invite, or answer someone who asks to join) and save it:
+Open **How it works** in the left menu (the page is titled **How this community works**). Under **Who can join**, pick one of three choices for who can bring people into the community (make an invite, or answer someone who asks to join) and save it:
 
 - **Invite: any member invites**: Every local community starts this way. Any member can make an invite in the app or the web app, and answer a request to join.
 - **Known: only admins invite**: Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead of the invite maker (the invite tree and the codes they made earlier stay), says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. Owners and admins can also keep a names list of who the members are, in the app on their own phones: see "Running a known community".
 - **Paused: nobody new for now**: Stops all new joins. No member or admin can generate an invite, existing unused invites are refused, and requests to join are turned off while paused. Members see that joining is paused on their card and in the guide.
 
-Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it.
+Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, nobody can answer a request to join, or make an invite in the app. You can still save it.
 
 **Requests to join and the public directory.** When someone finds your community in the global directory and asks to join, your server tells its owners and admins with a push notification ("Someone asked to join your community.") and a line on Home under Needs you ("2 people asked to join"). Tapping either opens People → Invites in the app, where the request is listed with **Invite** and **Not now**. The manager's Home counts them under Action Required too; they are answered in the app, not here. In an Invite community (any member invites), members who opted into "Requests to join" in Notification Preferences are notified too; in a Known one, only owners and admins are.
 
@@ -68,9 +68,9 @@ If a request waits **3 days** without an answer in an Invite community (any memb
 
 If a request waits **7 days** with no answer, the server sends an operator alert (knock.waiting: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
 
-**While no new members are being taken** (the community is paused), the card says so first. No choice is marked as the one in use; the one from before the pause is marked "before the pause". Saving either choice takes new members again, and every member is told. Until the manager has checked whether the community is paused, it won't save: if it can't check, reload to try again.
+**While no new members are being taken** (the community is paused), **Who can join** shows **Paused**, and **Paused: nobody new for now** is the choice marked when you open it. Pick **Invite** or **Known** and save to take new members again; the page says what that changes, and every member is told. Until the page has loaded, there is nothing to save: if it can't load, tap **Retry**.
 
-**While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The card says so first, in the server's words, with what would end it, and offers nothing to save until the preview is off.
+**While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The **Who can join** row says so, in the server's words, with what would end it, and cannot be opened until the preview is off.
 
 Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. Each change is logged with who made it, the owners get an alert, and every member is told in a notice from the community.
 

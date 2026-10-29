@@ -87,7 +87,7 @@ Add their name to the list, or open their entry, and tap **Invite this person**.
 
 ## The known floor
 
-In a LETS, a member the committee knows can go into debt by an agreed amount from day one. The **known floor** is that amount here. Your owner sets it in **Setting up → How this community works** (under Money → Known floor for confirmed members).
+In a LETS, a member the committee knows can go into debt by an agreed amount from day one. The **known floor** is that amount here. Your owner sets it in **How it works** in the manager's left menu (the page is titled **How this community works**), under Money → Known floor for confirmed members.
 
 - **The switch.** "Confirmed members get the known floor" is on in every community unless an owner switches it off. With nobody confirmed it changes nobody's limit: only a member an admin confirms gets the known floor. Switched off, no confirmed member has it, and nobody loses Beans they hold (below).
 - **The known floor.** 1,000 Beans to start: about 25 hours of work the community is trusting each confirmed member for. 40 Beans is an hour.
@@ -116,9 +116,9 @@ Every change to the switch, the known floor, the cap and any member's known floo
 
 A community can be a mix of members your admins know and members they do not. To run a mixed community:
 
-- **Any member invites.** In the manager, open **How this community works** (under Setting up); under **Who can join**, keep **Invite: any member invites**. People your members bring in join without your admins needing to know them.
+- **Any member invites.** In the manager, open **How it works** in the left menu (the page is titled **How this community works**); under **Who can join**, keep **Invite: any member invites**. People your members bring in join without your admins needing to know them.
 - **Keep the names list.** In the BeanPool app on an owner's or admin's phone, open **Settings → Community admin → Names list**, tap **Add a name**, and tap **Confirm a member** for each person your admins know.
-- **The known floor.** It is on in every community, so there is nothing to turn on: **Confirmed members get the known floor** is checked unless an owner unchecks it. To change the amounts, open **How this community works** (under Setting up), find **Known floor for confirmed members**, set them, and save.
+- **The known floor.** It is on in every community, so there is nothing to turn on: **Confirmed members get the known floor** is checked unless an owner unchecks it. To change the amounts, open **How it works** in the left menu, find **Known floor for confirmed members**, set them, and save.
 
 Members who join through another member's invite start at zero, while members your admins have confirmed on the names list get the known floor.
 

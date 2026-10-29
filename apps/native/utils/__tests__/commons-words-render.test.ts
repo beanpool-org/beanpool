@@ -34,7 +34,8 @@ vi.hoisted(() => {
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
+// What the Alerts said, their buttons, and in `order` each Alert and each dismiss of the keyboard, as they came.
+const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }>, order: [] as string[] }));
 
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
 
@@ -84,6 +85,7 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         Alert: {
             alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => unknown }>) => {
+                alerts.order.push('alert');
                 alerts.said.push(title);
                 if (body) alerts.said.push(body);
                 for (const b of buttons ?? []) { if (b.text) alerts.said.push(b.text); alerts.buttons.push(b); }
@@ -138,9 +140,12 @@ vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
     SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
 }));
+// A dismiss that `hangs` never resolves, as inside a Modal on Android 8–10 (utils/keyboard-dismiss.ts).
+const keyboard = vi.hoisted(() => ({ hangs: false }));
 vi.mock('react-native-keyboard-controller', () => {
     const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
-    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
+    const dismiss = () => { alerts.order.push('keyboard dismissed'); return keyboard.hangs ? new Promise<void>(() => {}) : Promise.resolve(); };
+    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss }, useKeyboardState: () => false };
 });
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'a-uuid', getRandomBytes: (n: number) => new Uint8Array(n) }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -171,6 +176,8 @@ const node = vi.hoisted(() => ({
     // What the member sent about a vote on removing them (removal by vote, Amendment A): replies, and cases reported false.
     replies: [] as Array<[string, string]>,
     reports: [] as string[],
+    // What utils/db.ts throws when the node doesn't take a reply, or null: it takes it.
+    replyFails: null as string | null,
 }));
 vi.mock('../use-reader-features', () => ({
     useReaderFeatures: () => ({ node: node.features, reader: null, effective: node.features, known: true }),
@@ -188,7 +195,11 @@ vi.mock('../db', () => ({
     fetchGroups: async () => node.groups,
     fetchYourGroups: async () => [],
     castDecisionVote: async () => node.vote,
-    replyToRemovalCase: async (id: string, reply: string) => { node.replies.push([id, reply]); return { success: true }; },
+    replyToRemovalCase: async (id: string, reply: string) => {
+        if (node.replyFails) throw new Error(node.replyFails);
+        node.replies.push([id, reply]);
+        return { success: true };
+    },
     reportRemovalCase: async (id: string) => { node.reports.push(id); return { success: true }; },
     createDecision: async () => ({ success: true }),
     createPost: async () => ({}),
@@ -234,6 +245,7 @@ import ProjectsScreen from '../../app/(tabs)/projects';
 import ProposeProjectScreen from '../../app/propose-project';
 import { NewPollModal } from '../../components/NewPollModal';
 import { sampleDecisions, sampleEnterprises } from '../../components/showcase/sample-screens';
+import { KEYBOARD_DISMISS_TIMEOUT_MS } from '../keyboard-dismiss';
 
 const NODE = 'https://mullum.example';
 const DAY = 24 * 3600_000;
@@ -318,6 +330,8 @@ beforeEach(() => {
     params.now = {};
     alerts.said.length = 0;
     alerts.buttons.length = 0;
+    alerts.order.length = 0;
+    keyboard.hangs = false;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     who.identity = { publicKey: KEY, privateKey: 'me-priv', callsign: 'Me' };
@@ -331,6 +345,7 @@ beforeEach(() => {
     node.area = null;
     node.replies = [];
     node.reports = [];
+    node.replyFails = null;
     yours.items = [];
     yours.error = null;
     picked.date = null;
@@ -560,6 +575,32 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(button('Reply to this case')).toBeNull();
         expect(button('Change your reply')).toBeNull();
         expect(button('Report this case as false')).toBeTruthy();
+        expect(bypassing()).toEqual([]);
+    });
+
+    it("Decide: a reply the node didn't take: the keyboard goes before the Alert says so, and a dismiss that never ends holds it back only briefly", async () => {
+        const DROPPED = 'Network request failed. You must be connected to a node.';
+        await renderIn('xx');
+        await click(byLabel(pseudoLocalise('Decide Section')), 'Decide');
+        await click(button('Reply to this case'), 'Reply to this case');
+        await type(host.querySelector('[data-testid="removal-reply-input"]'), 'It was a misunderstanding.');
+        node.replyFails = DROPPED;
+        alerts.order.length = 0;
+        await click(host.querySelector('[data-testid="removal-reply-send"]'), 'Send reply');
+        expect(alerts.order).toEqual(['keyboard dismissed', 'alert']);
+        expect(alerts.said).toContain(pseudoLocalise(DROPPED));
+        expect(node.replies).toEqual([]);
+        expect(host.querySelector('[data-testid="removal-reply-sheet"]')).toBeTruthy();
+        // Inside the sheet's Modal on Android 8–10 the dismiss may never resolve: the Alert waits for it a short while only.
+        keyboard.hangs = true;
+        alerts.order.length = 0;
+        alerts.said.length = 0;
+        await click(host.querySelector('[data-testid="removal-reply-send"]'), 'Send reply again');
+        expect(alerts.order).toEqual(['keyboard dismissed']);
+        await act(async () => { await new Promise((r) => setTimeout(r, KEYBOARD_DISMISS_TIMEOUT_MS + 50)); });
+        await settle(4);
+        expect(alerts.order).toEqual(['keyboard dismissed', 'alert']);
+        expect(alerts.said).toContain(pseudoLocalise(DROPPED));
         expect(bypassing()).toEqual([]);
     });
 

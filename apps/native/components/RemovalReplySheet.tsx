@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, Alert, StyleSheet, ScrollView } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { t } from '@beanpool/core';
 import { replyToRemovalCase } from '../utils/db';
+import { dismissKeyboardWithin } from '../utils/keyboard-dismiss';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { palette } from '../constants/colors';
 import { signedRequestWords } from './signed-request-lines';
@@ -43,6 +44,10 @@ export function RemovalReplySheet({ decisionId, current, onClose, onSent }: Remo
             await onSent();
             onClose();
         } catch (e: any) {
+            // An Alert is a window of its own: opened over the raised keyboard, it leaves the screen padded by the keyboard's
+            // height (phantom padding), so the keyboard goes first. Bounded: inside this Modal on Android 8–10 the dismiss
+            // may never resolve (utils/keyboard-dismiss.ts).
+            await dismissKeyboardWithin(() => KeyboardController.dismiss());
             Alert.alert(t('Error'), e?.message ? signedRequestWords(e.message) : t('Your reply could not be sent.'));
         } finally {
             setSending(false);

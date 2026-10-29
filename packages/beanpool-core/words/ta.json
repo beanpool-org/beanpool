@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 நம்பிக்கையில்",
   "✋ ASKED": "✋ கேட்கப்பட்டது",
   "{name} · {n} Beans held · since {date}": "{name} · {n} பயறுகள் வைக்கப்பட்டுள்ளன · {date} முதல்",
+  "{name} · no Beans held · since {date}": "{name} · பயறுகள் எதுவும் வைக்கப்படவில்லை · {date} முதல்",
   "Deals under way: {n}": "நடக்கும் பரிவர்த்தனைகள்: {n}",
   "You act for {name} here.": "இங்கே நீங்கள் {name} சார்பாக செயல்படுகிறீர்கள்.",
   "You're helping with this · {n} Beans held for you": "நீங்கள் இதில் உதவுகிறீர்கள் · உங்களுக்காக {n} பயறுகள் வைக்கப்பட்டுள்ளன",

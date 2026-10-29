@@ -3,7 +3,7 @@
  * Pure and universal: imported by both apps and the server.
  */
 
-import { t } from './words.js';
+import { formatNumber, t } from './words.js';
 
 export type DealRole = 'payer' | 'payee';
 
@@ -307,10 +307,15 @@ export function listingChipWords(chip: ListingChip): string {
     return chip === 'in-trust' ? t('🤝 IN TRUST') : t('✋ ASKED');
 }
 
-/** The listing page's lines about its deals (§3.2), one set for both apps. Amounts and dates come formatted. */
+/** The listing page's lines about its deals (§3.2), one set for both apps. Amounts and dates come formatted, except a row's. */
 export const listingDealLines = {
-    /** One row of the deals under way, for the listing's own people. */
-    heldRow: (name: string, n: string, date: string) => t('{name} · {n} Beans held · since {date}', { name, n, date }),
+    /**
+     * One row of the deals under way, for the listing's own people, from the deal's own amount: a free deal (a thing lent
+     * for nothing, a free Offer taken up) has nothing held, and says so rather than "0 Beans held".
+     */
+    heldRow: (name: string, credits: number, date: string) => (credits > 0
+        ? t('{name} · {n} Beans held · since {date}', { name, n: formatNumber(credits), date })
+        : t('{name} · no Beans held · since {date}', { name, date })),
     underWay: (n: number) => t('Deals under way: {n}', { n }),
     /** A keeper's note: the steps on this listing are taken as the enterprise. */
     actingFor: (name: string) => t('You act for {name} here.', { name }),

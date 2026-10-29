@@ -752,6 +752,7 @@
   "🤝 IN TRUST": "🤝 ĐANG ỦY THÁC",
   "✋ ASKED": "✋ ĐÃ HỎI",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Đậu đang giữ · từ {date}",
+  "{name} · no Beans held · since {date}": "{name} · không giữ Đậu nào · từ {date}",
   "Deals under way: {n}": "Giao dịch đang diễn ra: {n}",
   "You act for {name} here.": "Ở đây bạn thay mặt {name}.",
   "You're helping with this · {n} Beans held for you": "Bạn đang giúp việc này · {n} Đậu đang giữ cho bạn",

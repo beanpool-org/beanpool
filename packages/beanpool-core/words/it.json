@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 IN GARANZIA",
   "✋ ASKED": "✋ RICHIESTO",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Fagioli vincolati · dal {date}",
+  "{name} · no Beans held · since {date}": "{name} · nessun Fagiolo vincolato · dal {date}",
   "Deals under way: {n}": "Scambi in corso: {n}",
   "You act for {name} here.": "Qui agisci per {name}.",
   "You're helping with this · {n} Beans held for you": "Stai aiutando con questo · {n} Fagioli vincolati per te",

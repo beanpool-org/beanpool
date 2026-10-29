@@ -752,6 +752,7 @@
   "🤝 IN TRUST": "🤝 託管中",
   "✋ ASKED": "✋ 已申請",
   "{name} · {n} Beans held · since {date}": "{name} · 託管 {n} 豆子 · 自 {date}",
+  "{name} · no Beans held · since {date}": "{name} · 未託管豆子 · 自 {date}",
   "Deals under way: {n}": "進行中的交易：{n}",
   "You act for {name} here.": "你在這裡代表 {name} 操作。",
   "You're helping with this · {n} Beans held for you": "你在幫忙 · 為你託管 {n} 豆子",

@@ -235,6 +235,13 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.textContent).not.toContain('🤝 Accept Offer');
         });
 
+        it('a lender with a free loan out: the row says no Beans are held, never "0 Beans held"', async () => {
+            node.mine = [deal({ id: 'tx-l', credits: 0, buyerPublicKey: 'mo-key', buyerCallsign: 'Mo', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign })];
+            await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0, credits: 0, status: 'pending', author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
+            expect(row('tx-l')?.textContent).toContain('Mo · no Beans held · since 24 Oct');
+            expect(host.textContent).not.toContain('0 Beans held');
+        });
+
         it("a keeper of the enterprise on its Need: its deal read for it, Release at the enterprise's door, no Cancel", async () => {
             node.keeperOf = [ENT];
             node.kept = [deal({ id: 'tx-f', postId: 'p-1', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];

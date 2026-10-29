@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 EN FIDUCIE",
   "✋ ASKED": "✋ DEMANDÉ",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Haricots retenus · depuis le {date}",
+  "{name} · no Beans held · since {date}": "{name} · aucun Haricot retenu · depuis le {date}",
   "Deals under way: {n}": "Échanges en cours : {n}",
   "You act for {name} here.": "Ici, vous agissez pour {name}.",
   "You're helping with this · {n} Beans held for you": "Vous aidez pour ceci · {n} Haricots retenus pour vous",

@@ -804,6 +804,7 @@
   "🤝 IN TRUST": "🤝 EN CUSTODIA",
   "✋ ASKED": "✋ PEDIDO",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Frijoles retenidos · desde el {date}",
+  "{name} · no Beans held · since {date}": "{name} · sin Frijoles retenidos · desde el {date}",
   "Deals under way: {n}": "Tratos en curso: {n}",
   "You act for {name} here.": "Aquí actúas en nombre de {name}.",
   "You're helping with this · {n} Beans held for you": "Estás ayudando con esto · {n} Frijoles retenidos para ti",

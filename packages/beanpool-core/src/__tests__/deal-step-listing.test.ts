@@ -3,8 +3,10 @@
  * on each deal of a listing, what they may do on it, and the feed's chip. The node's side of the keeper rule is driven for
  * real in apps/server test-deal-listing-keepers.ts; here the rule's own matrix.
  */
-import { describe, expect, it } from 'vitest';
-import { dealMoves, dealSideOf, listingChips, listingChipWords, listingDeals, type DealRow } from '../deal-step.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { dealMoves, dealSideOf, listingChips, listingChipWords, listingDealLines, listingDeals, type DealRow } from '../deal-step.js';
+import { readFileSync } from 'node:fs';
+import { setLanguage, type Catalog } from '../words.js';
 
 const ME = 'me';
 const DAMO = 'damo';
@@ -175,5 +177,21 @@ describe('listingChips: the card says only what is the member’s own', () => {
     it('held in trust wins over a request on the same listing', () => {
         const both = [{ ...deal(KINDS[4], DAMO, ME, 'requested', 'x') }, deal(KINDS[4], DAMO, ME, 'pending', 'y')];
         expect(listingChips(both, ME).get('p')).toBe('in-trust');
+    });
+});
+
+describe("listingDealLines.heldRow: a deal's own amount, and nothing held on a free one", () => {
+    const fr = JSON.parse(readFileSync(new URL('../../words/fr.json', import.meta.url), 'utf8')) as Catalog;
+    afterEach(() => setLanguage('en'));
+    it('the Beans held, in the language’s way', () => {
+        expect(listingDealLines.heldRow('Mo', 20, '24 Oct')).toBe('Mo · 20 Beans held · since 24 Oct');
+        expect(listingDealLines.heldRow('Mo', 12.5, '24 Oct')).toBe('Mo · 12.5 Beans held · since 24 Oct');
+        setLanguage('fr', [fr]);
+        expect(listingDealLines.heldRow('Mo', 12.5, '24 oct.')).toBe('Mo · 12,5 Haricots retenus · depuis le 24 oct.');
+    });
+    it('a free loan (or any deal for nothing) never reads "0 Beans held"', () => {
+        expect(listingDealLines.heldRow('Mo', 0, '24 Oct')).toBe('Mo · no Beans held · since 24 Oct');
+        setLanguage('fr', [fr]);
+        expect(listingDealLines.heldRow('Mo', 0, '24 oct.')).toBe('Mo · aucun Haricot retenu · depuis le 24 oct.');
     });
 });

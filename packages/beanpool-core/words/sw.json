@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 KWA AMANA",
   "✋ ASKED": "✋ IMEOMBWA",
   "{name} · {n} Beans held · since {date}": "{name} · Maharagwe {n} yameshikiliwa · tangu {date}",
+  "{name} · no Beans held · since {date}": "{name} · hakuna Maharagwe yaliyoshikiliwa · tangu {date}",
   "Deals under way: {n}": "Mikataba inayoendelea: {n}",
   "You act for {name} here.": "Hapa unatenda kwa niaba ya {name}.",
   "You're helping with this · {n} Beans held for you": "Unasaidia na hili · Maharagwe {n} yameshikiliwa kwa ajili yako",

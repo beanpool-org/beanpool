@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 ट्रस्ट में",
   "✋ ASKED": "✋ माँगा गया",
   "{name} · {n} Beans held · since {date}": "{name} · {n} फलियाँ रखी गईं · {date} से",
+  "{name} · no Beans held · since {date}": "{name} · कोई फलियाँ नहीं रखी गईं · {date} से",
   "Deals under way: {n}": "चल रहे सौदे: {n}",
   "You act for {name} here.": "यहाँ आप {name} की ओर से काम करते हैं।",
   "You're helping with this · {n} Beans held for you": "आप इसमें मदद कर रहे हैं · आपके लिए {n} फलियाँ रखी गईं",

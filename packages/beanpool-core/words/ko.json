@@ -752,6 +752,7 @@
   "🤝 IN TRUST": "🤝 보관 중",
   "✋ ASKED": "✋ 요청함",
   "{name} · {n} Beans held · since {date}": "{name} · 콩 {n}개 보관 중 · {date}부터",
+  "{name} · no Beans held · since {date}": "{name} · 보관 중인 콩 없음 · {date}부터",
   "Deals under way: {n}": "진행 중인 거래: {n}",
   "You act for {name} here.": "여기서는 {name}을(를) 대신해 처리해요.",
   "You're helping with this · {n} Beans held for you": "이 일을 돕고 있어요 · 나를 위해 콩 {n}개 보관 중",

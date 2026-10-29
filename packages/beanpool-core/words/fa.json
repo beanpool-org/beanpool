@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 در امانت",
   "✋ ASKED": "✋ درخواست‌شده",
   "{name} · {n} Beans held · since {date}": "{name} · {n} لوبیا نگه‌داشته شده · از {date}",
+  "{name} · no Beans held · since {date}": "{name} · هیچ لوبیایی نگه‌داشته نشده · از {date}",
   "Deals under way: {n}": "معامله‌های در جریان: {n}",
   "You act for {name} here.": "اینجا از طرف {name} اقدام می‌کنید.",
   "You're helping with this · {n} Beans held for you": "دارید در این کمک می‌کنید · {n} لوبیا برای شما نگه‌داشته شده",

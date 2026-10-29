@@ -937,6 +937,7 @@
   "🤝 IN TRUST": "🤝 في الضمان",
   "✋ ASKED": "✋ مطلوب",
   "{name} · {n} Beans held · since {date}": "{name} · {n} فاصوليا محفوظة · منذ {date}",
+  "{name} · no Beans held · since {date}": "{name} · لا فاصوليا محفوظة · منذ {date}",
   "Deals under way: {n}": "صفقات جارية: {n}",
   "You act for {name} here.": "أنت تتصرف باسم {name} هنا.",
   "You're helping with this · {n} Beans held for you": "أنت تساعد في هذا · {n} فاصوليا محفوظة لك",

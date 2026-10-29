@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 ട്രസ്റ്റിൽ",
   "✋ ASKED": "✋ ചോദിച്ചു",
   "{name} · {n} Beans held · since {date}": "{name} · {n} പയർ സൂക്ഷിച്ചിരിക്കുന്നു · {date} മുതൽ",
+  "{name} · no Beans held · since {date}": "{name} · പയർ ഒന്നും സൂക്ഷിച്ചിട്ടില്ല · {date} മുതൽ",
   "Deals under way: {n}": "നടക്കുന്ന ഇടപാടുകൾ: {n}",
   "You act for {name} here.": "ഇവിടെ നിങ്ങൾ {name}-നു വേണ്ടി പ്രവർത്തിക്കുന്നു.",
   "You're helping with this · {n} Beans held for you": "നിങ്ങൾ ഇതിൽ സഹായിക്കുന്നു · നിങ്ങൾക്കായി {n} പയർ സൂക്ഷിച്ചിരിക്കുന്നു",

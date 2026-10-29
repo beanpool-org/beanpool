@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 TREUHAND",
   "✋ ASKED": "✋ ANGEFRAGT",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Bohnen verwahrt · seit {date}",
+  "{name} · no Beans held · since {date}": "{name} · keine Bohnen verwahrt · seit {date}",
   "Deals under way: {n}": "Laufende Geschäfte: {n}",
   "You act for {name} here.": "Du handelst hier für {name}.",
   "You're helping with this · {n} Beans held for you": "Du hilfst hier mit · {n} Bohnen für dich verwahrt",

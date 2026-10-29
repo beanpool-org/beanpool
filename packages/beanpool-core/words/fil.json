@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 NASA TIWALA",
   "✋ ASKED": "✋ HININGI",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Munggo na hawak · mula {date}",
+  "{name} · no Beans held · since {date}": "{name} · walang Munggo na hawak · mula {date}",
   "Deals under way: {n}": "Mga kasunduang nagaganap: {n}",
   "You act for {name} here.": "Kumikilos ka para sa {name} dito.",
   "You're helping with this · {n} Beans held for you": "Tumutulong ka rito · {n} Munggo na hawak para sa iyo",

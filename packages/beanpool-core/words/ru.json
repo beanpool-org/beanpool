@@ -863,6 +863,7 @@
   "🤝 IN TRUST": "🤝 НА ДОВЕРИИ",
   "✋ ASKED": "✋ ЗАПРОШЕНО",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Бобов удерживается · с {date}",
+  "{name} · no Beans held · since {date}": "{name} · Бобы не удерживаются · с {date}",
   "Deals under way: {n}": "Сделки в процессе: {n}",
   "You act for {name} here.": "Здесь вы действуете от имени {name}.",
   "You're helping with this · {n} Beans held for you": "Вы помогаете с этим · для вас удерживается {n} Бобов",

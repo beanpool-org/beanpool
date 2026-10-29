@@ -752,6 +752,7 @@
   "🤝 IN TRUST": "🤝 DALAM JAMINAN",
   "✋ ASKED": "✋ DIMINTA",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Kacang ditahan · sejak {date}",
+  "{name} · no Beans held · since {date}": "{name} · tidak ada Kacang ditahan · sejak {date}",
   "Deals under way: {n}": "Kesepakatan berjalan: {n}",
   "You act for {name} here.": "Di sini Anda bertindak untuk {name}.",
   "You're helping with this · {n} Beans held for you": "Anda membantu ini · {n} Kacang ditahan untuk Anda",

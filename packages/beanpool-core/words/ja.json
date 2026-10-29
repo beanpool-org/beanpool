@@ -752,6 +752,7 @@
   "🤝 IN TRUST": "🤝 預かり中",
   "✋ ASKED": "✋ 依頼中",
   "{name} · {n} Beans held · since {date}": "{name} · {n}豆を預かり中 · {date}から",
+  "{name} · no Beans held · since {date}": "{name} · 預かり中の豆なし · {date}から",
   "Deals under way: {n}": "進行中の取引: {n}",
   "You act for {name} here.": "ここでは{name}として操作します。",
   "You're helping with this · {n} Beans held for you": "あなたが手伝っています · あなたのために{n}豆を預かり中",

@@ -1415,7 +1415,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     className={`bg-white dark:bg-nature-900 border rounded-lg p-3 shadow-sm flex flex-col gap-2 ${tx.id === selectedTxId ? 'border-emerald-400 dark:border-emerald-600' : 'border-nature-200 dark:border-nature-800'}`}
                 >
                     <p className="text-sm font-bold text-nature-900 dark:text-white break-words">
-                        {listingDealLines.heldRow(otherName, formatNumber(tx.credits), formatDate(new Date(tx.createdAt), 'day-month'))}
+                        {listingDealLines.heldRow(otherName, tx.credits, formatDate(new Date(tx.createdAt), 'day-month'))}
                     </p>
                     {!m.release && (
                         <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">

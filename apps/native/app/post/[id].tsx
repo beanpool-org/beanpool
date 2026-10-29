@@ -918,7 +918,7 @@ export default function PostDetailModal() {
         return (
             <View key={tx.id} testID={`deal-row-${tx.id}`} style={{ borderWidth: 1, borderColor: tx.id === pinnedTxId ? colors.brand.primary : colors.border.default, borderRadius: 10, padding: 12, gap: 8, marginBottom: 8 }}>
                 <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700' }}>
-                    {listingDealLines.heldRow(otherName, formatNumber((tx as any).credits ?? 0), since)}
+                    {listingDealLines.heldRow(otherName, Number((tx as any).credits ?? 0), since)}
                 </Text>
                 {!m.release && (
                     <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>

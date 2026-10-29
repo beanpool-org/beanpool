@@ -863,6 +863,7 @@
   "🤝 IN TRUST": "🤝 У ТРАСТІ",
   "✋ ASKED": "✋ ЗАПИТАНО",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Бобів заблоковано · з {date}",
+  "{name} · no Beans held · since {date}": "{name} · Боби не заблоковано · з {date}",
   "Deals under way: {n}": "Угоди в процесі: {n}",
   "You act for {name} here.": "Тут ви дієте від імені {name}.",
   "You're helping with this · {n} Beans held for you": "Ви допомагаєте з цим · для вас заблоковано {n} Бобів",

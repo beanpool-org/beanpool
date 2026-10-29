@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 ΣΕ ΚΑΤΑΠΙΣΤΕΥΜΑ",
   "✋ ASKED": "✋ ΖΗΤΗΘΗΚΕ",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Φασόλια δεσμευμένα · από {date}",
+  "{name} · no Beans held · since {date}": "{name} · κανένα Φασόλι δεσμευμένο · από {date}",
   "Deals under way: {n}": "Συναλλαγές σε εξέλιξη: {n}",
   "You act for {name} here.": "Εδώ ενεργείς για λογαριασμό του {name}.",
   "You're helping with this · {n} Beans held for you": "Βοηθάς σε αυτό · {n} Φασόλια δεσμευμένα για σένα",

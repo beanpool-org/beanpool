@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 GÜVENCEDE",
   "✋ ASKED": "✋ İSTENDİ",
   "{name} · {n} Beans held · since {date}": "{name} · {n} Fasulye tutuluyor · {date} tarihinden beri",
+  "{name} · no Beans held · since {date}": "{name} · tutulan Fasulye yok · {date} tarihinden beri",
   "Deals under way: {n}": "Süren anlaşmalar: {n}",
   "You act for {name} here.": "Burada {name} adına hareket ediyorsunuz.",
   "You're helping with this · {n} Beans held for you": "Buna yardım ediyorsunuz · sizin için {n} Fasulye tutuluyor",

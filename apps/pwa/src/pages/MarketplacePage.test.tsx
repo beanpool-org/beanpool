@@ -1224,6 +1224,14 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(screen.getByRole('button', { name: 'Deny' })).toBeInTheDocument();
     });
 
+    it('a lender with a free loan out: the row says no Beans are held, never "0 Beans held"', async () => {
+        await open(listing({ title: 'Ladder', lendable: true, credits: 0, status: 'pending', authorPublicKey: ME, authorCallsign: 'Guest', pendingTransactionId: 'tx-l' }),
+            [deal({ id: 'tx-l', credits: 0, buyerPublicKey: 'mo-pk', buyerCallsign: 'Mo', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+        const row = await screen.findByTestId('deal-row-tx-l');
+        expect(within(row).getByText('Mo · no Beans held · since 24 Oct')).toBeInTheDocument();
+        expect(screen.queryByText(/0 Beans held/)).not.toBeInTheDocument();
+    });
+
     // ── Keepers ──────────────────────────────────────────────────────────────────────────────────────────────────
     const farmNeed = listing({ title: 'Mend the polytunnel', type: 'need', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', credits: 20 });
     const farmOffer = listing({ title: 'Dozen eggs', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', credits: 6 });

@@ -789,6 +789,7 @@
   "🤝 IN TRUST": "🤝 আস্থায়",
   "✋ ASKED": "✋ চাওয়া হয়েছে",
   "{name} · {n} Beans held · since {date}": "{name} · {n} শিম রাখা আছে · {date} থেকে",
+  "{name} · no Beans held · since {date}": "{name} · কোনো শিম রাখা নেই · {date} থেকে",
   "Deals under way: {n}": "চলমান লেনদেন: {n}",
   "You act for {name} here.": "এখানে আপনি {name}-এর হয়ে কাজ করছেন।",
   "You're helping with this · {n} Beans held for you": "আপনি এতে সাহায্য করছেন · আপনার জন্য {n} শিম রাখা আছে",

@@ -1096,7 +1096,6 @@
   "Posted by": "പോസ്റ്റ് ചെയ്തത്",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "റേറ്റിംഗുകളൊന്നുമില്ല ഇതുവരെ",
-  "Transferring {n} B to {name}": "{name}-ലേക്ക് {n} പയർ കൈമാറുന്നു",
   "Failed to complete transaction": "ഇടപാട് പൂർത്തിയാക്കുന്നതിൽ പരാജയപ്പെട്ടു",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "നിങ്ങളാണ് പണം സ്വീകരിക്കുന്നയാൾ. സമ്മതിച്ചതുപോലെ നിബന്ധനകൾ കൃത്യമായി പാലിക്കുക, പണം നൽകുന്നയാൾ നിങ്ങളുടെ ക്രെഡിറ്റുകൾ റിലീസ് ചെയ്യും (1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചുള്ള തുക നിങ്ങൾക്ക് ലഭിക്കും).",
   "Cancel this transaction and return the post to the market?": "ഈ ഇടപാട് റദ്ദാക്കി പോസ്റ്റ് വിപണിയിലേക്ക് തിരികെ നൽകണോ?",

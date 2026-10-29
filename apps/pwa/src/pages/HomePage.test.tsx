@@ -449,7 +449,8 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(deal).toHaveTextContent('▲');
         expect(needs.innerHTML).not.toMatch(/\bred-|danger/);
         fireEvent.click(deal);
-        expect(nav).toHaveBeenCalledWith('marketplace', 'p2');
+        // On the deal, not only its listing (deals S4): a recurring listing's author lands on this one.
+        expect(nav).toHaveBeenCalledWith('marketplace', 'p2', 't1');
         fireEvent.click(within(needs).getByRole('button', { name: '3 unread from 2 people' }));
         expect(nav).toHaveBeenCalledWith('messages');
     });
@@ -3401,7 +3402,7 @@ describe('the web app draws the cards real content (DESIGN-home-wide-and-content
         // Deal
         const deal = screen.getByRole('button', { name: /Sourdough · with Ana/ });
         fireEvent.click(deal);
-        expect(nav).toHaveBeenCalledWith('marketplace', 'p1');
+        expect(nav).toHaveBeenCalledWith('marketplace', 'p1', 't1');
 
         // Decide
         const decide = screen.getByRole('button', { name: /Compost bay/ });

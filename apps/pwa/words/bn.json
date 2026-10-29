@@ -1165,7 +1165,6 @@
   "Posted by": "পোস্ট করেছেন",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "এখনও কোনো রেটিং নেই",
-  "Transferring {n} B to {name}": "{name}-কে {n} B স্থানান্তর করা হচ্ছে",
   "Failed to complete transaction": "লেনদেন সম্পন্ন করা যায়নি",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "আপনি প্রাপক। সম্মত শর্তাবলী যথাযথভাবে পূরণ করুন এবং প্রদানকারী আপনার ক্রেডিট রিলিজ করবেন (আপনি ১.৫% লেনদেন ফি {owned} বাদ দিয়ে মোট পরিমাণ পাবেন)।",
   "Cancel this transaction and return the post to the market?": "এই লেনদেনটি বাতিল করে পোস্টটি বাজারে ফেরত পাঠাবেন?",

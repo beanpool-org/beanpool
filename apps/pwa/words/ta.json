@@ -1096,7 +1096,6 @@
   "Posted by": "பதிவிட்டவர்",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "இன்னும் மதிப்பீடுகள் இல்லை",
-  "Transferring {n} B to {name}": "{name}-க்கு {n} பயறு மாற்றப்படுகிறது",
   "Failed to complete transaction": "பரிவர்த்தனையை முடிப்பதில் தோல்வி",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "நீங்கள் பெறுநர். ஒப்புக்கொண்டபடி விதிமுறைகளை நிறைவேற்றுங்கள், செலுத்துபவர் உங்கள் கிரெடிட்டுகளை விடுவிப்பார் (1.5% பரிவர்த்தனை கட்டணம் {owned} கழித்து நிகரத் தொகையைப் பெறுவீர்கள்).",
   "Cancel this transaction and return the post to the market?": "இந்தப் பரிவர்த்தனையை ரத்துசெய்து பதிவை மீண்டும் சந்தைக்குத் திருப்பவா?",

@@ -403,6 +403,7 @@ export const SUITES = [
     'test-post-sight',
     'test-cancel-post-request',
     'test-one-open-deal',
+    'test-deal-listing-keepers',
     'test-non-members-cant-act',
     'test-marketplace-auth',
     'test-marketplace-list',

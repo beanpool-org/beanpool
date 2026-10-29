@@ -1165,7 +1165,6 @@
   "Posted by": "Δημοσιεύτηκε από",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "Χωρίς αξιολογήσεις ακόμα",
-  "Transferring {n} B to {name}": "Μεταφορά {n} B σε {name}",
   "Failed to complete transaction": "Αποτυχία ολοκλήρωσης συναλλαγής",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "Είστε ο Δικαιούχος. Εκπληρώστε τους όρους ακριβώς όπως συμφωνήθηκε και ο Πληρωτής θα αποδεσμεύσει τις πιστώσεις σας (θα λάβετε το καθαρό ποσό μείον τέλος 1,5% {owned}).",
   "Cancel this transaction and return the post to the market?": "Ακύρωση αυτής της συναλλαγής και επιστροφή της δημοσίευσης στην αγορά;",

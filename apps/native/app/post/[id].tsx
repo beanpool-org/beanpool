@@ -930,7 +930,18 @@ export default function PostDetailModal() {
                 try {
                     await cancelMarketplaceTransaction(m.tx.id!, me);
                     afterDealStep();
-                } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
+                } catch (e: any) {
+                    // Cancelled or released already, by its other side or another device: said so, as the panel says it, and
+                    // the row taken off at once, not left to fail the same way. Not re-read from the phone's copy, which still
+                    // holds it until the sync asked for here lands (and reloads the page).
+                    if (changedElsewhere(e, 'transaction_gone')) {
+                        Alert.alert(t('Already Updated'), t('This transaction was already cancelled or completed on another device. Your feed will automatically refresh.'));
+                        setListingTxs(prev => prev.filter(tx => tx.id !== m.tx.id));
+                        requestSync().catch(console.error);
+                    } else {
+                        Alert.alert(t('Error'), signedRequestWords(e.message));
+                    }
+                } finally { setAccepting(false); }
             } },
         ]);
     };

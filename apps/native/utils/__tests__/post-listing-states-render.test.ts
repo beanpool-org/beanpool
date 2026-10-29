@@ -18,7 +18,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const alerts = vi.hoisted(() => ({ said: [] as string[] }));
+// What each alert said, and the last one's buttons (a test presses one: "Yes, Cancel").
+const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
 const events = vi.hoisted(() => ({ listeners: new Map<string, Set<(...args: unknown[]) => void>>() }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
@@ -47,9 +48,10 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: absolute, absoluteFillObject: absolute, flatten: (s: unknown) => flat(s) },
         Alert: {
-            alert: (title: string, body?: string) => {
+            alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => unknown }>) => {
                 alerts.said.push(title);
                 if (body) alerts.said.push(body);
+                alerts.buttons = buttons ?? [];
             },
         },
         Linking: { openURL: async () => {} },
@@ -197,6 +199,7 @@ beforeEach(() => {
     net.calls.length = 0;
     nav.to.length = 0;
     alerts.said.length = 0;
+    alerts.buttons = [];
     node.mine = []; node.kept = []; node.keeperOf = []; node.unread = {}; node.chats = [];
     events.listeners.clear();
     store.map.clear();
@@ -242,6 +245,32 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.textContent).not.toContain('✅ Release Credits');
             expect(host.textContent?.match(/❌ Cancel Trust Hold/g)).toHaveLength(2);
             expect(host.textContent).not.toContain('🤝 Accept Offer');
+        });
+
+        it("a row's Cancel on a deal already over elsewhere: said so, the sync asked for, and that row gone at once", async () => {
+            node.mine = [
+                deal({ id: 'tx-a', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, createdAt: '2026-10-26T10:00:00.000Z' }),
+                deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 30, createdAt: AT }),
+            ];
+            await open(listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }));
+            // The node: Marty cancelled tx-a on his side a moment ago.
+            const base = net.answer!;
+            net.answer = (name, args) => (name === 'cancelMarketplaceTransaction'
+                ? Promise.reject(Object.assign(new Error('That deal is no longer open.'), { code: 'transaction_gone' }))
+                : base(name, args));
+            const asked = sync.asked;
+            await press(row('tx-a')!, '❌ Cancel Trust Hold');
+            const yes = alerts.buttons.find(b => b.text === 'Yes, Cancel');
+            expect(yes).toBeTruthy();
+            await act(async () => { await yes!.onPress?.(); });
+            await settle(4);
+            expect(net.calls).toContain('db.cancelMarketplaceTransaction');
+            expect(alerts.said).toContain('Already Updated');
+            expect(alerts.said).not.toContain('Error');
+            expect(alerts.said).not.toContain('That deal is no longer open.');
+            expect(sync.asked).toBeGreaterThan(asked);
+            expect(row('tx-a')).toBeNull();
+            expect(row('tx-b')?.textContent).toContain('Kofi · 30 Beans held · since 24 Oct');
         });
 
         it("the author messages each deal's other side from its row (its unread on it), and reaches all their deals", async () => {

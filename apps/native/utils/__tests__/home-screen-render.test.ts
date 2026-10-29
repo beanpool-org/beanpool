@@ -1690,7 +1690,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
             await act(async () => { (document.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLElement).click(); });
             const confirm = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!.find(b => b.style === 'destructive')!;
             let done!: Promise<void>;
-            await act(async () => { done = confirm.onPress!() as Promise<void>; nav.blur!(); });
+            await act(async () => { done = Promise.resolve(confirm.onPress!()); nav.blur!(); });
             await act(async () => { await done; });
             await settle();
             await act(async () => { nav.focus!(); });

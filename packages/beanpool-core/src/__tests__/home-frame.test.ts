@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_TYPES, HOME_COLUMN_CHOICES, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardsToAsk,
-    checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard, readHomeLayout, readSearchSettings, removeCard, setHomeColumns,
-    translateV1, type HomeLayoutV2, type HomeNodeFacts,
+    HOME_CARD_TYPES, HOME_CHAT_ID_CHARS, HOME_CHAT_KINDS, HOME_CHAT_NAME_CHARS, HOME_COLUMN_CHOICES, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES,
+    HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard,
+    readChatSettings, readHomeLayout, readSearchSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 import { t } from '../words.js';
 import { toolHomeCardTypes } from '../tools/index.js';
@@ -283,7 +283,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
         // A tool's card (tools/index.ts) is wherever its tool is, by its own manifest: the built-in types are pinned here.
         const toolCards = new Set(toolHomeCardTypes().map(t => t.id));
-        expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'shop', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
+        expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'shop', 'events', 'market', 'search', 'groups', 'chat', 'joined', 'pulse', 'sky', 'notices', 'community']);
         expect(on(global).filter(id => toolCards.has(id))).toEqual(toolHomeCardTypes().filter(t => t.onNode(global)).map(t => t.id));
         expect(on(local)).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'safety' && id !== 'find'));
         const adminsInvite = { ...local, features: { ...local.features, door: 'admins' } };
@@ -321,5 +321,89 @@ describe('home frame §5.2 (4): the default and the words', () => {
         expect(added.ok && cardsToAsk(added.layout)).toContain('shop');
         // Not in the newcomer's starter set: a member adds it, or opens their shop from Tools.
         expect(HOME_STARTER_SET).not.toContain('shop');
+    });
+});
+
+describe('a chosen chat (C0, scratch/fable-design/DESIGN-home-chosen-chat-fable.md §1, §2)', () => {
+    const picked = { conversationId: 'conv-ana-1', kind: 'dm', name: 'Ana Reyes' };
+    const chatCard = (id: string, settings: unknown) => ({ id, type: 'chat', settings: settings as Record<string, unknown> });
+
+    it('is an instance type, For you, up to three, on every node, asked of the node, with settings', () => {
+        const chat = HOME_CARD_TYPES.find(t => t.id === 'chat')!;
+        expect(chat).toMatchObject({ name: 'A chat', line: 'The last lines of one chat you choose.', group: 'you', multiple: { max: 3 }, asks: 'node' });
+        expect(chat.fixed).toBeUndefined();
+        expect(chat.readSettings).toBe(readChatSettings);
+        for (const a of [{ profile: 'global', features: { beans: false, escrow: false, enterprises: false } }, { profile: 'local', features: {} }]) {
+            expect(chat.onNode(a), a.profile).toBe(true);
+        }
+        // Beside Your groups in the catalogue: the order `cards=` names them in.
+        const ids = HOME_CARD_TYPES.map(t => t.id);
+        expect(ids.indexOf('chat')).toBe(ids.indexOf('groups') + 1);
+        expect(HOME_STARTER_SET).not.toContain('chat');
+        expect(HOME_CHAT_KINDS).toEqual(['dm', 'group', 'event', 'enterprise']);
+    });
+
+    it('three chats are taken, each its own instance with its chat; a fourth is refused and the layout unchanged', () => {
+        let l: HomeLayoutV2 = layout([one('steps')]);
+        const ids: string[] = [];
+        for (const kind of ['dm', 'group', 'event'] as const) {
+            const r = addCard(l, 'chat', { settings: { ...picked, conversationId: `conv-${kind}`, kind }, now: NOW });
+            expect(r.ok, kind).toBe(true);
+            if (!r.ok) return;
+            expect(r.id).toMatch(/^chat-[a-z2-7]{4}$/);
+            expect(r.layout.cards[0]).toEqual({ id: r.id, type: 'chat', settings: { conversationId: `conv-${kind}`, kind, name: 'Ana Reyes' } });
+            ids.push(r.id);
+            l = r.layout;
+        }
+        expect(new Set(ids).size).toBe(3);
+        expect(addCard(l, 'chat', { settings: { ...picked, conversationId: 'conv-four' } })).toEqual({ ok: false, refused: 'type-full' });
+        expect(l.cards.filter(c => c.type === 'chat')).toHaveLength(3);
+        // A stored layout holding four (a newer app's, or a write by hand) is still read whole: the frame never drops a card.
+        const four = layout([...l.cards, chatCard('chat-zzzz', { ...picked, conversationId: 'conv-four' })]);
+        expect(readHomeLayout(four)?.cards.filter(c => c.type === 'chat')).toHaveLength(4);
+    });
+
+    it('reads its settings tolerantly: garbage is no chat picked ({}), a name is cut to 60, unknown keys go', () => {
+        expect(readChatSettings(picked)).toEqual(picked);
+        expect(readChatSettings({ ...picked, name: `  ${'n'.repeat(70)}  `, extra: 'x' })).toEqual({ ...picked, name: 'n'.repeat(HOME_CHAT_NAME_CHARS) });
+        // A name counted in characters, never cut through one.
+        expect(readChatSettings({ ...picked, name: '🙂'.repeat(61) })).toEqual({ ...picked, name: '🙂'.repeat(60) });
+        expect(readChatSettings({ ...picked, name: 7 })).toEqual({ ...picked, name: '' });
+        expect(readChatSettings({ conversationId: 'c'.repeat(HOME_CHAT_ID_CHARS), kind: 'enterprise' })).toEqual({ conversationId: 'c'.repeat(64), kind: 'enterprise', name: '' });
+        const garbage: unknown[] = [
+            undefined, null, 'conv-ana-1', 7, [], [picked], {},
+            { ...picked, conversationId: '' }, { ...picked, conversationId: 'c'.repeat(HOME_CHAT_ID_CHARS + 1) }, { ...picked, conversationId: 42 },
+            { ...picked, conversationId: { id: 'x' } }, { ...picked, kind: 'thread' }, { ...picked, kind: 'DM' }, { conversationId: 'conv-ana-1' },
+        ];
+        for (const raw of garbage) expect(readChatSettings(raw), JSON.stringify(raw)).toEqual({});
+        // Added with garbage, the card is there with nothing picked: the apps say "Pick a chat".
+        const added = addCard(layout([]), 'chat', { settings: { conversationId: 99, kind: 'dm' }, now: NOW });
+        expect(added.ok && added.layout.cards[0].settings).toEqual({});
+    });
+
+    it('cardsToAsk asks a chat once it is picked, in catalogue order; never one with nothing picked, nor one not on Home', () => {
+        const a = chatCard('chat-bbbb', picked);
+        const b = chatCard('chat-aaaa', { ...picked, conversationId: 'grp-1', kind: 'group' });
+        const none = chatCard('chat-cccc', {});
+        const junk = chatCard('chat-dddd', { conversationId: 'x'.repeat(65), kind: 'dm' });
+        const withChats = layout([one('beans'), a, none, one('groups'), junk, b, one('market')]);
+        expect(cardsToAsk(withChats)).toEqual(['needs', 'market', 'groups', 'chat-aaaa', 'chat-bbbb', 'beans', 'community']);
+        // The same set in another order is the same ask.
+        expect(cardsToAsk(layout([b, one('market'), junk, a, one('groups'), none, one('beans')]))).toEqual(cardsToAsk(withChats));
+        // A Home without a chat card asks no chat, and asks what it asked before the type existed.
+        const without = layout([one('beans'), one('groups'), one('market')]);
+        expect(cardsToAsk(without)).toEqual(['needs', 'market', 'groups', 'beans', 'community']);
+        expect(cardsToAsk(without).some(id => id.startsWith('chat'))).toBe(false);
+        // Another instance type is untouched by the rule: a saved search with no words is asked as before.
+        expect(cardsToAsk(layout([{ id: 'search-k7mq', type: 'search', settings: {} }]))).toContain('search-k7mq');
+    });
+
+    it('its name and line fit the 320 model, and say nothing locked, earned or tiered', () => {
+        const chat = HOME_CARD_TYPES.find(t => t.id === 'chat')!;
+        for (const text of [chat.name, chat.line]) {
+            for (const w of text.split(/\s+/).filter(Boolean)) expect(wordDp(w), w).toBeLessThanOrEqual(140);
+            expect(text).not.toMatch(/lock|earn|tier|level|Ʀ/i);
+            expect(t(text)).toBe(text);
+        }
     });
 });

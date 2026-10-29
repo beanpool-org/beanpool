@@ -701,10 +701,13 @@ export default function SettingsScreen() {
             // switching to a node that has no profile for this key.
             showCommunityName(profile?.callsign || null);
             const edited = editedRef.current;
+            // The picture likewise: assigned on every load, the row's photo, else the phone-wide copy, else none. The card falls
+            // through to this where the hook reads no photo (no row, or a row without one), so leaving it alone where this
+            // community holds no row yet would keep the community before's photo beside the header's preset.
+            const cleaned = (profile?.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
+            if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
             {
                 if (profile) {
-                    const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
-                    if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
                     if (!edited.bio) {
                         if (profile.bio) setBio(profile.bio);
                         else if (canonical?.bio) setBio(canonical.bio);
@@ -718,7 +721,6 @@ export default function SettingsScreen() {
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
                     else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 } else if (canonical) {
-                    if (canonical.avatar && !edited.avatar) setAvatar(canonical.avatar);
                     if (canonical.bio && !edited.bio) setBio(canonical.bio);
                     if (!edited.contact) {
                         if (canonical.contactValue) setContact(canonical.contactValue);

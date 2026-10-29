@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import { db, createCrowdfundProject, pledgeToProject, deleteCrowdfundProject, updateCrowdfundProject, getCrowdfundProject } from './db/db.js';
 import {
     initStateEngine, reconcileLedgerFromDb, getBalance, payFromCommons, adminAssignTreasuryOperator, replaceLeadByVote, runLedgerAudit,
-    adminSetOperator, adminSetUserStatus, stepDownAsKeeper, adminRevokeTreasuryOperator,
+    adminSetOperator, adminSetUserStatus, stepDownAsKeeper, adminRevokeTreasuryOperator, proposeLeadSuccession,
 } from './state-engine.js';
+import { createScopedDecision, PROJECT_LEADER_STAYS } from './decisions-engine.js';
 import { grantNodeRole } from './engine/node-roles.js';
 
 console.log('Running #139 crowdfund project deletion refund regression test...');
@@ -227,8 +228,8 @@ check(liaCancel !== null && /Unauthorized/.test(liaCancel), `Lia, who made it an
 check(benchUntouched(), 'and nothing moves');
 
 // Pat joins it as a second keeper while nobody leads it. Then an admin switches Ola's access back on: Ola is a keeper who
-// doesn't lead it, one of two, and one of two keepers doesn't wind it up: they choose a lead. (Its ONLY keeper may, once
-// they may act: Marty's answer CF-Q1, 29 Oct 2026, part 10.)
+// doesn't lead it, one of two, and one of two keepers doesn't wind it up. (Its ONLY keeper may, once they may act: Marty's
+// answer CF-Q1, 29 Oct 2026, part 10.)
 const pat = makeMember('pat');
 adminAssignTreasuryOperator(bench, pat);
 adminSetOperator(ola, true);
@@ -239,10 +240,25 @@ const patCancel = refusal(() => deleteCrowdfundProject(bench, pat));
 check(patCancel !== null && /Unauthorized/.test(patCancel), `nor can Pat, its other keeper (${patCancel ?? 'it was cancelled'})`);
 check(benchUntouched(), 'and nothing moves');
 
-// The keepers vote Ola its lead: now Ola cancels it, and Ann gets the 4 back.
-replaceLeadByVote(bench, ola);
-const olaLeadCancel = refusal(() => deleteCrowdfundProject(bench, ola));
-check(olaLeadCancel === null, `Ola, voted its lead, cancels it (${olaLeadCancel ?? 'cancelled'})`);
+// Nor can they name a lead who would: a keepers' vote for a lead (replace_lead) is refused for a project, and succession
+// replaces only a lead it has. With two keepers and no lead, a node admin alone may cancel it (an admin's cancel of a project nobody leads: part
+// 10a). (Review of #2599: this part made Ola lead with a direct replaceLeadByVote, past both refusals, a lead the product
+// can't make.)
+const leadVote = refusal(() => createScopedDecision({
+    scopeKind: 'enterprise', scopeId: bench, authorPubkey: pat, title: 'Ola leads the bench', description: 'Ola should lead the bench now',
+    effect: 'replace_lead', subject: ola,
+}, () => {}));
+check(leadVote === PROJECT_LEADER_STAYS, `a keepers' vote to make Ola its lead is refused (${leadVote ?? 'it opened'})`);
+const succession = refusal(() => proposeLeadSuccession(bench, pat, ola));
+check(succession !== null && /No lead keeper/.test(succession), `and so is succession, with no lead to replace (${succession ?? 'it opened'})`);
+check(!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead'").get(bench) && benchUntouched(),
+    'nobody leads it still, and nothing moves');
+
+// Pat steps down, as a keeper who isn't the only one may: Ola is its only keeper, active with operator access on, and
+// cancels it (CF-Q1). Ann gets the 4 back.
+stepDownAsKeeper(bench, pat);
+const olaOnlyCancel = refusal(() => deleteCrowdfundProject(bench, ola));
+check(olaOnlyCancel === null, `Ola, its only keeper once Pat steps down, cancels it (${olaOnlyCancel ?? 'cancelled'})`);
 check(near(balanceOf(ann), before9.ann + 4) && near(balanceOf(benchEscrow), 0) && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(bench),
     `Ann gets back the 4 (${balanceOf(ann) - before9.ann}), the escrow is empty, the bench is gone`);
 
@@ -274,7 +290,7 @@ check(after9.ok && Math.abs(after9.drift - before9.drift) < 0.0001, `the ledger 
 // ── 10. Who else may cancel it: a node admin, its only keeper when nobody leads it, its maker only if it never had a keeper ──
 // Marty's answers, board, 29 Oct 2026 (from the review of #2554). CF-Q1 "Yes, admin or sole keeper": a project with keepers
 // and no lead is cancelled by a node admin or its only keeper, the people wind-up allows (isLeadOrSoleKeeperOrAdmin); before,
-// nobody could until a lead was named. CF-Q2 "No, removal ends it": a maker an admin removed as its last keeper may not
+// nobody could. CF-Q2 "No, removal ends it": a maker an admin removed as its last keeper may not
 // cancel it; before, its maker stood in whenever it had no keepers at all. A project that never had a keeper keeps its
 // maker's cancel. Each cancel pays every pledge it holds back once and leaves the node's total and the audit's drift as they were.
 console.log('\n── Who else may cancel it ──');

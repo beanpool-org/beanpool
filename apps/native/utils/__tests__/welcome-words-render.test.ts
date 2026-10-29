@@ -613,6 +613,37 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
             check(`Safety Backup, in by 12 words, ${rule}`);
         });
     }
+
+    // How it Works' Getting Back In card offers a sign-in for later only where the community keeps a copy for it, by the
+    // rule Safety Backup read; and by the rule read again as the guide opens, where an onboarding resumed there.
+    const SIGN_IN_LATER = '🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.';
+    it('How it Works after Safety Backup, at a community that keeps no copies: Getting Back In offers no sign-in', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        door.cachedRule = 'none';
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        await mount('xx');
+        expect(host!.querySelector('[data-testid="no-copies-row"]'), 'Safety Backup says the community keeps none').toBeTruthy();
+        await press('Next →', 'xx');
+        expect(host!.textContent).toContain(pseudoLocalise('🔑 Getting Back In'));
+        expect(host!.textContent, 'no copy is kept, so no sign-in is offered for later').not.toContain(pseudoLocalise(SIGN_IN_LATER));
+        check('How it Works after Safety Backup, none');
+    });
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`How it Works, resumed at a community whose rule is ${rule}: Getting Back In offers a sign-in only where a copy is kept`, async () => {
+            useVault();
+            store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+            door.cachedRule = rule;
+            phone.stored = SALLY;
+            phone.pending = { step: 'onboardingGuide', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+            await mount('xx');
+            expect(host!.textContent).toContain(pseudoLocalise('🔑 Getting Back In'));
+            if (rule === 'none') expect(host!.textContent, 'no copy is kept, so no sign-in is offered for later').not.toContain(pseudoLocalise(SIGN_IN_LATER));
+            else expect(host!.textContent, 'a kept copy is a way back').toContain(pseudoLocalise(SIGN_IN_LATER));
+            check(`How it Works, resumed, ${rule}`);
+        });
+    }
 });
 
 describe("the global community's door in the pseudo-locale", () => {

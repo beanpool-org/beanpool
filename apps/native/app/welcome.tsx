@@ -367,7 +367,8 @@ export default function WelcomeScreen() {
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     /**
      * Where a copy made at Safety Backup goes: the joined community's rule (vault rethink VR2, utils/copies-rule.ts),
-     * read as the step opens; this build's place until then and when the community never said.
+     * read as the step opens, and again as the guide after it opens (a resumed onboarding can open there first); this
+     * build's place until then and when the community never said.
      */
     const [backupCopiesAt, setBackupCopiesAt] = useState<SignInCopies>(() => signInCopiesAt());
     /** Read the rule again: the sheet found it moved on since the step read it, and linked nothing. */
@@ -380,9 +381,10 @@ export default function WelcomeScreen() {
     // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
     // name, join; then the same steps as an invite. `joinFlow` says which door this wizard came in by. ---
     const [joinFlow, setJoinFlow] = useState<OnboardingFlow>('invite');
-    // Safety Backup's copies: where the community just joined keeps them (the sign-in row's words and what it offers).
+    // Safety Backup's copies: where the community just joined keeps them (the sign-in row's words and what it offers), and
+    // the guide's: whether its Getting Back In card offers a sign-in.
     useEffect(() => {
-        if (mode !== 'seedBackup') return;
+        if (mode !== 'seedBackup' && mode !== 'onboardingGuide') return;
         let live = true;
         void (async () => {
             const url = await currentAnchorUrl().catch(() => null);
@@ -2608,9 +2610,14 @@ export default function WelcomeScreen() {
                             ) : (
                                 <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{welcomeLineWords(NO_WORDS_WAY_BACK)}</Text>
                             )}
-                            <Text style={guideStyles.bulletItem}>
-                                {t('🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.')}
-                            </Text>
+                            {/* Not where the community keeps no copies (its rule `none`, VR2): a sign-in linked there brings
+                                nothing back. Left out, not swapped for the no-copies row's sentence, which says none can be
+                                linked: a 12-words member at the global community can still add one, for the limits. */}
+                            {backupCopiesAt !== 'none' && (
+                                <Text style={guideStyles.bulletItem}>
+                                    {t('🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.')}
+                                </Text>
+                            )}
                         </View>
 
                         {/* Card 5: Where to Start */}

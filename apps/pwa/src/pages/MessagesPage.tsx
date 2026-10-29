@@ -51,6 +51,7 @@ import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
 import { ChatMenuModal } from '../components/ChatMenuModal';
 import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute';
 import { EventChat } from '../components/EventChat';
+import { FoldedChatText } from '../components/FoldedChatText';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { bundledGroupEmblem, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
@@ -2310,6 +2311,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const myReaction = reactions.find((r: any) => r && r.author === identity.publicKey);
                         const showEmojiPicker = !inRequest && activeEmojiPickerId === msg.id;
                         const isTopMessage = index < 2;
+                        // A long message folds with "…more" (FoldedChatText); never a removed line, nor one being edited.
+                        const foldable = !isTombstone && editingMessage?.id !== msg.id;
 
                         return (
                             <div
@@ -2451,7 +2454,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         />
                                                         {groupLine.text && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                {groupLine.text}
+                                                                <FoldedChatText text={groupLine.text} enabled={foldable} display="block" mine={isMe} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2473,7 +2476,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         <span style={{ fontStyle: 'italic', opacity: 0.8 }}><span aria-hidden="true">🖼️ </span>{closedPhotoWords()}</span>
                                                         {caption && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                {caption}
+                                                                <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2493,12 +2496,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     />
                                                     {caption && (
                                                         <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                            {caption}
+                                                            <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
                                                         </div>
                                                     )}
                                                 </>
                                             );
-                                        })() : decryptMessage(msg)}
+                                        })() : <FoldedChatText text={decryptMessage(msg)} enabled={foldable} mine={isMe} />}
                                     </div>
                                     {groupLine?.details && (
                                         <div data-testid="group-line-details" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>

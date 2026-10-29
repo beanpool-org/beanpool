@@ -8,7 +8,10 @@
  *     community's directory) is never asked for, nor anything signed by a key the phone doesn't have;
  *   - a typed address is a community to ask; opening its form drafts the key in memory and writes nothing;
  *   - Send writes the key once, with the name typed, hands it to the app, and the knock goes to that address, signed by
- *     that key, naming no community it came from.
+ *     that key, naming no community it came from;
+ *   - never a second key, with the real utils/knock-key.ts: an account the phone stored after the form opened signs the
+ *     knock and the draft is dropped (design §2.1); an account that changes between Send's two reads is refused, said, and
+ *     nothing is written or sent.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, type ReactNode } from 'react';
@@ -92,6 +95,16 @@ vi.mock('../knock', async (importOriginal) => ({
 }));
 const keys = vi.hoisted(() => ({ draft: null as any, knockKeyForThisPhone: vi.fn(), commitKnockKey: vi.fn() }));
 vi.mock('../knock-key', () => ({ knockKeyForThisPhone: keys.knockKeyForThisPhone, commitKnockKey: keys.commitKnockKey }));
+/**
+ * The phone's key store, for the cases that run the real utils/knock-key.ts: what each read of it finds, in order (then
+ * `stored`), every key written, and the key a draft makes.
+ */
+const phoneKey = vi.hoisted(() => ({ reads: [] as any[], stored: null as any, written: [] as any[], draft: null as any }));
+vi.mock('../identity', () => ({
+    loadIdentity: async () => (phoneKey.reads.length ? phoneKey.reads.shift() : phoneKey.stored),
+    importIdentity: async (identity: unknown) => { phoneKey.written.push(identity); },
+    draftIdentity: async () => ({ ...phoneKey.draft }),
+}));
 vi.mock('../join-another-community', () => ({ joinAnotherCommunity: vi.fn(), joinedNudge: vi.fn(), PROTECT_REDIRECT: '/x', HOME_REDIRECT: '/y' }));
 vi.mock('../typed-place', () => ({
     readTypedPlace: vi.fn(async () => ({ lat: -28.65, lng: 153.6, name: 'Mullumbimby' })), saveTypedPlace: vi.fn(), forgetTypedPlace: vi.fn(async () => undefined),
@@ -122,6 +135,7 @@ beforeEach(() => {
     knocks.readKnockStatus.mockResolvedValue({ ok: true, value: { status: 'pending' } });
     keys.knockKeyForThisPhone.mockImplementation(async (held: any) => held ?? { identity: DRAFT, createdHere: true });
     keys.commitKnockKey.mockImplementation(async (key: any, callsign: string) => ({ ...key.identity, callsign }));
+    phoneKey.reads = []; phoneKey.stored = null; phoneKey.written = []; phoneKey.draft = { ...DRAFT };
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -208,8 +222,13 @@ describe('Find a community with no account on the phone', () => {
         expect(knocks.readKnockStatus).toHaveBeenCalledWith(RIVERSIDE, expect.objectContaining({ publicKey: DRAFT.publicKey }));
     });
 
-    it('a phone that holds another account by Send is told, and nothing is sent', async () => {
-        keys.commitKnockKey.mockRejectedValue(new Error('This phone holds a different BeanPool account, so the request was not sent.'));
+    /** The real utils/knock-key.ts behind the screen, over the key store above: nothing of the key's rule is stubbed. */
+    async function realKeyRule() {
+        const real = await vi.importActual<typeof import('../knock-key')>('../knock-key');
+        keys.knockKeyForThisPhone.mockImplementation((held: any) => real.knockKeyForThisPhone(held));
+        keys.commitKnockKey.mockImplementation((key: any, callsign: string) => real.commitKnockKey(key, callsign));
+    }
+    async function openFormAndSend() {
         await render();
         await type(byId('find-address') as HTMLInputElement, 'riverside.example.org');
         await act(async () => { (byId('find-typed-community')!.querySelector('[aria-label="Ask to join riverside.example.org"]') as HTMLElement).click(); });
@@ -219,8 +238,36 @@ describe('Find a community with no account on the phone', () => {
         await type(inputs.find((i) => i.getAttribute('aria-label') === 'A few words about yourself')!, 'Hello.');
         await act(async () => { button('Send')!.click(); });
         await settle();
+    }
+    const KIM = { publicKey: 'ef'.repeat(32), privateKey: '01'.repeat(32), callsign: 'Kim', createdAt: '2026-10-29T00:00:00.000Z', mnemonic: Array(12).fill('word') };
+
+    it('an account the phone stored after the form opened (an invite join in between) signs the knock: the draft is dropped, nothing is written, never a second key', async () => {
+        await realKeyRule();
+        // The form opens on a phone with no account: a draft, in memory. By Send, the phone holds Kim's account.
+        phoneKey.reads = [null];
+        phoneKey.stored = KIM;
+        await openFormAndSend();
+        expect(phoneKey.written).toEqual([]);
+        expect(store.has('beanpool_knock_key')).toBe(false);
+        expect(knocks.sendKnock).toHaveBeenCalledTimes(1);
+        const [to, signer, req] = knocks.sendKnock.mock.calls[0];
+        expect(to).toBe(RIVERSIDE);
+        expect(signer.publicKey).toBe(KIM.publicKey);
+        expect(req).toMatchObject({ callsign: 'River Kid', message: 'Hello.' });
+        // The app is given the phone's account as it is stored: not renamed, and not the draft.
+        expect(who.setIdentity).toHaveBeenCalledWith(KIM);
+        expect(host.textContent).not.toContain('This phone holds a different BeanPool account');
+    });
+
+    it('an account that changes between Send\'s two reads is refused and said: nothing is written, nothing is sent', async () => {
+        await realKeyRule();
+        const OTHER = { ...KIM, publicKey: '23'.repeat(32), callsign: 'Ash' };
+        // The form opens with none; Send reads Kim's account, then, as the key is committed, another.
+        phoneKey.reads = [null, KIM, OTHER];
+        await openFormAndSend();
         expect(knocks.sendKnock).not.toHaveBeenCalled();
         expect(who.setIdentity).not.toHaveBeenCalled();
+        expect(phoneKey.written).toEqual([]);
         expect(host.textContent).toContain('This phone holds a different BeanPool account, so the request was not sent.');
     });
 });

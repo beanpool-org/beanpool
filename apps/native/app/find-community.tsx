@@ -332,7 +332,8 @@ export default function FindCommunityScreen() {
         const problem = knockFormProblem({ callsign, message });
         if (problem) { setFormError(problem); return; }
         // The key the knock signs with: the account's, or the one this form drafted, written to the phone now, before the
-        // knock goes out, and never taken off again on its own (utils/knock-key.ts).
+        // knock goes out, and never taken off again on its own (utils/knock-key.ts). An account the phone has stored since
+        // the form opened (an invite join in between) signs it instead, and the draft is dropped: never a second key.
         let signer: BeanPoolIdentity;
         try {
             if (identity) signer = identity;

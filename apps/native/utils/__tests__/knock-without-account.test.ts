@@ -121,10 +121,18 @@ describe('the key at the knock (utils/knock-key.ts)', () => {
         expect(keyWrites(pk)).toBe(1);
     });
 
-    it('never a second key: a phone that holds another account by Send sends nothing and writes nothing', async () => {
+    it('never a second key: an account the phone stored by Send signs the knock, the draft never written; handed any other key, the commit writes nothing', async () => {
         const drafted = await knockKeyForThisPhone(null);
         const other = await draftIdentity('Kim');
         await importIdentity(other);
+        // Send asks again with the key the form holds (find-community.tsx): the phone's own account, as stored, signs it.
+        const atSend = await knockKeyForThisPhone(drafted);
+        expect(atSend).toEqual({ identity: expect.objectContaining({ publicKey: other.publicKey }), createdHere: false });
+        const signer = await commitKnockKey(atSend, 'River Kid');
+        expect(signer.publicKey).toBe(other.publicKey);
+        expect(signer.callsign).toBe('Kim');
+        expect(keyWrites(other.publicKey)).toBe(1);
+        // The commit itself never writes over it: handed the draft (the account changed between Send's two reads), it refuses.
         await expect(commitKnockKey(drafted, 'River Kid')).rejects.toThrow(KNOCK_KEY_DIFFERS);
         expect((await loadIdentity())?.publicKey).toBe(other.publicKey);
         expect(keyWrites(drafted.identity.publicKey)).toBe(0);

@@ -37,7 +37,8 @@ export const KNOCK_KEY_DIFFERS = 'This phone holds a different BeanPool account,
 /**
  * The key the knock will be signed with: the phone's own when it has one (`createdHere` false), else `held` when the
  * form already drafted one, else a new one in memory, not saved. Asked again at Send, with the key the form holds: a key
- * drafted before the phone stored one (an invite join in between) never outranks it.
+ * drafted before the phone stored one (an invite join in between) never outranks it. The phone's account signs that knock,
+ * and the draft is dropped, never written: one key per phone (§2.1), as every door's `keyForThisPhone` does.
  */
 export async function knockKeyForThisPhone(held: JoinKey | null = null): Promise<JoinKey> {
     const stored = await loadIdentity();
@@ -72,9 +73,10 @@ const defaultDeps: CommitDeps = {
  * - A key the form drafted, on a phone with no account: the look (if any) ends first, while the phone still holds no key
  *   ({@link forgetTheLook} only clears a phone with none), then the mark, then the key with the name typed. The mark
  *   first: an app stopped in between leaves a mark naming a key the phone does not hold, which reads as nothing.
- * - The phone holds another key by now, or the account the form was opened with is gone: nothing is written, and the
- *   knock is not sent ({@link KNOCK_KEY_DIFFERS}). An unreadable stored key is never written over (identity.ts KEY-04:
- *   importIdentity refuses).
+ * - The phone holds a key other than `key`, or the account `key` was read as is gone: nothing is written, and the knock
+ *   is not sent ({@link KNOCK_KEY_DIFFERS}). Find a community reads `key` with {@link knockKeyForThisPhone} just before, so
+ *   from there this is an account that changed between the two reads. An unreadable stored key is never written over
+ *   (identity.ts KEY-04: importIdentity refuses).
  */
 export async function commitKnockKey(key: JoinKey, callsign: string, deps: CommitDeps = defaultDeps): Promise<BeanPoolIdentity> {
     const stored = await deps.loadIdentity();

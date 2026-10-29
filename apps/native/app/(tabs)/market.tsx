@@ -59,7 +59,7 @@ import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
+import { listingChips, listingChipWords, readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -677,6 +677,9 @@ export default function MarketScreen() {
 
     // In preview the pill counts none of the reader's own deals, even one read before the switch that lands after it.
     const pendingCount = usePendingDealsCount(dealsPreview ? null : identity, myTransactions);
+    // A card's chip on a listing the reader has a deal of their own on (deals S4, DESIGN-deals-fable §3.3): from the deals
+    // the phone already holds, and only the reader's own, so a card never tells anyone else who traded.
+    const dealChips = React.useMemo(() => (dealsPreview ? new Map() : listingChips(myTransactions, identity?.publicKey || '')), [dealsPreview, myTransactions, identity?.publicKey]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1517,6 +1520,7 @@ export default function MarketScreen() {
         // Elder is a tier, and a tier is Beans: no Elder look where the community shows none (as the tier chip below).
         const elderCard = !isPulse && showsBeans && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
+        const dealChip = isPulse ? undefined : dealChips.get(item.id);
         const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
         const groupName = item.target_group_name || item.targetGroupName || t('Group');
         const groupScopeBadgeText = isGroupScope ? t('🔒 Only {group} can see this', { group: groupName }) : null;
@@ -1591,6 +1595,13 @@ export default function MarketScreen() {
                             }
                             return null;
                         })()}
+                        {dealChip && (
+                            <View testID="card-deal-chip" style={[styles.gridBadge, dealChip === 'in-trust'
+                                ? { backgroundColor: colors.feedback.success.solid, borderColor: colors.feedback.success.solid }
+                                : { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid }]}>
+                                <Text style={[styles.gridPriceText, { color: dealChip === 'in-trust' ? colors.text.onBrand : colors.text.onGold, fontWeight: '900' }]}>{listingChipWords(dealChip)}</Text>
+                            </View>
+                        )}
                         {!isPulse && showsBeans && (
                             <View style={[styles.gridBadge, styles.gridPriceEnd]}>
                                 <CurrencyDisplay
@@ -1736,6 +1747,11 @@ export default function MarketScreen() {
                                 {isOwn && (
                                     <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>{t('👤 YOU')}</Text>
+                                    </View>
+                                )}
+                                {dealChip && (
+                                    <View testID="card-deal-chip" style={{ backgroundColor: dealChip === 'in-trust' ? colors.feedback.success.bg : colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: dealChip === 'in-trust' ? colors.feedback.success.border : colors.feedback.warning.border }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: dealChip === 'in-trust' ? colors.feedback.success.fg : colors.feedback.warning.fg }}>{listingChipWords(dealChip)}</Text>
                                     </View>
                                 )}
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>

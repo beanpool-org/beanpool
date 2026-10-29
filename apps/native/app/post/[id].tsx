@@ -12,7 +12,7 @@ import {
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
     submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
-    treasuryApprove, treasuryComplete, treasuryReject,
+    treasuryApprove, treasuryComplete, treasuryReject, getMarketplaceTransactions, getDealsFor,
     fetchGroupDetails, deleteGroupPostApi
 } from '../../utils/db';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -40,7 +40,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, type DealMoves, type DealRow } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -534,7 +534,14 @@ export default function PostDetailModal() {
     const [rejectModalTxId, setRejectModalTxId] = useState<string | null>(null);
     const [rejectMessage, setRejectMessage] = useState('');
 
-    const [requests, setRequests] = useState<any[]>([]);
+    const [localRequests, setRequests] = useState<any[]>([]);
+    // Every deal on this listing the reader stands on (deals S4): their own, and for a keeper the enterprise's, which the
+    // phone's sync never holds (utils/db.ts getDealsFor reads them from the node).
+    const [listingTxs, setListingTxs] = useState<DealRow[]>([]);
+    const [keptRequests, setKeptRequests] = useState<any[]>([]);
+    const requests = keptRequests.length > 0 ? [...localRequests, ...keptRequests.filter(k => !localRequests.some(r => r.id === k.id))] : localRequests;
+    // The row whose Release is being confirmed, on a listing with several deals under way (its own people's rows).
+    const [releaseRowId, setReleaseRowId] = useState<string | null>(null);
 
     const [authorAvgRating, setAuthorAvgRating] = useState<number | null>(null);
     const [authorRatingCount, setAuthorRatingCount] = useState<number>(0);
@@ -590,6 +597,29 @@ export default function PostDetailModal() {
                     }
 
                     const database = await getDb();
+                    // The listing's deals by the one rule (core listingDeals): the reader's own, and an enterprise's for its keeper.
+                    if (activeIdentity) {
+                        const reader = activeIdentity.publicKey;
+                        (async () => {
+                            const own = (await getMarketplaceTransactions(reader).catch(() => [])).filter(tx => tx.postId === singleId);
+                            const listed = await getPost(singleId);
+                            let kept: DealRow[] = [];
+                            if (listed?.author_pubkey && listed.author_pubkey !== reader && await readsOwn('enterprises', reader) && await readsOwn('escrow', reader)) {
+                                const b = await getBalance(reader).catch(() => null);
+                                if (Array.isArray((b as any)?.keeperOf) && (b as any).keeperOf.includes(listed.author_pubkey)) {
+                                    kept = (await getDealsFor(listed.author_pubkey)).filter(tx => tx.postId === singleId);
+                                }
+                            }
+                            setListingTxs([...own, ...kept] as DealRow[]);
+                            // Its requests, in the shape the phone's own rows have, for the keepers who answer them.
+                            setKeptRequests(kept.filter(tx => tx.status === 'requested').map((tx: any) => ({
+                                id: tx.id, post_id: tx.postId, status: tx.status, buyer_pubkey: tx.buyerPublicKey, seller_pubkey: tx.sellerPublicKey,
+                                buyer_callsign: tx.buyerCallsign, seller_callsign: tx.sellerCallsign, credits: tx.credits, hours: tx.hours ?? null,
+                                created_at: tx.createdAt, avgRating: 0, count: 0,
+                                resolvedReqPubkey: listed?.type === 'need' ? tx.sellerPublicKey : tx.buyerPublicKey,
+                            })));
+                        })().catch(() => {});
+                    }
                     const updateActiveTx = async (tx: any) => {
                         setActiveTx(tx);
                         // Ensure unread badge instantly updates when sync_data_updated triggers reload
@@ -843,6 +873,85 @@ export default function PostDetailModal() {
     const emoji = categoryEmoji(post.category);
     const cardAuthor = post.author_callsign || post.author_pubkey?.slice(0, 6) || t('Unknown');
     const priceLabel = isOffer ? t('ASKING PRICE') : t('WILLING TO PAY');
+    // Every deal on it the reader stands on (DESIGN-deals-fable §3.2, slice S4), by core's one rule, as on the web: its own
+    // people (its author, or a keeper of the enterprise that wrote it) see a row for each deal under way, the one a door
+    // named first; anyone else sees their own deal, or nothing of anyone else's.
+    const me = identity?.publicKey || '';
+    const deals = listingDeals(listingTxs, { id: post.id, authorPublicKey: post.author_pubkey, type: post.type, status: post.status }, me, operatedTreasuries);
+    const pinnedTxId = Array.isArray(txId) ? txId[0] : txId;
+    const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === pinnedTxId) - Number(a.tx.id === pinnedTxId)) : [];
+    const afterDealStep = () => { DeviceEventEmitter.emit('sync_data_updated'); };
+    // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
+    const releaseRow = async (m: DealMoves) => {
+        if (!identity) return;
+        const hoursRead = post.price_type !== 'fixed' ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null;
+        if (hoursRead && !hoursRead.ok) { Alert.alert(t('Error'), amountRefusalWords(hoursRead.refusal)); return; }
+        const finalHours = hoursRead?.ok ? hoursRead.value : undefined;
+        setAccepting(true);
+        try {
+            if (m.asKeeper) await treasuryComplete(m.actingAs, m.tx.id!, finalHours);
+            else await completeMarketplaceTransaction(m.tx.id!, me, finalHours);
+            setShowCompleteConfirm(false);
+            setReleaseRowId(null);
+            hapticSuccess();
+            afterDealStep();
+        } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
+    };
+    const cancelRow = (m: DealMoves) => {
+        Alert.alert(t('Cancel Transaction'), t('Return post to the market?'), [
+            { text: t('No'), style: 'cancel' },
+            { text: t('Yes, Cancel'), style: 'destructive', onPress: async () => {
+                setAccepting(true);
+                try {
+                    await cancelMarketplaceTransaction(m.tx.id!, me);
+                    afterDealStep();
+                } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
+            } },
+        ]);
+    };
+    const renderOwnDeal = (m: DealMoves) => {
+        const tx = m.tx;
+        const payer = tx.buyerPublicKey === m.actingAs;
+        const otherName = (payer ? tx.sellerCallsign : tx.buyerCallsign) || t('Peer');
+        const confirming = showCompleteConfirm && releaseRowId === tx.id;
+        const since = tx.createdAt ? formatDate(new Date(tx.createdAt), 'day-month') : '';
+        return (
+            <View key={tx.id} testID={`deal-row-${tx.id}`} style={{ borderWidth: 1, borderColor: tx.id === pinnedTxId ? colors.brand.primary : colors.border.default, borderRadius: 10, padding: 12, gap: 8, marginBottom: 8 }}>
+                <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700' }}>
+                    {listingDealLines.heldRow(otherName, formatNumber((tx as any).credits ?? 0), since)}
+                </Text>
+                {!m.release && (
+                    <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700' }}>
+                        {t('⏳ Pending Release by {name}', { name: otherName })}
+                    </Text>
+                )}
+                {m.release && (confirming ? (
+                    <View style={styles.confirmBox}>
+                        {post.price_type !== 'fixed' && (
+                            <TextInput accessibilityLabel={t('Actual time worked')} style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder={t('e.g. {amount}', { amount: 2.5 })} placeholderTextColor={colors.text.muted} />
+                        )}
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => { setShowCompleteConfirm(false); setReleaseRowId(null); }} disabled={accepting}>
+                                <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>
+                            </Pressable>
+                            <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, styles.confirmActionBtnGreen]} disabled={accepting || (post.price_type !== 'fixed' && !completeHours)} onPress={() => releaseRow(m)}>
+                                <Text style={styles.confirmActionBtnText}>{accepting ? t('Processing...') : t('Release Credits')}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                ) : (
+                    <Pressable accessibilityRole="button" style={[styles.acceptBtn, styles.acceptBtnOffer]} onPress={() => { setReleaseRowId(tx.id!); setShowCompleteConfirm(true); if (post.price_type !== 'fixed') setCompleteHours((tx as any).hours ? formatNumber((tx as any).hours) : '1'); }}>
+                        <Text style={styles.acceptBtnText}>{t('✅ Release Credits')}</Text>
+                    </Pressable>
+                ))}
+                {m.cancelHold && (
+                    <Pressable accessibilityRole="button" accessibilityHint={t('Cancels the transaction and returns the post to the market')} style={styles.cancelTxBtn} disabled={accepting} onPress={() => cancelRow(m)}>
+                        <Text style={styles.cancelTxBtnText}>{t('❌ Cancel Trust Hold')}</Text>
+                    </Pressable>
+                )}
+            </View>
+        );
+    };
 
     let photos: string[] = [];
     if (post.photos) {
@@ -1212,7 +1321,7 @@ export default function PostDetailModal() {
                 {/* Action Buttons */}
 
                 {/* 1. Pending Escrow State (Applies to both Payer and Payee) */}
-                {(post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
+                {ownRows.length === 0 && (post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                     <View style={styles.ownPostActions}>
                         {isPayer ? (
                             <>
@@ -1298,6 +1407,12 @@ export default function PostDetailModal() {
                             </>
                         ) : (
                             <>
+                                {/* The helper's line (design §3.2): the Beans are held for them, with the deal's own amount. */}
+                                {!isOwnPost && !!activeTx && (
+                                    <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 }}>
+                                        {listingDealLines.helping(formatNumber(activeTx.credits))}
+                                    </Text>
+                                )}
                                 <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
                                     {t('⏳ Pending Release by {name}', { name: targetPeerCallsign })}
                                 </Text>
@@ -1340,6 +1455,8 @@ export default function PostDetailModal() {
                                 </Pressable>
                             )}
 
+                            {/* Never for a keeper: the node has no door for one to cancel the enterprise's hold (routes/treasury.ts). */}
+                            {!isOperatorOfAuthor && (
                             <Pressable accessibilityRole="button" accessibilityHint={t('Cancels the transaction and returns the post to the market')} style={styles.cancelTxBtn} disabled={accepting} onPress={() => {
                                 const txToCancel = activeTx?.id || post.pending_transaction_id;
                                 if (!txToCancel) {
@@ -1368,6 +1485,7 @@ export default function PostDetailModal() {
                             }}>
                                 <Text style={styles.cancelTxBtnText}>{t('❌ Cancel Trust Hold')}</Text>
                             </Pressable>
+                            )}
 
                             <Pressable
                                 accessibilityRole="button"
@@ -1382,6 +1500,21 @@ export default function PostDetailModal() {
                                 </Text>
                             </Pressable>
                         </View>
+                    </View>
+                )}
+
+                {/* 1b. Deals under way, for the listing's own people: a row for each (a recurring listing can have several) */}
+                {ownRows.length > 0 && (
+                    <View style={styles.ownPostActions} testID="deals-under-way">
+                        <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '800', textAlign: 'center', marginBottom: 4 }}>
+                            {listingDealLines.underWay(ownRows.length)}
+                        </Text>
+                        {isOperatorOfAuthor && (
+                            <Text style={{ color: colors.text.secondary, fontSize: 12, textAlign: 'center', marginBottom: 4 }}>
+                                {listingDealLines.actingFor(post.author_callsign || cardAuthor)}
+                            </Text>
+                        )}
+                        {ownRows.map(renderOwnDeal)}
                     </View>
                 )}
 
@@ -1540,6 +1673,33 @@ export default function PostDetailModal() {
                     </View>
                 )}
 
+                {/* A one-off listing in someone else's deal (reached by a link); a recurring one the reader has finished (§3.2) */}
+                {deals.takenByOther && (
+                    <Text testID="taken-by-other" style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center', marginTop: 12 }}>
+                        {listingDealLines.takenByOther()}
+                    </Text>
+                )}
+                {deals.lastDone && post.status === 'active' && (
+                    <View testID="had-before" style={{ alignItems: 'center', marginTop: 12, gap: 4 }}>
+                        <Text style={{ color: colors.text.secondary, fontSize: 13, textAlign: 'center' }}>
+                            {listingDealLines.hadBefore(formatDate(new Date(deals.lastDone.tx.completedAt || deals.lastDone.tx.createdAt || Date.now()), 'day-month'))}
+                        </Text>
+                        {deals.lastDone.step.state === 'done-to-review' && !deals.lastDone.asKeeper && (
+                            <Pressable accessibilityRole="button" style={{ paddingVertical: 6, paddingHorizontal: 12 }} onPress={() => {
+                                const done = deals.lastDone!.tx;
+                                const iPaid = done.buyerPublicKey === me;
+                                setPromptReviewForTx({
+                                    txId: done.id!,
+                                    targetPubkey: iPaid ? done.sellerPublicKey : done.buyerPublicKey,
+                                    targetCallsign: (iPaid ? done.sellerCallsign : done.buyerCallsign) || t('Peer'),
+                                });
+                            }}>
+                                <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' }}>{t('Leave Review')}</Text>
+                            </Pressable>
+                        )}
+                    </View>
+                )}
+
                 {/* 3. Unaccepted Posts Displayed to Browsers */}
                 {isPulsePost ? (
                     <View style={styles.pulseInspirationBox}>
@@ -1569,6 +1729,11 @@ export default function PostDetailModal() {
                         {myRequest ? (
                             <View style={styles.confirmBox}>
                                 <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>{isLoan ? t('Asked to borrow') : t('Deal Established')}</Text>
+                                {(isLoan || !isOffer) && (
+                                    <Text style={{ color: colors.text.heading, fontSize: 14, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>
+                                        {isLoan ? listingDealLines.askedToBorrow(cardAuthor) : listingDealLines.offeredToHelp(cardAuthor)}
+                                    </Text>
+                                )}
                                 <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                                     {isLoan ? (
                                         t('Nothing is held until the lender says yes.')

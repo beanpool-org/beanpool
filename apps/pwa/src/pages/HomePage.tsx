@@ -272,7 +272,7 @@ interface Props {
      * 'settings-profile', 'guide' (a page of the members' guide, by slug: the Tips card's Read more). The lobby takes
      * 'marketplace' and 'map' only.
      */
-    onNavigate: (tab: string, contextId?: string) => void;
+    onNavigate: (tab: string, contextId?: string, txId?: string) => void;
     /** The safety card's "See my 12 words". */
     onSeeWords?: () => void;
     /**
@@ -624,12 +624,12 @@ function DealsBody({
     onNavigate,
 }: {
     d: NonNullable<HomeCards['deals']>;
-    onNavigate: (page: string, id?: string) => void;
+    onNavigate: (page: string, id?: string, txId?: string) => void;
 }) {
     const items = d.items ?? [];
     if (items.length === 0) {
         return (
-            <HomeLine onClick={() => onNavigate('marketplace', d.waitingOnMe?.postId)} label={t('Your deals: {line}', { line: dealsLine(d) })}>
+            <HomeLine onClick={() => onNavigate('marketplace', d.waitingOnMe?.postId, d.waitingOnMe?.txId)} label={t('Your deals: {line}', { line: dealsLine(d) })}>
                 <span className="min-w-0 break-words">{dealsLine(d)}</span>
             </HomeLine>
         );
@@ -643,7 +643,7 @@ function DealsBody({
                 return (
                     <HomeLine
                         key={item.txId}
-                        onClick={() => onNavigate('marketplace', item.postId)}
+                        onClick={() => onNavigate('marketplace', item.postId, item.txId)}
                         label={lineLabel}
                         testId="home-deal-item"
                     >
@@ -1858,7 +1858,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const go = () => {
             const target = item.target;
             switch (target.to) {
-                case 'deal': return onNavigate('marketplace', target.postId);
+                // On the deal itself (deals S4): a recurring listing's author lands on this one, as on the phone.
+                case 'deal': return onNavigate('marketplace', target.postId, target.txId);
                 case 'my-deals': return onNavigate('marketplace');
                 case 'decide': return onNavigate('projects');
                 case 'chat': return onNavigate('messages', target.conversationId);

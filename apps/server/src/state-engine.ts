@@ -1333,7 +1333,8 @@ export function runMarketplaceHygiene(): void {
             loan ? '⏳ Is it back?' : '⏳ Deal Awaiting Completion',
             loan ? loanNudgeBody(row.seller_callsign, row.post_title, Number(row.credits) > 0)
                 : `"${row.post_title || 'A deal'}" has been in escrow for over ${ESCROW_NUDGE_DAYS} days — release the Beans to the seller or cancel the deal.`,
-            { screen: 'post', postId: row.post_id },
+            // The deal itself, so a recurring listing's tap lands on this one (DESIGN-deals-fable §2.2, slice S4).
+            { screen: 'post', postId: row.post_id, txId: row.id },
             'marketplace',
             'trade.update'
         );

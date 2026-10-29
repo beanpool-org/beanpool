@@ -231,6 +231,8 @@ export function App() {
     const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
+    // The deal a door named with its listing (Home, the header's needs-you icons): the listing opens at that deal (deals S4).
+    const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
     // the app arrived on (a shared /?post=, the lobby's kept listing), which lands quietly on the Market as before.
     const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState(false);
@@ -393,7 +395,7 @@ export function App() {
             .catch(() => { setCommunityHealth(prev => ({ ...prev, online: false })); setShowCommunityStatus(true); });
     };
 
-    function navigateToTab(tab: string, contextId?: string) {
+    function navigateToTab(tab: string, contextId?: string, txId?: string) {
         if (tab === 'profile-setup') {
             setShowProfileSetup(true);
             return;
@@ -500,7 +502,7 @@ export function App() {
         }
         setActiveTab(tab as Tab);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
-        if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); }
+        if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); setOpenMarketTxId(txId ?? null); }
         if (tab === 'projects' && contextId === 'start') setProjectsInitialStart(true);
     }
 
@@ -971,7 +973,7 @@ export function App() {
                         isGuest={isGuest}
                         identityPubkey={identity?.publicKey}
                         activeTab={activeTab}
-                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                        onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                         settingsSeen={settingsSeen}
                         setShowSettings={setSettingsFromCog}
                     />
@@ -1043,7 +1045,7 @@ export function App() {
                     settingsSeen={settingsSeen}
                     setShowSettings={setSettingsFromCog}
                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
-                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                 />
 
                 {/* Main Scrollable Canvas */}
@@ -1141,7 +1143,7 @@ export function App() {
                                     onSaveSearchTaken={clearSaveSearch}
                                     addCardType={addHomeCard}
                                     onAddCardTaken={clearAddHomeCard}
-                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
                                     askedCommunity={askedCommunity}
                                     onAskedCommunitySeen={clearAskedCommunity}
@@ -1152,7 +1154,8 @@ export function App() {
                                     identity={identity}
                                     marketClickCount={marketClickCount}
                                     openPostId={openMarketPostId}
-                                    onPostOpened={() => setOpenMarketPostId(null)}
+                                    openTxId={openMarketTxId}
+                                    onPostOpened={() => { setOpenMarketPostId(null); setOpenMarketTxId(null); }}
                                     sayWhenPostUnopened={openMarketPostSaysWhy}
                                     openReviewTxId={openMarketReviewTxId}
                                     onReviewOpened={() => setOpenMarketReviewTxId(null)}

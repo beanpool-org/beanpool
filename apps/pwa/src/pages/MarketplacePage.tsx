@@ -23,7 +23,7 @@ import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCom
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
-    dealsNeedingMe,
+    dealsNeedingMe, listingDeals, listingDealLines, listingChips, listingChipWords, type DealMoves,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -57,6 +57,7 @@ import {
     acceptMarketplacePost, completeMarketplaceTransaction, getBalance,
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest, openDealIn,
+    treasuryApprove, treasuryReject, treasuryComplete,
     getMembers, getTreasury, getEnterpriseStatuses,
     getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
@@ -105,6 +106,8 @@ interface Props {
     sayWhenPostUnopened?: boolean;
     /** A finished trade to rate (a chat's "Rate your partner"): its rating form opens here; taken once, then `onReviewOpened`. */
     openReviewTxId?: string | null;
+    /** The deal `openPostId` was opened for (Home, the header's needs-you icons): the listing opens at that deal (deals S4). */
+    openTxId?: string | null;
     onReviewOpened?: () => void;
     /** Words to put in the search (a saved search's See more on Home); taken once, then `onSearchOpened`. */
     openSearch?: string | null;
@@ -293,7 +296,7 @@ const NEAR_WAIT_MS = 1500;
  */
 const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -571,7 +574,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             const found = posts.find(p => p.id === openPostId);
             if (found) {
                 setSelectedPost(found);
-                // Note: deep-link doesn't set txId yet in MVP, requires manual navigation into Deals
+                // At the deal the door named (a recurring listing's author has several): its row comes first.
+                setSelectedTxId(openTxId ?? null);
                 onPostOpened?.();
             } else if (deepLinkFetched.current !== openPostId) {
                 // Not in the feed: an event that has ended or been cancelled has left it, but its host and the
@@ -584,7 +588,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     onPostOpened?.();
                 };
                 getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
-                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); onPostOpened?.(); } else notReadable(); })
+                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); setSelectedTxId(openTxId ?? null); onPostOpened?.(); } else notReadable(); })
                     // A failed read is not an answer: say so, and let the next View Post ask again (review #1980 N1).
                     .catch(() => {
                         deepLinkFetched.current = null;
@@ -593,7 +597,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     });
             }
         }
-    }, [openPostId, posts, loading, onPostOpened, sayWhenPostUnopened]);
+    }, [openPostId, openTxId, posts, loading, onPostOpened, sayWhenPostUnopened]);
 
     // A Live Pulse chip names a listing that the browse list need not be holding — an older post, or one
     // the current filters hide. Same two steps as the deep-link above: open what we already have, else
@@ -659,6 +663,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [profileGateMsg, setProfileGateMsg] = useState<string | null>(null);
     const [acceptHours, setAcceptHours] = useState('1');
     const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+    // The row whose Release is being confirmed, on a listing with several deals under way (its own people's rows, S4).
+    const [releaseRowId, setReleaseRowId] = useState<string | null>(null);
     const [completeHours, setCompleteHours] = useState('');
     // The hours as typed, read as every typed amount is (core parseAmount): the language's decimal mark, any decimals.
     const acceptHoursRead = parseAmount(acceptHours, undefined, ANY_DECIMALS);
@@ -723,6 +729,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [submittingReview, setSubmittingReview] = useState(false);
 
     const pendingDealsCount = dealsNeedingMe(myTransactions, identity?.publicKey || '').length;
+    // The feed's chip on a listing the reader has a deal of their own on (S4): from the deals this page already holds.
+    const dealChips = useMemo(() => listingChips(myTransactions, identity?.publicKey || ''), [myTransactions, identity?.publicKey]);
 
     // Author ratings cache for tiles — cached by author in ref to prevent fan-out on every 15s poll
     const RATINGS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL ensures ratings updates eventually appear
@@ -880,6 +888,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         return () => { cancelled = true; };
     }, [identity, canLoadBalance, readsBalance, readsKeepers]);
 
+    // A keeper reading their enterprise's listing: its deals, which are the enterprise's and not in the member's own
+    // (the node lets its keepers read them, routes/marketplace.ts GET /api/marketplace/transactions). Asked only then, and
+    // again after a step taken here (keptDealsRead), as the phone's app/post/[id].tsx does.
+    const [keptDeals, setKeptDeals] = useState<MarketplaceTransaction[]>([]);
+    const [keptDealsRead, setKeptDealsRead] = useState(0);
+    const keptAuthor = selectedPost && identity && selectedPost.authorPublicKey !== identity.publicKey
+        && keeperOf.includes(selectedPost.authorPublicKey) ? selectedPost.authorPublicKey : null;
+    useEffect(() => {
+        if (!keptAuthor) { setKeptDeals([]); return; }
+        let live = true;
+        readsOwn('escrow')
+            .then((reads) => (reads ? getMyMarketplaceTransactions(keptAuthor) : []))
+            .then((txs) => { if (live) setKeptDeals(txs); })
+            .catch(() => { if (live) setKeptDeals([]); });
+        return () => { live = false; };
+    }, [keptAuthor, keptDealsRead]);
+
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -1015,8 +1040,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Depending on `myTransactions` directly would re-run this effect on every poll even when
     // nothing relevant changed, re-rendering an open post every 10s; this only changes when the
     // set of outstanding bids for THIS post actually changes.
+    // With the enterprise's own for its keeper (keptDeals): its requests are answered by its keepers.
+    const bidSource = keptDeals.length > 0 ? [...myTransactions, ...keptDeals] : myTransactions;
     const openNeedBidIds = (selectedPost?.type === 'need' || selectedPost?.lendable)
-        ? myTransactions
+        ? bidSource
             .filter(t => t.postId === selectedPost.id && t.status === 'requested')
             .map(t => t.id)
             .sort()
@@ -1096,14 +1123,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         
         // Fetch requests if this is a Need or a lendable Offer
         if (selectedPost.type === 'need' || selectedPost.lendable) {
-            const txPromise = myTransactions.length > 0
-                ? Promise.resolve(myTransactions)
+            const txPromise = bidSource.length > 0
+                ? Promise.resolve(bidSource)
                 : (identity
                     ? readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : [])).catch(() => [])
                     : Promise.resolve([]));
             txPromise
                 .then(async txs => {
-                    const filtered = txs.filter(t => t.postId === selectedPost.id && t.status === 'requested');
+                    const filtered = txs.filter((t, i) => t.postId === selectedPost.id && t.status === 'requested' && txs.findIndex(x => x.id === t.id) === i);
                     const enriched = await Promise.all(filtered.map(async req => {
                         try {
                             const requesterKey = selectedPost.type === 'need' ? req.sellerPublicKey : (req.buyerPublicKey || req.sellerPublicKey);
@@ -1327,6 +1354,133 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             : (isOwnPost ? ((selectedPost as any).acceptedByCallsign || t('Peer')) : selectedPost.authorCallsign);
         // The edit form's type toggle, in the member's language (its loop names its own `t`).
         const editTypeLabel = { offer: t('🟢 Offer'), need: t('🟠 Need') };
+
+        // Every deal on this listing the reader stands on (DESIGN-deals-fable §3.2, slice S4), by core's one rule, as on the
+        // phone: its own people (its author, or a keeper of the enterprise that wrote it) see a row for each deal under way,
+        // the one a door named first; anyone else sees their own deal, or nothing of anyone else's.
+        const me = identity?.publicKey || '';
+        const deals = listingDeals(keptDeals.length > 0 ? [...myTransactions, ...keptDeals] : myTransactions,
+            { id: selectedPost.id, authorPublicKey: selectedPost.authorPublicKey, type: selectedPost.type, status: selectedPost.status }, me, keeperOf);
+        const ownRows = deals.own ? [...deals.held].sort((a, b) => Number(b.tx.id === selectedTxId) - Number(a.tx.id === selectedTxId)) : [];
+        const afterDealStep = () => {
+            refresh();
+            onRefreshTransactions?.();
+            setKeptDealsRead(n => n + 1);
+        };
+        // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
+        const releaseRow = async (m: DealMoves<MarketplaceTransaction>) => {
+            if (!identity) return;
+            const finalHours = selectedPost.priceType !== 'fixed' ? completeHoursValue : undefined;
+            setAccepting(true);
+            try {
+                if (m.asKeeper) await treasuryComplete(m.actingAs, m.tx.id, finalHours);
+                else await completeMarketplaceTransaction(m.tx.id, me, finalHours);
+                setShowCompleteConfirm(false);
+                setReleaseRowId(null);
+                afterDealStep();
+                // The reader's own trade is theirs to rate; a keeper's is the enterprise's.
+                if (!m.asKeeper) {
+                    setReviewStars(5);
+                    setReviewComment('');
+                    setPromptReviewForTx(reviewTargetOf(m.tx, me));
+                }
+            } catch (e: any) {
+                setError(e.message || t('Failed to complete transaction'));
+            } finally {
+                setAccepting(false);
+            }
+        };
+        const cancelRow = async (m: DealMoves<MarketplaceTransaction>) => {
+            if (!identity || !confirm(t('Cancel this transaction and return the post to the market?'))) return;
+            setAccepting(true);
+            try {
+                await cancelMarketplaceTransaction(m.tx.id, me);
+                afterDealStep();
+            } catch (e: any) {
+                setError(e.message || t('Failed to cancel transaction'));
+            } finally {
+                setAccepting(false);
+            }
+        };
+        const renderOwnDeal = (m: DealMoves<MarketplaceTransaction>) => {
+            const tx = m.tx;
+            const payer = tx.buyerPublicKey === m.actingAs;
+            const otherName = (payer ? tx.sellerCallsign : tx.buyerCallsign) || t('Peer');
+            const confirming = showCompleteConfirm && releaseRowId === tx.id;
+            return (
+                <div
+                    key={tx.id}
+                    data-testid={`deal-row-${tx.id}`}
+                    className={`bg-white dark:bg-nature-900 border rounded-lg p-3 shadow-sm flex flex-col gap-2 ${tx.id === selectedTxId ? 'border-emerald-400 dark:border-emerald-600' : 'border-nature-200 dark:border-nature-800'}`}
+                >
+                    <p className="text-sm font-bold text-nature-900 dark:text-white break-words">
+                        {listingDealLines.heldRow(otherName, formatNumber(tx.credits), formatDate(new Date(tx.createdAt), 'day-month'))}
+                    </p>
+                    {!m.release && (
+                        <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            {t('⏳ Pending Release by {name}', { name: otherName })}
+                        </p>
+                    )}
+                    {m.release && (confirming ? (
+                        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3">
+                            {selectedPost.priceType !== 'fixed' && (
+                                <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-500 mb-2 uppercase tracking-wider">
+                                    {actualWorkedLabel(selectedPost.priceType)}
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={completeHours}
+                                        onChange={(e) => setCompleteHours(e.target.value)}
+                                        className="mt-1 w-full bg-white dark:bg-nature-900 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2 text-nature-900 dark:text-white font-mono text-center"
+                                    />
+                                </label>
+                            )}
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowCompleteConfirm(false); setReleaseRowId(null); }}
+                                    disabled={accepting}
+                                    className="flex-1 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-bold text-sm"
+                                >
+                                    {t('Cancel')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => releaseRow(m)}
+                                    disabled={accepting || (selectedPost.priceType !== 'fixed' && !(completeHoursValue > 0))}
+                                    className="flex-1 py-2 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60"
+                                >
+                                    {accepting ? t('Processing...') : t('Release Credits')}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setReleaseRowId(tx.id);
+                                setShowCompleteConfirm(true);
+                                if (selectedPost.priceType !== 'fixed') setCompleteHours(tx.hours ? formatNumber(tx.hours) : '1');
+                            }}
+                            disabled={accepting}
+                            className="w-full py-2.5 rounded-lg font-bold text-bp-commit-on text-sm bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60"
+                        >
+                            {t('✅ Release Credits')}
+                        </button>
+                    ))}
+                    {m.cancelHold && (
+                        <button
+                            type="button"
+                            onClick={() => cancelRow(m)}
+                            disabled={accepting}
+                            className="w-full py-2 rounded-lg border border-red-300 text-red-600 dark:text-red-300 font-bold text-sm hover:bg-red-50 dark:hover:bg-red-950/30"
+                        >
+                            {t('❌ Cancel Hold')}
+                        </button>
+                    )}
+                </div>
+            );
+        };
 
         return (
             <div className="p-4 max-w-lg mx-auto pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
@@ -1586,7 +1740,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                  {/* Action buttons */}
                  
                  {/* 1. Pending Trust Hold State (Applies to both Payer and Payee) */}
-                 {(selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
+                 {ownRows.length === 0 && (selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                      <div className="flex flex-col gap-2 mt-4">
                          {isPayer ? (
                              <>
@@ -1713,7 +1867,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              </>
                          ) : (
                              <>
-                                 <p className="text-amber-500 text-sm font-semibold text-center mt-2 mb-2">
+                                 {/* The helper's line (design §3.2): the Beans are held for them, with the deal's own amount. */}
+                                 {!isOwnPost && activeTx && (
+                                     <p className="text-emerald-700 dark:text-emerald-400 text-sm font-bold text-center mt-2">
+                                         {listingDealLines.helping(formatNumber(activeTx.credits))}
+                                     </p>
+                                 )}
+                                 <p className="text-amber-700 dark:text-amber-400 text-sm font-semibold text-center mt-2 mb-2">
                                      {t('⏳ Pending Release by {name}', { name: targetPeerCallsign })}
                                  </p>
                                  <p className="text-xs text-nature-500 text-center mb-2 px-4 shadow-sm">
@@ -1763,8 +1923,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                      </div>
                  )}
 
-                {/* 1.5 Pending Requests (For Authors of Needs or Lendable Offers) */}
-                {isOwnPost && (selectedPost.type === 'need' || selectedPost.lendable) && selectedPost.status === 'active' && requests.length > 0 && (
+                {/* 1b. Deals under way, for the listing's own people: a row for each (a recurring listing can have several) */}
+                {ownRows.length > 0 && (
+                    <div className="mt-4 flex flex-col gap-2" data-testid="deals-under-way">
+                        <p className="font-bold text-nature-900 dark:text-white text-sm text-center">{listingDealLines.underWay(ownRows.length)}</p>
+                        {keptAuthor && (
+                            <p className="text-xs text-nature-600 dark:text-nature-400 text-center">{listingDealLines.actingFor(selectedPost.authorCallsign)}</p>
+                        )}
+                        {ownRows.map(renderOwnDeal)}
+                    </div>
+                )}
+
+                {/* 1.5 Pending Requests (For Authors of Needs or Lendable Offers, and the keepers of an enterprise that wrote one) */}
+                {deals.own && (selectedPost.type === 'need' || selectedPost.lendable) && selectedPost.status === 'active' && requests.length > 0 && (
                     <div className="mt-4 bg-oat-50 dark:bg-nature-950 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 shadow-sm">
                         <p className="font-bold text-amber-800 dark:text-amber-500 text-sm mb-2 text-center">
                             {t('✋ Fulfillment Requests ({n})', { n: requests.length })}
@@ -1800,7 +1971,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 if (!identity) return;
                                                 setAccepting(true);
                                                 try {
-                                                    await rejectMarketplaceRequest(req.id, identity.publicKey);
+                                                    // A keeper answers at the enterprise's own door (routes/treasury.ts).
+                                                    if (keptAuthor) await treasuryReject(keptAuthor, req.id);
+                                                    else await rejectMarketplaceRequest(req.id, identity.publicKey);
+                                                    setKeptDealsRead(n => n + 1);
                                                     setRequests(prev => prev.filter(r => r.id !== req.id));
                                                     // This page no longer polls transactions itself,
                                                     // so App's pending-deals badge would otherwise
@@ -1822,7 +1996,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 if (!identity) return;
                                                 setAccepting(true);
                                                 try {
-                                                    await approveMarketplaceRequest(req.id, identity.publicKey);
+                                                    if (keptAuthor) await treasuryApprove(keptAuthor, req.id);
+                                                    else await approveMarketplaceRequest(req.id, identity.publicKey);
+                                                    setKeptDealsRead(n => n + 1);
                                                     const updated = await getMarketplacePosts({ id: selectedPost.id });
                                                     if (updated.length > 0) setSelectedPost(updated[0]);
                                                     refresh();
@@ -1843,6 +2019,27 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 );
                             })}
                         </div>
+                    </div>
+                )}
+
+                {/* A one-off listing in someone else's deal (reached by a link); a recurring one the reader has finished (§3.2) */}
+                {deals.takenByOther && (
+                    <p className="mt-4 text-sm text-center text-nature-600 dark:text-nature-400" data-testid="taken-by-other">{listingDealLines.takenByOther()}</p>
+                )}
+                {deals.lastDone && selectedPost.status === 'active' && (
+                    <div className="mt-4 flex flex-col items-center gap-1" data-testid="had-before">
+                        <p className="text-xs text-nature-600 dark:text-nature-400 text-center">
+                            {listingDealLines.hadBefore(formatDate(new Date(deals.lastDone.tx.completedAt || deals.lastDone.tx.createdAt), 'day-month'))}
+                        </p>
+                        {deals.lastDone.step.state === 'done-to-review' && !deals.lastDone.asKeeper && (
+                            <button
+                                type="button"
+                                onClick={() => { setReviewStars(5); setReviewComment(''); setPromptReviewForTx(reviewTargetOf(deals.lastDone!.tx, me)); }}
+                                className="text-xs font-bold text-emerald-700 dark:text-emerald-400 underline underline-offset-2 py-1"
+                            >
+                                {t('Leave Review')}
+                            </button>
+                        )}
                     </div>
                 )}
 
@@ -1867,7 +2064,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <span aria-hidden="true">🗞️ </span>{t('Daily Pulse — a daily thought for the post-extraction economy')}
                         </p>
                     </div>
-                ) : !isOwnPost && selectedPost.status === 'active' && !isAcceptedByMe && (
+                ) : !deals.own && selectedPost.status === 'active' && !isAcceptedByMe && (
                     <div style={{
                         display: 'flex', flexDirection: 'column', gap: '0.5rem',
                         marginTop: '0.75rem',
@@ -1884,6 +2081,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <span className="text-4xl block mb-2">⏳</span>
                                         <p className="font-bold text-amber-800 dark:text-amber-500 mb-1">
                                             {isLoan ? t('Asked to borrow') : t('Offer Pending Approval')}
+                                        </p>
+                                        <p className="text-sm font-semibold text-nature-800 dark:text-nature-200 mb-1">
+                                            {isLoan ? listingDealLines.askedToBorrow(selectedPost.authorCallsign) : listingDealLines.offeredToHelp(selectedPost.authorCallsign)}
                                         </p>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 mb-4">
                                             {isLoan ? t('Nothing is held until the lender says yes.') : t('The author is reviewing your offer to fulfill this need.')}
@@ -3573,6 +3773,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    dealChip={dealChips.get(post.id) ?? null}
                                                     distanceKm={near ? distanceOf(post) : null}
                                                     beansMarked={priceMarked}
                                                     onPhotoClick={(photos, idx, e) => {
@@ -3675,6 +3876,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    dealChip={dealChips.get(post.id) ?? null}
                                                     distanceKm={near ? distanceOf(post) : null}
                                                     beansMarked={priceMarked}
                                                     onPhotoClick={(photos, idx, e) => {

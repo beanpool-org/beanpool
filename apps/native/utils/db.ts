@@ -2773,6 +2773,20 @@ export async function treasuryComplete(treasury: string, transactionId: string, 
 export async function treasuryReject(treasury: string, transactionId: string) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
 }
+/**
+ * An enterprise's deals, for its keeper reading one of its listings (deals S4): the node lets its keepers read them (GET
+ * /api/marketplace/transactions), while the phone's sync reads only the member's own. Nothing when they can't be had.
+ */
+export async function getDealsFor(publicKey: string): Promise<MarketplaceTransaction[]> {
+    try {
+        const res = await signedGet(`/api/marketplace/transactions?publicKey=${encodeURIComponent(publicKey)}&limit=50`);
+        if (!res.ok) return [];
+        const rows = await res.json();
+        return Array.isArray(rows) ? rows : [];
+    } catch {
+        return [];
+    }
+}
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }

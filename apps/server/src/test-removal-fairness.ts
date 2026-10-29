@@ -23,7 +23,8 @@
  *  4. A case shown false is hidden: an admin hides it with a public reason, and members (the member included) read that
  *     reason in its place, no case, no reason in the params, a member's own title replaced, on Decide and on Home; who
  *     brought it and the reply stay; the admin's list keeps the case and who hid it. Once only; a reason of 10+
- *     characters; only a removal vote; only an admin. A closed vote's case too, from the admin list's past removals.
+ *     characters; only a removal vote; only an admin, and never the admin the vote is about, whose role is back once it
+ *     closes (another admin can). A closed vote's case too, from the admin list's past removals.
  *  5. The member reports the case as a false accusation: a report about whoever brought it, in Reports; the answer names
  *     nobody; once while it waits; only the member; a password's case names nobody to report. A member who already had a
  *     report waiting about that admin (the retaliation it is for) has the case added to it, and the owners are told.
@@ -466,6 +467,24 @@ async function main() {
     assert(finnHidden.status === 200 && finnAfter.card?.title === 'Remove FinnFox?' && !finnAfter.text.includes('thief') && !finnAfter.text.includes('stole')
         && home.status === 200 && homeRow?.title === 'Remove FinnFox?' && !home.text.includes('thief'),
         `a member's own title gives way to the node's, on Decide and on Home (${finnHidden.status} "${finnAfter.card?.title}"; home ${home.status} "${homeRow?.title}")`);
+    // Never by the admin the vote is about: no vote removes an admin, so their role is back once it closes, and the case is
+    // the one against them, as the vote is one they may not vote on. Another admin can.
+    const ari = seed('AdminAri');
+    grantNodeRole(ari.pubKeyHex, 'admin', gen.pubKeyHex);
+    const ariVote = de.adminEmergencySuspend(ari.pubKeyHex, gen.pubKeyHex, 'Changed the market rules without asking anyone').decision!.id;
+    voteAndClose(ariVote, true);
+    assert(row(ariVote).status === 'execution_blocked' && statusOf(ari) === 'active' && de.isAdminActor(ari.pubKeyHex),
+        `the community votes Yes on removing Ari, an admin, whom no vote removes: the vote closes and Ari is an admin again (${row(ariVote).status})`);
+    const ARI_OWN_WHY = 'The case was shown to be false, by me.';
+    fresh();
+    const ownHide = await admin(`/api/local/admin/decisions/${ariVote}/hide-case`, sessionOf(ari), { reason: ARI_OWN_WHY });
+    const ownHideEngine = de.adminHideCase(ariVote, ari.pubKeyHex, ARI_OWN_WHY);
+    assert(ownHide.status === 403 && ownHide.body?.error === de.HIDE_OWN_CASE && !ownHideEngine.success && ownHideEngine.status === 403
+        && !row(ariVote).case_hidden_at && !(await cardFor(vi, ariVote)).card?.caseHiddenReason,
+        `Ari can't hide the case on the vote about Ari: 403 in words, by the route and by the engine underneath; nothing hidden (${ownHide.status} ${ownHide.text.slice(0, 120)})`);
+    fresh();
+    const otherHides = await admin(`/api/local/admin/decisions/${ariVote}/hide-case`, abeSession, { reason: 'The steward confirmed the rules change was agreed' });
+    assert(otherHides.status === 200 && row(ariVote).case_hidden_by === abe.pubKeyHex, `another admin can: Abe hides it (${otherHides.status} ${otherHides.text.slice(0, 120)})`);
 
     // ── 5. Reporting the case as false ──────────────────────────────────────────────────────────────────────────────
     console.log('\n5. The member reports the case as a false accusation');

@@ -2501,13 +2501,19 @@ export function eraseRepliesOf(subjectPubkey: string, at: string): string[] {
 
 /** The fewest characters of an admin's public reason for hiding a case, as for a halt (adminHaltDecision). */
 export const HIDE_CASE_REASON_MIN_CHARS = 10;
+/** The admin a vote on removing them is about never hides its case (adminHideCase). */
+export const HIDE_OWN_CASE = "This vote is about you, so you can't hide its case. Another admin can.";
 
 /**
  * An admin hides the case of a vote on removing a member, as one shown to be false (Amendment A point 4), with a reason
  * members read in its place (publicDecision). Kept as a halt is kept: when, which admin (members never get the key) and
- * why. Any admin, as the brake is any admin's (design §10 Q12). It hides words and changes nothing else: an open vote runs
- * on (halting it, which lifts the pause, is the brake's), and a removal its vote carried still completes. At any status,
- * since a case stays readable after its vote, which is when it is most often shown false. Once hidden it stays hidden.
+ * why. Any admin, as the brake is any admin's (design §10 Q12), but never the one the vote is about: an owner or admin a
+ * pause's vote is about has their role back once it closes (no vote removes them, §3.8), and would be judging the case
+ * against them, as they may not vote on it (OWN_REMOVAL_VOTE_ERROR). Another admin can. The server's password is shared,
+ * so who signs in with it can't be told apart (the operators' page says so). It hides words and changes nothing else: an
+ * open vote runs on (halting it, which lifts the pause, is the brake's), and a removal its vote carried still completes.
+ * At any status, since a case stays readable after its vote, which is when it is most often shown false. Once hidden it
+ * stays hidden.
  */
 export function adminHideCase(decisionId: string, adminActor: string, reason: unknown): FairVoteResult {
     assertPlainTablesWritable();
@@ -2519,6 +2525,7 @@ export function adminHideCase(decisionId: string, adminActor: string, reason: un
     if (clean.length > 1000) return { success: false, status: 400, error: 'Reason is too long (1000 characters at most)' };
     const decision = communityRemovalVote(decisionId);
     if (!decision) return { success: false, status: 404, error: 'Only a vote on removing a member has a case to hide' };
+    if (decision.subject === adminActor) return { success: false, status: 403, error: HIDE_OWN_CASE };
     if (decision.caseHiddenAt) return { success: false, status: 409, error: 'This case is already hidden' };
     const now = new Date().toISOString();
     db.prepare(`

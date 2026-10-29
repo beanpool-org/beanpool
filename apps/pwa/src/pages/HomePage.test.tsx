@@ -2369,7 +2369,7 @@ describe('the Decide card shows just the votes that are yours: one setting on th
 });
 
 // ── Getting started (scratch/global-node/DESIGN-getting-started-fable.md §1–§3) ──────────────────────────────────────
-describe('Getting started in the web app:a newcomer\'s Home is the card alone, the tour is theirs to start, its end is kept on the account', () => {
+describe('Getting started in the web app: a newcomer\'s Home is the card alone, the tour is theirs to start, its end is kept on the account', () => {
     /** A member here for the first time: never saved a Home, never ended the tour. */
     const newcomer = (over: Partial<HomeAnswer> = {}) => {
         const a = answer({ layout: null });

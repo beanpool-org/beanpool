@@ -59,10 +59,11 @@ vi.mock('../node-post', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../node-post')>()),
     anchorUrl: vi.fn(async () => mem.anchor || null),
 }));
-// The sheet as the real one ends a link: the record says linked, then onLinked.
+// The sheet as the real one ends a link: the record says linked, then onLinked. It shows the community it was handed.
 vi.mock('../../components/LinkSignInSheet', () => ({
-    LinkSignInSheet: ({ visible, identity, onLinked, onClose }: any) => visible
+    LinkSignInSheet: ({ visible, identity, community, onLinked, onClose }: any) => visible
         ? createElement('button', {
+            'data-community': community ?? '',
             onClick: async () => {
                 const { finishOneWayBack } = await import('../one-way-back');
                 await finishOneWayBack(identity.publicKey, 'linked');
@@ -143,6 +144,33 @@ async function anHourOfFocuses(): Promise<number> {
     }
     return node.asks;
 }
+
+// A 12-words join at any community's open door starts the record (app/join-open-door.tsx), and the card opens the sheet
+// for it: the sheet names that community where it would name the global one (VR2 review r4407770716).
+describe('the sheet names the community the record is about', () => {
+    async function sheetFor(url: string): Promise<string | null> {
+        mem.anchor = url;
+        await startOneWayBack(who.identity.publicKey, url);
+        await render('settings');
+        await act(async () => { button('Add a sign-in').click(); });
+        await settle();
+        return button('sheet: Done').getAttribute('data-community');
+    }
+
+    it('another community\'s door: its saved name', async () => {
+        mem.async.set('beanpool_saved_nodes', JSON.stringify([{ url: OTHER, alias: 'Mullumbimby' }]));
+        expect(await sheetFor(OTHER)).toBe('Mullumbimby');
+    });
+
+    it('another community\'s door with no saved name: its host', async () => {
+        expect(await sheetFor(OTHER)).toBe('mullum.beanpool.org');
+    });
+
+    it('the global community\'s door: no name, so the sheet says the global community as before', async () => {
+        mem.async.set('beanpool_saved_nodes', JSON.stringify([{ url: GLOBAL, alias: 'Global' }]));
+        expect(await sheetFor(GLOBAL)).toBe('');
+    });
+});
 
 describe('finding 1: a sign-in added after "I still have my 12 words" puts the offer away for good', () => {
     it('added from Settings\' quiet offer: gone, and the record says linked', async () => {

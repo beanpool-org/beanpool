@@ -250,15 +250,19 @@ export function linkedAtVault(answer: Extract<LinkAnswer, { kind: 'linked' }>): 
     return answer.enrolment?.keptAt ? answer.enrolment.keptAt === 'vault' : signInCopiesAt() === 'vault';
 }
 
-/** What Safety Backup and Settings say once a sign-in was added. */
-export function linkedNotice(answer: Extract<LinkAnswer, { kind: 'linked' }>): string {
+/**
+ * What Safety Backup and Settings say once a sign-in was added. `community`: the name of the community whose door it was,
+ * where that isn't the global community (a door anyone can join, joined with 12 words: components/OneWayBackCard.tsx has
+ * the sheet say it); absent, the global community.
+ */
+export function linkedNotice(answer: Extract<LinkAnswer, { kind: 'linked' }>, community?: string): string {
     const name = SSO_PROVIDER_NAMES[answer.provider] ?? 'Your sign-in';
     const copy = answer.enrolment
         ? (linkedAtVault(answer)
             ? ` If you lose this phone, sign in with ${name} to get back in.`
-            : ` If you lose this phone, sign in with ${name} to get back into the global community.`)
+            : ` If you lose this phone, sign in with ${name} to get back into ${community ?? 'the global community'}.`)
         : answer.noCopies
-            ? ' The global community keeps no copies of members\' accounts, so your 12 words are still your way back.'
+            ? ` ${community ?? 'The global community'} keeps no copies of members' accounts, so your 12 words are still your way back.`
             : ' It couldn\'t keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.';
     return `Your ${name} sign-in is added: your account now has the usual new-account limits.${copy}`;
 }

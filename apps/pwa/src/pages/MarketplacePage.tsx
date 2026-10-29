@@ -1340,7 +1340,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // A pinned deal (My Deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
         // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
         // Only while its Beans are held: a finished pin gives way to the listing's live deal, and so does a request, which the
-        // listing's own read shows (Withdraw for one who asked; a pinned request hid that box, as on the phone).
+        // listing's own read shows (Withdraw for one who asked; a pinned request hid that box, as on the phone). Accept stays
+        // away while the member has a request of their own here all the same: the take-up below asks core's canTakeUp.
         const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id
             && t.status === 'pending') : undefined;
         // A finished one: the page says what became of it, as the phone does for an alert's deal (listingDealLines.finished).
@@ -2127,7 +2128,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             <span aria-hidden="true">🗞️ </span>{t('Daily Pulse — a daily thought for the post-extraction economy')}
                         </p>
                     </div>
-                ) : (!deals.own || myRequest) && selectedPost.status === 'active' && !isAcceptedByMe && (
+                ) : (myRequest || deals.canTakeUp) && selectedPost.status === 'active' && !isAcceptedByMe && (
                     <div style={{
                         display: 'flex', flexDirection: 'column', gap: '0.5rem',
                         marginTop: '0.75rem',

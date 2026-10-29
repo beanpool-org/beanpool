@@ -16,6 +16,9 @@
  * screen shows the host it read the card from, and a card that names another host loses its name: the "names another
  * host" tests fail before (the server's chosen name, no host shown).
  *
+ * And a phone waiting to be let in (an account, no community: slice S3, PR #2604's review) can open a card: its yes goes to
+ * welcome, so the 12 words its key has never shown come next. The waiting tests fail before (joined here).
+ *
  * Nothing is contacted: fetch plays the one community (its card, and this key's knock status).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -98,6 +101,7 @@ vi.mock('../join-another-community', () => ({
 
 import CommunityCardScreen from '../../app/community-card';
 import { KNOCKS_STORE_KEY } from '../storage-keys';
+import { takeKnockYes } from '../waiting-to-join';
 import { setLanguage } from '@beanpool/core';
 
 type Answer = { status: 'pending' } | { status: 'none' } | { status: 'approved'; invite: string } | 'offline';
@@ -306,6 +310,36 @@ describe('the card is what the server it was read from claims', () => {
         await open();
         expect(name()).toBe('Riverside');
         expect(shownHost()).toBe('riverside.example');
+    });
+});
+
+// A phone with an account and no community (slice S3: its key was made by a knock, so its 12 words have never been shown)
+// can open a community's card. Its yes is joined where the words are shown.
+describe('a phone waiting to be let in (an account, no community), on the card', () => {
+    beforeEach(() => { store.map.delete('beanpool_anchor_url'); takeKnockYes(KEY); });
+
+    it("a yes: Join hands it to welcome, whose invite step goes on to the 12 words; the card joins nothing itself (fails before: joined here, told its words came with it)", async () => {
+        remember();
+        scene.answer = { status: 'approved', invite: 'BP-RIVR-0001' };
+        await open();
+        expect(byTestId('community-card-join')?.textContent).toBe('Join Riverside');
+        await tap(byTestId('community-card-join'));
+        expect(joins).toEqual([]);
+        expect(alerts).toEqual([]);
+        expect(nav.replaced).toEqual(['/welcome']);
+        expect(takeKnockYes(KEY)).toEqual({ url: ORIGIN, invite: 'BP-RIVR-0001', name: 'Riverside' });
+        // Welcome forgets the request once its redeem lands, as for a yes from Find a community.
+        expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks.map((k: { url: string }) => k.url)).toEqual([ORIGIN]);
+    });
+
+    it("a yes on a card that names another host: handed over with no name of the card's", async () => {
+        remember();
+        scene.card = { ...CARD, name: 'Mullum Community', host: 'mullum.beanpool.org' };
+        scene.answer = { status: 'approved', invite: 'BP-RIVR-0001' };
+        await open();
+        await tap(byTestId('community-card-join'));
+        expect(joins).toEqual([]);
+        expect(takeKnockYes(KEY)).toEqual({ url: ORIGIN, invite: 'BP-RIVR-0001', name: null });
     });
 });
 

@@ -67,6 +67,8 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  *     from Find a community: utils/knock.ts); once asked, what the community answered (waiting, a yes to join with, or
  *     ask again), as Find a community shows it; and I have an invite (People's Join Another Community, as it is: no route
  *     fills its server box, so no link can point a member's join at another server: pair-link.test.ts holds it);
+ *   - an account in no community yet (waiting to be let in, slice S3): the same, but its yes goes to welcome, which joins
+ *     it through the invite step so the 12 words its key has never shown come next (as Find a community's Join does);
  *   - no account yet: the first screen, for an invite (Join with an invite), the ways back (Already a member), or
  *     look around global first, join there and find it in Find a community.
  * Nothing is read but the community's public card; nothing is sent until the member taps Send.
@@ -194,9 +196,17 @@ export default function CommunityCardScreen() {
     const [joining, setJoining] = useState(false);
     const join = async (c: CommunityCard, invite: string) => {
         if (!identity || !origin) return;
+        const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        if (!returnUrl) {
+            // No community yet (waiting to be let in, slice S3), as Find a community's Join does: welcome joins it through
+            // the invite step, so the wizard shows Your Photo and then the 12 words this key has never shown. Handed over
+            // in memory, never by a link.
+            (await import('../utils/waiting-to-join')).handKnockYesToWelcome({ url: origin, invite, name: c.name }, identity.publicKey);
+            router.replace('/welcome');
+            return;
+        }
         setJoining(true);
         try {
-            const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const joined = await joinAnotherCommunity({ targetUrl: origin, code: invite, identity, returnUrl, knownName: c.name });
             await forgetKnock(identity.publicKey, origin);
             const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);

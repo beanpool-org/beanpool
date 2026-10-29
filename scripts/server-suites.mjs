@@ -299,6 +299,7 @@ export const SUITES = [
     'test-genesis',
     'test-hardening',
     'test-logger-sanitization',
+    'test-log-address',
     'test-codes-out-of-logs',
     'test-ws-traffic-private',
     'test-ws-logs-session',

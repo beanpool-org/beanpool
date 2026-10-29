@@ -243,7 +243,7 @@ async function main() {
 
     // Where Start a community leads (config/start-community.ts): beanpool.org's page unless an owner names their own.
     const start = await import('./config/start-community.js');
-    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'Start a community leads to beanpool.org/#run-a-node by default');
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/start', 'Start a community leads to beanpool.org/start by default');
     assert(start.setStartCommunityUrl('https://start.example.org/how').ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
         'a self-hoster names their own page, and /api/community/info says it');
     for (const bad of ['javascript:alert(1)', 'ftp://start.example.org', 'http://start.example.org/how', 'https://user:pw@start.example.org', 'not a url', 'https://start.example.org/a b', `https://start.example.org/${'a'.repeat(300)}`, 42, {}]) {
@@ -251,9 +251,9 @@ async function main() {
             `${JSON.stringify(bad).slice(0, 40)} is refused, and the page named stays`);
     }
     db.prepare("UPDATE node_config SET value = 'javascript:alert(1)' WHERE key = 'startCommunityUrl'").run();
-    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'a stored row that is not a web address is ignored for the default');
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/start', 'a stored row that is not a web address is ignored for the default');
     assert(start.setStartCommunityUrl(null).ok && !db.prepare("SELECT 1 FROM node_config WHERE key = 'startCommunityUrl'").get()
-        && (await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'null goes back to the default, and leaves no row');
+        && (await getInfo()).body.startCommunityUrl === 'https://beanpool.org/start', 'null goes back to the default, and leaves no row');
 
     // The global community the web app's Settings links (config/global-community.ts): BeanPool's own unless the
     // operator names another, none when switched off or named badly. Read at every request.

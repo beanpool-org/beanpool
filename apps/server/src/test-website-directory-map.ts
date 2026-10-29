@@ -17,7 +17,7 @@
  *  2. A normal row still gets its mailto: and tel: links, its member count and its radius, and a link to its address.
  *  3. A row whose place isn't a number (Leaflet throws on it) is left off the map, and the rows after it still show.
  *  4. The totals count communities and whole-number member counts only.
- *  5. An empty directory says the apps' one "none" sentence with Start a community (the site's own #run-a-node); a
+ *  5. An empty directory says the apps' one "none" sentence with Start a community (the site's own Start a community page, start.html); a
  *     first read that fails says the list isn't available, never "none", and offers no Start.
  *  6. The directory tells the truth (front doors S13): the site reads the view of the rows a stranger is shown
  *     (directory_listed), and applies its rules again: no row of our own test servers (review, *.test), none that leads
@@ -275,8 +275,8 @@ async function main() {
     assert(emptyState?.style.display === 'block', 'map empty state is displayed when 0 communities are listed');
     assert(emptyText?.textContent === FIND_COMMUNITY_WORDS.noneNear,
         `it says the apps' one "none" sentence, "${FIND_COMMUNITY_WORDS.noneNear}" (${JSON.stringify(emptyText?.textContent)})`);
-    assert(startLink?.getAttribute('href') === '#run-a-node' && startLink?.textContent === FIND_COMMUNITY_WORDS.start && startLink?.style.display !== 'none',
-        `with Start a community, to the site's own how-to-run-a-node (${startLink?.outerHTML})`);
+    assert(startLink?.getAttribute('href') === 'start.html' && startLink?.textContent === FIND_COMMUNITY_WORDS.start && startLink?.style.display !== 'none',
+        `with Start a community, to the site's own how-to-run-a-node page (${startLink?.outerHTML})`);
     assert(emptyState?.getAttribute('role') === 'status', 'and a screen reader hears it');
     const emptyStatNodes = w.document.getElementById('stat-nodes').textContent;
     assert(emptyStatNodes === '—', `stat-nodes is — rather than bare 0 (${emptyStatNodes})`);

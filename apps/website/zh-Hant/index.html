@@ -47,7 +47,7 @@
                 <a href="#how-it-works">運作方式</a>
                 <a href="#features">你能做什麼</a>
                 <a href="rules.html">規則</a>
-                <a href="#run-a-node">營運社群</a>
+                <a href="start.html">營運社群</a>
                 <a href="help.html" title="所有規則、指南與手冊的一站式中心">說明</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="在 YouTube (@beanpool) 上觀看教學影片">
@@ -130,7 +130,7 @@
                     <a href="#how-it-works">運作方式</a>
                     <a href="#features">你能做什麼</a>
                     <a href="rules.html">規則</a>
-                    <a href="#run-a-node">營運社群</a>
+                    <a href="start.html">營運社群</a>
                     <a href="help.html">說明</a>
                     <a href="../guide/index.html">成員指南</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 影片</a>
@@ -546,7 +546,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">你附近暫時還沒有社群。</span>
-                    <a id="map-empty-start" href="#run-a-node">建立社群</a>
+                    <a id="map-empty-start" href="start.html">建立社群</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -565,6 +565,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -572,141 +574,7 @@
                 <h2>為你的社群營運 BeanPool</h2>
                 <p>每個社群都運作在自己的節點上：一台保存該社群成員、貼文與帳本的小型伺服器。由在地人員負責維護。如果你所在的城鎮或山谷還沒有節點，你可以成為發起人。</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>你負責照顧的事項</h3>
-                    <p>你和你指定的管理員是你社群的版主：檢舉會發送給你們。成員的資料存放在你的機器上，因此你需要負責備份。你可以讀取在地事業討論與活動聊天；但你無法讀取私訊。你負責邀請第一批成員，再由他們邀請其他人。</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>設定應用程式</h3>
-                    <p>你的節點在瀏覽器中隨附專屬的設定應用程式。你可以從中為社群命名、指定使用自身金鑰登入的所有者與管理員、列印 QR 碼邀請函、監控硬碟健全狀況、選擇公開網址或穿透通道，並協助同時遺失手機與 12 個助記詞的成員，透過你當面確認的一次性驗證碼，在全新手機上重新取回自己的帳號。</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>從首次啟動即維持私密</h3>
-                    <p>社群的刊登內容、地圖、訊息與餘額從節點啟動的那一刻起就僅供成員使用；無需開啟任何設定。未持有帳號而開啟該網址的訪客會被引導至全球社群，在那裡他們可以看到附近的內容並申請加入。</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>與相鄰社群連結</h3>
-                    <p>兩個社群可以協議連結，以便雙方成員相互交易。豆子絕不會離開本地：每對社群都會持續記錄彼此積欠對方的差額，雙方各自設定交易限額。除非雙方營運者都開啟此功能，否則連結預設處於關閉狀態，且目前仍處於早期階段：該功能已建置完成，在網頁版應用程式中備有操作畫面，但僅在我們自有的兩個測試社群之間進行過試驗，尚未在實際運作的社群間使用過。</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>建立社群</h2>
-                <p>如果你能照著步驟操作，大約需要半小時。首先需要了解的六件事：</p>
-                <ul class="run-node-facts">
-                    <li><strong>花費成本。</strong>軟體完全免費。它可以運作在家中常開的閒置電腦上（迷你電腦 Mini PC、NAS，或搭載 64 位元系統的 Raspberry Pi 樹莓派），或每月幾美元（約 6 美元）的小型租用伺服器上。</li>
-                    <li><strong>由誰主機託管。</strong>由你主機託管，運行在你自己的機器或租用的伺服器上。它絕不需要 <a href="https://beanpool.org">beanpool.org</a>：使用你自己的專屬網址即可。</li>
-                    <li><strong>你承擔的責任。</strong>成員的檢舉會發送給你。資料資料夾由你透過還原代碼自行備份。請維持兩位所有者。確保伺服器持續開啟並保持更新。</li>
-                    <li><strong>你絕不會看到的內容。</strong>成員的私人一對一訊息。</li>
-                    <li><strong>先安裝 Docker。</strong>在執行下方指令區塊前，機器需要先安裝 Docker；新租用的伺服器通常沒有預載。</li>
-                    <li><strong>手機可連線的網址。</strong>手機在網際網路上僅能透過 https 連線至社群。在具有公開 IP 位址且開放連接埠 80 和 443 的租用伺服器上，該 IP 位址即已足夠：伺服器會自動取得專屬憑證，無需 Cloudflare 帳號，自有網域亦同。在家中或未開放連接埠的情況下，認領程序會透過伺服器自行執行的穿透通道，為你提供以 .beanpool.org 結尾的免費網域名稱。純 http:// 位址僅在家庭區域網路中有效。</li>
-                </ul>
-                <p>接著，在已安裝 Docker 的機器上，貼上這段單一指令區塊。它會取得 compose 檔案、建立節點使用的網路、拉取已發布的映像檔（Intel/AMD 或 ARM64）、啟動節點、等待伺服器產生一次性認領代碼（在 Raspberry Pi 樹莓派上初次啟動較慢，最多約需五分鐘），並執行認領。啟動前無需進行任何設定。</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — 建立社群</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">單一指令區塊：取得、建立網路、拉取、啟動、等待、認領</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="複製至剪貼簿">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">最後一行：beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>你的網址。</strong>在貼上指令前先選定，並修改最後一行以相符合。如果你已經貼上執行，請在提問時按 Enter 跳過，然後再次執行最後一行：認領代碼會等待手機連線。<strong>租用伺服器</strong>若擁有公開 IP 位址並開放連接埠 80 和 443：加上 <code>--ip</code> 及其 IP 位址，例如 <code>beanpool claim --ip 203.0.113.7</code>。伺服器會透過連接埠 80 從 Let's Encrypt 自動取得該位址的憑證，手機即可透過 https://203.0.113.7 連線。<strong>家中的電腦，或沒有開放連接埠</strong>：保持原樣即可。它會要求輸入免費名稱的第一部分（若要使用 yourtown.beanpool.org，只需輸入 <strong>yourtown</strong>；按 Enter 可略過），透過伺服器自行執行的穿透通道連線，並等待最多三分鐘完成上線。<strong>自有網域</strong>：為該網域設定指向伺服器 IP 位址的 A 記錄，開放連接埠 80 和 443，並加上 <code>--address https://your.domain</code>。網域名稱在更換伺服器後仍可繼續使用；數字 IP 則不行：你也可以稍後在「設定」中新增名稱，使用 IP 位址的成員連線不會中斷。若想稍後在「設定」中選擇，請加上 <code>--no-name</code>。純 <code>http://</code> 位址僅適用於家用網路：手機在網際網路上會拒絕連線，認領程序也會發出警告。即使 BeanPool 專案的網址服務發生中斷，認領功能依然有效。</li>
-                    <li><strong>代碼與 QR 碼。</strong>畫面會顯示一次性認領代碼與 QR 碼。使用手機鏡頭掃描 QR 碼，或開啟 BeanPool，在<strong>尋找你的社群</strong>下方輸入伺服器網址，然後點擊<strong>認領</strong>。該手機即成為所有者。</li>
-                    <li><strong>設定。</strong>在網址（或伺服器專屬位址）後加上 <strong>/settings</strong> 開啟。設定精靈會引導你為社群命名、要求新增第二位所有者，並產生三份創始邀請。在「節點身分」下設定地圖上的位置，以便附近的人能找到你。</li>
-                </ol>
-                <p class="run-node-note">如果指令區塊顯示 <strong>No claim code after 5 minutes</strong>，或 <code>beanpool claim</code> 顯示 <strong>This community has no claim code waiting</strong>，表示伺服器尚未完成啟動：<code>docker compose logs beanpool-node</code> 會顯示目前進度。一旦記錄檔顯示社群尚無所有者且已有認領代碼，請重新執行最後一行。完整步驟請參閱營運者手冊的<a href="../guide/operators/first-time-setup.html">首次設定</a>。</p>
-
-                <h3 class="run-node-sub">建議：Docker 更新時讓社群持續運作</h3>
-                <p>開啟 Docker 的 live-restore 後，Docker 可以重新啟動，或安裝修補更新（patch），而不會讓你的社群停止運作。 下面這一步需要 root 或 <code>sudo</code>，略過也很安全：沒有它社群照樣運作，之後想做時，營運者手冊的「Updates and health」頁面有具體步驟。 負責安裝的 AI 助理一定會執行這一步 (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">用 AI 助理設定你的伺服器</a>)。</p>
-
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — 讓社群持續運作</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">選用：Docker live-restore</span>
-                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
-# Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
-# lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
-command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
-command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
-docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
-[ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ] &amp;&amp; { echo "Docker live-restore is already on."; exit 0; }
-python3 - &lt;&lt;'PY' || exit 1
-import json, os, stat, sys
-p = os.path.realpath("/etc/docker/daemon.json")
-st = os.stat(p) if os.path.exists(p) else None
-try:
-    d = json.loads(open(p).read().strip() or "{}") if st else {}
-    if not isinstance(d, dict):
-        raise ValueError
-except ValueError:
-    sys.exit(p + " is not a JSON object, so it is left alone. Fix or remove it, then paste this step again.")
-if d.get("live-restore") is True:
-    sys.exit(0)
-d["live-restore"] = True
-os.makedirs(os.path.dirname(p), exist_ok=True)
-tmp = p + ".new"
-fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-os.fchmod(fd, stat.S_IMODE(st.st_mode) if st else 0o644)
-if st:
-    os.fchown(fd, st.st_uid, st.st_gid)
-with os.fdopen(fd, "w") as f:
-    f.write(json.dumps(d, indent=2) + "\n")
-    f.flush()
-    os.fsync(f.fileno())
-os.replace(tmp, p)
-PY
-systemctl reload docker &lt;/dev/null || exit 1
-if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="複製至剪貼簿">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    在 GitHub 上查看 →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">建立社群&nbsp;→</a></p>
         </div>
     </section>
 
@@ -759,7 +627,7 @@ EOF</code>
                     <a href="getting-started.html">新手入門</a>
                     <a href="rules.html">規則</a>
                     <a href="post-extraction.html">後剝削經濟</a>
-                    <a href="#run-a-node">營運社群</a>
+                    <a href="start.html">營運社群</a>
                     <a href="../guide/index.html">成員指南</a>
                     <a href="status.html">伺服器狀態</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

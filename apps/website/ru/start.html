@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создать сообщество — BeanPool</title>
+    <meta name="description" content="Каждое сообщество работает на собственном узле: небольшом сервере, где хранятся данные об участниках, публикациях и реестре этого сообщества. Им управляет кто-то из местных жителей. Если в вашем городе или поселке такого узла еще нет, им можете стать вы.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.9">
+    <style>
+        /* beanpool.org/start: what running a community involves, choosing the address, and the one block that installs it */
+        .start-community .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .start-community h2[id] { scroll-margin-top: 100px; }
+        .start-community .run-node-facts, .start-community .run-node-steps { max-width: none; margin-inline: 0; }
+        .start-community .features-grid { margin: 1.5rem 0 0.5rem; }
+        .start-community .feature-card p { margin-bottom: 0; }
+        .start-community .terminal-window { margin: 1.25rem 0 1.75rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .start-community a.btn-primary, .start-community a.btn-primary:hover { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/start">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/start">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/start">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/start">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/start">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/start">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/start">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/start">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/start">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/start">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/start">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/start">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/start">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/start">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/start">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/start">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/start">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/start">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/start">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/start">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/start">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/start">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/start">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/start">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/start">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/start">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Иконка BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Как это работает</a>
+                <a href="index.html#features">Что вы можете делать</a>
+                <a href="rules.html">Правила</a>
+                <a href="start.html" aria-current="page">Создать сообщество</a>
+                <a href="help.html" title="Все правила, руководства и инструкции в одном месте">Справка</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Смотрите видеоуроки на YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Присоединяйтесь к сообществу на Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Посмотреть на GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <details class="lang-menu desktop-lang-menu">
+                    <summary class="lang-btn" aria-label="Выбрать язык" title="Выбрать язык"><span aria-hidden="true">🌐</span></summary>
+                    <div class="lang-dropdown">
+                        <a href="../start.html" hreflang="en" lang="en">English</a>
+                        <a href="../es/start.html" hreflang="es" lang="es">Español</a>
+                        <a href="../pt/start.html" hreflang="pt" lang="pt">Português</a>
+                        <a href="../hi/start.html" hreflang="hi" lang="hi">हिन्दी</a>
+                        <a href="../bn/start.html" hreflang="bn" lang="bn">বাংলা</a>
+                        <a href="../fr/start.html" hreflang="fr" lang="fr">Français</a>
+                        <a href="../ar/start.html" hreflang="ar" lang="ar">العربية</a>
+                        <a href="../id/start.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                        <a href="start.html" hreflang="ru" lang="ru" aria-current="page">Русский</a>
+                        <a href="../zh-Hans/start.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                        <a href="../zh-Hant/start.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                        <a href="../it/start.html" hreflang="it" lang="it">Italiano</a>
+                        <a href="../de/start.html" hreflang="de" lang="de">Deutsch</a>
+                        <a href="../tr/start.html" hreflang="tr" lang="tr">Türkçe</a>
+                        <a href="../sw/start.html" hreflang="sw" lang="sw">Kiswahili</a>
+                        <a href="../ml/start.html" hreflang="ml" lang="ml">മലയാളം</a>
+                        <a href="../ta/start.html" hreflang="ta" lang="ta">தமிழ்</a>
+                        <a href="../uk/start.html" hreflang="uk" lang="uk">Українська</a>
+                        <a href="../ur/start.html" hreflang="ur" lang="ur">اردو</a>
+                        <a href="../fa/start.html" hreflang="fa" lang="fa">فارسی</a>
+                        <a href="../vi/start.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                        <a href="../el/start.html" hreflang="el" lang="el">Ελληνικά</a>
+                        <a href="../fil/start.html" hreflang="fil" lang="fil">Filipino</a>
+                        <a href="../ja/start.html" hreflang="ja" lang="ja">日本語</a>
+                        <a href="../ko/start.html" hreflang="ko" lang="ko">한국어</a>
+                    </div>
+                </details>
+                <a href="getting-started.html" class="nav-cta">С чего начать</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Открыть меню"><span aria-hidden="true">☰</span> Меню</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">С чего начать</a>
+                    <details class="lang-menu phone-lang-menu">
+                        <summary class="lang-btn" aria-label="Выбрать язык" title="Выбрать язык"><span aria-hidden="true">🌐</span> <span>Выбрать язык</span></summary>
+                        <div class="lang-dropdown">
+                        <a href="../start.html" hreflang="en" lang="en">English</a>
+                        <a href="../es/start.html" hreflang="es" lang="es">Español</a>
+                        <a href="../pt/start.html" hreflang="pt" lang="pt">Português</a>
+                        <a href="../hi/start.html" hreflang="hi" lang="hi">हिन्दी</a>
+                        <a href="../bn/start.html" hreflang="bn" lang="bn">বাংলা</a>
+                        <a href="../fr/start.html" hreflang="fr" lang="fr">Français</a>
+                        <a href="../ar/start.html" hreflang="ar" lang="ar">العربية</a>
+                        <a href="../id/start.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                        <a href="start.html" hreflang="ru" lang="ru" aria-current="page">Русский</a>
+                        <a href="../zh-Hans/start.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                        <a href="../zh-Hant/start.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                        <a href="../it/start.html" hreflang="it" lang="it">Italiano</a>
+                        <a href="../de/start.html" hreflang="de" lang="de">Deutsch</a>
+                        <a href="../tr/start.html" hreflang="tr" lang="tr">Türkçe</a>
+                        <a href="../sw/start.html" hreflang="sw" lang="sw">Kiswahili</a>
+                        <a href="../ml/start.html" hreflang="ml" lang="ml">മലയാളം</a>
+                        <a href="../ta/start.html" hreflang="ta" lang="ta">தமிழ்</a>
+                        <a href="../uk/start.html" hreflang="uk" lang="uk">Українська</a>
+                        <a href="../ur/start.html" hreflang="ur" lang="ur">اردو</a>
+                        <a href="../fa/start.html" hreflang="fa" lang="fa">فارسی</a>
+                        <a href="../vi/start.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                        <a href="../el/start.html" hreflang="el" lang="el">Ελληνικά</a>
+                        <a href="../fil/start.html" hreflang="fil" lang="fil">Filipino</a>
+                        <a href="../ja/start.html" hreflang="ja" lang="ja">日本語</a>
+                        <a href="../ko/start.html" hreflang="ko" lang="ko">한국어</a>
+                        </div>
+                    </details>
+                    <a href="index.html#how-it-works">Как это работает</a>
+                    <a href="index.html#features">Что вы можете делать</a>
+                    <a href="rules.html">Правила</a>
+                    <a href="start.html" aria-current="page">Создать сообщество</a>
+                    <a href="help.html">Справка</a>
+                    <a href="../guide/index.html">Руководство для участников</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Видео на YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool на Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Исходный код на GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+        <main class="legal-content start-community">
+        <h1>Создать сообщество</h1>
+        <p class="lede">Каждое сообщество работает на собственном узле: небольшом сервере, где хранятся данные об участниках, публикациях и реестре этого сообщества. Им управляет кто-то из местных жителей. Если в вашем городе или поселке такого узла еще нет, им можете стать вы.</p>
+
+        <h2 id="involves">Что входит в запуск и ведение сообщества</h2>
+        <p>Примерно полчаса, если следовать инструкции. Шесть вещей, о которых нужно знать заранее:</p>
+        <ul class="run-node-facts">
+            <li><strong>Сколько это стоит.</strong> Программное обеспечение бесплатно. Оно работает на свободном домашнем компьютере, который постоянно включен (мини-ПК, NAS или Raspberry Pi с 64-битной системой), либо на небольшом арендованном сервере за несколько долларов в месяц (около $6 США).</li>
+            <li><strong>Кто его размещает.</strong> Вы сами, на своем компьютере или на арендованном сервере. Ему не требуется <a href="https://beanpool.org">beanpool.org</a>: работает ваш собственный веб-адрес.</li>
+            <li><strong>За что вы отвечаете.</strong> Жалобы от участников поступают вам. Папку с данными вы копируете сами с помощью кода восстановления. Держите двух владельцев. Следите за работой и обновлениями сервера.</li>
+            <li><strong>Чего вы никогда не видите.</strong> Личные сообщения участников.</li>
+            <li><strong>Сначала Docker.</strong> На машине должен быть установлен Docker перед выполнением команды ниже; на только что арендованном сервере его нет.</li>
+            <li><strong>Адрес, доступный для телефонов.</strong> Телефоны связываются с сообществом в интернете только по протоколу https. На арендованном сервере с публичным IP-адресом и открытыми портами 80 и 443 этого IP-адреса достаточно: сервер сам получает для него сертификат без аккаунта Cloudflare, то же самое и для собственного домена. Дома или без открытых портов процедура подключения дает бесплатное имя, оканчивающееся на .beanpool.org, через туннель, который сервер запускает сам. Обычный адрес http:// работает только в домашней сети.</li>
+        </ul>
+        <div class="features-grid">
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🧰</div>
+                <h3>За чем вы следите</h3>
+                <p>Вы и назначенные вами администраторы являетесь модераторами своего сообщества: жалобы поступают вам. Данные участников хранятся на вашей машине, поэтому вы заботитесь о резервных копиях. Вы можете читать обсуждения предприятий и чаты событий; вы не можете читать личные сообщения. Вы приглашаете первых участников, а они приглашают остальных.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">⚙️</div>
+                <h3>Приложение настроек</h3>
+                <p>Ваш узел поставляется с собственным веб-приложением настроек в браузере. В нем вы задаете название сообщества, назначаете владельца и администраторов, входящих по своим ключам, распечатываете QR-приглашения, следите за состоянием диска, выбираете публичный веб-адрес или туннель и помогаете участнику, потерявшему и телефон, и свои 12 слов, восстановить доступ к аккаунту на новом телефоне с помощью одноразового кода, подтвержденного лично.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🔒</div>
+                <h3>Конфиденциальность с первого запуска</h3>
+                <p>Объявления, карта, сообщения и балансы сообщества доступны только его участникам с момента первого запуска узла; ничего дополнительно включать не нужно. Тот, кто откроет его адрес без аккаунта, перенаправляется в глобальное сообщество, где они могут посмотреть, что есть поблизости, и попросить присоединиться.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🌐</div>
+                <h3>Связь с соседним сообществом</h3>
+                <p>Два сообщества могут договориться о связывании, чтобы их участники могли торговать друг с другом. Бобы никогда не покидают свое сообщество: каждая пара ведет непрерывный учет того, сколько одно сообщество должно другому, и каждая сторона устанавливает собственный лимит. Связывание отключено, пока оба оператора не включат его, и эта функция пока на ранней стадии: она создана, ее экраны есть в веб-приложении, но тестировалась она только между двумя нашими тестовыми сообществами, а не между действующими.</p>
+            </div>
+        </div>
+
+        <h2 id="address">Ваш адрес</h2>
+        <p>Выберите его перед вставкой и измените последнюю строку. Если вы уже вставили команду, нажимайте Enter при запросах, затем выполните последнюю строку снова: код привязки ожидает телефон. <strong>Арендованный сервер</strong> с публичным IP-адресом и открытыми портами 80 и 443: добавьте <code>--ip</code> и его IP-адрес, например <code>beanpool claim --ip 203.0.113.7</code>. Сервер получит собственный сертификат для этого адреса от Let's Encrypt через порт 80, и телефоны смогут подключаться к нему по адресу https://203.0.113.7. <strong>Компьютер дома или без открытых портов</strong>: оставьте как есть. Команда запросит первую часть бесплатного имени (введите просто <strong>yourtown</strong> для yourtown.beanpool.org; Enter пропускает), доступного через туннель, который сервер запускает сам, и подождет до трех минут для активации. <strong>Собственный домен</strong>: направьте для него A-запись на IP-адрес сервера, откройте порты 80 и 443 и добавьте <code>--address https://your.domain</code>. Имя сохраняется при смене сервера, а номер — нет: вы сможете добавить имя позже в Настройках, при этом участники, использующие IP-адрес, продолжат работать. Чтобы выбрать позже в Настройках, добавьте <code>--no-name</code>. Обычный адрес <code>http://</code> работает только в домашней сети: телефоны отклоняют его в интернете, о чем предупреждает процедура привязки. Если служба адресов проекта BeanPool недоступна, привязка все равно работает.</p>
+
+        <h2 id="install">Установка</h2>
+        <p>Затем на машине с установленным Docker вставьте этот блок команд. Он скачивает compose-файл, создает сеть для узла, загружает опубликованный образ (Intel/AMD или ARM64), запускает его, ожидает, пока сервер создаст одноразовый код подключения (до пяти минут при медленном первом запуске на Raspberry Pi), и запускает процедуру привязки. До запуска настраивать ничего не нужно.</p>
+
+        <div class="terminal-window">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <span class="terminal-dot red"></span>
+                    <span class="terminal-dot yellow"></span>
+                    <span class="terminal-dot green"></span>
+                </div>
+                <div class="terminal-title">bash — запуск сообщества</div>
+            </div>
+            <div class="terminal-body">
+                <div class="cta-step">
+                    <span class="cta-step-label">Один блок: загрузка, сеть, скачивание, запуск, ожидание, привязка</span>
+                    <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                    <button class="copy-btn" onclick="copyCode(this)" title="Скопировать в буфер обмена">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="run-node-sub">Последняя строка: beanpool claim</h3>
+        <ol class="run-node-steps">
+            <li><strong>Код и QR-код.</strong> Появится одноразовый код подключения и QR-код. Отсканируйте QR-код камерой телефона или откройте BeanPool, введите адрес сервера в разделе <strong>Найти своё сообщество</strong> и нажмите <strong>Привязать</strong>. Этот телефон станет владельцем.</li>
+            <li><strong>Настройки.</strong> Откройте свой адрес (или собственный адрес сервера), добавив <strong>/settings</strong>. Мастер настройки предложит дать название сообществу, добавить второго владельца и создаст три первых приглашения. Укажите свое местоположение на карте в разделе Node Identity, чтобы люди поблизости могли вас найти.</li>
+        </ol>
+        <p class="run-node-note">Если команда выведет <strong>No claim code after 5 minutes</strong> или <code>beanpool claim</code> сообщит <strong>This community has no claim code waiting</strong>, значит, сервер еще не завершил запуск: <code>docker compose logs beanpool-node</code> покажет текущее состояние. Как только в журнале появится сообщение, что у сообщества еще нет владельца и готов код привязки, запустите последнюю строку снова. Все подробные шаги описаны в <a href="../guide/operators/first-time-setup.html">руководстве оператора по начальной настройке</a>.</p>
+
+        <h2 id="keep-running">Рекомендуется: сохраните работу сообщества при обновлении Docker</h2>
+        <p>Этот шаг описан на странице «<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/server/updates-and-health.md" target="_blank" rel="noopener">Updates and health</a>» руководства оператора. ИИ-ассистент, который выполняет установку, всегда выполняет этот шаг (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">Настройка сервера с помощью ИИ-ассистента</a>).</p>
+
+        <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            Посмотреть на GitHub →
+        </a>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Иконка BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Бесплатное приложение для обмена с соседями за бобы.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Справочный центр</a>
+                    <a href="getting-started.html">С чего начать</a>
+                    <a href="rules.html">Правила</a>
+                    <a href="post-extraction.html">Экономика без хищничества</a>
+                    <a href="start.html">Создать сообщество</a>
+                    <a href="../guide/index.html">Руководство для участников</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="../privacy.html">Политика конфиденциальности</a>
+                    <a href="../terms.html">Условия использования</a>
+                    <a href="safety.html">Безопасность детей</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../start.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/start.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/start.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/start.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/start.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/start.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/start.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/start.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="start.html" hreflang="ru" lang="ru" aria-current="page">Русский</a>
+                    <a href="../zh-Hans/start.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/start.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/start.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/start.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/start.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/start.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/start.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/start.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/start.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/start.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/start.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/start.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/start.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/start.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/start.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/start.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Открытый исходный код под лицензией MIT. Сделано с <img src="../bean.png" alt="любовью" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> сообществами для сообществ. Границы часовых поясов © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">участники OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../main.js"></script>
+</body>
+</html>

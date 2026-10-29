@@ -47,7 +47,7 @@
                 <a href="#how-it-works">এটি যেভাবে কাজ করে</a>
                 <a href="#features">আপনি যা করতে পারেন</a>
                 <a href="rules.html">নিয়মাবলী</a>
-                <a href="#run-a-node">সম্প্রদায় পরিচালনা করুন</a>
+                <a href="start.html">সম্প্রদায় পরিচালনা করুন</a>
                 <a href="help.html" title="প্রতিটি নিয়ম, নির্দেশিকা এবং ম্যানুয়াল এক জায়গায়">সহায়তা</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube-এ ভিডিও টিউটোরিয়াল দেখুন (@beanpool)">
@@ -130,7 +130,7 @@
                     <a href="#how-it-works">এটি যেভাবে কাজ করে</a>
                     <a href="#features">আপনি যা করতে পারেন</a>
                     <a href="rules.html">নিয়মাবলী</a>
-                    <a href="#run-a-node">সম্প্রদায় পরিচালনা করুন</a>
+                    <a href="start.html">সম্প্রদায় পরিচালনা করুন</a>
                     <a href="help.html">সহায়তা</a>
                     <a href="../guide/index.html">সদস্যদের নির্দেশিকা</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube-এ ভিডিও</a>
@@ -546,7 +546,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">আপনার কাছাকাছি এখনও কোনো সম্প্রদায় নেই।</span>
-                    <a id="map-empty-start" href="#run-a-node">একটি সম্প্রদায় শুরু করুন</a>
+                    <a id="map-empty-start" href="start.html">একটি সম্প্রদায় শুরু করুন</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -565,6 +565,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -572,141 +574,7 @@
                 <h2>আপনার সম্প্রদায়ের জন্য BeanPool পরিচালনা করুন</h2>
                 <p>প্রতিটি সম্প্রদায় তার নিজস্ব নোডে চলে: একটি ছোট সার্ভার যা সেই সম্প্রদায়ের সদস্য, পোস্ট এবং খতিয়ান ধারণ করে। স্থানীয় কেউ এটি পরিচালনা করেন। আপনার শহর বা এলাকায় যদি এখনও কোনো নোড না থাকে, তবে সেটি আপনি হতে পারেন।</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>আপনি যা দেখাশোনা করেন</h3>
-                    <p>আপনি এবং আপনার নিযুক্ত অ্যাডমিনরা হলেন আপনার সম্প্রদায়ের মডারেটর: রিপোর্টগুলি আপনার কাছে আসে। আপনার সদস্যদের ডেটা আপনার মেশিনে থাকে, তাই আপনি এর ব্যাকআপ রাখেন। আপনি উদ্যোগের আলোচনা এবং ইভেন্ট চ্যাট পড়তে পারেন; আপনি সরাসরি বার্তা পড়তে পারবেন না। আপনি প্রথম সদস্যদের আমন্ত্রণ জানান এবং তাঁরা বাকিদের আমন্ত্রণ জানান।</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>সেটিংস অ্যাপ</h3>
-                    <p>আপনার নোডের ব্রাউজারে নিজস্ব সেটিংস অ্যাপ থাকে। সেখান থেকে আপনি আপনার সম্প্রদায়ের নামকরণ করেন, একজন মালিক ও অ্যাডমিনদের নিয়োগ করেন যাঁরা নিজস্ব কী দিয়ে সাইন ইন করেন, QR আমন্ত্রণ প্রিন্ট করেন, ডিস্কের অবস্থা পর্যবেক্ষণ করেন, একটি পাবলিক ওয়েব ঠিকানা বা টানেল বেছে নেন এবং এমন কোনো সদস্যকে সাহায্য করেন যিনি তাঁর ফোন এবং 12টি শব্দ উভয়ই হারিয়ে ফেলেছেন, একটি এককালীন কোডের মাধ্যমে নতুন ফোনে তাঁর অ্যাকাউন্টে ফিরে আসতে যা আপনি সশরীরে নিশ্চিত করেন।</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>প্রথম চালুর মুহূর্ত থেকেই ব্যক্তিগত</h3>
-                    <p>একটি সম্প্রদায়ের তালিকা, ম্যাপ, বার্তা এবং ব্যালেন্স এর নোড চালু হওয়ার মুহূর্ত থেকেই এর সদস্যদের জন্য সংরক্ষিত; আলাদা করে চালু করার কিছু নেই। অ্যাকাউন্ট ছাড়া কেউ এর ঠিকানা খুললে তাকে বিশ্ব সম্প্রদায়ে নির্দেশিত করা হয়, যেখানে তারা দেখতে পারে তাদের কাছাকাছি কী আছে এবং যোগ দেওয়ার অনুরোধ করতে পারে।</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>প্রতিবেশী সম্প্রদায়ের সাথে সংযোগ</h3>
-                    <p>দুটি সম্প্রদায় একে অপরের সাথে যুক্ত হতে সম্মত হতে পারে যাতে তাদের সদস্যরা নিজেদের মধ্যে বাণিজ্য করতে পারেন। শিম কখনোই তার নিজ সম্প্রদায় ছেড়ে যায় না: প্রতিটি জোড়া একটি চলমান হিসাব রাখে যে একটি সম্প্রদায় অন্যটির কাছে কী পরিমাণ ঋণী, এবং প্রতিটি পক্ষ নিজস্ব সীমা নির্ধারণ করে। উভয় অপারেটর এটি চালু না করা পর্যন্ত সংযোগ বন্ধ থাকে, এবং এটি এখনও প্রাথমিক পর্যায়ে রয়েছে: এটি তৈরি করা হয়েছে, ওয়েব অ্যাপে এর স্ক্রিন রয়েছে এবং এটি কেবল আমাদের নিজস্ব দুটি পরীক্ষামূলক সম্প্রদায়ের মধ্যে চেষ্টা করা হয়েছে, সরাসরি চলমান কোনো সম্প্রদায়ের মধ্যে কখনোই নয়।</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>একটি সম্প্রদায় শুরু করুন</h2>
-                <p>প্রায় আধ ঘণ্টা সময় লাগবে, যদি আপনি নির্দেশাবলী অনুসরণ করতে পারেন। প্রথমে জানার মতো ছয়টি বিষয়:</p>
-                <ul class="run-node-facts">
-                    <li><strong>এতে কত খরচ হয়।</strong> সফটওয়্যারটি বিনামূল্যে। এটি বাড়িতে চালু রাখা যায় এমন একটি অতিরিক্ত কম্পিউটারে (একটি মিনি পিসি, একটি NAS, বা একটি ৬৪-বিট সিস্টেমযুক্ত রাস্পবেরি পাই), অথবা মাসে কয়েক ডলারের (প্রায় US$6) একটি ছোট ভাড়া করা সার্ভারে চলে।</li>
-                    <li><strong>কে এটি হোস্ট করে।</strong> আপনি করেন, আপনার নিজের মেশিনে বা ভাড়া করা মেশিনে। এর জন্য কখনোই <a href="https://beanpool.org">beanpool.org</a>-এর প্রয়োজন হয় না: আপনার নিজস্ব ওয়েব ঠিকানা কাজ করে।</li>
-                    <li><strong>আপনার দায়িত্ব কী।</strong> আপনার সদস্যদের কাছ থেকে রিপোর্ট আপনার কাছে আসে। একটি রিকভারি কোডসহ ডেটা ফোল্ডারের ব্যাকআপ রাখা আপনার দায়িত্ব। দুজন মালিক রাখুন। সার্ভার চালু এবং আপডেট রাখুন।</li>
-                    <li><strong>আপনি যা কখনোই দেখতে পাবেন না।</strong> আপনার সদস্যদের সরাসরি বার্তাগুলি।</li>
-                    <li><strong>প্রথমে Docker।</strong> নিচের কমান্ড ব্লকের আগে মেশিনটিতে Docker ইনস্টল থাকা প্রয়োজন; একটি নতুন ভাড়া করা সার্ভারে এটি থাকে না।</li>
-                    <li><strong>ফোনে পৌঁছানো যায় এমন একটি ঠিকানা।</strong> ফোন ইন্টারনেটে কেবল https-এর মাধ্যমেই একটি সম্প্রদায়ে পৌঁছায়। একটি পাবলিক আইপি ঠিকানা এবং ৮০ ও ৪৪৩ পোর্ট খোলা থাকা একটি ভাড়া করা সার্ভারে, সেই আইপি ঠিকানাই যথেষ্ট: আপনার সার্ভার কোনো Cloudflare অ্যাকাউন্ট ছাড়াই এর জন্য নিজস্ব সার্টিফিকেট পায়, এবং আপনার নিজস্ব ডোমেইনের ক্ষেত্রেও একই। বাড়িতে, বা কোনো খোলা পোর্ট ছাড়া, ক্লেইম আপনাকে .beanpool.org দিয়ে শেষ হওয়া একটি বিনামূল্যের নাম দেয়, আপনার সার্ভার নিজেই পরিচালিত একটি টানেলের মাধ্যমে। একটি সাধারণ http:// ঠিকানা কেবল হোম নেটওয়ার্কে কাজ করে।</li>
-                </ul>
-                <p>তারপর, Docker ইনস্টল করা সেই মেশিনে, এই একটি ব্লক পেস্ট করুন। এটি কম্পোজ ফাইল সংগ্রহ করে, নোড যে নেটওয়ার্ক ব্যবহার করে তা তৈরি করে, প্রকাশিত ইমেজ (Intel/AMD বা ARM64) পুল করে, এটি চালু করে, সার্ভার তার এককালীন ক্লেইম কোড তৈরি না করা পর্যন্ত অপেক্ষা করে (রাস্পবেরি পাইতে ধীরগতির প্রথম শুরুর জন্য পাঁচ মিনিট পর্যন্ত), এবং এটি ক্লেইম করে। এটি শুরু হওয়ার আগে কনফিগার করার কিছু নেই।</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — একটি সম্প্রদায় শুরু করুন</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">একটি ব্লক: সংগ্রহ, নেটওয়ার্ক, পুল, চালু, অপেক্ষা, ক্লেইম</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="ক্লিপবোর্ডে কপি করুন">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">শেষ লাইনটি: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>আপনার ঠিকানা।</strong> পেস্ট করার আগেই এটি বেছে নিন এবং মেলানোর জন্য শেষ লাইনটি পরিবর্তন করুন। আপনি যদি ইতিমধ্যে পেস্ট করে থাকেন, তবে এর প্রশ্নগুলিতে Enter চাপুন, তারপর শেষ লাইনটি আবার চালান: দাবি কোডটি একটি ফোনের জন্য অপেক্ষা করে। <strong>একটি ভাড়া করা সার্ভার</strong> যাতে একটি পাবলিক আইপি ঠিকানা এবং ৮০ ও ৪৪৩ পোর্ট খোলা রয়েছে: <code>--ip</code> এবং এর আইপি ঠিকানা যুক্ত করুন, যেমন <code>beanpool claim --ip 203.0.113.7</code>। আপনার সার্ভার পোর্ট ৮০-র মাধ্যমে Let's Encrypt থেকে সেই ঠিকানার জন্য নিজস্ব সার্টিফিকেট পায় এবং ফোনগুলি https://203.0.113.7-এ এতে পৌঁছায়। <strong>বাড়িতে থাকা একটি কম্পিউটার, বা কোনো পোর্ট খোলা নেই</strong>: এটি যেমন আছে তেমনই রাখুন। এটি একটি বিনামূল্যের নামের প্রথম অংশের জন্য জিজ্ঞাসা করে (yourtown.beanpool.org-এর জন্য শুধু <strong>yourtown</strong> লিখুন; Enter চাপলে এড়িয়ে যাবে), যা আপনার সার্ভার নিজেই পরিচালিত একটি টানেলের মাধ্যমে যুক্ত হয়, এবং এটি সক্রিয় হতে তিন মিনিট পর্যন্ত অপেক্ষা করে। <strong>আপনার নিজস্ব ডোমেইন</strong>: সার্ভারের আইপি ঠিকানায় এর জন্য একটি A রেকর্ড নির্দেশ করুন, ৮০ এবং ৪৪৩ পোর্ট খুলুন এবং <code>--address https://your.domain</code> যুক্ত করুন। একটি নাম সার্ভার পরিবর্তনের পরেও টিকে থাকে; কোনো নম্বর টিকে থাকে না: আপনি পরে সেটিংসে একটি নাম যোগ করতে পারেন এবং যে সদস্যরা আইপি ঠিকানা ব্যবহার করেন তাঁদের কাজ অব্যাহত থাকে। সেটিংসে পরে বেছে নিতে, <code>--no-name</code> যোগ করুন। একটি সাধারণ <code>http://</code> ঠিকানা কেবল হোম নেটওয়ার্কে কাজ করে: ফোন ইন্টারনেটে এটি প্রত্যাখ্যান করে এবং ক্লেইম আপনাকে সতর্ক করে। BeanPool প্রকল্পের ঠিকানা পরিষেবা বন্ধ থাকলেও ক্লেইম কাজ করে।</li>
-                    <li><strong>কোড এবং QR।</strong> এটি একটি এককালীন দাবি কোড এবং একটি QR কোড দেখায়। আপনার ফোনের ক্যামেরা দিয়ে QR কোডটি স্ক্যান করুন, অথবা BeanPool খুলুন, <strong>আপনার সম্প্রদায় খুঁজুন</strong>-এর অধীনে সার্ভারের ঠিকানা টাইপ করুন এবং <strong>দাবি করুন</strong>-এ আলতো চাপুন। সেই ফোনটি মালিক হয়ে যায়।</li>
-                    <li><strong>সেটিংস।</strong> আপনার ঠিকানা (বা সার্ভারের নিজস্ব ঠিকানা) এবং তার পরে <strong>/settings</strong> খুলুন। সেটআপ উইজার্ড আপনার সম্প্রদায়ের নামকরণ করে, আপনাকে দ্বিতীয় একজন মালিক যুক্ত করতে বলে এবং তিনটি প্রতিষ্ঠাকালীন আমন্ত্রণ তৈরি করে। নোড আইডেন্টিটি (Node Identity)-এর অধীনে ম্যাপে আপনার অবস্থান সেট করুন যাতে আশেপাশের মানুষ আপনাকে খুঁজে পেতে পারেন।</li>
-                </ol>
-                <p class="run-node-note">যদি ব্লকটি বলে <strong>No claim code after 5 minutes</strong>, অথবা <code>beanpool claim</code> বলে <strong>This community has no claim code waiting</strong>, তবে সার্ভারটি চালু হওয়া এখনও শেষ হয়নি: <code>docker compose logs beanpool-node</code> দেখায় এটি কোন পর্যায়ে রয়েছে। লগ যখন বলে যে সম্প্রদায়ের এখনও কোনো মালিক নেই এবং একটি ক্লেইম কোড রয়েছে, তখন শেষ লাইনটি আবার চালান। সম্পূর্ণ ধাপগুলি অপারেটর ম্যানুয়ালের <a href="../guide/operators/first-time-setup.html">প্রথমবারের সেটআপ</a>-এ রয়েছে।</p>
-
-                <h3 class="run-node-sub">প্রস্তাবিত: Docker আপডেট হলেও আপনার সম্প্রদায় চালু রাখুন</h3>
-                <p>Docker-এর live-restore চালু থাকলে Docker রিস্টার্ট করতে পারে, বা প্যাচ আপডেট নিতে পারে, আপনার সম্প্রদায় না থামিয়েই। নিচের ধাপের জন্য root বা <code>sudo</code> লাগে, আর এটি বাদ দেওয়া নিরাপদ: এটি ছাড়াও আপনার সম্প্রদায় চলে, আর পরে করার ধাপগুলো অপারেটর ম্যানুয়ালের "Updates and health" পৃষ্ঠায় আছে। যে এআই সহকারী ইনস্টল করে, সে সবসময় এই ধাপটি করে (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">এআই সহকারী দিয়ে আপনার সার্ভার সেট আপ করা</a>)।</p>
-
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — সম্প্রদায় চালু রাখুন</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">ঐচ্ছিক: Docker live-restore</span>
-                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
-# Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
-# lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
-command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
-command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
-docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
-[ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ] &amp;&amp; { echo "Docker live-restore is already on."; exit 0; }
-python3 - &lt;&lt;'PY' || exit 1
-import json, os, stat, sys
-p = os.path.realpath("/etc/docker/daemon.json")
-st = os.stat(p) if os.path.exists(p) else None
-try:
-    d = json.loads(open(p).read().strip() or "{}") if st else {}
-    if not isinstance(d, dict):
-        raise ValueError
-except ValueError:
-    sys.exit(p + " is not a JSON object, so it is left alone. Fix or remove it, then paste this step again.")
-if d.get("live-restore") is True:
-    sys.exit(0)
-d["live-restore"] = True
-os.makedirs(os.path.dirname(p), exist_ok=True)
-tmp = p + ".new"
-fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-os.fchmod(fd, stat.S_IMODE(st.st_mode) if st else 0o644)
-if st:
-    os.fchown(fd, st.st_uid, st.st_gid)
-with os.fdopen(fd, "w") as f:
-    f.write(json.dumps(d, indent=2) + "\n")
-    f.flush()
-    os.fsync(f.fileno())
-os.replace(tmp, p)
-PY
-systemctl reload docker &lt;/dev/null || exit 1
-if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="ক্লিপবোর্ডে কপি করুন">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    GitHub-এ দেখুন →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">একটি সম্প্রদায় শুরু করুন&nbsp;→</a></p>
         </div>
     </section>
 
@@ -759,7 +627,7 @@ EOF</code>
                     <a href="getting-started.html">শুরু করার নির্দেশিকা</a>
                     <a href="rules.html">নিয়মাবলী</a>
                     <a href="post-extraction.html">শোষণ-পরবর্তী</a>
-                    <a href="#run-a-node">সম্প্রদায় পরিচালনা করুন</a>
+                    <a href="start.html">সম্প্রদায় পরিচালনা করুন</a>
                     <a href="../guide/index.html">সদস্যদের নির্দেশিকা</a>
                     <a href="status.html">সার্ভারের অবস্থা</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

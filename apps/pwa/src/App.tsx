@@ -54,6 +54,7 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
 import { ProfileSetup } from './components/ProfileSetup';
+import { MemberAvatar } from './components/MemberAvatar';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
@@ -347,9 +348,8 @@ export function App() {
     // null as a member, as before.
     const [isGuest, setIsGuest] = useState<boolean | null>(null);
     // The sidebar's profile button shows the member's picture: asked once the node takes the key as a member (a guest
-    // has no profile here), again after each save. A picture that fails to load gives the initials back.
+    // has no profile here), again after each save. With none, and one that fails to load: the ready-made one its key picks.
     const ownAvatar = useOwnAvatar(isGuest === false && identity ? identity.publicKey : null);
-    const [brokenAvatar, setBrokenAvatar] = useState<string | null>(null);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
     // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
@@ -981,14 +981,10 @@ export function App() {
                             onClick={() => setOpenProfilePubkey(identity.publicKey)}
                             className="w-full flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 hover:border-nature-400 dark:hover:border-nature-600 transition-colors cursor-pointer text-left"
                         >
-                            {/* The member's own picture, at the size it is kept; the initials while it loads, where there is
-                                none, and where it fails to load. */}
-                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-xs text-nature-800 dark:text-nature-200 shrink-0 overflow-hidden">
-                                {ownAvatar && ownAvatar !== brokenAvatar ? (
-                                    <img src={ownAvatar} alt={t('Your Photo')} className="w-full h-full object-cover" onError={() => setBrokenAvatar(ownAvatar)} />
-                                ) : (
-                                    identity.callsign ? identity.callsign.substring(0, 2).toUpperCase() : 'ME'
-                                )}
+                            {/* The member's own picture, at the size it is kept; while it loads, where there is none and where
+                                it fails to load, the ready-made picture the key picks (MemberAvatar), never bare initials. */}
+                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 shrink-0 overflow-hidden">
+                                <MemberAvatar avatarUrl={ownAvatar} pubkey={identity.publicKey} callsign={identity.callsign} size={32} alt={t('Your Photo')} />
                             </div>
                             <div className="flex flex-col truncate">
                                 <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || t('Anonymous')}</span>

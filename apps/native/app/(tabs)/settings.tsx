@@ -67,6 +67,7 @@ import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_L
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useOwnProfile } from '../../utils/use-own-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn, shareOutsideOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
@@ -648,6 +649,13 @@ export default function SettingsScreen() {
     // (unique per node, chosen at join), so the device-global identity.callsign is only
     // ever right by coincidence — display this instead and fall back while it loads.
     const [nodeCallsign, setNodeCallsign] = useState<string | null>(null);
+    // The card draws this community's row as last read (utils/use-own-profile.ts), as the header does: after a switch, a
+    // sync or a change made elsewhere it follows at once, where the loader below waits for the next focus. Until that row
+    // is read, and where it holds no photo, what the loader found (DESIGN-per-community-profile-fable.md S2 takes the
+    // phone-wide copy out of that).
+    const own = useOwnProfile();
+    const cardCallsign = (own.read && own.callsign) || nodeCallsign || identity?.callsign || '';
+    const cardAvatar = (own.read && own.avatarUrl) || avatar;
     const [communityLabel, setCommunityLabel] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [bio, setBio] = useState('');
@@ -1823,16 +1831,17 @@ export default function SettingsScreen() {
                         96px, same ring, same tap target and labels. */}
                     <Pressable onPress={() => setMode('profile')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel={t('Edit profile')}>
                         <MemberAvatar
-                            avatarUrl={avatar}
+                            avatarUrl={cardAvatar}
+                            updatedAt={cardAvatar === own.avatarUrl ? own.updatedAt : undefined}
                             pubkey={identity.publicKey}
-                            callsign={nodeCallsign || identity.callsign}
+                            callsign={cardCallsign}
                             size={96}
                         />
                         <View style={styles.avatarRing} />
                     </Pressable>
 
                     {/* Callsign */}
-                    <Text style={styles.callsignText}>{nodeCallsign || identity.callsign}</Text>
+                    <Text style={styles.callsignText}>{cardCallsign}</Text>
 
                     {/* Community name: names are per community */}
                     {communityLabel ? (

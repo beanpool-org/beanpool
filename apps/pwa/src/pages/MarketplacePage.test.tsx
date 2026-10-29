@@ -1057,3 +1057,265 @@ describe('MarketplacePage: shop parity for editing offers', () => {
         expect(screen.queryByTestId('edit-post-shop')).not.toBeInTheDocument();
     });
 });
+
+/**
+ * Deals S4 (scratch/fable-design/DESIGN-deals-fable.md §3.2, §3.3): every listing kind, by who is reading it. Payer, payee,
+ * asker and author; a keeper of the enterprise that wrote it, acting at the enterprise's own doors (routes/treasury.ts);
+ * a keeper of another enterprise and a stranger, who see nothing of anyone's deal. The feed's chip says only the reader's own.
+ */
+describe('MarketplacePage (deals-s4): a listing shows your deal for who you are', () => {
+    const ME = identity.publicKey;
+    const ENT = 'farm-co-pk';
+    const at = '2026-10-24T10:00:00.000Z';
+    const listing = (over: Record<string, unknown>) => ({
+        id: 'p', title: 'Listing', description: 'Words', type: 'offer', category: 'services', credits: 45, priceType: 'fixed',
+        status: 'active', repeatable: false, authorPublicKey: 'damo-pk', authorCallsign: 'Damo', createdAt: at, photos: ['/p.jpg'], ...over,
+    });
+    const deal = (over: Partial<api.MarketplaceTransaction>): api.MarketplaceTransaction => ({
+        id: 'tx', postId: 'p', postTitle: 'Listing', credits: 45, status: 'pending', buyerPublicKey: ME, buyerCallsign: 'Guest',
+        sellerPublicKey: 'damo-pk', sellerCallsign: 'Damo', createdAt: at, ...over,
+    });
+    let feed: any[] = [];
+    let entDeals: api.MarketplaceTransaction[] = [];
+    let keeperOf: string[] = [];
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        feed = [];
+        entDeals = [];
+        keeperOf = [];
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (f?: any) => (f?.id ? feed.filter(p => p.id === f.id) : f?.author ? [] : feed) as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getTreasury').mockResolvedValue(null);
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockImplementation(async () => ({ balance: 100, isBlockedFromTrading: false, keeperOf }) as any);
+        vi.spyOn(api, 'getMemberRatings').mockResolvedValue({ ratings: [], average: 0, count: 0 } as any);
+        vi.spyOn(api, 'getMyMarketplaceTransactions').mockImplementation(async (pk: string) => (pk === ENT ? entDeals : []));
+    });
+
+    async function open(post: any, txs: api.MarketplaceTransaction[], extra: Record<string, unknown> = {}) {
+        feed = [post];
+        const view = render(<MarketplacePage identity={identity} isMember={true} openPostId={post.id} onPostOpened={() => {}} transactions={txs} {...extra} />);
+        await screen.findByRole('heading', { name: post.title });
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        return view;
+    }
+    const noTakeUp = () => {
+        expect(screen.queryByRole('button', { name: /Accept Offer/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Offer to Fulfill/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Ask to borrow/ })).not.toBeInTheDocument();
+    };
+
+    // ── Not the author ─────────────────────────────────────────────────────────────────────────────────────────────
+    it('one-off Offer, payer, held: Release and Cancel, no Accept', async () => {
+        await open(listing({ title: 'Lawn mower', status: 'pending', pendingTransactionId: 'tx' }), [deal({})]);
+        expect(await screen.findByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('taken-by-other')).not.toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it("one-off Need, payee (helping, approved): \"You're helping with this\", the payer named, Cancel, never Release", async () => {
+        await open(listing({ title: 'Fix the fence', type: 'need', status: 'pending', authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk', pendingTransactionId: 'tx' }),
+            [deal({ credits: 20, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+        expect(await screen.findByText("You're helping with this · 20 Beans held for you")).toBeInTheDocument();
+        expect(screen.getByText('⏳ Pending Release by Kofi')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it('repeatable Need, payee: the same, and the listing stays on the board with nothing to take up again', async () => {
+        await open(listing({ title: 'Stall help', type: 'need', repeatable: true, authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk' }),
+            [deal({ credits: 20, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+        expect(await screen.findByText("You're helping with this · 20 Beans held for you")).toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it('Need, asked: "You offered to help · waiting on Kofi" and Cancel Offer, no second offer', async () => {
+        await open(listing({ title: 'Stall help', type: 'need', repeatable: true, authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk' }),
+            [deal({ status: 'requested', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME })]);
+        expect(await screen.findByText('You offered to help · waiting on Kofi')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Cancel Offer' })).toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it('lendable Offer, asked: "You asked to borrow it · nothing is held until Damo says yes" and Withdraw', async () => {
+        await open(listing({ title: 'Ladder', lendable: true }), [deal({ status: 'requested' })]);
+        expect(await screen.findByText('You asked to borrow it · nothing is held until Damo says yes')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Withdraw request' })).toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it('lendable Offer, borrowed (held): Release, never Ask again', async () => {
+        await open(listing({ title: 'Ladder', lendable: true, status: 'pending', pendingTransactionId: 'tx' }), [deal({})]);
+        expect(await screen.findByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it('recurring Offer whose last deal is done: Accept again, "You\'ve had this before", and Leave Review when unrated', async () => {
+        await open(listing({ title: 'Pottery course', repeatable: true }), [
+            deal({ id: 'tx-old', status: 'completed', completedAt: '2026-10-02T10:00:00.000Z', ratedByBuyer: true }),
+            deal({ id: 'tx-new', status: 'completed', completedAt: '2026-10-20T10:00:00.000Z', ratedByBuyer: false }),
+        ]);
+        expect(await screen.findByText("You've had this before · done 20 Oct")).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Leave Review' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Accept Offer/ })).toBeInTheDocument();
+    });
+
+    it('a one-off taken up by someone else, reached by a link: "Taken up by someone else for now.", nothing to take, nothing of theirs', async () => {
+        await open(listing({ title: 'Lawn mower', status: 'pending', pendingTransactionId: 'tx-kofi' }), []);
+        expect(await screen.findByText('Taken up by someone else for now.')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Cancel Hold/ })).not.toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it("a stranger on a recurring Offer with someone else's deals: nothing said, Accept shown", async () => {
+        await open(listing({ title: 'Pottery course', repeatable: true }), [deal({ buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi' })]);
+        expect(await screen.findByRole('button', { name: /Accept Offer/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('deals-under-way')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Kofi/)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('taken-by-other')).not.toBeInTheDocument();
+    });
+
+    // ── The author ───────────────────────────────────────────────────────────────────────────────────────────────
+    it('the author of a recurring Offer with two deals under way: one row each, the payer named, Cancel each, no Release', async () => {
+        await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
+            deal({ id: 'tx-a', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME, createdAt: '2026-10-24T10:00:00.000Z' }),
+            deal({ id: 'tx-b', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, credits: 30, createdAt: '2026-10-26T10:00:00.000Z' }),
+        ]);
+        const rows = await screen.findByTestId('deals-under-way');
+        expect(within(rows).getByText('Deals under way: 2')).toBeInTheDocument();
+        expect(within(screen.getByTestId('deal-row-tx-a')).getByText('Marty · 45 Beans held · since 24 Oct')).toBeInTheDocument();
+        expect(within(screen.getByTestId('deal-row-tx-a')).getByText('⏳ Pending Release by Marty')).toBeInTheDocument();
+        expect(within(screen.getByTestId('deal-row-tx-b')).getByText('Kofi · 30 Beans held · since 26 Oct')).toBeInTheDocument();
+        expect(within(rows).getAllByRole('button', { name: /Cancel Hold/ })).toHaveLength(2);
+        expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it('the author opened at one deal (Home, the header): that row comes first', async () => {
+        await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
+            deal({ id: 'tx-a', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME, createdAt: '2026-10-26T10:00:00.000Z' }),
+            deal({ id: 'tx-b', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, createdAt: '2026-10-24T10:00:00.000Z' }),
+        ], { openTxId: 'tx-b' });
+        const rows = within(await screen.findByTestId('deals-under-way')).getAllByTestId(/^deal-row-/);
+        expect(rows.map(r => r.getAttribute('data-testid'))).toEqual(['deal-row-tx-b', 'deal-row-tx-a']);
+    });
+
+    it("a Need's author, who pays: their row has Release and Cancel, and Release names the deal", async () => {
+        const done = vi.spyOn(api, 'completeMarketplaceTransaction').mockResolvedValue({ success: true } as any);
+        await open(listing({ title: 'Fix the fence', type: 'need', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }),
+            [deal({ id: 'tx-h', credits: 20, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
+        const row = await screen.findByTestId('deal-row-tx-h');
+        expect(within(row).getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
+        fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+        await waitFor(() => expect(done).toHaveBeenCalledWith('tx-h', ME, undefined));
+    });
+
+    it("a Need's author with a request: Approve and Deny", async () => {
+        await open(listing({ title: 'Fix the fence', type: 'need', authorPublicKey: ME, authorCallsign: 'Guest' }),
+            [deal({ id: 'tx-r', status: 'requested', buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
+        expect(await screen.findByText('✋ Fulfillment Requests (1)')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Approve & Hold in Trust' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Deny' })).toBeInTheDocument();
+    });
+
+    // ── Keepers ──────────────────────────────────────────────────────────────────────────────────────────────────
+    const farmNeed = listing({ title: 'Mend the polytunnel', type: 'need', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', credits: 20 });
+    const farmOffer = listing({ title: 'Dozen eggs', repeatable: true, authorPublicKey: ENT, authorCallsign: 'Farm Co-op', credits: 6 });
+
+    it("a keeper of the enterprise on its Need: the enterprise's deal (read for it), Release at its door, no Cancel, no Offer to fulfil", async () => {
+        keeperOf = [ENT];
+        entDeals = [deal({ id: 'tx-f', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
+        const done = vi.spyOn(api, 'treasuryComplete').mockResolvedValue({ success: true });
+        const ownDoor = vi.spyOn(api, 'completeMarketplaceTransaction');
+        await open(farmNeed, []);
+        const row = await screen.findByTestId('deal-row-tx-f');
+        expect(api.getMyMarketplaceTransactions).toHaveBeenCalledWith(ENT);
+        expect(screen.getByText('You act for Farm Co-op here.')).toBeInTheDocument();
+        expect(within(row).getByText('Mo · 20 Beans held · since 24 Oct')).toBeInTheDocument();
+        // The node has no door for a keeper to cancel the enterprise's hold: none shown (Mo cancels as himself).
+        expect(within(row).queryByRole('button', { name: /Cancel Hold/ })).not.toBeInTheDocument();
+        noTakeUp();
+        fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
+        fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+        await waitFor(() => expect(done).toHaveBeenCalledWith(ENT, 'tx-f', undefined));
+        expect(ownDoor).not.toHaveBeenCalled();
+    });
+
+    it("a keeper paid by the enterprise's own Need: their pay is another keeper's to release; they cancel as themselves", async () => {
+        keeperOf = [ENT];
+        entDeals = [deal({ id: 'tx-k', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: ME, sellerCallsign: 'Guest' })];
+        await open(farmNeed, []);
+        const row = await screen.findByTestId('deal-row-tx-k');
+        expect(within(row).getByText('⏳ Pending Release by Farm Co-op')).toBeInTheDocument();
+        expect(within(row).queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+        expect(within(row).getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
+    });
+
+    it("a keeper on the enterprise's recurring Offer: each buyer's row, waiting on them to release; no Release, no Cancel, no Accept", async () => {
+        keeperOf = [ENT];
+        entDeals = [
+            deal({ id: 'tx-1', credits: 6, buyerPublicKey: 'mo-pk', buyerCallsign: 'Mo', sellerPublicKey: ENT, sellerCallsign: 'Farm Co-op' }),
+            deal({ id: 'tx-2', credits: 6, buyerPublicKey: 'ana-pk', buyerCallsign: 'Ana', sellerPublicKey: ENT, sellerCallsign: 'Farm Co-op', createdAt: '2026-10-25T10:00:00.000Z' }),
+        ];
+        await open(farmOffer, []);
+        const rows = await screen.findByTestId('deals-under-way');
+        expect(within(rows).getByText('Deals under way: 2')).toBeInTheDocument();
+        expect(within(rows).getByText('⏳ Pending Release by Mo')).toBeInTheDocument();
+        expect(within(rows).getByText('⏳ Pending Release by Ana')).toBeInTheDocument();
+        expect(within(rows).queryByRole('button', { name: /Release Credits|Cancel Hold/ })).not.toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it("a keeper answers a request on the enterprise's Need at its door", async () => {
+        keeperOf = [ENT];
+        entDeals = [deal({ id: 'tx-q', status: 'requested', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
+        const yes = vi.spyOn(api, 'treasuryApprove').mockResolvedValue({ success: true });
+        const ownYes = vi.spyOn(api, 'approveMarketplaceRequest');
+        await open(farmNeed, []);
+        fireEvent.click(await screen.findByRole('button', { name: 'Approve & Hold in Trust' }));
+        await waitFor(() => expect(yes).toHaveBeenCalledWith(ENT, 'tx-q'));
+        expect(ownYes).not.toHaveBeenCalled();
+    });
+
+    for (const [who, kept] of [['a keeper of another enterprise', ['other-co-pk']], ['a member who keeps nothing', []]] as const) {
+        it(`${who}: a stranger to the farm's deals, never read for them, and may offer to help`, async () => {
+            keeperOf = [...kept];
+            entDeals = [deal({ id: 'tx-f', buyerPublicKey: ENT, sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
+            await open(farmNeed, []);
+            expect(screen.queryByTestId('deals-under-way')).not.toBeInTheDocument();
+            expect(await screen.findByRole('button', { name: /Offer to Fulfill/ })).toBeInTheDocument();
+            expect(api.getMyMarketplaceTransactions).not.toHaveBeenCalledWith(ENT);
+        });
+    }
+
+    // ── The feed ─────────────────────────────────────────────────────────────────────────────────────────────────
+    it("the feed's chip: 🤝 IN TRUST on my deal held, ✋ ASKED on my request, nothing on a stranger's deal or a finished one", async () => {
+        feed = [
+            listing({ id: 'a', title: 'Held one', repeatable: true }),
+            listing({ id: 'b', title: 'Asked one', lendable: true }),
+            listing({ id: 'c', title: 'Someone else deal', repeatable: true }),
+            listing({ id: 'd', title: 'Done one', repeatable: true }),
+        ];
+        render(<MarketplacePage identity={identity} isMember={true} transactions={[
+            deal({ id: '1', postId: 'a' }),
+            deal({ id: '2', postId: 'b', status: 'requested' }),
+            deal({ id: '3', postId: 'c', buyerPublicKey: 'kofi-pk', sellerPublicKey: 'damo-pk' }),
+            deal({ id: '4', postId: 'd', status: 'completed' }),
+        ]} />);
+        await screen.findByText('Held one');
+        await waitFor(() => expect(screen.getAllByTestId('card-deal-chip')).toHaveLength(2));
+        const chips = screen.getAllByTestId('card-deal-chip').map(c => c.textContent);
+        expect(chips.sort()).toEqual(['✋ ASKED', '🤝 IN TRUST']);
+        // Each on its own card: the card holding the chip carries that listing's title.
+        const cardOf = (chip: HTMLElement) => { let el: HTMLElement | null = chip; while (el && !/Held one|Asked one/.test(el.textContent || '')) el = el.parentElement; return el?.textContent || ''; };
+        const [first, second] = screen.getAllByTestId('card-deal-chip');
+        const pairs = [first, second].map(c => [c.textContent, /Held one/.test(cardOf(c)) && !/Asked one/.test(cardOf(c)) ? 'a' : /Asked one/.test(cardOf(c)) && !/Held one/.test(cardOf(c)) ? 'b' : '?']);
+        expect(pairs.sort()).toEqual([['✋ ASKED', 'b'], ['🤝 IN TRUST', 'a']]);
+    });
+});

@@ -5,7 +5,7 @@
  * The applicant, signed with their own key (the same key on every node), not a member here (a key a re-key replaced
  * gets 403 `key_invalidated` from both):
  *   POST /api/join/knock          { message, callsign, avatar?, fromNode?, toNode? }  → 201 { knock: { status: 'pending' } }
- *                                   (421 `wrong_community` for a knock whose `toNode` names another community; see below)
+ *                                   (400 `wrong_community` for a knock whose `toNode` names another community; see below)
  *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
  *   POST /api/join/knock/cancel   → 200 { knock: { status: 'cancelled' } } | 404 `not_found` ("Cancel my request"; the key
  *                                   may ask again after KNOCK_RULES.cancelBlockHours, 409 `knock_cancelled` before)
@@ -40,10 +40,12 @@
  * knockBody). A request in the old signature format names no host, so without this a community that received a knock
  * could send the same signed request on to another one within the five minutes a signature lasts, and learn from the
  * answer whether that key is a member there. A knock whose `toNode` is not one of this community's names
- * (engine/own-addresses.ts) is refused, 421 `wrong_community`, before anything about the key is said
+ * (engine/own-addresses.ts) is refused, 400 `wrong_community`, before anything about the key is said
  * (DESIGN-account-without-global-fable.md §3.5, closed in slice S3). On a node that knows none of its names yet, or for a
  * name on the home network, it must be the host the request came to, as a claim's `signedFor` must
- * (routes/node-claim.ts). A knock with no `toNode` claims nothing to check and is taken as before.
+ * (routes/node-claim.ts). A knock with no `toNode` claims nothing to check and is taken as before. 400, not the
+ * signature layer's 421: an HTTP client may send a request again on its own after a 421 (Misdirected Request; Node's
+ * fetch does), and the second one, its nonce spent, would be answered as a replay instead of with this refusal.
  *
  * ## Limits
  *
@@ -261,7 +263,7 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         if (!applicant) return;
         // Addressed to another community: refused before anything about this key here is said (see "Addressed here").
         if (!knockAddressedHere(((ctx as any).requestBody || {}).toNode, ctx.request.host)) {
-            return answer(ctx, 421, word('This request to join was sent to another community, so it was not taken here.'), 'wrong_community');
+            return answer(ctx, 400, word('This request to join was sent to another community, so it was not taken here.'), 'wrong_community');
         }
         if (refusedOnStandby(ctx, STANDBY_KNOCK)) return;
         if (!rateLimit(ctx, 'knock')) return;

@@ -8,7 +8,8 @@
  *
  *   1. a node that knows none of its names (as a self-hoster's first boot): a knock addressed to the host it came to is
  *      taken, with or without a port; one with no `toNode` is taken as before; one addressed to another community, or to
- *      another host on the home network, is refused 421 `wrong_community`, and nothing is written
+ *      another host on the home network, is refused 400 `wrong_community` (never a 421, which a client may send again
+ *      on its own, its nonce then spent), and nothing is written
  *   2. a node that knows its name: a knock addressed to that name is taken whatever host it came to; one addressed to
  *      another community, or to loopback, is refused, and nothing is written
  *   3. the refusal comes before anything about the key: a member of this community whose knock names another community
@@ -78,7 +79,7 @@ function rowsFor(pk: string): number {
     try { return (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE pubkey = ?').get(pk) as { n: number }).n; } catch { return -1; }
 }
 
-const refused = (r: Res) => r.status === 421 && r.body?.code === 'wrong_community';
+const refused = (r: Res) => r.status === 400 && r.body?.code === 'wrong_community';
 const taken = (r: Res) => r.status === 201 && r.body?.knock?.status === 'pending';
 
 async function main(): Promise<void> {
@@ -103,7 +104,7 @@ async function main(): Promise<void> {
         assert(taken(n) && rowsFor(none.pk) === 1, `1c. a knock with no toNode claims nothing to check, and is taken as before (${n.status})`);
         const away = newId('Kit');
         const a = await knock(away, { toNode: 'castlemaine.example.org' });
-        assert(refused(a), `1d. a knock addressed to another community is refused 421 wrong_community (${a.status} ${a.body?.code})`);
+        assert(refused(a), `1d. a knock addressed to another community is refused 400 wrong_community (${a.status} ${JSON.stringify(a.body)})`);
         assert(rowsFor(away.pk) === 0, '1e. …and nothing is written for it');
         const lan = newId('Bo');
         const l = await knock(lan, { toNode: '192.168.1.9' });

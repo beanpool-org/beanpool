@@ -71,8 +71,9 @@ import { readNodeProfile } from '../node-profile';
 import { readRecoveryCopiesRule, signInCopiesAt, type SignInCopies } from '../vault-config';
 import { copiesAtFor, copiesRuleChange, copiesRuleNow, copiesRuleSeen, knownCopiesRule } from '../copies-rule';
 import { finishMove, vaultMoveOffer } from '../vault-move';
+import { linkSignIn, linkedNotice, type LinkAnswer } from '../join-link';
 import type { KeeperEnrolmentResult } from '../keeper-enrolment';
-import { COMMUNITY, CommunityKeepingCopies, installNetwork, noVault, useVault, VAULT, type Network } from './fake-vault';
+import { COMMUNITY, CommunityKeepingCopies, FakeGlobal, GLOBAL, installNetwork, noVault, TICKET_KEY, useVault, VAULT, type Network } from './fake-vault';
 
 const SEED = new Uint8Array(32).fill(7);
 const MEMBER = {
@@ -101,6 +102,28 @@ class RuledCommunity extends CommunityKeepingCopies {
             return { status: 409, body: { error: "This community keeps no copies of members' accounts, so nothing was kept here. Your 12 words are your way back here.", code: 'no_copies_here' } };
         }
         return super.handle(req);
+    }
+}
+
+/**
+ * The global community's door (fake-vault.ts FakeGlobal) saying its rule in its info and holding it as the server does
+ * (apps/server routes/open-join.ts): it takes a key vault ticket only under `vault` (otherwise its link nonce names no
+ * ticket keys), and under `none` a link that carries a copy is still made, without the copy, the answer saying why
+ * (storeRecovery's `no_copies_here`).
+ */
+class RuledGlobal extends FakeGlobal {
+    rule = 'vault';
+    handle(req: any): { status: number; body: unknown } {
+        if (req.method === 'GET' && req.path === '/api/community/info') {
+            return { status: 200, body: { profile: 'global', features: {}, requestSigning: 2, recoveryCopies: this.rule } };
+        }
+        this.ticketKeys = this.rule === 'vault' ? [TICKET_KEY] : null;
+        const answer = super.handle(req);
+        if (this.rule === 'none' && req.path === '/api/join/link' && answer.status === 200 && req.body?.recovery) {
+            const recovery = { enrolled: false, error: "This community keeps no copies of members' accounts, so nothing was kept here. Your 12 words are your way back here.", code: 'no_copies_here' };
+            return { status: 200, body: { ...(answer.body as object), recovery } };
+        }
+        return answer;
     }
 }
 
@@ -355,6 +378,86 @@ describe('linking a sign-in in a build without the key vault, at a community tha
         expect((error as SsoSignInError).code).toBeUndefined();
         expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
         expect(atCommunity()).toEqual(['POST /api/recovery/sso-nonce']);
+    });
+});
+
+// Adding a sign-in later (utils/join-link.ts), for a member in by 12 words: where a copy goes is the door's rule as this
+// phone kept it (global-join.ts doorCopiesAt), and the one-way-back card opens the sheet long after that was kept. Where
+// the owners set `none` since, the link is made without a copy, and the member reads the rule's words: never "it couldn't
+// keep a copy … Account Protection in Settings can link it again", which Account Protection can't do under `none`.
+describe("adding a sign-in later, where the door's community set none since this phone kept its rule", () => {
+    const NOTICE_NONE = "Your Facebook sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back.";
+    const NOTICE_NOT_KEPT = "Your Facebook sign-in is added: your account now has the usual new-account limits. It couldn't keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.";
+    let door: RuledGlobal;
+    const atGlobal = () => net.sent.filter((s) => s.origin === GLOBAL).map((s) => `${s.method} ${s.path}`);
+    const sentLink = () => net.sent.find((s) => s.origin === GLOBAL && s.path === '/api/join/link')!.body;
+
+    beforeEach(() => {
+        door = new RuledGlobal();
+        net.global = door;
+        door.joined.set(MEMBER.publicKey, 'words');
+        facebookSaysYes();
+    });
+
+    /** The door said `rule` when this phone last asked (the app's start, a screen's read), and this phone kept it. */
+    async function kept(rule: string): Promise<void> {
+        door.rule = rule;
+        const read = copiesRuleNow(GLOBAL);
+        await vi.advanceTimersByTimeAsync(30_000);
+        expect(await read).toBe(rule);
+        net.sent.length = 0;
+    }
+    async function link(): Promise<Extract<LinkAnswer, { kind: 'linked' }>> {
+        const answer = linkSignIn({ url: GLOBAL, identity: MEMBER, provider: 'facebook', phoneLock: null });
+        await vi.advanceTimersByTimeAsync(30_000);
+        const linked = await answer;
+        expect(linked.kind).toBe('linked');
+        return linked as Extract<LinkAnswer, { kind: 'linked' }>;
+    }
+
+    for (const [build, rule] of [['with the key vault', 'server'], ['without it', 'vault']] as const) {
+        it(`a build ${build}, kept ${rule}: the copy went in the link, the door kept none and said why, and the member reads the rule`, async () => {
+            if (build === 'without it') noVault();
+            await kept(rule);
+            door.rule = 'none';
+            const answer = await link();
+            expect(sentLink().recovery?.shares?.length, 'the phone went by the rule it kept').toBeGreaterThan(0);
+            expect(answer).toMatchObject({ enrolment: null, noCopies: true });
+            expect(linkedNotice(answer)).toBe(NOTICE_NONE);
+            expect(atVault()).toEqual([]);
+            // Asked once, as the connect does after the same refusal: the screens read none when they look again.
+            expect(await knownCopiesRule(GLOBAL)).toBe('none');
+        });
+    }
+
+    it('a build with the key vault, kept vault: the door named no ticket, so no copy went; the rule asked once, and the member reads it', async () => {
+        await kept('vault');
+        door.rule = 'none';
+        const answer = await link();
+        expect(sentLink().recovery).toBeUndefined();
+        expect(sentLink().vaultTicket).toBeUndefined();
+        expect(atVault(), 'a door that takes no ticket: the vault is never asked').toEqual([]);
+        expect(atGlobal()).toEqual(['POST /api/join/link/sso-nonce', 'POST /api/join/link', 'GET /api/community/info']);
+        expect(answer).toMatchObject({ enrolment: null, noCopies: true });
+        expect(linkedNotice(answer)).toBe(NOTICE_NONE);
+    });
+
+    it('still vault there, and the key vault gave no ticket: not the rule, so its own sentence, as before', async () => {
+        await kept('vault');
+        net.vault.unreachable = true;
+        const answer = await link();
+        expect(sentLink().vaultTicket).toBeUndefined();
+        expect(answer.enrolment).toBeNull();
+        expect(answer.noCopies).toBeUndefined();
+        expect(linkedNotice(answer)).toBe(NOTICE_NOT_KEPT);
+    });
+
+    it('kept none: no copy goes, the rule\'s words, and nothing more is asked', async () => {
+        await kept('none');
+        const answer = await link();
+        expect(sentLink().recovery).toBeUndefined();
+        expect(atGlobal()).toEqual(['POST /api/join/link/sso-nonce', 'POST /api/join/link']);
+        expect(linkedNotice(answer)).toBe(NOTICE_NONE);
     });
 });
 

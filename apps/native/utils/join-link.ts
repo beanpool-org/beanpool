@@ -12,7 +12,11 @@
  *   lists the ticket keys, global-join.ts `doorTicketKeys`), and once the node has linked it, the copy goes to the vault
  *   (`depositDoorCopy`). No ticket the door takes: the door's own nonce, linked without a copy.
  * - a build without one: the door's own nonce, and the copy rides in the link (`recovery: { shares }`).
- * If the copy can't be made or kept, the link still stands: never a gate, either way round.
+ * If the copy can't be made or kept, the link still stands: never a gate, either way round. Where the door's community
+ * keeps no copies (its rule `none`, vault rethink VR2), none is made, and the answer says it was the rule, not a failure
+ * (`noCopies`): by the node's own word where a copy went with the link (`recovery.code` `no_copies_here`), else by the
+ * rule as this phone kept it, or asked once now where the kept one keeps copies. The one-way-back card opens the sheet
+ * long after that was kept, and the owners may have set `none` since.
  *
  * The backstop is the door's (global-join.ts `submitJoin`): a 401 to a link that carried a ticket opens the provider's
  * sheet once more, with the door's own nonce, and links without a copy.
@@ -24,9 +28,10 @@
 import { readNonceResponse, signInWithProvider, SsoSignInError } from './sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from './sso-providers';
 import { signedPost } from './node-post';
-import { extractSub } from './sso-sheet-connect';
+import { extractSub, NO_COPIES_HERE } from './sso-sheet-connect';
 import { enrolmentFromJoin, sealSsoShares, type KeeperEnrolmentResult } from './keeper-enrolment';
 import { signInCopiesAt } from './vault-config';
+import { copiesRuleNow } from './copies-rule';
 import { depositDoorCopy, doorCopiesAt, doorTicketKeys, doorVaultTicket, providerSignIn, retryAfterSeconds, tryAgainIn, JOIN_TIMEOUT_MS, type DoorSignIn } from './global-join';
 import type { BeanPoolIdentity } from './identity';
 
@@ -239,10 +244,22 @@ async function sendLink(url: string, identity: BeanPoolIdentity, signin: DoorSig
     console.log(`[LINK] ${signin.provider}: the door answered ${res.status} (${answer.kind === 'linked' ? 'linked' : answer.reason})`);
     if (answer.kind !== 'linked') return { answer, status: res.status };
     if (recovery) {
-        return { answer: { ...answer, enrolment: enrolmentFromJoin((answerBody as { recovery?: unknown }).recovery, signin.provider, wordsSealed) }, status: res.status };
+        const kept = (answerBody as { recovery?: unknown } | null)?.recovery;
+        const enrolment = enrolmentFromJoin(kept, signin.provider, wordsSealed);
+        // Kept none because the community keeps none: its rule, set since this phone kept it. Asked once, so the screens
+        // find the community's fresh answer when they read where a copy goes again (as the connect does after the same
+        // refusal, sso-sheet-connect.ts keepsNoCopiesNow).
+        if (!!kept && typeof kept === 'object' && (kept as { code?: unknown }).code === NO_COPIES_HERE) {
+            await copiesRuleNow(url);
+            return { answer: { ...answer, enrolment, noCopies: true }, status: res.status };
+        }
+        return { answer: { ...answer, enrolment }, status: res.status };
     }
     if (signin.vaultTicket) return { answer: { ...answer, enrolment: await depositDoorCopy(identity, signin) }, status: res.status };
-    return { answer: place === 'none' ? { ...answer, noCopies: true } : answer, status: res.status };
+    // No copy went with the link. Where the community keeps none, that is its rule, not a failure: as this phone kept it,
+    // else asked once now, since the kept answer may be from before the owners set `none`.
+    const noCopies = place === 'none' || await copiesRuleNow(url) === 'none';
+    return { answer: noCopies ? { ...answer, noCopies: true } : answer, status: res.status };
 }
 
 /** Whether a linked sign-in's copy is at the key vault: where the deposit said, else this build's place. */

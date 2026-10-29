@@ -7,6 +7,11 @@
  * left on Find, landed on a screen without what they said (PR #2604's review, comment 4411405761). The "no key" tests fail
  * before (each pushed /find-community). With a key, each still opens Find a community, as home-screen-render pins.
  *
+ * The door opens as every other visitor door does (utils/look-door.ts `openLookDoor`): the stack goes back to its bottom and
+ * the door replaces it, so the door is the only screen and its Back (app/welcome.tsx `leaveGlobalDoor`, a replace with the
+ * look) leaves one tab navigator, not a second on top of Home (PR #2604's review, comment 4411579990). Those tests fail
+ * before (the door was pushed on top of Home).
+ *
  * Rendered for real, as home-find-not-answering-render.test.ts does: react-dom in jsdom, React Native's host components as
  * plain tags, the knock reads stubbed at their module.
  */
@@ -33,8 +38,17 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFillObject: {} },
     };
 });
-const nav = vi.hoisted(() => ({ pushed: [] as unknown[] }));
-vi.mock('expo-router', () => ({ router: { push: (to: unknown) => nav.pushed.push(to), navigate: vi.fn(), replace: vi.fn(), back: vi.fn() } }));
+/** `pushed`: what was pushed; `moves`: every change to the stack, in order; `canDismiss`: whether screens sit below this one. */
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[], moves: [] as unknown[][], canDismiss: true }));
+vi.mock('expo-router', () => ({
+    router: {
+        push: (to: unknown) => { nav.pushed.push(to); nav.moves.push(['push', to]); },
+        replace: (to: unknown) => { nav.moves.push(['replace', to]); },
+        dismissAll: () => { nav.moves.push(['dismissAll']); },
+        canDismiss: () => nav.canDismiss,
+        navigate: vi.fn(), back: vi.fn(),
+    },
+}));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
@@ -73,31 +87,45 @@ async function tap(host: HTMLElement, testId: string): Promise<void> {
     await act(async () => { el!.click(); });
 }
 
-beforeEach(() => { document.body.innerHTML = ''; nav.pushed.length = 0; watches.length = 0; });
+beforeEach(() => { document.body.innerHTML = ''; nav.pushed.length = 0; nav.moves.length = 0; nav.canDismiss = true; watches.length = 0; });
+
+/** The door as the only screen: the stack back to its bottom, then the door in its place; nothing pushed. */
+const DOOR_ALONE = [['dismissAll'], ['replace', LOOK_DOOR]];
 afterEach(() => { document.body.innerHTML = ''; });
 
 describe("the visitors' Home with no key: the find card's ways to the list open the door, as before S3", () => {
-    it('Communities near you opens the door, not Find a community (fails before: /find-community)', async () => {
+    it('Communities near you opens the door, not Find a community (fails before: /find-community, then a pushed door)', async () => {
         const host = await render(null, { lat: -28.65, lng: 153.6 });
         await tap(host, 'home-find-near');
-        expect(nav.pushed).toEqual([LOOK_DOOR]);
+        expect(nav.pushed).toEqual([]);
+        expect(nav.moves).toEqual(DOOR_ALONE);
     });
 
-    it('or type your town opens the door, not Find with a town box it does not draw (fails before: /find-community town=1)', async () => {
+    it('or type your town opens the door, not Find with a town box it does not draw (fails before: /find-community town=1, then a pushed door)', async () => {
         const host = await render(null, null);
         await tap(host, 'home-find-type-town');
-        expect(nav.pushed).toEqual([LOOK_DOOR]);
+        expect(nav.pushed).toEqual([]);
+        expect(nav.moves).toEqual(DOOR_ALONE);
     });
 
-    it('Tell me when one starts here opens the door, place known or not, and keeps no watch (fails before: /find-community)', async () => {
+    it('Tell me when one starts here opens the door, place known or not, and keeps no watch (fails before: /find-community, then a pushed door)', async () => {
         for (const point of [null, { lat: -28.65, lng: 153.6 }]) {
             nav.pushed.length = 0;
+            nav.moves.length = 0;
             document.body.innerHTML = '';
             const host = await render(null, point);
             await tap(host, 'home-find-watch');
-            expect(nav.pushed, JSON.stringify(point)).toEqual([LOOK_DOOR]);
+            expect(nav.pushed, JSON.stringify(point)).toEqual([]);
+            expect(nav.moves, JSON.stringify(point)).toEqual(DOOR_ALONE);
         }
         expect(watches).toEqual([]);
+    });
+
+    it('with nothing below Home to dismiss, the door still replaces it and is never pushed (fails before: a pushed door)', async () => {
+        nav.canDismiss = false;
+        const host = await render(null, null);
+        await tap(host, 'home-find-near');
+        expect(nav.moves).toEqual([['replace', LOOK_DOOR]]);
     });
 
     it('Start a community still opens its screen, which a visitor may look at', async () => {

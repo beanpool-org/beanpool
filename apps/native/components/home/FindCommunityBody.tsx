@@ -9,7 +9,7 @@ import {
 import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { findLineWords } from '../find-community-lines';
-import { LOOK_DOOR } from '../../utils/look-around';
+import { openLookDoor } from '../../utils/look-door';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
 /** Shown through t() in the member's language. */
@@ -149,10 +149,11 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     /**
      * Communities near you, with its town box open or not. A visitor looking around with no key (no `identity`) goes to the
      * door, as the root guard sent these taps before S3: Find a community, which a phone with no account may now open to ask
-     * by an address, shows neither the list, nor a town, nor a watch until there is an account.
+     * by an address, shows neither the list, nor a town, nor a watch until there is an account. The door opens as the
+     * guard opened it and every other visitor door does, as the only screen, so its Back returns to the look.
      */
     const openFind = (town?: boolean) => {
-        if (!identity) { router.push(LOOK_DOOR); return; }
+        if (!identity) { openLookDoor(); return; }
         router.push(town ? { pathname: '/find-community', params: { town: '1' } } : '/find-community');
     };
 

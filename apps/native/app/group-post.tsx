@@ -77,7 +77,7 @@ export default function GroupPostScreen() {
             backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading,
         },
         backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-start' },
-        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { padding: 20 },
         // Plain words audience banner — scope must be unmistakable before posting
         audienceBanner: {

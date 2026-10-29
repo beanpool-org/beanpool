@@ -3849,7 +3849,8 @@ const styles = StyleSheet.create({
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
     inviteVerifiedText: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 14, lineHeight: 20 },
     clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
-    clipboardHintText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    // blue-700 in light: blue-600 was 4.48:1 on the pale blue pill over the page.
+    clipboardHintText: { color: dark ? palette.blue400 : palette.blue700, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     clipboardHintBox: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', alignItems: 'center', width: '100%' },
     homePasteSystemBtn: { width: 170, height: 44, marginTop: 12 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },

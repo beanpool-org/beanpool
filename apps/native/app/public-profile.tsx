@@ -358,8 +358,9 @@ export default function PublicProfileScreen() {
         statLabelOverall: { fontSize: 9, fontWeight: '700', color: colors.text.muted, letterSpacing: 0.5 },
         statValueProvider: { fontSize: 18, fontWeight: '800', color: colors.brand.primary, marginBottom: 2, marginTop: 4 },
         statLabelProvider: { fontSize: 9, fontWeight: '700', color: colors.brand.primary, letterSpacing: 0.5 },
-        statValueReceiver: { fontSize: 18, fontWeight: '800', color: theme === 'dark' ? colors.text.heading : palette.indigo500, marginBottom: 2, marginTop: 4 },
-        statLabelReceiver: { fontSize: 9, fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.indigo500, letterSpacing: 0.5 },
+        // indigo-600 in light, as the RECEIVED SERVICE badge: indigo-500 was 3.99:1 on the indigo-50 box.
+        statValueReceiver: { fontSize: 18, fontWeight: '800', color: theme === 'dark' ? colors.text.heading : palette.indigo600, marginBottom: 2, marginTop: 4 },
+        statLabelReceiver: { fontSize: 9, fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.indigo600, letterSpacing: 0.5 },
 
         // Tabs
         tabBar: {

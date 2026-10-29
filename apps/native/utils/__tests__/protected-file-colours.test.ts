@@ -67,8 +67,18 @@ const PAIRS: Pair[] = [
     { at: 'map.tsx:1253 the category chip on Offers, white on brand.fill', ink: '#ffffff', ground: 'brand.fill', wasOnMain: ['#ffffff', '#10b981'] },
     { at: 'map.tsx:1253 the category chip on Needs, white on action.fab', ink: '#ffffff', ground: 'action.fab', wasOnMain: ['#ffffff', '#ea580c'] },
     { at: 'map.tsx:417/476 the price tip pill and the cash nudge', ink: 'feedback.warning.fg', ground: 'feedback.warning.bg' },
-    { at: 'map.tsx:475 the cash checkbox, white tick on gold', ink: '#ffffff', ground: 'feedback.warning.solid' },
-    { at: 'map.tsx:1661 Learn more ⓘ in gold', ink: 'feedback.warning.solid', ground: 'surface.card' },
+    // Marty's "colour lines only" of 29 Oct (the phone contrast sweep): the white words on the Offers/Needs fills take the
+    // library's commit and action fills (emerald-500 was 2.54:1, orange-600 3.56), green words the brand ink, gold words
+    // the gold ink, the cash tick charcoal on the gold, the event preview's violet the event ink (3.05 in dark), and the
+    // cluster count's blue the onboarding blue fill. The pins keep their own hex.
+    { at: 'map.tsx:303/390/457/474/524/1358/1427 white on the Offers fill: filter chip, type, FREE, checkbox, Post, View Details, Confirm Pin', ink: '#ffffff', ground: 'brand.fill', wasOnMain: ['#ffffff', '#10b981'] },
+    { at: 'map.tsx:304/391/525/1358 white on the Needs fill: filter chip, type, Post, View Details', ink: '#ffffff', ground: 'action.fab', wasOnMain: ['#ffffff', '#ea580c'] },
+    { at: 'map.tsx:342/469 green words: the preview\'s Beans, ✓ Set', ink: 'brand.primary', ground: 'surface.card', wasOnMain: ['#10b981', 'surface.card'] },
+    { at: 'map.tsx:458 FREE, green words on its pale chip', ink: 'brand.primary', ground: 'surface.card', wasOnMain: ['#059669', 'surface.card'] },
+    { at: 'map.tsx:333/334 the event preview\'s date and badge, violet words', ink: 'event.ink', ground: 'surface.card', wasOnMain: ['#7c3aed', 'surface.card'] },
+    { at: 'map.tsx:146 and UnifiedMapPin.tsx:253 the cluster count, white on blue', ink: '#ffffff', ground: '#2563eb', wasOnMain: ['#ffffff', '#3b82f6'] },
+    { at: 'map.tsx:1660 the cash checkbox, charcoal tick on gold', ink: 'text.onGold', ground: 'feedback.warning.solid', wasOnMain: ['#ffffff', 'feedback.warning.solid'] },
+    { at: 'map.tsx:1641 Learn more ⓘ in the gold ink', ink: 'feedback.warning.fg', ground: 'surface.card', wasOnMain: ['feedback.warning.solid', 'surface.card'] },
     ...text('text.heading'),
     ...text('text.body'),
     ...text('text.secondary'),
@@ -103,6 +113,7 @@ const GROUNDS_AND_LINES: Record<string, string> = {
 /** Palette steps a protected file reads straight: fixed Tailwind steps, the same as on main. */
 const PALETTE_ON_MAIN: Record<string, string> = {
     amber700: '#b45309', // map.tsx:1496 "Contributions First" on a pale amber box
+    blue600: '#2563eb', // map.tsx:146 and UnifiedMapPin.tsx:253 the cluster circle, under its white count (pair above)
 };
 
 /**

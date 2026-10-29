@@ -51,6 +51,8 @@ On the global community no vote opens. The suspension lasts 7 days and then lift
 
 When the case on a vote on removing someone is shown to be false, **Hide case** on that vote (open, in its grace period, or under **Closed votes on removing a member**) hides it. Write a reason of at least 10 characters: members read it in the case's place. Who brought the case and the member's reply stay; Settings keeps the case and who hid it. A case is hidden once and stays hidden.
 
+Any owner or admin can hide a case, except the one the vote is about. No vote removes an owner or admin, so their role comes back when the vote closes, but they still can't hide its case, just as they couldn't vote on it. Another owner or admin can. The server's password is shared, so the node can't tell who signs in with it: an owner a vote was about who uses the password to hide its case is not stopped.
+
 Hiding doesn't stop the vote. To stop it, halt it (below), which lifts the suspension.
 
 The member the vote is about can report the case as a false accusation from the vote. It arrives in Reports like any other, about whoever brought the case. If they already had a report waiting about that person, the case is added to it.

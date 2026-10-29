@@ -189,6 +189,21 @@ describe('StrandedEscrowsPanel', () => {
         expect(screen.queryByRole('button', { name: 'Write off from the Commons' })).toBeNull();
     });
 
+    it('renders loading state while fetching stranded escrows', async () => {
+        let resolveFetch: (val: nodeClient.StrandedEscrowsResponse) => void;
+        const pendingPromise = new Promise<nodeClient.StrandedEscrowsResponse>((resolve) => {
+            resolveFetch = resolve;
+        });
+        vi.spyOn(nodeClient, 'fetchStrandedEscrows').mockReturnValue(pendingPromise);
+
+        renderPanel({ refreshKey: { ok: true } });
+        expect(screen.getByText('Loading stranded escrows...')).toBeInTheDocument();
+
+        resolveFetch!(list);
+        expect(await screen.findByText('escrow_70003252…')).toBeInTheDocument();
+        expect(screen.queryByText('Loading stranded escrows...')).toBeNull();
+    });
+
     it('renders nothing when nothing is stranded, or when a server answers without a list', async () => {
         const fetchSpy = vi.spyOn(nodeClient, 'fetchStrandedEscrows').mockResolvedValue({ success: true } as nodeClient.StrandedEscrowsResponse);
         const { container } = render(

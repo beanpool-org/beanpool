@@ -43,6 +43,7 @@ interface StrandedEscrowsPanelProps {
  */
 export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isStandby, onWrittenOff }: StrandedEscrowsPanelProps) {
     const [data, setData] = useState<StrandedEscrowsResponse | null>(null);
+    const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [openId, setOpenId] = useState<string | null>(null);
     const [reason, setReason] = useState('');
@@ -54,11 +55,14 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
     const [done, setDone] = useState<string | null>(null);
 
     const load = useCallback(async () => {
+        setLoading(true);
         try {
             setData(await fetchStrandedEscrows(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
             setLoadError(null);
         } catch (e: unknown) {
             setLoadError(e instanceof Error ? e.message : 'Could not load the stranded escrows');
+        } finally {
+            setLoading(false);
         }
     }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
@@ -99,10 +103,16 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
     };
 
     const escrows = data?.escrows ?? [];
-    if (!loadError && escrows.length === 0 && !done) return null;
+    if (!loading && !loadError && escrows.length === 0 && !done) return null;
 
     return (
         <div className="space-y-3">
+            {loading && !data && (
+                <div className="flex items-center gap-2 text-xs text-nature-400">
+                    <span className="animate-spin text-sm">⏳</span>
+                    <span>Loading stranded escrows...</span>
+                </div>
+            )}
             <div>
                 <h4 className="text-sm font-bold text-white m-0">Stranded escrows</h4>
                 <p className="text-xs text-nature-400 m-0 mt-0.5">

@@ -652,6 +652,28 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         });
     }
 
+    // The step read a rule that keeps copies, and the owners set `none` since: the link is made without a copy and says it
+    // was the rule (utils/join-link.ts `noCopies`), having kept the community's fresh answer. The step reads the rule again,
+    // so the panel under the notice says the community keeps none and offers no sign-in, as the notice does.
+    it('Safety Backup, in by 12 words: the step read the key vault, the link says the community keeps none since, and the step reads it again', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', 'https://global.beanpool.org');
+        door.cachedRule = 'vault';
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, joinDoor: 'words' };
+        await mount('xx');
+        await press(WORDS_BACKUP_TEXT.addSignIn, 'xx');
+        expect(linkSheet.props?.visible, 'the sheet is open').toBe(true);
+        door.cachedRule = 'none';
+        await act(async () => { linkSheet.props!.onLinked({ kind: 'linked', provider: 'google', enrolment: null, noCopies: true }); });
+        await settle();
+        const notice = (english: string) => pseudoLocalise(english).replace('{name}', 'Google');
+        expect(host!.textContent).toContain(notice("Your {name} sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back."));
+        expect(host!.querySelector('[data-testid="no-copies-row"]'), 'the step says the community keeps none').toBeTruthy();
+        expect(all('[data-sso]'), 'and offers no sign-in').toEqual([]);
+        check('Safety Backup, in by 12 words, linked where the community keeps none since');
+    });
+
     // How it Works' Getting Back In card offers a sign-in for later only where the community keeps a copy for it, by the
     // rule Safety Backup read; and by the rule read again as the guide opens, where an onboarding resumed there.
     const SIGN_IN_LATER = '🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.';

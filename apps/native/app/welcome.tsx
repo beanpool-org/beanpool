@@ -2499,6 +2499,10 @@ export default function WelcomeScreen() {
                                 // The record too: a restart comes back to the panel a sign-in member sees.
                                 updatePendingOnboarding({ joinDoor: undefined, ...(answer?.enrolment ? { joinEnrolment: answer.enrolment } : {}) }).catch(() => {});
                                 setJoinDoor(null);
+                                // No copy because the community keeps none, which the link may have heard only now (its
+                                // fresh answer kept, utils/join-link.ts): the step reads the rule again, so the panel under
+                                // the notice says so too.
+                                if (answer?.noCopies) setBackupCopiesRead((n) => n + 1);
                             }}
                         />
 

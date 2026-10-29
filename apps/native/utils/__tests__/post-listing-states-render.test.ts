@@ -179,6 +179,7 @@ function answers(post: Record<string, unknown>) {
         getPost: post, getDb: database, getMemberRatings: { average: 4.5, count: 3 },
         getBalance: { isBlockedFromTrading: false, keeperOf: node.keeperOf }, fetchGroupDetails: { group: { viewerRole: null } },
         getMarketplaceTransactions: node.mine, getDealsFor: node.kept, treasuryComplete: { success: true }, completeMarketplaceTransaction: { success: true },
+        treasuryReject: { success: true },
     };
     return (name: string, args: unknown[]) => {
         if (name === 'getUnreadCountForPost') return Promise.resolve(node.unread[String(args[2])] ?? 0);
@@ -295,6 +296,23 @@ for (const theme of ['light', 'dark'] as const) {
             await press(r, 'Release Credits');
             expect(net.calls).toContain('db.completeMarketplaceTransaction');
             expect(host.textContent).toContain('How was your experience with Helper?');
+        });
+
+        it("a keeper denies a request on the enterprise's Need at its door: it leaves the page at once", async () => {
+            node.keeperOf = [ENT];
+            node.kept = [deal({ id: 'tx-q', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];
+            await open(listing({ type: 'need', title: 'Mend the polytunnel', author_pubkey: ENT, author_callsign: 'Farm Co-op', credits: 20 }));
+            expect(host.textContent).toContain('✋ Fulfillment Requests (1)');
+            await press(host, 'Deny');
+            // The modal's own Decline (its overlay is a button around it, which closes it).
+            const decline = Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Decline');
+            expect(decline).toBeTruthy();
+            await act(async () => { decline!.click(); });
+            await settle(4);
+            expect(net.calls).toContain('db.treasuryReject');
+            expect(net.calls).not.toContain('db.rejectMarketplaceRequest');
+            expect(host.textContent).not.toContain('✋ Fulfillment Requests');
+            expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent === 'Approve & Commit')).toBe(false);
         });
 
         it('a helper on a Need, approved: the Beans held for them, the payer named, Cancel; no Release', async () => {

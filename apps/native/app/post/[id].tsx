@@ -1169,7 +1169,9 @@ export default function PostDetailModal() {
                 }
             }
             
+            // From both lists: a keeper's requests are the enterprise's, read for it from the node (keptRequests).
             setRequests(prev => prev.filter(r => r.id !== rejectModalTxId));
+            setKeptRequests(prev => prev.filter(r => r.id !== rejectModalTxId));
             setRejectModalTxId(null);
             hapticSuccess();
         } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
@@ -1182,6 +1184,7 @@ export default function PostDetailModal() {
         try {
             await cancelMarketplaceRequest(myRequest.id, identity.publicKey);
             setRequests(prev => prev.filter(r => r.id !== myRequest.id));
+            setKeptRequests(prev => prev.filter(r => r.id !== myRequest.id));
         } catch (e: any) { Alert.alert(t('Error'), signedRequestWords(e.message)); }
         setAccepting(false);
     };

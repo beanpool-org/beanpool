@@ -224,6 +224,16 @@ describe('the sentences with a name, a number or a time in them', () => {
             }
             const none = { kind: 'linked' as const, provider, enrolment: null, noCopies: true as const };
             heldTo(linkedNotice(none), () => linkedNoticeWords(none), [SSO_PROVIDER_NAMES[provider]]);
+            // In by another community's open door (slice S2): that community's name wherever linkedNotice says one.
+            const community = 'Riverbend Open';
+            for (const answer of [
+                { kind: 'linked' as const, provider, enrolment: null },
+                { kind: 'linked' as const, provider, enrolment: { enrolled: [], generation: null, skipped: [], available: 1, keptAt: 'vault' } as KeeperEnrolmentResult },
+                { kind: 'linked' as const, provider, enrolment: { enrolled: [], generation: null, skipped: [], available: 1, keptAt: 'community' } as KeeperEnrolmentResult },
+                none,
+            ]) {
+                heldTo(linkedNotice(answer, community), () => linkedNoticeWords(answer, community), [SSO_PROVIDER_NAMES[provider], community]);
+            }
         }
     });
 

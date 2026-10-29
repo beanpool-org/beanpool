@@ -442,6 +442,13 @@ export default function WelcomeScreen() {
      * nudge, and Manage signed by the account the claim made, which the app holds only once the wizard ends.
      */
     const [claimedName, setClaimedName] = useState<string | null>(null);
+    /**
+     * Another community's open door this wizard came in by (slice S2), named as its How it Works card names it: what Safety
+     * Backup's add-a-sign-in sheet and its notice say in place of "the global community" (VR2's sentences by the rule).
+     */
+    const otherDoorName = joinFlow === 'global' && createAnchorUrl && createAnchorUrl !== GLOBAL_NODE_URL
+        ? communityName({ url: createAnchorUrl, alias: claimedName })
+        : undefined;
     const [ownerAddresses, setOwnerAddresses] = useState<string[] | null | undefined>(undefined);
     const ownerManage = useManageNode(pendingIdentity);
     useEffect(() => {
@@ -2303,7 +2310,7 @@ export default function WelcomeScreen() {
                         />
                         )}
                         {linked && (
-                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked)}</Text>
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked, otherDoorName)}</Text>
                         )}
                         {/* The sign-in the member joined with used to protect another account: said here too, as the
                             protection sheet says it (PR #1336 review finding 9). */}
@@ -2483,6 +2490,7 @@ export default function WelcomeScreen() {
                             visible={showLinkSheet}
                             identity={pendingIdentity}
                             url={joinFlow === 'global' && createAnchorUrl ? createAnchorUrl : GLOBAL_NODE_URL}
+                            community={otherDoorName}
                             askPhoneLock={!pendingWordsAreNew}
                             onClose={() => setShowLinkSheet(false)}
                             onLinked={(answer) => {

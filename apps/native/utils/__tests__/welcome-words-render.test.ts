@@ -180,7 +180,13 @@ const door = vi.hoisted(() => ({
     cachedFeatures: null as any,
     /** The community's rule for copies as this phone kept it just now (fresh), or null when it never heard one. */
     cachedRule: null as null | string,
+    /** Where a case gives each community its own rule: by the address asked, over `cachedRule`. */
+    rulesAt: {} as Record<string, string>,
+    /** Each address whose kept answer was read, in order. */
+    profilesAsked: [] as string[],
 }));
+/** The add-a-sign-in sheet as welcome last drew it (a stand-in: components/LinkSignInSheet is swept with the key components). */
+const linkSheet = vi.hoisted(() => ({ props: null as null | Record<string, any> }));
 /** The sign-in sheet's connect, when a case answers it (utils/sso-sheet-connect.ts); otherwise the real one. */
 const sheetConnect = vi.hoisted(() => ({ answer: null as null | ((options: Record<string, unknown>) => Promise<unknown>) }));
 const vaultState = vi.hoisted(() => ({ waiting: null as any, check: null as any, candidates: [] as any[] }));
@@ -265,9 +271,13 @@ vi.mock('../node-profile', async (importOriginal) => {
     return {
         ...real,
         checkGlobalDoor: async () => door.check,
-        getCachedNodeProfile: async () => (door.cachedRule
-            ? { features: door.cachedFeatures ?? {}, recoveryCopies: door.cachedRule, checkedAt: new Date().toISOString() }
-            : door.cachedFeatures ? { features: door.cachedFeatures } : null),
+        getCachedNodeProfile: async (url?: string | null) => {
+            if (url) door.profilesAsked.push(url);
+            const rule = (url ? door.rulesAt[url] : undefined) ?? door.cachedRule;
+            return rule
+                ? { features: door.cachedFeatures ?? {}, recoveryCopies: rule, checkedAt: new Date().toISOString() }
+                : door.cachedFeatures ? { features: door.cachedFeatures } : null;
+        },
     };
 });
 vi.mock('../sso-sheet-connect', async (importOriginal) => {
@@ -323,7 +333,7 @@ vi.mock('../../components/WordsDoor', async (importOriginal) => {
         WordsBackupNote: () => createElement('span', { 'data-later-sweep': 'WordsBackupNote' }),
     };
 });
-vi.mock('../../components/LinkSignInSheet', () => ({ LinkSignInSheet: () => null }));
+vi.mock('../../components/LinkSignInSheet', () => ({ LinkSignInSheet: (props: Record<string, any>) => { linkSheet.props = props; return null; } }));
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('../../components/RecoveryWordsEntry', async () => {
     const { useEffect: effect } = await import('react');
@@ -359,7 +369,7 @@ const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
 
 /** Written by members or communities, or never translated: shown as written in every language. */
-const AS_WRITTEN = ['Sally', 'Kim', 'Ana', 'Mullum', 'mullum.beanpool.org', 'global.beanpool.org', 'WIPE', 'Google', 'Apple', 'Facebook', ...WORDS, ...OUT_WORDS];
+const AS_WRITTEN = ['Sally', 'Kim', 'Ana', 'Mullum', 'mullum.beanpool.org', 'global.beanpool.org', 'Riverbend Open', 'open.riverbend.example', 'WIPE', 'Google', 'Apple', 'Facebook', ...WORDS, ...OUT_WORDS];
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -373,6 +383,8 @@ beforeEach(() => {
     phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null; phone.redeemFails = null;
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' };
     door.check = { ok: true, profile: { features: {} } }; door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedRule = null;
+    door.rulesAt = {}; door.profilesAsked.length = 0;
+    linkSheet.props = null;
     sheetConnect.answer = null;
     vaultState.waiting = null; vaultState.check = null; vaultState.candidates = [];
     noVault();
@@ -670,6 +682,56 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
             check(`How it Works, resumed, ${rule}`);
         });
     }
+});
+
+/**
+ * In by another community's open door (slice S2, utils/open-door-key.ts finishOpenDoorJoin): the phone's anchor is that
+ * community's address, the wizard's record names it, and Safety Backup's copies follow THAT community's rule (VR2), never
+ * the global community's: each case gives the two communities opposite rules. The add-a-sign-in sheet a 12-words member
+ * opens there links at that community and names it, as does the notice once linked, never "the global community".
+ */
+describe("Safety Backup after another community's open door (S2), in the pseudo-locale", () => {
+    const DOOR = 'https://open.riverbend.example';
+    const GLOBAL = 'https://global.beanpool.org';
+    const doorRecord = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: DOOR, callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, communityName: 'Riverbend Open' };
+    for (const [doorRule, globalRule] of [['none', 'vault'], ['vault', 'none']] as const) {
+        it(`its rule ${doorRule} decides, never the global community's ${globalRule}`, async () => {
+            useVault();
+            store.map.set('beanpool_anchor_url', DOOR);
+            door.rulesAt = { [DOOR]: doorRule, [GLOBAL]: globalRule };
+            phone.stored = SALLY;
+            phone.pending = doorRecord;
+            await mount('xx');
+            expect(door.profilesAsked, "the rule asked is the door community's").toContain(DOOR);
+            if (doorRule === 'none') {
+                expect(host!.querySelector('[data-testid="no-copies-row"]'), 'that community keeps none').toBeTruthy();
+                expect(all('[data-sso]'), 'so no sign-in is offered').toEqual([]);
+            } else {
+                expect(host!.querySelector('[data-testid="no-copies-row"]'), "never the global community's none").toBeNull();
+                expect(all('[data-sso]').length, 'a sign-in is offered where the key vault keeps the copy').toBeGreaterThan(0);
+            }
+            check(`Safety Backup after another community's door, its rule ${doorRule}`);
+        });
+    }
+
+    it('a member in by 12 words there: the add-a-sign-in sheet links at that community and names it, and so does the notice', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', DOOR);
+        door.rulesAt = { [DOOR]: 'none', [GLOBAL]: 'vault' };
+        phone.stored = SALLY;
+        phone.pending = { ...doorRecord, joinDoor: 'words' };
+        await mount('xx');
+        await press('Add a sign-in', 'xx');
+        expect(linkSheet.props?.visible, 'the sheet is open').toBe(true);
+        expect(linkSheet.props?.url, "it links at the door's community").toBe(DOOR);
+        expect(linkSheet.props?.community, 'and names it').toBe('Riverbend Open');
+        await act(async () => { linkSheet.props!.onLinked({ kind: 'linked', provider: 'google', enrolment: null, noCopies: true }); });
+        await settle();
+        const notice = (english: string) => pseudoLocalise(english).replace('{name}', 'Google').replace('{community}', 'Riverbend Open');
+        expect(host!.textContent).toContain(notice("Your {name} sign-in is added: your account now has the usual new-account limits. {community} keeps no copies of members' accounts, so your 12 words are still your way back."));
+        expect(host!.textContent, 'never the global community').not.toContain(notice("Your {name} sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back."));
+        check("Safety Backup after another community's door, in by 12 words, linked");
+    });
 });
 
 describe("the global community's door in the pseudo-locale", () => {

@@ -472,6 +472,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         return enterprisesOn(communityInfo?.features) ? rows : { kept: [], groups: rows.groups };
     }, [yourChats, treasuries, identity?.publicKey, groups, isMember, communityInfo?.features]);
 
+    // ⚡ Bolt: O(1) Map lookup for groups by ID instead of O(G) .find() scans inside render loops
+    const groupsById = useMemo(() => new Map(groups.map(g => [g.id, g])), [groups]);
+
     const yourKeptPubkeys = useMemo(() => new Set(yourKeptRows.map(k => k.chat.id)), [yourKeptRows]);
     const yourGroupIds = useMemo(() => new Set(yourGroupRows.map(g => g.id)), [yourGroupRows]);
 
@@ -779,7 +782,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 );
                             })}
                             {yourGroupRows.map(g => {
-                                const fullGroup = groups.find(item => item.id === g.id);
+                                const fullGroup = groupsById.get(g.id);
                                 const category = g.category || fullGroup?.category;
                                 const memberCount = fullGroup?.memberCount;
                                 const description = fullGroup?.description;

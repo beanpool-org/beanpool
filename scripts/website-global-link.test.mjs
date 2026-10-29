@@ -72,7 +72,7 @@ function oursAndHttps(raw) {
 }
 
 /** The page's own script run as a browser would for one visitor; returns the page afterwards and where it went. */
-function visit({ ua, host = 'beanpool.org', arrival = 'navigate', touch = false }) {
+function visit({ ua, host = 'beanpool.org', arrival = 'navigate', touch = false, script = SCRIPT }) {
     const els = elementsById();
     const went = [];
     const document = { getElementById: (id) => els.get(id) ?? null };
@@ -83,7 +83,7 @@ function visit({ ua, host = 'beanpool.org', arrival = 'navigate', touch = false 
         replace(v) { went.push(['replace', v]); },
     };
     const performance = { getEntriesByType: (t) => (t === 'navigation' ? [{ type: arrival }] : []) };
-    vm.runInNewContext(SCRIPT, { document, location, performance, navigator: { userAgent: ua } });
+    vm.runInNewContext(script, { document, location, performance, navigator: { userAgent: ua } });
     return { els, went };
 }
 
@@ -169,13 +169,82 @@ test('now global is open, the page tells newcomers how to find it on the first s
     assert.doesNotMatch(HTML, /<!-- OPEN-GLOBAL/);
 });
 
-test('while IOS_OPEN_DOOR_LIVE is false, carries no apple-itunes-app meta tag (S14 flips both)', () => {
+// Front doors S14 (29 Oct 2026): the App Store has 1.2.83, which has the global door (it needs 1.2.56), so the flag is
+// true and the smart banner is back. S0 had taken both out "until S14 flips both".
+test('now IOS_OPEN_DOOR_LIVE is true, carries the apple-itunes-app smart banner meta for Safari with the global link app-argument', () => {
     const meta = MARKUP.match(/<meta\s+name="apple-itunes-app"\s+content="([^"]*)"/i);
-    assert.equal(meta, null, 'no apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false');
+    assert.ok(meta, 'apple-itunes-app meta tag');
+    assert.match(meta[1], /\bapp-id=6761870086\b/);
+    assert.match(meta[1], /\bapp-argument=https:\/\/beanpool\.org\/global\b/);
 });
 
-test('defines IOS_OPEN_DOOR_LIVE = false constant in script', () => {
-    assert.match(SCRIPT, /\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*false\b/);
+test('defines IOS_OPEN_DOOR_LIVE = true constant in script', () => {
+    assert.match(SCRIPT, /\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*true\b/);
+});
+
+test('every language copy of /global sets IOS_OPEN_DOOR_LIVE = true and carries the same smart banner meta as English', () => {
+    const langs = fs.readdirSync(SITE, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && fs.existsSync(path.join(SITE, d.name, 'global.html'))).map((d) => d.name);
+    assert.ok(langs.length >= 24, 'all 24 language copies: ' + langs.length);
+    const englishMeta = MARKUP.match(/<meta\s+name="apple-itunes-app"[^>]*>/i)[0];
+    for (const lang of langs) {
+        const page = fs.readFileSync(path.join(SITE, lang, 'global.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+        assert.match(page, /\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*true\b/, lang + ': the flag is true');
+        assert.equal(page.match(/<meta\s+name="apple-itunes-app"[^>]*>/i)?.[0], englishMeta, lang + ': the smart banner meta');
+    }
+});
+
+// The script holds no words (each language's wording sits in data-ios-text and data-ios-note), so every language runs
+// English's script exactly. On 29 Oct 2026 de and fr had lost the '' in `navigator.userAgent || ''` and de and sw the
+// backslash in /; wv\)/: a syntax error, so on those pages the script never ran and /global did nothing for anyone.
+test('every language copy of /global runs English\'s script, byte for byte, and it parses', () => {
+    const langs = fs.readdirSync(SITE, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && fs.existsSync(path.join(SITE, d.name, 'global.html'))).map((d) => d.name);
+    assert.ok(langs.length >= 24, 'all 24 language copies: ' + langs.length);
+    new vm.Script(SCRIPT);
+    for (const lang of langs) {
+        const page = fs.readFileSync(path.join(SITE, lang, 'global.html'), 'utf8');
+        const scripts = [...page.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+        assert.equal(scripts.length, 1, lang + ': one script');
+        assert.doesNotThrow(() => new vm.Script(scripts[0][2]), lang + ': the script parses');
+        assert.equal(scripts[0][2], SCRIPT, lang + ': the same script as English');
+    }
+});
+
+test('every language copy of /global, as an iPhone, opens the App Store door: first, and once on arrival at beanpool.org', () => {
+    const langs = fs.readdirSync(SITE, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && fs.existsSync(path.join(SITE, d.name, 'global.html'))).map((d) => d.name);
+    for (const lang of ['en', ...langs]) {
+        const page = (lang === 'en' ? HTML : fs.readFileSync(path.join(SITE, lang, 'global.html'), 'utf8')).replace(/<!--[\s\S]*?-->/g, '');
+        const els = new Map();
+        for (const m of page.matchAll(/<(\w+)\b([^>]*)>/g)) {
+            const id = m[2].match(/\bid="([^"]+)"/)?.[1];
+            if (!id) continue;
+            const classes = new Set((m[2].match(/\bclass="([^"]*)"/)?.[1] ?? '').split(/\s+/).filter(Boolean));
+            els.set(id, {
+                href: m[2].match(/\bhref="([^"]*)"/)?.[1].replace(/&amp;/g, '&'),
+                hidden: /(?:^|\s)hidden(?=\s|$|\/)/.test(m[2].replace(/"[^"]*"/g, '""')),
+                classes,
+                classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
+                getAttribute: (name) => m[2].match(new RegExp('\\b' + name + '="([^"]*)"'))?.[1] ?? null,
+            });
+        }
+        const went = [];
+        vm.runInNewContext(SCRIPT, {
+            document: { getElementById: (id) => els.get(id) ?? null },
+            location: { hostname: 'beanpool.org', set href(v) { went.push(v); }, replace(v) { went.push(v); } },
+            performance: { getEntriesByType: () => [{ type: 'navigate' }] },
+            navigator: { userAgent: UA.iphone },
+        });
+        const store = els.get('app-store');
+        assert.deepEqual(went, [store.href], lang + ': goes to the App Store on arrival');
+        assert.ok(store.href.endsWith(APP_STORE_ID), lang + ': this app\'s listing');
+        assert.ok(store.classes.has('btn-primary') && !store.classes.has('btn-ghost'), lang + ': the App Store button is first');
+        assert.equal(els.get('door-play').hidden, true, lang + ': no Google Play door');
+        assert.equal(els.get('door-app').hidden, true, lang + ': no Android app door');
+        assert.equal(els.get('door-ios').hidden, false, lang + ': the App Store door');
+        assert.ok(!els.get('global-door-main').classes.has('ios-open-pending'), lang + ': not the pending layout');
+    }
 });
 
 test('Android: the app by its link, beanpool.org/global, else Google Play with the referrer; once, on arrival at beanpool.org', () => {
@@ -210,15 +279,43 @@ test('Android inside an app\'s web view: Google Play, never an intent link it ma
     assert.ok(els.get('play').classList.contains('btn-primary'));
 });
 
-test('iPhone and iPad: while IOS_OPEN_DOOR_LIVE is false, browser line first and no redirect to store', () => {
+test('iPhone and iPad, door live: the App Store (the app\'s door) is first and primary, and opens once, on arrival at beanpool.org', () => {
     for (const who of [{ ua: UA.iphone }, { ua: UA.mac, touch: true }]) {
         const { els, went } = visit(who);
+        assert.deepEqual(went, [['href', APP_STORE]], who.ua + ' goes to the App Store on arrival');
+        assert.equal(els.get('door-play').hidden, true);
+        assert.equal(els.get('door-app').hidden, true, 'the intent-link door is Android\'s');
+        assert.equal(els.get('door-ios').hidden, false);
+        assert.ok(els.get('app-store').classList.contains('btn-primary') && !els.get('app-store').classList.contains('btn-ghost'), 'the App Store is first');
+        assert.equal(els.get('app-store').href, APP_STORE);
+        // The pending-update layout is not applied: the browser line is the quiet line under the doors, in its own words.
+        assert.equal(els.get('browser').hidden, false);
+        assert.equal(els.get('browser').href, GLOBAL);
+        assert.equal(els.get('browser').textContent, undefined, 'the browser line is left as written');
+        assert.ok(!els.get('browser').classes.has('btn-primary'));
+        assert.equal(els.get('ios-note').textContent, undefined, 'the iPhone note is left as written (For iPhone and iPad.)');
+        assert.equal(els.get('global-first-screen').hidden, false, 'the line about Explore BeanPool worldwide stays');
+        assert.ok(!els.get('global-door-main').classes.has('ios-open-pending'));
+        for (const arrival of ['back_forward', 'reload']) {
+            assert.deepEqual(visit({ ...who, arrival }).went, [], `${arrival}: the doors, not the store again`);
+        }
+        assert.deepEqual(visit({ ...who, host: '127.0.0.1' }).went, [], 'a copy of the site elsewhere waits for a tap');
+    }
+});
+
+// The flag stays as the way back: set false, the page puts the browser line first with the iPhone note and sends no one
+// to the store. Kept so that branch (and each language's own wording for it, below) is not dead, untested code.
+test('iPhone and iPad, flag set back to false: browser line first and no redirect to store', () => {
+    const closed = SCRIPT.replace(/\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*true\b/, 'var IOS_OPEN_DOOR_LIVE = false');
+    assert.notEqual(closed, SCRIPT);
+    for (const who of [{ ua: UA.iphone }, { ua: UA.mac, touch: true }]) {
+        const { els, went } = visit({ ...who, script: closed });
         assert.deepEqual(went, [], who.ua + ' must not redirect to App Store while iOS door is not live');
         assert.equal(els.get('door-play').hidden, true);
         assert.equal(els.get('door-ios').hidden, false);
         assert.ok(!els.get('app-store').classList.contains('btn-primary'), 'App Store is ghost, not primary');
         assert.equal(els.get('browser').hidden, false);
-        assert.deepEqual(visit({ ...who, arrival: 'back_forward' }).went, []);
+        assert.deepEqual(visit({ ...who, arrival: 'back_forward', script: closed }).went, []);
         assert.equal(els.get('browser').textContent, 'Open the global community in your browser', 'the browser line reads as its own button');
         assert.match(els.get('ios-note').textContent, /iPhone app can join the global community from its next update/);
     }

@@ -32,7 +32,7 @@ import {
     HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardType, listPhotoUrl, readSearchSettings,
+    homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     currentLanguage, formatCount, t, tn, word,
 } from '@beanpool/core';
@@ -2193,12 +2193,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             case 'decide': {
                 const d = c.decide;
                 if (!d) return null;
-                const hasItems = (d.items && d.items.length > 0) || !!d.poll;
+                // "My votes" sends `open` as the number of the member's own Decisions, not of all that are open: the counts would read
+                // as the community's, so the aside is left off there (the phone draws none either). Its rows say when each closes.
+                const showAside = ((d.items && d.items.length > 0) || !!d.poll) && readDecideSettings(card.settings).show !== 'mine';
                 return (
                     <HomeCard
                         key={id}
                         {...common}
-                        titleAside={hasItems ? (
+                        titleAside={showAside ? (
                             <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">
                                 {decideLine(d, now)}
                             </span>

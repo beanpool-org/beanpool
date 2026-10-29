@@ -2359,6 +2359,22 @@ describe('the Decide card shows just the votes that are yours: one setting on th
         expect(screen.getByTestId('home-live')).toHaveTextContent('Decide added to Home');
     });
 
+    it('the header counts the open Decisions on Summary and All open, and says nothing on My votes, whose count is only the member\'s own', async () => {
+        for (const [show, header] of [[undefined, true], ['open', true], ['mine', false]] as const) {
+            cleanup();
+            vi.stubGlobal('indexedDB', memoryIndexedDB());
+            resetHomeCacheForTest();
+            nodeDeciding(layoutWith(show ? { show } : undefined));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            const card = await screen.findByTestId('home-card-decide');
+            await waitFor(() => expect(rows()).toHaveLength(show === 'mine' ? 1 : show === 'open' ? 5 : 3));
+            // The node answers `open: 5` for the first two and `open: 1` (the member's one) for My votes.
+            if (header) expect(within(card).getByText(/^5 Decisions open, the first /), String(show)).toBeInTheDocument();
+            else expect(within(card).queryByText(/\d+ Decisions?\b/), String(show)).toBeNull();
+            expect(within(card).getByRole('heading', { name: 'Decide' })).toBeInTheDocument();
+        }
+    });
+
     it('a node from before the setting answers the Summary card whatever is stored: the page draws the rows it was sent', async () => {
         nodeDeciding(layoutWith({ show: 'mine' }));
         vi.mocked(api.getHome).mockImplementation(async () => fresh({ ...answer(), layout: layoutWith({ show: 'mine' }) as never, cards: { ...answer().cards, decide: decideFor('counts') } }));

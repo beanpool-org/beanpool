@@ -9,7 +9,9 @@
  *     words (a break between two words is a break at a word boundary);
  *   - a word reaches past its own tab, or a tab past the row, or the row past the 320 px screen, or the page scrolls
  *     sideways;
- *   - a tab is not drawn (no width), so one of the three cannot be tapped.
+ *   - a tab is not drawn (no width), so one of the three cannot be tapped;
+ *   - a word wider than the whole row (no real name is: this stands for a larger font scale or a longer future translation)
+ *     pushes its tab, the row or the page past the screen instead of breaking inside the row (the backstop, `max-w-full`).
  * The same rule the phone holds (apps/native/app/(tabs)/people.tsx: a pill starts from its own words and shares what is
  * left; the type shrinks, a word is never split). A tab's name may wrap at a space (the emoji above the word); that is
  * listed, not failed.
@@ -46,6 +48,8 @@ const WIDTH = Number(process.env.PEOPLE_TABS_WIDTH) || 320;
 const VIEWS = ['friends', 'community', 'invites'];
 /** Languages written without spaces between words: a break inside a run of these is a break between words. */
 const NO_SPACES = new Set(['zh-Hans', 'zh-Hant', 'ja', 'ko']);
+/** One word (130 letters, wider than any row up to the widest screen) for the backstop run. */
+const OVER_WIDE_WORD = 'Abcdefghijklmnopqrstuvwxyz'.repeat(5);
 
 /** Android's font size scales text, not layout: the root to 130 %, and the cards' pixel sizes with it (harness.mjs). */
 const TEXT_SCALE_CSS = (scale) => `
@@ -110,6 +114,19 @@ function measure({ lang, noSpaces }) {
     };
 }
 
+/** The backstop: the middle tab holds one word wider than the whole row. Changes the page, so run it after the sweep's measures. */
+function measureOverWideWord({ word }) {
+    const row = document.querySelector('[role="tablist"]');
+    const tabs = [...row.querySelectorAll('[role="tab"]')];
+    tabs[1].textContent = word;
+    const rowBox = row.getBoundingClientRect();
+    return {
+        width: window.innerWidth, scrollWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+        row: { left: rowBox.left, right: rowBox.right },
+        tab: (({ left, right }) => ({ left, right }))(tabs[1].getBoundingClientRect()),
+    };
+}
+
 async function main() {
     const outDir = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'bp-people-tabs-build-'));
     fs.mkdirSync(SHOTS_DIR, { recursive: true });
@@ -118,6 +135,7 @@ async function main() {
     const failures = [];
     const notes = [];
     let runs = 0;
+    let overWide = 0;
     try {
         await build({
             configFile: false, root: PWA_DIR, plugins: [react()], define: { __APP_VERSION__: JSON.stringify('harness') }, logLevel: 'warn',
@@ -175,6 +193,10 @@ async function main() {
                         }
                     }
                     console.log(`${lang} ${scheme}: tabs ${(await page.evaluate(measure, { lang, noSpaces: NO_SPACES.has(lang) })).tabs.map((t) => `${t.width.toFixed(0)}px/${t.lines}l`).join(' ')}`);
+                    const wide = await page.evaluate(measureOverWideWord, { word: OVER_WIDE_WORD });
+                    overWide += 1;
+                    if (wide.scrollWidth > wide.width) failures.push(`${lang} ${scheme}: a word wider than the row makes the page scroll sideways (${wide.scrollWidth}px in ${wide.width}px)`);
+                    if (wide.tab.left < wide.row.left - 0.5 || wide.tab.right > wide.row.right + 0.5) failures.push(`${lang} ${scheme}: a word wider than the row pushes its tab to ${wide.tab.left.toFixed(1)}–${wide.tab.right.toFixed(1)} px, past the row ${wide.row.left.toFixed(1)}–${wide.row.right.toFixed(1)}`);
                 } catch (e) {
                     failures.push(`${lang} ${scheme}: ${e.message}`);
                     await page.screenshot({ path: path.join(SHOTS_DIR, `people-tabs-${lang}-${scheme}-error.png`) }).catch(() => {});
@@ -194,7 +216,7 @@ async function main() {
         console.log(`people-tabs-check: ${failures.length} failure(s) in ${runs} runs`);
         process.exit(1);
     }
-    console.log(`people-tabs-check: ok — ${runs} runs (${LANGUAGES.length} languages × ${SCHEMES.join(' + ')} × 3 selected tabs) at ${WIDTH} px, 1.3× text: no word split, nothing past a tab, the row or the screen`);
+    console.log(`people-tabs-check: ok — ${runs} runs (${LANGUAGES.length} languages × ${SCHEMES.join(' + ')} × 3 selected tabs) at ${WIDTH} px, 1.3× text: no word split, nothing past a tab, the row or the screen; a word wider than the row stays inside it (${overWide} runs)`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

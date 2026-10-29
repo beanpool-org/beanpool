@@ -312,9 +312,11 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         // A tab never goes narrower than its longest word (no min-w-0; break-keep keeps a Chinese, Japanese or Korean
                         // name whole too), so a word is never split. Each tab starts from that width and shares what is left; where
                         // the three cannot sit side by side (130 % text, a longer language) the row wraps, so all three stay in view.
-                        // break-words is only the backstop for one word wider than the whole row. The phone's rule (people.tsx): a name
-                        // is never broken mid-word.
-                        className={`grow basis-[min-content] break-words break-keep leading-tight min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                        // break-words is only the backstop for one word wider than the whole row, and max-w-full is what lets it be one:
+                        // a flex item's automatic minimum is its min-content width, which break-words does not lower, so without the
+                        // clamp that word would push the tab (and the page) past the screen instead of breaking. The phone's rule
+                        // (people.tsx): a name is never broken mid-word.
+                        className={`grow basis-[min-content] max-w-full break-words break-keep leading-tight min-h-[48px] py-2 px-1 border-none rounded-lg text-xs font-bold cursor-pointer transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                             view === v 
                                 ? 'bg-white dark:bg-nature-800 text-rainbow shadow-sm border border-nature-200/50 dark:border-nature-700/50 scale-95 drop-shadow-sm' 
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'

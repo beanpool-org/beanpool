@@ -149,6 +149,14 @@ describe('communityShapeCard (design §4, slice S5)', () => {
             ]);
         });
 
+        it('open door from a node that says nothing of wordsDoor: the sign-in alone, never 12 words', () => {
+            for (const f of [{ door: 'open' }, { openJoin: true }] as CommunityShapeFeatures[]) {
+                const joining = communityShapeLines(f)[0];
+                expect(joining).toBe('**Joining:** anyone, with a sign-in');
+                expect(joining).not.toContain('12 words');
+            }
+        });
+
         it('open door without explicit decisions defaults decisions off', () => {
             const f: CommunityShapeFeatures = {
                 door: 'open',

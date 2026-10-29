@@ -93,10 +93,12 @@ export function communityShapeLines(features: CommunityShapeFeatures | null | un
 
     // 1. Joining / Door
     if (features?.openJoin === true || features?.door === 'open') {
-        if (features?.wordsDoor === false) {
-            lines.push(t('**Joining:** anyone, with a sign-in'));
-        } else {
+        // Only a node that says `wordsDoor: true` offers 12 words; one from before the field says nothing of them, so
+        // its open door is the sign-in alone (the apps' wordsDoorOn, invite-entries.ts joinWays).
+        if (features?.wordsDoor === true) {
             lines.push(t('**Joining:** anyone, with 12 words or a sign-in'));
+        } else {
+            lines.push(t('**Joining:** anyone, with a sign-in'));
         }
     } else if (features?.invites === false) {
         lines.push(t('**Joining:** paused — no new members for now'));

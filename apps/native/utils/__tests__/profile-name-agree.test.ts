@@ -199,7 +199,11 @@ vi.mock('../../components/NodeAdminEntry', () => ({ NodeAdminEntry: () => null }
 vi.mock('../../components/OwnerWordsCard', () => ({ OwnerWordsCard: () => null }));
 vi.mock('../../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../../components/useModalKeyboardLift', () => ({ useModalKeyboardLift: () => ({ lift: 0, maxHeight: 600 }) }));
-vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ profile: 'local', features: {} }) }));
+// useNodeProfileState is what useReaderFeatures (Settings' "How this community works" sheet) reads.
+vi.mock('../use-node-profile', () => ({
+    useNodeProfile: () => ({ profile: 'local', features: {} }),
+    useNodeProfileState: () => ({ profile: { profile: 'local', features: {} }, copyRead: true }),
+}));
 vi.mock('../node-profile', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../node-profile')>();
     return {

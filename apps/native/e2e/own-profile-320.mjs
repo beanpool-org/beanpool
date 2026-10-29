@@ -11,8 +11,9 @@
  * drawn under it with that tab's name as a stand-in body. My Profile is the real screen (app/public-profile.tsx), opened
  * for the member's own key with the phone-wide name as the door's name, its reads stood in for.
  *
- * States, each in both schemes: on community A with A's photo; after the switch to B, B's photo and B's name; B's photo
- * failing to load (the ready-made picture the key picks, never a blank disc). Each fails on: the page scrolling sideways;
+ * States, each in both schemes: on community A with A's photo; after the switch to B, B's photo; B's photo failing to
+ * load (the ready-made picture the key picks, never a blank disc); My Profile on A and on B, each with that community's
+ * name and photo. Each fails on: the page scrolling sideways;
  * text past the 320 edge or cut; the header avatar blank or not the community's; My Profile showing the phone-wide name.
  *
  * A stand-in for the phone, not an emulator: Android's fonts and line breaking differ. Nothing leaves the machine: the
@@ -97,8 +98,8 @@ const STUBS = {
     `,
     'expo-constants': `export default { expoConfig: { version: '1.2.83' } };`,
     '@react-native-async-storage/async-storage': `
-        const store = globalThis.__store || (globalThis.__store = new Map());
-        export default { getItem: async (k) => store.get(k) ?? null, setItem: async (k, v) => { store.set(k, v); }, removeItem: async (k) => { store.delete(k); } };
+        const store = () => globalThis.__store || (globalThis.__store = new Map());
+        export default { getItem: async (k) => store().get(k) ?? null, setItem: async (k, v) => { store().set(k, v); }, removeItem: async (k) => { store().delete(k); } };
     `,
     // The phone's copy of each community: the own row of the copy the anchor names, as getDb opens it.
     'db': `
@@ -118,7 +119,7 @@ const STUBS = {
     'NeedsYouIcons': `export const NeedsYouIcons = () => null;`,
     'pillar-sync': `export const getLastSyncTime = async () => Date.now();`,
     'crypto': `export const buildSignedHeaders = async () => ({});`,
-    'blocklist': `export const blockUser = async () => {}, unblockUser = async () => {}, isUserBlocked = () => false; export const BLOCKLIST_UPDATED_EVENT = 'blocklist_updated';`,
+    'blocklist': `export const blockUser = async () => {}, unblockUser = async () => {}, isUserBlocked = async () => false; export const BLOCKLIST_UPDATED_EVENT = 'blocklist_updated';`,
     'ReviewModal': `export const ReviewModal = () => null;`,
     'ArchetypeQuizModal': `export const ArchetypeQuizModal = () => null;`,
     'canonical-profile': `export const getCanonicalProfile = async () => null;`,
@@ -159,7 +160,7 @@ const ME = 'a1'.repeat(32);
 globalThis.__theme = { theme: scheme, colors };
 globalThis.__who = { identity: { publicKey: ME, privateKey: 'b2'.repeat(32), callsign: 'PhoneWide' } };
 globalThis.__params = { publicKey: ME, callsign: 'PhoneWide' };
-globalThis.__store = new Map([['beanpool_anchor_url', 'https://mullum.example']]);
+globalThis.__store = new Map([['beanpool_anchor_url', q.get('on') === 'b' ? 'https://bellingen.example' : 'https://mullum.example']]);
 globalThis.__copies = {
     'https://mullum.example': { callsign: 'Marty of Mullum', avatar_url: ${JSON.stringify(PHOTO_A)}, profile_updated_at: '2026-10-28T09:00:00.000Z' },
     'https://bellingen.example': { callsign: 'Marty of Bellingen', avatar_url: q.get('broken') === '1' ? '/api/avatar/' + ME + '?size=thumb&v=2&k=stale' : ${JSON.stringify(PHOTO_B)}, profile_updated_at: '2026-10-29T09:00:00.000Z' },
@@ -253,13 +254,13 @@ try {
             }
             return out;
         }, { WIDTH });
-        for (const p of found) problems.push(`${label}: ${p}`);
-        for (const p of await expect()) problems.push(`${label}: ${p}`);
+        const failed = [...found, ...(await expect())];
+        for (const p of failed) problems.push(`${label}: ${p}`);
         if (SHOTS) {
             fs.mkdirSync(SHOTS, { recursive: true });
             await page.screenshot({ path: path.join(SHOTS, `${label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`) });
         }
-        console.log(`${found.length ? '✗' : '✓'} ${label}`);
+        console.log(`${failed.length ? '✗' : '✓'} ${label}`);
     };
     const open = async (query) => { await page.goto(`${base}/?${query}`); await page.waitForTimeout(300); };
     const switchToB = async () => { await page.evaluate(() => globalThis.__switchTo('https://bellingen.example')); await page.waitForTimeout(300); };
@@ -278,11 +279,21 @@ try {
         await measure(`${scheme} header B photo fails to load`, async () => (PRESET.test((await headerPicture()) || '') ? [] : [`the header is not the preset: ${(await headerPicture() || 'none').slice(0, 40)}`]));
 
         await open(`tab=${encodeURIComponent('My Profile')}&scheme=${scheme}`);
-        await page.getByText('Marty of Mullum').first().waitFor();
+        await page.getByText('Marty of Mullum').first().waitFor({ timeout: 5000 }).catch(() => problems.push(`${scheme} My Profile: never drew its name (${errors.join('; ') || 'no page error'})`));
         await measure(`${scheme} My Profile on A`, async () => {
             const out = [];
             if (await page.getByText('PhoneWide').count()) out.push('the phone-wide name is shown');
             if ((await profilePicture()) !== PHOTO_A) out.push('the picture is not A\'s photo');
+            return out;
+        });
+        // Opened again once the phone is on B (a switch closes every screen over the tabs: use-communities.ts).
+        await open(`tab=${encodeURIComponent('My Profile')}&scheme=${scheme}&on=b`);
+        await page.getByText('Marty of Bellingen').first().waitFor({ timeout: 5000 }).catch(() => problems.push(`${scheme} My Profile on B: never drew its name`));
+        await measure(`${scheme} My Profile on B`, async () => {
+            const out = [];
+            if (await page.getByText('PhoneWide').count()) out.push('the phone-wide name is shown');
+            if (await page.getByText('Marty of Mullum').count()) out.push('A\'s name is shown');
+            if ((await profilePicture()) !== PHOTO_B) out.push('the picture is not B\'s photo');
             return out;
         });
     }

@@ -130,7 +130,7 @@ const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async ()
 /** The header avatar's picture: the image inside "Open profile". */
 const avatarSrc = () => host.querySelector('[aria-label="Open profile"] img')?.getAttribute('src') ?? null;
 async function drawHeader() {
-    await act(async () => { root.render(createElement(GlobalHeader)); });
+    await act(async () => { root.render(createElement(GlobalHeader) as any); });
     await settle();
 }
 /** The phone moves to `url`, as every switch does (use-communities.ts switchCommunity): the anchor, then the notice. */

@@ -19,8 +19,11 @@ export type { OwnProfile } from './own-profile-anchor';
  * any other is dropped (own-profile-anchor.ts): after a switch every field is null, which draws the ready-made picture
  * the key picks, until the new community's row is read. Only the latest read lands: one that started earlier and answers
  * later never puts an older row back.
+ *
+ * `reads` false: nothing is read and every field is null, as a screen that draws an example member instead of the reader
+ * (the Ledger in preview) asks nothing of the reader's own account. Turned true, it reads at once.
  */
-export function useOwnProfile(): OwnProfile {
+export function useOwnProfile(reads = true): OwnProfile {
     const { identity } = useIdentity();
     const publicKey = identity?.publicKey ?? null;
     const [state, setState] = useState<OwnProfile>(UNKNOWN_OWN_PROFILE);
@@ -28,13 +31,13 @@ export function useOwnProfile(): OwnProfile {
 
     const load = React.useCallback(async () => {
         const n = ++asked.current;
-        if (!publicKey) { setState(UNKNOWN_OWN_PROFILE); return; }
+        if (!publicKey || !reads) { setState(UNKNOWN_OWN_PROFILE); return; }
         // Storage that can't be read says nothing about which community this is: what the screen has stays.
         const url = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => undefined);
         if (url === undefined || n !== asked.current) return;
         setState(s => ownCommunityRead(s, url));
         if (!url) return;
-        let row: unknown;
+        let row: Parameters<typeof ownRowOf>[0];
         try {
             row = await getMemberProfile(publicKey);
         } catch {
@@ -44,8 +47,8 @@ export function useOwnProfile(): OwnProfile {
         // getDb opens the copy the anchor names as it is asked: read for this community only if it is still the phone's.
         const after = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => undefined);
         if (after !== url || n !== asked.current) return;
-        setState(s => ownRowArrived(s, url, ownRowOf(row as any)));
-    }, [publicKey]);
+        setState(s => ownRowArrived(s, url, ownRowOf(row)));
+    }, [publicKey, reads]);
 
     useFocusEffect(React.useCallback(() => { void load(); }, [load]));
 

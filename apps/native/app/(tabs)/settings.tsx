@@ -649,12 +649,13 @@ export default function SettingsScreen() {
     // (unique per node, chosen at join), so the device-global identity.callsign is only
     // ever right by coincidence — display this instead and fall back while it loads.
     const [nodeCallsign, setNodeCallsign] = useState<string | null>(null);
-    // The card draws this community's row as last read (utils/use-own-profile.ts), as the header does: after a switch, a
-    // sync or a change made elsewhere it follows at once, where the loader below waits for the next focus. Until that row
-    // is read, and where it holds no photo, what the loader found (DESIGN-per-community-profile-fable.md S2 takes the
-    // phone-wide copy out of that).
+    // The card's picture is this community's row as last read (utils/use-own-profile.ts), as the header's is: a photo that
+    // a sync or a change made elsewhere brings follows at once, where the loader below waits for the next focus. Until that
+    // row is read, and where it holds no photo, what the loader found (DESIGN-per-community-profile-fable.md S2 takes the
+    // phone-wide copy out of that). The name is the loader's first: it reads the same row, then the community's own answer
+    // and a rename still waiting to be sent, which the row alone does not know; the row's name stands in until it has.
     const own = useOwnProfile();
-    const cardCallsign = (own.read && own.callsign) || nodeCallsign || identity?.callsign || '';
+    const cardCallsign = nodeCallsign || (own.read && own.callsign) || identity?.callsign || '';
     const cardAvatar = (own.read && own.avatarUrl) || avatar;
     const [communityLabel, setCommunityLabel] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);

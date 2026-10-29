@@ -150,8 +150,9 @@ export default function LedgerScreen() {
     const [heldSample, setHeldSample] = useState(false);
     const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;
     const txns = heldSample === preview ? heldTxns : NO_TXNS;
-    // Your name and picture in this community (utils/use-own-profile.ts), as the header and My Profile draw them.
-    const own = useOwnProfile();
+    // Your name and picture in this community (utils/use-own-profile.ts), as the header and My Profile draw them. Never
+    // read while the mode is unknown or in preview, where the card is Example Valley's member and not yours.
+    const own = useOwnProfile(beansMode !== undefined && !preview);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
     // Where the list is and where the tab bar sits in it. Switching tab from below the tab bar (Send from Levels)
     // brings the tab bar to the top, so the other tab opens at its start; from above it, the list stays put.

@@ -2,7 +2,7 @@
 slug: reporting
 title: Reporting a problem
 summary: Tell your community's moderators about a post, an event, a Pulse post, a project, an enterprise or a message in a group's chat.
-related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
+related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse, how-your-community-works
 ---
 
 ## What you can report
@@ -57,6 +57,6 @@ The global community at global.beanpool.org is open to anyone, with 12 secret wo
 - **There are no community votes there.** When an admin suspends someone, the suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner.
 - **Polls there are informal.** Each one says "An informal poll; it decides nothing". Anyone can join, with 12 words or a sign-in, so one person with several accounts could tip the count.
 
-None of this happens in your own local community: there, every report waits for the moderators.
+None of this happens in your own local community unless its owners turn it on: by default, every report there waits for the moderators. See "How this community works" to check which rules yours has.
 
 If someone is in danger, contact your local emergency services first.

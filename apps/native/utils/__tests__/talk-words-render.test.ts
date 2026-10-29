@@ -648,7 +648,11 @@ describe('People\'s sub-nav at 320 dp with 1.3× text, in every language', () =>
     const NATIVE_WORDS = path.resolve(__dirname, '../../words');
     const COUNT = '🎟️ Invites ({n})';
 
-    /** The row as drawn with each of its three tabs selected in turn: the sub-nav, its tabs, and the layout each carries. */
+    /**
+     * The row as drawn with each of its three tabs selected in turn: the sub-nav, its tabs, and the layout each carries.
+     * React keeps the three tabs mounted, so each click rewrites the same nodes: the row is copied at the moment of the click,
+     * or all three entries would carry the layout of the last selection (review 4408169606).
+     */
     async function drawnRows() {
         rememberProfile('local', { ...LOCAL, membersOnDemand: false });
         await renderIn('en');
@@ -656,9 +660,10 @@ describe('People\'s sub-nav at 320 dp with 1.3× text, in every language', () =>
         const rows: Array<{ row: Element; pills: Element[]; texts: string[]; lines: string[]; minScale: number[] }> = [];
         for (const name of ['👫 Friends', '🏘️ Community', '🎟️ Invites']) {
             await click(buttonWithText(name), name);
-            const row = buttonWithText(name)!.parentElement!;
+            const live = buttonWithText(name)!.parentElement!;
+            const labels = Array.from(live.children).map((p) => p.querySelector(':scope > span[data-shrinks]')!);
+            const row = live.cloneNode(true) as Element;
             const pills = Array.from(row.children);
-            const labels = pills.map((p) => p.querySelector(':scope > span[data-shrinks]')!);
             rows.push({
                 row, pills,
                 texts: labels.map((l) => l.textContent!),
@@ -666,9 +671,13 @@ describe('People\'s sub-nav at 320 dp with 1.3× text, in every language', () =>
                 minScale: labels.map((l) => Number(l.getAttribute('data-min-scale'))),
             });
         }
+        // The selected tab carries the 1 dp border (+ 2 dp of frame). Read after the last click, each copy must still show its own.
+        rows.forEach(({ pills }, selected) => {
+            expect(pills.map((p) => layoutOf(p).borderWidth !== undefined), `bordered tab with tab ${selected + 1} selected`).toEqual([0, 1, 2].map((i) => i === selected));
+        });
         return rows;
     }
-    const emOf = (lang: string, label: string) => {
+    const emOf =(lang: string, label: string) => {
         const em = measured.widths[lang]?.[label];
         if (em === undefined) throw new Error(`${lang}: no measured width for "${label}"; run scripts/words/measure-people-pills.mjs`);
         return em;

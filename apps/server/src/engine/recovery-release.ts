@@ -50,6 +50,7 @@ import crypto from 'node:crypto';
 import { TWO_LAYER_THRESHOLD, word, wordsFor } from '@beanpool/core';
 
 import { db } from '../db/db.js';
+import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { getCurrentGeneration, openShareRow, type KeeperType } from './recovery-shares.js';
 import { ssoLookupHash, type SsoProvider } from '../sso.js';
@@ -318,10 +319,10 @@ export async function forgetOldReleasedCopies(now: number = Date.now()): Promise
         if (rows.length < SWEEP_BATCH) break;
         await yieldToEventLoop();
     }
-    if (forgotten > 0) {
-        // No old frame keeps the bytes in the WAL either (as services/recovery-seal-key.ts rewriteRows does).
-        try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* best effort: the next checkpoint writes over them */ }
-    }
+    // No old frame keeps the bytes in the WAL either. This runs on a live main server's timer, where a copy being served
+    // to a standby can hold the WAL (engine/open-copies.ts): emptied now, or by a try each minute for up to an hour once
+    // that reader lets go, never waiting on it with the event loop held (db/wal-truncate.ts).
+    if (forgotten > 0) truncateWalAfterDelete('released copies were emptied');
     return forgotten;
 }
 

@@ -20,10 +20,14 @@
  *      reads as the same kind of copy; a release 29 days old, and one in a session still live, keep theirs; the boot's
  *      wrap leaves an emptied one alone; a second run empties nothing; a standby writes nothing. The device of an old
  *      completed or expired session whose copy went is answered by the release rules at its routes, its sign-in too.
+ *      With a reader holding the WAL (a copy being served to a standby), the sweep answers at once, never waiting out
+ *      the busy timeout, and once the reader lets go the WAL is emptied and the copy is in neither file.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-recovery-copies.ts
  */
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 // The flags the server reads at import, set before anything is imported (every import below is dynamic).
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -387,6 +391,38 @@ async function main(): Promise<void> {
         assert(n.status === 200 && signIn.status === 400 && signIn.body?.error === s.words && signIn.body?.code === undefined,
             `an old ${s.label} session: its device's good sign-in → 400, "${s.words}", not the server's key (${show(signIn)})`);
     }
+
+    // A copy being served to a standby in pages holds a read on a second connection (engine/open-copies.ts). The sweep
+    // runs on the timer of a live main server, so it never waits on that reader with the event loop held: the WAL is
+    // emptied once the reader lets go (db/wal-truncate.ts, which a suite sets to try again every 150 ms).
+    process.env.WAL_TRUNCATE_RETRY_MS = '150';
+    const WAL = `${db.name}-wal`;
+    const fileBytes = (f: string) => { try { return fs.readFileSync(f); } catch { return Buffer.alloc(0); } };
+    session('held-old', 'complete', ago(28 * DAY));
+    const heldId = release('held-old', 906, ago(31 * DAY));
+    const heldCopy = Buffer.from(rowById(heldId).payload, 'utf8');
+    const filesHolding = () => [db.name, WAL].filter((f) => fileBytes(f).includes(heldCopy)).map((f) => path.basename(f));
+    assert(filesHolding().length > 0, `before the sweep, the database's files hold the copy (${filesHolding().join(', ') || 'neither'})`);
+    const Database = (await import('better-sqlite3')).default;
+    const reader = new Database(db.name, { readonly: true, fileMustExist: true });
+    reader.prepare('BEGIN').run();
+    reader.prepare('SELECT COUNT(*) AS n FROM recovery_releases').get();
+    const t0 = Date.now();
+    const heldGone = await rr.forgetOldReleasedCopies();
+    const took = Date.now() - t0;
+    assert(heldGone === 1 && rowById(heldId).payload === '', `with a reader holding the WAL, the sweep still empties the copy (emptied ${heldGone})`);
+    assert(took < 2_000, `and answers at once, never waiting out the 5-second busy timeout for the reader (${took} ms)`);
+    const heldWal = fileBytes(WAL).length;
+    assert(heldWal > 0, `while the reader holds it, the WAL cannot be emptied (${heldWal} bytes)`);
+    reader.prepare('COMMIT').run();
+    reader.close();
+    let walLeft = -1;
+    for (let i = 0; i < 40 && walLeft !== 0; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        walLeft = fileBytes(WAL).length;
+    }
+    assert(walLeft === 0 && filesHolding().length === 0,
+        `once the reader lets go, the next try empties the WAL, and the copy is in neither file (WAL ${walLeft} bytes; in ${filesHolding().join(', ') || 'neither'})`);
 
     assert(outsideFetches === 0, `no host but this machine was asked (${outsideFetches})`);
     console.log(`\n${passed}/${run} passed`);

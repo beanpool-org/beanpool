@@ -437,7 +437,8 @@ export default function SettingsScreen() {
             resolveCommunityLabel().then(setProtectionNodeLabel).catch(() => {});
             return;
         }
-        if (at === 'community') return fetchCommunityProtectionStatus();
+        // The vault's own line (didn't answer, paused) never sits above the community's copies.
+        if (at === 'community') { setProtectionNote(null); return fetchCommunityProtectionStatus(); }
         setProtectionLoading(true);
         try {
             if (!identity) return;

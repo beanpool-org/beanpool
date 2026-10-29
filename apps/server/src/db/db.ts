@@ -3004,8 +3004,10 @@ export function leadsProject(projectId: string, pubkey: string): boolean {
  * - A node admin (an owner or admin of the node, isAdminPubkey, which asks that their account is active).
  * - Its lead keeper (treasury_operators, role 'lead').
  * - With no lead, its only keeper. Nobody leads it when its lead left and no keeper was active with operator access to take
- *   over (promoteOrPauseAfterLeadLeft paused it). One of two or more keepers can't: the keepers choose a lead first. Every
- *   binding counts, a suspended keeper's too, as isLeadOrSoleKeeperOrAdmin counts them.
+ *   over (promoteOrPauseAfterLeadLeft paused it). One of two or more keepers can't, and nothing names a lead after: its
+ *   keepers can't vote one (decisions-engine.ts PROJECT_LEADER_STAYS), succession replaces only a lead it has
+ *   (proposeLeadSuccession), and an admin's assign binds a keeper. So a node admin alone cancels it then. Every binding
+ *   counts, a suspended keeper's too, as isLeadOrSoleKeeperOrAdmin counts them.
  * - Its maker, only while it has no keepers and never had one that left (projects.keeper_left_at, noteKeeperLeftProject):
  *   a maker an admin or the community removed as its last keeper, or who stepped down, no longer may ("removal ends it").
  *   Every way of making a project binds its maker as its lead, so that is a projects row no keeper was ever bound to.

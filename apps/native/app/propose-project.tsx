@@ -49,7 +49,8 @@ export default function ProposeProjectModal() {
         toastText: { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800, fontWeight: '700', fontSize: 13 },
     }));
 
-    const { kind } = useLocalSearchParams<{ kind?: string }>();
+    const { kind: rawKind } = useLocalSearchParams<{ kind?: string | string[] }>();
+    const kind = Array.isArray(rawKind) ? rawKind[0] : rawKind;
     const [lifecycle, setLifecycle] = useState<'bounded' | 'ongoing' | null>(() => {
         if (kind === 'ongoing' || kind === 'bounded') return kind;
         return null;

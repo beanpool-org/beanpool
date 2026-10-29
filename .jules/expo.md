@@ -178,3 +178,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `project-detail.tsx` missing an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `project-detail.tsx` so unhandled screen errors on the `/project-detail` route are safely caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-18 - [Refine route search parameters in propose-project.tsx]
+**Issue:** `propose-project.tsx` typed search parameter `kind` strictly as `{ kind?: string }`.
+**Learning:** Expo Router `useLocalSearchParams` query parameters can evaluate to `string | string[]`. Typing `kind?: string | string[]` and extracting scalar using `Array.isArray(rawKind) ? rawKind[0] : rawKind` ensures type safety and runtime stability.
+**Pattern:** Ensure `useLocalSearchParams` generic parameters allow `string | string[]` and safely extract scalar string values.

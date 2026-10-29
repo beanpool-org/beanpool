@@ -756,6 +756,7 @@
   "Deals under way: {n}": "Kesepakatan berjalan: {n}",
   "You act for {name} here.": "Di sini Anda bertindak untuk {name}.",
   "You're helping with this · {n} Beans held for you": "Anda membantu ini · {n} Kacang ditahan untuk Anda",
+  "You're helping with this · no Beans held": "Anda membantu ini · tidak ada Kacang ditahan",
   "You offered to help · waiting on {name}": "Anda menawarkan bantuan · menunggu {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Anda meminta meminjamnya · tidak ada yang ditahan sampai {name} setuju",
   "Taken up by someone else for now.": "Sedang diambil orang lain.",

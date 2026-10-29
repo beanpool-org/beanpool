@@ -793,6 +793,7 @@
   "Deals under way: {n}": "Laufende Geschäfte: {n}",
   "You act for {name} here.": "Du handelst hier für {name}.",
   "You're helping with this · {n} Beans held for you": "Du hilfst hier mit · {n} Bohnen für dich verwahrt",
+  "You're helping with this · no Beans held": "Du hilfst hier mit · keine Bohnen verwahrt",
   "You offered to help · waiting on {name}": "Du hast Hilfe angeboten · wartet auf {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Du hast gefragt, es zu leihen · nichts wird verwahrt, bis {name} zusagt",
   "Taken up by someone else for now.": "Gerade von jemand anderem übernommen.",

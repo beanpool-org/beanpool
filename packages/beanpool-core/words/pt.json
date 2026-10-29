@@ -793,6 +793,7 @@
   "Deals under way: {n}": "Negócios em andamento: {n}",
   "You act for {name} here.": "Aqui você age em nome de {name}.",
   "You're helping with this · {n} Beans held for you": "Você está ajudando com isto · {n} Feijões retidos para você",
+  "You're helping with this · no Beans held": "Você está ajudando com isto · nenhum Feijão retido",
   "You offered to help · waiting on {name}": "Você ofereceu ajuda · aguardando {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Você pediu emprestado · nada fica retido até {name} aceitar",
   "Taken up by someone else for now.": "Outra pessoa pegou por enquanto.",

@@ -793,6 +793,7 @@
   "Deals under way: {n}": "Süren anlaşmalar: {n}",
   "You act for {name} here.": "Burada {name} adına hareket ediyorsunuz.",
   "You're helping with this · {n} Beans held for you": "Buna yardım ediyorsunuz · sizin için {n} Fasulye tutuluyor",
+  "You're helping with this · no Beans held": "Buna yardım ediyorsunuz · tutulan Fasulye yok",
   "You offered to help · waiting on {name}": "Yardım teklif ettiniz · {name} bekleniyor",
   "You asked to borrow it · nothing is held until {name} says yes": "Ödünç istediniz · {name} kabul edene kadar hiçbir şey tutulmaz",
   "Taken up by someone else for now.": "Şu an başka biri aldı.",

@@ -1137,7 +1137,14 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         noTakeUp();
     });
 
-    it('Need, asked: "You offered to help · waiting on Kofi" and Cancel Offer, no second offer', async () => {
+    it('free Need, payee (helping, approved): no Beans held, never "0 Beans held for you"', async () => {
+        await open(listing({ title: 'Carry chairs', type: 'need', credits: 0, status: 'pending', authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk', pendingTransactionId: 'tx' }),
+            [deal({ credits: 0, buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, sellerCallsign: 'Guest' })]);
+        expect(await screen.findByText("You're helping with this · no Beans held")).toBeInTheDocument();
+        expect(screen.queryByText(/0 Beans held/)).not.toBeInTheDocument();
+    });
+
+    it('Need, asked:"You offered to help · waiting on Kofi" and Cancel Offer, no second offer', async () => {
         await open(listing({ title: 'Stall help', type: 'need', repeatable: true, authorCallsign: 'Kofi', authorPublicKey: 'kofi-pk' }),
             [deal({ status: 'requested', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME })]);
         expect(await screen.findByText('You offered to help · waiting on Kofi')).toBeInTheDocument();

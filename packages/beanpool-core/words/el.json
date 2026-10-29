@@ -793,6 +793,7 @@
   "Deals under way: {n}": "Συναλλαγές σε εξέλιξη: {n}",
   "You act for {name} here.": "Εδώ ενεργείς για λογαριασμό του {name}.",
   "You're helping with this · {n} Beans held for you": "Βοηθάς σε αυτό · {n} Φασόλια δεσμευμένα για σένα",
+  "You're helping with this · no Beans held": "Βοηθάς σε αυτό · κανένα Φασόλι δεσμευμένο",
   "You offered to help · waiting on {name}": "Προσφέρθηκες να βοηθήσεις · αναμονή για {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Ζήτησες να το δανειστείς · τίποτα δεν δεσμεύεται μέχρι να πει ναι ο/η {name}",
   "Taken up by someone else for now.": "Το έχει αναλάβει κάποιος άλλος προς το παρόν.",

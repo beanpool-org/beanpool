@@ -1902,10 +1902,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              </>
                          ) : (
                              <>
-                                 {/* The helper's line (design §3.2): the Beans are held for them, with the deal's own amount. */}
+                                 {/* The helper's line (design §3.2): the Beans are held for them, with the deal's own amount (none on a free Need). */}
                                  {!isOwnPost && activeTx && (
                                      <p className="text-emerald-700 dark:text-emerald-400 text-sm font-bold text-center mt-2">
-                                         {listingDealLines.helping(formatNumber(activeTx.credits))}
+                                         {listingDealLines.helping(activeTx.credits)}
                                      </p>
                                  )}
                                  <p className="text-amber-700 dark:text-amber-400 text-sm font-semibold text-center mt-2 mb-2">

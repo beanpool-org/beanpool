@@ -756,6 +756,7 @@
   "Deals under way: {n}": "進行中の取引: {n}",
   "You act for {name} here.": "ここでは{name}として操作します。",
   "You're helping with this · {n} Beans held for you": "あなたが手伝っています · あなたのために{n}豆を預かり中",
+  "You're helping with this · no Beans held": "あなたが手伝っています · 預かり中の豆なし",
   "You offered to help · waiting on {name}": "手伝いを申し出ました · {name}の返事待ち",
   "You asked to borrow it · nothing is held until {name} says yes": "借りたいと申し込みました · {name}が承諾するまで何も預かりません",
   "Taken up by someone else for now.": "今は他の人が受けています。",

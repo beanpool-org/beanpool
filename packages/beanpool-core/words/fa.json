@@ -793,6 +793,7 @@
   "Deals under way: {n}": "معامله‌های در جریان: {n}",
   "You act for {name} here.": "اینجا از طرف {name} اقدام می‌کنید.",
   "You're helping with this · {n} Beans held for you": "دارید در این کمک می‌کنید · {n} لوبیا برای شما نگه‌داشته شده",
+  "You're helping with this · no Beans held": "دارید در این کمک می‌کنید · هیچ لوبیایی نگه‌داشته نشده",
   "You offered to help · waiting on {name}": "پیشنهاد کمک دادید · در انتظار {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "درخواست کردید آن را قرض بگیرید · تا {name} موافقت نکند چیزی نگه‌داشته نمی‌شود",
   "Taken up by someone else for now.": "فعلاً شخص دیگری آن را گرفته است.",

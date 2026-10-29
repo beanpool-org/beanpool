@@ -793,6 +793,7 @@
   "Deals under way: {n}": "നടക്കുന്ന ഇടപാടുകൾ: {n}",
   "You act for {name} here.": "ഇവിടെ നിങ്ങൾ {name}-നു വേണ്ടി പ്രവർത്തിക്കുന്നു.",
   "You're helping with this · {n} Beans held for you": "നിങ്ങൾ ഇതിൽ സഹായിക്കുന്നു · നിങ്ങൾക്കായി {n} പയർ സൂക്ഷിച്ചിരിക്കുന്നു",
+  "You're helping with this · no Beans held": "നിങ്ങൾ ഇതിൽ സഹായിക്കുന്നു · പയർ ഒന്നും സൂക്ഷിച്ചിട്ടില്ല",
   "You offered to help · waiting on {name}": "നിങ്ങൾ സഹായം വാഗ്ദാനം ചെയ്തു · {name}-നായി കാത്തിരിക്കുന്നു",
   "You asked to borrow it · nothing is held until {name} says yes": "നിങ്ങൾ ഇത് കടം ചോദിച്ചു · {name} സമ്മതിക്കും വരെ ഒന്നും സൂക്ഷിക്കില്ല",
   "Taken up by someone else for now.": "ഇപ്പോൾ മറ്റൊരാൾ ഇത് ഏറ്റെടുത്തു.",

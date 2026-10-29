@@ -941,6 +941,7 @@
   "Deals under way: {n}": "صفقات جارية: {n}",
   "You act for {name} here.": "أنت تتصرف باسم {name} هنا.",
   "You're helping with this · {n} Beans held for you": "أنت تساعد في هذا · {n} فاصوليا محفوظة لك",
+  "You're helping with this · no Beans held": "أنت تساعد في هذا · لا فاصوليا محفوظة",
   "You offered to help · waiting on {name}": "عرضت المساعدة · بانتظار {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "طلبت استعارته · لا شيء محفوظ حتى يوافق {name}",
   "Taken up by someone else for now.": "أخذه شخص آخر حاليًا.",

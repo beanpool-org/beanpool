@@ -1450,10 +1450,10 @@ export default function PostDetailModal() {
                             </>
                         ) : (
                             <>
-                                {/* The helper's line (design §3.2): the Beans are held for them, with the deal's own amount. */}
+                                {/* The helper's line (design §3.2): the Beans are held for them, with the deal's own amount (none on a free Need). */}
                                 {!isOwnPost && !!activeTx && (
                                     <Text style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8 }}>
-                                        {listingDealLines.helping(formatNumber(activeTx.credits))}
+                                        {listingDealLines.helping(Number(activeTx.credits ?? 0))}
                                     </Text>
                                 )}
                                 <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: 8 }}>

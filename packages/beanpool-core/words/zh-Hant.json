@@ -756,6 +756,7 @@
   "Deals under way: {n}": "進行中的交易：{n}",
   "You act for {name} here.": "你在這裡代表 {name} 操作。",
   "You're helping with this · {n} Beans held for you": "你在幫忙 · 為你託管 {n} 豆子",
+  "You're helping with this · no Beans held": "你在幫忙 · 未託管豆子",
   "You offered to help · waiting on {name}": "你提出了幫忙 · 等待 {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "你申請借用 · 在 {name} 同意前不託管任何東西",
   "Taken up by someone else for now.": "暫時已被別人接下。",

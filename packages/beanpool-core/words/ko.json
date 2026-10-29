@@ -756,6 +756,7 @@
   "Deals under way: {n}": "진행 중인 거래: {n}",
   "You act for {name} here.": "여기서는 {name}을(를) 대신해 처리해요.",
   "You're helping with this · {n} Beans held for you": "이 일을 돕고 있어요 · 나를 위해 콩 {n}개 보관 중",
+  "You're helping with this · no Beans held": "이 일을 돕고 있어요 · 보관 중인 콩 없음",
   "You offered to help · waiting on {name}": "도움을 제안했어요 · {name}의 답을 기다리는 중",
   "You asked to borrow it · nothing is held until {name} says yes": "빌리고 싶다고 요청했어요 · {name}이(가) 승낙할 때까지 아무것도 보관되지 않아요",
   "Taken up by someone else for now.": "지금은 다른 사람이 맡았어요.",

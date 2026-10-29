@@ -867,6 +867,7 @@
   "Deals under way: {n}": "Сделки в процессе: {n}",
   "You act for {name} here.": "Здесь вы действуете от имени {name}.",
   "You're helping with this · {n} Beans held for you": "Вы помогаете с этим · для вас удерживается {n} Бобов",
+  "You're helping with this · no Beans held": "Вы помогаете с этим · Бобы не удерживаются",
   "You offered to help · waiting on {name}": "Вы предложили помощь · ждём {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Вы попросили взять это на время · ничего не удерживается, пока {name} не согласится",
   "Taken up by someone else for now.": "Сейчас это взял кто-то другой.",

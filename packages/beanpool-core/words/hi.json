@@ -793,6 +793,7 @@
   "Deals under way: {n}": "चल रहे सौदे: {n}",
   "You act for {name} here.": "यहाँ आप {name} की ओर से काम करते हैं।",
   "You're helping with this · {n} Beans held for you": "आप इसमें मदद कर रहे हैं · आपके लिए {n} फलियाँ रखी गईं",
+  "You're helping with this · no Beans held": "आप इसमें मदद कर रहे हैं · कोई फलियाँ नहीं रखी गईं",
   "You offered to help · waiting on {name}": "आपने मदद की पेशकश की · {name} का इंतज़ार",
   "You asked to borrow it · nothing is held until {name} says yes": "आपने इसे उधार माँगा · जब तक {name} हाँ न कहें, कुछ नहीं रखा जाता",
   "Taken up by someone else for now.": "अभी किसी और ने इसे लिया है।",

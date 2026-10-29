@@ -195,3 +195,19 @@ describe("listingDealLines.heldRow: a deal's own amount, and nothing held on a f
         expect(listingDealLines.heldRow('Mo', 0, '24 oct.')).toBe('Mo · aucun Haricot retenu · depuis le 24 oct.');
     });
 });
+
+describe("listingDealLines.helping: a helper's deal by its own amount, and nothing held on a free Need", () => {
+    const fr = JSON.parse(readFileSync(new URL('../../words/fr.json', import.meta.url), 'utf8')) as Catalog;
+    afterEach(() => setLanguage('en'));
+    it('the Beans held for them, in the language’s way', () => {
+        expect(listingDealLines.helping(20)).toBe("You're helping with this · 20 Beans held for you");
+        expect(listingDealLines.helping(12.5)).toBe("You're helping with this · 12.5 Beans held for you");
+        setLanguage('fr', [fr]);
+        expect(listingDealLines.helping(12.5)).toBe('Vous aidez pour ceci · 12,5 Haricots retenus pour vous');
+    });
+    it('a free Need never reads "0 Beans held for you"', () => {
+        expect(listingDealLines.helping(0)).toBe("You're helping with this · no Beans held");
+        setLanguage('fr', [fr]);
+        expect(listingDealLines.helping(0)).toBe('Vous aidez pour ceci · aucun Haricot retenu');
+    });
+});

@@ -793,6 +793,7 @@
   "Deals under way: {n}": "Échanges en cours : {n}",
   "You act for {name} here.": "Ici, vous agissez pour {name}.",
   "You're helping with this · {n} Beans held for you": "Vous aidez pour ceci · {n} Haricots retenus pour vous",
+  "You're helping with this · no Beans held": "Vous aidez pour ceci · aucun Haricot retenu",
   "You offered to help · waiting on {name}": "Vous avez proposé votre aide · en attente de {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Vous avez demandé à l'emprunter · rien n'est retenu tant que {name} n'a pas dit oui",
   "Taken up by someone else for now.": "Pris par quelqu'un d'autre pour le moment.",

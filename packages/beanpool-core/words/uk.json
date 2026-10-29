@@ -867,6 +867,7 @@
   "Deals under way: {n}": "Угоди в процесі: {n}",
   "You act for {name} here.": "Тут ви дієте від імені {name}.",
   "You're helping with this · {n} Beans held for you": "Ви допомагаєте з цим · для вас заблоковано {n} Бобів",
+  "You're helping with this · no Beans held": "Ви допомагаєте з цим · Боби не заблоковано",
   "You offered to help · waiting on {name}": "Ви запропонували допомогу · чекаємо на {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Ви попросили позичити · нічого не блокується, доки {name} не погодиться",
   "Taken up by someone else for now.": "Зараз це взяв хтось інший.",

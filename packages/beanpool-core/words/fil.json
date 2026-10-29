@@ -793,6 +793,7 @@
   "Deals under way: {n}": "Mga kasunduang nagaganap: {n}",
   "You act for {name} here.": "Kumikilos ka para sa {name} dito.",
   "You're helping with this · {n} Beans held for you": "Tumutulong ka rito · {n} Munggo na hawak para sa iyo",
+  "You're helping with this · no Beans held": "Tumutulong ka rito · walang Munggo na hawak",
   "You offered to help · waiting on {name}": "Nag-alok kang tumulong · hinihintay si {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Humiling kang hiramin ito · walang hawak hangga't hindi pumapayag si {name}",
   "Taken up by someone else for now.": "May ibang kumuha nito sa ngayon.",

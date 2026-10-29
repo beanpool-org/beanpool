@@ -756,6 +756,7 @@
   "Deals under way: {n}": "Giao dịch đang diễn ra: {n}",
   "You act for {name} here.": "Ở đây bạn thay mặt {name}.",
   "You're helping with this · {n} Beans held for you": "Bạn đang giúp việc này · {n} Đậu đang giữ cho bạn",
+  "You're helping with this · no Beans held": "Bạn đang giúp việc này · không giữ Đậu nào",
   "You offered to help · waiting on {name}": "Bạn đã đề nghị giúp · đang chờ {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Bạn đã hỏi mượn · không giữ gì cho đến khi {name} đồng ý",
   "Taken up by someone else for now.": "Hiện người khác đã nhận.",

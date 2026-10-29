@@ -319,8 +319,10 @@ export const listingDealLines = {
     underWay: (n: number) => t('Deals under way: {n}', { n }),
     /** A keeper's note: the steps on this listing are taken as the enterprise. */
     actingFor: (name: string) => t('You act for {name} here.', { name }),
-    /** A helper on a Need, approved: the Beans are held for them. */
-    helping: (n: string) => t("You're helping with this · {n} Beans held for you", { n }),
+    /** A helper on a Need, approved, from the deal's own amount: the Beans are held for them, and on a free Need none are. */
+    helping: (credits: number) => (credits > 0
+        ? t("You're helping with this · {n} Beans held for you", { n: formatNumber(credits) })
+        : t("You're helping with this · no Beans held")),
     offeredToHelp: (name: string) => t('You offered to help · waiting on {name}', { name }),
     askedToBorrow: (name: string) => t('You asked to borrow it · nothing is held until {name} says yes', { name }),
     takenByOther: () => t('Taken up by someone else for now.'),

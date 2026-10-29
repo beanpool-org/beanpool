@@ -808,6 +808,7 @@
   "Deals under way: {n}": "Tratos en curso: {n}",
   "You act for {name} here.": "Aquí actúas en nombre de {name}.",
   "You're helping with this · {n} Beans held for you": "Estás ayudando con esto · {n} Frijoles retenidos para ti",
+  "You're helping with this · no Beans held": "Estás ayudando con esto · sin Frijoles retenidos",
   "You offered to help · waiting on {name}": "Ofreciste ayudar · esperando a {name}",
   "You asked to borrow it · nothing is held until {name} says yes": "Pediste que te lo presten · no se retiene nada hasta que {name} diga que sí",
   "Taken up by someone else for now.": "Otra persona lo ha tomado por ahora.",

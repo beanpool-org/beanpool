@@ -324,6 +324,13 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.textContent).not.toContain('✅ Release Credits');
         });
 
+        it('a helper on a free Need, approved: no Beans held, never "0 Beans held for you"', async () => {
+            node.mine = [deal({ buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 0 })];
+            await open(listing({ type: 'need', title: 'Carry chairs', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 0 }));
+            expect(host.textContent).toContain("You're helping with this · no Beans held");
+            expect(host.textContent).not.toContain('0 Beans held');
+        });
+
         it('one who asked to borrow: whom they wait on, and nothing held', async () => {
             node.mine = [deal({ status: 'requested' })];
             await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0 }));

@@ -19,7 +19,7 @@ In the web app the first is called **Chat Messages**, and the third is the one n
 
 Changes save by themselves. They are kept by your community's server, so they follow your account.
 
-Three alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, that an admin started moving your account to a new phone, and that your community opened a vote about your account. If you run your community's server, its alerts about the server always come through too.
+Four alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, that an admin started moving your account to a new phone, that your community opened a vote about your account, and that an admin took down your reply on that vote. If you run your community's server, its alerts about the server always come through too.
 
 ## What an alert says
 

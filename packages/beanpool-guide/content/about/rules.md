@@ -109,9 +109,10 @@ On the global community there is no vote. The suspension lasts 7 days and then l
 ## A fair vote on removing a member
 
 - **The member is told at once.** When the vote on removing you opens, BeanPool tells you on your phone, and the web app tells you the next time you open it.
-- **You can reply.** In **Commons**, open **Decide** and tap **Reply to this case** on the vote about you. Everyone who reads the vote sees your reply beside the case. You can change it until the vote closes.
+- **You can reply.** In **Commons**, open **Decide** and tap **Reply to this case** on the vote about you. Everyone who reads the vote sees your reply beside the case. You can change it until the vote closes, unless an admin takes it down (below).
 - **The vote names who brought the case:** the admin who suspended the member. If an owner used the server's password, it says an owner did.
 - **A false case can be hidden.** When a case is shown to be false, an admin can hide it. Members then read the admin's reason in its place. Hiding a case doesn't stop the vote: an admin stops it by halting it, which lifts the suspension.
+- **A reply that harms someone can be taken down.** If a reply gives someone's address or phone number, or threatens them, an owner or admin can take it down, with a reason. The reply is deleted, and members read the reason in its place. The member is told, and can't write another reply on that vote. The vote carries on.
 - **A false accusation can be reported.** The member the vote is about can tap **Report this case as false**. The report goes to the admins and owners, and names whoever brought the case.
 - **No second case for a while.** After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can.
 - **Everyone who can vote is told.** When the vote opens, each member who can vote on it gets an alert on their phone, if their **Direct Messages** alerts are on. The alert never says who the vote is about.
@@ -122,7 +123,7 @@ Your community's server has owners and admins. They look after it.
 
 - An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.
 - If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.
-- An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read.
+- An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.
 - An admin cannot remove a member without the community's vote. Where the people who run the server have switched community votes off, the admins remove members themselves.
 - Admins can give members the right to vouch for newcomers.
 - Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.

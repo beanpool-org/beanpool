@@ -508,7 +508,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // Whether this reader may cancel the project, as its cancel asks (db.ts mayCancelProject): a node admin, its lead,
             // its only keeper when nobody leads it, or its maker when no keeper was ever bound to it. Both apps draw Cancel
             // from this alone, never from the keepers list, which can't say who is an admin or whether a keeper ever left.
-            mayCancel: actor && m.lifecycle === 'bounded' ? mayCancelProject(treasury, actor) : false,
+            // Never on one that has wound up: its projects row still reads ACTIVE, and no app offered a cancel there before.
+            mayCancel: actor && m.lifecycle === 'bounded' && m.status !== 'completed' ? mayCancelProject(treasury, actor) : false,
             availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
             keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
                 ? getKeeperRequests(treasury, 'pending').map(r => keeperRequestForReader(r, backingReader))

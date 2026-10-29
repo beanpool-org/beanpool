@@ -585,25 +585,48 @@ describe('MemberDetailModal', () => {
             expect(note).not.toHaveTextContent(/take that role away first/);
         });
 
-        // A key waiting on a re-key code (RV-S3-W, review 4398650630): the code made them 'suspended', not paused. No vote is open
-        // and the page offers no Suspend (it shows Suspended). The members list names no role for them (listNodeRoles reads active
-        // members only), so the note cannot tell an owner or admin from a member and says both.
-        describe('for someone suspended with no vote open, usually a key waiting on a re-key code', () => {
+        // A key held for a re-key code (RV-S3-W, reviews 4398650630 and the deciding pass on 57082022): the code made them 'suspended',
+        // not paused. No vote is open and the page offers no Suspend (it shows Suspended). The members list names no role for them
+        // (listNodeRoles reads active members only), so the note cannot tell an owner or admin, or the only owner, from a member and
+        // says all of it. Each clause is true of the server: cancelRekeyCode refuses a code that has run out (member-wizards.ts) and
+        // adminLiftSuspension refuses while the key is held (decisions-engine.ts, its ranOut branch names a new code, cancelled);
+        // adminEmergencySuspend refuses the only owner, a waiting owner included (isSoleOwner counts them: SOLE_OWNER_SUSPEND_REFUSAL).
+        describe('for someone suspended with no vote open, usually a key held for a re-key code', () => {
             const held = { ...active, status: 'suspended' };
+            const HELD_NOTE = "Removing a member is the community's vote here. They are suspended with no vote open, usually because a re-key code holds their key. "
+                + "End that first: cancel the code on Re-Key (if it has run out, make a new code and cancel that), and use Lift suspension if they are still suspended or no code holds their key. "
+                + "After that, suspending them opens the vote. No vote removes an owner or admin, and the community's only owner cannot be suspended until another owner is added.";
 
             it('says no vote is open, what ends the suspension first, and that no vote removes an owner or admin', async () => {
                 draw({ member: held, nodeRole: null });
                 const note = await screen.findByTestId('removal-is-the-vote');
-                expect(note).toHaveTextContent(/^Removing a member is the community's vote here\. They are suspended with no vote open, usually because a re-key code waits on their key\. End that first \(cancel the code on Re-Key, or use Lift suspension if no code waits\); after that, suspending them opens the vote\. No vote removes an owner or admin\.$/);
+                expect(note.textContent).toBe(HELD_NOTE);
                 expect(note).not.toHaveTextContent(/^Removing a member is the community's vote here\. Suspending them opens it\.$/);
                 expect(screen.getByText('⏸️ Suspended')).toBeInTheDocument();
                 expect(screen.queryByText('⏸️ Suspend')).toBeNull();
             });
 
+            // A code that has run out: cancelRekeyCode refuses it ("make a new code on Re-Key, then cancel it") and adminLiftSuspension
+            // refuses while its hold stands. The two ways out the earlier wording offered are both refused, so neither is offered.
+            it('for a code that has run out, names the way out the server allows: a new code on Re-Key, cancelled', async () => {
+                draw({ member: held, nodeRole: null });
+                const note = await screen.findByTestId('removal-is-the-vote');
+                expect(note).toHaveTextContent(/cancel the code on Re-Key \(if it has run out, make a new code and cancel that\)/);
+                expect(note).not.toHaveTextContent(/usually because a re-key code waits on their key/);
+                expect(note).not.toHaveTextContent(/or use Lift suspension if no code waits/);
+            });
+
+            // The only owner whose key waits on a re-key code: the page names no role for them, so the clause is in the note itself.
+            // Cancelling the code does not make them suspendable (isSoleOwner counts a waiting owner); the server refuses it.
+            it('for the only owner, says they cannot be suspended until another owner is added', async () => {
+                draw({ member: held, nodeRole: null });
+                expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/No vote removes an owner or admin, and the community's only owner cannot be suspended until another owner is added\.$/);
+            });
+
             it('does not read a role the node never named: the same words with or without one', async () => {
-                for (const role of [null, 'admin'] as const) {
-                    const { unmount } = draw({ member: held, nodeRole: role });
-                    expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/They are suspended with no vote open, usually because a re-key code waits on their key\./);
+                for (const [role, sole] of [[null, undefined], ['admin', undefined], ['owner', true], ['owner', false]] as const) {
+                    const { unmount } = draw({ member: held, nodeRole: role, isSoleOwner: sole });
+                    expect((await screen.findByTestId('removal-is-the-vote')).textContent).toBe(HELD_NOTE);
                     unmount();
                 }
             });

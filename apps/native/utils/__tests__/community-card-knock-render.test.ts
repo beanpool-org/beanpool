@@ -17,7 +17,8 @@
  * host" tests fail before (the server's chosen name, no host shown).
  *
  * And a phone waiting to be let in (an account, no community: slice S3, PR #2604's review) can open a card: its yes goes to
- * welcome, so the 12 words its key has never shown come next. The waiting tests fail before (joined here).
+ * welcome, so the 12 words its key has never shown come next, and its request, like any from the card, says it came from
+ * global only from a member there. The waiting and "no fromNode" tests fail before (joined here; "global.beanpool.org").
  *
  * Nothing is contacted: fetch plays the one community (its card, and this key's knock status).
  */
@@ -102,10 +103,11 @@ vi.mock('../join-another-community', () => ({
 import CommunityCardScreen from '../../app/community-card';
 import { KNOCKS_STORE_KEY } from '../storage-keys';
 import { takeKnockYes } from '../waiting-to-join';
+import { GLOBAL_NODE_URL } from '../global-node-url';
 import { setLanguage } from '@beanpool/core';
 
 type Answer = { status: 'pending' } | { status: 'none' } | { status: 'approved'; invite: string } | 'offline';
-const scene = { answer: { status: 'pending' } as Answer, statusReads: 0, knocks: 0, card: null as Record<string, unknown> | null };
+const scene = { answer: { status: 'pending' } as Answer, statusReads: 0, knocks: 0, sent: [] as Record<string, unknown>[], card: null as Record<string, unknown> | null };
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const CARD = { name: 'Riverside', host: 'riverside.example', members: null, area: null, joining: 'requests', askUrl: null, globalUrl: null };
@@ -133,6 +135,7 @@ beforeEach(() => {
     scene.answer = { status: 'pending' };
     scene.statusReads = 0;
     scene.knocks = 0;
+    scene.sent = [];
     scene.card = null;
     setLanguage('en');
     globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
@@ -145,6 +148,7 @@ beforeEach(() => {
         }
         if (u === `${ORIGIN}/api/join/knock` && init?.method === 'POST') {
             scene.knocks++;
+            scene.sent.push(JSON.parse(String(init.body)));
             return json({ knock: { status: 'pending' } }, 201);
         }
         throw new TypeError(`Network request failed: ${u}`);
@@ -313,8 +317,20 @@ describe('the card is what the server it was read from claims', () => {
     });
 });
 
+/** Ask to join from the card, with a message, and Send. */
+async function askFromCard(): Promise<void> {
+    await tap(byTestId('community-card-ask'));
+    const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+    await act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        set.call(message, 'I live by the river and grow tomatoes.');
+        message.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+}
+
 // A phone with an account and no community (slice S3: its key was made by a knock, so its 12 words have never been shown)
-// can open a community's card. Its yes is joined where the words are shown.
+// can open a community's card. Its yes is joined where the words are shown, and its request names no community it came from.
 describe('a phone waiting to be let in (an account, no community), on the card', () => {
     beforeEach(() => { store.map.delete('beanpool_anchor_url'); takeKnockYes(KEY); });
 
@@ -340,6 +356,39 @@ describe('a phone waiting to be let in (an account, no community), on the card',
         await tap(byTestId('community-card-join'));
         expect(joins).toEqual([]);
         expect(takeKnockYes(KEY)).toEqual({ url: ORIGIN, invite: 'BP-RIVR-0001', name: null });
+    });
+
+    it('asked from the card: the request names no community it came from (fails before: "global.beanpool.org")', async () => {
+        await open();
+        await askFromCard();
+        expect(scene.knocks).toBe(1);
+        expect(scene.sent[0]).toEqual(expect.objectContaining({ callsign: 'Damo', toNode: 'riverside.example' }));
+        expect('fromNode' in scene.sent[0]).toBe(false);
+    });
+});
+
+describe("what a request from the card says it came from, as Find a community says it (utils/knock-address.ts knockFromNode)", () => {
+    it('a member of the global community: global.beanpool.org', async () => {
+        store.map.set('beanpool_anchor_url', GLOBAL_NODE_URL);
+        await open();
+        await askFromCard();
+        expect(scene.sent[0]?.fromNode).toBe('global.beanpool.org');
+    });
+
+    it('a guest looking around global, with an account elsewhere: no fromNode', async () => {
+        store.map.set('beanpool_anchor_url', GLOBAL_NODE_URL);
+        store.map.set('beanpool_guest_nodes', JSON.stringify([GLOBAL_NODE_URL]));
+        await open();
+        await askFromCard();
+        expect(scene.knocks).toBe(1);
+        expect('fromNode' in scene.sent[0]).toBe(false);
+    });
+
+    it('a member of a local community: no fromNode (fails before: "global.beanpool.org")', async () => {
+        await open();
+        await askFromCard();
+        expect(scene.knocks).toBe(1);
+        expect('fromNode' in scene.sent[0]).toBe(false);
     });
 });
 

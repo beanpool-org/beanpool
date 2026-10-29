@@ -17,6 +17,7 @@ import {
     sendKnock, rememberedKnocks, cancelledKnocks, rememberKnock, forgetKnock, readKnockStatus, knockCardState, knockFormProblem,
     KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockCardState, type KnockStatusResult,
 } from '../utils/knock';
+import { knockFromNode } from '../utils/knock-address';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
 import { findLineWords } from '../components/find-community-lines';
@@ -175,7 +176,11 @@ export default function CommunityCardScreen() {
         setSending(true);
         setFormError(null);
         const avatar = await getCanonicalAvatar().catch(() => null);
-        const r = await sendKnock(origin, identity, { callsign, message, avatar });
+        // From the global community only for a member there, as Find a community says it (utils/knock-address.ts): a phone
+        // waiting to be let in (S3), or one in a local community, names no community it came from.
+        const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
+        const r = await sendKnock(origin, identity, { callsign, message, avatar }, knockFromNode(anchor, guest));
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
             await rememberKnock(identity.publicKey, { url: origin, name: c.name });

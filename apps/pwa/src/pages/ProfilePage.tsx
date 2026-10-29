@@ -396,7 +396,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                         ? 'bg-bp-commit-fill text-bp-commit-on border-bp-commit-fill' 
                         : saving 
                             ? 'bg-nature-300 text-white cursor-not-allowed' 
-                            : 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90'
+                            : 'bg-bp-commit-fill text-bp-commit-on hover:bg-bp-commit-hover'
                 }`}
             >
                 {saved ? t('✓ Profile Saved Successfully!') : saving ? t('Saving...') : t('Save Profile Changes')}

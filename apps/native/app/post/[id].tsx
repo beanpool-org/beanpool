@@ -40,7 +40,7 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, type DealMoves, type DealRow } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow } from '@beanpool/core';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -477,6 +477,8 @@ export default function PostDetailModal() {
     }, []);
     const { identity } = useIdentity();
     const [activeTx, setActiveTx] = useState<any>(null);
+    // The status of the deal a door named (an alert's txId) when that deal is over: said in one line, never the live deal.
+    const [pinnedOver, setPinnedOver] = useState<string | null>(null);
     const [post, setPost] = useState<any>(null);
     // True only once the post is confirmed absent (local miss + the server-side
     // check has had time to land). Until then a local miss renders as loading,
@@ -657,14 +659,22 @@ export default function PostDetailModal() {
                         }
                     };
 
-                    if (singleTxId) {
-                        database.getFirstAsync(`
-                            SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar 
-                            FROM marketplace_transactions t 
-                            LEFT JOIN members m ON t.buyer_pubkey = m.public_key 
-                            LEFT JOIN members s ON t.seller_pubkey = s.public_key 
-                            WHERE t.id = ? AND t.post_id = ?
-                        `, [singleTxId, singleId]).then(updateActiveTx);   // a deal shows only on ITS listing (a hand-made link pairs any)
+                    // The deal a door named stands as the live one only while its Beans are held, as on the web (MarketplacePage
+                    // pinnedTx). One that is over (an alert for a request declined, a deal cancelled, released or settled) never
+                    // does: it hid Accept, Ask to borrow and Offer to Fulfill from one the node lets take the listing up again.
+                    // Nor does a request (My Deals, Home): it hid the asker's own box and Withdraw. The listing's own read below
+                    // gives what the reader has on it now, and the page says what became of a deal that is over.
+                    const pinned: any = singleTxId ? await database.getFirstAsync(`
+                        SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar
+                        FROM marketplace_transactions t
+                        LEFT JOIN members m ON t.buyer_pubkey = m.public_key
+                        LEFT JOIN members s ON t.seller_pubkey = s.public_key
+                        WHERE t.id = ? AND t.post_id = ?
+                    `, [singleTxId, singleId]).catch(() => null) : null;   // a deal shows only on ITS listing (a hand-made link pairs any)
+                    const pinHeld = pinned?.status === 'pending';
+                    setPinnedOver(pinned && !pinHeld ? String(pinned.status) : null);
+                    if (pinHeld) {
+                        updateActiveTx(pinned);
                     } else if (activeIdentity) {
                         const currentPost = await getPost(singleId);
                         let isKeeper = false;
@@ -975,6 +985,14 @@ export default function PostDetailModal() {
             </Text>
         </View>
     );
+    // What Release moves on a deal, at its own rate for the time typed, and to whom (core releaseLine, as the web's panel and
+    // rows say it): a Need's author who changes 3 days to 5 sees the 100 Beans that will go, not the 60 held.
+    const renderReleaseLine = (deal: { credits?: number | null; hours?: number | null }, payee: string, testID: string) => (
+        <Text testID={testID} style={{ color: colors.brand.primary, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>
+            {releaseLine(deal, { priceType: post.price_type, lendable: post.lendable },
+                post.price_type !== 'fixed' ? parseAmount(completeHours, undefined, ANY_DECIMALS) : null, payee)}
+        </Text>
+    );
     const renderOwnDeal = (m: DealMoves) => {
         const tx = m.tx;
         const payer = tx.buyerPublicKey === m.actingAs;
@@ -996,6 +1014,7 @@ export default function PostDetailModal() {
                 {m.release && (confirming ? (
                     <View style={styles.confirmBox}>
                         {post.price_type !== 'fixed' && renderWorkedField()}
+                        {renderReleaseLine({ credits: Number((tx as any).credits ?? 0), hours: (tx as any).hours ?? null }, otherName, `release-line-${tx.id}`)}
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                             <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => { setShowCompleteConfirm(false); setReleaseRowId(null); }} disabled={accepting}>
                                 <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>
@@ -1433,6 +1452,13 @@ export default function PostDetailModal() {
 
                 {/* Action Buttons */}
 
+                {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now. */}
+                {!!pinnedOver && !!listingDealLines.finished(pinnedOver) && (
+                    <Text testID="pinned-deal-over" style={{ color: colors.text.secondary, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 12 }}>
+                        {listingDealLines.finished(pinnedOver)}
+                    </Text>
+                )}
+
                 {/* 1. Pending Escrow State (Applies to both Payer and Payee) */}
                 {ownRows.length === 0 && (post.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                     <View style={styles.ownPostActions}>
@@ -1461,6 +1487,8 @@ export default function PostDetailModal() {
                                     <View style={styles.confirmBox}>
                                         <Text style={styles.confirmBoxTitle}>{t('Finalize Transaction')}</Text>
                                         {post.price_type !== 'fixed' && renderWorkedField()}
+                                        {/* The deal's own rate; the listing's price while the deal is still loading. */}
+                                        {renderReleaseLine(activeTx ?? { credits: post.credits, hours: 1 }, targetPeerCallsign, 'release-line-panel')}
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
                                             <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowCompleteConfirm(false)} disabled={accepting}>
                                                 <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>

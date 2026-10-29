@@ -171,6 +171,8 @@ function answers(post: Record<string, unknown>) {
         getFirstAsync: async (sql: string, args: unknown[] = []) => {
             if (!sql.includes('FROM marketplace_transactions')) return null;
             const rows = node.mine.map(snake);
+            // The deal a door named, by its id on its listing, whatever its status (the phone's copy keeps finished deals).
+            if (sql.includes('WHERE t.id = ?')) return rows.find(d => d.id === args[0] && d.post_id === args[1]) ?? null;
             return rows.find(d => d.post_id === args[0] && d.status === 'pending'
                 && (!sql.includes('t.buyer_pubkey=?') || d.buyer_pubkey === args[1] || d.seller_pubkey === args[2])) ?? null;
         },
@@ -225,6 +227,14 @@ const press = async (scope: HTMLElement, text: string) => {
     await act(async () => { (el as HTMLElement).click(); });
     await settle(4);
 };
+/** Types into a field as a member does (React reads the input event, not a bare value change). */
+const typeInto = async (input: HTMLInputElement, text: string) => {
+    expect(input).toBeTruthy();
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => { setValue.call(input, text); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await settle(2);
+};
+const buttons = () => Array.from(host.querySelectorAll('button')).map((b) => b.textContent ?? '');
 
 for (const theme of ['light', 'dark'] as const) {
     describe(`a listing by who you are, at 320 dp × 1.3 (${theme})`, () => {
@@ -337,6 +347,30 @@ for (const theme of ['light', 'dark'] as const) {
             expect((r.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement).value).toBe('3');
         });
 
+        it("a daily Need's author changing 3 days to 5 on their row sees the 100 Beans that will go, not the 60 held, as the web says", async () => {
+            node.mine = [deal({ id: 'tx-d', credits: 60, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
+            await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20, price_type: 'daily' }));
+            const r = row('tx-d')!;
+            await press(r, '✅ Release Credits');
+            const line = () => r.querySelector('[data-testid="release-line-tx-d"]')?.textContent;
+            expect(line()).toBe('Transferring 60 B to Helper');
+            await typeInto(r.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement, '5');
+            expect(line()).toBe('Transferring 100 B to Helper');
+            // A time that could mean two numbers says why, as the panel says it.
+            await typeInto(r.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement, '1,000');
+            expect(line()).toBe('Type the amount without thousands separators, like 1000.5.');
+        });
+
+        it("one who took up an hourly Offer releases from the panel: the deal's own total, to the one they pay", async () => {
+            node.mine = [deal({ id: 'tx-h', credits: 30, hours: 2 })];
+            await open(listing({ title: 'Garden help', repeatable: 0, status: 'pending', accepted_by: ME.publicKey, credits: 15, price_type: 'hourly' }));
+            await press(host, '✅ Release Credits');
+            const line = () => host.querySelector('[data-testid="release-line-panel"]')?.textContent;
+            expect(line()).toBe('Transferring 30 B to Damo');
+            await typeInto(host.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement, '3');
+            expect(line()).toBe('Transferring 45 B to Damo');
+        });
+
         it("a keeper denies a request on the enterprise's Need at its door: it leaves the page at once", async () => {
             node.keeperOf = [ENT];
             node.kept = [deal({ id: 'tx-q', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];
@@ -400,3 +434,95 @@ for (const theme of ['light', 'dark'] as const) {
         });
     });
 }
+
+/**
+ * A deal's alert opens its listing with the deal's id (push-notice-check.ts noticeRoute). The pushes for a deal that is over
+ * (engine/escrow.ts: ❌ Request Declined, 🚫 Deal Cancelled, 🎉 Deal Completed!, ⚖️ Escrow Dispute Resolved as a refund or
+ * a release) land on the listing as it stands for the member now, with what they may do on it, and one line on what
+ * became of that deal; never a page with the deal over and no way to take the listing up again (review on #2588).
+ */
+describe("a finished deal's alert lands on the listing as it is now (review on #2588)", () => {
+    beforeEach(() => { look.theme = 'light'; });
+    const over = () => host.querySelector('[data-testid="pinned-deal-over"]')?.textContent ?? null;
+    const kinds = [
+        {
+            push: '❌ Request Declined: a helper whose offer Kofi declined',
+            post: { type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, repeatable: 0 },
+            tx: { id: 'tx-r', status: 'rejected', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20 },
+            takeUp: '✋ Offer to Fulfill', said: 'That request was declined.',
+        },
+        {
+            push: '🚫 Deal Cancelled: a taker whose one-off Offer deal was cancelled',
+            post: { title: 'Lawn mower', repeatable: 0 },
+            tx: { id: 'tx-c', status: 'cancelled' },
+            takeUp: '🤝 Accept Offer', said: 'That deal was cancelled.',
+        },
+        {
+            push: '🎉 Deal Completed!: a taker of a recurring Offer, released',
+            post: { title: 'Pottery course', repeatable: 1 },
+            tx: { id: 'tx-d', status: 'completed', completedAt: '2026-10-27T10:00:00.000Z' },
+            takeUp: '🤝 Accept Offer', said: 'That deal is done.',
+        },
+        {
+            push: '⚖️ Escrow Dispute Resolved, refunded: a borrower on a lendable Offer',
+            post: { title: 'Ladder', lendable: 1, repeatable: 0, credits: 5 },
+            tx: { id: 'tx-x', status: 'cancelled', credits: 5 },
+            takeUp: '📦 Ask to borrow', said: 'That deal was cancelled.',
+        },
+        {
+            push: '⚖️ Escrow Dispute Resolved, released: a helper on a repeatable Need',
+            post: { type: 'need', title: 'Weekly weeding', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, repeatable: 1 },
+            tx: { id: 'tx-y', status: 'completed', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, sellerCallsign: ME.callsign, credits: 20, completedAt: '2026-10-27T10:00:00.000Z' },
+            takeUp: '✋ Offer to Fulfill', said: 'That deal is done.',
+        },
+    ];
+    for (const k of kinds) {
+        it(`${k.push}: the take-up button, as from the feed, and what became of the deal`, async () => {
+            node.mine = [deal(k.tx)];
+            // From the feed: the listing as it stands.
+            await open(listing(k.post));
+            const fromFeed = buttons();
+            expect(fromFeed.some((b) => b.includes(k.takeUp))).toBe(true);
+            expect(over()).toBeNull();
+            act(() => root.unmount());
+            root = createRoot(host);
+            // From the alert, which names the deal: the same buttons, and one line on that deal.
+            await open(listing(k.post), { txId: k.tx.id });
+            expect(buttons().some((b) => b.includes(k.takeUp))).toBe(true);
+            expect(buttons()).toEqual(fromFeed);
+            expect(over()).toBe(k.said);
+            expect(host.textContent).not.toContain('✅ Release Credits');
+            expect(host.textContent).not.toContain('❌ Cancel Trust Hold');
+        });
+    }
+
+    it("a deal's alert while it is open still lands on it: an approved helper sees the Beans held for them, no take-up", async () => {
+        node.mine = [deal({ id: 'tx-a', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 20 })];
+        await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, status: 'pending', accepted_by: ME.publicKey }), { txId: 'tx-a' });
+        expect(host.textContent).toContain("You're helping with this · 20 Beans held for you");
+        expect(host.textContent).toContain('❌ Cancel Trust Hold');
+        expect(buttons().some((b) => b.includes('✋ Offer to Fulfill'))).toBe(false);
+        expect(over()).toBeNull();
+    });
+
+    it('one who asked to borrow, opened on their request by its id (My Deals, Home): whom they wait on, and Withdraw', async () => {
+        node.mine = [deal({ id: 'tx-q', status: 'requested' })];
+        await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0 }), { txId: 'tx-q' });
+        expect(host.textContent).toContain('You asked to borrow it · nothing is held until Damo says yes');
+        expect(buttons().some((b) => b.includes('Withdraw Request'))).toBe(true);
+        expect(over()).toBeNull();
+    });
+
+    it("a recurring Offer's author opened on one finished deal by its alert: the other deal's row and Edit, and that one's line", async () => {
+        node.mine = [
+            deal({ id: 'tx-done', status: 'completed', buyerPublicKey: 'marty-key', buyerCallsign: 'Marty', sellerPublicKey: ME.publicKey, completedAt: '2026-10-27T10:00:00.000Z' }),
+            deal({ id: 'tx-b', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 30, createdAt: AT }),
+        ];
+        await open(listing({ author_pubkey: ME.publicKey, author_callsign: ME.callsign }), { txId: 'tx-done' });
+        expect(over()).toBe('That deal is done.');
+        expect(row('tx-b')?.textContent).toContain('Kofi · 30 Beans held · since 24 Oct');
+        expect(row('tx-done')).toBeNull();
+        // Its own completed badge is for a one-off that is over, not for one deal of a recurring listing still under way.
+        expect(host.textContent).not.toContain('✅ Deal Completed');
+    });
+});

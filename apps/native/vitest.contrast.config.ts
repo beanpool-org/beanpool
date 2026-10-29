@@ -7,6 +7,10 @@ import { defineConfig } from 'vitest/config';
  * pair must show up once, under its own name, not also as a failure of the phone's unit tests. The scanner's own tests
  * (canaries on fixture sources) are utils/__tests__/button-contrast.test.ts and run with the rest.
  * `pnpm --filter beanpool-pillar test:contrast`.
+ *
+ * It needs no build: the colour library is the only part of @beanpool/core it reads (constants/colors.ts and the contrast
+ * maths), so that one source file stands in for the package. test-all can then start it at once and it frees its job slot
+ * in seconds, instead of holding one idle until `build` has finished.
  */
 export default defineConfig({
     define: {
@@ -14,6 +18,7 @@ export default defineConfig({
     },
     resolve: {
         alias: {
+            '@beanpool/core': fileURLToPath(new URL('../../packages/beanpool-core/src/brand-colours.ts', import.meta.url).href),
             '@beanpool/signin': fileURLToPath(new URL('../../packages/beanpool-signin/src/index.ts', import.meta.url).href),
         },
     },

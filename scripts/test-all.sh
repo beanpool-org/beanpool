@@ -301,13 +301,10 @@ run_check "native_phone_width" run_native_phone_width
 # 4.5:1 (3:1 for 24px, or 18.66px bold), naming file:line and both colours. Reviewed exceptions, none to start, are in
 # utils/button-contrast-exceptions.ts. The scanner's own canaries are in the native unit tests (utils/__tests__/button-contrast.test.ts).
 # Run on its own vitest config (test:contrast) so a red pair shows once, here, and not also as a failed unit test.
-# No device, no node, no browser; it reads @beanpool/core from its dist, so it starts once build has finished. Seconds.
-# Launched right after native_phone_width: scripts/test-merge-gate.sh pins the "Checks unfinished" list that starts with it.
-run_native_dark_contrast() {
-  wait_for_build || return 1
-  pnpm --filter beanpool-pillar test:contrast
-}
-run_check "native_dark_contrast" run_native_dark_contrast
+# No device, no node, no browser, and no build: the colour library is the only part of @beanpool/core it reads, and its
+# vitest config reads that from source. So it does NOT wait for build (a check that waits holds one of the job slots idle:
+# scripts/test-merge-gate.sh's stopped run has room for three such before deploy_preserve), and is done in seconds.
+run_check "native_dark_contrast" pnpm --filter beanpool-pillar test:contrast
 
 run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
 

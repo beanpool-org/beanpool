@@ -12,7 +12,7 @@
 // draws that script in: Roboto Bold-ish (wght 800, the active pill's weight, the wider) for Latin, Cyrillic and Greek;
 // Noto Sans <script> Bold and its UI variant (the wider) for Arabic, Devanagari, Bengali, Tamil and Malayalam. The emoji is
 // shaped in Noto Color Emoji (1.245 em, the same for all three). Japanese, Korean and Chinese labels are counted: an
-// ideograph, kana or hangul syllable is one em, a digit or bracket 0.6, a space 0.25.
+// ideograph, kana, hangul syllable or full-width bracket （） is one em, an ASCII digit or bracket 0.6, a space 0.25.
 //
 // Fonts at pinned commits: Roboto and Noto Color Emoji from google/fonts, Noto Sans <script> from notofonts.github.io,
 // the UI variants from the noto-fonts archive. {n} in a count label is measured as "12".
@@ -73,7 +73,7 @@ const EMOJI_EM = shape('NotoColorEmoji-Regular.ttf', '🏘️') / upem('NotoColo
 /** Width in em of text with no emoji in it, in the font Android draws the language in. */
 function wordsEm(lang, text) {
     if (!text) return 0;
-    if (CJK.has(lang)) return Array.from(text).reduce((w, c) => w + (/[0-9()（） ]/.test(c) ? (c === ' ' ? 0.25 : 0.6) : 1), 0);
+    if (CJK.has(lang)) return Array.from(text).reduce((w, c) => w + (/[0-9() ]/.test(c) ? (c === ' ' ? 0.25 : 0.6) : 1), 0);
     const family = SCRIPTS[lang];
     if (!family) return shape('Roboto-VF.ttf', text, 'wght=800') / upem('Roboto-VF.ttf');
     return Math.max(...[`NotoSans${family}-Bold.ttf`, `NotoSans${family}UI-Bold.ttf`].map((file) => shape(file, text) / upem(file)));

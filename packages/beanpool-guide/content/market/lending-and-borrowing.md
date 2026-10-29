@@ -32,7 +32,7 @@ Then open the thing again, tap **Link it to your Offer** and pick the Offer you 
 
 Where your community's price guide has something like it, the thing says what the guide suggests a day or a week. Free is fine too.
 
-Someone who wants to borrow it asks through the Offer, as for any Offer, and you agree it in the deal (see "A deal step by step"). While it is out, the thing says **Out on a loan**. When the deal is finished, its Offer is finished too, so the thing says **Its Offer has gone from the Market**. Tap **List it again** to post a new one, or **Forget it** to keep it on your shelf.
+Someone who wants to borrow it asks through the Offer, as for any Offer, and you agree it in the deal (see "A deal step by step"). Their copy of the Offer says **You asked to borrow it · nothing is held until** your name **says yes**, and its card in the Market says **✋ ASKED**. While it is out, the thing says **Out on a loan**, your Offer lists the loan under **Deals under way**, and anyone else who opens it reads **Taken up by someone else for now.** When the deal is finished, its Offer is finished too, so the thing says **Its Offer has gone from the Market**. Tap **List it again** to post a new one, or **Forget it** to keep it on your shelf.
 
 **Take out of your shop** pauses its Offer. **Put back in your shop** puts the same Offer back in the Market.
 

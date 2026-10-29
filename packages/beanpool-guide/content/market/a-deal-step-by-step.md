@@ -39,13 +39,35 @@ Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call 
 
 Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder.
 
+## What the post says while it is under way
+
+The post itself shows your deal, so you never need to go looking for it. It says the same in the phone app and the web app.
+
+- **You took up someone's Offer:** **You took this up on 24 Oct · 45 Beans held in trust**, with **Release Credits** and the button to call it off.
+- **You are helping with someone's Need, and they said yes:** **You're helping with this · 20 Beans held for you** and **Pending Release by** their name. Do the job; they release the beans.
+- **You offered to help, and they have not answered:** **You offered to help · waiting on** their name, and the button to withdraw.
+- **You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Credits** and the button to call it off; where you are paid, it says **Pending Release by** their name.
+- **Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.
+- **You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again.
+
+An alert about a deal, and a deal on Home or in the top bar, opens the post at that deal. On a Repeatable post you posted, that deal's line comes first.
+
+## A post of an enterprise you keep
+
+If you are a keeper of an enterprise, its posts show its deals to you as if you had posted them, with **You act for** the enterprise's name **here.** above them.
+
+- Where the enterprise pays (a Need it posted), you can **Release Credits** for it. You cannot release your own pay: if you are the one doing the job, another keeper releases it.
+- You can **Approve** or **Deny** the requests on its posts.
+- You cannot call off a deal for the enterprise. The other person in the deal can, as anyone can on their own deal.
+- You do not see **Accept Offer** on its posts.
+
 The price on the post cannot change while someone is asking for it or their beans are held. The deal keeps the price it was made at. To change the price, the person who posted it declines or cancels the deal first.
 
 ## A Repeatable post
 
 A Repeatable post goes back up after each deal, and several people can be in a deal on it at once. Any other post is marked finished.
 
-If you open a Repeatable Offer that you have already taken up, it shows your own deal instead of the Accept button: the date you took it up, the beans held in trust, and the button to release them once it is done.
+If you open a Repeatable Offer that you have already taken up, it shows your own deal instead of the Accept button: the date you took it up, the beans held in trust, and the button to release them once it is done. Everyone else's deals on it stay theirs: you see only your own.
 
 Each person can be in one deal on a Repeatable post at a time. Taking it up again while yours is under way starts nothing new: the app says **You already have a deal under way on this. Finish or cancel it first.** Once yours is released, cancelled or declined, you can take it up again straight away.
 

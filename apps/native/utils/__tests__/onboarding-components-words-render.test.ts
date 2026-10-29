@@ -95,10 +95,17 @@ vi.mock('../../components/SsoButton', () => {
     const button = (name: string) => ({ title, onPress }: { title?: string; onPress: () => void }) => createElement('button', { role: 'button', 'aria-label': title, 'data-sso': name, onClick: onPress }, title);
     return { GoogleButton: button('google'), AppleButton: button('apple'), FacebookButton: button('facebook') };
 });
-const sheet = vi.hoisted(() => ({ answer: null as null | Promise<unknown>, options: null as null | Record<string, unknown> }));
+/** The sheet's connect: `answer` as given, or, with `real`, the real one (against the case's own community). */
+const sheet = vi.hoisted(() => ({ answer: null as null | Promise<unknown>, options: null as null | Record<string, unknown>, real: false }));
 vi.mock('../sso-sheet-connect', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-sheet-connect')>();
-    return { ...real, connectAndDeposit: async (options: Record<string, unknown>) => { sheet.options = options; return sheet.answer; } };
+    return {
+        ...real,
+        connectAndDeposit: async (options: Record<string, unknown>) => {
+            sheet.options = options;
+            return sheet.real ? real.connectAndDeposit(options as Parameters<typeof real.connectAndDeposit>[0]) : sheet.answer;
+        },
+    };
 });
 vi.mock('../sso-signin', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-signin')>();
@@ -147,7 +154,7 @@ const AS_WRITTEN = ['Google', 'Apple', 'Facebook', 'Sally', 'mullum.beanpool.org
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-beforeEach(() => { alerts.said.length = 0; prompts.asked.length = 0; sheet.answer = null; sheet.options = null; kit.print = 'done'; noVault(); setLanguage('en'); });
+beforeEach(() => { alerts.said.length = 0; prompts.asked.length = 0; sheet.answer = null; sheet.options = null; sheet.real = false; kit.print = 'done'; noVault(); setLanguage('en'); });
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; noVault(); setLanguage('en'); });
 
 const settle = async () => { for (let i = 0; i < 4; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
@@ -365,6 +372,48 @@ describe('the sign-in sheet (SsoEnrolSheet)', () => {
             });
         }
     }
+    // A build without the vault asks nothing before its community's nonce (utils/sso-sheet-connect.ts), so the rule moved
+    // to `none` since the screen read it shows as the nonce's 409 `no_copies_here`. The real connect, at a community that
+    // answers as the server does (apps/server routes/keepers.ts noCopiesHere): the rule's sentence in the member's
+    // language, never the node's answer as it came; no Try again; the rule asked once; and the screen told on Cancel.
+    it("a community build: the screen said the community and the rule moved to none, its nonce refused: the rule's sentence, no Try again, the screen told on Cancel", async () => {
+        sheet.real = true;
+        const sent: string[] = [];
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+            const { origin, pathname } = new URL(String(input));
+            sent.push(`${init?.method ?? 'GET'} ${pathname}`);
+            if (origin === 'https://mullum.beanpool.org' && pathname === '/api/recovery/sso-nonce') {
+                return new Response(JSON.stringify({ error: "This community keeps no copies of members' accounts, so nothing was kept here. Your 12 words are your way back here.", code: 'no_copies_here' }), { status: 409 });
+            }
+            if (origin === 'https://mullum.beanpool.org' && pathname === '/api/community/info') {
+                return new Response(JSON.stringify({ profile: 'local', features: {}, requestSigning: 2, recoveryCopies: 'none' }), { status: 200 });
+            }
+            throw new TypeError(`Network request failed: the app contacted ${String(input)}`);
+        }) as typeof fetch;
+        try {
+            let closed = 0;
+            let changed = 0;
+            await mount(createElement(SsoEnrolSheet, {
+                visible: true, provider: 'google', askPhoneLock: false, copiesAt: 'community',
+                onClose() { closed++; }, onEnrolled() {}, onCopiesChanged() { changed++; },
+            }));
+            expect(sheet.options?.shownAt).toBe('community');
+            expect(sent).toEqual(['POST /api/recovery/sso-nonce', 'GET /api/community/info']);
+            expect(host!.textContent).toContain(pseudoLocalise(CONNECT_RULE_MESSAGES.none));
+            expect(host!.textContent).not.toContain('no_copies_here');
+            const labels = all('button').map((b) => b.textContent);
+            expect(labels).not.toContain(pseudoLocalise('Try again'));
+            expect(labels).toContain(pseudoLocalise('Cancel'));
+            check('the sheet, a community build, the rule moved to none');
+            expect(changed).toBe(0);
+            await click(all('button').find((b) => b.textContent === pseudoLocalise('Cancel')), 'Cancel');
+            expect(closed).toBe(1);
+            expect(changed).toBe(1);
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+    });
     it('any other refusal keeps Try again, and closing it tells the screen nothing', async () => {
         useVault();
         sheet.answer = Promise.resolve({ error: VAULT_MESSAGES.paused });

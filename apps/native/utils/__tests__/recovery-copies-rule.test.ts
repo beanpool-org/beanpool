@@ -66,6 +66,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sealSeedToSso } from '@beanpool/core';
 import { connectAndDeposit, CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
+import { SsoSignInError } from '../sso-signin';
 import { readNodeProfile } from '../node-profile';
 import { readRecoveryCopiesRule, signInCopiesAt, type SignInCopies } from '../vault-config';
 import { copiesAtFor, copiesRuleChange, copiesRuleNow, copiesRuleSeen, knownCopiesRule } from '../copies-rule';
@@ -82,7 +83,11 @@ const MEMBER = {
     mnemonic: 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' '),
 } as any;
 
-/** A community that says its rule in its info (or nothing, `rule` undefined: one from before the rule) and keeps copies. */
+/**
+ * A community that says its rule in its info (or nothing, `rule` undefined: one from before the rule) and keeps copies.
+ * Under `none` it refuses where a copy would be made, before a nonce is issued or anything kept, in the server's own
+ * answer (apps/server routes/keepers.ts noCopiesHere).
+ */
 class RuledCommunity extends CommunityKeepingCopies {
     rule: string | undefined = 'vault';
     /** No answer to anything, as a community that is down. */
@@ -91,6 +96,9 @@ class RuledCommunity extends CommunityKeepingCopies {
         if (this.down) return { status: 503, body: { error: 'down' } };
         if (req.method === 'GET' && req.path === '/api/community/info') {
             return { status: 200, body: { profile: 'local', features: {}, requestSigning: 2, ...(this.rule === undefined ? {} : { recoveryCopies: this.rule }) } };
+        }
+        if (this.rule === 'none' && req.method === 'POST' && (req.path === '/api/recovery/sso-nonce' || req.path === '/api/recovery/shares/sso')) {
+            return { status: 409, body: { error: "This community keeps no copies of members' accounts, so nothing was kept here. Your 12 words are your way back here.", code: 'no_copies_here' } };
         }
         return super.handle(req);
     }
@@ -304,6 +312,49 @@ describe('linking a sign-in, by the community\'s rule, in a build with the key v
         expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
         expect(atVault()).toEqual([]);
         expect(await screenReads()).toBe('none');
+    });
+});
+
+// A build without the vault asks nothing before its community's nonce (utils/sso-sheet-connect.ts), so a screen that read
+// the rule earlier (kept within the hour) still offers a sign-in after the owners set `none`. The nonce's 409
+// `no_copies_here` is that change: the rule's sentence, never the node's answer as it came, and the rule asked once, so
+// the screen, told as the sheet closes (components/SsoEnrolSheet.tsx), reads `none` when it looks again.
+describe('linking a sign-in in a build without the key vault, at a community that keeps none', () => {
+    beforeEach(() => noVault());
+
+    it('the screen read the community, which keeps none since: the rule\'s sentence, no sheet, and the screen\'s next read is none', async () => {
+        const screenReads = async (): Promise<SignInCopies> => {
+            const read = copiesAtFor(COMMUNITY);
+            await vi.advanceTimersByTimeAsync(30_000);
+            return read;
+        };
+        community.rule = 'server';
+        expect(await screenReads()).toBe('community');
+        community.rule = 'none';
+        expect(await screenReads(), 'kept within the hour').toBe('community');
+        facebookSaysYes();
+        net.sent.length = 0;
+        const { value, error } = await connect(COMMUNITY, 'community');
+        expect(error).toBeUndefined();
+        expect(value?.error).toBe(CONNECT_RULE_MESSAGES.none);
+        expect(value?.enrolled).toEqual([]);
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+        expect(atCommunity()).toEqual(['POST /api/recovery/sso-nonce', 'GET /api/community/info']);
+        expect(atVault()).toEqual([]);
+        expect(community.copies.size).toBe(0);
+        expect(await screenReads()).toBe('none');
+    });
+
+    it('any other refusal of its nonce is as before: the node\'s answer, and nothing more is asked', async () => {
+        community.down = true;
+        facebookSaysYes();
+        const { value, error } = await connect(COMMUNITY, 'community');
+        expect(value).toBeUndefined();
+        expect(error).toBeInstanceOf(SsoSignInError);
+        expect((error as SsoSignInError).reason).toBe('nonce');
+        expect((error as SsoSignInError).code).toBeUndefined();
+        expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+        expect(atCommunity()).toEqual(['POST /api/recovery/sso-nonce']);
     });
 });
 

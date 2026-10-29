@@ -67,7 +67,7 @@ If you keep an enterprise, or help run a project, everything only its keepers do
 - **Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
 - **Finalise Wind-Up:** once the 7 days are up, the lead keeper, the only keeper or a community admin finishes closing it. See "Rules and how decisions work".
 
-Before a project reaches its goal, it can also be cancelled under **Manage**, and every pledge goes back. Its leader or a community admin can cancel it. If it has no leader, its only collaborator can too; with two or more, they choose a leader first. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it. If nobody cancels it and the goal isn't met by its end date, every pledge goes back by itself a week after the end date, and its leader gets a notice saying how many backers and how many beans.
+Before a project reaches its goal, it can also be cancelled under **Manage**, and every pledge goes back. Its leader or a community admin can cancel it. If it has no leader, its only collaborator can too; with two or more and no leader, only a community admin can. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it. If nobody cancels it and the goal isn't met by its end date, every pledge goes back by itself a week after the end date, and its leader gets a notice saying how many backers and how many beans.
 
 ## Starting one
 

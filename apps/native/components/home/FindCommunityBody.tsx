@@ -9,6 +9,7 @@ import {
 import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { findLineWords } from '../find-community-lines';
+import { LOOK_DOOR } from '../../utils/look-around';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
 /** Shown through t() in the member's language. */
@@ -145,8 +146,18 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
         <HomeButton key="start" primary={startFirst} colors={colors} text={t(FIND_COMMUNITY_WORDS.start)} onPress={() => router.push('/start-community')} testID="home-find-start" />
     );
 
+    /**
+     * Communities near you, with its town box open or not. A visitor looking around with no key (no `identity`) goes to the
+     * door, as the root guard sent these taps before S3: Find a community, which a phone with no account may now open to ask
+     * by an address, shows neither the list, nor a town, nor a watch until there is an account.
+     */
+    const openFind = (town?: boolean) => {
+        if (!identity) { router.push(LOOK_DOOR); return; }
+        router.push(town ? { pathname: '/find-community', params: { town: '1' } } : '/find-community');
+    };
+
     const tellMe = async () => {
-        if (!point || !identity) { router.push('/find-community'); return; }
+        if (!point || !identity) { openFind(); return; }
         const r = await watchPlace(identity, point, nodeUrl ?? undefined);
         if (r.ok) setWatched(true);
         setWatchNote(r.ok ? t("Done. You'll be told when a community starts near here.") : r.message);
@@ -249,7 +260,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             {!!watchNote && <Text style={[s.rowLine, { marginTop: 6 }]} accessibilityLiveRegion="polite" testID="home-find-watch-note">{watchNote}</Text>}
             <FabAware id="find:actions" style={s.buttonRow}>
                 {startFirst && start}
-                <HomeButton primary={!startFirst} colors={colors} text={t('Communities near you')} onPress={() => router.push('/find-community')} testID="home-find-near" />
+                <HomeButton primary={!startFirst} colors={colors} text={t('Communities near you')} onPress={() => openFind()} testID="home-find-near" />
                 {!startFirst && start}
                 {!watching && (
                     <HomeButton colors={colors} text={t('Tell me when one starts here')} a11y={t('Tell me when a community starts near here')}
@@ -258,7 +269,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             </FabAware>
             {!point && (
                 <HomeLink id="find:town" colors={colors} text={t(LINKS.typeTown)} a11y={t('Or type your town, to see the communities near it')}
-                    onPress={() => router.push({ pathname: '/find-community', params: { town: '1' } })} testID="home-find-type-town" />
+                    onPress={() => openFind(true)} testID="home-find-type-town" />
             )}
         </>
     );

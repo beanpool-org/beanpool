@@ -19,16 +19,18 @@ The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Walle
 - **Your balance**, and roughly how many hours of help it is worth, at 40 beans an hour.
 - **Commons:** your community's shared pool.
 - **Credit Floor:** how far below zero you could go.
-- How many of your beans are held in deals that are under way, when there are some.
+- How many of your beans are held in deals that are under way, when there are some. Tap it to open **My Deals** on **In Progress**, where those deals are. On the web it is the **Held in Trust** box.
 - **Community Circulation:** shows when you hold beans. See "The circulation fee".
 - **Project pledges:** beans you have pledged to projects, if any.
 - **Send Beans:** send a gift. See "Sending a gift".
 
-In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger.
+In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Held in Trust** (when beans are held), **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger.
 
 ## Recent transactions
 
 Every trade, gift and fee, newest first, with a note, the time, and plus or minus. On the phone each line also says who it was with; in the web app it says **Sent** or **Received**. If a note mentions a post, tap **View Offer** to open it.
+
+A line for beans held in a deal (or paid out or returned from one) opens that deal when you tap it, on the phone and in the web app. You land on the post, where you release or cancel the deal.
 
 Only you can see your balance and these transactions. Nobody else in your community can read them. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
 

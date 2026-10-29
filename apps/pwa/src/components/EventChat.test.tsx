@@ -587,11 +587,11 @@ describe('EventChat: a long message folds with …more, as in every chat', () =>
         expect(folded.dataset.fold).toBe('folded');
         expect(screen.getAllByTestId('chat-fold-toggle')).toHaveLength(1);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' }));
+        fireEvent.click(screen.getByRole('button', { name: '…more' }));
         expect(screen.getByTestId('chat-text').dataset.fold).toBe('open');
         expect(screen.getByTestId('chat-text').textContent).toBe(fortyLines);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Show less' }));
+        fireEvent.click(screen.getByRole('button', { name: 'less' }));
         expect(screen.getByTestId('chat-text').dataset.fold).toBe('folded');
     });
 

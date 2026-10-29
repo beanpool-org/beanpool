@@ -11,7 +11,7 @@
  * Open or folded is this component's own state: per message, for as long as the chat is on screen, never stored.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { CHAT_FOLD_LINES, mayFoldChatText, t } from '@beanpool/core';
 
 interface Props {
@@ -47,6 +47,8 @@ function boxAround(el: HTMLElement): HTMLElement {
 export function FoldedChatText({ text, enabled = true, display = 'inline', mine = false }: Props) {
     const ref = useRef<HTMLSpanElement>(null);
     const [open, setOpen] = useState(false);
+    // The button's name is the word it shows (WCAG 2.5.3); the longer phrase describes it.
+    const hintId = useId();
     const [measured, setMeasured] = useState<Measured | null>(null);
 
     const candidate = enabled && mayFoldChatText(text);
@@ -87,7 +89,7 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
                     type="button"
                     onClick={() => setOpen(!open)}
                     aria-expanded={open}
-                    aria-label={open ? t('Show less') : t('Show the whole message')}
+                    aria-describedby={hintId}
                     data-testid="chat-fold-toggle"
                     style={{
                         display: 'inline-flex',
@@ -109,6 +111,7 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
                     {open ? t('less', undefined, 'folds a long message again') : t('…more', undefined, 'shows the rest of a long message')}
                 </button>
             )}
+            {long && <span id={hintId} hidden>{open ? t('Show less') : t('Show the whole message')}</span>}
         </>
     );
 }

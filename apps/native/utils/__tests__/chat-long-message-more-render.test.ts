@@ -90,13 +90,13 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
     it('a 40-line message folds to twelve lines under …more, opens in place, and folds again', () => {
         const { container } = render(inList(row(message('m1', fortyLines), kind)));
 
-        const more = screen.getByRole('button', { name: 'Show the whole message' });
+        const more = screen.getByRole('button', { name: '…more' });
         expect(more.textContent).toBe('…more');
         expect(more.getAttribute('aria-expanded')).toBe('false');
         expect(words(container, 'Line 1 of').getAttribute('data-lines')).toBe('12');
 
         fireEvent.click(more);
-        const less = screen.getByRole('button', { name: 'Show less' });
+        const less = screen.getByRole('button', { name: 'less' });
         expect(less.textContent).toBe('less');
         expect(less.getAttribute('aria-expanded')).toBe('true');
         expect(words(container, 'Line 1 of').getAttribute('data-lines')).toBeNull();
@@ -104,14 +104,14 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         expect(container.textContent).toContain('Line 40 of a long note');
 
         fireEvent.click(less);
-        expect(screen.getByRole('button', { name: 'Show the whole message' }).textContent).toBe('…more');
+        expect(screen.getByRole('button', { name: '…more' }).textContent).toBe('…more');
         expect(words(container, 'Line 1 of').getAttribute('data-lines')).toBe('12');
         expect(container.textContent).toContain('Line 40 of a long note');
     });
 
     it('a 3-line message never shows the control, and is drawn as it always was', () => {
         const { container } = render(inList(row(message('m2', threeLines), kind)));
-        expect(screen.queryByRole('button', { name: /whole message|Show less/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^(…more|less)$/ })).toBeNull();
         const text = words(container, 'First line');
         expect(text.getAttribute('data-lines')).toBeNull();
         // Its time still trails the words in the same Text.
@@ -121,37 +121,37 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
     it('a message of exactly twelve lines stays whole', () => {
         const twelve = Array.from({ length: 12 }, (_, i) => `Line ${i + 1}`).join('\n');
         const { container } = render(inList(row(message('m3', twelve), kind)));
-        expect(screen.queryByRole('button', { name: 'Show the whole message' })).toBeNull();
+        expect(screen.queryByRole('button', { name: '…more' })).toBeNull();
         expect(words(container, 'Line 1').getAttribute('data-lines')).toBeNull();
     });
 
     it('folds a long message of one paragraph by where the lines really break, and again when the width changes', () => {
         const { rerender, container } = render(inList(row(message('m4', aLongParagraph), kind)));
-        expect(screen.getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: '…more' })).toBeTruthy();
 
         // A wide window: the same words come to four lines, so nothing folds.
         layout.width = 1000;
         rerender(inList(row(message('m4', aLongParagraph), kind)));
-        expect(screen.queryByRole('button', { name: 'Show the whole message' })).toBeNull();
+        expect(screen.queryByRole('button', { name: '…more' })).toBeNull();
         expect(words(container, 'word word').getAttribute('data-lines')).toBeNull();
 
         layout.width = 320;
         rerender(inList(row(message('m4', aLongParagraph), kind)));
-        expect(screen.getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: '…more' })).toBeTruthy();
     });
 
     it('folds the same when the platform reports every line it has, not only the ones it drew', () => {
         layout.reports = 'all';
         render(inList(row(message('m5', fortyLines), kind)));
-        expect(screen.getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' }));
-        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: '…more' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: '…more' }));
+        expect(screen.getByRole('button', { name: 'less' })).toBeTruthy();
     });
 
     it('keeps its time and status on the line with the button, where the clamp cannot cut them off', () => {
         const status = createElement('span', { 'data-testid': 'status' }, ' ✓✓');
         render(inList(row(message('m6', fortyLines), kind, { status }), row(message('m7', threeLines), kind, { status })));
-        const more = screen.getByRole('button', { name: 'Show the whole message' });
+        const more = screen.getByRole('button', { name: '…more' });
         const footer = more.parentElement as HTMLElement;
         expect(footer.textContent).toContain('12:14');
         expect(footer.querySelector('[data-testid="status"]')).toBeTruthy();
@@ -162,14 +162,14 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         const a = row(message('a', fortyLines), kind);
         const b = row(message('b', fortyLines.replace(/Line/g, 'Item')), kind);
         const { rerender } = render(inList(a, b));
-        fireEvent.click(screen.getAllByRole('button', { name: 'Show the whole message' })[0]);
-        expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
-        expect(screen.getAllByRole('button', { name: 'Show the whole message' })).toHaveLength(1);
+        fireEvent.click(screen.getAllByRole('button', { name: '…more' })[0]);
+        expect(screen.getAllByRole('button', { name: 'less' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: '…more' })).toHaveLength(1);
 
         // The list scrolls it away and back (its row unmounts, then mounts): it is still open.
         rerender(inList(b));
         rerender(inList(a, b));
-        expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'less' })).toHaveLength(1);
     });
 
     it('a row that comes back is drawn folded at once, not clamped a line past the fold first', () => {
@@ -185,7 +185,7 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         const drawn = layout.commits.filter((c) => c.text.startsWith('Line 1 of'));
         expect(drawn.length).toBeGreaterThan(0);
         expect(drawn.every((c) => c.lines === 12 && !c.measuring)).toBe(true);
-        expect(screen.getAllByRole('button', { name: 'Show the whole message' })).toHaveLength(2);
+        expect(screen.getAllByRole('button', { name: '…more' })).toHaveLength(2);
     });
 
     it('an open message that comes back is drawn open at once, and a message that fit is not measured again', () => {
@@ -193,8 +193,8 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         const fits = row(message('fits', aLongParagraph), kind);
         layout.width = 1000;
         const { rerender } = render(inList(a, fits));
-        fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' }));
-        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: '…more' }));
+        expect(screen.getByRole('button', { name: 'less' })).toBeTruthy();
 
         rerender(inList());
         layout.commits.length = 0;
@@ -204,23 +204,23 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         const drawn = layout.commits.filter((c) => c.text.startsWith('Line 1 of') || c.text.startsWith('word word'));
         expect(drawn.length).toBeGreaterThanOrEqual(2);
         expect(drawn.every((c) => c.lines === undefined && !c.measuring)).toBe(true);
-        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'less' })).toBeTruthy();
     });
 
     it('a row that comes back at another width is measured again, not believed', () => {
         const paragraph = row(message('p', aLongParagraph), kind);
         const { rerender } = render(inList(paragraph));
-        expect(screen.getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: '…more' })).toBeTruthy();
 
         rerender(inList());
         layout.width = 1000; // four lines now
         rerender(inList(paragraph));
-        expect(screen.queryByRole('button', { name: 'Show the whole message' })).toBeNull();
+        expect(screen.queryByRole('button', { name: '…more' })).toBeNull();
     });
 
     it('an open message is never drawn clamped while it is measured again at a new width', () => {
         const { rerender } = render(inList(row(message('a', fortyLines), kind)));
-        fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' }));
+        fireEvent.click(screen.getByRole('button', { name: '…more' }));
 
         layout.commits.length = 0;
         layout.width = 300;
@@ -229,20 +229,20 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         const drawn = layout.commits.filter((c) => c.text.startsWith('Line 1 of'));
         expect(drawn.some((c) => c.measuring)).toBe(true); // it was measured again
         expect(drawn.every((c) => c.lines === undefined)).toBe(true); // and never clamped
-        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'less' })).toBeTruthy();
     });
 
     it('never folds a message the member is editing, and folds it again after', () => {
         const { rerender, container } = render(inList(row(message('e', fortyLines), kind, { isMe: true, editing: true })));
-        expect(screen.queryByRole('button', { name: /whole message|Show less/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^(…more|less)$/ })).toBeNull();
         expect(words(container, 'Line 1 of').getAttribute('data-lines')).toBeNull();
         rerender(inList(row(message('e', fortyLines), kind, { isMe: true, editing: false })));
-        expect(screen.getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: '…more' })).toBeTruthy();
     });
 
     it('a removed message is never folded', () => {
         render(inList(row(message('r', fortyLines, { type: 'removed' }), kind)));
-        expect(screen.queryByRole('button', { name: /whole message|Show less/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /^(…more|less)$/ })).toBeNull();
     });
 });
 
@@ -252,7 +252,7 @@ describe('a bubble outside a list keeps its own open state', () => {
 
     it('opens and folds without the provider', () => {
         render(row(message('solo', fortyLines), 'dm'));
-        act(() => { fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' })); });
-        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+        act(() => { fireEvent.click(screen.getByRole('button', { name: '…more' })); });
+        expect(screen.getByRole('button', { name: 'less' })).toBeTruthy();
     });
 });

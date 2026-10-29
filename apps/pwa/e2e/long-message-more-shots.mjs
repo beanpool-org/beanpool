@@ -4,7 +4,7 @@
  * run that shows the clamp and the measuring work in a browser. The real MessagesPage draws a group chat's lines (e2e/long-
  * message-more-shots-harness.tsx); a one-to-one chat draws its bubbles by the same code. For each theme it checks that:
  *   1. a 40-line message is clamped to twelve lines, with "…more" under it, and the whole message still in the page;
- *   2. the control is a real button, at least 44 px by 44 px, named "Show the whole message";
+ *   2. the control is a real button, at least 44 px by 44 px, named "…more" (the word it shows, WCAG 2.5.3), described "Show the whole message";
  *   3. a 3-line message and a short one have no control and no wrapper at all;
  *   4. "…more" opens the whole message in place, "less" folds it again;
  *   5. a one-paragraph message that folds at 320 px stops folding when the window is wide, and folds again when narrow;
@@ -88,7 +88,7 @@ const READ = (needle) => {
         scrollHeight: words ? words.scrollHeight : 0,
         lineHeight: lh,
         text: words ? words.textContent : row.textContent,
-        toggle: toggle ? { label: toggle.getAttribute('aria-label'), text: toggle.textContent, expanded: toggle.getAttribute('aria-expanded'), tag: toggle.tagName, w: Math.round(t.width), h: Math.round(t.height) } : null,
+        toggle: toggle ? { label: toggle.textContent, hint: document.getElementById(toggle.getAttribute('aria-describedby') || '')?.textContent ?? null, text: toggle.textContent, expanded: toggle.getAttribute('aria-expanded'), tag: toggle.tagName, w: Math.round(t.width), h: Math.round(t.height) } : null,
     };
 };
 
@@ -139,7 +139,7 @@ try {
         check(folded && Math.abs(folded.clientHeight - 12 * folded.lineHeight) <= 2, `it shows twelve lines (${folded?.clientHeight} px of a ${folded?.lineHeight} px line)`);
         check(folded && folded.scrollHeight > folded.clientHeight + 40, 'it has far more than it shows');
         check(folded?.text === LIST, 'the whole message is in the page, folded');
-        check(folded?.toggle?.tag === 'BUTTON' && folded.toggle.label === 'Show the whole message' && folded.toggle.text === '…more' && folded.toggle.expanded === 'false', 'the control is a button, "…more", named "Show the whole message"');
+        check(folded?.toggle?.tag === 'BUTTON' && folded.toggle.label === '…more' && folded.toggle.hint === 'Show the whole message' && folded.toggle.text === '…more' && folded.toggle.expanded === 'false', 'the control is a button, "…more", named "Show the whole message"');
         check(folded?.toggle && folded.toggle.w >= 44 && folded.toggle.h >= 44, `the control is ${folded?.toggle?.w}×${folded?.toggle?.h} px, at least 44×44`);
 
         // 3: a 3-line message and a short one: no control, no wrapper.
@@ -155,7 +155,7 @@ try {
         await page.waitForTimeout(150);
         const open = await page.evaluate(READ, 'Job 1 for');
         check(open?.fold === 'open' && open.clientHeight >= open.scrollHeight - 1, 'tapping …more opens the whole message in place');
-        check(open?.toggle?.label === 'Show less' && open.toggle.text === 'less' && open.toggle.expanded === 'true', 'the control now reads "less", named "Show less"');
+        check(open?.toggle?.label === 'less' && open.toggle.hint === 'Show less' && open.toggle.text === 'less' && open.toggle.expanded === 'true', 'the control now reads "less", named "less", described "Show less"');
         await page.evaluate(() => { document.querySelector('[data-testid="chat-text"]').scrollIntoView({ block: 'start' }); });
         await page.waitForTimeout(150);
         await page.screenshot({ path: path.join(OUT_DIR, `long-message-more-web-320px-130pct-${theme}-open.png`) });

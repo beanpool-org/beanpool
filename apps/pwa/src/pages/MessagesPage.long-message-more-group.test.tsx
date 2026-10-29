@@ -102,19 +102,19 @@ describe('a web group chat folds a long message with …more', () => {
         const long = screen.getByTestId('chat-text').closest('[id^="msg-"]') as HTMLElement;
         expect(within(long).getByTestId('group-line-author').textContent).toBe('Ben');
         expect(within(long).getByTestId('chat-text').dataset.fold).toBe('folded');
-        const more = within(long).getByRole('button', { name: 'Show the whole message' });
+        const more = within(long).getByRole('button', { name: '…more' });
         expect(more.textContent).toBe('…more');
         // Only the long one has a control; the 3-line line beside it is just its words.
         expect(screen.getAllByTestId('chat-fold-toggle')).toHaveLength(1);
 
         fireEvent.click(more);
         expect(within(long).getByTestId('chat-text').dataset.fold).toBe('open');
-        expect(within(long).getByRole('button', { name: 'Show less' }).textContent).toBe('less');
+        expect(within(long).getByRole('button', { name: 'less' }).textContent).toBe('less');
         expect(within(long).getByTestId('chat-text').textContent).toBe(fortyLines);
 
-        fireEvent.click(within(long).getByRole('button', { name: 'Show less' }));
+        fireEvent.click(within(long).getByRole('button', { name: 'less' }));
         expect(within(long).getByTestId('chat-text').dataset.fold).toBe('folded');
-        expect(within(long).getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(within(long).getByRole('button', { name: '…more' })).toBeTruthy();
     });
 
     it('folds my own long line in the group too', async () => {
@@ -127,6 +127,6 @@ describe('a web group chat folds a long message with …more', () => {
         await openChat();
         expect(screen.getAllByTestId('chat-fold-toggle')).toHaveLength(1);
         expect(screen.getByTestId('chat-text').textContent).toBe(fortyLines);
-        expect(screen.getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: '…more' })).toBeTruthy();
     });
 });

@@ -117,7 +117,7 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
                         <View style={styles.foldRow}>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel={fold.open ? t('Show less') : t('Show the whole message')}
+                                accessibilityHint={fold.open ? t('Show less') : t('Show the whole message')}
                                 accessibilityState={{ expanded: fold.open }}
                                 onPress={fold.toggle}
                                 style={styles.foldButton}

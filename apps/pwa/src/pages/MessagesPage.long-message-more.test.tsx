@@ -123,7 +123,7 @@ describe('a web one-to-one chat folds a long message with …more', () => {
         const long = rowWith('Ben line 1 of')!;
         const folded = within(long).getByTestId('chat-text');
         expect(folded.dataset.fold).toBe('folded');
-        const more = within(long).getByRole('button', { name: 'Show the whole message' });
+        const more = within(long).getByRole('button', { name: '…more' });
         expect(more.textContent).toBe('…more');
 
         // The 3-line message beside it is drawn as it always was.
@@ -132,20 +132,20 @@ describe('a web one-to-one chat folds a long message with …more', () => {
 
         fireEvent.click(more);
         expect(within(long).getByTestId('chat-text').dataset.fold).toBe('open');
-        expect(within(long).getByRole('button', { name: 'Show less' }).textContent).toBe('less');
+        expect(within(long).getByRole('button', { name: 'less' }).textContent).toBe('less');
         // All of it is there to read, copy and search once opened — and before.
         expect(within(long).getByTestId('chat-text').textContent).toBe(fortyLines('Ben'));
 
-        fireEvent.click(within(long).getByRole('button', { name: 'Show less' }));
+        fireEvent.click(within(long).getByRole('button', { name: 'less' }));
         expect(within(long).getByTestId('chat-text').dataset.fold).toBe('folded');
-        expect(within(long).getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(within(long).getByRole('button', { name: '…more' })).toBeTruthy();
     });
 
     it('folds my own long message too, and keeps its Edit and Delete beside it', async () => {
         thread.messages = [sent(ana, fortyLines('Ana'))];
         await openChat();
         const mine = rowWith('Ana line 1 of')!;
-        expect(within(mine).getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+        expect(within(mine).getByRole('button', { name: '…more' })).toBeTruthy();
         expect(within(mine).getByRole('button', { name: 'Edit message' })).toBeTruthy();
         expect(within(mine).getByRole('button', { name: 'Delete message' })).toBeTruthy();
     });
@@ -160,7 +160,7 @@ describe('a web one-to-one chat folds a long message with …more', () => {
         expect(screen.getByPlaceholderText('Edit message...')).toBeTruthy();
         // Whole: no clamp, no control, all forty lines in the bubble.
         expect(within(mine).queryByTestId('chat-text')).toBeNull();
-        expect(within(mine).queryByRole('button', { name: /whole message|Show less/ })).toBeNull();
+        expect(within(mine).queryByRole('button', { name: /^(…more|less)$/ })).toBeNull();
         expect(mine.textContent).toContain('Ana line 40 of the list');
         // The other long message is still folded.
         expect(within(rowWith('Ben line 1 of')!).getByTestId('chat-text').dataset.fold).toBe('folded');

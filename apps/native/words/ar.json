@@ -443,7 +443,6 @@
   "🎉 FUNDED": "🎉 تم التمويل",
   "🌱 PROJECT": "🌱 مشروع",
   "🏛️ ENTERPRISE": "🏛️ مؤسسة",
-  "Enterprise Balance": "رصيد المؤسسة",
   "in deficit (keepers eat last)": "في حالة عجز (يتحمل الرعاة المسؤولية أخيرًا)",
   "Pledge Beans": "تعهد بـ فاصوليا",
   "Word {n}: {word}": "الكلمة {n}: {word}",
@@ -2249,7 +2248,6 @@
   "Couldn't reach this community. Check your connection and try again.": "تعذر الوصول إلى هذا المجتمع. تحقق من اتصالك وحاول مجددًا.",
   "This community sent an answer the app couldn't read. Please try again later.": "أرسل هذا المجتمع ردًا تعذر على التطبيق قراءته. يُرجى المحاولة مرة أخرى لاحقًا.",
   "You asked to join. No answer yet: communities usually answer within a few days.": "لقد طلبت الانضمام. لا يوجد رد بعد: ترد المجتمعات عادةً في غضون أيام قليلة.",
-  "No answer came. You can ask again.": "لم يصل أي رد. يمكنك تقديم الطلب مرة أخرى.",
   "A member invited you. Join now to become a member.": "لقد دعاك أحد الأعضاء. انضم الآن لتصبح عضوًا.",
   "ACTIVE\u0004listing status": "نشط",
   "HELD IN TRUST": "محفوظ في الضمان",
@@ -3106,7 +3104,6 @@
   "PURPOSE STATEMENT *": "بيان الغرض *",
   "Purpose statement": "بيان الغرض",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "وضّح بوضوح الغرض من وجود هذه المؤسسة (مثال: 'نبني ونحافظ على بيت ظل مشترك بحلول نوفمبر').",
-  "The purpose statement is what the community judges the initiative against.": "بيان الغرض هو المعيار الذي يقيم المجتمع المبادرة على أساسه.",
   "FUNDING GOAL ({currency}) *": "هدف التمويل ({currency}) *",
   "Funding goal amount": "مبلغ هدف التمويل",
   "Pledges are held safely in the enterprise account.": "تُحفظ التعهدات بأمان في حساب المؤسسة.",
@@ -7081,5 +7078,6 @@
   "Tell me when a community starts here, or say you'd help start one": "أخبرني عندما يبدأ مجتمع هنا، أو ساهم في بدء واحد",
   "Nothing within 250 km yet.": "لا يوجد شيء في نطاق 250 كم بعد.",
   "See what people post elsewhere ›": "شاهد ما ينشره الآخرون في أماكن أخرى ›",
-  "Set your area": "حدد منطقتك"
+  "Set your area": "حدد منطقتك",
+  "The purpose statement is what the community judges the project or enterprise against.": "بيان الغرض هو المعيار الذي يقيم المجتمع المشروع أو المؤسسة على أساسه."
 }

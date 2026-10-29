@@ -47,6 +47,8 @@ export interface ShapeSettings {
     knownFloor: ShapeSetting<KnownFloorShape>;
     dmRequests?: ShapeSetting<boolean>;
     decisions: ShapeSetting<boolean>;
+    /** Members may share one post outside the community (front doors S6). Absent on a server from before it. */
+    shareOutside?: ShapeSetting<boolean>;
     listed: ShapeSetting<boolean>;
     shareLocation: ShapeSetting<boolean>;
     shareMemberCount: ShapeSetting<boolean>;
@@ -275,6 +277,10 @@ export function getConsequenceSentence(
             return targetValue === true
                 ? t("A member's first message to someone who hasn't added them, written to them or traded with them waits until that person accepts.")
                 : t('Every message arrives straight away. Requests still waiting become ordinary chats.');
+        case 'shareOutside':
+            return targetValue === false
+                ? t('Every link a member shared outside stops now, and nobody can share a new one. Turned on again, the old links stay stopped.')
+                : t('A member can share one listing or event with someone outside: the link shows that post for 7 days, without names or faces.');
         case 'decisions':
             return targetValue === false
                 ? t('Nothing can be proposed or voted on. Open votes close. An emergency suspension lifts by itself after 7 days.')

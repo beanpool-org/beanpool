@@ -279,13 +279,13 @@ export function DecideSection({
             {preview && (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                        {t('Voice credits for money votes')}
+                        {t('Voice credits')}
                     </div>
                     <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
                         {Math.floor(samplePoolVoting().voiceCredits)}
                     </div>
                     <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
-                        {t('From completed trades · N votes cost N×N')}
+                        {t('For money votes · from completed trades · N votes cost N×N')}
                     </div>
                 </div>
             )}

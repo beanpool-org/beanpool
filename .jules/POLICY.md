@@ -1165,3 +1165,27 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 ### 2026-10-28 — Expo: first of repeated params in rekey-code.tsx, seventh filing (#2549) — CLOSED, DECIDED (#1753, #2073, #2118, #2174, #2343, #2517)
 - **Category:** DELIBERATE DECISION
 - **Why not to re-file:** a link that repeats a parameter is ambiguous and refused on purpose, on EVERY screen, the re-key screen included (see #2343). Re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-29 — Palette: keyboard focus indicators on AddressSearch (#2574) — CLOSED, RE-FILE OF #1818/#2423
+- **Category:** RE-FILE (see #1818, #2423)
+- **Why not to re-file:** AddressSearch's keyboard focus was judged twice (#1818, #2423: CLAIM FALSE). This filing's test only checked a className, and the change dropped the mouse-focus ring. Re-file only with a keyboard path that really fails on main.
+
+### 2026-10-29 — Flow: catch unknown in RekeyMemberWizard (#2575) — CLOSED, SAME AS #2548
+- **Category:** CLAIM FALSE
+- **Why not to re-file:** every helper the wizard calls throws an Error subclass, so the typing gains nothing; the change moves fallback text on an identity screen with no test, and `err instanceof Error ? err.message : …` shows an EMPTY error for an Error with an empty message where main shows "Failed to complete re-keying". Flow: no catch-typing changes on identity screens (re-key, take-over, recovery).
+
+### 2026-10-29 — Pixel: dynamic accessibilityLabel on the group join button, fourth filing (#2576) — CLOSED (#1036, #2117, #2172)
+- **Category:** RE-FILE
+- **Why not to re-file:** the button already has an explicit label and `accessibilityState={{ busy }}` (#1036). The new `t('Joining group...')` key had no catalog entries. Pixel: stop filing this button.
+
+### 2026-10-29 — Bolt: O(1) group lookups in the PWA ProjectsPage, again (#2579) — CLOSED, RE-FILE OF #2547 (#1754, #2072)
+- **Category:** RE-FILE
+- **Why not to re-file:** closed the day before as #2547. No Map-for-find swaps without a profile of a real screen.
+
+### 2026-10-29 — Expo: first of a repeated `community` param in names-list.tsx, eighth filing (#2580) — CLOSED, DECIDED (#1753, #2073, #2118, #2174, #2343, #2384, #2454, #2549)
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** a link that repeats a parameter is ambiguous and refused on purpose, on EVERY screen. Re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-29 — Watchman: fix test-sync-copy-pages (#2581) — CLOSED, ALREADY FIXED
+- **Category:** PHANTOM
+- **Why not to re-file:** the suite passes on main (local full run 29 Oct, 56 s). main already resets the admin-auth tarpit and the runner sets BEANPOOL_SUITE_ENV_PASSWORD; the PR's wide-copy rewrite would have weakened the check.

@@ -478,7 +478,7 @@ export function requestPost(
         requesterPublicKey,
         isOffer ? '📩 New Request' : '🤝 Help Offered',
         `${requester?.callsign || 'A member'} ${isOffer ? 'requested' : 'offered to help with'} "${post.title}"`,
-        { screen: 'post', postId: post.id },
+        { screen: 'post', postId: post.id, txId: tx.id },
         'marketplace',
         'market.request'
     );
@@ -679,7 +679,7 @@ export function approvePostRequest(
         authorPublicKey,
         '✅ Request Approved',
         `Your request for "${post.title}" was approved!`,
-        { screen: 'post', postId: row.post_id },
+        { screen: 'post', postId: row.post_id, txId: row.id },
         'marketplace',
         'market.answer'
     );
@@ -718,7 +718,7 @@ export function rejectPostRequest(
         authorPublicKey,
         '❌ Request Declined',
         `Your request for "${post.title}" was declined`,
-        { screen: 'post', postId: row.post_id },
+        { screen: 'post', postId: row.post_id, txId: row.id },
         'marketplace',
         'market.answer'
     );
@@ -973,7 +973,7 @@ export function acceptPost(
         buyerPublicKey,
         '🛒 Offer Accepted',
         `${buyer?.callsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
-        { screen: 'post', postId: post.id },
+        { screen: 'post', postId: post.id, txId: tx.id },
         'marketplace',
         'market.request'
     );
@@ -1236,7 +1236,7 @@ export function completePostTransaction(
         confirmerPublicKey,
         '🎉 Deal Completed!',
         `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
-        { screen: 'post', postId: row.post_id },
+        { screen: 'post', postId: row.post_id, txId: row.id },
         'escrow',
         'trade.update'
     );
@@ -1317,7 +1317,7 @@ export function cancelPostTransaction(
         cancellerPublicKey,
         '🚫 Deal Cancelled',
         `Deal for "${post?.title || 'the post'}" was cancelled — escrow funds refunded.`,
-        { screen: 'post', postId: row.post_id },
+        { screen: 'post', postId: row.post_id, txId: row.id },
         'escrow',
         'trade.update'
     );
@@ -1613,7 +1613,7 @@ export function resolveEscrowDispute(
         authSigner,
         '⚖️ Escrow Dispute Resolved',
         `Dispute arbitrated by ${resolverName}: ${actionLabel} for "${post?.title || 'deal'}"`,
-        { screen: 'post', postId: row.post_id },
+        { screen: 'post', postId: row.post_id, txId: row.id },
         'escrow',
         'trade.update'
     );

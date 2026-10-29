@@ -424,7 +424,6 @@
   "🎉 FUNDED": "🎉 நிதியளிக்கப்பட்டது",
   "🌱 PROJECT": "🌱 திட்டம்",
   "🏛️ ENTERPRISE": "🏛️ கூட்டு முயற்சி",
-  "Enterprise Balance": "கூட்டு முயற்சி இருப்பு",
   "in deficit (keepers eat last)": "பற்றாக்குறையில் (பொறுப்பாளர்கள் கடைசியாகப் பெறுகிறார்கள்)",
   "Pledge Beans": "பயறுகளை உறுதியளிக்கவும்",
   "Word {n}: {word}": "சொல் {n}: {word}",
@@ -1883,7 +1882,6 @@
   "Couldn't reach this community. Check your connection and try again.": "இந்தச் சமூகத்தை இணைக்க முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்துவிட்டு மீண்டும் முயற்சிக்கவும்.",
   "This community sent an answer the app couldn't read. Please try again later.": "இந்தச் சமூகம் செயலியால் படிக்க முடியாத ஒரு பதிலை அனுப்பியது. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும்.",
   "You asked to join. No answer yet: communities usually answer within a few days.": "நீங்கள் இணையக் கோரிக்கை விடுத்துள்ளீர்கள். இன்னும் பதில் வரவில்லை: சமூகங்கள் வழக்கமாகச் சில நாட்களில் பதிலளிக்கும்.",
-  "No answer came. You can ask again.": "பதில் எதுவும் வரவில்லை. நீங்கள் மீண்டும் கேட்கலாம்.",
   "A member invited you. Join now to become a member.": "ஓர் உறுப்பினர் உங்களை அழைத்துள்ளார். உறுப்பினராக இப்போது இணையுங்கள்.",
   "ACTIVE\u0004listing status": "செயலில் உள்ளது",
   "HELD IN TRUST": "நம்பிக்கைப் பொறுப்பில்",
@@ -2668,7 +2666,6 @@
   "PURPOSE STATEMENT *": "நோக்க அறிக்கை *",
   "Purpose statement": "நோக்க அறிக்கை",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "இந்தக் கூட்டு முயற்சி எதற்காக உள்ளது என்பதைத் தெளிவாகக் குறிப்பிடவும் (எ.கா. 'நவம்பருக்குள் ஒரு பொது நிழற்குடையை உருவாக்கிப் பராமரிப்போம்').",
-  "The purpose statement is what the community judges the initiative against.": "நோக்க அறிக்கையைக் கொண்டே சமூகம் இந்த முயற்சியை மதிப்பிடுகிறது.",
   "FUNDING GOAL ({currency}) *": "நிதி இலக்கு ({currency}) *",
   "Funding goal amount": "நிதி இலக்குத் தொகை",
   "Pledges are held safely in the enterprise account.": "உறுதிமொழிகள் கூட்டு முயற்சிக் கணக்கில் பாதுகாப்பாக வைக்கப்படுகின்றன.",
@@ -6129,5 +6126,6 @@
   "Tell me when a community starts here, or say you'd help start one": "இங்கு ஒரு சமூகம் தொடங்கும் போது தெரிவிக்கவும், அல்லது ஒன்றைத் தொடங்க உதവவும்",
   "Nothing within 250 km yet.": "இன்னும் 250 கி.மீ-க்குள் எதுவும் இல்லை.",
   "See what people post elsewhere ›": "மற்ற இடங்களில் மக்கள் என்ன இடுகையிடுகிறார்கள் என்று பாருங்கள் ›",
-  "Set your area": "உங்கள் பகுதியை அமைக்கவும்"
+  "Set your area": "உங்கள் பகுதியை அமைக்கவும்",
+  "The purpose statement is what the community judges the project or enterprise against.": "நோக்க அறிக்கையைக் கொண்டே சமூகம் திட்டம் அல்லது கூட்டு முயற்சியை மதிப்பிடுகிறது."
 }

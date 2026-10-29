@@ -15,7 +15,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
-On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved. After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, tap **Explore BeanPool worldwide** on the app's first screen: see "Joining BeanPool".
 
@@ -40,13 +40,13 @@ A community whose server stays silent for a week is no longer listed, and comes 
 
 Your request goes straight to that community, not through the global community, with your name, your words and your picture. Only its members see it. Where the community lets only its admins invite, only its owners and admins see it. A member there can let you in: they tap **Invite**, and an invite is made that only your account can use.
 
-While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
+While you wait, the waiting card on **Home** shows when you asked (**You asked to join {name} on {date}.**) and whether your request arrived (**Your request arrived.**), and the community's own card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection.
 
-If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours.
+If you change your mind while waiting, tap **Cancel my request**. The request is really withdrawn, and you can ask again after 24 hours.
 
 When an admin or member invites you, you get a notification: **A community answered your request.** Your phone checks for an answer in the background every 15 minutes when the app isn't open.
 
-If nobody answers within 30 days, the card says **No answer came. You can ask again.**
+If nobody answers within 30 days, the card says **This request is no longer open. You can ask again.**
 
 If a community can't take your request, the card shows its own words, for example that too many requests came from your network today, or that it isn't taking requests to join right now.
 
@@ -60,6 +60,12 @@ The card says **A member invited you**. Tap **Join** with the community's name.
 - A sign-in account you linked to get back into your account works in the new community too: BeanPool keeps one copy for all your communities.
 
 You stay a member of the global community, and can switch between them: see "More than one community".
+
+## A post someone shared with you
+
+A member of a community can share one of its posts with you outside BeanPool: a link in a chat or a message. It opens that one post, in the app if you have it and in your web browser if not. It shows what the post is, its photos, its price and roughly where it is, and says that a member of that community shared it with you. Names and faces appear only once you join that community.
+
+From there you can **Ask to join** that community, **Get the app**, or **Look around the global community**. If the link says **This link has stopped working**, the person who shared it stopped it, it ran out after 7 days, or the post is gone: ask them for a new one.
 
 ## Nothing near you
 

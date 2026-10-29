@@ -159,7 +159,7 @@ export function EnterpriseCard({ item, sample = false }: { item: TreasurySummary
                 {/* Financial summary row */}
                 <View style={styles.financeRow}>
                     <View style={{ flexShrink: 1 }}>
-                        <Text style={styles.financeLabel}>{inCapitalsOf(t('Enterprise Balance'))}</Text>
+                        <Text style={styles.financeLabel}>{inCapitalsOf(t('Balance'))}</Text>
                         {item.balance < 0 && (
                             <Text style={styles.deficitWarning}>{t('in deficit (keepers eat last)')}</Text>
                         )}

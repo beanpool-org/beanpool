@@ -731,7 +731,6 @@
   "🎉 FUNDED": "🎉 NAPONDUHAN NA",
   "🌱 PROJECT": "🌱 PROYEKTO",
   "🏛️ ENTERPRISE": "🏛️ NEGOSYO",
-  "Enterprise Balance": "Balanse ng Negosyo",
   "in deficit (keepers eat last)": "may kakulangan (huling kumakain ang mga katiwala)",
   "Pledge Beans": "Mangako ng Munggo",
   "Word {n}: {word}": "Salita {n}: {word}",
@@ -1881,7 +1880,6 @@
   "Couldn't reach this community. Check your connection and try again.": "Hindi maabot ang komunidad na ito. Pakitingnan ang iyong koneksyon at subukang muli.",
   "This community sent an answer the app couldn't read. Please try again later.": "Nagpadala ang komunidad na ito ng sagot na hindi mabasa ng app. Pakisubukan muli mamaya.",
   "You asked to join. No answer yet: communities usually answer within a few days.": "Humiling kang sumali. Wala pang sagot: karaniwang sumasagot ang mga komunidad sa loob ng ilang araw.",
-  "No answer came. You can ask again.": "Walang sagot na dumating. Maaari kang magtanong muli.",
   "A member invited you. Join now to become a member.": "Inimbita ka ng isang miyembro. Sumali ngayon para maging miyembro.",
   "ACTIVE\u0004listing status": "AKTIBO",
   "HELD IN TRUST": "HAWAK SA TIWALA",
@@ -2666,7 +2664,6 @@
   "PURPOSE STATEMENT *": "PAHAYAG NG LAYUNIN *",
   "Purpose statement": "Pahayag ng layunin",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Ipahayag nang malinaw kung ano ang layunin ng negosyong ito (hal. 'Magtatayo at magpapanatili kami ng communal shade house bago mag-Nobyembre').",
-  "The purpose statement is what the community judges the initiative against.": "Ang pahayag ng layunin ang batayan ng komunidad para suriin ang inisyatiba.",
   "FUNDING GOAL ({currency}) *": "TARGET NA PONDO ({currency}) *",
   "Funding goal amount": "Halaga ng target na pondo",
   "Pledges are held safely in the enterprise account.": "Ligtas na itinatabi ang mga pangako sa account ng negosyo.",
@@ -6129,5 +6126,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Sabihan ako kapag may nagsimulang komunidad dito, o sabihing tutulong ka",
   "Nothing within 250 km yet.": "Wala pa sa loob ng 250 km.",
   "See what people post elsewhere ›": "Tingnan ang ipino-post ng mga tao sa ibang lugar ›",
-  "Set your area": "Itakda ang iyong lugar"
+  "Set your area": "Itakda ang iyong lugar",
+  "The purpose statement is what the community judges the project or enterprise against.": "Ang pahayag ng layunin ang batayan ng komunidad para suriin ang proyekto o negosyo."
 }

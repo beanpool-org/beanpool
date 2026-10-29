@@ -51,11 +51,12 @@ import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
 import { ChatMenuModal } from '../components/ChatMenuModal';
 import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute';
 import { EventChat } from '../components/EventChat';
+import { FoldedChatText } from '../components/FoldedChatText';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
 import { bundledGroupEmblem, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
-import { readsOwn } from '../lib/features';
+import { readsOwn, useCommunityInfo } from '../lib/features';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -271,6 +272,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     useEffect(() => { if (!requests && activeTab === 'requests') setActiveTab('all'); }, [requests, activeTab]);
     // Groups' "New group": the form Commons uses, opened here (the phone's Talk → Groups).
     const [showCreateGroup, setShowCreateGroup] = useState(false);
+    // An enterprise holds Beans and its form asks for a goal in Beans: no bridge to Start something on a community with
+    // Beans off (the phone's CreateGroupModal, and Commons' own Create form). Unknown counts as on, as everywhere.
+    const beansOn = useCommunityInfo()?.features?.beans !== false;
     const [activeConv, setActiveConv] = useState<Conversation | null>(null);
     const [messages, setMessages] = useState<ApiMessage[]>([]);
     // The DM whose lines have arrived: the pinned Rate your partner waits for them, so it never flashes over its own line.
@@ -2307,6 +2311,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const myReaction = reactions.find((r: any) => r && r.author === identity.publicKey);
                         const showEmojiPicker = !inRequest && activeEmojiPickerId === msg.id;
                         const isTopMessage = index < 2;
+                        // A long message folds with "…more" (FoldedChatText); never a removed line, nor one being edited.
+                        const foldable = !isTombstone && editingMessage?.id !== msg.id;
 
                         return (
                             <div
@@ -2448,7 +2454,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         />
                                                         {groupLine.text && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                {groupLine.text}
+                                                                <FoldedChatText text={groupLine.text} enabled={foldable} display="block" mine={isMe} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2470,7 +2476,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         <span style={{ fontStyle: 'italic', opacity: 0.8 }}><span aria-hidden="true">🖼️ </span>{closedPhotoWords()}</span>
                                                         {caption && (
                                                             <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                                {caption}
+                                                                <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
                                                             </div>
                                                         )}
                                                     </>
@@ -2490,12 +2496,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     />
                                                     {caption && (
                                                         <div style={{ marginTop: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                                            {caption}
+                                                            <FoldedChatText text={caption} enabled={foldable} display="block" mine={isMe} />
                                                         </div>
                                                     )}
                                                 </>
                                             );
-                                        })() : decryptMessage(msg)}
+                                        })() : <FoldedChatText text={decryptMessage(msg)} enabled={foldable} mine={isMe} />}
                                     </div>
                                     {groupLine?.details && (
                                         <div data-testid="group-line-details" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
@@ -3287,6 +3293,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 <CreateGroupModal
                     isOpen
                     onClose={() => setShowCreateGroup(false)}
+                    onStartWithBeans={!beansOn ? undefined : () => {
+                        setShowCreateGroup(false);
+                        onNavigate?.('projects', 'start');
+                    }}
                     onCreated={(group) => {
                         // As the phone's (decision 8): straight into the new group's chat. Its id is the group's.
                         setShowCreateGroup(false);

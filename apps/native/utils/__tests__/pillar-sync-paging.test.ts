@@ -346,6 +346,59 @@ describe('a copy from before the posts kept their enterprise\'s banner (Pictures
         expect(postsReads().every(u => new URL(u).searchParams.has('updatedAfter'))).toBe(true);
     });
 
+    // The upgrade's `newCopyGeneration()` (db.ts, the carried_banner branch; review of #2565 at f72b4204, as clearDB does) is
+    // what keeps a cycle that began before the open from storing anything. Without it that cycle writes its page and puts
+    // back the cursor the upgrade forgot, so the next cycle is a delta again and the listings the node won't send again
+    // never get their banner. The upgrade runs here as the cycle's posts read goes out: its cursor read, its generation taken.
+    it('a cycle already in flight as the upgraded build opens the copy stores nothing, and the next cycle reads the posts whole', async () => {
+        await phoneWithACursor();
+        expect(store.get(LAST_SYNC_KEY)).toBeTruthy();
+        // 'old' hasn't changed since the cursor and the node names its banner; 'new' has, so the delta the cycle in flight
+        // asked for answers with it.
+        node.posts = [
+            { ...listing('old', 'Ladder', '2026-01-01T00:00:00.000Z'), authorBannerUrl: BANNER } as Listing,
+            { ...listing('new', 'Drill', new Date().toISOString()), authorBannerUrl: BANNER } as Listing,
+        ];
+
+        let upgraded = false;
+        let askedFromCursor = false;
+        (globalThis as any).fetch = async (url: string) => {
+            if (!upgraded && url.includes('/api/marketplace/posts')) {
+                upgraded = true;
+                askedFromCursor = new URL(url).searchParams.has('updatedAfter');
+                // The previous build's copy (the table without the column), opened by this build while the answer is out.
+                await closeDB();
+                sql.exec('ALTER TABLE posts DROP COLUMN carried_banner');
+                await getDb();
+            }
+            return fetchMock(url);
+        };
+        try {
+            await sync(false);
+        } finally {
+            (globalThis as any).fetch = fetchMock;
+        }
+        expect(upgraded).toBe(true);
+        expect(askedFromCursor).toBe(true);
+        // The copy has the column now, and the cycle that began before the open wrote none of its page ('new'), set no
+        // banner, and put no cursor back.
+        expect((sql.prepare('PRAGMA table_info(posts)').all() as any[]).some(c => c.name === 'carried_banner')).toBe(true);
+        expect(held()).toEqual([{ id: 'old', title: 'Ladder' }]);
+        expect(banner('old')).toBeNull();
+        expect(store.has(LAST_SYNC_KEY)).toBe(false);
+        expect(store.has(HELD_KEY)).toBe(false);
+        expect(syncCursorKeysOf(FILE).filter(k => store.has(k))).toEqual([]);
+
+        // The next cycle reads from the start, not as a delta, and every listing gets its banner.
+        await sync();
+        expect(postsReads().length).toBeGreaterThan(0);
+        expect(postsReads().some(u => new URL(u).searchParams.has('updatedAfter'))).toBe(false);
+        expect(heldTitles().get('new')).toBe('Drill');
+        expect(banner('old')).toBe(BANNER);
+        expect(banner('new')).toBe(BANNER);
+        expect(store.get(LAST_SYNC_KEY)).toBeTruthy();
+    });
+
     it('a fresh copy has the column: opening it forgets no cursor', async () => {
         await phoneWithACursor();
         const before = syncCursorKeysOf(FILE).filter(k => store.has(k));

@@ -95,7 +95,49 @@ export const FIND_COMMUNITY_WORDS = {
      * ago (front doors S13): it is still listed, and asking to join still works (the knock waits until it answers).
      */
     notAnswering: word('Not answering lately'),
+    /** The honest waiting card (Lounge L1, entry S1): measured response lines from the directory. */
+    askedOnDate: word('You asked to join {name} on {date}.'),
+    answersWeek: word('Usually answers within a week'),
+    answersSlow: word("Hasn't answered requests lately"),
+    answersNone: word('Not taking requests right now'),
+    /** Honest waiting card status and cancellation words. */
+    requestArrived: word('Your request arrived.'),
+    cancelRequest: word('Cancel my request'),
+    cancelling: word('Cancelling…'),
+    keepIt: word('Keep it'),
+    /** The waiting card's button once the community says it no longer holds the request: forgets it, so the card can go. */
+    gotIt: word('Got it'),
+    cancelConfirmText: word('Cancel your request to join {name}? You can ask again after 24 hours.'),
 } as const;
+
+/**
+ * Entry S1's measured line for how promptly a community answers requests to join (from directory push answers).
+ * Returns the line in the member's language, or null when not measured or fewer than 3 knocks seen.
+ */
+export function communityAnswersLine(answers?: 'week' | 'slow' | 'none' | null): string | null {
+    switch (answers) {
+        case 'week': return t(FIND_COMMUNITY_WORDS.answersWeek);
+        case 'slow': return t(FIND_COMMUNITY_WORDS.answersSlow);
+        case 'none': return t(FIND_COMMUNITY_WORDS.answersNone);
+        default: return null;
+    }
+}
+
+/**
+ * How long after a knock its community could still say yes: the node keeps it open 30 days and an invite made for
+ * it lasts 30 days, so no status read can say approved after that; and a day for the clocks.
+ *
+ * The one definition: the phone (`utils/knock.ts`) and the web app (`lib/knock.ts`) both take it from here. It is also the
+ * outer end of Find your community's pin for a request the community no longer holds (`none`): the card stays until the
+ * member taps Got it, or day 61 after the send (Lounge L1, decided 29 Oct 2026).
+ */
+export const KNOCK_ANSWERABLE_DAYS = 61;
+
+/** Whether a remembered knock could still be answered at `now` (sent within {@link KNOCK_ANSWERABLE_DAYS}). */
+export function knockStillAnswerable(k: { sentAt?: unknown }, now: number = Date.now()): boolean {
+    const at = typeof k.sentAt === 'string' ? Date.parse(k.sentAt) : NaN;
+    return Number.isFinite(at) && now - at < KNOCK_ANSWERABLE_DAYS * 86_400_000;
+}
 
 /**
  * How long after a community's last push to the directory a row says "Not answering lately" (design §2.3): a node pushes

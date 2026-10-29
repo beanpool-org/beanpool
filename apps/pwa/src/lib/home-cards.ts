@@ -116,6 +116,8 @@ export interface HomeCommunity {
     key: string; name: string | null; url: string | null; memberCount: number | null; distanceKm: number | null;
     /** Its last push to the directory (front doors S13); absent from an older global node. */
     lastSeenAt?: string | null;
+    /** How quickly it answers requests to join (Lounge L1, entry S1: 'week' | 'slow' | 'none' | null). */
+    answers?: 'week' | 'slow' | 'none' | null;
 }
 export interface HomeFind {
     point: 'request' | 'area' | null;
@@ -265,6 +267,10 @@ export interface ShownOptions {
     tipsUp?: boolean;
     /** The tour ended in this browser (Done or Skip) before the account's answer says so; absent: the answer's word. */
     tourOver?: boolean;
+    /** Context for whether a knock is open, so Find stays pinned past its first 30 days (Lounge L1). */
+    hasOpenKnock?: boolean;
+    hasOpenWatch?: boolean;
+    knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[];
 }
 
 /** Whether the tour has ended for this reader: the account says so, or this browser just ended it. */
@@ -327,7 +333,7 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
         }
     };
     const base = shownLayout(answer, layout, opts);
-    const pins = pinnedCards(answer, now);
+    const pins = pinnedCards(answer, now, opts);
     let shown = cardOrder(base, pins).filter(c => cardOnNode(c.type, frameOf(answer)) && has(c));
     // A Home never saved folds its cards behind Getting started while it is up (§1): Skip or Done brings them.
     if (!base?.updatedAt && shown.some(c => c.type === 'start')) {

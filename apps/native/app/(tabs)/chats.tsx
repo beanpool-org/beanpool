@@ -202,7 +202,7 @@ export default function ChatsScreen() {
         tabBtn: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: colors.surface.subtle },
         tabBtnActive: { backgroundColor: colors.text.body },
         tabBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
-        tabBtnTextActive: { color: colors.text.inverse },
+        tabBtnTextActive: { color: theme === 'dark' ? colors.surface.app : colors.text.inverse }, // white on the dark scheme's pale fill was 1.1:1
         emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 100 },
         emptyText: { marginTop: 16, fontSize: 15, color: colors.text.muted, fontWeight: '500' },
      
@@ -239,7 +239,7 @@ export default function ChatsScreen() {
         chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default },
         chipActive: { backgroundColor: colors.text.body, borderColor: colors.text.body },
         chipText: { color: colors.text.secondary, fontSize: 13, fontWeight: '600' },
-        chipTextActive: { color: colors.text.inverse },
+        chipTextActive: { color: theme === 'dark' ? colors.surface.app : colors.text.inverse }, // white on the dark scheme's pale chip was 1.1:1
         optionsFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 },
         resetBtn: { paddingVertical: 4 },
         resetBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },

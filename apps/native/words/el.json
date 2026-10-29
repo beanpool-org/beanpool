@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 ΧΡΗΜΑΤΟΔΟΤΗΘΗΚΕ",
   "🌱 PROJECT": "🌱 ΕΡΓΟ",
   "🏛️ ENTERPRISE": "🏛️ ΕΓΧΕΙΡΗΜΑ",
-  "Enterprise Balance": "Υπόλοιπο εγχειρήματος",
   "in deficit (keepers eat last)": "σε έλλειμμα (οι υπεύθυνοι πληρώνονται τελευταίοι)",
   "Pledge Beans": "Δέσμευση φασολιών",
   "Word {n}: {word}": "Λέξη {n}: {word}",
@@ -1881,7 +1880,6 @@
   "Couldn't reach this community. Check your connection and try again.": "Δεν ήταν δυνατή η επικοινωνία με αυτή την κοινότητα. Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.",
   "This community sent an answer the app couldn't read. Please try again later.": "Αυτή η κοινότητα έστειλε μια απάντηση που η εφαρμογή δεν μπόρεσε να διαβάσει. Παρακαλούμε δοκιμάστε ξανά αργότερα.",
   "You asked to join. No answer yet: communities usually answer within a few days.": "Ζητήσατε να συμμετάσχετε. Καμία απάντηση ακόμα: οι κοινότητες συνήθως απαντούν εντός λίγων ημερών.",
-  "No answer came. You can ask again.": "Δεν ήρθε απάντηση. Μπορείτε να ρωτήσετε ξανά.",
   "A member invited you. Join now to become a member.": "Ένα μέλος σας προσκάλεσε. Μπείτε τώρα για να γίνετε μέλος.",
   "ACTIVE\u0004listing status": "ΕΝΕΡΓΗ",
   "HELD IN TRUST": "ΣΕ ΚΑΤΑΠΙΣΤΕΥΜΑ",
@@ -2666,7 +2664,6 @@
   "PURPOSE STATEMENT *": "ΔΗΛΩΣΗ ΣΚΟΠΟΥ *",
   "Purpose statement": "Δήλωση σκοπού",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Περίγραψε καθαρά τον σκοπό αυτού του εγχειρήματος (π.χ. 'Χτίζουμε και συντηρούμε ένα κοινοτικό θερμοκήπιο μέχρι τον Νοέμβριο').",
-  "The purpose statement is what the community judges the initiative against.": "Η δήλωση σκοπού είναι το κριτήριο με το οποίο η κοινότητα αξιολογεί την πρωτοβουλία.",
   "FUNDING GOAL ({currency}) *": "ΣΤΟΧΟΣ ΧΡΗΜΑΤΟΔΟΤΗΣΗΣ ({currency}) *",
   "Funding goal amount": "Ποσό στόχου χρηματοδότησης",
   "Pledges are held safely in the enterprise account.": "Οι δεσμεύσεις φυλάσσονται με ασφάλεια στον λογαριασμό του εγχειρήματος.",
@@ -6129,5 +6126,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Ειδοποιήστε με όταν ξεκινήσει μια κοινότητα εδώ, ή βοηθήστε να ξεκινήσει μία",
   "Nothing within 250 km yet.": "Τίποτα σε ακτίνα 250 χλμ. ακόμα.",
   "See what people post elsewhere ›": "Δείτε τι αναρτούν αλλού ›",
-  "Set your area": "Ορίστε την περιοχή σας"
+  "Set your area": "Ορίστε την περιοχή σας",
+  "The purpose statement is what the community judges the project or enterprise against.": "Η δήλωση σκοπού είναι το κριτήριο με το οποίο η κοινότητα αξιολογεί το έργο ή το εγχείρημα."
 }

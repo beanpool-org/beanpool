@@ -139,11 +139,11 @@ import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import * as tourStore from '../tour-store';
 import { START_CARD_WORDS } from '@beanpool/core';
-import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
+import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
-import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
+import { AccessibilityInfo, Alert, AppState, DeviceEventEmitter } from 'react-native';
 import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, SKY_NO_PLACE_LINE, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
@@ -200,6 +200,11 @@ const node = {
     keepsRow: false,
     /** What a community this phone knocked on says of the knock (GET /api/join/knock/status, routes/knocks.ts). */
     knockStatus: 'pending' as string,
+    /**
+     * While set, a saved Home layout is kept on the account and the Decide card is rebuilt from the setting stored for it, as
+     * the node's decideCard does (routes/home-answer.ts): the `show` it holds, or undefined for none.
+     */
+    decideFor: null as null | ((show: unknown) => HomeAnswer['cards']['decide']),
 };
 const etagOf = (pk: string, a: HomeAnswer) => {
     const { generatedAt: _g, ...rest } = a;
@@ -226,6 +231,7 @@ beforeEach(async () => {
     node.role = null;
     node.keepsRow = false;
     node.knockStatus = 'pending';
+    node.decideFor = null;
     loc.status = 'denied';
     loc.last = null;
     loc.asked = 0;
@@ -264,6 +270,10 @@ beforeEach(async () => {
             record(200);
             return new Response(JSON.stringify({ status: node.knockStatus }), { status: 200 });
         }
+        if (u.pathname === '/api/join/knock/cancel' && req.method === 'POST') {
+            record(200);
+            return new Response('{}', { status: 200 });
+        }
         if (u.pathname === '/api/node-admin/me') {
             record(200);
             return new Response(JSON.stringify({ role: node.role, communityName: 'Mullumbimby' }), { status: 200 });
@@ -273,6 +283,12 @@ beforeEach(async () => {
             const body = JSON.parse(req.body);
             if (node.keepsRow && node.answer.me && 'interests' in body.preferences) {
                 node.answer = { ...node.answer, me: { ...node.answer.me, interests: body.preferences.interests } };
+            }
+            if (node.decideFor && body.preferences['home.layout']) {
+                const layout = body.preferences['home.layout'];
+                const decide = node.decideFor(layout.cards.find((c: { type: string }) => c.type === 'decide')?.settings?.show);
+                const { decide: _old, ...rest } = node.answer.cards;
+                node.answer = { ...node.answer, layout, cards: { ...rest, ...(decide ? { decide } : {}) } };
             }
             record(200);
             return new Response(JSON.stringify({ success: true, ...body.preferences }), { status: 200 });
@@ -1537,10 +1553,119 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         await render();
         expect(document.querySelector('[data-testid="home-step-ask"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-step-post"]')).not.toBeNull();
-        expect(document.querySelector('[data-testid="home-card-find"]')!.textContent).toContain('Waiting for Byron Shire BeanPool: usually a few days.');
+        // L1 replaced the unmeasured "Waiting for X: usually a few days." with the honest waiting card: when it was asked, and that it arrived.
+        const waiting = document.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')!;
+        expect(waiting.textContent).toContain('You asked to join Byron Shire BeanPool on');
+        expect(waiting.textContent).toContain('Your request arrived.');
+        expect(document.querySelector('[data-testid="home-card-find"]')!.textContent).not.toContain('usually a few days');
         // Only the community it asked, signed for there.
         const asks = node.requests.filter(r => new URL(r.url).pathname === '/api/join/knock/status');
         expect(asks.map(r => new URL(r.url).origin)).toEqual(['https://byron.example.org']);
+    });
+
+    // Decided 29 Oct 2026 (PR #2573): a request the community no longer holds keeps Find pinned until the member taps Got it
+    // (or day 61 after the send); a Cancel that worked keeps the card, and with it the pin, for that Home visit.
+    it('past day 30, a request the community no longer holds: Find stays pinned with Got it, and Got it releases the pin', async () => {
+        node.answer = globalMember(40);
+        node.knockStatus = 'none';
+        const url = 'https://byron.example.org';
+        await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+        await render();
+        await settle();
+        const waiting = document.querySelector(`[data-testid="home-find-waiting-${url}"]`)!;
+        expect(waiting.textContent).toContain('This request is no longer open. You can ask again.');
+        expect(waiting.textContent).not.toContain('No answer came');
+        expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
+        // Pinned: first, and nothing to move or remove it with.
+        expect(cards()[0]).toBe('find');
+        expect(byLabel('Card options for Find your community')).toBeNull();
+
+        await act(async () => { (document.querySelector(`[data-testid="home-find-gotit-${url}"]`) as HTMLElement).click(); });
+        await settle();
+
+        // Forgotten by the phone, the card gone, and Find is a card like any other again.
+        expect(document.querySelector(`[data-testid="home-find-waiting-${url}"]`)).toBeNull();
+        expect(JSON.parse(mem.store.get(KNOCKS_STORE_KEY) ?? '{"knocks":[]}').knocks).toEqual([]);
+        expect(byLabel('Card options for Find your community')).not.toBeNull();
+    });
+
+    it('past day 30, a request still waiting keeps Find pinned and has no Got it', async () => {
+        node.answer = globalMember(40);
+        node.knockStatus = 'pending';
+        const url = 'https://byron.example.org';
+        await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+        await render();
+        await settle();
+        expect(document.querySelector(`[data-testid="home-find-gotit-${url}"]`)).toBeNull();
+        expect(byLabel('Card options for Find your community')).toBeNull();
+    });
+
+    it('a Cancel that worked: the card stays with the cancelled line for this visit, and Find stays where it was', async () => {
+        node.answer = globalMember(40);
+        node.knockStatus = 'pending';
+        const url = 'https://byron.example.org';
+        await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+        await render();
+        await settle();
+        await act(async () => { (document.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLElement).click(); });
+        const confirm = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!.find(b => b.style === 'destructive')!;
+        await act(async () => { await confirm.onPress!(); });
+        await settle();
+
+        const waiting = document.querySelector(`[data-testid="home-find-waiting-${url}"]`)!;
+        expect(waiting).not.toBeNull();
+        expect(waiting.textContent).toContain('You cancelled your request. You can ask again after 24 hours.');
+        expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
+        expect(cards()[0]).toBe('find');
+        expect(node.requests.filter(r => new URL(r.url).pathname === '/api/join/knock/cancel')).toHaveLength(1);
+    });
+
+    // A list that does not hold Find, as the newcomer's and the starter set are (Lounge L1, review of #2573). The stub node
+    // answers every card whatever `cards=` says, so what proves the card is asked for is the reads' `cards=`.
+    const withoutFind = (now: number) => ({ v: 2 as const, cards: [{ id: 'market', type: 'market' }, { id: 'events', type: 'events' }], dismissed: {}, updatedAt: iso(now - 72 * H) });
+    const useList = (layout: ReturnType<typeof withoutFind>) => {
+        node.answer = { ...node.answer, layout: layout as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(layout));
+    };
+
+    it('a newcomer with no wait still has Find asked for and drawn first, from a list that does not hold it', async () => {
+        node.answer = globalMember(3);
+        useList(withoutFind(Date.now()));
+        await render();
+        expect(homeCards().every(c => c.includes('find'))).toBe(true);
+        expect(cards()[0]).toBe('find');
+        expect(byLabel('Card options for Find your community')).toBeNull();
+    });
+
+    it('past day 30 with no wait it is not asked for and not drawn, from a list that does not hold it (the first read, with no answer in hand, asks for it until an answer says)', async () => {
+        node.answer = globalMember(40);
+        useList(withoutFind(Date.now()));
+        await render();
+        expect(cards()).not.toContain('find');
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeCards().length).toBeGreaterThan(1);
+        expect(homeCards().slice(1).some(c => c.includes('find'))).toBe(false);
+        expect(cards()).not.toContain('find');
+    });
+
+    it('past day 30 with a request that waits, from a list that does not hold Find: it is asked for, and the waiting card is drawn with no "…"', async () => {
+        node.answer = globalMember(40);
+        useList(withoutFind(Date.now()));
+        await rememberKnock(who.identity.publicKey, { url: 'https://byron.example.org', name: 'Byron Shire BeanPool' });
+        await render();
+        // The first read could not know the knock (it is read after the answer): the card is asked for once the phone does.
+        expect(homeCards().some(c => c.includes('find'))).toBe(true);
+        expect(homeCards().at(-1)).toContain('find');
+        expect(cards()[0]).toBe('find');
+        expect(document.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')?.textContent).toContain('You asked to join Byron Shire BeanPool on');
+        expect(byLabel('Card options for Find your community')).toBeNull();
+        // Every read after that asks for it too, and no extra read is made for it each time.
+        const without = homeCards().filter(c => !c.includes('find')).length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeCards().filter(c => !c.includes('find')).length).toBe(without);
+        expect(homeCards().at(-1)).toContain('find');
     });
 
     it('the place: on the global node the phone\'s last known one (only where already allowed), to two decimals; never asked for', async () => {
@@ -2818,6 +2943,115 @@ describe('sun and moon: worked out on the phone, from the place it already has (
         const after = node.requests.slice(before);
         expect(after.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences']);
         expect(JSON.parse(after[0].body).preferences['home.layout'].cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
+    });
+});
+
+describe('the Decide card shows just the votes that are yours: one setting on the card (My votes)', () => {
+    const decideRow = (id: string, title: string, voted: boolean, inHours: number) => ({ id, title, closesAt: iso(Date.now() + inHours * H), voted });
+    const ALL = [
+        decideRow('d1', 'Compost bay', false, 2), decideRow('d2', 'Bus shelter', true, 5), decideRow('d3', 'Tool library', false, 9),
+        decideRow('d4', 'Seed fund', false, 20), decideRow('d5', 'Hall roof', false, 30),
+    ];
+    /** What the node's decideCard answers for each setting (apps/server routes/home-answer.ts): three rows, five, or the member's own. */
+    const decideFor = (show: unknown): HomeAnswer['cards']['decide'] => show === 'mine'
+        ? { open: 1, soonestClosesAt: ALL[1].closesAt, polls: 0, pollsMore: false, items: [ALL[1]], poll: null }
+        : { open: 5, soonestClosesAt: ALL[0].closesAt, polls: 0, pollsMore: false, items: show === 'open' ? ALL : ALL.slice(0, 3), poll: null };
+    const phoneKey = () => homeLayoutStoreKey(who.identity.publicKey, NODE);
+    function withDecide(settings?: Record<string, unknown>, onHome = true) {
+        const base = localMember();
+        const layout = {
+            v: 2 as const, dismissed: {}, updatedAt: iso(Date.now() - 72 * H),
+            cards: [{ id: 'market', type: 'market' }, ...(onHome ? [{ id: 'decide', type: 'decide', ...(settings ? { settings } : {}) }] : []), { id: 'events', type: 'events' }],
+        };
+        node.decideFor = decideFor;
+        node.answer = { ...base, layout, cards: { ...base.cards, ...(onHome ? { decide: decideFor(settings?.show) } : {}) } };
+        mem.store.set(phoneKey(), JSON.stringify(layout));
+    }
+    const rowIds = () => Array.from(document.querySelectorAll('[data-testid^="home-decide-d"]'), e => e.getAttribute('data-testid')!.replace('home-decide-', ''));
+    const labels = () => Array.from(document.querySelectorAll('[data-testid="card-settings-show"] button'), e => e.textContent);
+    const chosen = () => Array.from(document.querySelectorAll('[data-testid="card-settings-show"] [aria-selected="true"]'), e => e.textContent);
+    const note = () => document.querySelector('[data-testid="card-settings-show-note"]')?.textContent;
+    const sentCards = (r: { body: string }) => JSON.parse(r.body).preferences['home.layout'].cards as { id: string; type: string; settings?: unknown }[];
+    const requestsAfter = (from: number) => node.requests.slice(from).filter(r => r.method === 'POST' || new URL(r.url).pathname === '/api/home');
+    const openSettings = async () => {
+        await act(async () => { byLabel('Card options for Decide')!.click(); });
+        await act(async () => { byLabel('Settings for Decide')!.click(); });
+        await settle(2);
+    };
+
+    it('Settings… from the card\'s "…": the three choices with the stored one chosen; My votes and Save keep the card where it is, save the setting, read Home after the save, and draw only the voted row', async () => {
+        withDecide({ show: 'open' });
+        await render();
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
+        // "All open" sends five rows, and the card draws all five (Summary's three stop at three).
+        expect(rowIds()).toEqual(['d1', 'd2', 'd3', 'd4', 'd5']);
+        await openSettings();
+        expect(document.querySelector('[data-testid="card-settings-words"]')).toBeNull();
+        expect(labels()).toEqual(['Summary', 'All open', 'My votes']);
+        expect(chosen()).toEqual(['All open']);
+        expect(note()).toBe('Up to five open Decisions, and the first poll.');
+        expect(byLabel('Save Decide')).not.toBeNull();
+        expect(byLabel('Add Decide to Home')).toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="card-settings-show-mine"]') as HTMLElement).click(); });
+        expect(chosen()).toEqual(['My votes']);
+        expect(note()).toBe('Open Decisions you voted in or proposed.');
+        const before = node.requests.length;
+        await act(async () => { byLabel('Save Decide')!.click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
+        expect(rowIds()).toEqual(['d2']);
+        expect(document.querySelector('[data-testid="home-decide-d2"]')!.textContent).toContain('You voted');
+        const sent = requestsAfter(before);
+        expect(sent.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(sentCards(sent[0])).toEqual([{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide', settings: { show: 'mine' } }, { id: 'events', type: 'events' }]);
+        expect(new URL(sent[1].url).searchParams.get('cards')!.split(',')).toContain('decide');
+        expect(boundSignatureValid(sent[0], who.identity.publicKey)).toBe(true);
+    });
+
+    it('a card with no setting, or one this build cannot read, opens on Summary and draws three rows', async () => {
+        for (const settings of [undefined, { show: 'watching', ids: ['d1'] }]) {
+            withDecide(settings);
+            await render();
+            expect(rowIds()).toEqual(['d1', 'd2', 'd3']);
+            await openSettings();
+            expect(chosen(), JSON.stringify(settings)).toEqual(['Summary']);
+            expect(note()).toBe('The Decisions closing soonest, and the first poll.');
+            act(() => root?.unmount());
+            host?.remove();
+            resetHomeStoreForTests();
+        }
+    });
+
+    it('Add a card: Decide asks what it shows first (Summary chosen); My votes and Add to Home save it first on Home, read after the save, and draw the voted row', async () => {
+        withDecide(undefined, false);
+        await render();
+        expect(cards()).not.toContain('decide');
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add Decide to Home')!.click(); });
+        await settle(2);
+        expect(chosen()).toEqual(['Summary']);
+        expect(byLabel('Add Decide to Home')).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="card-settings-show-mine"]') as HTMLElement).click(); });
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        expect(cards()[0]).toBe('decide');
+        expect(rowIds()).toEqual(['d2']);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Decide added to Home');
+        const sent = requestsAfter(before);
+        expect(sent.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(sentCards(sent[0])[0]).toEqual({ id: 'decide', type: 'decide', settings: { show: 'mine' } });
+        expect(new URL(sent[1].url).searchParams.get('cards')!.split(',')).toContain('decide');
+    });
+
+    it('a node from before the setting answers the Summary card whatever is stored: the phone draws the rows it was sent', async () => {
+        withDecide({ show: 'mine' });
+        node.decideFor = null;
+        node.answer = { ...node.answer, cards: { ...node.answer.cards, decide: decideFor('counts') } };
+        await render();
+        expect(rowIds()).toEqual(['d1', 'd2', 'd3']);
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
     });
 });
 

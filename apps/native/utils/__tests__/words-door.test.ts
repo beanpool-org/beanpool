@@ -655,8 +655,13 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         const welcome = src('app/welcome.tsx');
         expect(between(welcome, "if (mode !== 'globalJoin' || globalPhase !== 'choose') return;", '}, [mode, globalPhase]);'))
             .toMatch(/joinKeyForThisPhone\(globalKey\)[\s\S]*doorWork\.start\(GLOBAL_NODE_URL, key\.identity, 'words'\)/);
-        expect(between(src('app/join-open-door.tsx'), "if (phase !== 'choose') return;", '}, [phase, startWork]);'))
-            .toMatch(/accountKeyForDoor\(\)[\s\S]*startWork\(doorUrl, account\.identity, 'words'\)/);
+        // The door screen reads its key once, as it opens (since S2: the phone's own, or one it made in memory with no
+        // account), and the work starts for that key when the two choices show. Before S2 the choices' effect read
+        // accountKeyForDoor() itself.
+        const door = src('app/join-open-door.tsx');
+        expect(between(door, '// Arriving: whose key joins.', '// Read once, as the door opens')).toMatch(/const joining = await keyForDoor\(null\);[\s\S]*setKey\(joining\);/);
+        expect(between(door, "if (phase !== 'choose' || !key) return;", '}, [phase, startWork, heldForTap, key]);'))
+            .toMatch(/startWork\(doorUrl, key\.identity, 'words'\)/);
     });
 
     it('the 12-words join: the name check, then the work (Back still works), then the key onto the phone, then the join', () => {
@@ -682,7 +687,9 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
     it('the existing-account join by words asks no lock and writes no key: no sign-in, so no copy', () => {
         const join = between(src('app/join-open-door.tsx'), 'async function handleWordsJoin()', 'async function afterAnswer(');
         expect(join).not.toMatch(/authenticateUser|commitJoinKey|importIdentity|keepJoinedIdentity/);
-        expect(join).toMatch(/submitWordsJoin\(doorUrl, account\.identity, typed, run\)/);
+        // The phone's own account joins as it is; only a key this door made (S2, a phone with no account) is written, at Join.
+        expect(join).toContain('const joining = account.createdHere ? await commitOpenDoorKey(doorUrl, account, typed) : account.identity;');
+        expect(join).toMatch(/submitWordsJoin\(doorUrl, joining, typed, run\)/);
     });
 
     it('Safety Backup for a 12-words member: the words note first, the tickbox, then "Add a sign-in as a second way back"', () => {

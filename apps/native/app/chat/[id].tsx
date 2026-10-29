@@ -1356,6 +1356,7 @@ function ChatScreen({ id }: { id: string }) {
                 onRemove={() => { /* a DM has no convenor: nobody removes anybody else's message here */ }}
                 onPickEmoji={handleEmojiSelect}
                 onPressUrl={openUrl}
+                editing={editingMessage?.id === item.id}
                 quote={quote}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept

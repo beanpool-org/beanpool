@@ -32,6 +32,14 @@ export function findHeading(kind: GroupKind, features: { beans?: boolean; enterp
     return word('Groups, projects and enterprises here');
 }
 
+/** The title over the empty Find list for a chip, as the phone's commonsGroupsEmpty says it: word() key, shown through t(). */
+export function findEmptyTitle(kind: GroupKind, features: { beans?: boolean; enterprises?: boolean } | null | undefined): WordKey {
+    if (!enterprisesOn(features) || kind === 'chat') return word('No other groups to join');
+    if (kind === 'projects') return word('No projects to back yet');
+    if (kind === 'enterprises') return word('No enterprises yet');
+    return word('No others yet');
+}
+
 /** The line shown when Yours has no rows yet: word() key, shown through t(). */
 export function yoursEmpty(features: { beans?: boolean; enterprises?: boolean } | null | undefined): WordKey {
     return enterprisesOn(features)

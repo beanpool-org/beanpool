@@ -333,6 +333,9 @@ export interface CommunityInfo {
         /** Present, and true, only where anyone can join in a minute (the worldwide community): the node refuses the whole
          *  directory and the whole invite tree, and an open group's roster to anyone outside it. Absent: as before. */
         openMembership?: true;
+        /** Present, and true, only where members may share a post outside the community (front doors S6, lib/peek.ts):
+         *  Share outside the community, and Settings' Shared outside. Absent (turned off, global, an older node): neither. */
+        shareOutside?: true;
     };
     /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
     startCommunityUrl?: string;
@@ -612,6 +615,20 @@ export async function fetchMembershipAt(community: string, publicKey: string, si
         Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey, community));
     }
     return fetch(`${community}${path}`, { headers, cache: 'no-store', ...(signal ? { signal } : {}) });
+}
+
+/**
+ * A request signed by this browser's key to the community at `community` (an origin, any community, not only the one
+ * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts). Signed for that
+ * host only. The caller keeps its own timeout and reads the Response; a POST carries `bodyString` as JSON.
+ */
+export async function signedFetchAt(
+    method: 'GET' | 'POST', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
+): Promise<Response> {
+    const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
+    return fetch(`${community}${path}`, method === 'POST'
+        ? { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString }
+        : { method, headers: signed, cache: 'no-cache' });
 }
 
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {

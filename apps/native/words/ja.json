@@ -686,7 +686,6 @@
   "🎉 FUNDED": "🎉 資金調達完了",
   "🌱 PROJECT": "🌱 プロジェクト",
   "🏛️ ENTERPRISE": "🏛️ 事業体",
-  "Enterprise Balance": "事業体の残高",
   "in deficit (keepers eat last)": "赤字（管理者の取り分は最後）",
   "Pledge Beans": "豆をプレッジする",
   "Word {n}: {word}": "単語 {n}：{word}",
@@ -1789,7 +1788,6 @@
   "Couldn't reach this community. Check your connection and try again.": "このコミュニティに接続できませんでした。通信環境を確認してもう一度お試しください。",
   "This community sent an answer the app couldn't read. Please try again later.": "コミュニティからアプリが読み取れない応答が返されました。後でもう一度お試しください。",
   "You asked to join. No answer yet: communities usually answer within a few days.": "参加を申請しました。まだ返答はありません：通常、数日以内に返答があります。",
-  "No answer came. You can ask again.": "返答がありませんでした。もう一度申請できます。",
   "A member invited you. Join now to become a member.": "メンバーから招待されました。今すぐ参加してメンバーになりましょう。",
   "ACTIVE\u0004listing status": "公開中",
   "HELD IN TRUST": "預かり中",
@@ -2556,7 +2554,6 @@
   "PURPOSE STATEMENT *": "活動目的 *",
   "Purpose statement": "活動目的",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "この事業体が何を行うためのものかを明確に記載してください（例：「11月までに共同の日よけ小屋を建設し維持する」）。",
-  "The purpose statement is what the community judges the initiative against.": "コミュニティはこの活動目的に照らして取り組みを評価します。",
   "FUNDING GOAL ({currency}) *": "資金目標 ({currency}) *",
   "Funding goal amount": "資金目標額",
   "Pledges are held safely in the enterprise account.": "プレッジは事業体のアカウントで安全に保管されます。",
@@ -5891,5 +5888,6 @@
   "Tell me when a community starts here, or say you'd help start one": "ここでコミュニティが始まったら通知する、または立ち上げに参加する",
   "Nothing within 250 km yet.": "250 km以内にはまだ何もありません。",
   "See what people post elsewhere ›": "他の場所の投稿を見る ›",
-  "Set your area": "地域を設定"
+  "Set your area": "地域を設定",
+  "The purpose statement is what the community judges the project or enterprise against.": "コミュニティはこの活動目的に照らしてプロジェクトまたは事業体を評価します。"
 }

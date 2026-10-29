@@ -423,7 +423,6 @@
   "🎉 FUNDED": "🎉 IMEFADHILIWA",
   "🌱 PROJECT": "🌱 MRADI",
   "🏛️ ENTERPRISE": "🏛️ SHIRIKA",
-  "Enterprise Balance": "Salio la Mradi",
   "in deficit (keepers eat last)": "katika nakisi (wasimamizi hupokea mwisho)",
   "Pledge Beans": "Weka Ahadi ya Maharagwe",
   "Word {n}: {word}": "Neno {n}: {word}",
@@ -1881,7 +1880,6 @@
   "Couldn't reach this community. Check your connection and try again.": "Haikuweza kufikia jumuiya hii. Angalia muunganisho wako kisha ujaribu tena.",
   "This community sent an answer the app couldn't read. Please try again later.": "Jumuiya hii ilituma jibu ambalo programu haikuweza kulisoma. Tafadhali jaribu tena baadaye.",
   "You asked to join. No answer yet: communities usually answer within a few days.": "Uliomba kujiunga. Bado hakuna jibu: kwa kawaida jumuiya hujibu ndani ya siku chache.",
-  "No answer came. You can ask again.": "Hakuna jibu lililokuja. Unaweza kuomba tena.",
   "A member invited you. Join now to become a member.": "Mwanachama alikualika. Jiunge sasa ili uwe mwanachama.",
   "ACTIVE\u0004listing status": "AMILIFU",
   "HELD IN TRUST": "IMESHIKILIWA KWA AMANA",
@@ -2666,7 +2664,6 @@
   "PURPOSE STATEMENT *": "MAELEZO YA MADHUMUNI *",
   "Purpose statement": "Maelezo ya madhumuni",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "Eleza waziwazi kile shirika hili lipo kufanya (mf. 'Tunajenga na kudumisha nyumba ya kivuli ya jumuiya ifikapo Novemba').",
-  "The purpose statement is what the community judges the initiative against.": "Maelezo ya madhumuni ndicho jumuiya inachotumia kuhukumu mpango huo.",
   "FUNDING GOAL ({currency}) *": "LENGO LA UFADHILI ({currency}) *",
   "Funding goal amount": "Kiasi cha lengo la ufadhili",
   "Pledges are held safely in the enterprise account.": "Ahadi huwekwa salama katika akaunti ya shirika.",
@@ -6129,5 +6126,6 @@
   "Tell me when a community starts here, or say you'd help start one": "Niarifu jumuiya itakapoanza hapa, au taja kuwa ungesaidia kuianzisha",
   "Nothing within 250 km yet.": "Hakuna chochote ndani ya kilomita 250 bado.",
   "See what people post elsewhere ›": "Ona kile watu wanachochapisha kwingineko ›",
-  "Set your area": "Weka eneo lako"
+  "Set your area": "Weka eneo lako",
+  "The purpose statement is what the community judges the project or enterprise against.": "Maelezo ya madhumuni ndicho jumuiya inachotumia kuhukumu mradi au biashara."
 }

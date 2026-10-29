@@ -119,6 +119,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         await screen.findByTestId('group-filter-chips');
         await waitFor(() => {
             expect(screen.queryByText('No enterprises found')).toBeNull();
+            for (const title of ['No others yet', 'No projects to back yet', 'No enterprises yet']) expect(screen.queryByText(title)).toBeNull();
             expect(screen.queryByText('Loading enterprises…')).toBeNull();
             expect(screen.queryByText('+ Propose a Project')).toBeNull();
         });

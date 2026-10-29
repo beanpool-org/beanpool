@@ -418,7 +418,6 @@
   "🎉 FUNDED": "🎉 募资成功",
   "🌱 PROJECT": "🌱 项目",
   "🏛️ ENTERPRISE": "🏛️ 企业",
-  "Enterprise Balance": "企业资金余额",
   "in deficit (keepers eat last)": "赤字状态（管理者最后受偿）",
   "Pledge Beans": "认捐豆子",
   "Word {n}: {word}": "助记词 {n}：{word}",
@@ -1789,7 +1788,6 @@
   "Couldn't reach this community. Check your connection and try again.": "无法连接到此社区。请检查你的网络连接并重试。",
   "This community sent an answer the app couldn't read. Please try again later.": "此社区返回了应用无法读取的答复。请稍后重试。",
   "You asked to join. No answer yet: communities usually answer within a few days.": "你已申请加入。暂无回复：社区通常会在几天内答复。",
-  "No answer came. You can ask again.": "未收到回复。你可以再次申请。",
   "A member invited you. Join now to become a member.": "已有成员邀请了你。立即加入成为成员。",
   "ACTIVE\u0004listing status": "有效",
   "HELD IN TRUST": "托管中",
@@ -2556,7 +2554,6 @@
   "PURPOSE STATEMENT *": "宗旨陈述 *",
   "Purpose statement": "宗旨陈述",
   "State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November').": "明确阐述该企业的宗旨（例如：“我们在 11 月前建造并维护一座社区遮阳房”）。",
-  "The purpose statement is what the community judges the initiative against.": "宗旨陈述是社区衡量该倡议的标准。",
   "FUNDING GOAL ({currency}) *": "筹资目标（{currency}）*",
   "Funding goal amount": "筹资目标金额",
   "Pledges are held safely in the enterprise account.": "认捐的款项安全保存在企业账户中。",
@@ -5891,5 +5888,6 @@
   "Tell me when a community starts here, or say you'd help start one": "在此处建立社区时通知我，或表示愿意协助创建",
   "Nothing within 250 km yet.": "250 公里内暂无内容。",
   "See what people post elsewhere ›": "查看其他地方的内容 ›",
-  "Set your area": "设置你的地区"
+  "Set your area": "设置你的地区",
+  "The purpose statement is what the community judges the project or enterprise against.": "宗旨陈述是社区衡量该项目或企业的标准。"
 }

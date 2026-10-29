@@ -264,3 +264,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `downloadAdminFile` edge cases (`HUGE_DOWNLOAD_BYTES` user confirmation prompt, `Content-Disposition` header filename sanitization and path traversal prevention, and HTTP error response JSON detail extraction) in `apps/manager/src/lib/node-client.ts` were untested.
 **Learning:** Testing `downloadAdminFile` required mocking `window.confirm`, `URL.createObjectURL`, `URL.revokeObjectURL`, and spying on `document.createElement('a')` to assert link download attribute targets and prompt cancellation returns.
 **Action:** Continue identifying utility edge cases or untested UI components across `apps/manager/`.
+
+## 2026-10-27 - [manager tests] updateEnterpriseLocation and clearEnterpriseLocation unit tests
+**Gap:** `updateEnterpriseLocation` and `clearEnterpriseLocation` in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage in `node-client.test.ts`.
+**Learning:** Testing enterprise location helpers verified `POST` and `DELETE` requests to `/api/local/admin/treasury/:pubkey/location` with coordinate payloads, admin credentials/2FA session headers, and error handling for failed requests.
+**Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.

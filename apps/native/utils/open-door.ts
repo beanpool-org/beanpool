@@ -14,7 +14,8 @@
  *   invite (app/_layout.tsx): its signed work waits for the member's first tap (`from=link`), as the global community's
  *   own link does (utils/global-link.ts). Another community's door that the member's Join in the app didn't open just now
  *   ({@link takeDoorTap}) waits the same, so a link in a spelling the intercept doesn't know holds too. Nothing joins
- *   without the member's tap, and the key that joins is the phone's own.
+ *   without the member's tap, and the key that joins is the phone's own: its account, or, on a phone with none, a key the
+ *   door makes in memory and writes only at Join (utils/open-door-key.ts; DESIGN-account-without-global-fable.md §2.3).
  * - The community's name is its own answer (or the phone's saved name for it, or its host), never a link's.
  *
  * Kept free of the screens' imports and of the phone's storage, so the router can read a link without loading either.
@@ -93,6 +94,37 @@ export function takeDoorTap(url: string, nowMs: number = Date.now()): boolean {
     return !!tap && tap.url === url && nowMs >= tap.atMs && nowMs - tap.atMs < TAPPED_DOOR_MS;
 }
 
+/**
+ * **🔑 Restore my account** at a door (app/join-open-door.tsx: its sign-in has an account there already, made on another
+ * phone): the first screen's restore, with the door's community in its address field, the address shown under the door's
+ * title. On a new phone the field was empty, and the member had to type it (PR #2564 review). Handed over in memory, as
+ * {@link takeDoorTap} is, for one opening within a minute (app/welcome.tsx {@link takeRestoreAt}): no link fills the field.
+ */
+let restoreAt: { url: string; atMs: number } | null = null;
+
+/** Where the door's Restore goes: welcome's restore, with the door's address handed over ({@link takeRestoreAt}). */
+export function restoreAtDoorHref(url: string, nowMs: number = Date.now()): { pathname: '/welcome'; params: { mode: 'member' } } {
+    const door = doorNodeAt(url);
+    restoreAt = door ? { url: door.url, atMs: nowMs } : null;
+    return { pathname: '/welcome', params: { mode: 'member' } };
+}
+
+/** The address a door's Restore handed the first screen's restore just now, or null. Read once: the next reading is null. */
+export function takeRestoreAt(nowMs: number = Date.now()): string | null {
+    const handed = restoreAtWaiting(nowMs) ? restoreAt!.url : null;
+    restoreAt = null;
+    return handed;
+}
+
+/**
+ * Whether a door's Restore has handed the first screen an address it has not taken yet ({@link takeRestoreAt}). Looks
+ * without taking it: welcome's resume asks, so it never sends the member back to the door over the restore the door
+ * opened (app/welcome.tsx; PR #2564 review).
+ */
+export function restoreAtWaiting(nowMs: number = Date.now()): boolean {
+    return !!restoreAt && nowMs >= restoreAt.atMs && nowMs - restoreAt.atMs < TAPPED_DOOR_MS;
+}
+
 /** A link to the door, as the system hands it over. */
 export interface DoorLink {
     /** The community it names (the global community when it names none), null when refused. */
@@ -133,14 +165,15 @@ export function doorLinkFromSystemPath(path: unknown): DoorLink | null {
  * Where a door link goes, or null to stay where the member is (cold: as from the icon).
  *
  * - The global community's: as its own link (utils/global-link.ts globalLinkRoute), so every way into it reads the one rule.
- * - Another community's, for a phone with an account and no join wizard left half done: its door, with the work held for
- *   the member's tap. An address the screen refuses opens the screen, which says so (never quietly another door).
- * - With no account, or a wizard half done: as from the icon. A new phone joins another community by its invite; the first
- *   screen's own door is the global community's.
+ * - Another community's, for a phone with no join wizard left half done: its door, with the work held for the member's tap.
+ *   With an account, that account joins. With none, the door makes one there, at the community's own address
+ *   (DESIGN-account-without-global-fable.md §2.3, slice S2): a self-hoster's open community takes a new phone with nothing
+ *   of ours. An address the screen refuses opens the screen, which says so (never quietly another door).
+ * - A wizard half done: as from the icon. It resumes, and the link starts nothing new.
  */
 export function doorLinkRoute(link: DoorLink, phone: PhoneAtLink, initial: boolean, nowMs: number): string | null {
     if (link.node?.global) return globalLinkRoute(phone, initial, nowMs);
-    if (phone.wizardPending || !phone.account) return initial ? '/' : null;
+    if (phone.wizardPending) return initial ? '/' : null;
     const node = link.node ? link.node.url : (link.named ?? '');
     return `${OPEN_DOOR_PATH}?node=${encodeURIComponent(node)}&from=${FROM_LINK}`;
 }

@@ -42,6 +42,7 @@ import { PROTOCOL_CONSTANTS, word } from '@beanpool/core';
 import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
 import { cleanLabel, AREA_NAME_MAX } from '../config/clean-label.js';
 import { serveCommunityCard } from './community-card.js';
+import { servePeekPage } from './peek.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -226,6 +227,9 @@ router.get('/', async (ctx) => {
         ctx.body = renderInviteTrampoline({ webJoin });
         return;
     }
+    // A post shared outside the community (`?post=<id>&peek=<ticket>`, front doors S6): its share page for a stranger, or
+    // the community's card where the link opens nothing now (routes/peek.ts). A member's browser goes to the web app.
+    if (servePeekPage(ctx)) return;
     if (serveCommunityCard(ctx)) return;
     const query = ctx.querystring ? `?${ctx.querystring}` : '';
     ctx.redirect(`/app${query}`);

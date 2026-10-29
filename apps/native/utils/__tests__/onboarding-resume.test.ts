@@ -14,7 +14,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
 }));
 
-import { claimInFlight, keyMadeForThisJoin, resumePlan, type PendingOnboarding } from '../onboarding-state';
+import { claimInFlight, doorJoinOut, doorResumeUrl, keyMadeForThisJoin, resumePlan, wizardHold, type PendingOnboarding } from '../onboarding-state';
 
 const KEY = 'ab'.repeat(32);
 const STORED = { publicKey: KEY, privateKey: '07'.repeat(32), callsign: 'Sam', createdAt: '2026-09-26T00:00:00Z' } as any;
@@ -154,8 +154,77 @@ describe('resuming an invite join, as before', () => {
     });
 });
 
+/**
+ * Another community's open door (DESIGN-account-without-global-fable.md §2.3, slice S2): the same record as the global
+ * community's door (flow `global`), at that community's own address. Its join that never finished goes back to the door
+ * screen at that address, never to the first screen's door, which is the global community's.
+ */
+describe("resuming a join at another community's open door (S2)", () => {
+    const SELF = 'https://open.riverbend.example';
+    const atSelf: PendingOnboarding = { ...globalAtDoor, anchorUrl: SELF, joinsOut: 1 };
+
+    it('at the door: back to THAT door with the same key, marked as its own; the global community\'s door stays the first screen\'s', () => {
+        const plan = resumePlan(atSelf, STORED);
+        expect(plan).toMatchObject({ action: 'resume', mode: 'globalJoin', flow: 'global', anchorUrl: SELF, freshKey: true, newKey: true });
+        expect(doorResumeUrl(plan)).toBe(SELF);
+        // The global community's own record: the first screen's door, as before.
+        expect(doorResumeUrl(resumePlan(globalAtDoor, STORED))).toBeNull();
+        // An old global record with no address reads as the global community's, as it always did.
+        expect(resumePlan({ ...globalAtDoor, anchorUrl: '' }, STORED)).toMatchObject({ action: 'resume', anchorUrl: '' });
+        expect(doorResumeUrl(resumePlan({ ...globalAtDoor, anchorUrl: '' }, STORED))).toBeNull();
+        // Past the door, every step is the welcome screen's, at that address.
+        for (const step of ['profileSetup', 'seedBackup', 'onboardingGuide'] as const) {
+            const later = resumePlan({ ...atSelf, step, freshKey: undefined, newKey: KEY, redeemed: true }, STORED);
+            expect(later, step).toMatchObject({ action: 'resume', mode: step, flow: 'global', anchorUrl: SELF, newKey: true });
+            expect(doorResumeUrl(later), step).toBeNull();
+        }
+    });
+
+    it('at any address the door screen takes (an IP, a LAN name with a port), in its one spelling', () => {
+        for (const [kept, read] of [['https://203.0.113.7', 'https://203.0.113.7'], ['https://riverbend.lan:8443', 'https://riverbend.lan:8443'], ['HTTPS://Open.Riverbend.Example/', SELF]]) {
+            expect(doorResumeUrl(resumePlan({ ...atSelf, anchorUrl: kept }, STORED)), kept).toBe(read);
+        }
+    });
+
+    it('an address the door screen would refuse is nothing to resume: the record goes, the key stays', () => {
+        for (const bad of ['http://open.riverbend.example', 'https://open.riverbend.example/path', 'javascript:alert(1)', 'https://127.0.0.1\\@evil.test']) {
+            expect(resumePlan({ ...atSelf, anchorUrl: bad }, STORED), bad).toEqual({ action: 'clear' });
+        }
+    });
+
+    it('its name, when the door knew it, comes back for How it Works, cleaned; the global community\'s never has one', () => {
+        const later = { ...atSelf, step: 'onboardingGuide' as const, communityName: 'Riverbend\u202e Open\n' };
+        expect(resumePlan(later, STORED)).toMatchObject({ communityName: 'Riverbend Open' });
+        expect(resumePlan({ ...globalAtDoor, step: 'onboardingGuide', communityName: 'Riverbend' }, STORED)).toMatchObject({ communityName: null });
+    });
+
+    it('holds the root guard to the door screen only while that join is at the door (doorJoinOut, wizardHold)', () => {
+        expect(doorJoinOut(atSelf)).toBe(true);
+        expect(wizardHold(atSelf)).toBe('door');
+        // The global community's door, any later step, and any other flow: welcome alone, as before.
+        expect(doorJoinOut(globalAtDoor)).toBe(false);
+        expect(wizardHold(globalAtDoor)).toBe('wizard');
+        expect(wizardHold({ ...atSelf, step: 'profileSetup' })).toBe('wizard');
+        expect(wizardHold({ ...atSelf, anchorUrl: '' })).toBe('wizard');
+        expect(wizardHold({ ...atSelf, flow: 'invite', step: 'create' })).toBe('wizard');
+        // A claim whose answer is not in keeps its own hold; no record holds nothing.
+        expect(wizardHold({ ...atSelf, flow: 'claim', step: 'claim' })).toBe('claim');
+        expect(wizardHold(null)).toBe(false);
+        expect(doorJoinOut(null)).toBe(false);
+    });
+});
+
 describe('the welcome screen', () => {
     const src = () => fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+
+    it("hands another community's door join back to that door screen, over itself, before any of its own steps (S2)", () => {
+        const s = src();
+        expect(s).toMatch(/const doorAt = doorResumeUrl\(plan\);\s*if \(doorAt\) \{[^}]*router\.push\(openDoorHref\(doorAt\)\);\s*return;/);
+        // Before the screen takes the plan for its own global door.
+        expect(s.indexOf('const doorAt = doorResumeUrl(plan);')).toBeLessThan(s.indexOf("if (plan.mode === 'globalJoin' && plan.identity) {"));
+        // Safety Backup's "Add a sign-in" goes to the community the member joined, never to the global community by name.
+        expect(s).toContain("url={joinFlow === 'global' && createAnchorUrl ? createAnchorUrl : GLOBAL_NODE_URL}");
+    });
 
     it('hands a claim whose answer is not in back to the claim screen, with no code (never kept)', () => {
         const s = src();

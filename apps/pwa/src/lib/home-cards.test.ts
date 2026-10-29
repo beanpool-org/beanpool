@@ -382,8 +382,8 @@ describe('sun and moon (CARD-FRAME §4, §5.2 item 22): worked out here, from th
 
 describe('a pinned Find your community on the web (#1517)', () => {
     const written = (...types: string[]): HomeLayoutV2 => ({ v: 2, cards: types.map(id => ({ id, type: id })), dismissed: {}, updatedAt: daysAgo(0) });
-    const global = (days: number) => answer(
-        { safety: { words: true, signInLinked: false }, find, steps: { ...steps, joinedAt: daysAgo(days) }, market, events, community: { name: null, members: 2310, communities: 38 } },
+    const global = (days: number, overFind: Record<string, unknown> = {}) => answer(
+        { safety: { words: true, signInLinked: false }, find: { ...find, ...overFind }, steps: { ...steps, joinedAt: daysAgo(days) }, market, events, community: { name: null, members: 2310, communities: 38 } },
         { profile: 'global', features: GLOBAL_FEATURES, me: me({ joinedAt: daysAgo(days), interests: ['food'] }) },
     );
 
@@ -402,6 +402,25 @@ describe('a pinned Find your community on the web (#1517)', () => {
     it('after 30 days it is a card like any other: drawn where the list puts it', () => {
         expect(shown(global(30), { now: NOW }, written('market', 'find', 'events'))).toEqual(['market', 'find', 'events', 'community']);
         expect(shown(global(30), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
+    });
+
+    it('a newcomer with no wait still sees it, from the newcomer\'s list and from the starter set (Lounge L1, review of #2573)', () => {
+        for (const days of [3, 29]) {
+            expect(shown(global(days), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+            expect(shown(global(days), { now: NOW, hasOpenKnock: false, knocks: [] }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        }
+        // Nothing saved yet: the newcomer's own Home, Getting started with the pin under it.
+        expect(shownFrame(global(3), null, { now: NOW }).map(c => c.type)).toContain('find');
+    });
+
+    it('a wait keeps it past day 30, from a list that does not hold it: an open knock, or a watch (Lounge L1, review of #2573)', () => {
+        const knocks = [{ url: 'https://byron.example.org', sentAt: daysAgo(0.2) }];
+        expect(shown(global(40), { now: NOW }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
+        expect(shown(global(40), { now: NOW, hasOpenKnock: true }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        expect(shown(global(40), { now: NOW, knocks }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        expect(shown(global(40, { watches: [{ point: 'area', radiusKm: 25 }] }), { now: NOW }, written('market', 'events'))).toEqual(['find', 'market', 'events', 'community']);
+        // A cancelled knock is no wait.
+        expect(shown(global(40), { now: NOW, knocks: [{ ...knocks[0], cancelledAt: daysAgo(0.1) }] }, written('market', 'events'))).toEqual(['market', 'events', 'community']);
     });
 });
 

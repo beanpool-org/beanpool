@@ -503,6 +503,21 @@ test("no page promises a community's answers line before the directory carries i
     assert.deepEqual(said, []);
 });
 
+test("Find your community's pin is described as decided (Lounge L1, Fable 29 Oct 2026): a waiting request or a watch, then Got it; no \"No answer came\"", () => {
+    const { guide } = sourceGuides();
+    const words = (g) => g.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n');
+    const decided = "After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again.";
+    for (const slug of ['home', 'finding-a-community']) {
+        const page = guide.guides.find((g) => g.slug === slug);
+        assert.ok(page, `${slug} is a page`);
+        assert.ok(words(page).includes(decided), `${slug} says the decided sentences`);
+    }
+    // The community's own card says the same line as the Home card now (KNOCK_MESSAGES.none); the old one is retired everywhere.
+    assert.ok(words(guide.guides.find((g) => g.slug === 'finding-a-community')).includes('**This request is no longer open. You can ask again.**'));
+    const retired = guide.guides.filter((g) => /No answer came|for as long as (you have )?an open request|is open; with neither/i.test(words(g))).map((g) => g.slug);
+    assert.deepEqual(retired, []);
+});
+
 test('the manual names no removed button, page or route (owner-delete: no wipe, no snapshot delete, no legacy page, restore from the shell)', () => {
     const gone = ['Wipe & Reset', 'Factory reset', 'Delete snapshot', 'Legacy Settings', '/settings-legacy', '/api/local/admin/restore'];
     const pages = fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'));
@@ -745,3 +760,18 @@ test('loadLanguagePages falls back to English section title and summary when man
         fs.rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('the members\' guide: Commons pages mention "Start something" and describe what it offers (Fable 5.1 §4.1, §5 S5)', () => {
+    const { guide } = sourceGuides();
+    const textOf = (slug) => {
+        const p = guide.guides.find(g => g.slug === slug);
+        assert.ok(p, `guide page "${slug}" exists`);
+        return p.blocks.flatMap(b => b.type === 'ul' ? b.items : [b.text]).join('\n');
+    };
+
+    for (const slug of ['enterprises', 'groups', 'decisions', 'polls', 'events']) {
+        const text = textOf(slug);
+        assert.ok(text.includes('Start something'), `${slug}.md must mention "Start something"`);
+    }
+});
+

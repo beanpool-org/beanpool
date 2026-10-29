@@ -258,6 +258,31 @@ export function MemberDetailModal({
         return true;
     }, [currentRole, isSoleOwner, ownerCount, members, pubkey, nodeRole, member?.nodeRole]);
 
+    // The removal note's words (removal by vote S3, RV-S3-W): what stands between this member and the vote, true for each page.
+    //  - A removal the community voted for: Offboard settles it.
+    //  - 'suspended', which a pause never writes (it writes 'disabled'): a re-key code holds their key (member-wizards.ts
+    //    issueRekeyCode), or a report suspended them before reports made pauses. No vote is open and the page offers no Suspend.
+    //    The way out is the one the server allows: cancelRekeyCode refuses a code that has run out, and adminLiftSuspension
+    //    refuses while the key is held (its ranOut branch: a new code on Re-Key, cancelled), so neither alone ends a run-out
+    //    code. A cancel puts back their status from before the code, so Lift suspension follows if they stay suspended.
+    //    The members list names no role for them (listNodeRoles reads active members only) and no pause vote carries one, so
+    //    the note cannot tell an owner, an admin or the only owner from a member, and it says all three. An owner whose key
+    //    waits on a re-key code still counts as the only owner (isSoleOwner, isOwnerWaitingOnRekey) and adminEmergencySuspend
+    //    refuses them (SOLE_OWNER_SUSPEND_REFUSAL), so the sole-owner row below cannot fire on this page: this sentence
+    //    carries that clause itself.
+    //  - The only owner, live: the server takes the last owner's role away for no one and suspends them for no one.
+    //  - An owner or admin, live or held aside by a pause: no vote removes one; an owner takes the role away first.
+    //  - Anyone else, a moderator included: the suspension opens the vote.
+    const removalNote = doors?.settlesRemoval
+        ? t("Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now.")
+        : memberStatus === 'suspended'
+            ? t("Removing a member is the community's vote here. They are suspended with no vote open, usually because a re-key code holds their key. End that first: cancel the code on Re-Key (if it has run out, make a new code and cancel that), and use Lift suspension if they are still suspended or no code holds their key. After that, suspending them opens the vote. No vote removes an owner or admin, and the community's only owner cannot be suspended until another owner is added.")
+            : effectiveIsSoleOwner
+                ? t("Removing a member is the community's vote here, and no vote removes an owner or admin. This is the community's only owner, so the role cannot be taken away, and they cannot be suspended, until another owner is added.")
+                : holdsServerRole
+                    ? t("Removing a member is the community's vote here, and no vote removes an owner or admin. An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote.")
+                    : t("Removing a member is the community's vote here. Suspending them opens it.");
+
     const canGrantRole = (role: MemberNodeRole): boolean => {
         if (effectiveViewerRole === 'owner') return true;
         if (effectiveViewerRole === 'admin') {
@@ -840,11 +865,7 @@ export function MemberDetailModal({
                     )}
                     {removalIsTheVote && (
                         <p className="m-0 text-[11px] text-nature-400" data-testid="removal-is-the-vote">
-                            {doors?.settlesRemoval
-                                ? "Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now."
-                                : holdsServerRole
-                                    ? "Removing a member is the community's vote here, and no vote removes an owner or admin. An owner can take that role away first; after that, they are a member like any other, and suspending them opens the vote."
-                                    : "Removing a member is the community's vote here. Suspending them opens it."}
+                            {removalNote}
                         </p>
                     )}
                     <FreshProofBox proof={pruneProof} testId="prune-proof" />

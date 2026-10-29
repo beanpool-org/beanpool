@@ -33,7 +33,7 @@ export function MobileHeader({
     settingsSeen: boolean;
     setShowSettings: (v: boolean) => void;
     onOpenProfile: (pubkey: string) => void;
-    onNavigate: (tab: string, ctxId?: string) => void;
+    onNavigate: (tab: string, ctxId?: string, txId?: string) => void;
 }) {
     // The sync chip as its dot alone where the title wouldn't fit beside the chip's words.
     const [headerRef, chipDotOnly] = useDotOnlyChip(title);
@@ -106,7 +106,7 @@ export function SidebarStatus({ isGuest, identityPubkey, activeTab, onNavigate, 
     isGuest: boolean | null;
     identityPubkey?: string;
     activeTab: string;
-    onNavigate: (tab: string, ctxId?: string) => void;
+    onNavigate: (tab: string, ctxId?: string, txId?: string) => void;
     settingsSeen: boolean;
     setShowSettings: (v: boolean) => void;
 }) {

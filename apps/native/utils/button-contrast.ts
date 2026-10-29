@@ -837,7 +837,10 @@ function applyExceptions(found: Finding[], exceptions: readonly ContrastExceptio
     for (const f of found) {
         // One pair = these two colours written at these two lines. The same colours written at other lines are not excused.
         const hit = exceptions.find((x) => sameColours(x, f) && x.wordsLine === f.words.line && x.backgroundLine === f.background.line);
-        if (hit && hit.reason && hit.reason.trim().length >= 30) { used.add(hit); excused.push({ ...f, reason: hit.reason }); }
+        // An entry that names the pair is used even when its reason is too short: the reason message is then the only one
+        // printed, and not also a "renumber it" for lines that are the same.
+        if (hit) used.add(hit);
+        if (hit && hit.reason && hit.reason.trim().length >= 30) excused.push({ ...f, reason: hit.reason });
         else findings.push(f);
     }
     exceptions.forEach((x, i) => {

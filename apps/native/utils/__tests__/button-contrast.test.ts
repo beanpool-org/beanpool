@@ -423,6 +423,9 @@ describe('the exceptions list', () => {
         const r = scan(SAVE_PROFILE, [{ ...exception, reason: 'false positive' }]);
         expect(r.findings).toHaveLength(1);
         expect(r.badExceptions.join('\n')).toMatch(/reason of at least 30 characters/);
+        // the entry names the pair exactly: the reason is the only fault, so it is not also told to renumber or delete
+        expect(r.badExceptions).toHaveLength(1);
+        expect(r.badExceptions.join('\n')).not.toMatch(/excuses no failing pair|Renumber/);
     });
 
     it('reports an entry that excuses nothing (the pair was fixed): delete it', () => {

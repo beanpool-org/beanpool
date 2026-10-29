@@ -174,7 +174,7 @@ export function AddWordsForm({
             )}
 
             <Pressable
-                style={[styles.submit, { backgroundColor: colors.text.heading }, (!check.ready || busy) && styles.disabled]}
+                style={[styles.submit, { backgroundColor: colors.brand.fill }, (!check.ready || busy) && styles.disabled]}
                 onPress={submit}
                 disabled={!check.ready || busy}
                 accessibilityRole="button"
@@ -183,8 +183,8 @@ export function AddWordsForm({
                 accessibilityState={{ disabled: !check.ready || busy, busy }}
             >
                 {busy
-                    ? <ActivityIndicator color={colors.text.inverse} />
-                    : <Text style={[styles.submitText, { color: colors.text.inverse }]}>{addWordsLine('submit')}</Text>}
+                    ? <ActivityIndicator color={colors.text.onBrand} />
+                    : <Text style={[styles.submitText, { color: colors.text.onBrand }]}>{addWordsLine('submit')}</Text>}
             </Pressable>
             <Pressable style={styles.cancel} onPress={onCancel} accessibilityRole="button" disabled={busy}>
                 <Text style={[styles.cancelText, { color: colors.text.secondary }]}>{addWordsLine('cancel')}</Text>

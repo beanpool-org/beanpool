@@ -271,8 +271,9 @@ export default function SettingsScreen() {
             backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default,
             borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16,
         },
-        primaryBtn: { backgroundColor: colors.text.heading, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
-        primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
+        // The brand pair, never a text token as a fill: text.heading and text.inverse are both white in dark (Damo, 29 Oct).
+        primaryBtn: { backgroundColor: colors.brand.fill, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+        primaryBtnText: { color: colors.text.onBrand, fontSize: 16, fontWeight: 'bold' },
         backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
         backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
         dangerBtn: { backgroundColor: colors.feedback.danger.bg, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 16, borderWidth: 1, borderColor: colors.feedback.danger.border },
@@ -2542,7 +2543,7 @@ export default function SettingsScreen() {
                         accessibilityLabel={loading ? t("Saving profile...") : t("Save Profile")}
                         accessibilityState={{ disabled: loading, busy: loading }}
                     >
-                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t("Save Profile")}</Text>}
+                        {loading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Save Profile")}</Text>}
                     </Pressable>
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
                         <Text style={styles.backBtnText}>{t("Cancel")}</Text>
@@ -2788,7 +2789,7 @@ export default function SettingsScreen() {
                                         accessibilityState={{ disabled: guestVisit.visiting, busy: guestVisit.visiting }}
                                         testID="settings-global-visit"
                                     >
-                                        {guestVisit.visiting ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('🌍 Look around the global community')}</Text>}
+                                        {guestVisit.visiting ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t('🌍 Look around the global community')}</Text>}
                                     </Pressable>
                                 </>
                             )}
@@ -2824,7 +2825,7 @@ export default function SettingsScreen() {
                     />
                     
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
-                        {advancedLoading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
+                        {advancedLoading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
                     </Pressable>
 
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
@@ -3245,7 +3246,7 @@ export default function SettingsScreen() {
                                 style={[
                                     styles.dangerBtn, 
                                     { 
-                                        backgroundColor: colors.text.heading,
+                                        backgroundColor: colors.brand.fill,
                                         borderColor: colors.border.default,
                                         minHeight: 48,
                                         justifyContent: 'center',
@@ -3260,7 +3261,7 @@ export default function SettingsScreen() {
                                 accessibilityHint={t('Signs you out of this device')}
                                 accessibilityState={{ disabled: advancedLoading || wipeConfirm !== 'WIPE' }}
                             >
-                                <Text style={[styles.dangerBtnText, { color: theme === 'dark' ? '#000000' : '#ffffff' }]}>
+                                <Text style={[styles.dangerBtnText, { color: colors.text.onBrand }]}>
                                     {advancedLoading ? t('Signing Out...') : <><Text>🚪</Text> {t('Confirm Sign Out')}</>}
                                 </Text>
                             </Pressable>

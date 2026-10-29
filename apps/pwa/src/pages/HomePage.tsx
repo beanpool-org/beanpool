@@ -34,9 +34,10 @@ import {
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    currentLanguage, formatCount, t, tn, word,
+    communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { AskedCommunity } from '../components/AskedCommunity';
@@ -51,7 +52,7 @@ import {
     FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
     canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
-    resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
+    resetLayout, sameList, type FrameAnswer, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
 import { markHomeInflight, recordHomeAnswer } from '../lib/home-store';
@@ -987,6 +988,95 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     useEffect(() => {
         if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
     }, [publicKey]);
+
+    const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
+    const [knockStatuses, setKnockStatuses] = useState<Record<string, KnockStatusResult | null>>({});
+    /** Every cancel still out (by URL): two waiting cards are normal, and each one's button is its own. */
+    const [cancellingKnocks, setCancellingKnocks] = useState<ReadonlySet<string>>(() => new Set());
+    /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
+    const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
+    /**
+     * The requests whose Cancel worked in this Home visit (by URL): their cards stay, with the cancelled line and no button.
+     * Held here, never stored: the next visit reads the browser's memory, where `cancelKnock` has already marked the knock
+     * cancelled, and the card is not drawn.
+     */
+    const [cancelledKnocks, setCancelledKnocks] = useState<ReadonlySet<string>>(() => new Set());
+
+    useEffect(() => {
+        if (!publicKey) {
+            setKnocks([]);
+            return;
+        }
+        let alive = true;
+        rememberedKnocks(publicKey).then(list => {
+            if (alive) setKnocks(list);
+        });
+        return () => { alive = false; };
+    }, [publicKey]);
+
+    const knockKey = knocks.map(k => k.url).join(' ');
+    useEffect(() => {
+        if (!identity || !knocks.length) return;
+        let alive = true;
+        knocks.forEach(k => {
+            readKnockStatus(k.url, identity).then(r => {
+                if (alive) setKnockStatuses(was => ({ ...was, [k.url]: r }));
+            });
+        });
+        return () => { alive = false; };
+    }, [knockKey, identity?.publicKey]);
+
+    const handleCancelKnock = async (k: RememberedKnock) => {
+        if (!identity) return;
+        const name = k.name ?? k.url.replace(/^https:\/\//, '');
+        const ok = window.confirm(t(FIND_COMMUNITY_WORDS.cancelConfirmText, { name }));
+        if (!ok) return;
+        setCancellingKnocks(was => new Set(was).add(k.url));
+        setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
+        const res = await cancelKnock(k.url, identity);
+        // `not_found` is the node's answer to every standing but an open request: it lapsed, it was cancelled elsewhere, or a
+        // member said yes after this card read it. The node is asked what it holds now, never told, and the button stays busy
+        // meanwhile.
+        const reread = !res.ok && res.status === 404 && res.code === 'not_found'
+            ? await readKnockStatus(k.url, identity)
+            : null;
+        setCancellingKnocks(was => { const left = new Set(was); left.delete(k.url); return left; });
+        if (res.ok) {
+            // The card stays and says so. `knocks` keeps this request for the visit, so the pin holds and Find does not
+            // vanish under the line that says what happened.
+            setCancelledKnocks(was => new Set(was).add(k.url));
+        } else {
+            if (reread) setKnockStatuses(was => ({ ...was, [k.url]: reread }));
+            setCancelErrors(was => ({ ...was, [k.url]: res.message }));
+        }
+    };
+
+    /**
+     * "Got it" on a request the community says it no longer holds: the browser forgets the knock, the card goes, and `knocks`
+     * is the list without it, so the pin it held can go (a request nothing holds pins Find until this, or day 61).
+     */
+    const handleGotIt = async (k: RememberedKnock) => {
+        if (!publicKey) return;
+        await forgetKnock(publicKey, k.url);
+        setKnocks(was => was.filter(item => item.url !== k.url));
+    };
+
+    const knocksRef = useRef(knocks);
+    knocksRef.current = knocks;
+
+    // The pins to ask by, with the knocks this browser remembers: a member whose list lacks `find` and whose request waits
+    // asks for the card that carries the waiting line, or the node never builds it (Lounge L1, review of #2573).
+    const askPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
+        const hasOpenKnock = knocksRef.current.some(k => !k.cancelledAt && knockStillAnswerable(k, at));
+        return askPinned(ans, at, { hasOpenKnock });
+    }, []);
+
+    const currentPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
+        const hasOpenKnock = (knocksRef.current ?? knocks).some(k => !k.cancelledAt && knockStillAnswerable(k, at));
+        const hasOpenWatch = ((ans?.cards?.find as { watches?: unknown[] })?.watches?.length ?? 0) > 0;
+        return pinnedCards(ans, at, { hasOpenKnock, hasOpenWatch });
+    }, [knocks]);
+
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
@@ -1152,7 +1242,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             });
     }, [publicKey, keep, holds, landedEpoch]);
 
-    // The cards an answer read with no `cards=` was built for: the node's own choice from the account's list.
+    // The cards an answer read with no `cards=` was built for: the node's own choice from the account's list, by its own
+    // pin (a member's first 30 days). Not the knocks this browser remembers: the node knows nothing of them, so a read
+    // that was not told to build Find for a waiting request did not, and the follow-up read asks for it (askPins).
     const builtFor = (a: HomeAnswer): string[] => cardsToAsk(readLayout(a.layout), askPinned(a, Date.now()), frameOf(a));
 
     const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point' | 'layout') => {
@@ -1170,7 +1262,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             // left off after that: the node would build its whole old catalogue every read (review of #1701, finding 6).
             const held = answerRef.current;
             const sent = drawnRef.current || (held?.me && !held.welcome)
-                ? cardsToAsk(drawnRef.current, askPinned(held, Date.now()), held ? frameOf(held) : null) : undefined;
+                ? cardsToAsk(drawnRef.current, askPins(held), held ? frameOf(held) : null) : undefined;
             const readPromise = getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
                 answerRef.current ? etagRef.current : null);
             markHomeInflight(readPromise);
@@ -1255,7 +1347,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             const built = builtForRef.current ?? [];
             const goes = sentPoint(pointRef.current, pick.layout);
             const moved = !!p && !!goes && (goes.lat !== p.lat || goes.lng !== p.lng);
-            if (member && !extraRead.current && (moved || cardsToAsk(pick.layout, askPinned(a, Date.now()), frameOf(a)).some(id => !built.includes(id)))) {
+            if (member && !extraRead.current && (moved || cardsToAsk(pick.layout, askPins(a), frameOf(a)).some(id => !built.includes(id)))) {
                 extraRead.current = true;
                 if (saving) void saving.then(() => fetchHomeRef.current?.('layout'));
                 else again.current = true;
@@ -1292,6 +1384,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }, [keep, saveLayout, publicKey, holds, landedEpoch]);
     const fetchHomeRef = useRef(fetchHome);
     fetchHomeRef.current = fetchHome;
+
+    // The knocks are read after the first answer may be in: a request that waits pins Find, and a list without it never asked
+    // for it, so the card that carries the waiting line is read for now (a read that knows the knocks asks for it by itself).
+    useEffect(() => {
+        const held = answerRef.current;
+        const built = builtForRef.current;
+        if (!held?.me || held.welcome || !built || !knocks.length) return;
+        if (cardsToAsk(drawnRef.current, askPins(held), frameOf(held)).some(id => !built.includes(id))) void fetchHomeRef.current('layout');
+    }, [knockKey]);
 
     // Landing: the copy this browser kept, drawn at once, then the node.
     useEffect(() => {
@@ -1470,7 +1571,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     const now = Date.now();
     const myInterests = interests ?? answer?.me?.interests ?? [];
-    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver }) : [];
+    const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
+    const shown = answer ? shownFrame(answer, layout, { now, interests: myInterests, interestsOpen, tipsUp: !!tipsView, tourOver, hasOpenKnock, knocks }) : [];
     /** The layout edits start from: the one drawn, or the starter set for a Home never saved once the tour has ended. */
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
     const startUp = shown.some(c => c.type === 'start');
@@ -1537,7 +1639,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         setTourOver(true);
         setTourProgress(null);
         if (answered?.me && !answered.welcome) {
-            changeLayout(() => endTourLayout(drawnRef.current, { pinned: pinnedCards(frameOf(answered), Date.now()) }), { reread: true });
+            changeLayout(() => endTourLayout(drawnRef.current, { pinned: currentPins(frameOf(answered)) }), { reread: true });
         }
         if (kind === 'done') { setHintOpen(false); writeFlag(hintKey(publicKey)); }
         else setHintOpen(!readFlag(hintKey(publicKey)));
@@ -1550,7 +1652,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         setTourOver(false);
         // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
         if (answered?.me && drawnRef.current) {
-            const r = addCard(drawnRef.current, 'start', Date.now(), { pinned: pinnedCards(frameOf(answered), Date.now()) });
+            const r = addCard(drawnRef.current, 'start', Date.now(), { pinned: currentPins(frameOf(answered)) });
             if (r.ok) changeLayout(() => r.layout);
         }
         void sendTourRecord(publicKey, tourRecord('open'));
@@ -1624,7 +1726,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const saving = refusedLanding.current ? Promise.resolve() : saveLayout(next);
         // An add, a card's settings, Reset, or a card the answer wasn't built for: read Home again once the save is
         // answered (the node builds an instance from the settings it keeps). A move or a remove reads nothing.
-        const pins = askPinned(answered, Date.now());
+        const pins = askPins(answered);
         const had = builtForRef.current ?? cardsToAsk(before, pins, frameOf(answered));
         if (opts.reread || cardsToAsk(next, pins, frameOf(answered)).some(id => !had.includes(id))) void saving.then(() => fetchHomeRef.current('layout')).then(opts.afterRead);
         else opts.afterRead?.();
@@ -1758,7 +1860,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const profile = String(a.profile);
     const isVisitor = !!a.welcome || !a.me;
     const beansOn = visitor ? visitor.beans : a.features.beans !== false;
-    const pins = pinnedCards(a, now);
+    const pins = currentPins(a, now);
     let imgCount = 0;
     const nextImageLoading = () => (imgCount++ < 8 ? 'eager' : 'lazy');
     // Only the cards on screen: a "Your way back in" with nothing to say is no place to move to, or a press on the card
@@ -1937,6 +2039,93 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                         : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
                                     {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
                                 </Fragment>
+                            );
+                        })}
+                        {knocks.map(k => {
+                            const comm = f.communities.find(cm => (k.key && cm.key === k.key) || (cm.url && communityOrigin(cm.url) === k.url));
+                            const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
+                            const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
+                            const st = knockStatuses[k.url];
+                            const answersLine = communityAnswersLine(comm?.answers);
+                            const isCancelling = cancellingKnocks.has(k.url);
+                            const cancelled = cancelledKnocks.has(k.url);
+
+                            if (!cancelled && st?.ok && st.value.status === 'approved') {
+                                const approved = cardKnockLines([k], knockStatuses)[0];
+                                return (
+                                    <p key={k.url} dir="auto" className="m-0 mt-2 font-semibold text-sm text-text-primary break-words" data-testid={`home-find-invited-${k.url}`}>
+                                        {'🎉 ' + (approved?.text ?? '')}
+                                    </p>
+                                );
+                            }
+
+                            // What the community now says (the phone's knockCardState): only a pending request arrived and can be
+                            // taken back. An answer that could not be read is said as it is, with no Cancel. Nothing open there
+                            // (`none`: lapsed, cancelled elsewhere, an invite that expired) is the closed card: its three lines
+                            // and "Got it", which forgets the request (decided 29 Oct 2026). lib/knock words its own sentences.
+                            const pending = !!st?.ok && st.value.status === 'pending';
+                            const closed = !!st?.ok && st.value.status === 'none';
+                            let arrivedLine: string;
+                            if (st === undefined || st === null) arrivedLine = t('Checking…');
+                            else if (!st.ok) arrivedLine = st.message;
+                            else if (pending) arrivedLine = t(FIND_COMMUNITY_WORDS.requestArrived);
+                            else arrivedLine = t(KNOCK_MESSAGES.none);
+
+                            return (
+                                <div key={k.url} data-testid={`home-waiting-card-${k.url}`} className="mt-2 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-900/40">
+                                    <p dir="auto" className="m-0 text-sm font-semibold text-text-primary break-words" data-testid={`home-waiting-sent-${k.url}`}>
+                                        {t(FIND_COMMUNITY_WORDS.askedOnDate, { name, date: sentDate })}
+                                    </p>
+                                    {/* Always in the page, so a screen reader hears the line when it is put in (a region added
+                                        with its words in it is not always announced). */}
+                                    <div role="status">
+                                        {cancelled && (
+                                            <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-cancelled-${k.url}`}>
+                                                {t(KNOCK_MESSAGES.cancelled)}
+                                            </p>
+                                        )}
+                                    </div>
+                                    {!cancelled && (
+                                        <p dir="auto" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-arrived-${k.url}`}>
+                                            {arrivedLine}
+                                        </p>
+                                    )}
+                                    {answersLine && !cancelled && !closed && (
+                                        <p className="m-0 mt-1 text-xs italic text-nature-600 dark:text-nature-300 break-words" data-testid={`home-waiting-answers-${k.url}`}>
+                                            {answersLine}
+                                        </p>
+                                    )}
+                                    {closed && !cancelled && (
+                                        <div className="mt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleGotIt(k)}
+                                                data-testid={`home-gotit-knock-${k.url}`}
+                                                className={FIND_ACTION}
+                                            >
+                                                {t(FIND_COMMUNITY_WORDS.gotIt)}
+                                            </button>
+                                        </div>
+                                    )}
+                                    {pending && !cancelled && (
+                                        <div className="mt-2">
+                                            <button
+                                                type="button"
+                                                disabled={isCancelling}
+                                                onClick={() => void handleCancelKnock(k)}
+                                                data-testid={`home-cancel-knock-${k.url}`}
+                                                className="min-h-[44px] px-3 py-2 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 bg-transparent text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                            >
+                                                {isCancelling ? t(FIND_COMMUNITY_WORDS.cancelling) : t(FIND_COMMUNITY_WORDS.cancelRequest)}
+                                            </button>
+                                        </div>
+                                    )}
+                                    {cancelErrors[k.url] && (
+                                        <p role="alert" dir="auto" className="m-0 mt-1 text-xs text-red-600 dark:text-red-400 break-words" data-testid={`home-cancel-error-${k.url}`}>
+                                            {cancelErrors[k.url]}
+                                        </p>
+                                    )}
+                                </div>
                             );
                         })}
                         {/* Nothing listed within 250 km, and the list has loaded (findOffersStart): Start leads, as on the

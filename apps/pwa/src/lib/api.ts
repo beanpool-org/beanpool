@@ -617,6 +617,20 @@ export async function fetchMembershipAt(community: string, publicKey: string, si
     return fetch(`${community}${path}`, { headers, cache: 'no-store', ...(signal ? { signal } : {}) });
 }
 
+/**
+ * A request signed by this browser's key to the community at `community` (an origin, any community, not only the one
+ * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts). Signed for that
+ * host only. The caller keeps its own timeout and reads the Response; a POST carries `bodyString` as JSON.
+ */
+export async function signedFetchAt(
+    method: 'GET' | 'POST', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
+): Promise<Response> {
+    const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
+    return fetch(`${community}${path}`, method === 'POST'
+        ? { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString }
+        : { method, headers: signed, cache: 'no-cache' });
+}
+
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {
     return request('GET', `/api/invite/mine/${encodeURIComponent(publicKey)}`);
 }

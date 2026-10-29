@@ -136,6 +136,7 @@ export const SUITES = [
     'test-money-followups',
     'test-admin-password-query',
     'test-cors-policy',
+    'test-knock-cors',
     'test-gateway-config',
     'test-gateway-real-client',
     'test-dos-hardening',

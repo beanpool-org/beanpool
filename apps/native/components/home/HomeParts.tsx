@@ -177,21 +177,25 @@ export function HomeLink({ id, text, a11y, onPress, colors, testID }: {
 export const communityLinksStyle = { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 20 } as const;
 
 /** A card's button: wraps to a second row rather than shrinking its words (§9 "buttons flexShrink: 0"). */
-export function HomeButton({ text, a11y, onPress, colors, primary, testID }: {
+export function HomeButton({ text, a11y, onPress, colors, primary, busy, testID }: {
     text: string;
     a11y?: string;
     onPress: () => void;
     colors: AppColors;
     primary?: boolean;
+    /** Its work is under way: the press does nothing, and a screen reader hears it is busy and disabled. */
+    busy?: boolean;
     testID?: string;
 }) {
     const s = homeStyles(colors);
     return (
         <Pressable
             onPress={onPress}
+            disabled={busy}
             style={({ pressed }) => [s.button, primary && s.buttonPrimary, pressed && (primary ? s.buttonPrimaryPressed : s.pressed)]}
             accessibilityRole="button"
             accessibilityLabel={a11y ?? text}
+            accessibilityState={busy ? { disabled: true, busy: true } : undefined}
             testID={testID}
         >
             <Text style={[s.buttonText, primary && s.buttonTextPrimary]}>{text}</Text>

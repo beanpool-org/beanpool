@@ -1812,6 +1812,8 @@ export async function getTransactions(pubkey: string) {
                CASE WHEN t.to_pubkey = ? THEN 'credit' ELSE 'debit' END as type,
                m_peer.callsign as peer_callsign,
                mt.post_title,
+               mt.id as deal_id,
+               mt.post_id as deal_post_id,
                mt.buyer_pubkey,
                mt.seller_pubkey,
                mb.callsign as buyer_callsign,
@@ -1837,14 +1839,15 @@ export async function getTransactions(pubkey: string) {
         let peerName = row.peer_pubkey.slice(0, 8).toUpperCase();
         // A hold's name as parts too: the Ledger tab writes it in the member's language from them (app/(tabs)/ledger.tsx
         // peerWords); `peer` stays the English.
-        let held: { title: string | null; counterparty: string | null; toCounterparty: boolean } | null = null;
+        // `dealId` and `postId` are the deal this hold belongs to, when this phone has it: the Ledger row opens it.
+        let held: { title: string | null; counterparty: string | null; toCounterparty: boolean; dealId?: string | null; postId?: string | null } | null = null;
         if (row.peer_pubkey.startsWith('escrow_')) {
             peerName = 'Held in Trust';
             held = { title: null, counterparty: null, toCounterparty: false };
             if (row.post_title) {
                 const isBuyer = pubkey === row.buyer_pubkey;
                 const counterparty = isBuyer ? row.seller_callsign : row.buyer_callsign;
-                held = { title: row.post_title, counterparty: counterparty || null, toCounterparty: isBuyer };
+                held = { title: row.post_title, counterparty: counterparty || null, toCounterparty: isBuyer, dealId: row.deal_id ?? null, postId: row.deal_post_id ?? null };
                 if (counterparty) {
                     peerName = `Held in Trust: ${row.post_title} (${isBuyer ? 'to' : 'from'} ${counterparty})`;
                 } else {

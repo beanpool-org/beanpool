@@ -1185,7 +1185,7 @@ export function App() {
                                 />
                             )}
                             {activeTab === 'ledger' && (
-                                <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} preview={beansMode === 'preview'}
+                                <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} preview={beansMode === 'preview'} deals={myTransactions}
                                     onNearYou={() => setActiveTab('home')} onGuide={(slug) => navigateToTab('guide', slug)} />
                             )}
                             {activeTab === 'projects' && (

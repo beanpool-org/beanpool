@@ -644,6 +644,64 @@ docker compose exec beanpool-node beanpool claim</code>
                 </ol>
                 <p class="run-node-note">यदि ब्लॉक <strong>No claim code after 5 minutes</strong> कहता है, या <code>beanpool claim</code> <strong>This community has no claim code waiting</strong> कहता है, तो सर्वर पूरी तरह से शुरू नहीं हुआ है: <code>docker compose logs beanpool-node</code> दिखाता है कि यह कहाँ है। एक बार जब लॉग कहे कि समुदाय का अभी तक कोई मालिक नहीं है और उसके पास एक दावा कोड है, तो अंतिम पंक्ति फिर से चलाएं। पूरे चरण ऑपरेटर मैनुअल के <a href="../guide/operators/first-time-setup.html">पहली बार सेटअप</a> में हैं।</p>
 
+                <h3 class="run-node-sub">अनुशंसित: Docker अपडेट होने पर भी अपने समुदाय को चालू रखें</h3>
+                <p>Docker का live-restore चालू होने पर Docker रीस्टार्ट हो सकता है, या पैच अपडेट ले सकता है, और आपका समुदाय बंद नहीं होता। नीचे वाले चरण के लिए root या <code>sudo</code> चाहिए, और इसे छोड़ देना सुरक्षित है: आपका समुदाय इसके बिना भी चलता है, और बाद में इसे करने के चरण ऑपरेटर मैनुअल के "Updates and health" पृष्ठ पर हैं। इंस्टॉलेशन करने वाला एआई सहायक हमेशा यह चरण करता है (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">एआई सहायक से अपना सर्वर सेट अप करना</a>)।</p>
+
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — समुदाय को चालू रखें</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">वैकल्पिक: Docker live-restore</span>
+                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+# Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
+# lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
+command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
+docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
+[ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ] &amp;&amp; { echo "Docker live-restore is already on."; exit 0; }
+python3 - &lt;&lt;'PY' || exit 1
+import json, os, stat, sys
+p = os.path.realpath("/etc/docker/daemon.json")
+st = os.stat(p) if os.path.exists(p) else None
+try:
+    d = json.loads(open(p).read().strip() or "{}") if st else {}
+    if not isinstance(d, dict):
+        raise ValueError
+except ValueError:
+    sys.exit(p + " is not a JSON object, so it is left alone. Fix or remove it, then paste this step again.")
+if d.get("live-restore") is True:
+    sys.exit(0)
+d["live-restore"] = True
+os.makedirs(os.path.dirname(p), exist_ok=True)
+tmp = p + ".new"
+fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.fchmod(fd, stat.S_IMODE(st.st_mode) if st else 0o644)
+if st:
+    os.fchown(fd, st.st_uid, st.st_gid)
+with os.fdopen(fd, "w") as f:
+    f.write(json.dumps(d, indent=2) + "\n")
+    f.flush()
+    os.fsync(f.fileno())
+os.replace(tmp, p)
+PY
+systemctl reload docker &lt;/dev/null || exit 1
+if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
+EOF</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="क्लिपबोर्ड पर कॉपी करें">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
                     GitHub पर देखें →

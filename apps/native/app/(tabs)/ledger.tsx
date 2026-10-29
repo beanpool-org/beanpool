@@ -861,13 +861,17 @@ export default function LedgerScreen() {
                         {escrowTotal > 0 && (
                             <>
                                 <View style={styles.walletMetricDivider} />
-                                {/* The total opens the deals that hold it: Your deals, In Progress (the Market's sheet, as the listing's "All your deals" does). */}
+                                {/* The total opens the deals that hold it: Your deals, In Progress (the Market's sheet, as the listing's "All your deals" does).
+                                    In preview it is Example Valley's, and like every button there it opens the marker's sheet and goes nowhere. */}
                                 <Pressable
                                     style={styles.walletMetric}
                                     accessibilityRole="button"
                                     accessibilityHint={t('Opens your deals in progress')}
                                     testID="ledger-in-escrow"
-                                    onPress={() => router.push({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } })}
+                                    onPress={() => {
+                                        if (preview) { setSheetOpen(true); return; }
+                                        router.push({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
+                                    }}
                                 >
                                     <MaterialCommunityIcons name="lock-clock" size={14} color={colors.feedback.warning.fg} />
                                     <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{formatNumber(escrowTotal, 1)}</Text>

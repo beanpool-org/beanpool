@@ -425,14 +425,14 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
     const hoursEquivalent = Math.abs(balance) / 40;
 
-    // The Wallet's rows: the member's own, or Example Valley's in preview (who it was with, and when, under each).
-    // What is held in trust: the Beans of this member's deals under way as the payer, the figure the phone's Ledger calls IN ESCROW.
+    // What is held in trust: the Beans of this member's deals under way as the payer, the figure the phone's Ledger shows as IN ESCROW.
     const inTrust = sample ? 0 : (deals ?? []).reduce((sum, d) => (d.status === 'pending' && d.buyerPublicKey === myKey ? sum + d.credits : sum), 0);
     // A hold's, release's or refund's other side is `escrow_<deal id>` (older ones `escrow_<listing id>`).
     const dealOfAccount = (key: string): MarketplaceTransaction | undefined => {
         const id = key.slice(ESCROW_ACCOUNT.length);
         return (deals ?? []).find(d => d.id === id) ?? (deals ?? []).find(d => d.postId === id);
     };
+    // The Wallet's rows: the member's own, or Example Valley's in preview (who it was with, and when, under each).
     const rows: LedgerRow[] = sample ? sample.rows : txns.map(tx => {
         const isSent = tx.from === myKey;
         const at = new Date(tx.timestamp);
@@ -822,7 +822,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 data-testid="ledger-in-escrow"
                                 className="flex-1 basis-[9rem] min-w-0 min-h-[44px] bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                             >
-                                <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2 uppercase tracking-wide">{t('IN ESCROW')}</p>
+                                <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2">{t('Held in Trust')}</p>
                                 <p className="text-2xl font-black font-mono text-amber-700 dark:text-amber-400 flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
                                     {formatNumber(inTrust, 1)}
                                     <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />

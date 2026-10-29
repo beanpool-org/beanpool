@@ -19,12 +19,12 @@ The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Walle
 - **Your balance**, and roughly how many hours of help it is worth, at 40 beans an hour.
 - **Commons:** your community's shared pool.
 - **Credit Floor:** how far below zero you could go.
-- **IN ESCROW:** how many of your beans are held in deals that are under way, when there are some. Tap it to open **My Deals** on **In Progress**, where those deals are.
+- How many of your beans are held in deals that are under way, when there are some. Tap it to open **My Deals** on **In Progress**, where those deals are. On the web it is the **Held in Trust** box.
 - **Community Circulation:** shows when you hold beans. See "The circulation fee".
 - **Project pledges:** beans you have pledged to projects, if any.
 - **Send Beans:** send a gift. See "Sending a gift".
 
-In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **IN ESCROW** (when beans are held), **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger.
+In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Held in Trust** (when beans are held), **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger.
 
 ## Recent transactions
 

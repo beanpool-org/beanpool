@@ -155,3 +155,59 @@ describe('rememberedKnocks & storage on web', () => {
         });
     });
 });
+
+// PR #2573 round 3: the signing moved from this file to lib/api.ts (signing-source-rule.test.ts). The status read and the
+// cancel must still leave signed for the community they name, and for that host only.
+describe('the status read and the cancel are signed for the community they name', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('a status read is a signed GET to that community\'s status path', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ status: 'pending' }), { status: 200 }));
+
+        const res = await readKnockStatus('https://s.example.org/some/path', IDENTITY);
+        expect(res).toEqual({ ok: true, value: { status: 'pending' } });
+
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchSpy.mock.calls[0];
+        expect(url).toBe('https://s.example.org/api/join/knock/status');
+        expect(init?.method).toBe('GET');
+        expect(init?.body).toBeUndefined();
+        const headers = init?.headers as Record<string, string>;
+        expect(headers['X-Public-Key']).toBe(PUB);
+        expect(headers['X-Signature']).toMatch(/\S/);
+        expect(headers['X-Timestamp']).toMatch(/^\d+$/);
+        expect(headers['X-Nonce']).toMatch(/\S/);
+        expect(headers['X-Signed-For']).toBe('s.example.org');
+    });
+
+    it('a cancel is a signed POST of {} to that community\'s cancel path', async () => {
+        await rememberKnock(PUB, { url: 'https://c.example.org', name: 'CancelMe' }, new Date('2026-10-10T00:00:00Z'));
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+        expect((await cancelKnock('https://c.example.org', IDENTITY, new Date('2026-10-11T00:00:00Z'))).ok).toBe(true);
+
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchSpy.mock.calls[0];
+        expect(url).toBe('https://c.example.org/api/join/knock/cancel');
+        expect(init?.method).toBe('POST');
+        expect(init?.body).toBe('{}');
+        const headers = init?.headers as Record<string, string>;
+        expect(headers['Content-Type']).toBe('application/json');
+        expect(headers['X-Public-Key']).toBe(PUB);
+        expect(headers['X-Signature']).toMatch(/\S/);
+        expect(headers['X-Signed-For']).toBe('c.example.org');
+    });
+
+    it('sends nothing for a community with no usable address', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+        expect(await readKnockStatus(null, IDENTITY)).toMatchObject({ ok: false, kind: 'no_address' });
+        expect(await cancelKnock('http://insecure.example.org', IDENTITY)).toMatchObject({ ok: false });
+        expect(fetchSpy).not.toHaveBeenCalled();
+    });
+});

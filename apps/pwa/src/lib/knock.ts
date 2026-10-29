@@ -2,14 +2,12 @@
  * "Ask to join" a local community from the web app (DESIGN-global-lounge-fable.md §6 L1).
  *
  * Persists remembered knocks in `localStorage` under `beanpool_knocks` (matching native's KNOCKS_STORE_KEY),
- * signs requests to the community origin using noble ed25519 request signing via @beanpool/core,
- * and handles reading status and cancelling requests.
+ * and reads status and cancels requests at the community origin. The signing is lib/api.ts's (signedFetchAt): the
+ * member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import {
-    buildBoundRequestHeaders, ed25519Signer, isPublicIpv4, knockStillAnswerable, t, word,
-} from '@beanpool/core';
-import { hexToBytes } from '@noble/hashes/utils.js';
+import { isPublicIpv4, knockStillAnswerable, t, word } from '@beanpool/core';
+import { signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 
 export const KNOCK_PATH = '/api/join/knock';
@@ -165,18 +163,9 @@ export async function forgetKnock(pubkey: string, url: string): Promise<void> {
 export async function readKnockStatus(communityUrl: string | null, identity: BeanPoolIdentity): Promise<KnockStatusResult> {
     const origin = communityOrigin(communityUrl);
     if (!origin) return { ok: false, kind: 'no_address', message: t(KNOCK_MESSAGES.noAddress) };
-    const target = `${origin}${KNOCK_STATUS_PATH}`;
     let res: Response;
     try {
-        const sign = ed25519Signer(hexToBytes(identity.privateKey));
-        const headers = await buildBoundRequestHeaders({
-            method: 'GET',
-            url: target,
-            body: '',
-            publicKeyHex: identity.publicKey,
-            sign,
-        });
-        res = await withTimeout(fetch(target, { method: 'GET', headers, cache: 'no-cache' }));
+        res = await withTimeout(signedFetchAt('GET', origin, KNOCK_STATUS_PATH, '', identity));
     } catch {
         return { ok: false, kind: 'unreachable', message: t(KNOCK_MESSAGES.unreachable) };
     }
@@ -196,23 +185,9 @@ export async function cancelKnock(
 ): Promise<{ ok: true } | { ok: false; message: string; status?: number; code?: string | null }> {
     const origin = communityOrigin(communityUrl);
     if (!origin) return { ok: false, message: t(KNOCK_MESSAGES.noAddress) };
-    const target = `${origin}${KNOCK_CANCEL_PATH}`;
     let res: Response;
     try {
-        const sign = ed25519Signer(hexToBytes(identity.privateKey));
-        const bodyString = '{}';
-        const headers = await buildBoundRequestHeaders({
-            method: 'POST',
-            url: target,
-            body: bodyString,
-            publicKeyHex: identity.publicKey,
-            sign,
-        });
-        res = await withTimeout(fetch(target, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...headers },
-            body: bodyString,
-        }));
+        res = await withTimeout(signedFetchAt('POST', origin, KNOCK_CANCEL_PATH, '{}', identity));
     } catch {
         return { ok: false, message: t(KNOCK_MESSAGES.unreachable) };
     }

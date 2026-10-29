@@ -1549,7 +1549,6 @@ export default function MarketScreen() {
                             size="grid"
                             accessibilityLabel={item.title}
                             imageStyle={styles.gridImage}
-                            tileStyle={styles.gridImage}
                         />
                         {/* One row along the photo's foot, the badges at its start and the price at its end. It wraps,
                             growing upwards: RECURRING and YOU in a longer language (or at 320dp and 1.3x) stack instead
@@ -1699,6 +1698,8 @@ export default function MarketScreen() {
                 onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
             >
                 <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
+                    {/* The slot is 80 dp wide and as tall as the text beside it (at least 80): stretched by the row. Never a
+                        percentage height, which Yoga reads against the whole list and made a lone card fill the screen. */}
                     <MarketCardPicture
                         postId={item.id}
                         cover={coverImage}
@@ -1706,8 +1707,8 @@ export default function MarketScreen() {
                         category={item.category}
                         kind={isPulse ? 'pulse' : (item.type === 'event' ? 'event' : 'listing')}
                         size="thumb"
-                        imageStyle={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}
-                        tileBox={{ width: 80, height: '100%', minHeight: 80, borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}
+                        imageStyle={{ width: 80, minHeight: 80, alignSelf: 'stretch', borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}
+                        tileBox={{ width: 80, minHeight: 80, alignSelf: 'stretch', borderTopLeftRadius: 14, borderBottomLeftRadius: 14, overflow: 'hidden' }}
                     />
                     <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>

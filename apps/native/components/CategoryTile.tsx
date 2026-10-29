@@ -147,9 +147,13 @@ export const CategoryTile: React.FC<CategoryTileProps> = ({
 };
 
 const styles = StyleSheet.create({
+    // Fills the slot its host gives it, and no more: stretch across and grow along, never `height: '100%'`. A percentage
+    // height is read by Yoga against the room the ancestors offer, not against the host's own height, so in a Market list
+    // row whose slot takes its height from the text beside it the tile and its card grew to the whole list (a lone
+    // listing, with the examples under it, filled the screen). Stretch and grow follow the host's laid-out box.
     container: {
-        width: '100%',
-        height: '100%',
+        alignSelf: 'stretch',
+        flexGrow: 1,
         overflow: 'hidden',
     },
     centerAlign: {

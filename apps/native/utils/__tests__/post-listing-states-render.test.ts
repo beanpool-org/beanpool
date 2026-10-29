@@ -174,7 +174,7 @@ function answers(post: Record<string, unknown>) {
     const table: Record<string, unknown> = {
         getPost: post, getDb: database, getMemberRatings: { average: 4.5, count: 3 }, getUnreadCountForPost: 0,
         getBalance: { isBlockedFromTrading: false, keeperOf: node.keeperOf }, fetchGroupDetails: { group: { viewerRole: null } },
-        getMarketplaceTransactions: node.mine, getDealsFor: node.kept, treasuryComplete: { success: true },
+        getMarketplaceTransactions: node.mine, getDealsFor: node.kept, treasuryComplete: { success: true }, completeMarketplaceTransaction: { success: true },
     };
     return (name: string) => (name in table ? Promise.resolve(table[name]) : undefined);
 }
@@ -255,6 +255,19 @@ for (const theme of ['light', 'dark'] as const) {
             await press(r, 'Release Credits');
             expect(net.calls).toContain('db.treasuryComplete');
             expect(net.calls).not.toContain('db.completeMarketplaceTransaction');
+            // The enterprise's trade is not the keeper's to rate.
+            expect(host.textContent).not.toContain('How was your experience');
+        });
+
+        it("a Need's author, who pays, releases from their row: then asked to rate the helper, as the web asks", async () => {
+            node.mine = [deal({ id: 'tx-h', credits: 20, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
+            await open(listing({ type: 'need', title: 'Fix the fence', author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20 }));
+            const r = row('tx-h')!;
+            expect(host.textContent).not.toContain('How was your experience');
+            await press(r, '✅ Release Credits');
+            await press(r, 'Release Credits');
+            expect(net.calls).toContain('db.completeMarketplaceTransaction');
+            expect(host.textContent).toContain('How was your experience with Helper?');
         });
 
         it('a helper on a Need, approved: the Beans held for them, the payer named, Cancel; no Release', async () => {

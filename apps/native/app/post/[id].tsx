@@ -895,6 +895,9 @@ export default function PostDetailModal() {
             setReleaseRowId(null);
             hapticSuccess();
             afterDealStep();
+            // The reader's own trade is theirs to rate, as the panel it replaces asked and the web asks; a keeper's is the
+            // enterprise's. Release is the payer's, so the one to rate is the deal's seller.
+            if (!m.asKeeper) setPromptReviewForTx({ txId: m.tx.id!, targetPubkey: m.tx.sellerPublicKey, targetCallsign: m.tx.sellerCallsign || t('Peer') });
         } catch (e: any) { hapticWarning(); Alert.alert(t('Error'), signedRequestWords(e.message)); } finally { setAccepting(false); }
     };
     const cancelRow = (m: DealMoves) => {

@@ -110,15 +110,20 @@ test('every internal href in apps/website/**/*.html resolves to a file in the tr
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The Docker live-restore step of "Start a community".
+// The Docker live-restore step of "Start a community", and the one-paste block it follows.
 //
 // Self-hosters copy this step onto their own servers, so it has to work for root and for a user with sudo, check that
 // systemd and Docker are there, never damage an existing /etc/docker/daemon.json, and be the same text everywhere it
-// appears: the README, the server README, the website and its 24 translations (sources and built pages).
+// appears: the README and the server README.
 //
 // It is an OPTIONAL step in a block of its own, below the one-paste quickstart (Marty, 29 Oct 2026): the quickstart stays
 // short for newcomers, and says nothing about live-restore. An AI assistant doing the install always does the step, and
 // the step points it to the install-with-AI page.
+//
+// The website does not carry the step (Marty, 29 Oct 2026, evening: "lets get start a community on its own page - straight
+// up", after seeing 35 lines of install code on the home page): beanpool.org/start, in every language, has the one-paste
+// block, the same as the README's, and one sentence that sends to the operator manual's Updates and health page; the home
+// page has no install code at all, only a teaser with a button to /start. The README is for operators, so it keeps the step.
 // ---------------------------------------------------------------------------------------------------------------------
 
 const STEP_FIRST_LINE = '# Docker live-restore:';
@@ -143,17 +148,17 @@ function extractStep(text, where) {
 /** What the quickstart must never carry: the live-restore step, or anything it runs. */
 const LIVE_RESTORE_WORDS = /live-restore|LiveRestore|daemon\.json|systemctl|\bsudo\b|python3|<<'?EOF/i;
 
-/** The English home page, and the home page of each of the 24 languages as a source and as a built page: [name, file]. */
-function websitePages() {
-    const pages = [['apps/website/index.html', path.join(SITE, 'index.html')]];
+/** One page of the English site, and of each of the 24 languages as a source and as a built page: [name, file]. */
+function websitePages(page) {
+    const pages = [[`apps/website/${page}`, path.join(SITE, page)]];
     for (const lang of SOURCE_LANGS) {
-        pages.push([`apps/website-src/content/${lang}/index.html`, path.join(ROOT, 'apps/website-src/content', lang, 'index.html')]);
-        pages.push([`apps/website/${lang}/index.html`, path.join(SITE, lang, 'index.html')]);
+        pages.push([`apps/website-src/content/${lang}/${page}`, path.join(ROOT, 'apps/website-src/content', lang, page)]);
+        pages.push([`apps/website/${lang}/${page}`, path.join(SITE, lang, page)]);
     }
     return pages;
 }
 
-/** The one-paste quickstart alone (the first copyable block of "Start a community"), by file, whatever else the page holds. */
+/** The one-paste quickstart alone (the one copyable block of beanpool.org/start), by file, whatever else the page holds. */
 function quickstartBlocks() {
     const found = new Map();
     const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
@@ -162,19 +167,18 @@ function quickstartBlocks() {
     const fence = section[1].match(/```bash\n([\s\S]*?)```/);
     assert.ok(fence, 'README has the quickstart block under "## Run a community"');
     found.set('README.md', fence[1].trim());
-    for (const [name, file] of websitePages()) {
+    for (const [name, file] of websitePages('start.html')) {
         assert.ok(fs.existsSync(file), `${name} exists`);
-        const block = fs.readFileSync(file, 'utf8').match(/<code class="cta-block">([\s\S]*?)<\/code>/);
-        assert.ok(block, `${name} has <code class="cta-block">`);
-        found.set(name, decodeHtml(block[1]).trim());
+        const blocks = [...fs.readFileSync(file, 'utf8').matchAll(/<code class="cta-block">([\s\S]*?)<\/code>/g)];
+        assert.equal(blocks.length, 1, `${name} has one <code class="cta-block">, the quickstart: the live-restore step is not on the website`);
+        found.set(name, decodeHtml(blocks[0][1]).trim());
     }
     return found;
 }
 
 /**
- * The two copyable blocks of "Start a community" in the README and in the website pages (English, 24 sources, 24 built):
- * the one-paste `quickstart`, and below it the `stepBlock` with the optional live-restore `step` in it. `lead` is the words
- * just above the step's block: its heading and sentences.
+ * The two copyable blocks of "Run a community" in the README: the one-paste `quickstart`, and below it the `stepBlock` with
+ * the optional live-restore `step` in it. `lead` is the words just above the step's block: its heading and sentences.
  */
 function pasteBlocks() {
     const found = new Map();
@@ -187,16 +191,6 @@ function pasteBlocks() {
     assert.equal(fences.length, 2, 'README: "## Run a community" has two bash blocks, the quickstart and the optional step');
     const above = section[1].slice(fences[0].index + fences[0][0].length, fences[1].index).trim().split(/\n\s*\n/).pop();
     found.set('README.md', entry('README.md', fences[0][1], fences[1][1], above));
-
-    for (const [name, file] of websitePages()) {
-        assert.ok(fs.existsSync(file), `${name} exists`);
-        const html = fs.readFileSync(file, 'utf8');
-        const blocks = [...html.matchAll(/<code class="cta-block">([\s\S]*?)<\/code>/g)];
-        assert.equal(blocks.length, 2, `${name} has two <code class="cta-block">, the quickstart and the optional step`);
-        const between = html.slice(blocks[0].index + blocks[0][0].length, blocks[1].index);
-        assert.ok(between.includes('<h3'), `${name}: the optional step has a heading of its own`);
-        found.set(name, entry(name, decodeHtml(blocks[0][1]), decodeHtml(blocks[1][1]), between.slice(between.lastIndexOf('<h3'))));
-    }
     return found;
 }
 
@@ -209,7 +203,7 @@ function serverReadmeStep() {
     return { stepBlock: fences[0][1], step: extractStep(fences[0][1], 'apps/server/README.md'), lead: above };
 }
 
-/** Every copy of the step in the tree, by file. */
+/** Every copy of the step in the tree, by file: the README and the server README. */
 function stepCopies() {
     const copies = new Map();
     for (const [name, found] of pasteBlocks()) copies.set(name, found.step);
@@ -238,18 +232,52 @@ function scriptOf(step, daemonJson) {
 
 const sandbox = () => fs.mkdtempSync(path.join(os.tmpdir(), 'live-restore-test-'));
 
-test('the live-restore step is the same text in the README, the server README, the website and all 24 translations', () => {
+test('the live-restore step is the same text in the README and the server README', () => {
     const copies = stepCopies();
-    assert.equal(SOURCE_LANGS.length, 24, 'there are 24 translation sources');
-    assert.equal(copies.size, 2 + 1 + 24 + 24, 'README, server README, English page, 24 sources and 24 built pages');
+    assert.equal(copies.size, 2, 'README and server README');
     const canonical = copies.get('README.md');
     const different = [...copies].filter(([, step]) => step !== canonical).map(([name]) => name);
     assert.deepEqual(different, [], `these copies differ from the README step: ${different.join(', ')}`);
 });
 
-test('the one-paste block has no live-restore line: the same short block in the README, the website and all 24 translations', () => {
+test('the live-restore step is on no website page: the home page has no install code, /start has the one-paste block and a pointer, in all 25 languages', () => {
+    assert.equal(SOURCE_LANGS.length, 24, 'there are 24 translation sources');
+    const everyPage = [...websitePages('index.html'), ...websitePages('start.html')];
+    assert.equal(everyPage.length, 2 * (1 + 24 + 24), 'the English page, 24 sources and 24 built pages, for the home page and for /start');
+    for (const [name, file] of everyPage) {
+        assert.ok(fs.existsSync(file), `${name} exists`);
+        const html = fs.readFileSync(file, 'utf8');
+        assert.ok(!html.includes(STEP_FIRST_LINE), `${name}: the live-restore step is not on the website`);
+        assert.deepEqual(html.split('\n').filter((l) => /live-restore|LiveRestore|daemon\.json|systemctl|python3|<<'?EOF/i.test(l)), [], `${name}: no line about live-restore or what the step runs`);
+        const blocks = (html.match(/<code class="cta-block">/g) || []).length;
+        if (name.endsWith('index.html')) assert.equal(blocks, 0, `${name}: the home page has no install code`);
+        else assert.equal(blocks, 1, `${name}: /start has the one-paste block only`);
+    }
+});
+
+test('/start in every language sends to the operator manual for the live-restore step, and to the install-with-AI page for what an assistant does', () => {
+    const UPDATES = 'https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/server/updates-and-health.md';
+    const WITH_AI = 'https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md';
+    for (const [name, file] of websitePages('start.html')) {
+        const html = fs.readFileSync(file, 'utf8');
+        const at = html.indexOf('<h2 id="keep-running">');
+        assert.ok(at > 0, `${name}: has the Recommended heading (keep-running)`);
+        assert.ok(at > html.indexOf('<code class="cta-block">'), `${name}: the pointer comes after the one-paste block`);
+        const section = html.slice(at, html.indexOf('</main>'));
+        const paragraph = section.match(/<\/h2>\s*<p>([\s\S]*?)<\/p>/)[1];
+        assert.ok(paragraph.includes(`href="${UPDATES}"`), `${name}: it links the operator manual's Updates and health page`);
+        assert.ok(paragraph.includes(`href="${WITH_AI}"`), `${name}: it links the install-with-AI page, where an assistant is told it always does the step`);
+        assert.equal((section.match(/<p>/g) || []).length, 1, `${name}: it is one paragraph`);
+    }
+    // The pointer in English is one sentence about the step, then the AI-assistant sentence.
+    const en = fs.readFileSync(path.join(SITE, 'start.html'), 'utf8');
+    assert.match(en, /<h2 id="keep-running">Recommended: keep your community running when Docker updates<\/h2>/);
+    assert.match(en, /An AI assistant doing the install always does this step \(<a href="[^"]+install-with-ai\.md"/);
+});
+
+test('the one-paste block has no live-restore line: the same short block in the README and on /start in all 25 languages', () => {
     const blocks = quickstartBlocks();
-    assert.equal(blocks.size, 1 + 1 + 24 + 24, 'README, English page, 24 sources and 24 built pages');
+    assert.equal(blocks.size, 1 + 1 + 24 + 24, 'README, English /start, 24 sources and 24 built pages');
     const canonical = blocks.get('README.md');
     assert.ok(canonical.startsWith('git clone https://github.com/beanpool-org/beanpool.git && cd beanpool\ndocker network create beanpool-shared\n'), 'it starts with the clone and the network');
     assert.ok(canonical.endsWith('\ndocker compose exec beanpool-node beanpool claim'), 'and ends with the claim');
@@ -266,17 +294,17 @@ test('the live-restore step is optional: below the one-paste block, in a block o
         assert.equal(stepBlock.trim(), step, `${name}: the step's block holds the step and nothing else, so one copy button copies all of it`);
         assert.ok(lead.includes('install-with-ai.md'), `${name}: the words above the step link it to the install-with-AI page`);
     }
-    for (const name of ['README.md', 'apps/website/index.html']) {
-        const { lead } = blocks.get(name);
+    {
+        const { lead } = blocks.get('README.md');
         for (const words of [
             'Recommended: keep your community running when Docker updates',
             'Docker can restart, or take a patch update, without stopping your community',
             'needs root or',
             'safe to skip',
-            // Agents read the README and the website too: they must find out that the step is theirs to do.
+            // Agents read the README: they must find out that the step is theirs to do.
             'An AI assistant doing the install always does this step',
         ]) {
-            assert.ok(lead.includes(words), `${name}: the step is introduced with "${words}"`);
+            assert.ok(lead.includes(words), `README.md: the step is introduced with "${words}"`);
         }
     }
     const server = serverReadmeStep();

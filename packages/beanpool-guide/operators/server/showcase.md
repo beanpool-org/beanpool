@@ -49,7 +49,7 @@ A value other than true or false is ignored, and the log says so once.
 
 ## Where Start a community leads
 
-The sheet's **Start a community** leads to a page on how to run a community. With nothing set, that is https://beanpool.org/#run-a-node. Your community doesn't need it: you can name your own page instead.
+The sheet's **Start a community** leads to a page on how to run a community. With nothing set, that is https://beanpool.org/start. Your community doesn't need it: you can name your own page instead.
 
 - An owner sets it with POST /api/local/admin/start-community-url and a url, or null for the default. It must start https://, have no user name or password in it, and be at most 300 characters.
 - Or set the row startCommunityUrl in node_config, the same way as above. A value that isn't such an address is ignored, and the default is used.

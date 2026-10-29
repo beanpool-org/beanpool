@@ -2033,10 +2033,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </div>
                 )}
 
+                {/* The room between the chat's header and its composer (the phone's "column": dmKeyBannerMaxHeight works from the
+                    same measure). Nothing in it can make the chat taller than that, so the composer never goes under the bottom
+                    nav: the pinned block gives way first, then the thread, which keeps its floor while the room has it. (Its
+                    children are not indented one more level, to keep this change reviewable.) */}
+                <div data-testid="chat-middle" style={{ flex: '1 1 0px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                 {/* The pinned block above the thread: the deal strip, the listing header, the Trust Hold banner and the pinned Rate
-                    banner. It takes what the column leaves once the header, the composer and the thread's floor are in, and scrolls
-                    inside that (the phone's dmKeyBannerMaxHeight idea), so at 320 px and 1.3x text the thread keeps 120 px and the
-                    composer stays above the bottom nav. Every card stays reachable by scrolling and by Tab. */}
+                    banner. It takes what the room leaves once the thread's floor is in, and scrolls inside that (the phone's
+                    dmKeyBannerMaxHeight idea), so at 320 px and 1.3x text the thread keeps 120 px. Every card stays reachable by
+                    scrolling and by Tab. */}
                 <div data-testid="chat-pinned" style={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
                     {/* The deals with this person, both sides (the phone's pinned strip): Release / Cancel for the payer, "Awaiting
                         release" for the payee, Review once it is done. Each card opens its listing at that deal. */}
@@ -2167,9 +2172,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     })()}
                 </div>
 
-                {/* Messages. The floor is what the pinned block above leaves it at the least (120 px, whatever the text size). */}
+                {/* Messages. The pinned block above leaves it 120 px at the least, whatever the text size; in a room under 120 px
+                    (a short window) the thread is the whole room, as it was before the pinned block. */}
                 <div data-testid="chat-thread" style={{
-                    flex: 1, minHeight: '120px', overflowY: 'auto', padding: '1rem',
+                    flex: 1, minHeight: 'min(120px, 100%)', overflowY: 'auto', padding: '1rem',
                     display: 'flex', flexDirection: 'column', gap: '0.3rem',
                 }}>
                     {messages.length === 0 && (
@@ -2839,6 +2845,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         );
                     })}
                     <div ref={messagesEndRef} />
+                </div>
                 </div>
 
                 {/* Edit Preview */}

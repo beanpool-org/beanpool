@@ -268,7 +268,7 @@ describe('Chat deal strip: the pinned block never takes the thread or the compos
         expect(onNavigate).toHaveBeenCalledWith('marketplace-review', 'tx-old');
     });
 
-    it('the strip and the Trust Hold banner sit in one scroll box that can shrink, above a thread with a floor', async () => {
+    it('the strip and the Trust Hold banner sit in one scroll box that can shrink, above a thread with a floor, in a room the composer is not part of', async () => {
         mockTxs = [
             deal('tx-new', { createdAt: '2026-10-22T00:00:00Z' }),
             deal('tx-old', { createdAt: '2026-10-19T00:00:00Z' }),
@@ -279,9 +279,20 @@ describe('Chat deal strip: the pinned block never takes the thread or the compos
         expect(within(pinned).getByText('🔒 Trust Hold: 5 Beans')).toBeInTheDocument();
         // Content-sized when there is room, and the one thing that gives way when there is not.
         expect(pinned).toHaveStyle({ flexGrow: '0', flexShrink: '1', minHeight: '0px', overflowY: 'auto' });
+        // The room between the chat's header and its composer: it can shrink to nothing, so whatever is in it can never make the
+        // chat taller than the column (the composer under the bottom nav); the pinned box and the thread share it.
+        const room = screen.getByTestId('chat-middle');
+        expect(room).toHaveStyle({ flexGrow: '1', flexShrink: '1', minHeight: '0px', display: 'flex', flexDirection: 'column' });
         const thread = screen.getByTestId('chat-thread');
-        expect(thread).toHaveStyle({ minHeight: '120px', overflowY: 'auto' });
-        // The box comes before the thread, so the thread (and with it the composer) is the last thing in the column.
+        expect(room).toContainElement(pinned);
+        expect(room).toContainElement(thread);
+        const composerBox = document.querySelector('textarea');
+        expect(composerBox).not.toBeNull();
+        expect(room).not.toContainElement(composerBox as HTMLElement);
+        // The thread keeps 120 px while the room has it, and is the whole room when it is shorter (a short window).
+        expect(thread).toHaveStyle({ overflowY: 'auto' });
+        expect(thread.getAttribute('style')).toContain('min-height: min(120px, 100%)');
+        // The box comes before the thread.
         expect(pinned.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 

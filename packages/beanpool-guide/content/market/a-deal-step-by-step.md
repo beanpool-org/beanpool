@@ -34,7 +34,7 @@ In the web app, **Withdraw Request** is **Cancel Offer** and **Approve & Commit*
 Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, the button to call it off is **Cancel Hold**.
 
 - Do the job, or hand over the thing.
-- The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at.
+- The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at. Before they confirm, the app says how many beans will go and to whom, such as **Transferring 100 B to Kofi**.
 - The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons.
 
 Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder.
@@ -52,7 +52,7 @@ The post itself shows your deal, so you never need to go looking for it. It says
 - **Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.
 - **You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again.
 
-An alert about a deal, and a deal on Home or in the top bar, opens the post at that deal. On a Repeatable post you posted, that deal's line comes first.
+An alert about a deal, and a deal on Home or in the top bar, opens the post at that deal. On a Repeatable post you posted, that deal's line comes first. If that deal is over by then, the post opens as it is now, with one line on what became of it: **That request was declined.**, **That deal was cancelled.** or **That deal is done.** Whatever you can do on the post, such as take it up again, is there as usual.
 
 ## A post of an enterprise you keep
 

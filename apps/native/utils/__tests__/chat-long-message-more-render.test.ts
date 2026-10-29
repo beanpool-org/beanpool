@@ -7,12 +7,20 @@
  * with an onTextLayout reports its lines after it is drawn, at 32 characters a line at 320 dp, and a Text with numberOfLines
  * reports (and draws) no more than that many. `LAYOUT_REPORTS` flips the other behaviour a platform has been seen to have,
  * reporting every line it has however many it drew. The fold must hold either way.
+ *
+ * `layout.commits` records every commit of a message's words (its text, the numberOfLines it was drawn with, and whether
+ * it was asking for a layout). The settled tree hides a row that was drawn clamped for a frame and then corrected, so the
+ * tests about a row coming back read this log, not the final DOM.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, useEffect, useRef } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-const layout = vi.hoisted(() => ({ width: 320, reports: 'drawn' as 'drawn' | 'all' }));
+const layout = vi.hoisted(() => ({
+    width: 320,
+    reports: 'drawn' as 'drawn' | 'all',
+    commits: [] as { text: string; lines: number | undefined; measuring: boolean }[],
+}));
 
 vi.mock('react-native', () => {
     /** Lines the text comes to: each paragraph wraps every (width / 10) characters. */
@@ -20,7 +28,9 @@ vi.mock('react-native', () => {
     function MockText({ children, onPress, numberOfLines, onTextLayout, style: _style, accessibilityRole: _role, ...rest }: any) {
         const ref = useRef<HTMLSpanElement>(null);
         useEffect(() => {
-            if (!onTextLayout || !ref.current) return;
+            if (!ref.current) return;
+            layout.commits.push({ text: ref.current.textContent ?? '', lines: numberOfLines, measuring: !!onTextLayout });
+            if (!onTextLayout) return;
             const all = linesOf(ref.current.textContent ?? '');
             const drawn = layout.reports === 'all' ? all : Math.min(all, numberOfLines ?? all);
             onTextLayout({ nativeEvent: { lines: Array.from({ length: drawn }, () => ({})) } });
@@ -74,7 +84,7 @@ const words = (container: HTMLElement, startsWith: string) =>
     Array.from(container.querySelectorAll('span')).find((s) => (s.textContent ?? '').startsWith(startsWith)) as HTMLElement;
 
 describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds with …more (%s)', (kind) => {
-    beforeEach(() => { layout.width = 320; layout.reports = 'drawn'; });
+    beforeEach(() => { layout.width = 320; layout.reports = 'drawn'; layout.commits.length = 0; });
     afterEach(cleanup);
 
     it('a 40-line message folds to twelve lines under …more, opens in place, and folds again', () => {
@@ -160,6 +170,66 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         rerender(inList(b));
         rerender(inList(a, b));
         expect(screen.getAllByRole('button', { name: 'Show less' })).toHaveLength(1);
+    });
+
+    it('a row that comes back is drawn folded at once, not clamped a line past the fold first', () => {
+        const a = row(message('a', fortyLines), kind);
+        const b = row(message('b', fortyLines.replace(/Line/g, 'Item')), kind);
+        const { rerender } = render(inList(a, b));
+
+        // The list scrolls it away and back: its row unmounts, then mounts again.
+        rerender(inList(b));
+        layout.commits.length = 0;
+        rerender(inList(a, b));
+
+        const drawn = layout.commits.filter((c) => c.text.startsWith('Line 1 of'));
+        expect(drawn.length).toBeGreaterThan(0);
+        expect(drawn.every((c) => c.lines === 12 && !c.measuring)).toBe(true);
+        expect(screen.getAllByRole('button', { name: 'Show the whole message' })).toHaveLength(2);
+    });
+
+    it('an open message that comes back is drawn open at once, and a message that fit is not measured again', () => {
+        const a = row(message('a', fortyLines), kind);
+        const fits = row(message('fits', aLongParagraph), kind);
+        layout.width = 1000;
+        const { rerender } = render(inList(a, fits));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' }));
+        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+
+        rerender(inList());
+        layout.commits.length = 0;
+        rerender(inList(a, fits));
+
+        // Neither is drawn clamped or asks for a layout: the open one whole, the one that fit as it always was.
+        const drawn = layout.commits.filter((c) => c.text.startsWith('Line 1 of') || c.text.startsWith('word word'));
+        expect(drawn.length).toBeGreaterThanOrEqual(2);
+        expect(drawn.every((c) => c.lines === undefined && !c.measuring)).toBe(true);
+        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
+    });
+
+    it('a row that comes back at another width is measured again, not believed', () => {
+        const paragraph = row(message('p', aLongParagraph), kind);
+        const { rerender } = render(inList(paragraph));
+        expect(screen.getByRole('button', { name: 'Show the whole message' })).toBeTruthy();
+
+        rerender(inList());
+        layout.width = 1000; // four lines now
+        rerender(inList(paragraph));
+        expect(screen.queryByRole('button', { name: 'Show the whole message' })).toBeNull();
+    });
+
+    it('an open message is never drawn clamped while it is measured again at a new width', () => {
+        const { rerender } = render(inList(row(message('a', fortyLines), kind)));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the whole message' }));
+
+        layout.commits.length = 0;
+        layout.width = 300;
+        rerender(inList(row(message('a', fortyLines), kind)));
+
+        const drawn = layout.commits.filter((c) => c.text.startsWith('Line 1 of'));
+        expect(drawn.some((c) => c.measuring)).toBe(true); // it was measured again
+        expect(drawn.every((c) => c.lines === undefined)).toBe(true); // and never clamped
+        expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
     });
 
     it('never folds a message the member is editing, and folds it again after', () => {

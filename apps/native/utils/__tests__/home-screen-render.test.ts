@@ -1635,6 +1635,8 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         };
         const leaveAndReturn = async () => {
             await act(async () => { nav.blur!(); });
+            // Leaving Home drops the visit's cancelled knocks at once (index.tsx focus cleanup), before any return.
+            expect(waitingCard()).toBeNull();
             await act(async () => { nav.focus!(); });
             await settle();
         };
@@ -1693,6 +1695,8 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
             await act(async () => { done = Promise.resolve(confirm.onPress!()); nav.blur!(); });
             await act(async () => { await done; });
             await settle();
+            // The late Cancel lands while Home is away: it leaves nothing behind for the next visit (the guard's else-branch).
+            expect(waitingCard()).toBeNull();
             await act(async () => { nav.focus!(); });
             await settle();
             expect(waitingCard()).toBeNull();

@@ -453,7 +453,7 @@ describe('FindCommunityBody tells the truth about what the community now answers
         expect(cancelledLine(host, lismore)).toBe(CANCELLED_LINE);
         expect(cancelButton(host, byron)).toBeNull();
         expect(cancelButton(host, lismore)).toBeNull();
-        // Home is not told: the cards stay for this visit, and with them the pin.
+        // The card's own knock list is not changed (Home hears of a Cancel through onCancelled, not onKnocksChange): the cards stay for this visit, and with them the pin.
         expect(changes).toEqual([]);
     });
 });

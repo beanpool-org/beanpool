@@ -11,7 +11,24 @@ afterEach(() => {
     restore = [];
 });
 
-function stubPipeline(natural: { width: number; height: number }, opts: { decodeFails?: boolean } = {}) {
+function stubPipeline(
+    natural: { width: number; height: number },
+    opts: { decodeFails?: boolean; nullContext?: boolean; readFails?: boolean } = {},
+) {
+    if (opts.readFails) {
+        const originalFileReader = window.FileReader;
+        class FakeFileReader {
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            error = new Error('Could not read file');
+            readAsDataURL() {
+                setTimeout(() => this.onerror?.(), 0);
+            }
+        }
+        (window as any).FileReader = FakeFileReader;
+        restore.push(() => { (window as any).FileReader = originalFileReader; });
+    }
+
     const originalImage = window.Image;
     const loaded: string[] = [];
     class FakeImage {
@@ -32,6 +49,7 @@ function stubPipeline(natural: { width: number; height: number }, opts: { decode
     const originalGetContext = window.HTMLCanvasElement.prototype.getContext;
     const originalToDataUrl = window.HTMLCanvasElement.prototype.toDataURL;
     (window.HTMLCanvasElement.prototype as any).getContext = function (this: HTMLCanvasElement) {
+        if (opts.nullContext) return null;
         // An arrow function keeps the canvas as `this`: the size it was drawn at, read when drawImage is called.
         return { drawImage: (...args: unknown[]) => drawn.push({ canvasWidth: this.width, canvasHeight: this.height, args }) };
     };
@@ -95,5 +113,17 @@ describe('resizePhotoFile', () => {
 
         await expect(resizePhotoFile(cameraFile())).rejects.toThrow();
         expect(encoded).toHaveLength(0);
+    });
+
+    it('rejects when canvas context creation returns null', async () => {
+        stubPipeline({ width: 320, height: 240 }, { nullContext: true });
+
+        await expect(resizePhotoFile(cameraFile())).rejects.toThrow('No canvas to draw the picture on');
+    });
+
+    it('rejects when FileReader fails to read the file', async () => {
+        stubPipeline({ width: 320, height: 240 }, { readFails: true });
+
+        await expect(resizePhotoFile(cameraFile())).rejects.toThrow('Could not read file');
     });
 });

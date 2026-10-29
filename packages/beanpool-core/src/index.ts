@@ -87,10 +87,10 @@ export * from './enterprise-pledge.js';
 export * from './needs-you.js';
 export * from './refresh-gate.js';
 export * from './dm-requests.js';
+export * from './community-shape-card.js';
 // Group locks: named, not `export *`, so the raw wrap opener (openGroupKeyWrapUnverified, which checks neither who made
 // a wrap nor the key inside it) stays out of the apps' reach; openGroupKeyWrap checks the key against its record's
 // commitment. A new export from group-crypto.ts is added here on purpose or not at all.
-export * from './community-shape-card.js';
 export {
     GROUP_NONCE_PREFIX, GROUP_KEY_WRAP_TAG, GROUP_EPOCH_TAG, GROUP_TOP_UP_TAG, GROUP_LINE_TAG, GROUP_LINE_FORMAT, GROUP_EPOCH_REASONS, GROUP_KEY_COMMIT_TAG,
     GroupKeyNotVerifiedError, GroupLineNotVerifiedError,

@@ -3604,6 +3604,10 @@ export async function deletePost(id: string) {
  * without that the event would fire on every poll and the header would re-read on every sync
  * tick for nothing. In the node's COMPLETE list a null CLEARS the row, so it is a change, and
  * the header must re-read or it would go on showing a photo the node no longer has.
+ *
+ * A new `profile_updated_at` is a change too (the upsert COALESCEs it, so only a value it names): a node from before
+ * versioned face URLs keeps one address for every photo, and the header's avatar busts its image cache with that stamp
+ * (MemberAvatar `updatedAt`). Without it a new photo there stayed the old one from the phone's disk cache for good.
  */
 async function ownProfileRowWouldChange(
     txn: any,
@@ -3612,6 +3616,7 @@ async function ownProfileRowWouldChange(
     incomingCallsign: string,
     incomingAvatar: string | null,
     avatarClears = false,
+    incomingUpdatedAt: string | null = null,
 ): Promise<boolean> {
     if (!selfPubkey || pk !== selfPubkey) return false;
     const before = await txn.getFirstAsync(
@@ -3622,6 +3627,10 @@ async function ownProfileRowWouldChange(
     if (incomingCallsign !== (before.callsign ?? '')) return true;
     if (incomingAvatar !== null && incomingAvatar !== before.avatar_url) return true;
     if (incomingAvatar === null && avatarClears && before.avatar_url !== null) return true;
+    if (incomingUpdatedAt !== null) {
+        const held = await txn.getFirstAsync('SELECT profile_updated_at FROM members WHERE public_key = ?', [pk]) as { profile_updated_at: string | null } | null;
+        if (incomingUpdatedAt !== (held?.profile_updated_at ?? null)) return true;
+    }
     return false;
 }
 
@@ -4030,7 +4039,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             const arch = m.archetype || null;
-            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears)) ownRowChanged = true;
+            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET

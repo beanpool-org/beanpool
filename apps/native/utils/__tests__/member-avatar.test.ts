@@ -53,16 +53,21 @@ vi.mock('expo-image', () => {
             'data-source': JSON.stringify(props.source),
             'aria-label': props.accessibilityLabel,
             alt: props.accessibilityLabel || '',
+            // expo-image's onError, as the image's own error event.
+            onError: props.onError ? () => props.onError({ error: 'failed' }) : undefined,
         }),
     };
 });
 
+/** The phone's community, as utils/node-post reads it from storage. */
+const phone = vi.hoisted(() => ({ anchor: 'https://node.example' }));
 vi.mock('../node-post', () => ({
-    anchorUrl: vi.fn(async () => 'https://node.example'),
-    getCachedAnchorUrl: vi.fn(() => 'https://node.example'),
+    anchorUrl: vi.fn(async () => phone.anchor),
+    getCachedAnchorUrl: vi.fn(() => phone.anchor),
 }));
 
 import { MemberAvatar } from '../../components/MemberAvatar';
+import { communitySwitched } from '../community-switch';
 
 describe('MemberAvatar (native) — no bare initials (Marty addition)', () => {
     let host: HTMLDivElement;
@@ -125,5 +130,58 @@ describe('MemberAvatar (native) — no bare initials (Marty addition)', () => {
         const img2 = host.querySelector('img')?.getAttribute('data-source');
         expect(img1).toBeTruthy();
         expect(img1).toBe(img2);
+    });
+});
+
+// Profile S1 (scratch/fable-design/DESIGN-per-community-profile-fable.md §2.3-2.4): Damo's blank header avatar, and a path
+// from one community resolved against another.
+describe('MemberAvatar (native) — never a blank disc, never another community\'s address', () => {
+    let host: HTMLDivElement;
+    let root: Root;
+    const pubkey = 'c'.repeat(64);
+    const draw = async (avatarUrl: string | null) => {
+        await act(async () => {
+            root.render(createElement(MemberAvatar, { avatarUrl, pubkey, callsign: 'Charlie', size: 40 }) as any);
+        });
+        for (let i = 0; i < 4; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+    };
+    const img = () => host.querySelector('img')!;
+
+    beforeEach(async () => {
+        phone.anchor = 'https://node.example';
+        await act(async () => { communitySwitched(); });
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+    });
+
+    afterEach(async () => {
+        await act(async () => { root.unmount(); });
+        host.remove();
+    });
+
+    it('renders the preset by key when the image fails to load, not a blank disc', async () => {
+        await draw(null);
+        const preset = img().getAttribute('data-source');
+
+        await draw(`/api/avatar/${pubkey}?size=thumb&v=1&k=stale`);
+        expect(img().getAttribute('src')).toContain('https://node.example/api/avatar/');
+        await act(async () => { img().dispatchEvent(new Event('error')); });
+        expect(img().getAttribute('data-source')).toBe(preset);
+        expect(host.textContent).toBe('');
+
+        // Another address is tried afresh.
+        await draw(`/api/avatar/${pubkey}?size=thumb&v=2&k=fresh`);
+        expect(img().getAttribute('src')).toContain('k=fresh');
+    });
+
+    it('a relative path resolves against the community the phone moved to, not the one it was drawn on', async () => {
+        await draw(`/api/avatar/${pubkey}?size=thumb&v=1`);
+        expect(img().getAttribute('src')).toMatch(/^https:\/\/node\.example\/api\/avatar\//);
+
+        phone.anchor = 'https://other.example';
+        await act(async () => { communitySwitched(); });
+        for (let i = 0; i < 4; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(img().getAttribute('src')).toMatch(/^https:\/\/other\.example\/api\/avatar\//);
     });
 });

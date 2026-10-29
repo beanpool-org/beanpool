@@ -21,6 +21,7 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { useOwnProfile } from '../utils/use-own-profile';
 import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
@@ -486,11 +487,15 @@ export default function PublicProfileScreen() {
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
+    // Your own name and picture are this community's row (utils/use-own-profile.ts), once read: never the name the door
+    // passed, nor the phone-wide one, which can be another community's (DESIGN-per-community-profile-fable.md §2).
+    const own = useOwnProfile();
+    const ownShown = isSelf && own.read;
     // On a community that says `membersOnDemand` this phone may hold no card for the member: it is fetched by key when
     // missing or a day old (utils/members-lookup.ts). Offline with none held, the profile says so, and the name is never
     // a blank (DESIGN-global-members-by-area §2.4): the name the caller passed, the card's, or the key's first 8 characters.
     const membersOnDemand = membersByKey(nodeProfile?.features);
-    const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined)
+    const callsignStr = (ownShown ? own.callsign : undefined) || (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined)
         || (membersOnDemand ? profile?.callsign || pubKeyStr?.slice(0, 8) : undefined);
     const [cardUnreachable, setCardUnreachable] = useState(false);
 
@@ -970,7 +975,7 @@ export default function PublicProfileScreen() {
                 {/* Banner */}
                 <View style={styles.banner}>
                     <View style={styles.avatarRing}>
-                        <MemberAvatar avatarUrl={profile?.avatar_url} pubkey={pubKeyStr || ''} callsign={callsignStr || '?'} size={80} enlargeable />
+                        <MemberAvatar avatarUrl={ownShown ? own.avatarUrl : profile?.avatar_url} updatedAt={ownShown ? own.updatedAt : undefined} pubkey={pubKeyStr || ''} callsign={callsignStr || '?'} size={80} enlargeable />
                     </View>
                     <View style={styles.nameRow}>
                         <Text style={styles.callsignText} numberOfLines={1}>{callsignStr}</Text>

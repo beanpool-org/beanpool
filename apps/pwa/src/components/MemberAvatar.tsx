@@ -14,8 +14,9 @@ export interface MemberAvatarProps {
 
 /**
  * A member's, an enterprise's or a project's face on the web, as the phone's components/MemberAvatar draws it: its
- * picture, or with none (or one the browser may not load) the ready-made picture its key picks (@beanpool/core
- * avatarPresetForPubkey, its callsign where no key is known). Never a bare initial (Pictures S4).
+ * picture, or with none (or one the browser may not load, or one that fails to load: a stale address after the photo
+ * changed elsewhere) the ready-made picture its key picks (@beanpool/core avatarPresetForPubkey, its callsign where no key
+ * is known). Never a bare initial (Pictures S4), never a broken image.
  */
 export function MemberAvatar({
     avatarUrl,
@@ -27,7 +28,11 @@ export function MemberAvatar({
     onClick,
 }: MemberAvatarProps) {
     const key = pubkey || callsign;
-    const src = resolveAvatarUrl(avatarUrl, key) || resolveAvatarUrl(null, key) || '/avatars/avatar_bean_green.webp';
+    const preset = resolveAvatarUrl(null, key) || '/avatars/avatar_bean_green.webp';
+    const picture = resolveAvatarUrl(avatarUrl, key) || preset;
+    // The picture that failed to load: the preset stands in for it. Another picture is tried afresh.
+    const [failed, setFailed] = React.useState<string | null>(null);
+    const src = picture === failed ? preset : picture;
 
     return (
         <img
@@ -36,6 +41,7 @@ export function MemberAvatar({
             width={size}
             height={size}
             onClick={onClick}
+            onError={src === preset ? undefined : () => setFailed(src)}
             className={`rounded-full object-cover shrink-0 ${className}`}
             style={{ width: `${size}px`, height: `${size}px` }}
         />

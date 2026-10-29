@@ -61,7 +61,7 @@ const realLoad = (Module as any)._load;
 afterAll(() => { (Module as any)._load = realLoad; });
 
 import { applyDelta, getDb, getPosts, getMyPosts, getPost, getMemberRatings, syncMessages } from '../db';
-import { PROFILE_UNREAD, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
+import { PROFILE_UNREAD, ownCardChanged, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 import { fetchNodeProfile } from '../node-profile';
 
 const DB = 'beanpool_a.beanpool.org.db';
@@ -682,5 +682,92 @@ describe('review of #1999: members by key where the node says either switch, nev
         expect(wholeReads()[0]).toBe(`${A_URL}/api/members`);
         expect(paths()).toContain('/api/marketplace/posts');
         expect(held().length).toBe(2001);
+    });
+});
+
+// Profile S1 (scratch/fable-design/DESIGN-per-community-profile-fable.md §2.5): the own card first. It is one of up to
+// 1,000 held cards, and was re-checked only when its turn among the 100 fetched longest ago came round, so a photo changed
+// on the web never reached this phone's header; on a restore it sorted behind 300 partners and came a cycle late.
+describe('the own card, first, where members are read by key', () => {
+    const B_URL = 'https://b.beanpool.org';
+    const ownCard = () => cardOf(OWN);
+    /** Who the first members read of the cycle asked for. */
+    const firstAsked = () => keysOf(membersRequests()[0] ?? '');
+    const ownAsked = () => membersRequests().some(r => keysOf(r).includes(OWN));
+    /** Held long enough that the own card is the newest of 151: never among the 100 re-checked first. */
+    async function holdingMany() {
+        onDemandProfile(true);
+        partners(150);
+        await performSync();
+        await performSync();
+        sql.prepare('UPDATE members SET card_fetched_at = ? WHERE public_key = ?').run(new Date(Date.now() + 3_600_000).toISOString(), OWN);
+        expect(held()).toHaveLength(151);
+        node.requests = [];
+    }
+
+    it('a restore with 350 partners: the own card is in the first read, not a cycle later behind the others', async () => {
+        onDemandProfile(true);
+        partners(350);
+        await performSync();
+        expect(firstAsked()[0]).toBe(OWN);
+        expect(held()).toContain(OWN);
+        // Still at most 3 reads of at most 100 for the missing cards.
+        const missing = membersRequests().filter(r => new URL(r).searchParams.get('updatedAfter') === null);
+        expect(missing).toHaveLength(3);
+        for (const r of missing) expect(keysOf(r).length).toBeLessThanOrEqual(100);
+    });
+
+    it('re-read after profile_updated from the node: the new photo lands on the next cycle, asked for first', async () => {
+        await holdingMany();
+        expect(ownCard().avatar_url).toBeNull();
+        // A photo set on the web: the node's card has it.
+        node.cards.set(OWN, { ...node.cards.get(OWN)!, avatarUrl: FACE(OWN), profileUpdatedAt: new Date(Date.now() + 60_000).toISOString() });
+        // Without a word from the node, a cycle does not ask for it (the re-check takes the 100 fetched longest ago).
+        await performSync();
+        expect(ownAsked()).toBe(false);
+        expect(ownCard().avatar_url).toBeNull();
+
+        // The node says this member's card changed (ws-client hears `profile_updated` naming them).
+        ownCardChanged();
+        node.requests = [];
+        await performSync();
+        expect(firstAsked()[0]).toBe(OWN);
+        expect(ownCard().avatar_url).toBe(FACE(OWN));
+        // Once read, it is not asked for first again until something says it changed.
+        node.requests = [];
+        await performSync();
+        expect(ownAsked()).toBe(false);
+    });
+
+    it('after a switch to another community that reads members by key, and back: asked for first on each', async () => {
+        await holdingMany();
+        await performSync();
+        expect(ownAsked()).toBe(false);
+
+        // The phone moves to B, which reads members by key too.
+        const profiles = JSON.parse(store.get('beanpool_node_profiles')!);
+        store.set('beanpool_node_profiles', JSON.stringify({ ...profiles, [B_URL]: profiles[A_URL] }));
+        store.set('beanpool_anchor_url', B_URL);
+        node.requests = [];
+        await performSync();
+        expect(firstAsked()[0]).toBe(OWN);
+
+        store.set('beanpool_anchor_url', A_URL);
+        node.requests = [];
+        await performSync();
+        expect(firstAsked()[0]).toBe(OWN);
+    });
+
+    it('a profile_updated with the read refused (503): asked for first again next cycle, nothing dropped', async () => {
+        await holdingMany();
+        ownCardChanged();
+        node.keysReads = 'busy';
+        await performSync();
+        expect(firstAsked()[0]).toBe(OWN);
+        expect(held()).toHaveLength(151);
+        node.keysReads = 'ok';
+        node.requests = [];
+        await performSync();
+        expect(firstAsked()[0]).toBe(OWN);
     });
 });

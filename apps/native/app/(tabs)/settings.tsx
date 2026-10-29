@@ -67,6 +67,7 @@ import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_L
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useOwnProfile } from '../../utils/use-own-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
 import { beansOn, effectiveFeatures, shareOutsideOn } from '../../utils/node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
@@ -659,6 +660,14 @@ export default function SettingsScreen() {
     // (unique per node, chosen at join), so the device-global identity.callsign is only
     // ever right by coincidence — display this instead and fall back while it loads.
     const [nodeCallsign, setNodeCallsign] = useState<string | null>(null);
+    // The card's picture is this community's row as last read (utils/use-own-profile.ts), as the header's is: a photo that
+    // a sync or a change made elsewhere brings follows at once, where the loader below waits for the next focus. Until that
+    // row is read, and where it holds no photo, what the loader found (DESIGN-per-community-profile-fable.md S2 takes the
+    // phone-wide copy out of that). The name is the loader's first: it reads the same row, then the community's own answer
+    // and a rename still waiting to be sent, which the row alone does not know; the row's name stands in until it has.
+    const own = useOwnProfile();
+    const cardCallsign = nodeCallsign || (own.read && own.callsign) || identity?.callsign || '';
+    const cardAvatar = (own.read && own.avatarUrl) || avatar;
     const [communityLabel, setCommunityLabel] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [bio, setBio] = useState('');
@@ -703,10 +712,13 @@ export default function SettingsScreen() {
             // switching to a node that has no profile for this key.
             showCommunityName(profile?.callsign || null);
             const edited = editedRef.current;
+            // The picture likewise: assigned on every load, the row's photo, else the phone-wide copy, else none. The card falls
+            // through to this where the hook reads no photo (no row, or a row without one), so leaving it alone where this
+            // community holds no row yet would keep the community before's photo beside the header's preset.
+            const cleaned = (profile?.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
+            if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
             {
                 if (profile) {
-                    const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
-                    if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
                     if (!edited.bio) {
                         if (profile.bio) setBio(profile.bio);
                         else if (canonical?.bio) setBio(canonical.bio);
@@ -720,7 +732,6 @@ export default function SettingsScreen() {
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
                     else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 } else if (canonical) {
-                    if (canonical.avatar && !edited.avatar) setAvatar(canonical.avatar);
                     if (canonical.bio && !edited.bio) setBio(canonical.bio);
                     if (!edited.contact) {
                         if (canonical.contactValue) setContact(canonical.contactValue);
@@ -1834,16 +1845,17 @@ export default function SettingsScreen() {
                         96px, same ring, same tap target and labels. */}
                     <Pressable onPress={() => setMode('profile')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel={t('Edit profile')}>
                         <MemberAvatar
-                            avatarUrl={avatar}
+                            avatarUrl={cardAvatar}
+                            updatedAt={cardAvatar === own.avatarUrl ? own.updatedAt : undefined}
                             pubkey={identity.publicKey}
-                            callsign={nodeCallsign || identity.callsign}
+                            callsign={cardCallsign}
                             size={96}
                         />
                         <View style={styles.avatarRing} />
                     </Pressable>
 
                     {/* Callsign */}
-                    <Text style={styles.callsignText}>{nodeCallsign || identity.callsign}</Text>
+                    <Text style={styles.callsignText}>{cardCallsign}</Text>
 
                     {/* Community name: names are per community */}
                     {communityLabel ? (

@@ -603,14 +603,20 @@ describe('Talk at 320 dp with 1.3× text, in the pseudo-locale', () => {
         const pills = Array.from(row.children);
         expect(pills.length).toBe(3);
         const labels = pills.map((p) => p.querySelector(':scope > span[data-shrinks]')!);
-        // One line, and a word never breaks: the longest must fit where its pill sits at the smallest shrink (the whole
-        // names, at their measured widths, are held to the row in the next describe).
+        // One line, and the whole name inside its pill. On one line a word cannot break, so the longest-word check below only
+        // fails when the name is cut by more than its own length; the real rule is that the pill leaves the name at least its
+        // smallest shrink (`scales[i] \u2265 min-scale`), or RN ellipsizes it. The pseudo-locale is a stress case, 35% longer than
+        // any real language, and misses that floor by a hair (0.5947 against 0.6 for the Community name, 0.5976 for the others);
+        // the real languages are held to the floor exactly in the next describe. So allow PSEUDO_SLACK: a change that cuts more
+        // than a hair of a name fails here.
+        const PSEUDO_SLACK = 0.01;
         const dp = labels.map((l) => widthOf(l.textContent!, 11 * SCALE));
         const scales = scalesInRow(row, pills, dp);
         labels.forEach((label, i) => {
             expect(label.getAttribute('data-lines')).toBe('1');
             const longest = label.textContent!.split(/[\s\u200B]+/).reduce((a, b) => (widthOf(b, 1) > widthOf(a, 1) ? b : a), '');
             expect(widthOf(longest, 11 * SCALE) * Number(label.getAttribute('data-min-scale')), longest).toBeLessThanOrEqual(scales[i] * dp[i]);
+            expect(scales[i], `name ${i + 1}`).toBeGreaterThanOrEqual(Number(label.getAttribute('data-min-scale')) - PSEUDO_SLACK);
         });
         await click(buttonWithText(pseudoLocalise('🏘️ Community')), 'Community');
         const sorts = buttonWithText(pseudoLocalise('Newest'))?.parentElement ?? Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes(pseudoLocalise('Newest')))!.parentElement!;

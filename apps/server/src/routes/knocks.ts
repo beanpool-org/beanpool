@@ -4,7 +4,8 @@
  *
  * The applicant, signed with their own key (the same key on every node), not a member here (a key a re-key replaced
  * gets 403 `key_invalidated` from both):
- *   POST /api/join/knock          { message, callsign, avatar?, fromNode? }  → 201 { knock: { status: 'pending' } }
+ *   POST /api/join/knock          { message, callsign, avatar?, fromNode?, toNode? }  → 201 { knock: { status: 'pending' } }
+ *                                   (421 `wrong_community` for a knock whose `toNode` names another community; see below)
  *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
  *   POST /api/join/knock/cancel   → 200 { knock: { status: 'cancelled' } } | 404 `not_found` ("Cancel my request"; the key
  *                                   may ask again after KNOCK_RULES.cancelBlockHours, 409 `knock_cancelled` before)
@@ -32,6 +33,17 @@
  * write by a non-member, which the middleware allows (writes carry their own authorisation); the status read is on
  * the public list (https-server.ts) so a signed non-member reaches it, and it answers only for the signer. The list
  * and the answers are gated reads and writes for members: a non-member is refused by the middleware (read) or here.
+ *
+ * ## Addressed here
+ *
+ * The phone puts the community it is asking in the body as `toNode`, inside what is signed (apps/native utils/knock.ts
+ * knockBody). A request in the old signature format names no host, so without this a community that received a knock
+ * could send the same signed request on to another one within the five minutes a signature lasts, and learn from the
+ * answer whether that key is a member there. A knock whose `toNode` is not one of this community's names
+ * (engine/own-addresses.ts) is refused, 421 `wrong_community`, before anything about the key is said
+ * (DESIGN-account-without-global-fable.md §3.5, closed in slice S3). On a node that knows none of its names yet, or for a
+ * name on the home network, it must be the host the request came to, as a claim's `signedFor` must
+ * (routes/node-claim.ts). A knock with no `toNode` claims nothing to check and is taken as before.
  *
  * ## Limits
  *
@@ -65,6 +77,7 @@ import { mayInviteHere, ADMINS_ONLY, ADMINS_ONLY_ANSWER_MESSAGE } from '../confi
 import { NamesListError } from '../engine/names-list.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
 import type { RouteDeps } from './types.js';
 import { word, wordsFor } from '@beanpool/core';
 // A refusal with values in it, in English as a template literal wrote it, its sentence marked for the way out to find
@@ -166,6 +179,21 @@ function parseFromNode(raw: unknown): Parsed<string | null> {
     return { ok: true, value: host };
 }
 
+/**
+ * Whether a knock's `toNode` names this community ("Addressed here", above): absent, one of its names, or (on a node that
+ * knows none of its names, or for a name on the home network) the host this request came to.
+ */
+export function knockAddressedHere(raw: unknown, requestHost: string): boolean {
+    if (raw === undefined || raw === null || raw === '') return true;
+    if (typeof raw !== 'string' || raw.length > 300) return false;
+    const host = normalizeAddress(raw.trim());
+    if (!host) return false;
+    const standing = audienceStanding(host);
+    if (standing === 'foreign') return false;
+    if ((standing === 'unconfigured' || isLocalNetworkHost(host)) && host !== normalizeAddress(requestHost)) return false;
+    return true;
+}
+
 const KEY_INVALIDATED = word('This key was replaced by a new one, so it can’t ask to join. Use the device or the 12 words that hold the new key.');
 
 function refuseKnock(ctx: any, reason: KnockRefusal): void {
@@ -231,6 +259,10 @@ export function createKnockRoutes(deps: RouteDeps): Router {
     router.post('/api/join/knock', async (ctx) => {
         const applicant = signer(ctx, 'This request must be signed by the key you are asking to join with.');
         if (!applicant) return;
+        // Addressed to another community: refused before anything about this key here is said (see "Addressed here").
+        if (!knockAddressedHere(((ctx as any).requestBody || {}).toNode, ctx.request.host)) {
+            return answer(ctx, 421, word('This request to join was sent to another community, so it was not taken here.'), 'wrong_community');
+        }
         if (refusedOnStandby(ctx, STANDBY_KNOCK)) return;
         if (!rateLimit(ctx, 'knock')) return;
         // Who can't knock at all is told before their words are read, so a member's app learns it plainly.

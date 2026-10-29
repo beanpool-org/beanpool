@@ -4,13 +4,17 @@
  *
  * ## Where a knock goes, and with which key
  *
- * To the community itself, at the address the directory gives for it (`communityOrigin`: https, a host name or a public
- * IPv4 address, never the global node), signed with the member's OWN key, the same key on every node (one identity per
- * device). Nothing goes through the global node, which records no knocks. The signer is the only applicant a
- * community sees: the body names no key, and it says where the app came from as `fromNode`, never `from` (the
- * node's signature check reads a `from` field as the sender's key and refuses any other).
+ * To the community itself, at the address the directory gives for it, or the one the member typed or scanned
+ * (`communityOrigin`: https, a host name or a public IPv4 address, never the global node), signed with the phone's OWN
+ * key, the same key on every node (one identity per device). A phone with no account yet asks too (DESIGN-account-without-
+ * global-fable.md §2.4, slice S3): its key is made for the knock (utils/knock-key.ts) and nothing of ours is asked. Nothing
+ * goes through the global node, which records no knocks. The signer is the only applicant a community sees: the body
+ * names no key, and it says where the app came from as `fromNode`, never `from` (the node's signature check reads a
+ * `from` field as the sender's key and refuses any other). `fromNode` is the global community's name only when the
+ * phone is a member there (utils/knock-address.ts `knockFromNode`); otherwise it is left out, and the members' list
+ * says the request came from the BeanPool app.
  *
- *   POST <community>/api/join/knock          { message, callsign, avatar?, fromNode }  → 201 { knock: { status: 'pending' } }
+ *   POST <community>/api/join/knock          { message, callsign, avatar?, fromNode?, toNode }  → 201 { knock: { status: 'pending' } }
  *   GET  <community>/api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
  *
  * ## What the member is told
@@ -125,18 +129,20 @@ export function knockAvatar(value: string | null | undefined): string | undefine
 }
 
 /**
- * The body a knock sends: no key in it, and `fromNode`, never `from`. `toNode` names the community it is for, inside
- * what is signed. The signature covers the method, path, time, nonce and body but not the host, so without it a
- * community that received a knock could send the same signed request on to another community within the node's
- * five-minute window. No node checks `toNode` yet (G6 ignores fields it doesn't read); sending it now means a node
- * that starts refusing a knock addressed elsewhere needs no app update.
+ * The body a knock sends: no key in it, and `fromNode`, never `from`, left out when `fromNode` is null
+ * (knock-address.ts `knockFromNode`). `toNode` names the community it is for, inside what is signed. An old-format
+ * signature covers the method, path, time, nonce and body but not the host, so without it a community that received a
+ * knock could send the same signed request on to another community within the node's five-minute window. A node
+ * refuses a knock whose `toNode` is not one of its own names (apps/server routes/knocks.ts, S3; older nodes ignore it).
  */
-export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode: string; toNode?: string; avatar?: string } {
+export function knockBody(
+    req: KnockRequest, toNode?: string, fromNode: string | null = KNOCK_FROM_NODE,
+): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string } {
     const avatar = knockAvatar(req.avatar);
     return {
         message: req.message.trim(),
         callsign: req.callsign.replace(/\s+/g, ' ').trim(),
-        fromNode: KNOCK_FROM_NODE,
+        ...(fromNode ? { fromNode } : {}),
         ...(toNode ? { toNode } : {}),
         ...(avatar ? { avatar } : {}),
     };
@@ -163,13 +169,18 @@ function withTimeout<T>(p: Promise<T>): Promise<T> {
     });
 }
 
-/** Ask `communityUrl` to let this key in. The address must be one `communityOrigin` accepts. */
-export async function sendKnock(communityUrl: string | null, identity: BeanPoolIdentity, req: KnockRequest): Promise<KnockSendResult> {
+/**
+ * Ask `communityUrl` to let this key in. The address must be one `communityOrigin` accepts. `fromNode`: what the knock
+ * says it came from (knock-address.ts `knockFromNode`); null leaves it out.
+ */
+export async function sendKnock(
+    communityUrl: string | null, identity: BeanPoolIdentity, req: KnockRequest, fromNode: string | null = KNOCK_FROM_NODE,
+): Promise<KnockSendResult> {
     const origin = communityOrigin(communityUrl);
     if (!origin) return { kind: 'no_address', message: KNOCK_MESSAGES.noAddress };
     let res: Response;
     try {
-        res = await withTimeout(signedPost(origin, KNOCK_PATH, knockBody(req, origin.replace(/^https:\/\//, '')), identity));
+        res = await withTimeout(signedPost(origin, KNOCK_PATH, knockBody(req, origin.replace(/^https:\/\//, ''), fromNode), identity));
     } catch {
         return { kind: 'unreachable', message: KNOCK_MESSAGES.unreachable };
     }

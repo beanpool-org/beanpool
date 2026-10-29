@@ -19,12 +19,15 @@ const KNOCK_WORDS = {
     unreachable: word("Couldn't reach your community. Check your connection and try again."),
 } as const;
 
-/** Under each request: when, and where they came from, two facts side by side. */
+/**
+ * Under each request: when, and where they came from, two facts side by side. A request that named no community it came
+ * from (a phone with no community yet, or one in a local community: slice S3) came from the BeanPool app itself.
+ */
 function requestMeta(r: JoinRequest): string {
     const days = joinRequestAge(r);
     // English writes one form for both; the count is 2 or more here.
     const when = days === null ? '' : days === 0 ? t('Asked today') : days === 1 ? t('Asked yesterday') : tn(days, 'Asked {n} days ago', 'Asked {n} days ago');
-    const from = r.fromNode ? t('from {node}', { node: r.fromNode }) : '';
+    const from = r.fromNode ? t('from {node}', { node: r.fromNode }) : t('from the BeanPool app');
     return [when, from].filter(Boolean).join(' · ');
 }
 

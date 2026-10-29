@@ -110,6 +110,7 @@ export const SUITES = [
     'test-home-steps',
     'test-knock',
     'test-knock-notices',
+    'test-knock-to-node',
     'test-commons-conservation',
     'test-commons-pot-edges',
     'test-commons-pot-unknown',

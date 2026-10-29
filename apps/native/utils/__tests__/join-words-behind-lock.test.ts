@@ -198,7 +198,9 @@ describe('welcome.tsx: every way into the wizard says whether it made the key', 
         expect(recordRead).toBeGreaterThan(-1);
         // Read before adoptJoinKey takes the door's mark off the record.
         expect(adopted).toBeGreaterThan(recordRead);
-        expect(create).toContain('const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);');
+        // Or one a knock made on this phone, whose words were never shown (slice S3, utils/knock-key.ts): its first join.
+        expect(create).toContain('const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey) || knockMade;');
+        expect(create).toContain('const knockMade = storedIdentity ? await knockKeyIsNew(storedIdentity.publicKey) : false;');
         expect(create).toMatch(/setPendingIdentity\(identity\);\s*setPendingNewKey\(keyIsNew \? identity\.publicKey : null\);/);
         expect(create).toMatch(/setPendingOnboarding\(\{[^}]*\.\.\.\(keyIsNew \? \{ newKey: identity\.publicKey \} : \{\}\),/);
     });

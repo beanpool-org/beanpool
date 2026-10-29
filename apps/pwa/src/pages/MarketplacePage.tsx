@@ -1367,6 +1367,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             refresh();
             onRefreshTransactions?.();
             setKeptDealsRead(n => n + 1);
+            // The listing as the node has it now, as Approve re-reads it: a one-off's deal released or called off changes its
+            // status, and the copy the page opened with would bring back the panel for a deal already finished.
+            const id = selectedPost.id;
+            getMarketplacePosts({ id })
+                .then(rows => { if (rows[0]) setSelectedPost(prev => (prev?.id === id ? rows[0] : prev)); })
+                .catch(() => {});
         };
         // Release where the reader pays, as themselves or, a keeper, at the enterprise's own door (routes/treasury.ts).
         const releaseRow = async (m: DealMoves<MarketplaceTransaction>) => {

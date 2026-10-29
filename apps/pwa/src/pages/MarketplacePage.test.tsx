@@ -1231,6 +1231,34 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         await waitFor(() => expect(done).toHaveBeenCalledWith('tx-h', ME, undefined));
     });
 
+    for (const [step, after] of [['Release', 'completed'], ['Cancel', 'active']] as const) {
+        it(`a one-off Need's author, after ${step} from their row: the listing as the node has it now, no panel for a deal that is over`, async () => {
+            vi.spyOn(api, 'completeMarketplaceTransaction').mockResolvedValue({ success: true } as any);
+            vi.spyOn(api, 'cancelMarketplaceTransaction').mockResolvedValue({ success: true } as any);
+            vi.spyOn(window, 'confirm').mockReturnValue(true);
+            const fence = listing({ title: 'Fix the fence', type: 'need', status: 'pending', pendingTransactionId: 'tx-h', authorPublicKey: ME, authorCallsign: 'Guest', credits: 20 });
+            const held = deal({ id: 'tx-h', credits: 20, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' });
+            // Opened by its link, which the app then clears (App.tsx, onPostOpened): nothing re-selects the listing after.
+            const view = await open(fence, [held]);
+            view.rerender(<MarketplacePage identity={identity} isMember={true} transactions={[held]} />);
+            const row = await screen.findByTestId('deal-row-tx-h');
+            // The node, once the step is taken: the listing moved on, the deal over.
+            feed = [{ ...fence, status: after }];
+            if (step === 'Release') {
+                fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
+                fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+            } else {
+                fireEvent.click(within(row).getByRole('button', { name: /Cancel Hold/ }));
+            }
+            await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+            view.rerender(<MarketplacePage identity={identity} isMember={true} transactions={[{ ...held, status: step === 'Release' ? 'completed' : 'cancelled' }]} />);
+            await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+            expect(screen.queryByTestId('deals-under-way')).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /Release Credits/ })).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: /Cancel Hold/ })).not.toBeInTheDocument();
+        });
+    }
+
     it("a Need's author with a request: Approve and Deny", async () => {
         await open(listing({ title: 'Fix the fence', type: 'need', authorPublicKey: ME, authorCallsign: 'Guest' }),
             [deal({ id: 'tx-r', status: 'requested', buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);

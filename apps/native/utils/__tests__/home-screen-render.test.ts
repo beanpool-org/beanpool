@@ -200,6 +200,11 @@ const node = {
     keepsRow: false,
     /** What a community this phone knocked on says of the knock (GET /api/join/knock/status, routes/knocks.ts). */
     knockStatus: 'pending' as string,
+    /**
+     * While set, a saved Home layout is kept on the account and the Decide card is rebuilt from the setting stored for it, as
+     * the node's decideCard does (routes/home-answer.ts): the `show` it holds, or undefined for none.
+     */
+    decideFor: null as null | ((show: unknown) => HomeAnswer['cards']['decide']),
 };
 const etagOf = (pk: string, a: HomeAnswer) => {
     const { generatedAt: _g, ...rest } = a;
@@ -226,6 +231,7 @@ beforeEach(async () => {
     node.role = null;
     node.keepsRow = false;
     node.knockStatus = 'pending';
+    node.decideFor = null;
     loc.status = 'denied';
     loc.last = null;
     loc.asked = 0;
@@ -277,6 +283,12 @@ beforeEach(async () => {
             const body = JSON.parse(req.body);
             if (node.keepsRow && node.answer.me && 'interests' in body.preferences) {
                 node.answer = { ...node.answer, me: { ...node.answer.me, interests: body.preferences.interests } };
+            }
+            if (node.decideFor && body.preferences['home.layout']) {
+                const layout = body.preferences['home.layout'];
+                const decide = node.decideFor(layout.cards.find((c: { type: string }) => c.type === 'decide')?.settings?.show);
+                const { decide: _old, ...rest } = node.answer.cards;
+                node.answer = { ...node.answer, layout, cards: { ...rest, ...(decide ? { decide } : {}) } };
             }
             record(200);
             return new Response(JSON.stringify({ success: true, ...body.preferences }), { status: 200 });
@@ -2931,6 +2943,115 @@ describe('sun and moon: worked out on the phone, from the place it already has (
         const after = node.requests.slice(before);
         expect(after.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences']);
         expect(JSON.parse(after[0].body).preferences['home.layout'].cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
+    });
+});
+
+describe('the Decide card shows just the votes that are yours: one setting on the card (My votes)', () => {
+    const decideRow = (id: string, title: string, voted: boolean, inHours: number) => ({ id, title, closesAt: iso(Date.now() + inHours * H), voted });
+    const ALL = [
+        decideRow('d1', 'Compost bay', false, 2), decideRow('d2', 'Bus shelter', true, 5), decideRow('d3', 'Tool library', false, 9),
+        decideRow('d4', 'Seed fund', false, 20), decideRow('d5', 'Hall roof', false, 30),
+    ];
+    /** What the node's decideCard answers for each setting (apps/server routes/home-answer.ts): three rows, five, or the member's own. */
+    const decideFor = (show: unknown): HomeAnswer['cards']['decide'] => show === 'mine'
+        ? { open: 1, soonestClosesAt: ALL[1].closesAt, polls: 0, pollsMore: false, items: [ALL[1]], poll: null }
+        : { open: 5, soonestClosesAt: ALL[0].closesAt, polls: 0, pollsMore: false, items: show === 'open' ? ALL : ALL.slice(0, 3), poll: null };
+    const phoneKey = () => homeLayoutStoreKey(who.identity.publicKey, NODE);
+    function withDecide(settings?: Record<string, unknown>, onHome = true) {
+        const base = localMember();
+        const layout = {
+            v: 2 as const, dismissed: {}, updatedAt: iso(Date.now() - 72 * H),
+            cards: [{ id: 'market', type: 'market' }, ...(onHome ? [{ id: 'decide', type: 'decide', ...(settings ? { settings } : {}) }] : []), { id: 'events', type: 'events' }],
+        };
+        node.decideFor = decideFor;
+        node.answer = { ...base, layout, cards: { ...base.cards, ...(onHome ? { decide: decideFor(settings?.show) } : {}) } };
+        mem.store.set(phoneKey(), JSON.stringify(layout));
+    }
+    const rowIds = () => Array.from(document.querySelectorAll('[data-testid^="home-decide-d"]'), e => e.getAttribute('data-testid')!.replace('home-decide-', ''));
+    const labels = () => Array.from(document.querySelectorAll('[data-testid="card-settings-show"] button'), e => e.textContent);
+    const chosen = () => Array.from(document.querySelectorAll('[data-testid="card-settings-show"] [aria-selected="true"]'), e => e.textContent);
+    const note = () => document.querySelector('[data-testid="card-settings-show-note"]')?.textContent;
+    const sentCards = (r: { body: string }) => JSON.parse(r.body).preferences['home.layout'].cards as { id: string; type: string; settings?: unknown }[];
+    const requestsAfter = (from: number) => node.requests.slice(from).filter(r => r.method === 'POST' || new URL(r.url).pathname === '/api/home');
+    const openSettings = async () => {
+        await act(async () => { byLabel('Card options for Decide')!.click(); });
+        await act(async () => { byLabel('Settings for Decide')!.click(); });
+        await settle(2);
+    };
+
+    it('Settings… from the card\'s "…": the three choices with the stored one chosen; My votes and Save keep the card where it is, save the setting, read Home after the save, and draw only the voted row', async () => {
+        withDecide({ show: 'open' });
+        await render();
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
+        // "All open" sends five rows, and the card draws all five (Summary's three stop at three).
+        expect(rowIds()).toEqual(['d1', 'd2', 'd3', 'd4', 'd5']);
+        await openSettings();
+        expect(document.querySelector('[data-testid="card-settings-words"]')).toBeNull();
+        expect(labels()).toEqual(['Summary', 'All open', 'My votes']);
+        expect(chosen()).toEqual(['All open']);
+        expect(note()).toBe('Up to five open Decisions, and the first poll.');
+        expect(byLabel('Save Decide')).not.toBeNull();
+        expect(byLabel('Add Decide to Home')).toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="card-settings-show-mine"]') as HTMLElement).click(); });
+        expect(chosen()).toEqual(['My votes']);
+        expect(note()).toBe('Open Decisions you voted in or proposed.');
+        const before = node.requests.length;
+        await act(async () => { byLabel('Save Decide')!.click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
+        expect(rowIds()).toEqual(['d2']);
+        expect(document.querySelector('[data-testid="home-decide-d2"]')!.textContent).toContain('You voted');
+        const sent = requestsAfter(before);
+        expect(sent.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(sentCards(sent[0])).toEqual([{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide', settings: { show: 'mine' } }, { id: 'events', type: 'events' }]);
+        expect(new URL(sent[1].url).searchParams.get('cards')!.split(',')).toContain('decide');
+        expect(boundSignatureValid(sent[0], who.identity.publicKey)).toBe(true);
+    });
+
+    it('a card with no setting, or one this build cannot read, opens on Summary and draws three rows', async () => {
+        for (const settings of [undefined, { show: 'watching', ids: ['d1'] }]) {
+            withDecide(settings);
+            await render();
+            expect(rowIds()).toEqual(['d1', 'd2', 'd3']);
+            await openSettings();
+            expect(chosen(), JSON.stringify(settings)).toEqual(['Summary']);
+            expect(note()).toBe('The Decisions closing soonest, and the first poll.');
+            act(() => root?.unmount());
+            host?.remove();
+            resetHomeStoreForTests();
+        }
+    });
+
+    it('Add a card: Decide asks what it shows first (Summary chosen); My votes and Add to Home save it first on Home, read after the save, and draw the voted row', async () => {
+        withDecide(undefined, false);
+        await render();
+        expect(cards()).not.toContain('decide');
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add Decide to Home')!.click(); });
+        await settle(2);
+        expect(chosen()).toEqual(['Summary']);
+        expect(byLabel('Add Decide to Home')).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="card-settings-show-mine"]') as HTMLElement).click(); });
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        expect(cards()[0]).toBe('decide');
+        expect(rowIds()).toEqual(['d2']);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Decide added to Home');
+        const sent = requestsAfter(before);
+        expect(sent.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(sentCards(sent[0])[0]).toEqual({ id: 'decide', type: 'decide', settings: { show: 'mine' } });
+        expect(new URL(sent[1].url).searchParams.get('cards')!.split(',')).toContain('decide');
+    });
+
+    it('a node from before the setting answers the Summary card whatever is stored: the phone draws the rows it was sent', async () => {
+        withDecide({ show: 'mine' });
+        node.decideFor = null;
+        node.answer = { ...node.answer, cards: { ...node.answer.cards, decide: decideFor('counts') } };
+        await render();
+        expect(rowIds()).toEqual(['d1', 'd2', 'd3']);
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
     });
 });
 

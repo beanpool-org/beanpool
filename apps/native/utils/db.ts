@@ -2773,6 +2773,25 @@ export async function treasuryComplete(treasury: string, transactionId: string, 
 export async function treasuryReject(treasury: string, transactionId: string) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
 }
+/**
+ * An enterprise's open deals, held and asked, for its keeper reading one of its listings (deals S4): the node lets its
+ * keepers read them (GET /api/marketplace/transactions), while the phone's sync reads only the member's own. Each status
+ * read by itself: the node's page is the 50 newest, and a held deal behind 50 newer ones (a shop's brisk sales) would
+ * have no row and no Release. Nothing of a status whose read can't be had.
+ */
+export async function getDealsFor(publicKey: string): Promise<MarketplaceTransaction[]> {
+    const read = async (status: 'pending' | 'requested'): Promise<MarketplaceTransaction[]> => {
+        try {
+            const res = await signedGet(`/api/marketplace/transactions?publicKey=${encodeURIComponent(publicKey)}&status=${status}&limit=50`);
+            if (!res.ok) return [];
+            const rows = await res.json();
+            return Array.isArray(rows) ? rows : [];
+        } catch {
+            return [];
+        }
+    };
+    return (await Promise.all([read('pending'), read('requested')])).flat();
+}
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }

@@ -1096,7 +1096,6 @@
   "Posted by": "İlanı veren",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "Henüz değerlendirme yok",
-  "Transferring {n} B to {name}": "{name} kullanıcısına {n} fasulye aktarılıyor",
   "Failed to complete transaction": "İşlem tamamlanamadı",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "Ödeme alan sizsiniz. Şartları tam olarak anlaşıldığı gibi yerine getirin, Ödeyen kredilerinizi serbest bırakacaktır (Ortak Havuz için %1,5 işlem ücreti {owned} düşülmüş net tutarı alırsınız).",
   "Cancel this transaction and return the post to the market?": "Bu işlem iptal edilip ilan pazara geri döndürülsün mü?",

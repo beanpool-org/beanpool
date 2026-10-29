@@ -26,7 +26,7 @@ import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, 
 import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
 import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
+import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -377,6 +377,26 @@ describe('sun and moon at 320dp × 1.3 (CARD-FRAME §4, slice F5)', () => {
         const pad = 2 * num(s.chip.paddingHorizontal) + 2 * num(s.chip.borderWidth);
         for (const c of SKY_PLACE_CHIPS) expect(textWidth(c.label, num(s.chipText.fontSize)) + pad, c.label).toBeLessThanOrEqual(CARD_INNER);
         expect(num(s.chip.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+    });
+});
+
+describe("the Decide card's settings sheet at 320dp × 1.3 (My votes)", () => {
+    it('its three chips share a row or wrap whole, each a 48dp target; the line under the chosen one wraps at word breaks inside the sheet', () => {
+        const sheetInner = SCREEN - 2 * num((editHomeStyles as unknown as Record<string, Record<string, unknown>>).list.paddingHorizontal);
+        const pad = 2 * num(s.chip.paddingHorizontal) + 2 * num(s.chip.borderWidth);
+        expect(HOME_DECIDE_CHOICES.map(c => c.show)).toEqual(['counts', 'open', 'mine']);
+        for (const c of HOME_DECIDE_CHOICES) {
+            expect(textWidth(c.label, num(s.chipText.fontSize)) + pad, c.label).toBeLessThan(sheetInner);
+            // The note's longest word, at its 13 pt, beside nothing: it wraps, never clips.
+            expect(longestWord(c.note, 13), c.note).toBeLessThan(sheetInner);
+            expect(`${c.label} ${c.note}`).not.toMatch(/lock|earn|tier|level|Ʀ/i);
+        }
+        expect(num(s.chip.minHeight)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(s.chips.flexWrap).toBe('wrap');
+        const sheet = read('components/home/CardSettingsSheet.tsx');
+        // Its note is not cut to a line count, and it sits inside the sheet's scrolling list.
+        expect(sheet).toMatch(/testID="card-settings-show-note"/);
+        expect(sheet.slice(sheet.indexOf('card-settings-show-note') - 200, sheet.indexOf('card-settings-show-note') + 200)).not.toMatch(/numberOfLines/);
     });
 });
 

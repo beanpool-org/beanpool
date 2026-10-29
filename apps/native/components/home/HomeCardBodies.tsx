@@ -17,7 +17,7 @@ import {
     communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
-import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
+import { HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, communityShapeSummary, type CommunityShapeFeatures, type SkyToday, type TipsView } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { getBundledGuide } from '../../utils/guide';
 import { FabAware, HOME_TARGET_DP, HomeButton, HomeLink, HomeRow, communityLinksStyle, homeStyles } from './HomeParts';
@@ -416,7 +416,8 @@ export function DecideBody({ card, features, colors, now }: { card: NonNullable<
             : null;
         return (
             <>
-                {(card.items || []).slice(0, 3).map(item => {
+                {/* As many rows as the node sent for the card's setting (core HOME_DECIDE_ROWS): three, or five for "All open" and "My votes". */}
+                {(card.items || []).slice(0, HOME_DECIDE_ROWS_MAX).map(item => {
                     const closes = closesInWords(item.closesAt, now);
                     const vote = item.voted ? t('You voted') : t('Not yet');
                     const sub = `${closes} · ${vote}`;

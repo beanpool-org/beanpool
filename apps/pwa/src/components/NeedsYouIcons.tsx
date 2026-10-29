@@ -43,10 +43,11 @@ export function allNeedsLabel(kinds: number): string {
 }
 
 /** Where a tap on a need lands in the web app. Parity with HomePage.tsx:1802-1820. */
-export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string) => void): void {
+export function goToWebNeedsTarget(target: NeedsTarget, onNavigate?: (tab: string, ctxId?: string, txId?: string) => void): void {
     if (!onNavigate) return;
     switch (target.to) {
-        case 'deal': return onNavigate('marketplace', target.postId);
+        // On the deal itself, not only its listing: a recurring listing's author lands on this one (deals S4).
+        case 'deal': return onNavigate('marketplace', target.postId, target.txId);
         case 'my-deals': return onNavigate('marketplace');
         case 'decide': return onNavigate('projects');
         case 'chat': return onNavigate('messages', target.conversationId);
@@ -133,7 +134,7 @@ export function NeedsYouIcons({
     variant = 'header',
 }: {
     identityPubkey?: string;
-    onNavigate?: (tab: string, ctxId?: string) => void;
+    onNavigate?: (tab: string, ctxId?: string, txId?: string) => void;
     activeTab?: string;
     /** The map's header row: its logo is drawn over the room, and the slot stops short of it. */
     besideLogo?: boolean;

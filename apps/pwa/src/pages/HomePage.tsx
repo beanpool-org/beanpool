@@ -29,10 +29,10 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
+    HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardType, listPhotoUrl, readSearchSettings,
+    homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
     communityShapeSummary, type CommunityShapeFeatures,
@@ -275,7 +275,7 @@ interface Props {
      * 'settings-profile', 'guide' (a page of the members' guide, by slug: the Tips card's Read more). The lobby takes
      * 'marketplace' and 'map' only.
      */
-    onNavigate: (tab: string, contextId?: string) => void;
+    onNavigate: (tab: string, contextId?: string, txId?: string) => void;
     /** The safety card's "See my 12 words". */
     onSeeWords?: () => void;
     /**
@@ -627,12 +627,12 @@ function DealsBody({
     onNavigate,
 }: {
     d: NonNullable<HomeCards['deals']>;
-    onNavigate: (page: string, id?: string) => void;
+    onNavigate: (page: string, id?: string, txId?: string) => void;
 }) {
     const items = d.items ?? [];
     if (items.length === 0) {
         return (
-            <HomeLine onClick={() => onNavigate('marketplace', d.waitingOnMe?.postId)} label={t('Your deals: {line}', { line: dealsLine(d) })}>
+            <HomeLine onClick={() => onNavigate('marketplace', d.waitingOnMe?.postId, d.waitingOnMe?.txId)} label={t('Your deals: {line}', { line: dealsLine(d) })}>
                 <span className="min-w-0 break-words">{dealsLine(d)}</span>
             </HomeLine>
         );
@@ -646,7 +646,7 @@ function DealsBody({
                 return (
                     <HomeLine
                         key={item.txId}
-                        onClick={() => onNavigate('marketplace', item.postId)}
+                        onClick={() => onNavigate('marketplace', item.postId, item.txId)}
                         label={lineLabel}
                         testId="home-deal-item"
                     >
@@ -737,7 +737,8 @@ function DecideBody({
 
     return (
         <div>
-            {items.slice(0, 3).map(item => {
+            {/* As many rows as the node sent for the card's setting (core HOME_DECIDE_ROWS): three, or five for "All open" and "My votes". */}
+            {items.slice(0, HOME_DECIDE_ROWS_MAX).map(item => {
                 const when = closesIn(item.closesAt, now);
                 const votedStatus = item.voted ? t('You voted') : t('Not yet');
                 const sub = [when, votedStatus].filter(Boolean).join(' · ');
@@ -1980,7 +1981,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const go = () => {
             const target = item.target;
             switch (target.to) {
-                case 'deal': return onNavigate('marketplace', target.postId);
+                // On the deal itself (deals S4): a recurring listing's author lands on this one, as on the phone.
+                case 'deal': return onNavigate('marketplace', target.postId, target.txId);
                 case 'my-deals': return onNavigate('marketplace');
                 case 'decide': return onNavigate('projects');
                 case 'chat': return onNavigate('messages', target.conversationId);
@@ -2401,12 +2403,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             case 'decide': {
                 const d = c.decide;
                 if (!d) return null;
-                const hasItems = (d.items && d.items.length > 0) || !!d.poll;
+                // "My votes" sends `open` as the number of the member's own Decisions, not of all that are open: the counts would read
+                // as the community's, so the aside is left off there (the phone draws none either). Its rows say when each closes.
+                const showAside = ((d.items && d.items.length > 0) || !!d.poll) && readDecideSettings(card.settings).show !== 'mine';
                 return (
                     <HomeCard
                         key={id}
                         {...common}
-                        titleAside={hasItems ? (
+                        titleAside={showAside ? (
                             <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">
                                 {decideLine(d, now)}
                             </span>

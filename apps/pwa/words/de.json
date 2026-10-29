@@ -1165,7 +1165,6 @@
   "Posted by": "Eingestellt von",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "Noch keine Bewertungen",
-  "Transferring {n} B to {name}": "Übertrage {n} B an {name}",
   "Failed to complete transaction": "Transaktion konnte nicht abgeschlossen werden",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "Du wirst bezahlt. Erfülle die Bedingungen wie vereinbart, dann gibt die zahlende Person dein Guthaben frei (du erhältst den Nettobetrag abzüglich 1,5% Transaktionsgebühr {owned}).",
   "Cancel this transaction and return the post to the market?": "Diese Transaktion abbrechen und den Eintrag zurück auf den Markt stellen?",

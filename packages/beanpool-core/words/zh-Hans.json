@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-20",
@@ -748,5 +748,22 @@
   "Working Group": "工作组",
   "Guild": "公会",
   "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "全球社区中不使用豆子。请在信息中注明你期望的回报：免费、交换、或面议。",
-  "Your first week": "你的第一周"
+  "Your first week": "你的第一周",
+  "🤝 IN TRUST": "🤝 托管中",
+  "✋ ASKED": "✋ 已申请",
+  "{name} · {n} Beans held · since {date}": "{name} · 托管 {n} 豆子 · 自 {date}",
+  "{name} · no Beans held · since {date}": "{name} · 未托管豆子 · 自 {date}",
+  "Deals under way: {n}": "进行中的交易：{n}",
+  "You act for {name} here.": "你在这里代表 {name} 操作。",
+  "You're helping with this · {n} Beans held for you": "你在帮忙 · 为你托管 {n} 豆子",
+  "You're helping with this · no Beans held": "你在帮忙 · 未托管豆子",
+  "You offered to help · waiting on {name}": "你提出了帮忙 · 等待 {name}",
+  "You asked to borrow it · nothing is held until {name} says yes": "你申请借用 · 在 {name} 同意前不托管任何东西",
+  "Taken up by someone else for now.": "暂时已被别人接下。",
+  "You've had this before · done {date}": "你以前用过 · {date} 完成",
+  "⭐ Review": "⭐ 评价",
+  "Transferring {n} B to {name}": "正在向 {name} 转账 {n} B",
+  "That deal is done.": "那笔交易已完成。",
+  "That request was declined.": "那个申请已被拒绝。",
+  "That deal was cancelled.": "那笔交易已取消。"
 }

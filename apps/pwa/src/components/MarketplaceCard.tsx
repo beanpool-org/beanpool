@@ -12,7 +12,7 @@
 import { useState } from 'react';
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
-import { formatNumber, listPhotoUrl, t } from '@beanpool/core';
+import { formatNumber, listPhotoUrl, listingChipWords, t, type ListingChip } from '@beanpool/core';
 import { Sentence } from './Sentence';
 import { CategoryTile } from './CategoryTile';
 
@@ -65,9 +65,14 @@ interface Props {
      * a founding trade to make, which can't happen on that node (DESIGN-global-showcase-fable.md §1–§2).
      */
     beansMarked?: boolean;
+    /**
+     * A deal of the reader's own on this listing, held in trust or asked for (@beanpool/core listingChips): only for the
+     * people the deal belongs to, never a stranger, so a card never says who traded (DESIGN-deals-fable §3.3).
+     */
+    dealChip?: ListingChip | null;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm, beansMarked = false }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm, beansMarked = false, dealChip = null }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -132,6 +137,14 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const youPill = isOwnPost ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300/50">{t('👤 You')}</span>
     ) : null;
+    const dealPill = dealChip ? (
+        <span
+            data-testid="card-deal-chip"
+            className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border border-transparent ${dealChip === 'in-trust' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink' : 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'}`}
+        >
+            {listingChipWords(dealChip)}
+        </span>
+    ) : null;
     const pulsePill = isPulse ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">{t('🗞️ Daily Pulse')}</span>
     ) : null;
@@ -179,6 +192,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                     parts={{ you: <span className="text-blue-600 dark:text-blue-400 font-bold">{t('👤 (You)')}</span> }}
                                 />
                             ) : elderCard ? t('by {name} ⛰️', { name: authorName }) : t('by {name}', { name: authorName })}
+                            {dealPill}
                             {distanceTag}
                             {foundingChip && (
                                 <span data-testid="author-founding" className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent min-w-0 max-w-full whitespace-normal break-words">
@@ -279,6 +293,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             )}
                             {pulsePill}
                             {youPill}
+                            {dealPill}
                             {pausedPill}
                             {categoryConfig && (
                                 <span className="text-[10px] font-black text-nature-500 dark:text-nature-400 flex items-center gap-1">
@@ -471,7 +486,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 {/* Distance tag */}
                 {distanceTag && <div className="mt-0.5">{distanceTag}</div>}
 
-                {/* Paused pill */}
+                {/* The reader's own deal on it (S4), and the paused pill */}
+                {dealPill && <div className="mt-1">{dealPill}</div>}
                 {pausedPill && <div className="mt-1">{pausedPill}</div>}
 
                 {/* Daily Pulse keeps its description and button */}

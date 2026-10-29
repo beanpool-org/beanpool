@@ -510,15 +510,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
              (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
         ) || null;
     }, [activeConv, userTransactions, identity.publicKey, activePeerPubkey]);
-    // The deals with the open DM's other person that ask something of the chat, newest first: Beans held (either side's), or a
-    // finished trade I haven't rated. The phone's pinned strip (chat/[id].tsx `activeDeals`), same rule. The deal the
-    // buyer's Trust Hold banner above already carries is left out of it, as the phone leaves out the one its action bar shows.
+    // The deals with the open DM's other person that ask something of the chat, newest first: Beans held (either side's), a
+    // finished trade I haven't rated, or a request on my listing waiting for my answer (the list's Action Required counts it,
+    // so the chat it opens must show it: DESIGN-deals-fable §2.2, every surface opens the deal). The phone's pinned strip
+    // (chat/[id].tsx `activeDeals`) is the same rule less the request. The deal the buyer's Trust Hold banner above already
+    // carries is left out of it, as the phone leaves out the one its action bar shows.
     const stripDeals = useMemo(() => {
         if (activeConv?.type !== 'dm' || !activePeerPubkey) return [];
         const me = identity.publicKey;
         return userTransactions
             .filter(tx => ((tx.buyerPublicKey === me && tx.sellerPublicKey === activePeerPubkey) || (tx.sellerPublicKey === me && tx.buyerPublicKey === activePeerPubkey))
-                && (tx.status === 'pending' || (tx.status === 'completed' && !iRated(tx, me)))
+                && (tx.status === 'pending' || (tx.status === 'completed' && !iRated(tx, me)) || (tx.status === 'requested' && dealStep(tx, me).state === 'to-answer'))
                 && tx.id !== activePendingTransaction?.id)
             .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     }, [activeConv?.type, userTransactions, identity.publicKey, activePeerPubkey, activePendingTransaction?.id]);

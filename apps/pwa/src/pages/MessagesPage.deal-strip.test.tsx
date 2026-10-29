@@ -181,6 +181,50 @@ describe('Chat deal strip: the payer', () => {
     });
 });
 
+describe('Chat deal strip: a request on my listing waits for my answer', () => {
+    // The list's Action Required counts this request (dealsNeedingMe → to-answer), so the chat it opens must show it.
+    it('the chip leads to a card: the item, "Waiting on you: answer", nothing held and no buttons; it opens the listing at the deal', async () => {
+        const onNavigate = vi.fn();
+        mockTxs = [sold('tx-q', { status: 'requested', postAuthorPublicKey: 'my-pubkey', postType: 'offer' })];
+        render(<MessagesPage identity={me} onNavigate={onNavigate} />);
+        await waitFor(() => expect(screen.queryByTestId('deal-action-chip')).not.toBeNull());
+        expect(screen.getByTestId('deal-action-chip').textContent).toBe('⚡Action Required (1)');
+        fireEvent.click(await screen.findByText('Bob'));
+        const card = within(await strip()).getByRole('group', { name: 'Bread tx-q' });
+        expect(within(card).getByText('Waiting on you: answer')).toBeInTheDocument();
+        expect(within(card).queryByText(/escrow/)).toBeNull();
+        expect(within(card).queryByText(/Awaiting release/)).toBeNull();
+        expect(screen.queryByText(/Trust Hold/)).toBeNull();
+        // The card's one control is the door to the listing, where Approve and Deny are.
+        expect(within(card).getAllByRole('button')).toHaveLength(1);
+        fireEvent.click(within(card).getByRole('button', { name: /Bread tx-q/ }));
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-tx-q', 'tx-q');
+        expect(completeMarketplaceTransaction).not.toHaveBeenCalled();
+        expect(cancelMarketplaceTransaction).not.toHaveBeenCalled();
+    });
+
+    it('a request of mine waiting on them, a declined one and a stranger\'s: no card', async () => {
+        mockTxs = [
+            deal('tx-a', { status: 'requested', postAuthorPublicKey: 'peer-pubkey', postType: 'offer' }),
+            sold('tx-d', { status: 'rejected', postAuthorPublicKey: 'my-pubkey', postType: 'offer' }),
+            sold('tx-x', { status: 'requested', buyerPublicKey: 'other-pubkey', sellerPublicKey: 'third-pubkey' }),
+        ];
+        await openChat();
+        await screen.findByText(/No messages yet/);
+        expect(screen.queryByTestId('chat-deal-strip')).toBeNull();
+    });
+
+    it('the request sits among the cards by date, next to a held deal', async () => {
+        mockTxs = [
+            sold('tx-held', { createdAt: '2026-10-20T00:00:00Z' }),
+            sold('tx-q', { status: 'requested', postAuthorPublicKey: 'my-pubkey', postType: 'offer', createdAt: '2026-10-22T00:00:00Z' }),
+        ];
+        await openChat();
+        const cards = within(await strip()).getAllByRole('group').map(g => g.getAttribute('aria-label'));
+        expect(cards).toEqual(['Bread tx-q', 'Bread tx-held']);
+    });
+});
+
 describe('Chat deal strip: each card opens the listing at its deal', () => {
     it('a card opens the Market at its post and its deal, not the newest one', async () => {
         const onNavigate = vi.fn();
@@ -266,5 +310,15 @@ describe('Chat deal strip in the member\'s language', () => {
         expect(within(s).getAllByRole('button', { name: xx('Release credits for {title}').replace('{title}', 'Bread tx-old') })).toHaveLength(1);
         expect(within(s).getByRole('button', { name: xx('Leave a review for {title}').replace('{title}', 'Bread tx-d') })).toBeInTheDocument();
         expect(bypassing(document.body, { others: ['Bob', 'Bread tx-new', 'Bread tx-s', 'Bread tx-d', 'Bread tx-old'] })).toEqual([]);
+    });
+
+    it('the request card\'s words came through t() too', async () => {
+        await showIn('xx');
+        mockTxs = [sold('tx-q', { status: 'requested', postAuthorPublicKey: 'my-pubkey', postType: 'offer' })];
+        render(<MessagesPage identity={me} />);
+        fireEvent.click(await screen.findByText('Bob'));
+        const s = await strip();
+        expect(within(s).getByText(xx('Waiting on you: answer'))).toBeInTheDocument();
+        expect(bypassing(document.body, { others: ['Bob', 'Bread tx-q'] })).toEqual([]);
     });
 });

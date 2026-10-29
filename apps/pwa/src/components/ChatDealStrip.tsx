@@ -1,11 +1,14 @@
 /**
  * The deals in a chat with one person, pinned above the thread: the phone's deal strip (chat/[id].tsx `dealStrip`), same
  * cards, same words, same order (DESIGN-deals-fable §2.2, slice S5). One card per deal that still asks something of the
- * chat: Beans held in trust, or a finished trade the member hasn't rated.
+ * chat: Beans held in trust, a finished trade the member hasn't rated, or a request on their listing waiting for their
+ * answer (the list's Action Required counts it, so the chat it opens shows it).
  *
  *  - the payer sees Release and Cancel (core's dealMoves: only the payer releases);
  *  - the payee sees "⏳ Awaiting release": their step is in the world, not in the app;
- *  - a finished trade not yet rated shows "⭐ Review".
+ *  - a finished trade not yet rated shows "⭐ Review";
+ *  - a request to answer says "Waiting on you: answer" (core's dealStateWords) and has no control of its own: nothing is
+ *    held yet, and Approve and Deny live on the listing, which the card opens.
  *
  * A card's title and amount open the listing at that deal. Every control is a real button, 44 px tall, with a name that
  * says which deal it acts on; colours are the shared library's roles (light and dark come with them).
@@ -38,7 +41,8 @@ const buttonBase = {
 
 /** A card's second line: the amount and where it stands, as the phone writes it ("5 Beans · in escrow"). */
 function metaWords(tx: MarketplaceTransaction, me: string, peerName: string | null, showsBeans: boolean): string {
-    if (showsBeans && tx.credits > 0) {
+    // A request holds nothing yet: never "in escrow", whatever Beans it names.
+    if (tx.status !== 'requested' && showsBeans && tx.credits > 0) {
         const amount = tn(tx.credits, '{n} Beans', '{n} Beans');
         return tx.status === 'completed' ? t('{amount} · completed', { amount }) : t('{amount} · in escrow', { amount });
     }
@@ -83,43 +87,45 @@ export function ChatDealStrip({ deals, me, peerName, showsBeans, busy, onOpen, o
                                     {metaWords(tx, me, peerName, showsBeans)}
                                 </div>
                             </button>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem' }}>
-                                {tx.status === 'pending' && releasable && (
-                                    <>
+                            {(releasable || awaiting || reviewable) && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem' }}>
+                                    {tx.status === 'pending' && releasable && (
+                                        <>
+                                            <button
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={() => onRelease(tx)}
+                                                aria-label={tx.postTitle ? t('Release credits for {title}', { title: tx.postTitle }) : t('Release credits for deal')}
+                                                style={{ ...buttonBase, flex: 1, border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}
+                                            >
+                                                {busy ? '…' : t('Release')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                disabled={busy}
+                                                onClick={() => onCancel(tx)}
+                                                aria-label={t('Cancel deal')}
+                                                style={{ ...buttonBase, border: '1px solid var(--border-primary)', background: 'var(--bp-chip-danger-tint)', color: 'var(--bp-chip-danger-ink)' }}
+                                            >
+                                                {t('Cancel')}
+                                            </button>
+                                        </>
+                                    )}
+                                    {awaiting && (
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 600, fontStyle: 'italic', color: 'var(--text-secondary)' }}>{t('⏳ Awaiting release')}</span>
+                                    )}
+                                    {reviewable && (
                                         <button
                                             type="button"
-                                            disabled={busy}
-                                            onClick={() => onRelease(tx)}
-                                            aria-label={tx.postTitle ? t('Release credits for {title}', { title: tx.postTitle }) : t('Release credits for deal')}
-                                            style={{ ...buttonBase, flex: 1, border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}
+                                            onClick={() => onReview(tx)}
+                                            aria-label={tx.postTitle ? t('Leave a review for {title}', { title: tx.postTitle }) : t('Leave a review for deal')}
+                                            style={{ ...buttonBase, flex: 1, border: '1px solid var(--border-primary)', background: 'var(--bp-chip-warn-tint)', color: 'var(--bp-chip-warn-ink)' }}
                                         >
-                                            {busy ? '…' : t('Release')}
+                                            {t('⭐ Review')}
                                         </button>
-                                        <button
-                                            type="button"
-                                            disabled={busy}
-                                            onClick={() => onCancel(tx)}
-                                            aria-label={t('Cancel deal')}
-                                            style={{ ...buttonBase, border: '1px solid var(--border-primary)', background: 'var(--bp-chip-danger-tint)', color: 'var(--bp-chip-danger-ink)' }}
-                                        >
-                                            {t('Cancel')}
-                                        </button>
-                                    </>
-                                )}
-                                {awaiting && (
-                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, fontStyle: 'italic', color: 'var(--text-secondary)' }}>{t('⏳ Awaiting release')}</span>
-                                )}
-                                {reviewable && (
-                                    <button
-                                        type="button"
-                                        onClick={() => onReview(tx)}
-                                        aria-label={tx.postTitle ? t('Leave a review for {title}', { title: tx.postTitle }) : t('Leave a review for deal')}
-                                        style={{ ...buttonBase, flex: 1, border: '1px solid var(--border-primary)', background: 'var(--bp-chip-warn-tint)', color: 'var(--bp-chip-warn-ink)' }}
-                                    >
-                                        {t('⭐ Review')}
-                                    </button>
-                                )}
-                            </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     );
                 })}

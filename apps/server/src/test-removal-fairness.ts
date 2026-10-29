@@ -40,6 +40,10 @@
  *     who. The member is told (a push of its own kind and a kept notice, neither saying why or who) and can't write another,
  *     open or closed. A closed vote's reply comes down too. On a standby, hiding a case and taking down a reply are refused
  *     with its JSON answer, and nothing is written.
+ *  9. A phone move: the admin who paused a member moves to a new phone (a re-key), and the vote names their new key as who
+ *     paused, which a standby's next copy carries: the member's report of the case is about them, and after the vote ends
+ *     without removing the member, the cool-down holds them on a newer key still. A standby following the re-key makes
+ *     the same move, and the row keeps its stamp.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-removal-fairness.ts
  */
@@ -175,6 +179,8 @@ async function main() {
     const { ownerSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
+    const { completeRekey, issueRekeyCode } = await import('./engine/member-wizards.js');
+    const { moveMemberKeyRows } = await import('./engine/key-move.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { setNodeRole, STANDBY_CODE } = await import('./config/node-role.js');
     const alerts = await import('./services/alerts.js');
@@ -793,6 +799,51 @@ async function main() {
     assert(onStandby.length === 2 && onStandby.every(a => a.status === 409 && a.body?.code === STANDBY_CODE && typeof a.body?.error === 'string')
         && !row(gusVote).case_hidden_at && row(daveVote).subject_reply === REPLY2 && !row(daveVote).reply_hidden_at,
         `on a standby, hiding a case and taking down a reply answer the standby's JSON refusal, and nothing is written (${onStandby.map(a => `${a.status} ${a.text.slice(0, 70)}`).join('; ')})`);
+
+    // ── 9. A phone move ─────────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n9. The admin who brought a case moves to a new phone: the vote still names them');
+    const ace = seed('AdminAce');
+    grantNodeRole(ace.pubKeyHex, 'admin', gen.pubKeyHex);
+    const mia = seed('MiaMoss');
+    const miaVote = (await pause(sessionOf(ace), mia, 'Sold eggs at the market that belonged to a neighbour')).body?.decision?.id as string;
+    const pausedByOf = (decisionId: string) => JSON.parse(row(decisionId).params).pausedBy as string;
+    /** Ace's phone moves, as an owner moves it with the server's password (engine/member-wizards.ts completeRekey): the new key. */
+    const moveAce = (from: Id): Id => {
+        const to = keypair(ace.callsign);
+        completeRekey(from.pubKeyHex, to.pubKeyHex, issueRekeyCode(from.pubKeyHex, 'owner:password').code, 'owner:password');
+        return to;
+    };
+    const beforeMove = new Date().toISOString();
+    await new Promise(r => setTimeout(r, 5));
+    const aceNew = moveAce(ace);
+    const delta9 = await se.exportSyncState('removal-fairness', beforeMove) as { plainTables?: Record<string, any[]> };
+    const carried9 = (delta9.plainTables?.decisions ?? []).find((d: any) => d.id === miaVote);
+    assert(!!miaVote && pausedByOf(miaVote) === aceNew.pubKeyHex && de.isAdminActor(aceNew.pubKeyHex) && !!carried9 && JSON.parse(carried9.params).pausedBy === aceNew.pubKeyHex,
+        `Ace pauses Mia, then moves to a new phone: the vote names Ace's new key as who paused, and a standby's next copy carries it (${pausedByOf(miaVote)?.slice(0, 8)}, carried ${!!carried9})`);
+    fresh();
+    const miaReported = await signed('POST', `/api/commons/decisions/${miaVote}/report`, mia, { words: 'The eggs were from my own hens' });
+    const miaReport = db.prepare('SELECT * FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?').get(mia.pubKeyHex, aceNew.pubKeyHex) as any;
+    assert(miaReported.status === 200 && miaReported.body?.duplicate !== true && !!miaReport && /false accusation/i.test(miaReport.reason) && miaReport.reason.includes(miaVote.slice(0, 8)),
+        `Mia reports the case as false: the report is about Ace, on the new key, not a case that "names nobody" (${miaReported.status} ${miaReported.text.slice(0, 120)})`);
+    // The vote ends without removing Mia, and Ace's phone moves again: the cool-down follows Ace to the newest key.
+    voteAndClose(miaVote, false);
+    const aceNewer = moveAce(aceNew);
+    const miaRemovals = removalsOf(mia);
+    const aceAgain = await pause(sessionOf(aceNewer), mia, 'Sold eggs at the market that belonged to a neighbour, again');
+    assert(row(miaVote).status === 'failed' && pausedByOf(miaVote) === aceNewer.pubKeyHex
+        && aceAgain.status === 403 && aceAgain.body?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(mia) === 'active' && removalsOf(mia) === miaRemovals,
+        `Mia's vote ends without removing Mia (${row(miaVote).status}), and Ace's phone moves again: from the newest key, Ace still can't pause Mia (${aceAgain.status} ${aceAgain.text.slice(0, 160)})`);
+    // A standby follows its main server's re-key with the same move (engine/key-move.ts followReplicatedRekeys), and each
+    // row it moves keeps its stamp.
+    const KEPT_STAMP = '2026-01-02T03:04:05.000Z';
+    db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status, closes_at, updated_at)
+        VALUES ('rf-standby-move', 'SYSTEM', 'Remove Someone?', 'An admin paused Someone.', 'member', 'remove_member', 'pk-someone', ?, '1m1v', 'failed', ?, ?)`)
+        .run(JSON.stringify({ memberName: 'Someone', pausedBy: 'pk-admin-old', rule: 2 }), KEPT_STAMP, KEPT_STAMP);
+    moveMemberKeyRows('pk-admin-old', 'pk-admin-new', new Date().toISOString(), { keepStamps: true });
+    const followed = row('rf-standby-move');
+    assert(followed.params === JSON.stringify({ memberName: 'Someone', pausedBy: 'pk-admin-new', rule: 2 }) && followed.updated_at === KEPT_STAMP,
+        `a standby following the re-key makes the same move, the rest of the params as they were, and the row keeps its stamp (${followed.params} ${followed.updated_at})`);
+    db.prepare("DELETE FROM decisions WHERE id = 'rf-standby-move'").run();
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

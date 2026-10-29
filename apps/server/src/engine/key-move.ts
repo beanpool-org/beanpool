@@ -40,10 +40,9 @@ function hasStamp(table: string): boolean {
  */
 export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, opts: { keepStamps: boolean }): void {
     const keepStamps = opts.keepStamps;
-    /** `table.column` from the old key to the new, on the rows `where` (SQL, no parameters) also picks. */
-    const move = (table: string, column: string, where?: string): void => {
-        const cond = where ? `${column} = ? AND (${where})` : `${column} = ?`;
-        const update = db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${cond}`);
+    /** The rows of `table` that `cond` (SQL, the old key its one parameter) picks get `set` (SQL, the new key its one). */
+    const rewrite = (table: string, set: string, cond: string): void => {
+        const update = db.prepare(`UPDATE ${table} SET ${set} WHERE ${cond}`);
         if (!keepStamps || !hasStamp(table)) {
             update.run(newKey, oldKey);
             return;
@@ -56,6 +55,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
         const restore = db.prepare(`UPDATE ${table} SET updated_at = ? WHERE rowid = ? AND updated_at IS NOT ?`);
         for (const b of before) restore.run(b.u, b.r, b.u);
     };
+    /** `table.column` from the old key to the new, on the rows `where` (SQL, no parameters) also picks. */
+    const move = (table: string, column: string, where?: string): void =>
+        rewrite(table, `${column} = ?`, where ? `${column} = ? AND (${where})` : `${column} = ?`);
 
     // (a) members row itself - update primary key and restore active status, unless the member is
     // suspended ('disabled'): a new key does not lift a suspension
@@ -248,6 +250,11 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('decisions', 'admin_halted_by');
     move('decisions', 'case_hidden_by');
     move('decisions', 'reply_hidden_by');
+    // A pause's own vote names who paused in its params, not in a column (decisions-engine pauseMember `pausedBy`), and the
+    // cool-down and a report of its case read it there (removalCoolDownRefusal, removalCaseReport). Left on the old key, the
+    // admin could pause the member again at once from the new one, and the member's report of the case would name nobody.
+    rewrite('decisions', "params = json_set(params, '$.pausedBy', ?)",
+        "effect = 'remove_member' AND (CASE WHEN json_valid(params) THEN json_extract(params, '$.pausedBy') END) = ?");
     move('decisions', 'subject', "touches = 'member' OR touches = 'pool' OR touches = 'scope'");
     move('decision_votes', 'voter_pubkey');
     move('decision_electors', 'member_pubkey');

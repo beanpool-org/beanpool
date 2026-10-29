@@ -555,3 +555,110 @@ describe('the card of a request the community no longer holds, and the card afte
         expect(host.querySelector(`[data-testid="home-find-waiting-cancelled-${byron}"]`)?.textContent).toBe('Vous avez annulé votre demande. Vous pourrez la renouveler dans 24 heures.');
     });
 });
+
+describe('the card\'s per-request state belongs to the request, not to the community (review of #2573, comment 4407475831)', () => {
+    const byron = 'https://byron.example.org';
+    const askedAgain: RememberedKnock = { ...knock, sentAt: '2026-10-27T00:00:00.000Z' };
+    const CANCELLED = 'You cancelled your request. You can ask again after 24 hours.';
+    const NONE = 'This request is no longer open. You can ask again.';
+
+    /** The card as Home keeps it mounted: `show` hands it a new list, as Home does when it reads the phone's memory again. */
+    async function mount(first: RememberedKnock[]) {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const root = createRoot(host);
+        const show = async (knocks: RememberedKnock[]) => {
+            const card = createElement(FindCommunityBody, {
+                home, knocks, identity: ME, nodeUrl: null, point: { lat: -28.65, lng: 153.6 }, colors: lightColors,
+            });
+            await act(async () => { root.render(card as unknown as Parameters<Root['render']>[0]); });
+        };
+        await show(first);
+        await act(async () => { await Promise.resolve(); });
+        return { host, show };
+    }
+    const sent = (host: HTMLElement) => host.querySelector(`[data-testid="home-find-waiting-sent-${byron}"]`)?.textContent;
+    const arrived = (host: HTMLElement) => host.querySelector(`[data-testid="home-find-waiting-arrived-${byron}"]`)?.textContent;
+    const cancelledLine = (host: HTMLElement) => host.querySelector(`[data-testid="home-find-waiting-cancelled-${byron}"]`)?.textContent;
+    const cancelButton = (host: HTMLElement) => host.querySelector(`[data-testid="home-find-cancel-${byron}"]`) as HTMLButtonElement | null;
+    const gotIt = (host: HTMLElement) => host.querySelector(`[data-testid="home-find-gotit-${byron}"]`) as HTMLButtonElement | null;
+    const confirmCancel = async (host: HTMLElement, alertCall: number) => {
+        await act(async () => { cancelButton(host)!.click(); });
+        const destructive = alertMock.mock.calls[alertCall][2].find((b: any) => b.style === 'destructive');
+        await act(async () => { await destructive.onPress(); });
+    };
+
+    it('a Cancel that worked is not carried onto a later request to the same community: the new request arrived, and can be cancelled', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: true });
+        const { host, show } = await mount([knock]);
+        await confirmCancel(host, 0);
+        expect(cancelledLine(host)).toBe(CANCELLED);
+        expect(cancelButton(host)).toBeNull();
+
+        // 24 hours on the member asked again; the app was still alive, and Home hands the card the new request.
+        await show([askedAgain]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(sent(host)).toBe('You asked to join Byron Shire BeanPool on 27 Oct 2026.');
+        expect(cancelledLine(host)).toBeUndefined();
+        expect(arrived(host)).toBe('Your request arrived.');
+        expect(cancelButton(host)).not.toBeNull();
+        expect(host.textContent).not.toContain(CANCELLED);
+        // The new request's own status was read, not the old request's answer reused.
+        expect(readKnockStatusMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('the same request handed over again (a new list, the same sentAt) keeps its cancelled line for the visit', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: true });
+        const { host, show } = await mount([knock]);
+        await confirmCancel(host, 0);
+
+        await show([{ ...knock }]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(cancelledLine(host)).toBe(CANCELLED);
+        expect(cancelButton(host)).toBeNull();
+        expect(readKnockStatusMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('Got it on a closed request, then the same community asked again: the new request says Checking…, with no Got it, until its own read answers', async () => {
+        readKnockStatusMock.mockResolvedValueOnce({ ok: true, value: { status: 'none' } });
+        const { host, show } = await mount([knock]);
+        expect(arrived(host)).toBe(NONE);
+        await act(async () => { gotIt(host)!.click(); });
+        expect(forgetKnockMock).toHaveBeenCalledTimes(1);
+        expect(host.querySelector(`[data-testid="home-find-waiting-${byron}"]`)).toBeNull();
+
+        let finishRead: (r: unknown) => void = () => {};
+        readKnockStatusMock.mockReturnValueOnce(new Promise(resolve => { finishRead = resolve; }));
+        await show([askedAgain]);
+
+        // While the read is out nothing says the new request is closed, and nothing can forget it.
+        expect(sent(host)).toBe('You asked to join Byron Shire BeanPool on 27 Oct 2026.');
+        expect(arrived(host)).toBe('Checking…');
+        expect(host.textContent).not.toContain(NONE);
+        expect(gotIt(host)).toBeNull();
+        expect(forgetKnockMock).toHaveBeenCalledTimes(1);
+
+        await act(async () => { finishRead({ ok: true, value: { status: 'pending' } }); });
+        expect(arrived(host)).toBe('Your request arrived.');
+        expect(cancelButton(host)).not.toBeNull();
+        expect(gotIt(host)).toBeNull();
+    });
+
+    it('a failed Cancel\'s error does not outlive its request: the next request to that community starts without it', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'Network offline' });
+        const { host, show } = await mount([knock]);
+        await confirmCancel(host, 0);
+        expect(host.querySelector(`[data-testid="home-find-cancel-error-${byron}"]`)?.textContent).toBe('Network offline');
+
+        await show([askedAgain]);
+        await act(async () => { await Promise.resolve(); });
+
+        expect(host.querySelector(`[data-testid="home-find-cancel-error-${byron}"]`)).toBeNull();
+        expect(cancelButton(host)).not.toBeNull();
+    });
+});

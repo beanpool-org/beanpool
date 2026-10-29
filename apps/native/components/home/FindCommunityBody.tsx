@@ -15,6 +15,13 @@ import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 const LINKS = { typeTown: TYPE_YOUR_TOWN };
 
 /**
+ * What the card's per-request state is kept under. A community's URL is not enough: asking the same community again (after
+ * a Cancel, or a Got it) gives a new request with a new `sentAt` under the same URL, and the Home tab stays mounted, so
+ * state kept by URL would tell the member the new request is cancelled or closed.
+ */
+const requestKey = (k: RememberedKnock) => `${k.url} ${k.sentAt}`;
+
+/**
  * "Find your community" (design §3.1, §7) as a Home card on the global node (slice H4): the way out of the worldwide
  * community to a local one. What the Market drew above its feed before H4, now drawn from Home's own answer (its `find`
  * card is GET /api/global/home's body, assembled in-process), so it costs no request of its own; the screen checks its
@@ -46,32 +53,33 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     /** The list as it is now, for a cancel that finishes after another one did (a press handler's closure is older). */
     const latestKnocks = useRef<readonly RememberedKnock[]>(knocks);
     const showKnocks = (list: readonly RememberedKnock[]) => { latestKnocks.current = list; setActiveKnocks(list); };
-    /** Every cancel still out: two waiting cards are normal, and each one's button is its own. */
-    const [cancellingUrls, setCancellingUrls] = useState<ReadonlySet<string>>(() => new Set());
-    /** Why a cancel failed, kept under the knock it was for (by its URL): one community's failure is not another's. */
+    /** Every cancel still out (by `requestKey`): two waiting cards are normal, and each one's button is its own. */
+    const [cancellingRequests, setCancellingRequests] = useState<ReadonlySet<string>>(() => new Set());
+    /** Why a cancel failed, kept under the request it was for (by `requestKey`): one community's failure is not another's, nor a later request's. */
     const [cancelErrors, setCancelErrors] = useState<Record<string, string>>({});
     /**
-     * The requests whose Cancel worked in this Home visit (by URL): their cards stay, with the cancelled line and no button.
-     * Held here, never stored: the next visit reads the phone's memory, where `cancelKnock` has already marked the knock
-     * cancelled, and the card is not drawn.
+     * The requests whose Cancel worked in this Home visit (by `requestKey`): their cards stay, with the cancelled line and
+     * no button. Held here, never stored: the next visit reads the phone's memory, where `cancelKnock` has already marked the
+     * knock cancelled, and the card is not drawn. A later request to the same community is a new key, so it is not marked.
      */
-    const [cancelledUrls, setCancelledUrls] = useState<ReadonlySet<string>>(() => new Set());
+    const [cancelledRequests, setCancelledRequests] = useState<ReadonlySet<string>>(() => new Set());
 
     useEffect(() => {
         showKnocks(knocks);
     }, [knocks]);
 
-    // Only the communities this phone asked, once per knock it remembers.
-    const knockKey = activeKnocks.map(k => k.url).join(' ');
+    // Only the communities this phone asked, once per request it remembers (a new request to the same community is read anew).
+    const knockKey = activeKnocks.map(requestKey).join(' ');
     useEffect(() => {
         if (!identity || !activeKnocks.length) return;
         let alive = true;
-        activeKnocks.forEach(k => readKnockStatus(k.url, identity).then(r => { if (alive) setStatuses(was => ({ ...was, [k.url]: r })); }));
+        activeKnocks.forEach(k => readKnockStatus(k.url, identity).then(r => { if (alive) setStatuses(was => ({ ...was, [requestKey(k)]: r })); }));
         return () => { alive = false; };
     }, [knockKey, identity?.publicKey]);
 
     const onCancelKnock = (k: RememberedKnock) => {
         if (!identity) return;
+        const rk = requestKey(k);
         const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
         const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
         Alert.alert(
@@ -83,8 +91,8 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                     text: t(FIND_COMMUNITY_WORDS.cancelRequest),
                     style: 'destructive',
                     onPress: async () => {
-                        setCancellingUrls(was => new Set(was).add(k.url));
-                        setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([url]) => url !== k.url)));
+                        setCancellingRequests(was => new Set(was).add(rk));
+                        setCancelErrors(was => Object.fromEntries(Object.entries(was).filter(([key]) => key !== rk)));
                         const res = await cancelKnock(k.url, identity);
                         // `not_found` is the node's answer to every standing but an open request: it lapsed, it was cancelled
                         // elsewhere, or a member said yes after this card read it. The node is asked what it holds now, never
@@ -92,14 +100,14 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                         const reread = !res.ok && res.status === 404 && res.code === 'not_found'
                             ? await readKnockStatus(k.url, identity)
                             : null;
-                        setCancellingUrls(was => { const left = new Set(was); left.delete(k.url); return left; });
+                        setCancellingRequests(was => { const left = new Set(was); left.delete(rk); return left; });
                         if (res.ok) {
                             // The card stays and says so (Home is not told: the list it pins by keeps this request for the
                             // visit, so Find does not vanish under the line that says what happened).
-                            setCancelledUrls(was => new Set(was).add(k.url));
+                            setCancelledRequests(was => new Set(was).add(rk));
                         } else {
-                            if (reread) setStatuses(was => ({ ...was, [k.url]: reread }));
-                            setCancelErrors(was => ({ ...was, [k.url]: res.message }));
+                            if (reread) setStatuses(was => ({ ...was, [rk]: reread }));
+                            setCancelErrors(was => ({ ...was, [rk]: res.message }));
                         }
                     },
                 },
@@ -160,14 +168,15 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             {activeKnocks.map(k => {
                 const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
                 const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
-                const status = statuses[k.url];
+                const rk = requestKey(k);
+                const status = statuses[rk];
                 const sentDate = formatDate(new Date(k.sentAt), 'day-month-year');
                 const answersLine = communityAnswersLine(comm?.answers);
-                const isCancelling = cancellingUrls.has(k.url);
-                const cancelled = cancelledUrls.has(k.url);
+                const isCancelling = cancellingRequests.has(rk);
+                const cancelled = cancelledRequests.has(rk);
 
                 if (!cancelled && status?.ok && status.value.status === 'approved') {
-                    const approved = cardKnockLines([k], statuses)[0];
+                    const approved = cardKnockLines([k], { [k.url]: status })[0];
                     return (
                         <Text key={k.url} style={[s.rowLine, s.rowStrong, { marginTop: 6 }]} testID={`home-find-invited-${k.url}`}>
                             {'🎉 ' + (approved?.text ?? '')}
@@ -229,9 +238,9 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                                 />
                             </View>
                         )}
-                        {!!cancelErrors[k.url] && (
+                        {!!cancelErrors[rk] && (
                             <Text style={[s.rowSub, { marginTop: 4, color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID={`home-find-cancel-error-${k.url}`}>
-                                {findLineWords(cancelErrors[k.url])}
+                                {findLineWords(cancelErrors[rk])}
                             </Text>
                         )}
                     </View>

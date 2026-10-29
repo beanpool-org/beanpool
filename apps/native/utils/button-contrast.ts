@@ -12,16 +12,23 @@
  * What it reads, per theme:
  *   - style={styles.x}, arrays (later entries win), object literals, `cond && style`, `cond ? a : b`, spreads, StyleSheet.flatten,
  *     a Pressable's `({ pressed }) => [...]`, and a StyleSheet.create table found through `styles`, `useStyles(...)`,
- *     `useMemo(() => makeStyles(...))` or `makeStyles(...)`.
+ *     `useStyles(makeStyles)`, `useMemo(() => makeStyles(...))` or `makeStyles(...)`, also when several tables are
+ *     destructured from one call (`const { styles, profileStyles } = useMemo(() => makeStyles(...))`: each name finds its own).
  *   - colours as `colors.a.b` (also `c.a.b`), `palette.x`, hex/rgb/rgba strings, and a local `const X = '#...'`.
  *   - `theme === 'dark'`, `dark`, `isDark` and their negations are folded for the theme being measured.
  *   - any other condition is a switch: the background and the words are measured under the SAME setting of it, so
  *     `active && bg` beside `active && ink` is never crossed with `!active`. A pair that exists only while the control is
- *     `disabled` is not measured (WCAG exempts inactive controls).
+ *     `disabled` is not measured (WCAG exempts inactive controls): the element's own `disabled` prop, a switch named for
+ *     it (`isDisabled`, `saveDisabled`), or a local alias of the prop's switch (`isCreating = creating === id` under
+ *     `disabled={!!creating}`).
  *
  * What it does NOT judge (counted in the report, never silently passed as clean): words or backgrounds it cannot resolve
  * (`tone.fg`, `rgbaOf(...)`, a prop), words with no background set above them on the same screen (text-ink-contrast covers
  * the standard grounds), icons, and anything behind a component boundary (a custom component's own background).
+ * Styles it cannot follow add nothing, so they are counted too: `stats.opaqueStyles` (with the files that have most), and
+ * `stats.unreadTables`, the files whose `styles` table was not found (a spec function imported from another file,
+ * `StyleSheet.create(spec(colors))`, `styles` handed to a child as a prop). formatReport prints both, and
+ * e2e/button-contrast.check.ts fails when either rises past its ceiling.
  * Translucent fills are laid over the page, then over the card, and the worse result counts.
  *
  * Node only: this file reads the source tree and is never imported by the app.
@@ -101,6 +108,8 @@ interface Ctx {
     sf: ts.SourceFile;
     theme: Theme;
     opaque: { count: number };
+    /** Names a style was read from (`styles.card`) whose StyleSheet.create table could not be found. */
+    unreadTables: Set<string>;
 }
 
 const lineOf = (n: ts.Node, sf: ts.SourceFile) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
@@ -130,14 +139,19 @@ function pathOf(e: ts.Expression): { root: string; path: string[] } | null {
     return ts.isIdentifier(cur) ? { root: cur.text, path } : null;
 }
 
-/** The initialiser (or function) a name was declared with, found by walking out through the enclosing blocks. */
-function findDecl(name: string, from: ts.Node): ts.Node | undefined {
+/**
+ * The initialiser (or function) a name was declared with, found by walking out through the enclosing blocks. With
+ * `pattern`, a name bound inside a destructuring (`const { styles, profileStyles } = ...`) finds that declaration's
+ * initialiser too; `isPatternInit` tells the two apart.
+ */
+function findDecl(name: string, from: ts.Node, pattern = false): ts.Node | undefined {
     for (let n: ts.Node | undefined = from.parent; n; n = n.parent) {
         if (!('statements' in n)) continue;
         for (const st of (n as ts.Block).statements) {
             if (ts.isVariableStatement(st)) {
                 for (const d of st.declarationList.declarations) {
-                    if (ts.isIdentifier(d.name) && d.name.text === name && d.initializer) return d.initializer;
+                    if (!d.initializer) continue;
+                    if (ts.isIdentifier(d.name) ? d.name.text === name : pattern && bindingNames(d.name).has(name)) return d.initializer;
                 }
             } else if (ts.isFunctionDeclaration(st) && st.name?.text === name) return st;
         }
@@ -145,23 +159,42 @@ function findDecl(name: string, from: ts.Node): ts.Node | undefined {
     return undefined;
 }
 
+/** True for an initialiser that a destructuring declares several names from. */
+const isPatternInit = (init: ts.Node) => ts.isVariableDeclaration(init.parent) && !ts.isIdentifier(init.parent.name);
+
 const isStyleSheetCreate = (n: ts.Node): n is ts.CallExpression =>
     ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'create' &&
     ts.isIdentifier(n.expression.expression) && n.expression.expression.text === 'StyleSheet';
 
-/** The object literal of the StyleSheet.create call a declaration leads to, following one local `makeStyles(...)` hop. */
-function findCreate(n: ts.Node, hops = 0): ts.ObjectLiteralExpression | undefined {
+/**
+ * The object literal of the StyleSheet.create call a declaration leads to, following local `makeStyles(...)` hops: through
+ * a call (`useMemo(() => makeStyles(...))`) and through a function handed over by name (`useStyles(makeStyles)`). With
+ * `want`, the table bound to that name (`const profileStyles = StyleSheet.create(...)`, or `profileStyles: StyleSheet.create(...)`
+ * in a returned object), for a declaration that destructures several tables from one call.
+ */
+function findCreate(n: ts.Node, hops = 0, want?: string): ts.ObjectLiteralExpression | undefined {
     let found: ts.ObjectLiteralExpression | undefined;
+    /** The table behind a local name: its function (or what it is initialised with), one hop further. */
+    const follow = (name: string, at: ts.Node, functionsOnly: boolean) => {
+        const decl = hops < 3 ? findDecl(name, at) : undefined;
+        return decl && decl !== n && (!functionsOnly || ts.isFunctionLike(decl)) ? findCreate(decl, hops + 1, want) : undefined;
+    };
     const visit = (x: ts.Node) => {
         if (found) return;
         if (isStyleSheetCreate(x)) {
             const arg = x.arguments[0];
-            if (arg && ts.isObjectLiteralExpression(unwrap(arg))) found = unwrap(arg) as ts.ObjectLiteralExpression;
+            if (!want && arg && ts.isObjectLiteralExpression(unwrap(arg))) found = unwrap(arg) as ts.ObjectLiteralExpression;
             return;
         }
-        if (hops < 3 && ts.isCallExpression(x) && ts.isIdentifier(x.expression)) {
-            const decl = findDecl(x.expression.text, x);
-            const hit = decl && decl !== n ? findCreate(decl, hops + 1) : undefined;
+        if (want) {
+            const bound = ts.isVariableDeclaration(x) && ts.isIdentifier(x.name) && x.name.text === want ? x.initializer
+                : ts.isPropertyAssignment(x) && propName(x) === want ? x.initializer : undefined;
+            const hit = bound && findCreate(bound, hops);
+            if (hit) { found = hit; return; }
+        }
+        if (ts.isCallExpression(x)) {
+            let hit = ts.isIdentifier(x.expression) ? follow(x.expression.text, x, false) : undefined;
+            for (const arg of x.arguments) if (!hit && ts.isIdentifier(arg)) hit = follow(arg.text, arg, true);
             if (hit) { found = hit; return; }
         }
         ts.forEachChild(x, visit);
@@ -270,6 +303,46 @@ function withCond(alts: Alt[], cond: Cond): Alt[] {
         const merged = mergeCond(a.cond, cond);
         return merged ? [{ cond: merged, props: a.props }] : [];
     });
+}
+
+/** A switch whose name says it holds the control inactive: `disabled`, `isDisabled`, `saveDisabled`, `props.disabled`. Not a comparison. */
+const isDisabledName = (key: string) => /disabled/i.test(key) && !/[=<>]/.test(key);
+
+const FALSY_LITERALS = new Set(['null', 'undefined', 'false', '0', "''", '""']);
+
+/**
+ * Does `e` being truthy mean the switch written `key` is truthy? True for the switch itself, `!!key`, `Boolean(key)`,
+ * `key && _`, `key === _` (the other side a value, not null / false / 0 / ''), and a local `const` set to any of those, followed
+ * a few steps. It is how `isCreating = creating === item.id` is known to hold the row inactive when `disabled={!!creating}`.
+ */
+function impliesSwitch(e0: ts.Expression, key: string, sf: ts.SourceFile, depth = 0): boolean {
+    const e = unwrap(e0);
+    if (depth > 3) return false;
+    if (textOf(e, sf) === key) return true;
+    if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.ExclamationToken) {
+        const inner = unwrap(e.operand);
+        return ts.isPrefixUnaryExpression(inner) && inner.operator === ts.SyntaxKind.ExclamationToken && impliesSwitch(inner.operand, key, sf, depth + 1);
+    }
+    if (ts.isCallExpression(e) && ts.isIdentifier(e.expression) && e.expression.text === 'Boolean' && e.arguments.length === 1) {
+        return impliesSwitch(e.arguments[0], key, sf, depth + 1);
+    }
+    if (ts.isBinaryExpression(e)) {
+        const op = e.operatorToken.kind;
+        if (op === ts.SyntaxKind.AmpersandAmpersandToken) return impliesSwitch(e.left, key, sf, depth + 1) || impliesSwitch(e.right, key, sf, depth + 1);
+        if (op === ts.SyntaxKind.EqualsEqualsEqualsToken || op === ts.SyntaxKind.EqualsEqualsToken) {
+            const [l, r] = [unwrap(e.left), unwrap(e.right)];
+            return (!FALSY_LITERALS.has(textOf(r, sf)) && impliesSwitch(l, key, sf, depth + 1)) || (!FALSY_LITERALS.has(textOf(l, sf)) && impliesSwitch(r, key, sf, depth + 1));
+        }
+        return false;
+    }
+    return ts.isIdentifier(e) && aliasImplies(e.text, key, e, sf, depth + 1);
+}
+
+/** True when the local `const` named `alias` (found from `from`) is only truthy while the switch written `key` is. */
+function aliasImplies(alias: string, key: string, from: ts.Node, sf: ts.SourceFile, depth = 0): boolean {
+    if (alias === key || !/^[A-Za-z_$][\w$]*$/.test(alias)) return false;
+    const decl = findDecl(alias, from);
+    return !!decl && !ts.isFunctionLike(decl) && impliesSwitch(decl as ts.Expression, key, sf, depth);
 }
 
 // ── Colours ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -430,10 +503,11 @@ function evalStyle(e0: ts.Expression, ctx: Ctx, depth = 0): Alt[] {
     const p = pathOf(e);
     if (p && p.path.length === 1) {
         // styles.x, from the StyleSheet.create table `styles` was declared with
-        const decl = findDecl(p.root, e);
-        const table = decl ? findCreate(decl) : undefined;
+        const decl = findDecl(p.root, e, true);
+        const table = decl ? findCreate(decl, 0, isPatternInit(decl) ? p.root : undefined) : undefined;
         const entry = table?.properties.find((q) => propName(q) === p.path[0]);
         if (entry && ts.isPropertyAssignment(entry)) return evalStyle(entry.initializer, ctx, depth + 1);
+        if (!table && /styles$/i.test(p.root)) ctx.unreadTables.add(p.root);
     }
     if (ts.isIdentifier(e)) {
         const decl = findDecl(e.text, e);
@@ -516,6 +590,10 @@ export interface Stats {
     skipped: Map<string, number>;
     /** Style expressions the scanner could not read (props, calls): they add nothing, as if layout only. */
     opaqueStyles: number;
+    /** The same, per file (both themes added), for the files with any. */
+    opaqueByFile: Map<string, number>;
+    /** Files that read a style from a name (`styles.card`) whose StyleSheet.create table the scanner could not find: every style from it adds nothing. */
+    unreadTables: Map<string, string[]>;
 }
 
 export interface ContrastReport {
@@ -546,29 +624,53 @@ function groundRatios(paints: Paint[], ink: Rgba, theme: Theme): { ratio: number
 
 type Content = 'words' | 'glyph' | 'emoji' | 'chevron';
 
+/** A name that ends in "emoji": `emoji`, `Emoji`, `categoryEmoji`. Not `emojiLabel`, not `emojis`. */
+const EMOJI_NAME = /(?:^|[a-z0-9_$])[eE]moji$/;
+
+/** Only emoji (drawn by a variation selector, ⚠️, or by default, 🫘), no letter or digit. */
+function isEmojiText(text: string): boolean {
+    const t = text.trim();
+    return !!t && !/[\p{L}\p{N}]/u.test(t) && !t.replace(/.\uFE0F/gu, '').replace(/[\s\p{Emoji_Presentation}\p{Emoji_Modifier}\u200D]/gu, '');
+}
+
 /**
- * What a <Text> draws, from its literal children. `emoji`: only emoji, or an expression named for one (`{opt.emoji}`,
- * `{categoryEmoji(x)}`): the emoji font ignores `color`. `chevron`: only `›` `‹` `»` `«`, a disclosure mark beside a labelled
+ * An expression that IS an emoji, by its own name: `{opt.emoji}`, `{categoryEmoji(post.category)}`, or a choice between
+ * such names and emoji (`{tier?.emoji || '🌱'}`, `{pulse ? '🗞️' : emoji}`). Judged on the name being read or called, never on
+ * the text around it: `{t('Add an emoji')}`, `{emojiLabel}` and `{item.emojiName}` are words.
+ */
+function isEmojiExpression(e0: ts.Expression): boolean {
+    const e = unwrap(e0);
+    if (ts.isStringLiteralLike(e)) return isEmojiText(e.text);
+    if (ts.isConditionalExpression(e)) return isEmojiExpression(e.whenTrue) && isEmojiExpression(e.whenFalse);
+    if (ts.isBinaryExpression(e) && (e.operatorToken.kind === ts.SyntaxKind.BarBarToken || e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken)) {
+        return isEmojiExpression(e.left) && isEmojiExpression(e.right);
+    }
+    const target = unwrap(ts.isCallExpression(e) ? e.expression : e);
+    const name = ts.isIdentifier(target) ? target.text : ts.isPropertyAccessExpression(target) ? target.name.text : undefined;
+    return name !== undefined && EMOJI_NAME.test(name);
+}
+
+/**
+ * What a <Text> draws, from its literal children. `emoji`: only emoji, or an expression whose own name is one (`{opt.emoji}`,
+ * `{categoryEmoji(x)}`; see isEmojiExpression): the emoji font ignores `color`. `chevron`: only `›` `‹` `»` `«`, a disclosure mark beside a labelled
  * row. `glyph`: other symbols with no letter or digit (a star, a tick, a cross): a graphical object, held to 3:1 not 4.5.
  * Anything with a letter, a digit, or an expression it cannot read is `words`.
  */
-function contentOf(node: ts.Node, sf: ts.SourceFile): Content {
+function contentOf(node: ts.Node): Content {
     if (!ts.isJsxElement(node)) return 'words';
     const literal: string[] = [];
     let emojiExpression = false;
     for (const child of node.children) {
         if (ts.isJsxText(child)) literal.push(child.text);
         else if (ts.isJsxExpression(child) && child.expression && ts.isStringLiteralLike(child.expression)) literal.push(child.expression.text);
-        else if (ts.isJsxExpression(child) && child.expression && /emoji/i.test(child.expression.getText(sf))) emojiExpression = true;
+        else if (ts.isJsxExpression(child) && child.expression && isEmojiExpression(child.expression)) emojiExpression = true;
         else if (ts.isJsxExpression(child) && !child.expression) continue; // a comment
         else return 'words';
     }
     const joined = literal.join('').trim();
     if (/[\p{L}\p{N}]/u.test(joined)) return 'words';
     if (!joined) return emojiExpression ? 'emoji' : 'words';
-    // an emoji drawn by a variation selector (⚠️) or by default (🫘): what is left once those are taken out
-    const rest = joined.replace(/.\uFE0F/gu, '').replace(/[\s\p{Emoji_Presentation}\p{Emoji_Modifier}\u200D]/gu, '');
-    if (!rest) return 'emoji';
+    if (isEmojiText(joined)) return 'emoji';
     if (/^[\s\u203A\u2039\u00BB\u00AB]+$/u.test(joined)) return 'chevron';
     return 'glyph';
 }
@@ -576,8 +678,10 @@ function contentOf(node: ts.Node, sf: ts.SourceFile): Content {
 function scanFile(file: string, text: string, stats: Stats, found: Map<string, Finding>): void {
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     stats.files++;
+    const unread = new Set<string>();
+    let opaque = 0;
     for (const theme of THEMES) {
-        const ctx: Ctx = { sf, theme, opaque: { count: 0 } };
+        const ctx: Ctx = { sf, theme, opaque: { count: 0 }, unreadTables: new Set() };
         const skip = (why: string) => stats.skipped.set(why, (stats.skipped.get(why) ?? 0) + 1);
 
         const check = (el: ts.Node, words: Colour, props: Props, chain: Chain, cond: Cond, content: Content, extraKeys: string[] = []) => {
@@ -590,7 +694,7 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
             if (/^(colors|c)\.border\./.test(words.expr)) return skip('decorative glyph in a border colour');
             if (content === 'emoji') return skip('emoji, drawn in its own colours');
             if (content === 'chevron') return skip('decorative chevron');
-            for (const [k, v] of cond) if (v && /\bdisabled\b/i.test(k)) return; // inactive controls are exempt
+            for (const [k, v] of cond) if (v && isDisabledName(k)) return; // inactive controls are exempt
             const bg = chain.paints[chain.paints.length - 1];
             if (bg.rgba.a === 0) return;
             stats.checked[theme]++;
@@ -665,8 +769,10 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
                 for (const alt of own) {
                     const cond = mergeCond(chain.cond, alt.cond);
                     if (!cond) continue;
+                    // A switch set under the control's `disabled` test may be a local alias of it (`isCreating = creating === id`).
+                    const held = (k: string) => [...cond].some(([ck, cv]) => cv && aliasImplies(ck, k, node, sf));
                     const inactive = chain.inactive
-                        || !!disabledCases?.some((dc) => dc.value && [...dc.cond].every(([k, v]) => cond.get(k) === v));
+                        || !!disabledCases?.some((dc) => dc.value && [...dc.cond].every(([k, v]) => cond.get(k) === v || (v && held(k))));
                     const styled = [...chain.styled, ...alt.cond.keys()];
                     let c: Chain = { cond, paints: chain.paints, poison: chain.poison, inactive, styled };
                     const bg = alt.props.bg;
@@ -675,7 +781,7 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
                         // An opaque fill hides what is above it: only its own switches chose the ground the words sit on.
                         c = bg.rgba.a >= 0.995 ? { cond, paints: [bg], inactive, styled: [...alt.cond.keys()] } : { cond, paints: [...c.paints, bg], poison: c.poison, inactive, styled };
                     }
-                    if (TEXTS.has(tag) && alt.props.color) check(opening, alt.props.color, alt.props, c, cond, contentOf(node, sf));
+                    if (TEXTS.has(tag) && alt.props.color) check(opening, alt.props.color, alt.props, c, cond, contentOf(node));
                     next.push(c);
                     // A component taking its label's style as a prop: the label sits on this element's background.
                     if (!boxed) {
@@ -695,8 +801,12 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
         };
 
         visit(sf, fresh());
-        stats.opaqueStyles += ctx.opaque.count;
+        opaque += ctx.opaque.count;
+        ctx.unreadTables.forEach((name) => unread.add(name));
     }
+    stats.opaqueStyles += opaque;
+    if (opaque) stats.opaqueByFile.set(file, opaque);
+    if (unread.size) stats.unreadTables.set(file, [...unread].sort());
 }
 
 // ── The tree, the exceptions, the report ─────────────────────────────────────────────────────────────────────────
@@ -715,19 +825,28 @@ function applyExceptions(found: Finding[], exceptions: readonly ContrastExceptio
     const used = new Set<ContrastException>();
     const findings: Finding[] = [];
     const excused: Array<Finding & { reason: string }> = [];
+    const sameColours = (x: ContrastException, f: Finding) =>
+        x.file === f.file && x.words === f.words.expr && x.background === f.background.expr && (!x.theme || x.theme === f.theme);
+    const isLine = (n: unknown) => Number.isInteger(n) && (n as number) > 0;
     exceptions.forEach((x, i) => {
         const where = `exception ${i + 1} (${x.file || '?'})`;
         if (!x.file || !x.words || !x.background) bad.push(`${where}: file, words and background are all required`);
+        if (!isLine(x.wordsLine) || !isLine(x.backgroundLine)) bad.push(`${where}: wordsLine and backgroundLine are required (the line numbers the report prints beside the two colours)`);
         if (!x.reason || x.reason.trim().length < 30) bad.push(`${where}: a reason of at least 30 characters is required`);
     });
     for (const f of found) {
-        const hit = exceptions.find((x) => x.file === f.file && x.words === f.words.expr && x.background === f.background.expr && (!x.theme || x.theme === f.theme));
+        // One pair = these two colours written at these two lines. The same colours written at other lines are not excused.
+        const hit = exceptions.find((x) => sameColours(x, f) && x.wordsLine === f.words.line && x.backgroundLine === f.background.line);
         if (hit && hit.reason && hit.reason.trim().length >= 30) { used.add(hit); excused.push({ ...f, reason: hit.reason }); }
         else findings.push(f);
     }
     exceptions.forEach((x, i) => {
         if (!used.has(x) && x.file && x.words && x.background) {
-            bad.push(`exception ${i + 1} (${x.file}: ${x.words} on ${x.background}) excuses no failing pair: delete it`);
+            const moved = found.filter((f) => sameColours(x, f));
+            const where = [...new Set(moved.map((f) => `words line ${f.words.line} over background line ${f.background.line}`))];
+            bad.push(`exception ${i + 1} (${x.file}: ${x.words} on ${x.background}) excuses no failing pair: ` +
+                (where.length ? `the same colours fail at ${where.join('; ')}, not at words line ${x.wordsLine} over background line ${x.backgroundLine}. Renumber it if that is the same pair, or fix the pair and delete it`
+                    : 'delete it'));
         }
     });
     return { findings, excused, bad };
@@ -739,7 +858,9 @@ function report(found: Map<string, Finding>, stats: Stats, exceptions: readonly 
     return { stats, findings, excused, badExceptions: bad };
 }
 
-const newStats = (): Stats => ({ files: 0, checked: { light: 0, dark: 0 }, noGround: 0, skipped: new Map(), opaqueStyles: 0 });
+const newStats = (): Stats => ({
+    files: 0, checked: { light: 0, dark: 0 }, noGround: 0, skipped: new Map(), opaqueStyles: 0, opaqueByFile: new Map(), unreadTables: new Map(),
+});
 
 /** Scan one source text (the canaries in utils/__tests__/button-contrast.test.ts use this). `file` is only a label. */
 export function scanSource(file: string, text: string, exceptions: readonly ContrastException[] = []): ContrastReport {
@@ -768,6 +889,13 @@ export function formatReport(r: ContrastReport): string {
     lines.push(`${checked} button/label pairs measured (${r.stats.checked.light} light, ${r.stats.checked.dark} dark) in ${r.stats.files} files; ` +
         `${r.stats.noGround} words had no background set above them; ${[...r.stats.skipped.values()].reduce((a, b) => a + b, 0)} could not be resolved; ` +
         `${r.excused.length} excused.`);
+    // How much was NOT read: a style the scanner cannot follow adds nothing, so a screen that moves into such a shape looks clean.
+    lines.push(`${r.stats.opaqueStyles} style expressions in ${r.stats.opaqueByFile.size} files could not be read and add nothing; ` +
+        `${r.stats.unreadTables.size} files use a style table the scanner could not find.`);
+    if (r.stats.unreadTables.size) {
+        lines.push(`  style table not found: ${[...r.stats.unreadTables].map(([file, names]) => `${file} (${names.join(', ')})`).join('; ')}`);
+    }
+    if (r.stats.opaqueByFile.size) lines.push(`  most unread: ${topOpaqueFiles(r).join('; ')}`);
     for (const f of r.findings) {
         lines.push(
             '',
@@ -779,6 +907,11 @@ export function formatReport(r: ContrastReport): string {
     }
     for (const b of r.badExceptions) lines.push('', `BAD EXCEPTION ${b}`);
     return lines.join('\n');
+}
+
+/** For the coverage report: the files with the most style expressions the scanner could not read, as `file (count)`. */
+export function topOpaqueFiles(r: ContrastReport, n = 6): string[] {
+    return [...r.stats.opaqueByFile].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([file, count]) => `${file} (${count})`);
 }
 
 /** For the coverage report: the most common reasons pairs could not be measured. */

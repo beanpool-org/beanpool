@@ -49,7 +49,9 @@ web app's class strings in dark, and `native_dark_contrast` (`apps/native/utils/
 screen sets behind it, and fails below the bar in light or dark, naming `file:line` and both colours. A fill under words
 is `brand.fill` / `accent.fill` / `feedback.*.solid` with `text.onBrand` / `onAccent` / `onDanger` / `onGold`, never a
 `text.*` token under `text.inverse`. A reviewed exception goes in `apps/native/utils/button-contrast-exceptions.ts` with a
-reason; one that excuses nothing fails.
+reason and the two lines the report prints beside the colours (it excuses that pair, not the same colours elsewhere in the
+file); one that excuses nothing fails. The report also says how much it could not read (a style table built in another file,
+or handed to a child as a prop adds no colours), and the check fails when that number grows.
 
 ## The roles
 

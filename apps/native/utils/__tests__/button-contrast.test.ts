@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { scanSource, parseColour, type ContrastReport } from '../button-contrast';
+import { scanSource, parseColour, formatReport, topOpaqueFiles, type ContrastReport } from '../button-contrast';
 
 /**
  * The button-contrast scanner (utils/button-contrast.ts) on small fixture screens. The whole-tree run is
@@ -114,6 +114,41 @@ describe('the shapes of the white-on-white fault are caught', () => {
         expect(themes(r)).toEqual(['dark']);
         expect(r.findings[0].line).toBe(14);
     });
+
+    it('several tables destructured from one makeStyles call: each name reads its own table (the welcome screen)', () => {
+        const src = (name: string) => `
+            export function Screen() {
+                const { colors, dark } = useTheme();
+                const { styles, profileStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+                return <Pressable style={${name}.btn}><Text style={${name}.btnText}>Save</Text></Pressable>;
+            }
+            function makeStyles(colors, dark) {
+                const styles = StyleSheet.create({ btn: { backgroundColor: colors.brand.fill }, btnText: { color: colors.text.onBrand } });
+                const profileStyles = StyleSheet.create({ btn: { backgroundColor: colors.text.heading }, btnText: { color: colors.text.inverse } });
+                return { styles, profileStyles };
+            }`;
+        // the same entry names in both tables: only profileStyles is the faulty pair, and `styles` is not read for it
+        const bad = scanRaw(src('profileStyles'));
+        expect(themes(bad)).toEqual(['dark']);
+        expect(bad.findings[0].words).toMatchObject({ expr: 'colors.text.inverse', line: 9 });
+        expect(bad.stats.unreadTables.size).toBe(0);
+        const good = scanRaw(src('styles'));
+        expect(good.findings).toEqual([]);
+        expect(good.stats.checked).toEqual({ light: 1, dark: 1 });
+    });
+
+    it('a makeStyles function handed to useStyles by name: `useStyles(makeStyles)`', () => {
+        const screen = `function Screen() { const styles = useStyles(makeStyles); return <Pressable style={styles.btn}><Text style={styles.btnText}>x</Text></Pressable>; }`;
+        const table = `{ btn: { backgroundColor: colors.text.heading }, btnText: { color: colors.text.inverse } }`;
+        for (const make of [
+            `const makeStyles = ({ colors }) => StyleSheet.create(${table});`,
+            `function makeStyles({ colors }) { return StyleSheet.create(${table}); }`,
+        ]) {
+            const r = scanRaw(`${screen}\n${make}`);
+            expect(themes(r), make).toEqual(['dark']);
+            expect(r.stats.unreadTables.size, make).toBe(0);
+        }
+    });
 });
 
 describe('what is fine stays quiet', () => {
@@ -159,6 +194,33 @@ describe('what is fine stays quiet', () => {
         const withSwitch = (name: string) => scan(`<Pressable style={[{ backgroundColor: colors.brand.fill }, ${name} && { backgroundColor: colors.text.heading }]}><Text style={[{ color: colors.text.onBrand }, ${name} && { color: colors.text.inverse }]}>x</Text></Pressable>`);
         expect(withSwitch('disabled').findings).toEqual([]);
         expect(themes(withSwitch('busy'))).toEqual(['dark']);
+    });
+
+    it('a switch named for the disabled state is exempt however it is spelled: isDisabled, saveDisabled, props.disabled', () => {
+        const withSwitch = (name: string) => scan(`<Pressable style={[{ backgroundColor: colors.brand.fill }, ${name} && { backgroundColor: colors.text.heading }]}><Text style={[{ color: colors.text.onBrand }, ${name} && { color: colors.text.inverse }]}>x</Text></Pressable>`);
+        for (const name of ['isDisabled', 'saveDisabled', 'buttonDisabled', 'props.disabled', 'Boolean(isDisabled)']) {
+            expect(withSwitch(name).findings, name).toEqual([]);
+        }
+        // a comparison that merely mentions the word says nothing about the control being inactive
+        expect(themes(withSwitch("mode === 'disabled'"))).toEqual(['dark']);
+        expect(themes(withSwitch('disabled === false'))).toEqual(['dark']);
+    });
+
+    it('a row styled by a local alias of the `disabled` switch is inactive too (new-message: isCreating = creating === id)', () => {
+        const row = (alias: string, disabled: string) => scan(
+            `const isBusy = ${alias}; <Pressable disabled={${disabled}} style={[{ backgroundColor: colors.surface.card }, isBusy && { backgroundColor: colors.accent.tint }]}><Text style={{ color: colors.text.muted }}>x</Text></Pressable>`,
+        );
+        // muted words on the accent tint read 3.29:1 in dark; the row is drawn so only while every row is inactive
+        expect(row('busyKey === id', '!!busyKey').findings).toEqual([]);
+        expect(row('id === busyKey', 'busyKey').findings).toEqual([]);
+        expect(row('!!busyKey && ready', '!!busyKey').findings).toEqual([]);
+        expect(row('Boolean(busyKey)', 'busyKey').findings).toEqual([]);
+        // not held inactive: the control is not disabled, the alias says nothing about the switch, or it holds when the switch is empty
+        expect(themes(row('busyKey === id', 'false'))).toEqual(['dark']);
+        expect(themes(row('otherKey === id', '!!busyKey'))).toEqual(['dark']);
+        expect(themes(row('busyKey == null', '!!busyKey'))).toEqual(['dark']);
+        expect(themes(row('busyKey === undefined', '!!busyKey'))).toEqual(['dark']);
+        expect(themes(row('busyKey || ready', '!!busyKey'))).toEqual(['dark']);
     });
 
     it('JSX drawn only `on && <Text/>` is measured on the fill that setting gives, not on the other one', () => {
@@ -259,6 +321,20 @@ describe('what is fine stays quiet', () => {
         expect(themes(on('✓'))).toEqual(['dark']);
     });
 
+    it('words that merely mention emoji are words: only an expression NAMED for one is skipped', () => {
+        const on = (content: string) => scan(`<View style={{ backgroundColor: colors.text.heading }}><Text style={{ color: colors.text.inverse }}>${content}</Text></View>`);
+        for (const words of ["{t('Add an emoji')}", '{emojiLabel}', '{item.emojiName}', "{t('{emoji} {tier}', { emoji: tier.emoji })}", '{emojis.length}']) {
+            expect(themes(on(words)), words).toEqual(['dark']);
+            expect(on(words).stats.skipped.get('emoji, drawn in its own colours'), words).toBeUndefined();
+        }
+        // a choice between emoji names and emoji is still an emoji; one arm that is words makes it words
+        for (const emoji of ["{trust.tier?.emoji || '🌱'}", "{pulse ? '🗞️' : emoji}", '{band.emoji ?? categoryEmoji(c)}', '{item!.emoji}', "{chatEmoji('group', category)}"]) {
+            expect(on(emoji).findings, emoji).toEqual([]);
+            expect(on(emoji).stats.skipped.get('emoji, drawn in its own colours'), emoji).toBe(2);
+        }
+        expect(themes(on("{pulse ? t('News') : emoji}"))).toEqual(['dark']);
+    });
+
     it('colours it cannot resolve are counted as skipped, not passed and not failed', () => {
         const r = scan(`
             <View style={{ backgroundColor: tone.bg }}><Text style={{ color: colors.text.inverse }}>x</Text></View>;
@@ -293,7 +369,10 @@ describe('what is fine stays quiet', () => {
 
 describe('the exceptions list', () => {
     const REASON = 'Drawn only over the sunken row, where this ink is 5:1; checked on a device in dark.';
-    const exception = { file: FILE, words: 'colors.text.inverse', background: 'colors.text.heading', theme: 'dark' as const, reason: REASON };
+    // SAVE_PROFILE writes the words' colour on line 6 and the fill on line 5 (the numbers the report prints beside them).
+    const exception = {
+        file: FILE, words: 'colors.text.inverse', wordsLine: 6, background: 'colors.text.heading', backgroundLine: 5, theme: 'dark' as const, reason: REASON,
+    };
 
     it('excuses exactly the pair it names, with its reason', () => {
         const r = scan(SAVE_PROFILE, [exception]);
@@ -307,6 +386,37 @@ describe('the exceptions list', () => {
         expect(scan(SAVE_PROFILE, [{ ...exception, file: 'app/other.tsx' }]).findings).toHaveLength(1);
         expect(scan(SAVE_PROFILE, [{ ...exception, words: 'colors.text.heading' }]).findings).toHaveLength(1);
         expect(scan(SAVE_PROFILE, [{ ...exception, theme: 'light' as const }]).findings).toHaveLength(1);
+        // the same two colours written on other lines are another pair
+        expect(scan(SAVE_PROFILE, [{ ...exception, wordsLine: 7 }]).findings).toHaveLength(1);
+        expect(scan(SAVE_PROFILE, [{ ...exception, backgroundLine: 4 }]).findings).toHaveLength(1);
+    });
+
+    it('excuses ONE pair, not every place in the file that writes the same two colours', () => {
+        // three Save-Profile-shaped buttons, each writing the colours on its own line (3, 4 and 5)
+        const three = `
+            <Pressable style={{ backgroundColor: colors.text.heading }}><Text style={{ color: colors.text.inverse }}>a</Text></Pressable>
+            <Pressable style={{ backgroundColor: colors.text.heading }}><Text style={{ color: colors.text.inverse }}>b</Text></Pressable>
+            <Pressable style={{ backgroundColor: colors.text.heading }}><Text style={{ color: colors.text.inverse }}>c</Text></Pressable>`;
+        expect(scan(three).findings).toHaveLength(3);
+        const r = scan(three, [{ ...exception, wordsLine: 2, backgroundLine: 2 }]);
+        expect(r.excused.map((f) => f.words.line)).toEqual([2]);
+        expect(r.findings.map((f) => f.words.line)).toEqual([3, 4]);
+        expect(r.badExceptions).toEqual([]);
+    });
+
+    it('an entry whose lines have moved says where the pair is now', () => {
+        const r = scan(SAVE_PROFILE, [{ ...exception, wordsLine: 20, backgroundLine: 19 }]);
+        expect(r.findings).toHaveLength(1);
+        expect(r.badExceptions.join('\n')).toMatch(/excuses no failing pair: the same colours fail at words line 6 over background line 5, not at words line 20 over background line 19/);
+    });
+
+    it('refuses an entry without the lines: it would excuse the whole file', () => {
+        const bare: Partial<typeof exception> = { ...exception };
+        delete bare.wordsLine;
+        delete bare.backgroundLine;
+        const r = scan(SAVE_PROFILE, [bare as typeof exception]);
+        expect(r.findings).toHaveLength(1);
+        expect(r.badExceptions.join('\n')).toMatch(/wordsLine and backgroundLine are required/);
     });
 
     it('refuses an entry without a real reason: the pair stays a failure and the entry is reported', () => {
@@ -320,6 +430,45 @@ describe('the exceptions list', () => {
         const r = scan(fixed, [exception]);
         expect(r.findings).toEqual([]);
         expect(r.badExceptions.join('\n')).toMatch(/excuses no failing pair: delete it/);
+    });
+});
+
+describe('what it could not read is counted and named, never silently clean', () => {
+    const SCREEN = (table: string) => `
+        export function Screen() {
+            const { colors } = useTheme();
+            ${table}
+            return <Pressable style={styles.btn}><Text style={styles.btnText}>Save</Text></Pressable>;
+        }`;
+
+    it('a screen whose table it can read has none unread', () => {
+        const r = scanRaw(SCREEN(`const styles = useStyles(({ colors }) => StyleSheet.create({ btn: { backgroundColor: colors.brand.fill }, btnText: { color: colors.text.onBrand } }));`));
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.opaqueStyles).toBe(0);
+    });
+
+    it.each([
+        ['a spec function from another file', `const styles = useStyles(({ colors }) => StyleSheet.create(importedSpec(colors)));`],
+        ['a table handed over as a prop', `const { styles } = props;`],
+        ['no table at all', ``],
+    ])('%s: the file is named, its styles are counted, and the report says so', (_why, table) => {
+        const r = scanRaw(SCREEN(table));
+        expect(r.findings).toEqual([]);
+        expect(r.stats.unreadTables.get(FILE)).toEqual(['styles']);
+        expect(r.stats.opaqueStyles).toBeGreaterThan(0);
+        expect(r.stats.opaqueByFile.get(FILE)).toBe(r.stats.opaqueStyles);
+        const text = formatReport(r);
+        expect(text).toMatch(/1 files use a style table the scanner could not find/);
+        expect(text).toContain(`style table not found: ${FILE} (styles)`);
+        expect(text).toContain(`most unread: ${FILE} (${r.stats.opaqueStyles})`);
+        expect(topOpaqueFiles(r)).toEqual([`${FILE} (${r.stats.opaqueStyles})`]);
+    });
+
+    it('a prop that is not a style table (`style`, `props.style`) is counted as unread styles but is not a missing table', () => {
+        const r = scanRaw(`export function Chip({ style }) { const { colors } = useTheme(); return <View style={[{ backgroundColor: colors.text.heading }, style]}><Text style={{ color: colors.text.inverse }}>x</Text></View>; }`);
+        expect(r.stats.unreadTables.size).toBe(0);
+        expect(r.stats.opaqueStyles).toBeGreaterThan(0);
+        expect(themes(r)).toEqual(['dark']);
     });
 });
 

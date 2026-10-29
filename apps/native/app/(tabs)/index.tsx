@@ -47,7 +47,7 @@ import {
     canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety, isHomeDoorbellFor,
     effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
     ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
-    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
+    type HomeAnswer, type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
 } from '../../utils/home-cards';
 import {
     SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readPhoneOnlySent,
@@ -55,7 +55,7 @@ import {
     writePhoneOnlySent, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
-import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
+import { rememberedKnocks, knockStillAnswerable, type RememberedKnock } from '../../utils/knock';
 import { getCachedNodeProfile, hiddenTabsFor } from '../../utils/node-profile';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
@@ -209,11 +209,25 @@ export default function HomeScreen() {
     /** On the global node: the place the last read was measured from (the phone's, where allowed), and this phone's knocks. */
     const [place, setPlace] = useState<HomePoint | null>(null);
     const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
+    const knocksRef = useRef<RememberedKnock[]>([]);
+    knocksRef.current = knocks;
     /** The Tips card's record for this account (@beanpool/core home-tips.ts); null: not read yet, so no card. */
     const [tips, setTips] = useState<TipsRecord | null>(null);
     const tipsRef = useRef<TipsRecord | null>(null);
     const roleRef = useRef<HomeRole>(undefined);
     roleRef.current = role;
+
+    const currentPins = useCallback((ans: HomeAnswer | null | undefined, at: number = Date.now()) => {
+        const hasOpenKnock = knocksRef.current.some(k => !k.cancelledAt && knockStillAnswerable(k, at));
+        const hasOpenWatch = (ans?.cards?.find?.watches?.length ?? 0) > 0;
+        return pinnedCards(ans, at, { hasOpenKnock, hasOpenWatch });
+    }, []);
+    // The pins to ask by, with the knocks this phone remembers: a member whose list lacks `find` and whose request waits
+    // asks for the card that carries the waiting line, or the node never builds it (Lounge L1, review of #2573).
+    const askPins = useCallback((ans: HomeAnswer | null | undefined, at: number = Date.now()) => {
+        const hasOpenKnock = knocksRef.current.some(k => !k.cancelledAt && knockStillAnswerable(k, at));
+        return askPinned(ans, at, { hasOpenKnock });
+    }, []);
 
     const identityRef = useRef(identity);
     identityRef.current = identity;
@@ -457,7 +471,7 @@ export default function HomeScreen() {
         // (the first landing), from what this read brings, at its end.
         const tipsLandNow = why === 'focus' && !!cached?.answer.me;
         if (tipsLandNow) void landTips(whose);
-        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1, phoneOver.current).layout, askPinned(cached?.answer, Date.now()), cached?.answer);
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1, phoneOver.current).layout, askPins(cached?.answer), cached?.answer);
         // The global node only: "near you" from where the phone is (where location is already allowed).
         const global = await readsGlobal(u, cached);
         const point = global ? await lastKnownPlace() : null;
@@ -505,7 +519,7 @@ export default function HomeScreen() {
             // The account's list asks for cards this read didn't (a first landing on this phone, or another device's edit):
             // one more read for them, never more (a `layout` read doesn't ask again). It follows the save's answer, so it
             // never sends the list a second time while the first is out.
-            const wanted = cardsToAsk(pick.layout, askPinned(answered, Date.now()), answered);
+            const wanted = cardsToAsk(pick.layout, askPins(answered), answered);
             if (member && why !== 'layout' && wanted.some(c => !asked.includes(c))) void (saving ?? Promise.resolve()).then(() => refreshRef.current('layout'));
             if (!pick.push && pick.layout && !answered.layoutV1) {
                 // A version-1 copy is drawn and never kept as the phone's: it is not written until the member edits (§2.6),
@@ -528,7 +542,13 @@ export default function HomeScreen() {
             // The knocks this phone sent, on the global node (where a member asks a local community to let them in).
             if (member && read.stored.answer.profile === 'global') {
                 void rememberedKnocks(id.publicKey).catch(() => [] as RememberedKnock[]).then(list => {
-                    if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setKnocks(list);
+                    if (!stillOnPhone(whose) || identityRef.current?.publicKey !== id.publicKey) return;
+                    knocksRef.current = list;
+                    setKnocks(list);
+                    // This read asked before the knocks were known: a request that waits pins Find, and a list without it
+                    // never asked for it, so the card that carries the waiting line is asked for now, once (not from a
+                    // `layout` read, which has the knocks already).
+                    if (why !== 'layout' && cardsToAsk(pick.layout, askPins(answered), answered).some(c => !asked.includes(c))) void refreshRef.current('layout');
                 });
             }
             if (why === 'pull') AccessibilityInfo.announceForAccessibility(t('Home updated'));
@@ -547,7 +567,7 @@ export default function HomeScreen() {
         }
         // No answer this time (offline, members only, needs an update): land from what the phone holds.
         if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
-    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips, refreshAsVisitor]);
+    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips, refreshAsVisitor, askPins]);
 
     const refreshRef = useRef(refresh);
     refreshRef.current = refresh;
@@ -639,10 +659,10 @@ export default function HomeScreen() {
             return;
         }
         const saving = pushLayout(next, whose);
-        const pins = askPinned(answered, Date.now());
+        const pins = askPins(answered);
         const asksMore = cardsToAsk(next, pins, answered).some(c => !cardsToAsk(before, pins, answered).includes(c));
         if (asksMore || opts.reread) void saving.then(() => refreshRef.current('layout'));
-    }, [url, pushLayout]);
+    }, [url, pushLayout, askPins]);
     // "Don't show tips again", and Remove on Tips: the record says so and the card leaves the list, so the member's other
     // devices follow.
     const onTipsDontShow = useCallback(() => {
@@ -650,9 +670,9 @@ export default function HomeScreen() {
         if (!id) return;
         keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
         setHint(false);
-        changeLayout(removeCard(layoutRef.current, 'tips', Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        changeLayout(removeCard(layoutRef.current, 'tips', Date.now(), currentPins(storedRef.current?.answer)));
         AccessibilityInfo.announceForAccessibility(removedLine(cardName('tips')));
-    }, [keepTips, changeLayout]);
+    }, [keepTips, changeLayout, currentPins]);
     // Tips added from the picker, or Reset to defaults while they were off: the tips start over from the first one.
     const onTipsOn = useCallback(() => {
         const id = identityRef.current;
@@ -673,7 +693,7 @@ export default function HomeScreen() {
     }, []);
     const addNow = useCallback((type: string, settings?: Record<string, unknown>) => {
         const ans = storedRef.current?.answer;
-        const added = addCard(layoutRef.current, type, Date.now(), { settings, pinned: pinnedCards(ans, Date.now()) });
+        const added = addCard(layoutRef.current, type, Date.now(), { settings, pinned: currentPins(ans) });
         setAddOpen(false);
         setSettingsFor(null);
         if (!added.ok) {
@@ -688,7 +708,7 @@ export default function HomeScreen() {
         changeLayout(added.layout, { reread: type !== 'sky' });
         scrollRef.current?.scrollTo({ y: 0, animated: true });
         AccessibilityInfo.announceForAccessibility(addedLine(cardLabelName({ type, settings }, ans?.profile)));
-    }, [changeLayout, onTipsOn, noteSaveSearch]);
+    }, [changeLayout, onTipsOn, noteSaveSearch, currentPins]);
     const onPick = useCallback((row: PickerRow) => {
         if (!row.hasSettings) { addNow(row.type); return; }
         setAddOpen(false);
@@ -697,9 +717,9 @@ export default function HomeScreen() {
     const onRemoveCard = useCallback((c: HomeCardInstance) => {
         if (c.type === 'tips') { onTipsDontShow(); return; }
         setHint(false);
-        changeLayout(removeCard(layoutRef.current, c.id, Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        changeLayout(removeCard(layoutRef.current, c.id, Date.now(), currentPins(storedRef.current?.answer)));
         AccessibilityInfo.announceForAccessibility(removedLine(cardLabelName(c, storedRef.current?.answer.profile)));
-    }, [changeLayout, onTipsDontShow]);
+    }, [changeLayout, onTipsDontShow, currentPins]);
     // "Save this search to Home" on the Market (Marty, 7 Oct): the search comes as the `saveSearch` param. Once Home knows
     // the member's list, the saved search's sheet opens with it filled in, Add to Home its last button; or Home says why
     // not (the same search there, five there, Home full). Read once, then the param is cleared.
@@ -805,13 +825,15 @@ export default function HomeScreen() {
     const answer = stored?.answer ?? null;
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
+    const hasOpenKnock = knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now));
+    const hasOpenWatch = (answer?.cards?.find?.watches?.length ?? 0) > 0;
     const knocked = knocks.length > 0;
     // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
     const tipsList = answer ? tipsFor(answer, role) : [];
     const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
-    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView, place, tourOver }) : [];
-    // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
-    const pins = pinnedCards(answer, now);
+    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, hasOpenKnock, hasOpenWatch, now, tipsUp: !!tipsView, place, tourOver }) : [];
+    // Find your community's pin (the global node: a member's first 30 days, then while a knock or watch is open): no "…", no move, at the top.
+    const pins = currentPins(answer, now);
     const interestsUp = drawn.some(c => c.type === 'interests');
     useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);
     const word = answer && stored ? safetyWord(answer, stored.asked.split(',')) : null;
@@ -840,7 +862,7 @@ export default function HomeScreen() {
         setTourOver(true);
         setTourProgress(null);
         const ans = storedRef.current?.answer;
-        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current, { pinned: pinnedCards(ans, Date.now()) }), { reread: true });
+        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current, { pinned: currentPins(ans) }), { reread: true });
         if (kind === 'done') {
             setHint(false);
             void markSeenOnce(whose, 'hint');
@@ -849,7 +871,7 @@ export default function HomeScreen() {
             void markSeenOnce(whose, 'hint');
         }
         if (u && stillOnPhone(whose)) void saveTourRecord(u, id, tourRecord(kind));
-    }, [url, changeLayout]);
+    }, [url, changeLayout, currentPins]);
     const tourRestart = useCallback(() => {
         const id = identityRef.current;
         const u = storedRef.current?.url ?? url;
@@ -858,17 +880,17 @@ export default function HomeScreen() {
         // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
         const ans = storedRef.current?.answer;
         if (canTailor(ans) && layoutRef.current) {
-            const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+            const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: currentPins(ans) });
             if (added.ok) changeLayout(added.layout);
         }
         if (u) void saveTourRecord(u, id, tourRecord('open'));
         startTour(id.publicKey, 0);
-    }, [url, changeLayout]);
+    }, [url, changeLayout, currentPins]);
     const tourAddChip = useCallback((type: string) => {
         const ans = storedRef.current?.answer;
-        const added = addCard(layoutRef.current, type, Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+        const added = addCard(layoutRef.current, type, Date.now(), { pinned: currentPins(ans) });
         if (added.ok) changeLayout(added.layout, { reread: true });
-    }, [changeLayout]);
+    }, [changeLayout, currentPins]);
     const chipsKey = chips.join(',');
     useEffect(() => {
         if (!answer?.me || !tailor) { lendTourHome(null); return; }
@@ -924,7 +946,7 @@ export default function HomeScreen() {
                 // The directory's rows are other people's publications: each is checked before it is drawn.
                 const home = readGlobalHome(c.find);
                 return home ? frame(
-                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} />,
+                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} onKnocksChange={setKnocks} />,
                 ) : null;
             }
             case 'steps': {

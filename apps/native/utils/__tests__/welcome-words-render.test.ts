@@ -84,14 +84,22 @@ vi.mock('react-native', () => {
     };
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
+// Whether the screen is the one in view: every case's single welcome is; a case with two in the stack provides it.
+const focus = vi.hoisted(() => ({ ctx: null as unknown as ReactAll.Context<boolean> }));
+/** Where the screen sent the member with router.push, in order. */
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[] }));
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
+    const { useEffect: effect, createContext, useContext } = await import('react');
+    focus.ctx = createContext(true);
     return {
-        router: { push() {}, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
+        router: { push(to: unknown) { nav.pushed.push(to); }, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
         useGlobalSearchParams: () => params.now,
         useLocalSearchParams: () => params.now,
-        useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
-        useIsFocused: () => true,
+        useFocusEffect: (cb: () => void | (() => void)) => {
+            const focused = useContext(focus.ctx);
+            effect(() => (focused ? cb() : undefined), [cb, focused]);
+        },
+        useIsFocused: () => useContext(focus.ctx),
         ErrorBoundary: () => null,
     };
 });
@@ -329,6 +337,7 @@ import { LanguageSwitch } from '../../components/LanguagePicker';
 import WelcomeScreen from '../../app/welcome';
 import { noVault, useVault } from './fake-vault';
 import { DOOR_MESSAGES } from '../global-join';
+import { restoreAtDoorHref } from '../open-door';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
@@ -342,6 +351,7 @@ beforeEach(() => {
     store.map.clear();
     alerts.said.length = 0; alerts.buttons.length = 0; prompts.asked.length = 0;
     params.now = {};
+    nav.pushed.length = 0;
     clip.has = false; clip.text = '';
     lock.none = true;
     phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null; phone.redeemFails = null;
@@ -381,6 +391,22 @@ function button(words: string, lang: UiLang): HTMLElement {
 async function press(words: string, lang: UiLang) {
     const b = button(words, lang);
     await act(async () => { b.click(); });
+    await settle();
+}
+/**
+ * The first screen's Explore BeanPool worldwide, and the screen it opens. Before any door, it asks whether a phone with no
+ * account may look around first (slice S12, welcome.tsx exploreWorldwide): the phone's key store, the wizard's record and the
+ * door, through global-guest-visit.ts's own loads, which can outlast a settle on a busy machine (it did on main's tree under
+ * load, 8 runs in 12). So until the screen stops saying "Connecting to the global community…", the home's line while it
+ * asks and the door's own while it checks, never a fixed number of ticks.
+ */
+async function explore(lang: UiLang) {
+    await press('🌍 Explore BeanPool worldwide', lang);
+    const connecting = lang === 'xx' ? pseudoLocalise('Connecting to the global community…') : 'Connecting to the global community…';
+    for (const until = Date.now() + 5000; (host!.textContent ?? '').includes(connecting) && Date.now() < until;) {
+        await act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+    }
+    expect(host!.textContent, 'the look-first ask and the door\'s check answered').not.toContain(connecting);
     await settle();
 }
 /** A button whose words are exactly these (a sentence with a name in it, as drawn). */
@@ -554,15 +580,21 @@ describe("the global community's door in the pseudo-locale", () => {
     it('shut: the door\'s own sentence, Try again and Join with an invite', async () => {
         door.check = { ok: false, reason: 'door_closed' };
         await mount('xx');
-        await press('🌍 Explore BeanPool worldwide', 'xx');
+        await explore('xx');
         expect(host!.textContent).toContain(pseudoLocalise(DOOR_MESSAGES.doorClosed));
+        expect(button('Try again', 'xx')).toBeTruthy();
+        expect(button('🎟️ Join with an invite', 'xx')).toBeTruthy();
+        // The global community's own door, on this screen in place of the first one: never the first screen left showing,
+        // and never another community's open door (app/join-open-door.tsx, slice S2), which is its own screen.
+        expect(host!.textContent).not.toContain(pseudoLocalise('Welcome to BeanPool'));
+        expect(nav.pushed).toEqual([]);
         check('the door, shut');
     });
 
     it('the sign-in, the name step, and an answer that sends the member to restore', async () => {
         useVault();
         await mount('xx');
-        await press('🌍 Explore BeanPool worldwide', 'xx');
+        await explore('xx');
         check('the door, signing in');
         await press('Continue with Google', 'xx');
         expect(host!.textContent).toContain(pseudoLocalise('✅ Signed in with {provider}').replace('{provider}', 'Google'));
@@ -577,7 +609,7 @@ describe("the global community's door in the pseudo-locale", () => {
     it('a door with the 12-words way: the two ways side by side (WordsDoor is a stand-in), and the sign-in again', async () => {
         door.check = { ok: true, profile: { features: { wordsDoor: true } } };
         await mount('xx');
-        await press('🌍 Explore BeanPool worldwide', 'xx');
+        await explore('xx');
         expect(host!.querySelector('[data-later-sweep="DoorChoices"]')).toBeTruthy();
         check('the door, two ways');
     });
@@ -672,5 +704,139 @@ describe('a language picked on an open step redraws it, live', () => {
         // A sentence of this sweep's the catalog doesn't have yet: its English, never a gap.
         const pen = 'No pen handy? Carry on — you can come back to these any time under Settings → Recovery Phrase.';
         expect(page.textContent).toContain(typeof fr[pen] === 'string' ? fr[pen] as string : pen);
+    });
+});
+
+/**
+ * PR #2564's deciding review (not blocking, taken): another community's door's **🔑 Restore my account**
+ * (app/join-open-door.tsx) opened this restore with an empty address field on a new phone, and the member had to type the
+ * address shown under the door's title. The door hands it over in memory (utils/open-door.ts restoreAtDoorHref).
+ */
+describe("another community's door sent the member here to restore", () => {
+    const SELF = 'https://open.riverbend.example';
+    const field = () => all('input').find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)') as HTMLInputElement | undefined;
+
+    it("with 12 words: the address field is that community's, over the phone's anchor", async () => {
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await mount('en');
+        expect(host!.textContent).toContain('🔑 Restore your account');
+        await press('🔑 Recover with 12 Words', 'en');
+        expect(field()?.value).toBe(SELF);
+    });
+
+    it("with a sign-in, at the community: the same address", async () => {
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await mount('en');
+        await press('🌐 Recover with Social', 'en');
+        expect(field()?.value).toBe(SELF);
+    });
+
+    it("opened any other way, nothing is handed over: the phone's anchor, as before; and a hand-over is read once", async () => {
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        params.now = { mode: 'member' };
+        await mount('en');
+        await press('🔑 Recover with 12 Words', 'en');
+        expect(field()?.value).toBe('https://mullum.beanpool.org');
+        act(() => root?.unmount()); host?.remove();
+
+        restoreAtDoorHref(SELF);
+        await mount('en');
+        act(() => root?.unmount()); host?.remove();
+        await mount('en');
+        await press('🔑 Recover with 12 Words', 'en');
+        expect(field()?.value).toBe('https://mullum.beanpool.org');
+    });
+
+    it("from a door the welcome screen pushed: the welcome in view takes the address, never the one under it", async () => {
+        // welcome → the door (router.push) → its Restore (router.replace): the stack is [welcome, welcome], both mounted,
+        // and the params are global, so both read mode=member. The one under it, earlier in the tree, took the hand-over
+        // first, and the one in view showed the phone's anchor (PR #2564 review). The router runs the one in view's focus
+        // effects once its navigation has loaded, after welcome has consumed the param (router.setParams({ mode: '' })).
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        const screen = (name: string, focused: boolean) => createElement('div', { key: name, 'data-screen': name }, createElement(focus.ctx.Provider, { value: focused }, createElement(WelcomeScreen)));
+        const stack = (...screens: unknown[]) => createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, ...(screens as any[]));
+        await act(async () => { root!.render(stack(screen('under', true)) as any); });
+        await settle();
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', false)) as any); });
+        await settle();
+        params.now = { mode: '' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', true)) as any); });
+        await settle();
+        const inView = host.querySelector('[data-screen="in-view"]') as HTMLElement;
+        expect(inView.textContent).toContain('🔑 Restore your account');
+        const recover = Array.from(inView.querySelectorAll('button, [role="button"]')).find((b) => (b.textContent ?? '').includes('🔑 Recover with 12 Words')) as HTMLElement;
+        expect(recover, 'a button "🔑 Recover with 12 Words"').toBeTruthy();
+        await act(async () => { recover.click(); });
+        await settle();
+        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)');
+        expect(address?.value).toBe(SELF);
+    });
+
+    // The door's record still on the phone at its Restore: welcome's resume pushed the door again over the restore it had
+    // just opened, and the button read as doing nothing (PR #2564 review). The record stays: Back out of the restore, and
+    // the next launch, still resume the door; a restore that lands clears it (utils/restore-account.ts).
+    const doorRecord = { step: 'globalJoin', flow: 'global', inviteCode: '', anchorUrl: SELF, callsign: 'Sally', redeemed: false };
+    for (const [kind, record] of [
+        ['a key an invite join took over (its sign-in had an account there already)', { ...doorRecord, newKey: SALLY.publicKey }],
+        ["a key the door made whose join's answer never came", { ...doorRecord, freshKey: SALLY.publicKey, joinsOut: 1 }],
+    ] as const) {
+        it(`the door's record still on the phone, ${kind}: the restore stays in view, never the door again over it`, async () => {
+            phone.stored = SALLY;
+            phone.pending = { ...record };
+            restoreAtDoorHref(SELF);
+            params.now = { mode: 'member' };
+            await mount('en');
+            expect(nav.pushed).toEqual([]);
+            expect(host!.textContent).toContain('🔑 Restore your account');
+            await press('🔑 Recover with 12 Words', 'en');
+            expect(field()?.value).toBe(SELF);
+        });
+    }
+
+    it("the door's record still on the phone, from a door the welcome screen pushed: the restore in view, its resume run before its focus, sends nobody back", async () => {
+        // welcome (the door's record: back to the door, router.push) → the door's Restore (router.replace). The one in view
+        // mounts before its navigation has loaded, so its resume can finish before its focus effect takes the hand-over:
+        // it looks without taking it (utils/open-door.ts restoreAtWaiting).
+        phone.stored = SALLY;
+        phone.pending = { ...doorRecord, newKey: SALLY.publicKey };
+        host = document.createElement('div');
+        document.body.appendChild(host);
+        root = createRoot(host);
+        const screen = (name: string, focused: boolean) => createElement('div', { key: name, 'data-screen': name }, createElement(focus.ctx.Provider, { value: focused }, createElement(WelcomeScreen)));
+        const stack = (...screens: unknown[]) => createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, ...(screens as any[]));
+        await act(async () => { root!.render(stack(screen('under', true)) as any); });
+        await settle();
+        expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
+        restoreAtDoorHref(SELF);
+        params.now = { mode: 'member' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', false)) as any); });
+        await settle();
+        params.now = { mode: '' };
+        await act(async () => { root!.render(stack(screen('under', false), screen('in-view', true)) as any); });
+        await settle();
+        expect(nav.pushed).toHaveLength(1);
+        const inView = host.querySelector('[data-screen="in-view"]') as HTMLElement;
+        expect(inView.textContent).toContain('🔑 Restore your account');
+        const recover = Array.from(inView.querySelectorAll('button, [role="button"]')).find((b) => (b.textContent ?? '').includes('🔑 Recover with 12 Words')) as HTMLElement;
+        expect(recover, 'a button "🔑 Recover with 12 Words"').toBeTruthy();
+        await act(async () => { recover.click(); });
+        await settle();
+        const address = Array.from(inView.querySelectorAll('input')).find((i) => i.getAttribute('placeholder') === 'Community name or address (e.g. mullum)');
+        expect(address?.value).toBe(SELF);
+    });
+
+    it("the door's record still on the phone, and welcome opened any other way: back to the door, as before", async () => {
+        phone.stored = SALLY;
+        phone.pending = { ...doorRecord, freshKey: SALLY.publicKey, joinsOut: 1 };
+        await mount('en');
+        expect(nav.pushed).toEqual([{ pathname: '/join-open-door', params: { node: SELF } }]);
     });
 });

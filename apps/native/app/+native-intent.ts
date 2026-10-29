@@ -53,8 +53,8 @@ export async function routeGlobalLink(
 }
 
 /**
- * A link to a door screen (utils/open-door.ts): the global community's as its own link; another community's door for an
- * account, with its work held for the member's tap. Read as {@link routeGlobalLink} reads the phone.
+ * A link to a door screen (utils/open-door.ts): the global community's as its own link; another community's door, with or
+ * without an account, its work held for the member's tap. Read as {@link routeGlobalLink} reads the phone.
  */
 export async function routeDoorLink(
     link: DoorLink, initial: boolean, readPhone: () => Promise<PhoneAtLink> = phoneAtLink, nowMs: () => number = Date.now,
@@ -126,8 +126,9 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     }
 
     // A link straight to the door screen, `beanpool://join-open-door[?node=…]` (utils/open-door.ts): it only opens the screen.
-    // With no node, or the global community's, it goes as the global link does; another community's opens its door for an
-    // account with the signed work held until the member taps (`from=link`), never with any other param a link carried.
+    // With no node, or the global community's, it goes as the global link does; another community's opens its door, for an
+    // account or a phone with none (whose account the door makes at Join), with the signed work held until the member taps
+    // (`from=link`), never with any other param a link carried.
     const doorLink = doorLinkFromSystemPath(path);
     if (doorLink) return routeDoorLink(doorLink, initial);
 

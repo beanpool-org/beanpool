@@ -338,13 +338,17 @@ describe("welcome.tsx: the global door's sign-in with the phone's own key", () =
 });
 
 describe('join-open-door.tsx: the door for an account the phone already has (the global community\'s as join-global)', () => {
-    it("always asks the lock before the sign-in starts (its key is always the phone's own); a check that does not pass starts nothing", () => {
+    it("asks the lock before the sign-in starts for the phone's own key; a check that does not pass starts nothing", () => {
+        // Since S2 another community's door also takes a phone with no account (utils/open-door-key.ts): a key the door has
+        // just made in memory has no account behind it yet, so, as at the first screen's door (welcome.tsx
+        // handleGlobalSignIn), it asks no lock. Every key the phone held already, the phone's own account, asks it. Before
+        // S2 the screen had only the phone's own key, and this line was `if (!(await authenticateUser(...))) return;`.
         const s = read('app/join-open-door.tsx');
         expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
         const body = slice(s, 'async function handleSignIn(provider: SsoProvider) {', '\n    }\n');
-        const key = body.indexOf('const account = await accountKeyForDoor();');
+        const key = body.indexOf('const account = await keyAtTap();');
         // The lock's prompt is in the member's language (words S3e): the same English, through t().
-        const asked = body.indexOf(`if (!(await authenticateUser(t('${REASON}')))) return;`);
+        const asked = body.indexOf(`if (!account.createdHere && !(await authenticateUser(t('${REASON}')))) return;`);
         const signIn = body.indexOf('await signInAtDoor(');
         expect(key).toBeGreaterThan(-1);
         expect(asked).toBeGreaterThan(key);

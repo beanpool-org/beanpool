@@ -15,6 +15,8 @@ No invite, but a community near you? Join the global community, then ask that co
 
 Installing a community server? On the phone app, its claim makes your account: no invite, and nothing from the BeanPool project.
 
+A community that lets anyone join sent you its link? On the phone app, the link opens its door, and joining there makes your account: no invite, and nothing from the BeanPool project.
+
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
 ## Joining with an invite

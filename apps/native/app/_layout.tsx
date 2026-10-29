@@ -22,7 +22,7 @@ import { markNoticeShown } from '../utils/sync-notices';
 import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
-import { claimInFlight, forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
+import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
@@ -209,14 +209,15 @@ function RootLayoutNav() {
     // identity is a stranger to every node BY DESIGN — route back into the
     // wizard, never to node-mismatch (see utils/onboarding-state.ts).
     // 'claim' = that wizard is a claim whose answer is not in (onboarding-state.ts claimInFlight): the claim screen
-    // stays too, so the node can say whether the claim landed.
-    const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | 'wizard' | 'claim' | null>(null);
+    // stays too, so the node can say whether the claim landed. 'door' = a join at another community's open door that has
+    // not finished (onboarding-state.ts doorJoinOut): the door screen stays too, for the same reason.
+    const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | 'wizard' | 'claim' | 'door' | null>(null);
     useEffect(() => {
         let mounted = true;
         const refresh = () => {
             getPendingOnboarding().then((p) => {
                 if (!mounted) return;
-                setPendingOnboardingFlag(!p ? false : claimInFlight(p) ? 'claim' : 'wizard');
+                setPendingOnboardingFlag(wizardHold(p));
             });
         };
         // A claim code an older build kept at rest for an account made elsewhere (#2412): that detour is gone.
@@ -639,12 +640,14 @@ function RootLayoutNav() {
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
         // on a fresh device that holds no local identity yet — the screen mints
         // the new identity itself at the "Submit Request" step — so it must be
-        // reachable without one. So is the claim screen, whose claim makes the
-        // account. Any other route → back to welcome (utils/auth-return.ts,
-        // `setupRedirect`). Unless the phone is looking around the global
-        // community as a visitor, chosen on the first screen (slice S12,
-        // utils/look-around.ts): then its screens stay, and one that needs a
-        // key opens the door, where the key is made at Join.
+        // reachable without one. So are the claim screen, whose claim makes the
+        // account, and another community's open door, whose join makes it. Any
+        // other route → back to welcome (utils/auth-return.ts, `setupRedirect`).
+        // Unless the phone is looking around the global community as a
+        // visitor, chosen on the first screen (slice S12, utils/look-around.ts):
+        // then its screens stay, and one that needs a key opens the door, where
+        // the key is made at Join. Another community's door and a community's
+        // card stay ahead of that, looking around or not.
         if (!identity) {
             const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
             if (to) {
@@ -670,7 +673,9 @@ function RootLayoutNav() {
         // "my account is gone". Don't route at all until the flag has loaded.
         if (pendingOnboarding === null) return;
         if (pendingOnboarding) {
-            const to = setupRedirect(segments, { hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim' });
+            const to = setupRedirect(segments, {
+                hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim', doorOut: pendingOnboarding === 'door',
+            });
             if (to) router.replace(to);
             return;
         }

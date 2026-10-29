@@ -139,11 +139,11 @@ import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import * as tourStore from '../tour-store';
 import { START_CARD_WORDS } from '@beanpool/core';
-import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
+import { KNOCKS_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeLayoutPhoneOnlySentStoreKey, homeLayoutPhoneOnlyStoreKey, homeLayoutStoreKey, homeTipsStoreKey } from '../storage-keys';
 import { HOME_TIPS, localDay, skyToday, translateV1 } from '@beanpool/core';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider } from '../../components/LanguageProvider';
-import { AccessibilityInfo, AppState, DeviceEventEmitter } from 'react-native';
+import { AccessibilityInfo, Alert, AppState, DeviceEventEmitter } from 'react-native';
 import { FEWER_CARDS_LINE, HOME_SAFETY_POLL_MS, SKY_NO_PLACE_LINE, decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
@@ -263,6 +263,10 @@ beforeEach(async () => {
         if (u.pathname === '/api/join/knock/status') {
             record(200);
             return new Response(JSON.stringify({ status: node.knockStatus }), { status: 200 });
+        }
+        if (u.pathname === '/api/join/knock/cancel' && req.method === 'POST') {
+            record(200);
+            return new Response('{}', { status: 200 });
         }
         if (u.pathname === '/api/node-admin/me') {
             record(200);
@@ -1537,10 +1541,119 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         await render();
         expect(document.querySelector('[data-testid="home-step-ask"]')).toBeNull();
         expect(document.querySelector('[data-testid="home-step-post"]')).not.toBeNull();
-        expect(document.querySelector('[data-testid="home-card-find"]')!.textContent).toContain('Waiting for Byron Shire BeanPool: usually a few days.');
+        // L1 replaced the unmeasured "Waiting for X: usually a few days." with the honest waiting card: when it was asked, and that it arrived.
+        const waiting = document.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')!;
+        expect(waiting.textContent).toContain('You asked to join Byron Shire BeanPool on');
+        expect(waiting.textContent).toContain('Your request arrived.');
+        expect(document.querySelector('[data-testid="home-card-find"]')!.textContent).not.toContain('usually a few days');
         // Only the community it asked, signed for there.
         const asks = node.requests.filter(r => new URL(r.url).pathname === '/api/join/knock/status');
         expect(asks.map(r => new URL(r.url).origin)).toEqual(['https://byron.example.org']);
+    });
+
+    // Decided 29 Oct 2026 (PR #2573): a request the community no longer holds keeps Find pinned until the member taps Got it
+    // (or day 61 after the send); a Cancel that worked keeps the card, and with it the pin, for that Home visit.
+    it('past day 30, a request the community no longer holds: Find stays pinned with Got it, and Got it releases the pin', async () => {
+        node.answer = globalMember(40);
+        node.knockStatus = 'none';
+        const url = 'https://byron.example.org';
+        await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+        await render();
+        await settle();
+        const waiting = document.querySelector(`[data-testid="home-find-waiting-${url}"]`)!;
+        expect(waiting.textContent).toContain('This request is no longer open. You can ask again.');
+        expect(waiting.textContent).not.toContain('No answer came');
+        expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
+        // Pinned: first, and nothing to move or remove it with.
+        expect(cards()[0]).toBe('find');
+        expect(byLabel('Card options for Find your community')).toBeNull();
+
+        await act(async () => { (document.querySelector(`[data-testid="home-find-gotit-${url}"]`) as HTMLElement).click(); });
+        await settle();
+
+        // Forgotten by the phone, the card gone, and Find is a card like any other again.
+        expect(document.querySelector(`[data-testid="home-find-waiting-${url}"]`)).toBeNull();
+        expect(JSON.parse(mem.store.get(KNOCKS_STORE_KEY) ?? '{"knocks":[]}').knocks).toEqual([]);
+        expect(byLabel('Card options for Find your community')).not.toBeNull();
+    });
+
+    it('past day 30, a request still waiting keeps Find pinned and has no Got it', async () => {
+        node.answer = globalMember(40);
+        node.knockStatus = 'pending';
+        const url = 'https://byron.example.org';
+        await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+        await render();
+        await settle();
+        expect(document.querySelector(`[data-testid="home-find-gotit-${url}"]`)).toBeNull();
+        expect(byLabel('Card options for Find your community')).toBeNull();
+    });
+
+    it('a Cancel that worked: the card stays with the cancelled line for this visit, and Find stays where it was', async () => {
+        node.answer = globalMember(40);
+        node.knockStatus = 'pending';
+        const url = 'https://byron.example.org';
+        await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+        await render();
+        await settle();
+        await act(async () => { (document.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLElement).click(); });
+        const confirm = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!.find(b => b.style === 'destructive')!;
+        await act(async () => { await confirm.onPress!(); });
+        await settle();
+
+        const waiting = document.querySelector(`[data-testid="home-find-waiting-${url}"]`)!;
+        expect(waiting).not.toBeNull();
+        expect(waiting.textContent).toContain('You cancelled your request. You can ask again after 24 hours.');
+        expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
+        expect(cards()[0]).toBe('find');
+        expect(node.requests.filter(r => new URL(r.url).pathname === '/api/join/knock/cancel')).toHaveLength(1);
+    });
+
+    // A list that does not hold Find, as the newcomer's and the starter set are (Lounge L1, review of #2573). The stub node
+    // answers every card whatever `cards=` says, so what proves the card is asked for is the reads' `cards=`.
+    const withoutFind = (now: number) => ({ v: 2 as const, cards: [{ id: 'market', type: 'market' }, { id: 'events', type: 'events' }], dismissed: {}, updatedAt: iso(now - 72 * H) });
+    const useList = (layout: ReturnType<typeof withoutFind>) => {
+        node.answer = { ...node.answer, layout: layout as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(layout));
+    };
+
+    it('a newcomer with no wait still has Find asked for and drawn first, from a list that does not hold it', async () => {
+        node.answer = globalMember(3);
+        useList(withoutFind(Date.now()));
+        await render();
+        expect(homeCards().every(c => c.includes('find'))).toBe(true);
+        expect(cards()[0]).toBe('find');
+        expect(byLabel('Card options for Find your community')).toBeNull();
+    });
+
+    it('past day 30 with no wait it is not asked for and not drawn, from a list that does not hold it (the first read, with no answer in hand, asks for it until an answer says)', async () => {
+        node.answer = globalMember(40);
+        useList(withoutFind(Date.now()));
+        await render();
+        expect(cards()).not.toContain('find');
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeCards().length).toBeGreaterThan(1);
+        expect(homeCards().slice(1).some(c => c.includes('find'))).toBe(false);
+        expect(cards()).not.toContain('find');
+    });
+
+    it('past day 30 with a request that waits, from a list that does not hold Find: it is asked for, and the waiting card is drawn with no "…"', async () => {
+        node.answer = globalMember(40);
+        useList(withoutFind(Date.now()));
+        await rememberKnock(who.identity.publicKey, { url: 'https://byron.example.org', name: 'Byron Shire BeanPool' });
+        await render();
+        // The first read could not know the knock (it is read after the answer): the card is asked for once the phone does.
+        expect(homeCards().some(c => c.includes('find'))).toBe(true);
+        expect(homeCards().at(-1)).toContain('find');
+        expect(cards()[0]).toBe('find');
+        expect(document.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')?.textContent).toContain('You asked to join Byron Shire BeanPool on');
+        expect(byLabel('Card options for Find your community')).toBeNull();
+        // Every read after that asks for it too, and no extra read is made for it each time.
+        const without = homeCards().filter(c => !c.includes('find')).length;
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeCards().filter(c => !c.includes('find')).length).toBe(without);
+        expect(homeCards().at(-1)).toContain('find');
     });
 
     it('the place: on the global node the phone\'s last known one (only where already allowed), to two decimals; never asked for', async () => {

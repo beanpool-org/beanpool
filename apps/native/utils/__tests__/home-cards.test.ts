@@ -918,6 +918,48 @@ describe('the global node\'s Home (H4)', () => {
         expect(draw(a, down, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'find', 'market', 'community']);
     });
 
+    it('a newcomer with no wait keeps Find as before L1: pinned, drawn first and asked for from the starter list, on day 3 and on the last day (Lounge L1, review of #2573)', () => {
+        for (const days of [3, FIND_PINNED_DAYS - 0.001, null]) {
+            const a = member(days);
+            expect(pinnedCards(a, NOW)).toEqual(['find']);
+            // The starter list and the newcomer's list hold no `find`: the pin is the only thing that draws and asks for it.
+            expect(draw(a, STARTER, ctx({ interests: ['food'], now: NOW }))[0]).toBe('find');
+            expect(draw(a, null, ctx({ interests: ['food'], now: NOW }))).toContain('find');
+            expect(cardsToAsk(STARTER, askPinned(a, NOW), a)).toContain('find');
+            expect(cardsToAsk(null, askPinned(a, NOW), a)).toContain('find');
+        }
+        expect(findPinned(member(3), NOW, { hasOpenKnock: false, hasOpenWatch: false, knocks: [] })).toBe(true);
+    });
+
+    it('a wait keeps Find past day 30: an open knock or a watch pins it, draws it and has it asked for, from a list that does not hold it (Lounge L1, review of #2573)', () => {
+        const gone = member(FIND_PINNED_DAYS + 10);
+        // No wait: past the pin it is a card like any other, so a list without it neither draws nor asks for it.
+        expect(pinnedCards(gone, NOW)).toEqual([]);
+        expect(draw(gone, STARTER, ctx({ interests: ['food'], now: NOW }))).not.toContain('find');
+        expect(cardsToAsk(STARTER, askPinned(gone, NOW), gone)).not.toContain('find');
+
+        // A knock open on day 40: pinned from the knock the phone remembers, and asked for with that same context.
+        const knocks = [{ url: 'https://byron.example.org', sentAt: iso(NOW - 5 * H) }];
+        expect(pinnedCards(gone, NOW, { knocks })).toEqual(['find']);
+        expect(askPinned(gone, NOW, { knocks })).toEqual(['find']);
+        // The real path the screen takes: the layout lacks `find`, so `cards=` carries it only when the knock is passed on.
+        expect(cardsToAsk(STARTER, askPinned(gone, NOW), gone)).not.toContain('find');
+        expect(cardsToAsk(STARTER, askPinned(gone, NOW, { knocks }), gone)).toContain('find');
+        expect(cardsToAsk(null, askPinned(gone, NOW, { hasOpenKnock: true }), gone)).toContain('find');
+        expect(draw(gone, STARTER, ctx({ interests: ['food'], now: NOW, knocks }))[0]).toBe('find');
+
+        // A watch the answer carries pins it without a knock.
+        const watching = member(FIND_PINNED_DAYS + 10, { cards: { find: find({ watches: [{ point: 'area', radiusKm: 25 }] }), market: market(2), events, community: { name: 'BeanPool', members: 2310, communities: 38 } } });
+        expect(pinnedCards(watching, NOW)).toEqual(['find']);
+        expect(cardsToAsk(STARTER, askPinned(watching, NOW), watching)).toContain('find');
+
+        // A cancelled knock, or one past the days it can be answered, is no wait.
+        expect(pinnedCards(gone, NOW, { knocks: [{ ...knocks[0], cancelledAt: iso(NOW - 2 * H) }] })).toEqual([]);
+        expect(pinnedCards(gone, NOW, { knocks: [{ url: knocks[0].url, sentAt: iso(NOW - 62 * 24 * H) }] })).toEqual([]);
+        // A local node never pins it.
+        expect(pinnedCards({ ...gone, profile: 'local' }, NOW, { knocks })).toEqual([]);
+    });
+
     it('pinned: under Needs you, and under "Your way back in" while that one leads; after the pin it is the picker\'s, like any card', () => {
         const pins: ['find'] = ['find'];
         expect(ids(cardOrder(STARTER, pins)).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);

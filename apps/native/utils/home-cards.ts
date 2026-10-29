@@ -27,6 +27,7 @@ import {
     skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, isNearKm, readTourRecord, starterCards, t, tourEnded, type TourRecord, repeatCaption, type RepeatPattern,
     currentLanguage, formatCount, formatNumber, tn, word, type TierName, type WordKey,
+    knockStillAnswerable,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { TIER_WORDS } from './trust-tier';
@@ -395,19 +396,36 @@ export function readMarkSent(raw: unknown): MarkSent[] {
 }
 
 /**
- * Whether Find your community is pinned for this reader: on the global node, in the member's first 30 days from joining,
- * or while the join date is unknown (the node's own rule, routes/home-answer.ts `cardsToBuild`, and the web app's,
- * apps/pwa lib/home-cards.ts `findPinned`).
+ * Whether Find your community is pinned for this reader: on the global node, in the member's first 30 days from joining
+ * (or while the join date is unknown: the node's own rule, routes/home-answer.ts `cardsToBuild`, and the web app's,
+ * apps/pwa lib/home-layout.ts `findPinned`), and past them for as long as a knock or place watch is open: the pin follows
+ * the wait too, so day 31 does not hide the card that says what became of it (Lounge L1, DESIGN-global-lounge-fable.md §0.3, §6 L1).
  */
-export function findPinned(answer: Pick<HomeAnswer, 'profile' | 'me'>, now: number): boolean {
+export function findPinned(
+    answer: Pick<HomeAnswer, 'profile' | 'me'> & { cards?: { find?: { watches?: unknown[] | null } } },
+    now: number,
+    ctx?: { hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
+): boolean {
     if (answer.profile !== 'global') return false;
     const joined = answer.me?.joinedAt ? Date.parse(answer.me.joinedAt) : NaN;
-    return !Number.isFinite(joined) || now - joined < FIND_PINNED_DAYS * DAY_MS;
+    if (!Number.isFinite(joined) || now - joined < FIND_PINNED_DAYS * DAY_MS) return true;
+    const hasOpenKnock = typeof ctx === 'boolean'
+        ? ctx
+        : Boolean(ctx?.hasOpenKnock ?? (ctx?.knocks ? ctx.knocks.some(k => !k.cancelledAt && knockStillAnswerable(k, now)) : false));
+    const findCard = answer.cards?.find;
+    const hasOpenWatch = typeof ctx === 'object' && typeof ctx?.hasOpenWatch === 'boolean'
+        ? ctx.hasOpenWatch
+        : Boolean(findCard?.watches && findCard.watches.length > 0);
+    return hasOpenKnock || hasOpenWatch;
 }
 
 /** The cards pinned for this reader now: they can't be removed or moved, and stand at the top (only `find` has a pin). */
-export function pinnedCards(answer: Pick<HomeAnswer, 'profile' | 'me'> | null | undefined, now: number): HomeCardId[] {
-    return answer && findPinned(answer, now) ? ['find'] : [];
+export function pinnedCards(
+    answer: (Pick<HomeAnswer, 'profile' | 'me'> & { cards?: { find?: { watches?: unknown[] | null } } }) | null | undefined,
+    now: number,
+    ctx?: { hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[] } | boolean,
+): HomeCardId[] {
+    return answer && findPinned(answer, now, ctx) ? ['find'] : [];
 }
 
 /** The list a layout holds: the member's, or the newcomer's while there is none. */
@@ -705,8 +723,12 @@ export function cardsToAsk(
  * The pins to ask by: the account's, from the answer in hand; with none yet, `find` counts as pinned, so it is asked for
  * until an answer says whether it still is (the web app's rule, apps/pwa lib/home-cards.ts `askedCards`).
  */
-export function askPinned(answer: Pick<HomeAnswer, 'profile' | 'me'> | null | undefined, now: number): HomeCardId[] {
-    return answer ? pinnedCards(answer, now) : ['find'];
+export function askPinned(
+    answer: (Pick<HomeAnswer, 'profile' | 'me'> & { cards?: { find?: { watches?: unknown[] | null } } }) | null | undefined,
+    now: number,
+    ctx?: { hasOpenKnock?: boolean; hasOpenWatch?: boolean; knocks?: readonly { sentAt?: unknown; cancelledAt?: string }[] } | boolean,
+): HomeCardId[] {
+    return answer ? pinnedCards(answer, now, ctx) : ['find'];
 }
 
 /** The member's starred categories: the account's, else the phone's own (the Market's For You stars, `bp_fav_categories`). */
@@ -737,6 +759,12 @@ export interface HomeDrawContext {
     role?: HomeRole;
     /** The phone remembers a knock this account sent (utils/knock.ts `rememberedKnocks`); absent: not read yet. */
     knocked?: boolean;
+    /** Whether an open knock is known to wait (Lounge L1). */
+    hasOpenKnock?: boolean;
+    /** Whether a place watch is open (Lounge L1). */
+    hasOpenWatch?: boolean;
+    /** Remembered knocks to evaluate wait-based pinning (Lounge L1). */
+    knocks?: readonly { sentAt?: unknown; cancelledAt?: string; [key: string]: unknown }[];
     /** The phone's clock, for the 30-day pin; absent: now. */
     now?: number;
     /** The Tips card has a tip to show (@beanpool/core home-tips.ts, from the device's record); absent: none. */
@@ -912,7 +940,7 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
     const c = answer.cards as Record<string, unknown> & HomeCards;
     const global = answer.profile === 'global';
     const canInvite = invitesForReader(answer.features, ctx.role);
-    const pinned = pinnedCards(answer, ctx.now ?? Date.now());
+    const pinned = pinnedCards(answer, ctx.now ?? Date.now(), ctx);
     const shows = ({ id, type, settings }: HomeCardInstance): boolean => {
         if (!cardOnNode(type, answer, ctx.role)) return false;
         switch (type) {

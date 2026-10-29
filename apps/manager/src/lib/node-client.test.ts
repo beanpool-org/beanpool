@@ -19,6 +19,8 @@ import {
     loginToNode,
     fetchNodeTreasuries,
     createNodeTreasury,
+    updateEnterpriseLocation,
+    clearEnterpriseLocation,
     seedTreasuryOffer,
     fetchTreasuryKeepers,
     assignTreasuryKeeper,
@@ -199,6 +201,76 @@ describe('resolveNodeApiUrl', () => {
 
         const url = resolveNodeApiUrl('https://node.beanpool.org', '/api/local/admin/onboarding-funnel', { days: '30' });
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
+
+        vi.unstubAllGlobals();
+    });
+});
+
+describe('enterprise location helpers', () => {
+    it('updateEnterpriseLocation posts location payload and handles success and refusal', async () => {
+        const mockSuccess = { success: true, lat: -33.8688, lng: 151.2093 };
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => mockSuccess,
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await updateEnterpriseLocation(
+            'https://node.example.com',
+            'treasury-pub-1',
+            { lat: -33.8688, lng: 151.2093 },
+            'secret123',
+            'tfa-sess-1'
+        );
+        expect(res).toEqual(mockSuccess);
+
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/treasury/treasury-pub-1/location');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-Password']).toBe('secret123');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess-1');
+        expect(JSON.parse(init.body)).toEqual({ lat: -33.8688, lng: 151.2093, password: 'secret123' });
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status: 400,
+            statusText: 'Bad Request',
+            json: async () => ({ error: 'Invalid coordinates' }),
+        }));
+        await expect(updateEnterpriseLocation('https://node.example.com', 'treasury-pub-1', { lat: 999, lng: 999 }, 'secret123'))
+            .rejects.toThrow('Invalid coordinates');
+
+        vi.unstubAllGlobals();
+    });
+
+    it('clearEnterpriseLocation sends DELETE request and handles success and error', async () => {
+        const mockSuccess = { success: true, lat: null, lng: null };
+        const fetchMock = vi.fn().mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => mockSuccess,
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await clearEnterpriseLocation('https://node.example.com', 'treasury-pub-1', 'secret123', 'tfa-sess-1');
+        expect(res).toEqual(mockSuccess);
+
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/treasury/treasury-pub-1/location');
+        expect(init.method).toBe('DELETE');
+        expect(init.headers['X-Admin-Password']).toBe('secret123');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-sess-1');
+        expect(JSON.parse(init.body)).toEqual({ password: 'secret123' });
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            statusText: 'Internal Server Error',
+            json: async () => ({}),
+        }));
+        await expect(clearEnterpriseLocation('https://node.example.com', 'treasury-pub-1', 'secret123'))
+            .rejects.toThrow('HTTP 500: Internal Server Error');
 
         vi.unstubAllGlobals();
     });

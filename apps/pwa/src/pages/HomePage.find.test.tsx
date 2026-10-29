@@ -10,7 +10,7 @@
  * (PR #2551 review: before, nothing was drawn, and the "no Find card" tests here fail there).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { HomeAnswer, HomeFind } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -42,6 +42,8 @@ vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}), onSocketO
 
 import * as api from '../lib/api';
 import { HomePage, WATCH_WORDS } from './HomePage';
+import { rememberKnock } from '../lib/knock';
+import * as knockModule from '../lib/knock';
 
 const { done: WATCH_DONE, joinFirst: WATCH_JOIN_FIRST, needsPlace: WATCH_NEEDS_PLACE } = WATCH_WORDS;
 import { resetHomeCacheForTest } from '../lib/home-cache';
@@ -253,5 +255,453 @@ describe('a community gone quiet on the web find card (front doors S13)', () => 
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-find-body');
         expect(screen.queryByTestId('home-find-not-answering-l')).toBeNull();
+    });
+});
+
+describe('the honest waiting card on the web find card (Lounge L1)', () => {
+    it('shows sent date, arrived status, and measured line for a waiting knock', async () => {
+        const comm = {
+            key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org',
+            memberCount: 40, distanceKm: 12, answers: 'week' as const,
+        };
+        await rememberKnock(ME.publicKey, comm, new Date('2026-10-25T00:00:00.000Z'));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [comm] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({
+            ok: true, value: { status: 'pending' },
+        });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-waiting-card-https://byron.example.org');
+        expect(within(card).getByTestId('home-waiting-sent-https://byron.example.org')).toHaveTextContent('You asked to join Byron Shire BeanPool on 25 Oct 2026.');
+        expect(await within(card).findByTestId('home-waiting-arrived-https://byron.example.org')).toHaveTextContent('Your request arrived.');
+        expect(within(card).getByTestId('home-waiting-answers-https://byron.example.org')).toHaveTextContent('Usually answers within a week');
+        expect(within(card).getByTestId('home-cancel-knock-https://byron.example.org')).toHaveTextContent('Cancel my request');
+
+        // While a knock is waiting, the Find card remains pinned and cannot be moved or removed (no card menu)
+        const findCard = screen.getByTestId('home-card-find');
+        expect(within(findCard).queryByTestId('home-card-menu')).toBeNull();
+
+        readSpy.mockRestore();
+    });
+
+    it('cancels knock with confirmation and withdraws it', async () => {
+        const comm = {
+            key: 'mullum', name: 'Mullumbimby BeanPool', url: 'https://mullum.example.org',
+            memberCount: 20, distanceKm: 15, answers: 'slow' as const,
+        };
+        await rememberKnock(ME.publicKey, comm, new Date('2026-10-26T00:00:00.000Z'));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [comm] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({
+            ok: true, value: { status: 'pending' },
+        });
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: true });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const cancelBtn = await screen.findByTestId('home-cancel-knock-https://mullum.example.org');
+        fireEvent.click(cancelBtn);
+
+        expect(confirmSpy).toHaveBeenCalledWith('Cancel your request to join Mullumbimby BeanPool? You can ask again after 24 hours.');
+        expect(cancelSpy).toHaveBeenCalledWith('https://mullum.example.org', ME);
+
+        // The card stays for this visit: the button is gone, and the card says what happened.
+        await waitFor(() => expect(screen.queryByTestId('home-cancel-knock-https://mullum.example.org')).toBeNull());
+        expect(screen.getByTestId('home-waiting-card-https://mullum.example.org')).toBeInTheDocument();
+
+        readSpy.mockRestore();
+        cancelSpy.mockRestore();
+        confirmSpy.mockRestore();
+    });
+
+    it('shows error note when cancellation fails (never false success)', async () => {
+        const comm = {
+            key: 'bangalow', name: 'Bangalow BeanPool', url: 'https://bangalow.example.org',
+            memberCount: 15, distanceKm: 25,
+        };
+        await rememberKnock(ME.publicKey, comm, new Date('2026-10-27T00:00:00.000Z'));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [comm] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({
+            ok: true, value: { status: 'pending' },
+        });
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: false, message: 'Node could not be reached' });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const cancelBtn = await screen.findByTestId('home-cancel-knock-https://bangalow.example.org');
+        fireEvent.click(cancelBtn);
+
+        expect(await screen.findByTestId('home-cancel-error-https://bangalow.example.org')).toHaveTextContent('Node could not be reached');
+        expect(screen.getByTestId('home-waiting-card-https://bangalow.example.org')).toBeInTheDocument();
+
+        readSpy.mockRestore();
+        cancelSpy.mockRestore();
+        confirmSpy.mockRestore();
+    });
+
+    it('a failed cancel says so under the knock it was for, not under another waiting beside it', async () => {
+        const first = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+        const second = { key: 'lismore', name: 'Lismore BeanPool', url: 'https://lismore.example.org', memberCount: 30, distanceKm: 40 };
+        await rememberKnock(ME.publicKey, first, new Date(Date.now() - 5 * 3_600_000));
+        await rememberKnock(ME.publicKey, second, new Date(Date.now() - 4 * 3_600_000));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [first, second] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: false, message: 'Node could not be reached' });
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-cancel-knock-https://byron.example.org'));
+
+        const failed = await screen.findByTestId('home-cancel-error-https://byron.example.org');
+        expect(failed).toHaveTextContent('Node could not be reached');
+        expect(within(screen.getByTestId('home-waiting-card-https://byron.example.org')).getByTestId('home-cancel-error-https://byron.example.org')).toBe(failed);
+        // The other request was not touched: no message under it, and its own Cancel is still live.
+        expect(screen.queryByTestId('home-cancel-error-https://lismore.example.org')).toBeNull();
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        expect(screen.getByTestId('home-cancel-knock-https://lismore.example.org')).toBeEnabled();
+
+        readSpy.mockRestore();
+        cancelSpy.mockRestore();
+        confirmSpy.mockRestore();
+    });
+
+    it('a community name or a node\'s own words that will not break wrap inside the card (320 dp, 130%)', async () => {
+        const long = { key: 'long', name: 'A'.repeat(80), url: 'https://long.example.org', memberCount: 9, distanceKm: 30 };
+        await rememberKnock(ME.publicKey, long, new Date(Date.now() - 3_600_000));
+
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [long] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: false, kind: 'refused', status: 500, code: 'x', message: 'B'.repeat(90) });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const sent = await screen.findByTestId('home-waiting-sent-https://long.example.org');
+        const arrived = await screen.findByText('B'.repeat(90));
+        for (const line of [sent, arrived]) {
+            expect(line).toHaveClass('break-words');
+            expect(line).toHaveAttribute('dir', 'auto');
+        }
+
+        readSpy.mockRestore();
+    });
+});
+
+/** KNOCK_MESSAGES.none: what the Home card and the community's own card say of a request nothing holds (decided 29 Oct 2026). */
+const NONE_LINE = 'This request is no longer open. You can ask again.';
+/** KNOCK_MESSAGES.cancelled: under the sent line of a card whose cancel worked, for the rest of that Home visit. */
+const CANCELLED_LINE = 'You cancelled your request. You can ask again after 24 hours.';
+
+describe('the web waiting card tells the truth about what the community now answers (Lounge L1, review of #2573)', () => {
+    const BYRON = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+    const LISMORE = { key: 'lismore', name: 'Lismore BeanPool', url: 'https://lismore.example.org', memberCount: 30, distanceKm: 40 };
+    const arrivedOf = (url: string) => within(screen.getByTestId(`home-waiting-card-${url}`)).getByTestId(`home-waiting-arrived-${url}`);
+    const cancelOf = (url: string) => screen.queryByTestId(`home-cancel-knock-${url}`);
+
+    async function askedOf(...comms: Array<typeof BYRON>) {
+        for (const [i, c] of comms.entries()) await rememberKnock(ME.publicKey, c, new Date(Date.now() - (5 - i) * 3_600_000));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: comms }, true)));
+    }
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('a community with nothing open (lapsed, cancelled elsewhere) says it is no longer open, with no Cancel under it', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'none' } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://byron.example.org');
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent(NONE_LINE));
+        expect(arrivedOf(BYRON.url)).not.toHaveTextContent('Your request arrived.');
+        expect(cancelOf(BYRON.url)).toBeNull();
+        expect(document.body.textContent).not.toContain('No answer came');
+    });
+
+    it('a read that could not be made, or a refusal, is said as it is, with no Cancel', async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+            ? { ok: false, kind: 'unreachable', message: "Couldn't reach this community. Check your connection and try again." }
+            : { ok: false, kind: 'refused', status: 500, code: null, message: 'Back in an hour.' }));
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent("Couldn't reach this community. Check your connection and try again."));
+        await waitFor(() => expect(arrivedOf(LISMORE.url)).toHaveTextContent('Back in an hour.'));
+        expect(cancelOf(BYRON.url)).toBeNull();
+        expect(cancelOf(LISMORE.url)).toBeNull();
+    });
+
+    it('a cancel the community answers "not_found" stops offering Cancel, and the card says what it now answers', async () => {
+        await askedOf(BYRON);
+        // The community holds the request until the cancel is refused, and nothing after: the card reads it again to say so.
+        let held = true;
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async () => ({ ok: true, value: { status: held ? 'pending' : 'none' } }));
+        vi.spyOn(knockModule, 'cancelKnock').mockImplementation(async () => {
+            held = false;
+            return { ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' };
+        });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('Your request arrived.'));
+        const readsBefore = readSpy.mock.calls.length;
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        expect(await screen.findByTestId(`home-cancel-error-${BYRON.url}`)).toHaveTextContent('There is no open request from you here.');
+        expect(readSpy.mock.calls.length).toBe(readsBefore + 1);
+        expect(arrivedOf(BYRON.url)).toHaveTextContent(NONE_LINE);
+        expect(screen.getByTestId(`home-gotit-knock-${BYRON.url}`)).toHaveTextContent('Got it');
+        expect(cancelOf(BYRON.url)).toBeNull();
+    });
+
+    it('a cancel that meets a "yes" (404 not_found, then the community says approved) shows the invite, never "No answer came"', async () => {
+        await askedOf(BYRON);
+        let said: 'pending' | 'approved' = 'pending';
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async () => (said === 'pending'
+            ? { ok: true, value: { status: 'pending' } }
+            : { ok: true, value: { status: 'approved', invite: 'ABCD-EFGH', expiresAt: null } }));
+        vi.spyOn(knockModule, 'cancelKnock').mockImplementation(async () => {
+            said = 'approved';
+            return { ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' };
+        });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('Your request arrived.'));
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        expect(await screen.findByTestId(`home-find-invited-${BYRON.url}`)).toHaveTextContent('said yes');
+        expect(screen.queryByTestId(`home-waiting-card-${BYRON.url}`)).toBeNull();
+        expect(cancelOf(BYRON.url)).toBeNull();
+        expect(document.body.textContent).not.toContain('No answer came');
+        expect(document.body.textContent).not.toContain('no open request');
+    });
+
+    it('a cancel that gets a 404 whose re-read cannot be made says why, with no Cancel and never "No answer came"', async () => {
+        await askedOf(BYRON);
+        let down = false;
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async () => (down
+            ? { ok: false, kind: 'unreachable', message: "Couldn't reach this community. Check your connection and try again." }
+            : { ok: true, value: { status: 'pending' } }));
+        vi.spyOn(knockModule, 'cancelKnock').mockImplementation(async () => {
+            down = true;
+            return { ok: false, message: 'There is no open request from you here.', status: 404, code: 'not_found' };
+        });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent('Your request arrived.'));
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        await waitFor(() => expect(arrivedOf(BYRON.url)).toHaveTextContent("Couldn't reach this community. Check your connection and try again."));
+        expect(cancelOf(BYRON.url)).toBeNull();
+        expect(document.body.textContent).not.toContain('No answer came');
+    });
+
+    it('two cancels out at once: each button stays its own (the first finishing does not free the second, a press on a busy one sends nothing)', async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        let finishA: (r: { ok: true }) => void = () => {};
+        let finishB: (r: { ok: true }) => void = () => {};
+        const cancelSpy = vi.spyOn(knockModule, 'cancelKnock')
+            .mockReturnValueOnce(new Promise(resolve => { finishA = resolve; }))
+            .mockReturnValueOnce(new Promise(resolve => { finishB = resolve; }));
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const a = await screen.findByTestId(`home-cancel-knock-${BYRON.url}`);
+        const b = await screen.findByTestId(`home-cancel-knock-${LISMORE.url}`);
+        fireEvent.click(a);
+        await waitFor(() => expect(a).toBeDisabled());
+        fireEvent.click(b);
+        await waitFor(() => expect(b).toBeDisabled());
+
+        // B started while A is out: A's button is still busy, and a press on it sends nothing.
+        expect(a).toBeDisabled();
+        fireEvent.click(a);
+        expect(cancelSpy).toHaveBeenCalledTimes(2);
+        expect(confirmSpy).toHaveBeenCalledTimes(2);
+
+        // A finishes: its card stays and says so, its button is gone; B's button is still busy.
+        await act(async () => { finishA({ ok: true }); });
+        await waitFor(() => expect(screen.getByTestId(`home-waiting-cancelled-${BYRON.url}`)).toHaveTextContent(CANCELLED_LINE));
+        expect(screen.queryByTestId(`home-cancel-knock-${BYRON.url}`)).toBeNull();
+        expect(screen.getByTestId(`home-cancel-knock-${LISMORE.url}`)).toBeDisabled();
+        expect(screen.queryByTestId(`home-waiting-cancelled-${LISMORE.url}`)).toBeNull();
+        expect(screen.queryByRole('alert')).toBeNull();
+
+        // B finishes: both say so, and A's line did not go when B's came.
+        await act(async () => { finishB({ ok: true }); });
+        await waitFor(() => expect(screen.getByTestId(`home-waiting-cancelled-${LISMORE.url}`)).toHaveTextContent(CANCELLED_LINE));
+        expect(screen.getByTestId(`home-waiting-cancelled-${BYRON.url}`)).toHaveTextContent(CANCELLED_LINE);
+        expect(screen.queryByTestId(`home-cancel-knock-${LISMORE.url}`)).toBeNull();
+    });
+});
+
+describe('the card of a request the community no longer holds, and after a Cancel that worked (decided 29 Oct 2026, PR #2573)', () => {
+    const BYRON = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12, answers: 'week' as const };
+    const LISMORE = { key: 'lismore', name: 'Lismore BeanPool', url: 'https://lismore.example.org', memberCount: 30, distanceKm: 40 };
+    const cardOf = (url: string) => screen.getByTestId(`home-waiting-card-${url}`);
+    const stored = () => JSON.parse(localStorage.getItem('beanpool_knocks') ?? '{"knocks":[]}').knocks as Array<{ url: string; cancelledAt?: string }>;
+
+    async function askedOf(...comms: Array<typeof BYRON | typeof LISMORE>) {
+        for (const [i, c] of comms.entries()) await rememberKnock(ME.publicKey, c, new Date(Date.now() - (5 - i) * 3_600_000));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: comms }, true)));
+    }
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('the none card is three lines and Got it: when it was asked, that it is no longer open, that the member can ask again; no Cancel, no measured line', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'none' } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(within(cardOf(BYRON.url)).getByTestId(`home-waiting-arrived-${BYRON.url}`)).toHaveTextContent(NONE_LINE));
+
+        const card = cardOf(BYRON.url);
+        expect(within(card).getByTestId(`home-waiting-sent-${BYRON.url}`)).toHaveTextContent(/^You asked to join Byron Shire BeanPool on \d{1,2} \w{3} \d{4}\.$/);
+        expect(within(card).getByRole('button', { name: 'Got it' })).toBeInTheDocument();
+        expect(within(card).queryByRole('button', { name: 'Cancel my request' })).toBeNull();
+        expect(within(card).queryByTestId(`home-waiting-answers-${BYRON.url}`)).toBeNull();
+        expect(document.body.textContent).not.toContain('No answer came');
+    });
+
+    it('Got it forgets the knock (the store too), the card goes, and Find is a card like any other: its "…" is back', async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'none' } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(within(cardOf(BYRON.url)).getByTestId(`home-waiting-arrived-${BYRON.url}`)).toHaveTextContent(NONE_LINE));
+        // Pinned while a request is shown, even one nothing holds: no "…".
+        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+
+        fireEvent.click(screen.getByTestId(`home-gotit-knock-${BYRON.url}`));
+        await waitFor(() => expect(screen.queryByTestId(`home-waiting-card-${BYRON.url}`)).toBeNull());
+        expect(stored().map(k => k.url)).toEqual([LISMORE.url]);
+        // The other still shows, so the pin still holds.
+        expect(screen.getByTestId(`home-waiting-card-${LISMORE.url}`)).toBeInTheDocument();
+        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+
+        fireEvent.click(screen.getByTestId(`home-gotit-knock-${LISMORE.url}`));
+        await waitFor(() => expect(screen.queryByTestId(`home-waiting-card-${LISMORE.url}`)).toBeNull());
+        expect(stored()).toEqual([]);
+        // Nothing open, no watch: past day 30 the pin is gone, and the card can be moved or removed again.
+        await waitFor(() => expect(within(screen.getByTestId('home-card-find')).getByTestId('home-card-menu')).toBeInTheDocument());
+    });
+
+    it('a request that waits, or whose answer could not be read, has no Got it', async () => {
+        await askedOf(BYRON, LISMORE);
+        vi.spyOn(knockModule, 'readKnockStatus').mockImplementation(async (url) => (url === BYRON.url
+            ? { ok: true, value: { status: 'pending' } }
+            : { ok: false, kind: 'unreachable', message: "Couldn't reach this community. Check your connection and try again." }));
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(within(cardOf(LISMORE.url)).getByTestId(`home-waiting-arrived-${LISMORE.url}`)).toHaveTextContent("Couldn't reach this community"));
+        await waitFor(() => expect(within(cardOf(BYRON.url)).getByTestId(`home-waiting-arrived-${BYRON.url}`)).toHaveTextContent('Your request arrived.'));
+        expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+    });
+
+    it('a Cancel that worked keeps the card for this visit: no button, the cancelled line under the sent line in a polite live region, nothing stored but the cancel, the pin held', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: true });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(within(cardOf(BYRON.url)).getByTestId(`home-waiting-arrived-${BYRON.url}`)).toHaveTextContent('Your request arrived.'));
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        const line = await screen.findByTestId(`home-waiting-cancelled-${BYRON.url}`);
+        expect(line).toHaveTextContent(CANCELLED_LINE);
+        const status = within(cardOf(BYRON.url)).getByRole('status');
+        expect(status).toContainElement(line);
+        // Under the sent line, in place of the arrived line; no button, no measured line, no Got it.
+        const card = cardOf(BYRON.url);
+        expect(Array.from(card.children).map(c => c.getAttribute('data-testid') ?? c.getAttribute('role'))).toEqual([
+            `home-waiting-sent-${BYRON.url}`, 'status',
+        ]);
+        expect(screen.queryByTestId(`home-cancel-knock-${BYRON.url}`)).toBeNull();
+        expect(screen.queryByTestId(`home-waiting-arrived-${BYRON.url}`)).toBeNull();
+        expect(screen.queryByTestId(`home-waiting-answers-${BYRON.url}`)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Got it' })).toBeNull();
+        // The card (and the Find card holding it) stays where it was for this visit: still pinned.
+        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+        // This visit only: the card wrote nothing (the knock is still the one remembered; cancelKnock is mocked here).
+        expect(stored().map(k => k.url)).toEqual([BYRON.url]);
+    });
+
+    it('a Cancel that failed still shows the error and the button, and no cancelled line', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        vi.spyOn(knockModule, 'cancelKnock').mockResolvedValue({ ok: false, message: 'Node could not be reached' });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(within(cardOf(BYRON.url)).getByTestId(`home-waiting-arrived-${BYRON.url}`)).toHaveTextContent('Your request arrived.'));
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+
+        expect(await screen.findByTestId(`home-cancel-error-${BYRON.url}`)).toHaveTextContent('Node could not be reached');
+        expect(screen.getByTestId(`home-cancel-knock-${BYRON.url}`)).toBeInTheDocument();
+        expect(screen.queryByTestId(`home-waiting-cancelled-${BYRON.url}`)).toBeNull();
+    });
+});
+
+/**
+ * What a global node answers, built only for the cards asked (`cards=`), as the real one does; asked nothing, it builds the
+ * member's own list and Find only in their first 30 days (routes/home-answer.ts `cardsToBuild`), knowing nothing of the
+ * knocks a browser remembers.
+ */
+function answerFor(asked: readonly string[] | undefined, over: { joinedDaysAgo: number; listed: string[]; find: Partial<HomeFind> }): HomeAnswer {
+    const joinedAt = new Date(Date.now() - over.joinedDaysAgo * 86_400_000).toISOString();
+    const all: Record<string, unknown> = { find: { ...NONE_NEAR, ...over.find }, market: { items: [], total14d: 0, more: false } };
+    const built = asked ?? [...over.listed, ...(over.joinedDaysAgo < 30 ? ['find'] : [])];
+    const cards = Object.fromEntries(Object.entries(all).filter(([id]) => built.includes(id)));
+    return {
+        generatedAt: NOW, profile: 'global', welcome: false,
+        features: { beans: false, guestListingsOnly: true, invites: false },
+        me: { joinedAt, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: { v: 1, state: 'skipped', at: '2026-10-01T00:00:00.000Z' } },
+        layout: { v: 2, cards: over.listed.map(id => ({ id, type: id })), dismissed: {}, updatedAt: null },
+        cards,
+    } as unknown as HomeAnswer;
+}
+
+describe('Find your community stays on Home where the list does not hold it (Lounge L1, review of #2573)', () => {
+    const BYRON = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12, answers: 'week' as const };
+    const asks = () => vi.mocked(api.getHome).mock.calls.map(c => (c[0] as { cards?: string[] }).cards ?? []);
+    let joinedDaysAgo = 3;
+
+    beforeEach(() => {
+        joinedDaysAgo = 3;
+        vi.mocked(api.getHome).mockImplementation(async (params) => fresh(answerFor((params as { cards?: string[] }).cards, {
+            joinedDaysAgo, listed: ['market'], find: { communities: [BYRON] },
+        })));
+    });
+
+    it('a newcomer on day 3 with no wait: Find is drawn first, from a list that does not hold it, with no "…", as on main', async () => {
+        joinedDaysAgo = 3;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const find = await screen.findByTestId('home-card-find');
+        expect(within(find).queryByTestId('home-card-menu')).toBeNull();
+    });
+
+    it('past day 30 with no wait it is a card like any other: not asked for, not drawn', async () => {
+        joinedDaysAgo = 40;
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(api.getHome).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByTestId('home-card-market')).toBeInTheDocument());
+        expect(asks().flat()).not.toContain('find');
+        expect(screen.queryByTestId('home-card-find')).toBeNull();
+    });
+
+    it('past day 30 with an open knock, from a list without Find: it is asked for, and the waiting card is drawn', async () => {
+        joinedDaysAgo = 40;
+        await rememberKnock(ME.publicKey, BYRON, new Date(Date.now() - 5 * 3_600_000));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const card = await screen.findByTestId('home-waiting-card-https://byron.example.org');
+        expect(within(card).getByTestId('home-waiting-sent-https://byron.example.org')).toHaveTextContent('You asked to join Byron Shire BeanPool');
+        // The node was told to build it, and the card has no "…" while the request waits.
+        expect(asks().some(cards => cards.includes('find'))).toBe(true);
+        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+
+        readSpy.mockRestore();
     });
 });

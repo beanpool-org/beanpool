@@ -31,13 +31,15 @@ In the web app, **Withdraw Request** is **Cancel Offer** and **Approve & Commit*
 
 ## While the beans are held
 
-Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, only the person who did not post the listing sees **Message**, and the button to call it off is **Cancel Hold**.
+Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, the button to call it off is **Cancel Hold**.
 
 - Do the job, or hand over the thing.
 - The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at.
 - The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons.
 
 Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder.
+
+The price on the post cannot change while someone is asking for it or their beans are held. The deal keeps the price it was made at. To change the price, the person who posted it declines or cancels the deal first.
 
 ## What the post says while it is under way
 
@@ -46,7 +48,7 @@ The post itself shows your deal, so you never need to go looking for it. It says
 - **You took up someone's Offer:** **You took this up on 24 Oct · 45 Beans held in trust**, with **Release Credits** and the button to call it off.
 - **You are helping with someone's Need, and they said yes:** **You're helping with this · 20 Beans held for you** and **Pending Release by** their name. Do the job; they release the beans.
 - **You offered to help, and they have not answered:** **You offered to help · waiting on** their name, and the button to withdraw.
-- **You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Credits** and the button to call it off; where you are paid, it says **Pending Release by** their name.
+- **You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**, or **no Beans held** on a deal for nothing, such as a thing you lend for free. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Credits** and the button to call it off; where you are paid, it says **Pending Release by** their name. Each line has **Message** for the person in that deal, and **All your deals ›** sits under them.
 - **Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.
 - **You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again.
 
@@ -60,8 +62,6 @@ If you are a keeper of an enterprise, its posts show its deals to you as if you 
 - You can **Approve** or **Deny** the requests on its posts.
 - You cannot call off a deal for the enterprise. The other person in the deal can, as anyone can on their own deal.
 - You do not see **Accept Offer** on its posts.
-
-The price on the post cannot change while someone is asking for it or their beans are held. The deal keeps the price it was made at. To change the price, the person who posted it declines or cancels the deal first.
 
 ## A Repeatable post
 

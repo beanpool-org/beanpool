@@ -75,7 +75,7 @@ const entry = path.join(work, 'entry.tsx');
 fs.writeFileSync(entry, `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { View, ScrollView, Text, Pressable, StyleSheet } from 'react-native';
+import { View, ScrollView, Text, StyleSheet } from 'react-native';
 import { palette } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { onboardingColors } from ${JSON.stringify(path.join(NATIVE, 'utils/onboarding-colors'))};
 import { WaitingToJoin } from ${JSON.stringify(path.join(NATIVE, 'components/welcome/WaitingToJoin'))};
@@ -119,10 +119,7 @@ const Page = () => (
         <View style={s.homeMain}>
             <Text style={s.headerTitle}>Welcome to BeanPool</Text>
             <WaitingToJoin lines={waitingLines(asked, statuses)} checking={false} joining={null} onCheckAgain={noop} onJoin={noop} onGotIt={noop}
-                onAskAnother={noop} onJoinWithInvite={noop} styles={s} accent={colors.text.inverse} />
-            <Pressable style={s.restoreSecondaryBtn} accessibilityRole="button" accessibilityLabel="Already a Member? Restore Account">
-                <Text style={s.restoreSecondaryBtnText}>🔑 Already a Member? Restore Account →</Text>
-            </Pressable>
+                onAskAnother={noop} onJoinWithInvite={noop} onRestore={noop} styles={s} accent={colors.text.inverse} />
         </View>
     </ScrollView>
 );

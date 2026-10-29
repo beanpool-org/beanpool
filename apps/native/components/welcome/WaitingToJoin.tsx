@@ -12,6 +12,8 @@ export interface WaitingToJoinStyles {
     secondaryBtn: object;
     secondaryBtnText: object;
     doorLine: object;
+    restoreSecondaryBtn: object;
+    restoreSecondaryBtnText: object;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface WaitingToJoinStyles {
  *
  * Every line wraps at 320 dp with text at 1.3×; the buttons' words wrap too (never shrunk), and every button is 48 dp or more.
  */
-export function WaitingToJoin({ lines, checking, joining, onCheckAgain, onJoin, onGotIt, onAskAnother, onJoinWithInvite, styles, accent }: {
+export function WaitingToJoin({ lines, checking, joining, onCheckAgain, onJoin, onGotIt, onAskAnother, onJoinWithInvite, onRestore, styles, accent }: {
     lines: readonly WaitingLine[];
     checking: boolean;
     /** The community whose yes is being joined, if any: every other button waits. */
@@ -37,6 +39,8 @@ export function WaitingToJoin({ lines, checking, joining, onCheckAgain, onJoin, 
     onGotIt(line: WaitingLine): void;
     onAskAnother(): void;
     onJoinWithInvite(): void;
+    /** Already a Member? Restore Account: welcome's restore, which asks before it replaces this account. */
+    onRestore(): void;
     styles: WaitingToJoinStyles;
     accent: string;
 }) {
@@ -102,6 +106,16 @@ export function WaitingToJoin({ lines, checking, joining, onCheckAgain, onJoin, 
             </Pressable>
             <Pressable style={[styles.secondaryBtn, { minHeight: 48 }]} onPress={onJoinWithInvite} disabled={busy} accessibilityRole="button" testID="welcome-waiting-invite">
                 <Text style={styles.secondaryBtnText}>{t('🎟️ Join with an invite')}</Text>
+            </Pressable>
+            <Pressable
+                style={styles.restoreSecondaryBtn}
+                onPress={onRestore}
+                disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel={t('Already a Member? Restore Account')}
+                testID="welcome-waiting-restore"
+            >
+                <Text style={styles.restoreSecondaryBtnText}>{t('🔑 Already a Member? Restore Account →')}</Text>
             </Pressable>
         </View>
     );

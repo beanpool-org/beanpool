@@ -3898,8 +3898,8 @@ export default function WelcomeScreen() {
 
 
     // --- WAITING TO BE LET IN (slice S3) ---
-    // Home for an account that is a member nowhere yet (utils/waiting-to-join.ts): the title, the waiting mode in place of
-    // the doors, and Restore below, as on the first screen. An invite pasted or opened goes to the invite step as there.
+    // Home for an account that is a member nowhere yet (utils/waiting-to-join.ts): the title, then the waiting mode in place
+    // of the doors, with Restore below as on the first screen. An invite opened goes to the invite step as there.
     if (mode === 'home' && waitingToJoin && accountOnPhone) {
         return (
             <SafeAreaView style={styles.container}>
@@ -3913,22 +3913,14 @@ export default function WelcomeScreen() {
                             checking={waitChecking}
                             joining={waitJoining}
                             onCheckAgain={() => { void readWaitStatuses(waitKnocks, accountOnPhone); }}
-                            onJoin={(line) => startKnockJoin({ url: line.url, invite: line.invite ?? '', name: line.name })}
+                            onJoin={(line) => startKnockJoin({ url: line.url, invite: line.invite, name: line.name })}
                             onGotIt={(line) => { void forgetWaitLine(line); }}
                             onAskAnother={() => router.push('/find-community')}
-                            onJoinWithInvite={() => { setError(null); setMode('create'); }}
+                            onJoinWithInvite={() => { setError(null); setCallsign(c => c || accountOnPhone.callsign || ''); setMode('create'); }}
+                            onRestore={() => setMode('member')}
                             styles={styles}
                             accent={colors.text.inverse}
                         />
-                        <Pressable
-                            style={styles.restoreSecondaryBtn}
-                            onPress={() => setMode('member')}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Already a Member? Restore Account')}
-                            testID="welcome-waiting-restore"
-                        >
-                            <Text style={styles.restoreSecondaryBtnText}>{t('🔑 Already a Member? Restore Account →')}</Text>
-                        </Pressable>
                     </View>
                 </ScrollView>
             </SafeAreaView>

@@ -82,8 +82,10 @@ export function takeKnockYes(publicKey: string | null | undefined): KnockYes | n
  * `text` is in the member's language already; `note` is a sentence for findLineWords.
  */
 export type WaitingLine =
-    | { kind: 'waiting' | 'invited'; url: string; name: string; text: string; invite?: string }
-    | { kind: 'closed' | 'trouble'; url: string; name: string; note: string };
+    | { kind: 'waiting'; url: string; name: string; text: string }
+    | { kind: 'invited'; url: string; name: string; text: string; invite: string }
+    | { kind: 'closed'; url: string; name: string; note: string }
+    | { kind: 'trouble'; url: string; name: string; note: string };
 
 export function waitingLines(
     asked: readonly RememberedKnock[], statuses: Readonly<Record<string, KnockStatusResult | null | undefined>>,

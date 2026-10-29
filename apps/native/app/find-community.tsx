@@ -21,9 +21,7 @@ import {
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { knockAddressFrom, knockFromNode, knockScanTarget } from '../utils/knock-address';
-import { commitKnockKey, knockKeyForThisPhone } from '../utils/knock-key';
 import type { JoinKey } from '../utils/door-key';
-import { handKnockYesToWelcome } from '../utils/waiting-to-join';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
 import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult } from '@beanpool/core';
@@ -324,7 +322,8 @@ export default function FindCommunityScreen() {
     useEffect(() => {
         if (!openForm || identity) return;
         let alive = true;
-        knockKeyForThisPhone(heldKey).then(k => { if (alive) setHeldKey(k); }).catch(() => {});
+        // Loaded at the tap, as the key store is only needed here (utils/knock-key.ts).
+        import('../utils/knock-key').then(m => m.knockKeyForThisPhone(heldKey)).then(k => { if (alive) setHeldKey(k); }).catch(() => {});
         return () => { alive = false; };
     }, [openForm, !!identity]);
 
@@ -336,7 +335,11 @@ export default function FindCommunityScreen() {
         // knock goes out, and never taken off again on its own (utils/knock-key.ts).
         let signer: BeanPoolIdentity;
         try {
-            signer = identity ?? await commitKnockKey(await knockKeyForThisPhone(heldKey), callsign);
+            if (identity) signer = identity;
+            else {
+                const { commitKnockKey, knockKeyForThisPhone } = await import('../utils/knock-key');
+                signer = await commitKnockKey(await knockKeyForThisPhone(heldKey), callsign);
+            }
         } catch (e: any) {
             setFormError(e?.message ? welcomeLineWords(e.message) : t('Please try again.'));
             return;
@@ -377,7 +380,7 @@ export default function FindCommunityScreen() {
         if (!returnUrl) {
             // No community yet (waiting to be let in, slice S3): welcome joins it through the invite step, so the wizard
             // shows Your Photo and then the 12 words this key has never shown. Handed over in memory, never by a link.
-            handKnockYesToWelcome({ url, invite, name }, identity.publicKey);
+            (await import('../utils/waiting-to-join')).handKnockYesToWelcome({ url, invite, name }, identity.publicKey);
             router.replace('/welcome');
             return;
         }
@@ -611,8 +614,10 @@ export default function FindCommunityScreen() {
                     </>
                 )}
 
-                {!!pubkey && <Text style={styles.sectionLabel}>{point ? t('NEAREST FIRST') : t('COMMUNITIES')}</Text>}
-                {!!pubkey && typed && !townOpen && (
+                {/* Where "near" is: only for an account, whose list it places (S3: with none, the address and the code). */}
+                {!!pubkey && <>
+                <Text style={styles.sectionLabel}>{point ? t('NEAREST FIRST') : t('COMMUNITIES')}</Text>
+                {typed && !townOpen && (
                     <View style={styles.placeRow} testID="find-town-picked">
                         <Text style={styles.placeName} numberOfLines={2}>{nearWords(typed)}</Text>
                         <Pressable style={[styles.linkBtn, { marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" accessibilityLabel={t('Change the town')}>
@@ -620,7 +625,7 @@ export default function FindCommunityScreen() {
                         </Pressable>
                     </View>
                 )}
-                {!!pubkey && (!point || !!typed) && (
+                {(!point || !!typed) && (
                     <View style={styles.placeRow}>
                         <Pressable style={styles.pillBtn} onPress={locateMe} disabled={locating} accessibilityRole="button">
                             <MaterialCommunityIcons name="crosshairs-gps" size={20} color={colors.brand.primary} />
@@ -633,13 +638,13 @@ export default function FindCommunityScreen() {
                         )}
                     </View>
                 )}
-                {!!pubkey && !!point && !typed && !townOpen && (
+                {!!point && !typed && !townOpen && (
                     <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" testID="find-type-town-instead">
                         <Text style={styles.linkText}>{t(LINES.notHereTypeYourTown)}</Text>
                     </Pressable>
                 )}
                 {!!locationNote && <Text style={[styles.rowSub, { marginTop: 6 }]} accessibilityLiveRegion="polite">{findLineWords(locationNote)}</Text>}
-                {!!pubkey && townOpen && (
+                {townOpen && (
                     <View style={{ marginTop: 10 }}>
                         <AddressSearch onPick={r => void pickTown(r)} accent={colors.brand.primary} words={findTownSearchWords()} />
                         <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 4 }]} onPress={() => setTownOpen(false)} accessibilityRole="button"
@@ -648,6 +653,7 @@ export default function FindCommunityScreen() {
                         </Pressable>
                     </View>
                 )}
+                </>}
 
                 <Text style={[styles.label, { marginTop: 16 }]}>{pubkey ? t("Know the community's name, or its server address?") : t("The community's address")}</Text>
                 <View style={styles.searchBox}>

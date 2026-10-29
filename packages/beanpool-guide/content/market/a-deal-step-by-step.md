@@ -52,7 +52,7 @@ The post itself shows your deal, so you never need to go looking for it. It says
 - **Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.
 - **You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again.
 
-An alert about a deal, and a deal on Home or in the top bar, opens the post at that deal. On a Repeatable post you posted, that deal's line comes first. If that deal is over by then, the post opens as it is now, with one line on what became of it: **That request was declined.**, **That deal was cancelled.** or **That deal is done.** Whatever you can do on the post, such as take it up again, is there as usual. Once you have a new deal under way on it, that line goes.
+An alert about a deal, and a deal on Home or in the top bar, opens the post at that deal. On a Repeatable post you posted, that deal's line comes first. If that deal is over by then, the post opens as it is now, with one line on what became of it: **That request was declined.**, **That deal was cancelled.** or **That deal is done.** Whatever you can do on the post, such as take it up again, is there as usual. If you take it up again, that line goes as soon as your new deal is asked for or held.
 
 ## A post of an enterprise you keep
 

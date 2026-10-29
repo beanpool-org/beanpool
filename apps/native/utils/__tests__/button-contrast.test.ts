@@ -223,6 +223,43 @@ describe('what is fine stays quiet', () => {
         expect(themes(row('busyKey || ready', '!!busyKey'))).toEqual(['dark']);
     });
 
+    it('a `disabled` prop on an ancestor exempts a switch that first appears on a child: the label, or an inner View', () => {
+        // grey (border.default) under white: 1.20:1 in light. The control is disabled exactly while `saving`.
+        const nested = (disabled: string) => scan(
+            `<Pressable disabled={${disabled}} style={{ backgroundColor: colors.brand.fill }}><View style={saving && { backgroundColor: colors.border.default }}><Text style={{ color: colors.text.inverse }}>x</Text></View></Pressable>`,
+        );
+        expect(nested('saving').findings).toEqual([]);
+        expect(nested('!!saving').findings).toEqual([]);
+        // the same fixture under a flag that is not the one the control is disabled by is still a fault
+        expect(themes(nested('other'))).toEqual(['light']);
+        expect(themes(nested('!saving'))).toEqual(['light']);
+        // the switch on the label itself, and two levels down
+        const label = (disabled: string) => scan(
+            `<Pressable disabled={${disabled}} style={{ backgroundColor: colors.brand.fill }}><View><Text style={[{ color: colors.text.onBrand }, saving && { color: colors.text.inverse, backgroundColor: colors.border.default }]}>x</Text></View></Pressable>`,
+        );
+        expect(label('saving').findings).toEqual([]);
+        expect(themes(label('other'))).toEqual(['light']);
+        // a component taking its label's style: the disabled prop is on that component
+        const prop = (disabled: string) => scan(
+            `<Button disabled={${disabled}} style={{ backgroundColor: colors.brand.fill }} textStyle={[{ color: colors.text.onBrand }, saving && { color: colors.text.inverse, backgroundColor: colors.border.default }]} />`,
+        );
+        expect(prop('saving').findings).toEqual([]);
+    });
+
+    it('a control held disabled is counted, not passed silently: by its prop, by a name, or by an ancestor\'s prop', () => {
+        const held = (jsx: string) => scan(jsx).stats;
+        const grey = `style={[{ backgroundColor: colors.brand.fill }, saving && { backgroundColor: colors.border.default }]}`;
+        // the grey look while `saving` is one label evaluation per theme, counted and not measured; the normal look is measured
+        expect(held(`<Pressable disabled={saving} ${grey}><Text style={{ color: colors.text.inverse }}>x</Text></Pressable>`)).toMatchObject({ inactive: 2, checked: { light: 1, dark: 1 } });
+        const named = held(`<Pressable ${grey.replace('saving', 'isDisabled')}><Text style={{ color: colors.text.inverse }}>x</Text></Pressable>`);
+        expect(named.inactive).toBeGreaterThan(0);
+        const ancestor = held(`<Pressable disabled={saving} style={{ backgroundColor: colors.brand.fill }}><View style={saving && { backgroundColor: colors.border.default }}><Text style={{ color: colors.text.inverse }}>x</Text></View></Pressable>`);
+        expect(ancestor.inactive).toBe(2);
+        // a control that is not disabled has none counted, and its pair is measured
+        expect(held(`<Pressable disabled={other} ${grey}><Text style={{ color: colors.text.inverse }}>x</Text></Pressable>`).inactive).toBe(0);
+        expect(formatReport(scan(`<Pressable disabled={saving} ${grey}><Text style={{ color: colors.text.inverse }}>x</Text></Pressable>`))).toMatch(/2 sit on a control held disabled \(not measured\)/);
+    });
+
     it('JSX drawn only `on && <Text/>` is measured on the fill that setting gives, not on the other one', () => {
         const fill = (render: string) => scan(`<View style={[{ backgroundColor: colors.surface.card }, on && { backgroundColor: colors.accent.fill }]}>{${render}}</View>`);
         // the tick sits on the sage fill it is drawn over...

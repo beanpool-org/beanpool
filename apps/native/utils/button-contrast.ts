@@ -18,9 +18,10 @@
  *   - `theme === 'dark'`, `dark`, `isDark` and their negations are folded for the theme being measured.
  *   - any other condition is a switch: the background and the words are measured under the SAME setting of it, so
  *     `active && bg` beside `active && ink` is never crossed with `!active`. A pair that exists only while the control is
- *     `disabled` is not measured (WCAG exempts inactive controls): the element's own `disabled` prop, a switch named for
- *     it (`isDisabled`, `saveDisabled`), or a local alias of the prop's switch (`isCreating = creating === id` under
- *     `disabled={!!creating}`).
+ *     `disabled` is not measured (WCAG exempts inactive controls): a `disabled` prop on the words' element or any element
+ *     above it (the switch may first appear on a child), a switch named for it (`isDisabled`, `saveDisabled`), or a local
+ *     alias of the prop's switch (`isCreating = creating === id` under `disabled={!!creating}`). Those are counted
+ *     (`stats.inactive`), not dropped silently, so an over-wide name or alias shows up as a number.
  *
  * What it does NOT judge (counted in the report, never silently passed as clean): words or backgrounds it cannot resolve
  * (`tone.fg`, `rgbaOf(...)`, a prop), words with no background set above them on the same screen (text-ink-contrast covers
@@ -559,10 +560,21 @@ interface Chain {
     cond: Cond;
     paints: Paint[];
     poison?: string;
-    /** Under a `disabled` setting of its control. */
-    inactive?: boolean;
+    /** The `disabled` props on the way down (an ancestor's, then the element's own), each with the element it sits on. */
+    disabled: Array<{ cases: Case[]; node: ts.Node }>;
     /** The switches a style chose a colour by on the way down (the render guards in `cond` are left out of a report). */
     styled: string[];
+}
+
+/**
+ * Is the control held inactive under the settings `cond` assumes? True when a `disabled` prop on the way down (the words' own
+ * element, or any ancestor's: the switch may first appear on a child) comes out true under them. A switch set under the test
+ * may be a local alias of it (`isCreating = creating === id` under `disabled={!!creating}`).
+ */
+function heldInactive(disabled: Chain['disabled'], cond: Cond, sf: ts.SourceFile): boolean {
+    return disabled.some(({ cases, node }) => cases.some((dc) => dc.value && [...dc.cond].every(
+        ([k, v]) => cond.get(k) === v || (v && [...cond].some(([ck, cv]) => cv && aliasImplies(ck, k, node, sf))),
+    )));
 }
 
 export interface Finding {
@@ -586,6 +598,8 @@ export interface Stats {
     checked: Record<Theme, number>;
     /** Words with a colour that had no background set above them on the same screen. */
     noGround: number;
+    /** Pairs that would have been measured but sit on a control held disabled (WCAG exempts it), both themes added. */
+    inactive: number;
     /** Why a pair could not be measured -> how many. */
     skipped: Map<string, number>;
     /** Style expressions the scanner could not read (props, calls): they add nothing, as if layout only. */
@@ -685,7 +699,6 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
         const skip = (why: string) => stats.skipped.set(why, (stats.skipped.get(why) ?? 0) + 1);
 
         const check = (el: ts.Node, words: Colour, props: Props, chain: Chain, cond: Cond, content: Content, extraKeys: string[] = []) => {
-            if (chain.inactive) return; // a control held disabled is exempt from the bar
             if (chain.poison !== undefined) return skip(`background unresolved: ${chain.poison}`);
             if (chain.paints.length === 0) { if (theme === 'light') stats.noGround++; return; }
             if (isUnresolved(words)) return skip(`words unresolved: ${words.unresolved}`);
@@ -694,9 +707,11 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
             if (/^(colors|c)\.border\./.test(words.expr)) return skip('decorative glyph in a border colour');
             if (content === 'emoji') return skip('emoji, drawn in its own colours');
             if (content === 'chevron') return skip('decorative chevron');
-            for (const [k, v] of cond) if (v && isDisabledName(k)) return; // inactive controls are exempt
             const bg = chain.paints[chain.paints.length - 1];
             if (bg.rgba.a === 0) return;
+            // A control held disabled (its own `disabled` prop or an ancestor's, or a switch named for it) is exempt from the bar.
+            // Counted, so an over-wide name or alias shows up as a number in the report instead of passing silently.
+            if (heldInactive(chain.disabled, cond, sf) || [...cond].some(([k, v]) => v && isDisabledName(k))) { stats.inactive++; return; }
             stats.checked[theme]++;
             const { ratio, ground, inkHex } = groundRatios(chain.paints, words.rgba, theme);
             // A symbol on its own (a star, a tick, a cross) is a graphical object, held to WCAG 1.4.11's 3:1, not to the text bar.
@@ -716,7 +731,7 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
             });
         };
 
-        const fresh = (): Chain[] => [{ cond: new Map<string, boolean>(), paints: [], styled: [] }];
+        const fresh = (): Chain[] => [{ cond: new Map<string, boolean>(), paints: [], disabled: [], styled: [] }];
         const visit = (node: ts.Node, chains: Chain[]): void => {
             if (!ts.isJsxElement(node) && !ts.isJsxSelfClosingElement(node)) {
                 // `on && <Text/>` and `a ? <X/> : <Y/>` draw their JSX only under that setting of the switch: the words
@@ -769,17 +784,14 @@ function scanFile(file: string, text: string, stats: Stats, found: Map<string, F
                 for (const alt of own) {
                     const cond = mergeCond(chain.cond, alt.cond);
                     if (!cond) continue;
-                    // A switch set under the control's `disabled` test may be a local alias of it (`isCreating = creating === id`).
-                    const held = (k: string) => [...cond].some(([ck, cv]) => cv && aliasImplies(ck, k, node, sf));
-                    const inactive = chain.inactive
-                        || !!disabledCases?.some((dc) => dc.value && [...dc.cond].every(([k, v]) => cond.get(k) === v || (v && held(k))));
+                    const disabled = disabledCases ? [...chain.disabled, { cases: disabledCases, node }] : chain.disabled;
                     const styled = [...chain.styled, ...alt.cond.keys()];
-                    let c: Chain = { cond, paints: chain.paints, poison: chain.poison, inactive, styled };
+                    let c: Chain = { cond, paints: chain.paints, poison: chain.poison, disabled, styled };
                     const bg = alt.props.bg;
-                    if (bg && isUnresolved(bg)) c = { cond, paints: c.paints, poison: bg.unresolved, inactive, styled };
+                    if (bg && isUnresolved(bg)) c = { cond, paints: c.paints, poison: bg.unresolved, disabled, styled };
                     else if (bg && bg.rgba.a > 0) {
                         // An opaque fill hides what is above it: only its own switches chose the ground the words sit on.
-                        c = bg.rgba.a >= 0.995 ? { cond, paints: [bg], inactive, styled: [...alt.cond.keys()] } : { cond, paints: [...c.paints, bg], poison: c.poison, inactive, styled };
+                        c = bg.rgba.a >= 0.995 ? { cond, paints: [bg], disabled, styled: [...alt.cond.keys()] } : { cond, paints: [...c.paints, bg], poison: c.poison, disabled, styled };
                     }
                     if (TEXTS.has(tag) && alt.props.color) check(opening, alt.props.color, alt.props, c, cond, contentOf(node));
                     next.push(c);
@@ -862,7 +874,7 @@ function report(found: Map<string, Finding>, stats: Stats, exceptions: readonly 
 }
 
 const newStats = (): Stats => ({
-    files: 0, checked: { light: 0, dark: 0 }, noGround: 0, skipped: new Map(), opaqueStyles: 0, opaqueByFile: new Map(), unreadTables: new Map(),
+    files: 0, checked: { light: 0, dark: 0 }, noGround: 0, inactive: 0, skipped: new Map(), opaqueStyles: 0, opaqueByFile: new Map(), unreadTables: new Map(),
 });
 
 /** Scan one source text (the canaries in utils/__tests__/button-contrast.test.ts use this). `file` is only a label. */
@@ -891,7 +903,7 @@ export function formatReport(r: ContrastReport): string {
     const checked = r.stats.checked.light + r.stats.checked.dark;
     lines.push(`${checked} button/label pairs measured (${r.stats.checked.light} light, ${r.stats.checked.dark} dark) in ${r.stats.files} files; ` +
         `${r.stats.noGround} words had no background set above them; ${[...r.stats.skipped.values()].reduce((a, b) => a + b, 0)} could not be resolved; ` +
-        `${r.excused.length} excused.`);
+        `${r.stats.inactive} sit on a control held disabled (not measured); ${r.excused.length} excused.`);
     // How much was NOT read: a style the scanner cannot follow adds nothing, so a screen that moves into such a shape looks clean.
     lines.push(`${r.stats.opaqueStyles} style expressions in ${r.stats.opaqueByFile.size} files could not be read and add nothing; ` +
         `${r.stats.unreadTables.size} files use a style table the scanner could not find.`);

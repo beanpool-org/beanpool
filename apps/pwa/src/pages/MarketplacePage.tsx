@@ -295,6 +295,8 @@ const NEAR_WAIT_MS = 1500;
  * language as the button's screen-reader name (saveSearchLabel), and a voice-control member can say what they see.
  */
 const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
+/** A deal still open: held in trust, or asked for and not yet answered. */
+const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
 export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
@@ -891,7 +893,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // A keeper reading their enterprise's listing: its deals, which are the enterprise's and not in the member's own
     // (the node lets its keepers read them, routes/marketplace.ts GET /api/marketplace/transactions). Asked only then, and
-    // again after a step taken here (keptDealsRead), as the phone's app/post/[id].tsx does.
+    // again after a step taken here (keptDealsRead), as the phone's app/post/[id].tsx does. Its open deals only, held and
+    // asked, each read by itself: the node's page is the 50 newest, and a held deal behind 50 newer ones (a shop's brisk
+    // sales) would have no row and no Release.
     const [keptDeals, setKeptDeals] = useState<MarketplaceTransaction[]>([]);
     const [keptDealsRead, setKeptDealsRead] = useState(0);
     const keptAuthor = selectedPost && identity && selectedPost.authorPublicKey !== identity.publicKey
@@ -900,8 +904,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         if (!keptAuthor) { setKeptDeals([]); return; }
         let live = true;
         readsOwn('escrow')
-            .then((reads) => (reads ? getMyMarketplaceTransactions(keptAuthor) : []))
-            .then((txs) => { if (live) setKeptDeals(txs); })
+            .then((reads) => (reads ? Promise.all(OPEN_DEAL_STATUSES.map(status => getMyMarketplaceTransactions(keptAuthor, status))) : []))
+            .then((reads) => { if (live) setKeptDeals(reads.flat()); })
             .catch(() => { if (live) setKeptDeals([]); });
         return () => { live = false; };
     }, [keptAuthor, keptDealsRead]);

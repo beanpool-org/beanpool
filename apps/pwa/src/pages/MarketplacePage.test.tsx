@@ -1091,8 +1091,12 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
         vi.spyOn(api, 'getBalance').mockImplementation(async () => ({ balance: 100, isBlockedFromTrading: false, keeperOf }) as any);
         vi.spyOn(api, 'getMemberRatings').mockResolvedValue({ ratings: [], average: 0, count: 0 } as any);
-        vi.spyOn(api, 'getMyMarketplaceTransactions').mockImplementation(async (pk: string) => (pk === ENT ? entDeals : []));
+        // As the node answers (GET /api/marketplace/transactions): of one status when asked, its 50 newest.
+        vi.spyOn(api, 'getMyMarketplaceTransactions').mockImplementation(async (pk: string, status?: string) => (pk === ENT
+            ? entDeals.filter(d => !status || d.status === status).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 50)
+            : []));
     });
+    const entReads = () => vi.mocked(api.getMyMarketplaceTransactions).mock.calls.filter(c => c[0] === ENT);
 
     async function open(post: any, txs: api.MarketplaceTransaction[], extra: Record<string, unknown> = {}) {
         feed = [post];
@@ -1286,7 +1290,8 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         const ownDoor = vi.spyOn(api, 'completeMarketplaceTransaction');
         await open(farmNeed, []);
         const row = await screen.findByTestId('deal-row-tx-f');
-        expect(api.getMyMarketplaceTransactions).toHaveBeenCalledWith(ENT);
+        // Its open deals only, each status read by itself.
+        expect(entReads().map(c => c[1]).sort()).toEqual(['pending', 'requested']);
         expect(screen.getByText('You act for Farm Co-op here.')).toBeInTheDocument();
         expect(within(row).getByText('Mo · 20 Beans held · since 24 Oct')).toBeInTheDocument();
         // The node has no door for a keeper to cancel the enterprise's hold: none shown (Mo cancels as himself).
@@ -1298,6 +1303,16 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
         await waitFor(() => expect(done).toHaveBeenCalledWith(ENT, 'tx-f', undefined));
         expect(ownDoor).not.toHaveBeenCalled();
+    });
+
+    it("a keeper sees the enterprise's held deal behind 50 newer finished ones, with its Release", async () => {
+        keeperOf = [ENT];
+        const sold = Array.from({ length: 50 }, (_, i) => deal({ id: `tx-sold-${i}`, postId: 'other', status: 'completed', credits: 6,
+            buyerPublicKey: `buyer-${i}`, sellerPublicKey: ENT, createdAt: new Date(Date.parse('2026-10-27T00:00:00.000Z') + i * 60_000).toISOString() }));
+        entDeals = [...sold, deal({ id: 'tx-old', credits: 20, buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-pk', sellerCallsign: 'Mo' })];
+        await open(farmNeed, []);
+        const row = await screen.findByTestId('deal-row-tx-old');
+        expect(within(row).getByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
     });
 
     it("a keeper paid by the enterprise's own Need: their pay is another keeper's to release; they cancel as themselves", async () => {
@@ -1343,7 +1358,7 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
             await open(farmNeed, []);
             expect(screen.queryByTestId('deals-under-way')).not.toBeInTheDocument();
             expect(await screen.findByRole('button', { name: /Offer to Fulfill/ })).toBeInTheDocument();
-            expect(api.getMyMarketplaceTransactions).not.toHaveBeenCalledWith(ENT);
+            expect(entReads()).toEqual([]);
         });
     }
 

@@ -31,6 +31,7 @@ describe('a long message folds with …more', () => {
         fireEvent.click(more);
         expect(text().dataset.fold).toBe('open');
         const less = screen.getByRole('button', { name: 'less' });
+        expect(less).toHaveAccessibleDescription('Show less');
         expect(less.textContent).toBe('less');
         expect(less.getAttribute('aria-expanded')).toBe('true');
         // The whole message is in the page whether it is folded or open: copy, find-in-page and a screen reader reach all of it.

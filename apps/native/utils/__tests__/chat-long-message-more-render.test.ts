@@ -37,10 +37,11 @@ vi.mock('react-native', () => {
         });
         return createElement('span', { ref, onClick: onPress, 'data-lines': numberOfLines, ...rest }, children);
     }
-    const host = (tag: string) => function MockHost({ children, onPress, accessibilityLabel, accessibilityRole, accessibilityState, disabled, style: _style, ...rest }: any) {
+    const host = (tag: string) => function MockHost({ children, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, accessibilityState, disabled, style: _style, ...rest }: any) {
         return createElement(tag, {
             onClick: disabled ? undefined : onPress,
             'aria-label': accessibilityLabel,
+            'aria-description': accessibilityHint,
             'aria-expanded': accessibilityState?.expanded,
             role: accessibilityRole === 'button' ? 'button' : undefined,
             ...rest,
@@ -93,12 +94,15 @@ describe.each([['dm' as ChatKind], ['group' as ChatKind]])('a long message folds
         const more = screen.getByRole('button', { name: '…more' });
         expect(more.textContent).toBe('…more');
         expect(more.getAttribute('aria-expanded')).toBe('false');
+        // Named by the word it shows (WCAG 2.5.3); the longer phrase is its hint, and it follows the state.
+        expect(more.getAttribute('aria-description')).toBe('Show the whole message');
         expect(words(container, 'Line 1 of').getAttribute('data-lines')).toBe('12');
 
         fireEvent.click(more);
         const less = screen.getByRole('button', { name: 'less' });
         expect(less.textContent).toBe('less');
         expect(less.getAttribute('aria-expanded')).toBe('true');
+        expect(less.getAttribute('aria-description')).toBe('Show less');
         expect(words(container, 'Line 1 of').getAttribute('data-lines')).toBeNull();
         // The whole message is in the tree, folded or not: a screen reader reaches all of it.
         expect(container.textContent).toContain('Line 40 of a long note');

@@ -298,6 +298,16 @@ for (const theme of ['light', 'dark'] as const) {
             expect(host.textContent).toContain('How was your experience with Helper?');
         });
 
+        it("a daily Need's author releasing from their row is asked for DAYS, with what changing them does, as the panel asks", async () => {
+            node.mine = [deal({ id: 'tx-d', credits: 60, hours: 3, buyerPublicKey: ME.publicKey, buyerCallsign: ME.callsign, sellerPublicKey: 'helper-key', sellerCallsign: 'Helper' })];
+            await open(listing({ type: 'need', title: 'Pick the olives', author_pubkey: ME.publicKey, author_callsign: ME.callsign, credits: 20, price_type: 'daily' }));
+            const r = row('tx-d')!;
+            await press(r, '✅ Release Credits');
+            expect(r.textContent).toContain('CONFIRM ACTUAL DAYS WORKED');
+            expect(r.textContent).toContain('Adjust the final time up or down if the scope changed.');
+            expect((r.querySelector('input[aria-label="Actual time worked"]') as HTMLInputElement).value).toBe('3');
+        });
+
         it("a keeper denies a request on the enterprise's Need at its door: it leaves the page at once", async () => {
             node.keeperOf = [ENT];
             node.kept = [deal({ id: 'tx-q', status: 'requested', buyerPublicKey: ENT, buyerCallsign: 'Farm Co-op', sellerPublicKey: 'mo-key', sellerCallsign: 'Mo', credits: 20 })];

@@ -164,6 +164,15 @@ function priceUnitWords(priceType: string | null | undefined): string {
     return '';
 }
 
+/** The label over the time a payer confirms at Release, for a deal priced by the hour, day, week or month. */
+function confirmWorkedLabel(priceType: string | null | undefined): string {
+    if (priceType === 'hourly') return t('CONFIRM ACTUAL HOURS WORKED');
+    if (priceType === 'daily') return t('CONFIRM ACTUAL DAYS WORKED');
+    if (priceType === 'weekly') return t('CONFIRM ACTUAL WEEKS WORKED');
+    if (priceType === 'monthly') return t('CONFIRM ACTUAL MONTHS WORKED');
+    return t('CONFIRM ACTUAL UNITS WORKED');
+}
+
 /** "(4.5) • 3 Reviews": a member's average and how many reviews, in the member's language. */
 const reviewsLine = (average: number, count: number) => tn(count, '({average}) • {n} Reviews', '({average}) • {n} Reviews', { average: formatNumber(average, 1) });
 
@@ -935,6 +944,17 @@ export default function PostDetailModal() {
             Alert.alert(t('Error'), e.message ? signedRequestWords(e.message) : t('Failed to start chat.'));
         }
     };
+    // The time a payer confirms at Release, in the listing's unit and with what changing it does: the panel's and each
+    // row's, one field (a bare number left a daily rate's payer guessing whether "8" was hours or days).
+    const renderWorkedField = () => (
+        <View style={{ marginBottom: 16 }}>
+            <Text style={styles.confirmBoxLabel}>{confirmWorkedLabel(post.price_type)}</Text>
+            <TextInput accessibilityLabel={t('Actual time worked')} style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder={t('e.g. {amount}', { amount: 2.5 })} placeholderTextColor={colors.text.muted} />
+            <Text style={{ color: colors.text.secondary, fontSize: 12, textAlign: 'center', marginTop: 4, paddingHorizontal: 12 }}>
+                {t('Adjust the final time up or down if the scope changed. The final credits released will be calculated automatically.')}
+            </Text>
+        </View>
+    );
     const renderOwnDeal = (m: DealMoves) => {
         const tx = m.tx;
         const payer = tx.buyerPublicKey === m.actingAs;
@@ -955,9 +975,7 @@ export default function PostDetailModal() {
                 )}
                 {m.release && (confirming ? (
                     <View style={styles.confirmBox}>
-                        {post.price_type !== 'fixed' && (
-                            <TextInput accessibilityLabel={t('Actual time worked')} style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder={t('e.g. {amount}', { amount: 2.5 })} placeholderTextColor={colors.text.muted} />
-                        )}
+                        {post.price_type !== 'fixed' && renderWorkedField()}
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                             <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => { setShowCompleteConfirm(false); setReleaseRowId(null); }} disabled={accepting}>
                                 <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>
@@ -1390,21 +1408,7 @@ export default function PostDetailModal() {
                                 {showCompleteConfirm ? (
                                     <View style={styles.confirmBox}>
                                         <Text style={styles.confirmBoxTitle}>{t('Finalize Transaction')}</Text>
-                                        {post.price_type !== 'fixed' && (
-                                            <View style={{ marginBottom: 16 }}>
-                                                <Text style={styles.confirmBoxLabel}>{
-                                                    post.price_type === 'hourly' ? t('CONFIRM ACTUAL HOURS WORKED')
-                                                        : post.price_type === 'daily' ? t('CONFIRM ACTUAL DAYS WORKED')
-                                                        : post.price_type === 'weekly' ? t('CONFIRM ACTUAL WEEKS WORKED')
-                                                        : post.price_type === 'monthly' ? t('CONFIRM ACTUAL MONTHS WORKED')
-                                                        : t('CONFIRM ACTUAL UNITS WORKED')
-                                                }</Text>
-                                                <TextInput accessibilityLabel={t('Actual time worked')} style={styles.confirmBoxInput} value={completeHours} onChangeText={setCompleteHours} keyboardType="numeric" placeholder={t('e.g. {amount}', { amount: 2.5 })} placeholderTextColor={colors.text.muted} />
-                                                <Text style={{ color: colors.text.secondary, fontSize: 12, textAlign: 'center', marginTop: 4, paddingHorizontal: 12 }}>
-                                                    {t('Adjust the final time up or down if the scope changed. The final credits released will be calculated automatically.')}
-                                                </Text>
-                                            </View>
-                                        )}
+                                        {post.price_type !== 'fixed' && renderWorkedField()}
                                         <View style={{ flexDirection: 'row', gap: 10 }}>
                                             <Pressable accessibilityRole="button" style={styles.cancelActionBtn} onPress={() => setShowCompleteConfirm(false)} disabled={accepting}>
                                                 <Text style={styles.cancelActionBtnText} numberOfLines={1}>{t('Cancel')}</Text>

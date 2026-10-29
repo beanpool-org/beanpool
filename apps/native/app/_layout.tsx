@@ -24,6 +24,7 @@ import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
 import { forgetKnockKey } from '../utils/knock-key';
+import { inviteLinkToWelcome } from '../utils/waiting-to-join';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
@@ -458,7 +459,9 @@ function RootLayoutNav() {
             // Half-finished join wizard: the identity exists on-device but was
             // never registered with any node, so a fresh invite should flow into
             // the wizard like a new user's — not the member node-switch dialogs.
-            if (await getPendingOnboarding()) {
+            // So does a phone in no community (waiting to be let in, slice S3, or a wipe that kept the key): the invite step
+            // joins with its key and the wizard shows the 12 words a knock's key has never shown (utils/waiting-to-join.ts).
+            if (inviteLinkToWelcome({ record: await getPendingOnboarding(), anchorUrl: current })) {
                 routeToWelcomeWithInvite();
                 return;
             }

@@ -541,6 +541,12 @@ export default function WelcomeScreen() {
         void handleCreate();
     }, [knockJoin, mode, inviteCode, createAnchorUrl]);
 
+    // The invite step on a phone that holds an account, however the invite came (a link the root layout handed over to a
+    // phone in no community, a scan, a paste): the name box starts with the account's name, as Join with an invite fills it.
+    useEffect(() => {
+        if (mode === 'create' && accountOnPhone?.callsign) setCallsign(c => c || accountOnPhone.callsign);
+    }, [mode, accountOnPhone?.callsign]);
+
     /** Got it, on a request its community no longer holds: the phone forgets it, as the L1 card does. */
     const forgetWaitLine = async (line: WaitingLine) => {
         if (!accountOnPhone) return;

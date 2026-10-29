@@ -15,6 +15,9 @@
  *      that hasn't taken it).
  *   4. Join with an invite opens the invite step; Ask another community opens Find a community.
  *   5. Restore over the waiting key: Recover with 12 Words still asks "Replace this phone's account?" first.
+ *   6. An invite link on a waiting phone, which the root layout hands here (app/_layout.tsx, waiting-to-join.ts
+ *      inviteLinkToWelcome): the invite step with the link's invite, its community and the account's name; Next joins with
+ *      this key and the wizard goes on at Your Photo with the words new; a refused redeem leaves no community.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -549,5 +552,43 @@ describe('5. Restore over the waiting key', () => {
         await type('Community name or address (e.g. mullum)', 'riverside.example.org');
         await press('Recover Identity');
         expect(host!.textContent).toContain("⚠️ Replace this phone's account?");
+    });
+});
+
+describe('6. an invite link on a waiting phone, handed here by the root layout', () => {
+    const field = (label: string) => all('input').find((i) => i.getAttribute('aria-label') === label) as HTMLInputElement | undefined;
+
+    it('the invite step, filled; Next joins with this key and lands on Your Photo; the words are new; the mark and the request go', async () => {
+        params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+        await mount();
+        expect(byId('welcome-waiting')).toBeNull();
+        expect(field('Invite link or code')?.value).toBe('INV-ABCD-EFGH');
+        expect(field('Community name or node address')?.value).toBe(RIVERSIDE);
+        // The account's name, as Join with an invite fills it.
+        expect(field('Your name or nickname')?.value).toBe('River Kid');
+        await press('Next');
+        expect(host!.textContent).toContain('Your Photo');
+        expect(store.map.get('beanpool_anchor_url')).toBe(RIVERSIDE);
+        expect(phone.records.at(-1)).toMatchObject({ step: 'profileSetup', inviteCode: 'INV-ABCD-EFGH', anchorUrl: RIVERSIDE, callsign: 'River Kid', redeemed: true, newKey: KNOCKER.publicKey });
+        expect(knocking.mark).toBeNull();
+        expect(knocking.forgotten).toContain(RIVERSIDE);
+    });
+
+    it('a refused redeem: the invite step says so, and the phone is back with no community, its words still to be shown', async () => {
+        params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+        phone.redeemFails = 'This invite has expired.';
+        await mount();
+        await press('Next');
+        expect(host!.textContent).toContain('This invite has expired.');
+        expect(store.map.has('beanpool_anchor_url')).toBe(false);
+        expect(phone.records.some((r) => r.step === 'profileSetup')).toBe(false);
+        expect(knocking.mark).toBe(KNOCKER.publicKey);
+    });
+
+    it('a name already typed is kept', async () => {
+        params.now = { invite: 'INV-ABCD-EFGH', server: RIVERSIDE, t: '1' };
+        await mount();
+        await type('Your name or nickname', 'Riverside Kid');
+        expect(field('Your name or nickname')?.value).toBe('Riverside Kid');
     });
 });

@@ -9,6 +9,7 @@
  *   - which community: a typed address, an app link or a scanned code, never a word, http, a home number or global;
  *   - the waiting state: an account, no community, no wizard; its lines; the yes handed from Find to welcome in memory;
  *   - the root guard: Find a community with no account, and a waiting phone held on welcome, never the tabs, never asked;
+ *     an invite link on a waiting phone goes to welcome's invite step (the wizard, so the 12 words), never "Switch Nodes?";
  *   - Restore over a waiting key still asks first, and replacing it takes the knock's mark and requests with it.
  *
  * Nothing here contacts a node: fetch is a stub that plays the one community, and anything else fails the test.
@@ -46,7 +47,7 @@ import * as SecureStore from 'expo-secure-store';
 import { commitKnockKey, forgetKnockKey, knockKeyForThisPhone, knockKeyIsNew, KNOCK_KEY_DIFFERS, type CommitDeps } from '../knock-key';
 import { knockAddressFrom, knockFromNode, knockScanTarget } from '../knock-address';
 import { knockBody, sendKnock, rememberKnock, rememberedKnocks, KNOCK_FROM_NODE, KNOCK_MESSAGES, type KnockStatusResult } from '../knock';
-import { handKnockYesToWelcome, phoneIsWaiting, takeKnockYes, waitingLines } from '../waiting-to-join';
+import { handKnockYesToWelcome, inviteLinkToWelcome, phoneIsWaiting, takeKnockYes, waitingLines } from '../waiting-to-join';
 import { setupRedirect } from '../auth-return';
 import { draftIdentity, importIdentity, loadIdentity } from '../identity';
 import { restoreFromWords } from '../restore-account';
@@ -244,6 +245,20 @@ describe('waiting to be let in (utils/waiting-to-join.ts)', () => {
         expect(waitingLines([], {})).toEqual([]);
     });
 
+    it('an invite link goes to the invite step for a phone in no community or with a wizard part-way; "Switch Nodes?" only with a community', () => {
+        const wizard = { step: 'profileSetup' as const, inviteCode: 'INV-ABCD-EFGH', anchorUrl: RIVERSIDE, callsign: 'Kid', redeemed: true };
+        // Waiting to be let in (a knock's key, or a wipe that kept the key): the invite step, so the wizard runs.
+        expect(inviteLinkToWelcome({ record: null, anchorUrl: null })).toBe(true);
+        expect(inviteLinkToWelcome({ record: null, anchorUrl: '' })).toBe(true);
+        expect(inviteLinkToWelcome({ record: null, anchorUrl: '  ' })).toBe(true);
+        // A wizard part-way, with a community or not: the invite step, as before.
+        expect(inviteLinkToWelcome({ record: wizard, anchorUrl: RIVERSIDE })).toBe(true);
+        expect(inviteLinkToWelcome({ record: wizard, anchorUrl: null })).toBe(true);
+        // A member, with a community in use: the member's own path ("Switch Nodes?"), as before.
+        expect(inviteLinkToWelcome({ record: null, anchorUrl: RIVERSIDE })).toBe(false);
+        expect(inviteLinkToWelcome({ record: null, anchorUrl: GLOBAL_NODE_URL })).toBe(false);
+    });
+
     it('a yes Find a community hands to welcome: in memory, for this account only, taken once', () => {
         handKnockYesToWelcome({ url: `${RIVERSIDE}/`, invite: ' INV-ABCD-EFGH ', name: 'Riverside' }, 'aa');
         expect(takeKnockYes('bb')).toBeNull();
@@ -301,6 +316,25 @@ describe('the root guard (auth-return.ts setupRedirect)', () => {
         const branch = guard.slice(held, guard.indexOf("if (recognition === 'recovering') {"));
         expect(branch).toMatch(/AsyncStorage\.getItem\('beanpool_anchor_url'\)\.then\(\(anchor\) => \{[\s\S]*if \(anchor\) \{ refreshHold\.current\(\); return; \}\s*router\.replace\(to\);/);
         expect(branch).toMatch(/\n\s*return;\n\s*\}\n/);
+    });
+
+    it('app/_layout.tsx sends an invite link on a phone in no community to welcome\'s invite step, before "Switch Nodes?" or any redeem', () => {
+        const layout = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf8');
+        const handler = layout.slice(layout.indexOf('const inviteToken = extractInviteToken(currentUrl);'));
+        // No account: the invite step, as before.
+        expect(handler).toMatch(/if \(!identity\) \{\s*routeToWelcomeWithInvite\(\);\s*return;\s*\}/);
+        const case2 = handler.slice(handler.indexOf('// Case 2: User has active identity (Logged in)'));
+        const read = case2.indexOf("AsyncStorage.getItem('beanpool_anchor_url').then(async current => {");
+        const toWelcome = case2.indexOf('if (inviteLinkToWelcome({ record: await getPendingOnboarding(), anchorUrl: current })) {\n                routeToWelcomeWithInvite();\n                return;\n            }');
+        expect(read).toBeGreaterThan(-1);
+        expect(toWelcome).toBeGreaterThan(read);
+        // Everything that switches the community or redeems comes after: a phone with a community still gets them.
+        for (const later of ["t('Switch Nodes?')", "t('Switch & Join')", 'redeemInvite(parsedCode', "AsyncStorage.setItem('beanpool_anchor_url', targetOrigin)"]) {
+            expect(case2.indexOf(later), later).toBeGreaterThan(toWelcome);
+        }
+        // The invite step gets the link's invite and its community, as for a phone with no account.
+        const route = handler.slice(handler.indexOf('const routeToWelcomeWithInvite = () => {'), handler.indexOf('// Case 1:'));
+        expect(route).toMatch(/pathname: '\/welcome',\s*params: \{\s*invite: parsedCode,\s*server: extractedNodeOrigin \|\| undefined,/);
     });
 });
 

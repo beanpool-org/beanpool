@@ -34,6 +34,18 @@ export function phoneIsWaiting({ hasIdentity, record, anchorUrl }: WaitingFacts)
     return hasIdentity && !record && !(anchorUrl ?? '').trim();
 }
 
+/**
+ * An invite link on a phone that holds an account (app/_layout.tsx): whether it goes to the first screen's invite step, as on
+ * a phone with no account, instead of the member's "Switch Nodes?". It does for a join wizard part-way, and for a phone in
+ * no community (waiting to be let in, or a wipe that kept the key). The invite step joins with the phone's key, so the wizard
+ * runs: Your Photo, then Safety Backup with the 12 words a knock's key has never shown. A refused redeem leaves the phone with
+ * no community. "Switch Nodes?" redeems directly and goes to the tabs, with no wizard, and on a refusal it leaves the phone on
+ * a community that never took the key. A phone with a community in use keeps "Switch Nodes?".
+ */
+export function inviteLinkToWelcome({ record, anchorUrl }: Pick<WaitingFacts, 'record' | 'anchorUrl'>): boolean {
+    return !!record || !(anchorUrl ?? '').trim();
+}
+
 /** What the phone holds now: the wizard's record and the community in use, read together. */
 export async function readWaitingFacts(): Promise<{ record: PendingOnboarding | null; anchorUrl: string | null }> {
     const [record, anchorUrl] = await Promise.all([

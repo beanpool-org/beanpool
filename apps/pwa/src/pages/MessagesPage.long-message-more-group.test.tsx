@@ -4,7 +4,7 @@
  * control; my own long line folds too. The one-to-one half is MessagesPage.long-message-more.test.tsx.
  * Real group crypto, a node in memory behind the page's own transport (group-chat-fake-node.test-support.ts).
  */
-import { render, screen, act, cleanup, within, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';

@@ -45,7 +45,7 @@ function boxAround(el: HTMLElement): HTMLElement {
 }
 
 export function FoldedChatText({ text, enabled = true, display = 'inline', mine = false }: Props) {
-    const ref = useRef<HTMLDivElement>(null);
+    const ref = useRef<HTMLSpanElement>(null);
     const [open, setOpen] = useState(false);
     const [measured, setMeasured] = useState<Measured | null>(null);
 
@@ -80,7 +80,8 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
 
     return (
         <>
-            <div ref={ref} style={style} data-testid="chat-text" data-fold={long ? (open ? 'open' : 'folded') : known ? 'whole' : 'measuring'}>{text}</div>
+            {/* A span (given a display) so it can sit in a paragraph as well as in a box. */}
+            <span ref={ref} style={style} data-testid="chat-text" data-fold={long ? (open ? 'open' : 'folded') : known ? 'whole' : 'measuring'}>{text}</span>
             {long && (
                 <button
                     type="button"
@@ -97,9 +98,11 @@ export function FoldedChatText({ text, enabled = true, display = 'inline', mine 
                         background: 'none',
                         border: 'none',
                         font: 'inherit',
-                        fontWeight: 700,
-                        textDecoration: mine ? 'underline' : 'none',
-                        color: mine ? '#fff' : 'var(--accent)',
+                        // As the bubble's own Reply, React and Edit buttons are drawn.
+                        fontWeight: 600,
+                        textDecoration: 'underline',
+                        textUnderlineOffset: '2px',
+                        color: mine ? '#ffffff' : 'var(--accent)',
                         cursor: 'pointer',
                     }}
                 >

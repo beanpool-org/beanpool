@@ -113,7 +113,7 @@ describe('a long message folds with …more', () => {
         expect(text().style.display).toBe('block');
     });
 
-    it('the control reads white and underlined on my own bubble, and not white on someone else\'s', () => {
+    it('the control is drawn as the bubble\'s own Reply and Edit are: underlined, white on my bubble and not white on someone else\'s', () => {
         const { rerender } = render(<FoldedChatText text={fortyLines} mine />);
         const mine = screen.getByRole('button', { name: 'Show the whole message' }).style;
         expect(mine.color).toBe('rgb(255, 255, 255)');
@@ -121,6 +121,6 @@ describe('a long message folds with …more', () => {
         rerender(<FoldedChatText text={fortyLines} />);
         const theirs = screen.getByRole('button', { name: 'Show the whole message' }).style;
         expect(theirs.color).not.toBe('rgb(255, 255, 255)');
-        expect(theirs.textDecoration).not.toBe('underline');
+        expect(theirs.textDecoration).toBe('underline');
     });
 });

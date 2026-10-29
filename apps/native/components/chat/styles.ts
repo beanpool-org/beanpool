@@ -47,8 +47,8 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     foldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
     foldButton: { minHeight: 44, minWidth: 44, justifyContent: 'center' },
     foldTime: { alignSelf: 'center', marginTop: 0 },
-    foldText: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
-    foldTextMe: { color: colors.chat.messageTextMe, textDecorationLine: 'underline' },
+    foldText: { fontSize: 16, lineHeight: 22, fontWeight: '600', textDecorationLine: 'underline' },
+    foldTextMe: { color: colors.chat.messageTextMe },
     foldTextOther: { color: colors.text.link },
 
     systemMessageContainer: { width: '100%', alignItems: 'center', marginVertical: 8 },

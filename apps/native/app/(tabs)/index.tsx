@@ -31,6 +31,7 @@ import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
+import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import { LookAroundCard } from '../../components/LookAroundCard';
 import { lookingAroundHere } from '../../utils/look-around';
@@ -181,6 +182,7 @@ export default function HomeScreen() {
     const [safetyUp, setSafetyUp] = useState(false);
     const [local, setLocal] = useState<LocalNeeds | null>(null);
     const [menuFor, setMenuFor] = useState<HomeCardInstance | null>(null);
+    const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
@@ -1023,12 +1025,15 @@ export default function HomeScreen() {
                 const sky = skyOf(answer, inst, place, now);
                 return sky ? frame(<SkyBody sky={sky} colors={colors} />) : null;
             }
+            // `features` only for a reader with an account here: the shape line is the members' card (design §4.1), and a visitor is told none of it.
             case 'community': return frame(
                 <CommunityBody
                     card={c.community}
                     profile={profile}
                     invitesOn={invitesOn}
+                    features={tailor ? answer?.features : undefined}
                     colors={colors}
+                    onOpenShape={() => setShapeSheetOpen(true)}
                     onAdd={tailor ? () => setAddOpen(true) : undefined}
                     onEdit={tailor ? () => setEditOpen(true) : undefined}
                 />,
@@ -1242,6 +1247,11 @@ export default function HomeScreen() {
                 />
                 <NewPollModal visible={pollModal} onClose={() => setPollModal(false)} onSuccess={() => void refresh('again')} />
                 <NewEventModal visible={eventModal} onClose={() => setEventModal(false)} onSuccess={() => void refresh('again')} />
+                <CommunityShapeSheet
+                    features={answer?.features}
+                    visible={shapeSheetOpen}
+                    onClose={() => setShapeSheetOpen(false)}
+                />
                 {manage.dialog}
             </View>
         </FabBandContext.Provider>

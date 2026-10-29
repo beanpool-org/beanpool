@@ -259,6 +259,15 @@ export function signOutEverywhereWarningWords(communityName: string, isOwner: bo
         : t("This signs you out of {name}'s Settings on every computer and phone. Your key stays on this phone: Manage signs you in again.", { name: communityName });
 }
 
+/** The row that opens the read-only sheet describing who can join, Beans, decisions and safety rules (design §4, slice S5). */
+export function howThisCommunityWorksLabelWords(): string {
+    return t('How this community works');
+}
+
+export function howThisCommunityWorksSubtitleWords(): string {
+    return t('Who can join, Beans, decisions and safety rules for this community');
+}
+
 // ── Event reminders: utils/event-extras.ts reminderOffsetLabel's offsets, as "… before" ─────────────────────────
 
 /** One reminder offset as Settings' tick row says it: "1 day before". */

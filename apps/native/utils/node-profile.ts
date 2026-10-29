@@ -89,6 +89,14 @@ export interface NodeFeatures {
      */
     openMembership?: boolean;
     /**
+     * A first message from someone new waits as a request until accepted (design §4).
+     */
+    dmRequests?: boolean;
+    /**
+     * The community's known floor for confirmed members (design §4.2, S5).
+     */
+    knownFloor?: number;
+    /**
      * Members may share a listing or an event outside the community (front doors S6, utils/peek.ts): a link that opens that
      * one post, without names or faces, for seven days. The phone offers "Share outside the community" and Settings'
      * Shared outside only then. A node that doesn't say (turned off, the worldwide one, a node from before it) offers
@@ -100,10 +108,10 @@ export interface NodeFeatures {
 export type NodeDoor = 'open' | 'members' | 'admins';
 const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
-const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'knownFloor'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'shareOutside',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'dmRequests', 'shareOutside',
 ];
 
 export interface NodeProfile {
@@ -185,6 +193,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         for (const key of FEATURE_KEYS) {
             if (typeof f[key] === 'boolean') features[key] = f[key] as boolean;
         }
+        if (typeof f.knownFloor === 'number') features.knownFloor = f.knownFloor;
         if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
         const n = f.nearbyListings as { radiusKm?: unknown; max?: unknown } | undefined;
         if (n && typeof n === 'object' && typeof n.radiusKm === 'number' && n.radiusKm > 0 && typeof n.max === 'number' && n.max > 0) {
@@ -391,6 +400,8 @@ export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?
         if (key === 'showcase') continue;
         if (typeof reader[key] === 'boolean') out[key] = reader[key];
     }
+    if (typeof reader.knownFloor === 'number') out.knownFloor = reader.knownFloor;
+    if (reader.door) out.door = reader.door;
     return out;
 }
 

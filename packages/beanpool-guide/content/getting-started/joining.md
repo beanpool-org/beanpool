@@ -25,6 +25,7 @@ An invite is a link, a QR code or a code. A code looks like **INV-** followed by
 
 - An invite works **once**.
 - An invite lasts **30 days**. After that, ask for a new one.
+- If a community has **paused joining**, it is not taking new members for now. Existing invites cannot be used while joining is paused, and members cannot make new ones. Try again once the community reopens, or ask the admins.
 
 To join:
 

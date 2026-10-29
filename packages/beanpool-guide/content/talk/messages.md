@@ -3,7 +3,7 @@ slug: messages
 title: Messages
 summary: Start a chat, send photos, reply, react, edit, delete, mute, and what is private.
 help: Your chats. A chat with one person is locked end to end. Tap a chat to open it, or start one from a post or from your friends.
-related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
+related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed, how-your-community-works
 ---
 
 ## Your chats
@@ -94,7 +94,9 @@ Tap their name at the top of the chat to open their profile (an enterprise's pag
 
 ## Message requests
 
-When someone you haven't added or messaged before sends you a first message, it arrives as a **message request**.
+Where your community's owners have turned on message requests, a first message from someone you haven't added as a friend, messaged before, or traded with arrives as a **message request**. You can read it before deciding. The sender cannot write anything more until you accept, and they are never told if you ignore the request or block them. Messages from your community's admins and moderators, and chats that come with a trade, always arrive straight away.
+
+If your community turns message requests off, every message arrives straight away, and any request still waiting becomes an ordinary chat. See "How this community works".
 
 - **On your phone**: in **Talk** under **Messages**, tap the **Requests** pill at the top. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Ignore** to dismiss it without letting them know. You can also tap **Block** to block them. If you have several requests waiting, you can tap **Ignore all**. A push notification that says someone wants to message you opens this Requests section directly when tapped.
 - **In the web app**: the same **Requests** pill appears above your list of chats.

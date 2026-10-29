@@ -913,7 +913,6 @@
   "No ratings yet": "評価はまだありません",
   "Finalize Transaction": "取引を完了する",
   "e.g. {amount}": "例: {amount}",
-  "Transferring {n} B to {name}": "{name}へ{n} Bを送金中",
   "Failed to complete transaction": "取引を完了できませんでした",
   "Processing...": "処理中...",
   "Release Credits": "クレジットを支払う",

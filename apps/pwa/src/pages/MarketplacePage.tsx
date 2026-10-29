@@ -23,7 +23,7 @@ import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCom
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
-    dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, type DealMoves,
+    dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -1339,8 +1339,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
         // A pinned deal (My Deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
         // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
+        // Only while its Beans are held: a finished pin gives way to the listing's live deal, and so does a request, which the
+        // listing's own read shows (Withdraw for one who asked; a pinned request hid that box, as on the phone).
         const pinnedTx = selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id
-            && (t.status === 'pending' || t.status === 'requested')) : undefined;   // a finished pin gives way to the listing's live deal
+            && t.status === 'pending') : undefined;
+        // A finished one: the page says what became of it, as the phone does for an alert's deal (listingDealLines.finished).
+        const pinnedDone = !pinnedTx && selectedTxId ? myTransactions.find(t => t.id === selectedTxId && t.postId === selectedPost.id) : undefined;
+        const pinnedOver = pinnedDone ? listingDealLines.finished(pinnedDone.status) : null;
         const activeTx = pinnedTx
             ?? myTransactions.find(t => t.postId === selectedPost.id && t.status === 'pending' && (!isOwnPost ? (t.buyerPublicKey === identity?.publicKey || t.sellerPublicKey === identity?.publicKey) : true));
             
@@ -1466,6 +1471,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     />
                                 </label>
                             )}
+                            {/* What Release moves on this deal, at its own rate for the time typed, and to whom (the panel's line). */}
+                            <p data-testid={`release-line-${tx.id}`} className="text-center mb-2 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-nature-900 py-2 rounded-lg border border-emerald-100 dark:border-emerald-900 break-words">
+                                {releaseLine(tx, selectedPost, selectedPost.priceType !== 'fixed' ? completeHoursRead : null, otherName)}
+                            </p>
                             <div className="flex gap-2">
                                 <button
                                     type="button"
@@ -1779,7 +1788,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                  <SharePostButtons post={selectedPost} />
 
                  {/* Action buttons */}
-                 
+
+                 {/* The deal a door named, when it is over by now: what became of it, above the listing as it stands for the reader. */}
+                 {pinnedOver && (
+                     <p data-testid="pinned-deal-over" className="mt-4 text-sm font-semibold text-center text-nature-600 dark:text-nature-400">{pinnedOver}</p>
+                 )}
+
                  {/* 1. Pending Trust Hold State (Applies to both Payer and Payee) */}
                  {ownRows.length === 0 && (selectedPost.status === 'pending' || activeTx?.status === 'pending') && (isPayer || isPayee) && (
                      <div className="flex flex-col gap-2 mt-4">
@@ -1828,12 +1842,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                          )}
                                          
                                          <div className="text-center mb-4 text-xs font-bold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-nature-900 py-2.5 rounded-lg border border-emerald-100 dark:border-emerald-900 shadow-sm">
-                                             {(() => {
-                                                 if (selectedPost.priceType !== 'fixed' && !completeHoursRead.ok && isAmbiguousAmount(completeHoursRead.refusal)) return amountRefusalWords(completeHoursRead.refusal);
-                                                 const hrs = completeHoursValue || 0;
-                                                 const tot = selectedPost.priceType !== 'fixed' ? selectedPost.credits * hrs : selectedPost.credits;
-                                                 return t('Transferring {n} B to {name}', { n: tot, name: targetPeerCallsign });
-                                             })()}
+                                             {/* The deal's own rate, as each row's confirm and the node work it out; the listing's price while it loads. */}
+                                             {releaseLine(activeTx ?? { credits: selectedPost.credits, hours: 1 }, selectedPost,
+                                                 selectedPost.priceType !== 'fixed' ? completeHoursRead : null, targetPeerCallsign)}
                                          </div>
                                          
                                          <div className="flex gap-2">
@@ -1893,8 +1904,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                      <button
                                          onClick={() => {
                                              setShowCompleteConfirm(true);
+                                             // The time the deal was struck for, as each row and the phone open it.
                                              if (selectedPost.priceType !== 'fixed' && !completeHours) {
-                                                 setCompleteHours('1');
+                                                 setCompleteHours(activeTx?.hours ? formatNumber(activeTx.hours) : '1');
                                              }
                                          }}
                                          disabled={accepting}

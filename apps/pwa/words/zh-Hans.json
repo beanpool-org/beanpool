@@ -1072,7 +1072,6 @@
   "Posted by": "发布者",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "暂无评分",
-  "Transferring {n} B to {name}": "正在向 {name} 转账 {n} B",
   "Failed to complete transaction": "无法完成交易",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "你是收款方。请严格按照约定履行条款，付款方将释放你的额度（你将收到扣除 1.5% 交易费 {owned} 后的净额）。",
   "Cancel this transaction and return the post to the market?": "要取消此交易并将条目重新放回市集吗？",

@@ -1269,7 +1269,6 @@
   "Posted by": "نُشر بواسطة",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "لا توجد تقييمات حتى الآن",
-  "Transferring {n} B to {name}": "جارٍ تحويل {n} B إلى {name}",
   "Failed to complete transaction": "فشل إتمام المعاملة",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "أنت مستلم المبلغ. نفّذ الشروط بدقة كما تم الاتفاق، وسيقوم الدافع بتحرير رصيدك (ستتلقى المبلغ الصافي بعد خصم رسوم معاملة 1.5% {owned}).",
   "Cancel this transaction and return the post to the market?": "هل تريد إلغاء هذه المعاملة وإعادة المنشور إلى السوق؟",

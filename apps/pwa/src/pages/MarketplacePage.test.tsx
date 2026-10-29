@@ -1242,6 +1242,48 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         await waitFor(() => expect(done).toHaveBeenCalledWith('tx-h', ME, undefined));
     });
 
+    it("a daily Need's author changing 3 days to 5 on their row: the 100 Beans that will go, not the 60 held, then released for 5", async () => {
+        const done = vi.spyOn(api, 'completeMarketplaceTransaction').mockResolvedValue({ success: true } as any);
+        await open(listing({ title: 'Pick the olives', type: 'need', repeatable: true, priceType: 'daily', credits: 20, authorPublicKey: ME, authorCallsign: 'Guest' }),
+            [deal({ id: 'tx-d', credits: 60, hours: 3, buyerPublicKey: ME, sellerPublicKey: 'helper-pk', sellerCallsign: 'Helper' })]);
+        const row = await screen.findByTestId('deal-row-tx-d');
+        fireEvent.click(within(row).getByRole('button', { name: /Release Credits/ }));
+        const line = within(row).getByTestId('release-line-tx-d');
+        expect(line).toHaveTextContent('Transferring 60 B to Helper');
+        fireEvent.change(within(row).getByRole('textbox'), { target: { value: '5' } });
+        expect(line).toHaveTextContent('Transferring 100 B to Helper');
+        // A time that could mean two numbers says why, as the panel says it, and Release waits for one that can't.
+        fireEvent.change(within(row).getByRole('textbox'), { target: { value: '1,000' } });
+        expect(line).toHaveTextContent('Type the amount without thousands separators, like 1000.5.');
+        fireEvent.change(within(row).getByRole('textbox'), { target: { value: '5' } });
+        fireEvent.click(within(row).getByRole('button', { name: 'Release Credits' }));
+        await waitFor(() => expect(done).toHaveBeenCalledWith('tx-d', ME, 5));
+    });
+
+    it("one who took up an hourly Offer: the panel's total is the deal's own rate for the hours typed", async () => {
+        await open(listing({ title: 'Garden help', priceType: 'hourly', credits: 15, status: 'pending', pendingTransactionId: 'tx-g' }),
+            [deal({ id: 'tx-g', credits: 30, hours: 2 })]);
+        fireEvent.click(await screen.findByRole('button', { name: /Release Credits/ }));
+        // Opened at the 2 hours the deal was struck for, as each row and the phone open it (it opened at 1: 15 B).
+        expect(screen.getByRole('textbox')).toHaveValue('2');
+        expect(await screen.findByText('Transferring 30 B to Damo')).toBeInTheDocument();
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: '3' } });
+        expect(screen.getByText('Transferring 45 B to Damo')).toBeInTheDocument();
+    });
+
+    it('a door that named a deal over by now: the listing as it is, Accept again, and what became of that deal', async () => {
+        await open(listing({ title: 'Lawn mower' }), [deal({ id: 'tx-c', status: 'cancelled' })], { openTxId: 'tx-c' });
+        expect(await screen.findByTestId('pinned-deal-over')).toHaveTextContent('That deal was cancelled.');
+        expect(screen.getByRole('button', { name: /Accept Offer/ })).toBeInTheDocument();
+    });
+
+    it('one who asked to borrow, opened on their request by its id (My Deals, Home): whom they wait on, and Withdraw', async () => {
+        await open(listing({ title: 'Ladder', lendable: true }), [deal({ id: 'tx-q', status: 'requested' })], { openTxId: 'tx-q' });
+        expect(await screen.findByText('You asked to borrow it · nothing is held until Damo says yes')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Withdraw request' })).toBeInTheDocument();
+        expect(screen.queryByTestId('pinned-deal-over')).not.toBeInTheDocument();
+    });
+
     for (const [step, after] of [['Release', 'completed'], ['Cancel', 'active']] as const) {
         it(`a one-off Need's author, after ${step} from their row: the listing as the node has it now, no panel for a deal that is over`, async () => {
             vi.spyOn(api, 'completeMarketplaceTransaction').mockResolvedValue({ success: true } as any);

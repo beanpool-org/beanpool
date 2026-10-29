@@ -16,7 +16,7 @@
  *
  * Nothing here is anything the reader couldn't already read from the card's own screen, and each card is computed for
  * the verified signer only (never a key from the query):
- *   - the reader's OWN cards (`needs`, `safety`, `steps`, `deals`, `enterprise`, `shop`, `groups`, `beans`, `notices`, and
+ *   - the reader's OWN cards (`needs`, `safety`, `steps`, `deals`, `enterprise`, `shop`, `groups`, `chat`, `beans`, `notices`, and
  *     `me` and `layout`): for a key that passes the read gate (passesReadGate: a member, a suspended one included, as for
  *     their own messages, trades and Beans). Each is about the signer and nobody else: no other member's balance, deal,
  *     notice or vote is ever read for it (privacy-defaults-2026-09-28).
@@ -48,6 +48,15 @@
  * locked line's bytes only while they are short, LOCKED_LINE_CHARS, `🔒 Message` always), four Pulse items with when
  * each was published, and the community's figures. Nothing new reaches the visitors' subset but the listings count.
  *
+ * ## A pinned chat (`chat`, scratch/fable-design/DESIGN-home-chosen-chat-fable.md, slice C1)
+ *
+ * Up to three chats a member picked, each keyed by its instance id, its chat named in the settings of their own stored
+ * layout. Answered only while they are in the chat now, as the chat's own read answers them; anything else is `gone` with
+ * no name and no line. Its last three lines come as stored: what the node stores readable as words, a direct message or a
+ * locked group line as its bytes for the device to open (the node holds no key and opens nothing; LOCKED_LINE_CHARS
+ * bounds them as it does a group's last line). What the node learns is which chats are pinned, nothing it didn't serve
+ * already on GET /api/messages/:id.
+ *
  * ## Cost
  *
  * `cards=` limits the work: only the cards asked for are computed (a hidden Pulse runs no Pulse query), and each read has
@@ -61,18 +70,23 @@
  * under 8 KB gzipped and 24 KB raw (DESIGN-home-wide-and-content-fable.md §2 "Budget").
  */
 import {
-    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
-    HOME_FRAME_LIMITS, dealsNeedingMe, openDeals as coreOpenDeals, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts,
-    type TourRecord,
+    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, homeChatPicked, normalizeCategory, readChatSettings, readHomeLayout as readFrameLayout,
+    readSearchSettings, searchTermsFor, HOME_FRAME_LIMITS, dealsNeedingMe, openDeals as coreOpenDeals, type HomeCardInstance, type HomeChatCard,
+    type HomeChatLine, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts, type TourRecord,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, ON_HOLIDAY_SQL, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
     getMember, getPosts, getBalance, getMarketplaceTransactions, getConversationsByMember, getListedUnreadCounts,
     listYourChats, keeperOf, isVisitorKey, readsAsMember, passesReadGate, getPublicCommunityInfo, getTransactions,
-    getEnterpriseLedger, treasuryKeepers, type EnterpriseLedgerEntry,
+    getEnterpriseLedger, treasuryKeepers, getConversation, getConversationMessages, type EnterpriseLedgerEntry,
 } from '../state-engine.js';
-import { type YourChatLastMessage } from '../engine/your-groups.js';
+import { LOCKED_PREVIEW, type YourChatLastMessage } from '../engine/your-groups.js';
+import { heldFromUnread } from '../engine/dm-requests.js';
+import { pageWithOwnWithheld, withheldConversationOwnedBy } from '../engine/withheld-lines.js';
+import { getGroupThreadMessages } from '../engine/group-thread.js';
+import { getEnterpriseThreadMessages } from '../engine/enterprise-thread.js';
+import { getChatMutesFor } from '../engine/chat-mutes.js';
 import { featuresFor } from '../config/features-for.js';
 import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
 import { getDoor, type Door } from '../config/door.js';
@@ -85,7 +99,7 @@ import { probationRuleSet, probationSummary, type ProbationSummary } from '../en
 import { readMemberArea } from '../engine/member-area.js';
 import { getInterestsUpdatedAt, getTourRecord, hasSawLedger } from '../engine/home-preferences.js';
 import { standbyWritesNothing } from '../config/node-role.js';
-import { chatHiddenFrom } from '../engine/event-thread.js';
+import { canReadEventThread, chatHiddenFrom, getEventThreadMessages, loadEventForThread } from '../engine/event-thread.js';
 import { pendingGroupInvites } from '../engine/group-invites.js';
 import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
@@ -147,6 +161,8 @@ const DECIDE_ITEMS = 3;
  * most this long; past it the line is `🔒 Message` alone (§2: three groups, at most 1.5 KB locked).
  */
 const LOCKED_LINE_CHARS = 512;
+/** The last lines a pinned chat shows (DESIGN-home-chosen-chat-fable.md §2; Marty, 29 Oct: three, to read without opening). */
+const CHAT_LINES = 3;
 /**
  * The signer's own ledger lines read for "This month", newest first: more than nearly anyone has in a month (about one
  * circulation fee a day, and their trades). Past it the month is the newest MONTH_LINES, and says `more`.
@@ -399,8 +415,10 @@ interface Ctx {
     interests: string[];
     /** HomeReader.lands: what this app can open beyond the first set. */
     lands: ReadonlySet<HomeLanding>;
-    /** Read once per answer, for `needs` and `groups`. */
+    /** Read once per answer, for `needs`, `groups` and a pinned chat. */
     chats?: ReturnType<typeof listYourChats>;
+    /** Each pinned chat built (a `chat` card), with its newest line shown: part of the chat stamp (HomeBuilt). */
+    pinnedChats?: string[];
     /** Read once per answer, for `steps` and `me`. */
     firstOffer?: boolean;
 }
@@ -1003,6 +1021,92 @@ function groupsCard(c: Ctx): HomeCards['groups'] | undefined {
     return { items, total: all.length };
 }
 
+/** A stored line as a chat's own read serves it (engine Message, a thread's message), as far as a chat card reads it. */
+interface ChatRow {
+    id: string; authorPubkey: string; authorCallsign?: string | null; ciphertext: string; nonce: string; type: string;
+    systemType?: string | null; metadata?: string | null; timestamp: string;
+}
+
+/**
+ * A line as the chat card carries it (core HomeChatLine): opened by nobody here. A system line or a `plaintext-v1` one, which
+ * the node stores readable, as its words, cut; any other (a direct message, a locked group line) as its bytes exactly as
+ * stored while ciphertext, nonce and metadata come to LOCKED_LINE_CHARS at most, else `🔒 Message` and no bytes. A line
+ * whose id, time, author or kind is longer than any the node writes (a peer's) is left out.
+ */
+function chatLineOf(r: ChatRow): HomeChatLine | null {
+    const id = bounded(r.id, ID_CHARS), at = bounded(r.timestamp, ID_CHARS), author = bounded(r.authorPubkey, ID_CHARS), type = bounded(r.type, ID_CHARS);
+    if (!id || !at || !author || !type) return null;
+    const who = author === 'SYSTEM' ? null : clip(r.authorCallsign || getMember(author)?.callsign || author.slice(0, 8), NAME_CHARS);
+    const line = { id, author, who, at, type, systemType: type === 'system' ? bounded(r.systemType, ID_CHARS) : null };
+    const metadata = r.metadata ?? null;
+    if (type === 'system' || r.nonce === 'plaintext-v1') {
+        const words = type === 'system' ? String(r.ciphertext ?? '') : Buffer.from(String(r.ciphertext ?? ''), 'base64').toString('utf8');
+        return { ...line, text: clip(words, TITLE_CHARS), metadata: bounded(metadata, LOCKED_LINE_CHARS) };
+    }
+    const fits = String(r.ciphertext ?? '').length + String(r.nonce ?? '').length + (metadata?.length ?? 0) <= LOCKED_LINE_CHARS;
+    return fits ? { ...line, sealed: { ciphertext: r.ciphertext, nonce: r.nonce, metadata } } : { ...line, text: LOCKED_PREVIEW };
+}
+
+const chatLinesOf = (rows: ChatRow[]): HomeChatLine[] => rows.map(chatLineOf).filter((l): l is HomeChatLine => l !== null);
+
+/** A direct chat on the card: the other person's name, their lines and the member's own (withheld ones included), oldest first. */
+function directChat(c: Ctx, id: string, other: string | null, rows: ChatRow[], unread: number): HomeChatCard {
+    const name = other ? getMember(other)?.callsign : null;
+    return { kind: 'dm', name: name ? clip(name, NAME_CHARS) : null, unread, muted: muted(getChatMutesFor(c.me!).get(id), c.now), lines: chatLinesOf(rows) };
+}
+
+/**
+ * A chat the member pinned (type `chat`, scratch/fable-design/DESIGN-home-chosen-chat-fable.md §1–§3): answered only
+ * while they are in it now, as the chat's own read answers them, and otherwise `gone` with no name and no line, so an id
+ * they guessed or one they have left tells them nothing.
+ *   - a group's, an enterprise's or an event's chat: one in their list of chats (listYourChats: an active membership, a
+ *     keepership, the host or Going while the chat is readable), an event's re-checked (canReadEventThread, chatHiddenFrom);
+ *     its lines through the chat's own read (a group's leaves out lines sealed before their membership, fromEpochOf);
+ *   - a direct chat: one they are a participant of, never a request waiting for them or one they ignored (heldFromUnread,
+ *     the rule that keeps it out of their chats and their badge); their own withheld lines among the rest, and a
+ *     conversation kept for them alone is theirs, as GET /api/messages/:id answers it, so nothing on Home says that the
+ *     other person blocked them (engine/withheld-lines.ts).
+ * The last CHAT_LINES as stored (chatLineOf), the unread count their chats list gives, and whether they muted it. The
+ * settings come from the member's own stored layout, never the request (cardsToBuild). With nothing picked, no card.
+ */
+function chatCard(c: Ctx, settings?: Record<string, unknown>): HomeChatCard | undefined {
+    built('chat');
+    const s = readChatSettings(settings);
+    if (!homeChatPicked(s)) return undefined;
+    const card = pinnedChat(c, s.conversationId);
+    // The chat stamp (buildHome): the newest line shown, so a new line in a pinned chat moves the tag.
+    const newest = 'lines' in card ? card.lines[card.lines.length - 1] : undefined;
+    (c.pinnedChats ??= []).push(`${s.conversationId} ${newest ? `${newest.at} ${newest.id}` : ''}`);
+    return card;
+}
+
+function pinnedChat(c: Ctx, id: string): HomeChatCard {
+    const me = c.me!;
+    const mine = chats(c).items.find(g => g.conversationId === id);
+    if (mine) {
+        if (mine.kind === 'event') {
+            let readable = false;
+            try { readable = canReadEventThread(loadEventForThread(id), me); } catch { /* no such event: not readable */ }
+            if (!readable || chatHiddenFrom({ id, type: 'event_thread' }, me)) return { gone: 'left' };
+        }
+        const rows: ChatRow[] = mine.kind === 'group' ? getGroupThreadMessages(id, me, CHAT_LINES, 0)
+            : mine.kind === 'event' ? getEventThreadMessages(id, CHAT_LINES, 0) : getEnterpriseThreadMessages(id, CHAT_LINES, 0);
+        return { kind: mine.kind, name: clip(mine.name, NAME_CHARS), unread: mine.unreadCount, muted: muted(mine.mute, c.now), lines: chatLinesOf(rows) };
+    }
+    const conv = getConversation(id);
+    if (!conv) {
+        const kept = withheldConversationOwnedBy(id, me);
+        return kept ? directChat(c, id, kept.other_pubkey, pageWithOwnWithheld(id, me, CHAT_LINES, 0, () => []), 0) : { gone: 'left' };
+    }
+    if (conv.type !== 'dm' || !conv.participants.includes(me)) {
+        // An event's chat they had a seat in, while the event isn't there for them (hidden by reports, out of their sight).
+        return { gone: conv.type === 'event_thread' && conv.participants.includes(me) && chatHiddenFrom(conv, me) ? 'hidden' : 'left' };
+    }
+    if (heldFromUnread(me).has(id)) return { gone: 'request' };
+    const rows = pageWithOwnWithheld(id, me, CHAT_LINES, 0, (limit, offset) => getConversationMessages(id, limit, offset));
+    return directChat(c, id, conv.participants.find(p => p !== me) ?? null, rows, getListedUnreadCounts(me)[id] ?? 0);
+}
+
 function joinedCard(c: Ctx): HomeCards['joined'] | undefined {
     built('joined');
     const since = iso(c.now - JOINED_DAYS * DAY_MS);
@@ -1138,14 +1242,14 @@ function memberFigures(c: Ctx, commonsBalance: number): Pick<NonNullable<HomeCar
 // ── the answer ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Which cards each part of a reader may have (the module's header). */
-const OWN_CARDS: ReadonlySet<string> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'shop', 'groups', 'beans', 'notices']);
+const OWN_CARDS: ReadonlySet<string> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'shop', 'groups', 'chat', 'beans', 'notices']);
 const COMMUNITY_CARDS: ReadonlySet<string> = new Set(['find', 'events', 'market', 'search', 'decide', 'joined', 'pulse']);
 
 /** A card type's builder: the reader, and the instance's settings through its type's reader (absent for a type with none). */
 type Builder = (c: Ctx, settings?: Record<string, unknown>) => unknown;
 /** By type. A type with no builder here (one the apps draw, or one newer than this node) is kept in the layout and not built. */
 const BUILDERS: Partial<Record<string, Builder>> = {
-    search: searchCard,
+    search: searchCard, chat: chatCard,
     needs: needsCard, safety: safetyCard, find: findCard, steps: stepsCard, deals: dealsCard, enterprise: enterpriseCard, shop: shopCard,
     events: eventsCard, market: marketCard, decide: decideCard, groups: groupsCard, joined: joinedCard, pulse: pulseCard,
     beans: beansCard, notices: noticesCard, community: communityCard,
@@ -1201,9 +1305,11 @@ function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | 
 export interface HomeBuilt {
     body: HomeAnswer;
     /**
-     * The newest `lastActivityAt` of the signer's chats, when this answer read them (for `needs` or `groups`), else null:
-     * a new line in any of them moves the tag even where no card shows it, the member's own line from another device
-     * or one in a fourth group (W3, §2 "Budget").
+     * The newest `lastActivityAt` of the signer's chats, when this answer read them (for `needs`, `groups` or a pinned
+     * group's chat), else null: a new line in any of them moves the tag even where no card shows it, the member's own line
+     * from another device or one in a fourth group (W3, §2 "Budget"). With a pinned chat built (a `chat` card), each one's
+     * newest line shown follows it, so a new line in a pinned direct chat, which that list never holds, moves the tag too
+     * (DESIGN-home-chosen-chat-fable.md §3). A Home with no chat card has the stamp it had before chat cards.
      */
     chatStamp: string | null;
 }
@@ -1270,7 +1376,8 @@ export function buildHome(reader: HomeReader): HomeBuilt {
         layout,
         cards,
     };
-    const chatStamp = c.chats ? c.chats.items.reduce<string | null>((newest, g) => (newest === null || g.lastActivityAt > newest ? g.lastActivityAt : newest), null) : null;
+    const groupsStamp = c.chats ? c.chats.items.reduce<string | null>((newest, g) => (newest === null || g.lastActivityAt > newest ? g.lastActivityAt : newest), null) : null;
+    const chatStamp = c.pinnedChats?.length ? [groupsStamp ?? '', ...c.pinnedChats].join('\n') : groupsStamp;
     return { body, chatStamp };
 }
 

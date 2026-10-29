@@ -343,8 +343,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // Where this account goes on a phone (DESIGN-global-entry-fable.md §D): the community the app lists by name, or
     // this one by its address. Said at Safety Backup, so nobody taps "I'm new" there and makes a second account.
     const [appsGlobal, setAppsGlobal] = useState(() => isAppsGlobal(initialInfo, webAppHost()));
-    // This community keeps no copies of members' accounts (its rule `none`, vault rethink VR2): a sign-in added at Safety
-    // Backup only lifts the new-account limits, and is offered in those words.
+    // This community keeps no copies of members' accounts (its rule `none`, vault rethink VR2): the door's sign-in only lets
+    // the member in (WebJoin), and a sign-in added at Safety Backup only lifts the new-account limits; each is offered in
+    // those words.
     const [keepsNoCopies, setKeepsNoCopies] = useState(() => initialInfo?.recoveryCopies === 'none');
     const [showAreaStep, setShowAreaStep] = useState(false);
     const [doorCheck, setDoorCheck] = useState(0);
@@ -2638,6 +2639,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onExisting={onComplete}
                                 onJoined={handleJoined}
                                 wordsDoor={wordsDoor}
+                                keepsNoCopies={keepsNoCopies}
                                 onRestore={(how, provider) => {
                                     setError(null);
                                     setRestoredForDoor(null);

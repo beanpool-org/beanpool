@@ -1452,8 +1452,10 @@ export default function PostDetailModal() {
 
                 {/* Action Buttons */}
 
-                {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now. */}
-                {!!pinnedOver && !!listingDealLines.finished(pinnedOver) && (
+                {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now.
+                    Not once the reader has taken the listing up again (a deal of their own held or asked for: no take-up left,
+                    and not its own people): that deal's box is the page, as on the web. */}
+                {!!pinnedOver && !!listingDealLines.finished(pinnedOver) && (deals.own || deals.canTakeUp) && (
                     <Text testID="pinned-deal-over" style={{ color: colors.text.secondary, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 12 }}>
                         {listingDealLines.finished(pinnedOver)}
                     </Text>

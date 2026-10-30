@@ -131,17 +131,21 @@ export function Zone({ host }: GardenScreenProps) {
     const hemisphere: Hemisphere = picked ?? current?.hemisphere ?? 'north';
     /**
      * Set once a choice is being kept: a second tap before the first lands would go back twice, out of the guide too
-     * (the web's stack would empty). Cleared only when the write fails, so the member can tap again.
+     * (the web's stack would empty). Cleared only when the write fails, so the member can tap again; the sentence then
+     * says it wasn't kept (a full disk, as the Tool shed's Save says it), and the screen stays.
      */
     const keeping = useRef(false);
+    const [problem, setProblem] = useState<string | null>(null);
     const keep = async (climate: { zone: (typeof GARDEN_ZONES)[number]['id']; hemisphere: Hemisphere } | null) => {
         if (keeping.current) return;
         keeping.current = true;
+        setProblem(null);
         try {
             await host.doc.set(withGardenClimate(host.doc.get(), climate));
-        } catch (e) {
+        } catch {
             keeping.current = false;
-            throw e;
+            setProblem(t("Couldn't save it on this phone. Try again."));
+            return;
         }
         host.back();
     };
@@ -161,6 +165,7 @@ export function Zone({ host }: GardenScreenProps) {
                             onPress={() => { void choose(z.id); }} testID={`garden-zone-${z.id}`} />
                     );
                 })}
+                {problem ? <ToolNote tone="danger" text={problem} testID="garden-zone-problem" /> : null}
             </ToolSection>
             {found ? (
                 <ToolSection>

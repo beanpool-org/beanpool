@@ -11,7 +11,7 @@ import {
     guideView, harvestLine, soonLine, t, weeksText, withGardenClimate, zoneLineText, zoneSourceText,
     type GardenScreenProps, type GardenZoneId, type Hemisphere, type ToolPlace,
 } from '@beanpool/core';
-import { ToolButton, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolSection } from '../ui';
+import { ToolButton, ToolChips, ToolEmpty, ToolField, ToolLive, ToolNote, ToolRow, ToolSection } from '../ui';
 
 const BUTTONS = 'p-3 flex flex-wrap gap-2 min-w-0';
 
@@ -135,17 +135,21 @@ export function Zone({ host }: GardenScreenProps) {
     const hemisphere: Hemisphere = picked ?? current?.hemisphere ?? 'north';
     /**
      * Set once a choice is being kept: a second tap before the first lands would go back twice, out of the guide too
-     * (the web's stack would empty). Cleared only when the write fails, so the member can tap again.
+     * (the web's stack would empty). Cleared only when the write fails, so the member can tap again; the sentence then
+     * says it wasn't kept (a browser whose store refused it, as the Tool shed's Save says it), and the screen stays.
      */
     const keeping = useRef(false);
+    const [problem, setProblem] = useState<string | null>(null);
     const keep = async (climate: { zone: GardenZoneId; hemisphere: Hemisphere } | null) => {
         if (keeping.current) return;
         keeping.current = true;
+        setProblem(null);
         try {
             await host.doc.set(withGardenClimate(host.doc.get(), climate));
-        } catch (e) {
+        } catch {
             keeping.current = false;
-            throw e;
+            setProblem(t("Couldn't save it in this browser. Try again."));
+            return;
         }
         host.back();
     };
@@ -167,6 +171,7 @@ export function Zone({ host }: GardenScreenProps) {
                             onClick={() => { void choose(z.id); }} testId={`garden-zone-${z.id}`} />
                     );
                 })}
+                <ToolLive testId="garden-zone-problem-live">{problem ? <ToolNote tone="danger" text={problem} testId="garden-zone-problem" /> : null}</ToolLive>
             </ToolSection>
             {found && (
                 <ToolSection>

@@ -1636,6 +1636,41 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
     }, 30_000);
 
+    it("a choice this phone couldn't keep (a full disk) says so and stays on Change; the next tap is kept and goes back once", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        // The INSERT tools/store.ts writeToolDoc runs, refused as SQLite refuses it on a full disk.
+        const real = disk.db.runAsync;
+        let full = true;
+        disk.db.runAsync = async (sql: string, params?: unknown[]) => {
+            if (full && /INSERT INTO tool_docs/.test(sql)) throw new Error('database or disk is full');
+            return real(sql, params);
+        };
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => !!byTestId('garden-zone-problem'), 8000);
+        expect(byTestId('garden-zone-problem')?.textContent).toBe("Couldn't save it on this phone. Try again.");
+        expect(nav.backs).toBe(0);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).stored).toBe(false);
+        // The disk has room again: the same row, tapped again, is kept and goes back once.
+        full = false;
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await settle();
+        expect(nav.backs).toBe(1);
+        expect(byTestId('garden-zone-problem')).toBeNull();
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+        // And Use my place again on a full disk: the same sentence, the choice kept as it was, no back.
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        full = true;
+        await click(byTestId('garden-zone-reset'), 'Use my place again');
+        await settleUntil(() => !!byTestId('garden-zone-problem'), 8000);
+        expect(byTestId('garden-zone-problem')?.textContent).toBe("Couldn't save it on this phone. Try again.");
+        expect(nav.backs).toBe(1);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+    }, 30_000);
+
     it("takes the member's area, then the phone's last known place only where location is already allowed; never asks", async () => {
         keepHome(null, { lat: 51.5, lng: -0.1 }); // London, as the member's rough area
         await redraw({}, 'en');

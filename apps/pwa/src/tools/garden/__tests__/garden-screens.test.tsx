@@ -43,9 +43,13 @@ const answer = (place: { lat: number; lng: number } | null, area: { lat: number;
     profile: 'local', generatedAt: '', features: {}, me: area ? { area } : null, cards: place ? { community: { place } } : {},
 });
 
+/** This browser's IndexedDB, a stand-in that can refuse a write as a full disk does (failNextCommit). */
+let idb: ReturnType<typeof memoryIndexedDB>;
+
 beforeEach(() => {
     localStorage.clear();
-    vi.stubGlobal('indexedDB', memoryIndexedDB());
+    idb = memoryIndexedDB();
+    vi.stubGlobal('indexedDB', idb);
     resetToolStoreForTest();
     resetAccountEpochForTest();
     resetHomeCacheForTest();
@@ -184,6 +188,38 @@ describe('Your garden on the web: the guide', () => {
         fireEvent.click(reset);
         await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Warm temperate · southern hemisphere'));
         expect(screen.getByTestId('garden-zone-source').textContent).toContain("From your community's place.");
+        expect(props.onClose).not.toHaveBeenCalled();
+    });
+
+    it("a choice this browser couldn't keep says so, out loud, and stays on Change; the next tap is kept and goes back once", async () => {
+        home.answer = answer({ lat: -28.55, lng: 153.5 });
+        const { props } = draw({ id: 'garden', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('tool-door-already'));
+        fireEvent.click(await screen.findByTestId('garden-change'));
+        await screen.findByTestId('garden-zone-found');
+        idb.failNextCommit();
+        fireEvent.click(screen.getByTestId('garden-zone-mild'));
+        const said = await screen.findByTestId('garden-zone-problem');
+        expect(said.textContent).toBe("Couldn't save it in this browser. Try again.");
+        // In the region that was there, empty, before it: a screen reader hears it as it shows.
+        const live = screen.getByTestId('garden-zone-problem-live');
+        expect(live.getAttribute('aria-live')).toBe('polite');
+        expect(live.contains(said)).toBe(true);
+        expect(screen.getByTestId('garden-zone')).toBeTruthy();
+        expect(JSON.parse((await readToolRecord(OWNER, 'garden'))?.body ?? '{"settings":{}}').settings).toEqual({});
+        // The browser keeps it now: the same row, tapped again, is kept and goes back once, to the guide.
+        fireEvent.click(screen.getByTestId('garden-zone-mild'));
+        await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Mild temperate · southern hemisphere'));
+        expect(props.onClose).not.toHaveBeenCalled();
+        expect(JSON.parse((await readToolRecord(OWNER, 'garden'))!.body)).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+        // And Use my place again, refused the same way: the same sentence, the choice kept as it was, still on Change.
+        fireEvent.click(screen.getByTestId('garden-change'));
+        const reset = await screen.findByTestId('garden-zone-reset');
+        idb.failNextCommit();
+        fireEvent.click(reset);
+        expect((await screen.findByTestId('garden-zone-problem')).textContent).toBe("Couldn't save it in this browser. Try again.");
+        expect(screen.getByTestId('garden-zone-mild').textContent).toContain('Mild temperate (chosen)');
+        expect(JSON.parse((await readToolRecord(OWNER, 'garden'))!.body)).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
         expect(props.onClose).not.toHaveBeenCalled();
     });
 

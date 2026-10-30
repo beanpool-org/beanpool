@@ -5,14 +5,16 @@
  * host or bypass its manifest's declared permissions. Tools import only types from tools/host.ts.
  */
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    TOOL_PERMISSION_GRANTS, lendBackAroundOf, narrowHost, pricingHintFor, withinAnswerTime,
+    TOOL_PERMISSION_GRANTS, lendBackAroundOf, narrowHost, pricingHintFor, toolPlaceOf, withinAnswerTime,
     type PricingGuideItem, type ToolDealSummary, type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolOfferDraft,
-    type ToolOwnOffer, type ToolPermission, type ToolPostStatus,
+    type ToolOwnOffer, type ToolPermission, type ToolPlace, type ToolPostStatus,
 } from '@beanpool/core';
 import { getMyPosts, getPost, pausePost, resumePost, signedGet } from '../utils/db';
 import { viewOf } from '../utils/posts-view';
+import { readStoredHome } from '../utils/home-store';
 import { keepPicked, openNeedComposer } from './doors';
 import { removeToolPhoto, toolPhotoUri } from './photos';
 import { communityKey } from './community';
@@ -59,6 +61,7 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
                 return keepPicked(community, owner, tool, await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 }));
             },
         },
+        place: () => phonePlace(owner, ctx.node.url),
         offerDoor: (draft) => ctx.openListSheet(draft),
         needDoor: (draft) => { void openNeedComposer(owner, tool, draft); },
         deals: () => ownerDeals(owner),
@@ -71,6 +74,26 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
         },
         nodeCopy: { on: ctx.nodeCopy ?? false },
     };
+}
+
+/**
+ * `place`: a place the phone already holds, never asked for and never sent (core toolPlaceOf): the community's own place
+ * and the member's rough area from the Home answer this phone kept for this account and community, else the phone's last
+ * known place where location is already allowed (as Home's own lastKnownPlace: never a permission prompt). Null for none.
+ */
+export async function phonePlace(owner: string, url: string | null): Promise<ToolPlace | null> {
+    const base = (url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) ?? '').trim();
+    const answer = base ? (await readStoredHome(owner, base))?.answer : null;
+    const kept = toolPlaceOf({ community: answer?.cards.community?.place, area: answer?.me?.area });
+    if (kept) return kept;
+    try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') return null;
+        const last = await Location.getLastKnownPositionAsync();
+        return last ? toolPlaceOf({ device: { lat: last.coords.latitude, lng: last.coords.longitude } }) : null;
+    } catch {
+        return null;
+    }
 }
 
 /** The most rows the node gives in one page (MAX_PAGE_LIMIT in https-server.ts); asked for no number, it gives 50. */

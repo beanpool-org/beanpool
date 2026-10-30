@@ -6,12 +6,12 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    lendBackAroundOf, narrowHost, pricingHintFor, toolDocBytes, toolDocMaxBytes,
+    lendBackAroundOf, narrowHost, pricingHintFor, toolDocBytes, toolDocMaxBytes, toolPlaceOf,
     type PricingGuideItem, type ToolDealSummary, type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolNeedDraft,
-    type ToolOfferDraft, type ToolOwnOffer, type ToolPermission, type ToolPostStatus,
+    type ToolOfferDraft, type ToolOwnOffer, type ToolPermission, type ToolPlace, type ToolPostStatus,
 } from '@beanpool/core';
 import {
-    getMarketplacePosts, getMyMarketplaceTransactions, pauseMarketplacePost, request, resumeMarketplacePost, type MarketplacePost,
+    getHome, getMarketplacePosts, getMyMarketplaceTransactions, pauseMarketplacePost, request, resumeMarketplacePost, type MarketplacePost,
 } from '../lib/api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { chooseImageFile, keepChosen, toolPhotoToken } from './photos';
@@ -293,6 +293,21 @@ const newPhotoRef = () => (typeof crypto !== 'undefined' && typeof crypto.random
     ? crypto.randomUUID()
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
+/**
+ * `place`: a place the community's server already tells this member (core toolPlaceOf): the community's own place and
+ * the member's rough area, from the Home answer's Your community card (GET /api/home, as Home reads it; nothing is sent
+ * with it). The browser's own position is never asked for. Null for none, or when the server can't be reached.
+ */
+export async function webPlace(): Promise<ToolPlace | null> {
+    try {
+        const read = await getHome({ cards: ['community'] });
+        if (read.notModified) return null;
+        return toolPlaceOf({ community: read.answer.cards.community?.place, area: read.answer.me?.area });
+    } catch {
+        return null;
+    }
+}
+
 function webGrants(ctx: WebHostContext, tool: string): Partial<ToolHostGrants> {
     const owner = ctx.owner.publicKey;
     const photo = async (capture: boolean) => keepChosen(owner, tool, await chooseImageFile(capture), newPhotoRef());
@@ -308,6 +323,7 @@ function webGrants(ctx: WebHostContext, tool: string): Partial<ToolHostGrants> {
             });
         },
         needDoor: (draft: ToolNeedDraft) => ctx.openComposer(composerDraft('need', draft)),
+        place: () => webPlace(),
         photos: {
             pick: () => photo(false),
             remove: async (ref: string) => { await removeToolPhoto(owner, tool, ref); },

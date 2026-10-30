@@ -156,7 +156,7 @@ const covered = (sso) => protectionFrom({ enrolled: sso.map(() => 'sso'), genera
 const hasWords = q.get('words') !== 'none';
 // "Your community's admins" (VR3): offered here (the rule "this server"), and whether the community keeps the copy.
 globalThis.__offered = q.get('offered') !== 'no';
-// A copy it keeps but can't open (#2626): its key gone (`cantopen-key`), or another key in its place (`cantopen-other`).
+// A copy it keeps but can't open (#2626): its key gone (copy=cantopen-key), or another key in its place (copy=cantopen-other).
 const CANT_OPEN = { 'cantopen-key': 'recovery_seal_key_missing', 'cantopen-other': 'recovery_seal_unopenable' }[q.get('copy') || ''];
 globalThis.__copy = q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
     : CANT_OPEN ? { kept: false, since: null, offered: globalThis.__offered, unopenable: { since: '2026-10-29T04:05:06.000Z', reason: CANT_OPEN } }

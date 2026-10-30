@@ -539,7 +539,7 @@ function moveDust(amount: number): void {
 moveDust(0.00005);
 const pantryBefore = { jon: balanceOf(jon), commons: getCommonsBalanceExact(), commonsRow: commonsRow(), sum: sumBalances() };
 const pantryFails = refusal(() => deleteCrowdfundProject(pantry, lou));
-check(nedRemoved === null && pantryFails !== null && /non-zero balance/.test(pantryFails), `the pantry's cancel fails after its first move (${nedRemoved ?? pantryFails ?? 'it was cancelled'})`);
+check(nedRemoved === null && pantryFails !== null && /enterprise account with non-zero balance/.test(pantryFails), `the pantry's cancel fails after its first move (${nedRemoved ?? pantryFails ?? 'it was cancelled'})`);
 check(near(getCommonsBalanceExact(), pantryBefore.commons) && near(commonsRow(), pantryBefore.commonsRow) && near(balanceOf(ned), 0)
     && near(balanceOf(jon), pantryBefore.jon) && near(balanceOf(pantryEscrow), 8) && escrowRows(pantryEscrow).length === 0
     && !!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(pantry) && near(sumBalances(), pantryBefore.sum),

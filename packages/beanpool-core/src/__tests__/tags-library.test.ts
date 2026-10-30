@@ -201,6 +201,28 @@ describe('suggestTags', () => {
         expect(suggestTags('Limón fresco', '', { index: es })).toEqual(['food.fruit.lemon']);
     });
 
+    it('a word that is a label in the member’s language beats an English one: Spanish "pan" is bread, not frying pans', () => {
+        const tag = (en: string) => `${en}${CONTEXT_SEPARATOR}tag`;
+        const es = buildTagIndex(wordsFor('es', [{
+            [tag('Bread')]: 'Pan', [tag('Frying pans')]: 'Sartenes', [tag('Hay')]: 'Heno', [tag('Sourdough')]: 'Masa madre',
+            [tag('Eggs')]: 'Huevos',
+        }]));
+        expect(es.byName('pan')).toEqual(['food.bakery.bread']);
+        expect(es.byLabel('pan')).toEqual(['food.bakery.bread']);
+        expect(es.byName('sartenes')).toEqual(['goods.kitchen.frying-pans']);
+        expect(suggestTags('Pan de masa madre', '', { index: es })).toEqual(['food.bakery.sourdough', 'food.bakery.bread']);
+        expect(suggestTags('Pan casero', '', { index: es })).toEqual(['food.bakery.bread']);
+        // An English-only word ("hay", there is) still names its tag, below what the language's own labels found.
+        expect(es.byName('hay')).toEqual(['animals.feed.hay']);
+        expect(es.byLabel('hay')).toEqual([]);
+        expect(suggestTags('Hay huevos', '', { index: es })).toEqual(['food.eggs', 'animals.feed.hay']);
+        expect(suggestTags('Hay limones frescos', '', { index: es })).toEqual(['animals.feed.hay']);
+        // English is as it was: "pan" is not an English label, so the synonym word finds frying pans.
+        const en = buildTagIndex(wordsFor('en'));
+        expect(en.byName('pan')).toEqual(['goods.kitchen.frying-pans']);
+        expect(suggestTags('Pan', '', { index: en })).toEqual(['goods.kitchen.frying-pans']);
+    });
+
     it('suggests from the names inside a title written without spaces (Chinese, Japanese)', () => {
         const zh = buildTagIndex(wordsFor('zh-Hans', [{
             [`Lemon${CONTEXT_SEPARATOR}tag`]: '柠檬',

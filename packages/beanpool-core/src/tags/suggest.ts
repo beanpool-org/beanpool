@@ -1,7 +1,7 @@
 /**
  * Tags to suggest for a listing from its own words (DESIGN-owner-seeding-tags-fable.md §4.4): one function for the phone's
  * and the web's pickers and the assistant. Reads the label index, so a Spanish title suggests from Spanish labels, and the
- * English ones and the old synonym words always. Suggests, never sets: the member (or the assistant) picks.
+ * English ones and the old synonym words always, below them. Suggests, never sets: the member (or the assistant) picks.
  */
 import { compoundWords } from '../search-terms.js';
 import { TAG_LIBRARY, tagIndex, type TagIndex } from './index.js';
@@ -31,7 +31,9 @@ function singulars(word: string): string[] {
  * Up to `limit` tag ids for a title and description, best first. A tag is named by a label or an old synonym word (three,
  * two, then one word at a time, the longer name first: "sweet potato" is not "potato"; a compound only whole: "free-range"
  * is not "free", while any other mark parts words: "lemons/limes" is lemon and lime; in a script written without spaces,
- * the names inside the run: "新鲜柠檬出售" is lemon). An English broader word in the title ("screen", "citrus") adds the few tags it is on inside
+ * the names inside the run: "新鲜柠檬出售" is lemon). In another language, a name that is not one of its labels (an English
+ * label, an old synonym word) counts half: Spanish "hay" (there is) is the English hay, below what the language's own labels
+ * found. An English broader word in the title ("screen", "citrus") adds the few tags it is on inside
  * the listing's category (at most two), never a family ("food") and never from elsewhere ("hire" on a chainsaw is not
  * a party). Title words count three times a description's. When a tag and one under it are both found, the one under it
  * is kept. Tops are never suggested: the category is its own field.
@@ -61,9 +63,11 @@ export function suggestTags(title: string, description = '', options: SuggestTag
         for (const n of [3, 2, 1]) {
             for (let i = 0; i + n <= words.length; i++) {
                 if (used.slice(i, i + n).some(Boolean)) continue;
-                const ids = lookup(words.slice(i, i + n), index.byName);
+                const own = lookup(words.slice(i, i + n), index.byLabel);
+                const ids = own.length ? own : lookup(words.slice(i, i + n), index.byName);
                 if (ids.length) {
-                    bump(ids, weight * (1 + (n - 1) / 2));
+                    const by = own.length || index.lang === 'en' ? 1 : 1 / 2;
+                    bump(ids, weight * by * (1 + (n - 1) / 2));
                     for (let j = i; j < i + n; j++) used[j] = true;
                 } else if (n === 1) {
                     // A word of a script written without spaces is a run of words ("新鲜柠檬出售"): the names inside it count.

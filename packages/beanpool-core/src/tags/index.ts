@@ -96,8 +96,12 @@ function tagForms(text: string): string[] {
 export interface TagIndex {
     readonly lang: string;
     /** The tags a word or phrase names: a label in this language or in English, or a word the old synonym map keyed; a
-     *  compound as written or joined ("Wi-Fi" finds "Wifi"). */
+     *  compound as written or joined ("Wi-Fi" finds "Wifi"). A label in this language beats the rest: Spanish "pan" is
+     *  bread, never frying pans by the English synonym word "pan". */
     byName(text: string): readonly string[];
+    /** The tags a label in this language names (an untranslated tag's is its English), as byName reads it: never by a
+     *  translated tag's English label or an old synonym word. */
+    byLabel(text: string): readonly string[];
     /** The tags an English broader word is on: a tag's words (for it and everything under it) or its aliases. */
     byAlias(text: string): readonly string[];
     /** The tags named inside a word of a script written without spaces: "新鲜柠檬出售" (fresh lemons for sale) holds 柠檬. The
@@ -140,6 +144,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
     const lang = words?.lang ?? currentLanguage();
     const translate = words ? words.t : t;
     const names = new Map<string, string[]>();
+    const ownNames = new Map<string, string[]>();
     const aliases = new Map<string, string[]>();
     const labels = new Map<string, string>();
     const own: Array<[string, string]> = [];
@@ -150,6 +155,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
         const label = translate(tag.en) || en;
         labels.set(tag.id, label);
         add(names, label, tag.id);
+        add(ownNames, label, tag.id);
         add(names, en, tag.id);
         for (const key of tag.synonymKeys ?? []) add(names, key, tag.id);
         for (const w of tag.words ?? []) add(aliases, w, tag.id);
@@ -166,7 +172,11 @@ export function buildTagIndex(words?: Translate): TagIndex {
         : UNSPACED.test(q) && label.includes(q) ? 3 : -1);
     return {
         lang,
-        byName: (text) => find(names, text),
+        byName(text) {
+            const mine = find(ownNames, text);
+            return mine.length ? mine : find(names, text);
+        },
+        byLabel: (text) => find(ownNames, text),
         byAlias: (text) => find(aliases, text),
         inside(text) {
             let run = tagText(text);

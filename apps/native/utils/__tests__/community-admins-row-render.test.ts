@@ -29,7 +29,7 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'),
         ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => s },
-        Alert: { alert: () => {} },
+        Alert: { alert: (title: string, body: string) => { fx.alerts.push({ title, body }); } },
     };
 });
 /** Account Protection coming into view again: every focus effect mounted runs once more. */
@@ -71,6 +71,8 @@ const fx = vi.hoisted(() => ({
     answers: {} as Record<string, unknown>,
     asked: [] as string[],
     removed: [] as string[],
+    turnedOn: [] as string[],
+    alerts: [] as { title: string; body: string }[],
 }));
 vi.mock('../node-post', () => ({
     anchorUrl: async () => fx.anchor,
@@ -90,7 +92,7 @@ vi.mock('../community-copy', async (importOriginal) => {
             return typeof answer === 'function' ? (answer as () => unknown)() : answer ?? null;
         },
         removeCommunityCopy: async (url: string) => { fx.removed.push(url); },
-        turnOnCommunityCopy: async () => ({ since: new Date().toISOString() }),
+        turnOnCommunityCopy: async (url: string) => { fx.turnedOn.push(url); return { since: new Date().toISOString() }; },
     };
 });
 
@@ -112,6 +114,8 @@ beforeEach(() => {
     fx.answers = { [MULLUM]: KEPT };
     fx.asked.length = 0;
     fx.removed.length = 0;
+    fx.turnedOn.length = 0;
+    fx.alerts.length = 0;
     setLanguage('en');
 });
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; });
@@ -182,5 +186,85 @@ describe('CommunityAdminsRow: only the community in use speaks', () => {
         await act(async () => { answerAgain(KEPT); });
         await settle();
         expect(byTestId('community-admins-on')?.textContent).toContain('mullum.beanpool.org');
+    });
+});
+
+/** A copy Mullumbimby's server keeps but can't open now (#2626 deciding pass, keepers.ts:602): `reason` is why. */
+const cantOpen = (reason: string, offered = true) => (
+    { kept: false, since: null, offered, unopenable: { since: '2026-10-05T00:00:00.000Z', reason } }
+);
+const click = async (id: string) => { await act(async () => { byTestId(id)!.click(); }); await settle(); };
+
+describe('CommunityAdminsRow: a copy the server keeps but can\'t open is never On, and says what can be done', () => {
+    it('its key gone: kept but can\'t be opened, since when; the people who run it can put the key back; Remove only', async () => {
+        fx.answers[MULLUM] = cantOpen('recovery_seal_key_missing');
+        await mount();
+        expect(byTestId('community-admins-on'), 'never "On"').toBeNull();
+        const said = byTestId('community-admins-cant-open')?.textContent ?? '';
+        expect(said).toContain("Kept in mullum.beanpool.org since 5 Oct 2026, but its server can't open it now, so your admins can't bring you back with it.");
+        expect(said).toContain('The people who run it can put that key back. Until then, your 12 words still work.');
+        expect(byTestId('community-admins-turn-on'), 'turning it on again can\'t work without the key: not offered').toBeNull();
+        expect(byTestId('community-admins-remove')).toBeTruthy();
+    });
+
+    it('another key in its place, and offered: Turn on again makes a copy it can open, and the row then says On', async () => {
+        fx.answers[MULLUM] = cantOpen('recovery_seal_unopenable');
+        await mount();
+        expect(byTestId('community-admins-on')).toBeNull();
+        expect(byTestId('community-admins-cant-open')?.textContent).toContain('It was locked with a key the server no longer has. Turn it on again to make a copy it can open.');
+        expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on again');
+        expect(byTestId('community-admins-remove')).toBeTruthy();
+
+        fx.answers[MULLUM] = KEPT;
+        await click('community-admins-turn-on');
+        expect(fx.turnedOn).toEqual([MULLUM]);
+        expect(byTestId('community-admins-cant-open')).toBeNull();
+        expect(byTestId('community-admins-on')?.textContent).toContain('mullum.beanpool.org');
+    });
+
+    it('another key in its place, and no longer offered: no Turn on; it can be removed', async () => {
+        fx.answers[MULLUM] = cantOpen('recovery_seal_unopenable', false);
+        await mount();
+        expect(byTestId('community-admins-cant-open')?.textContent).toContain('and mullum.beanpool.org no longer makes new copies. You can remove it; your 12 words still work.');
+        expect(byTestId('community-admins-turn-on')).toBeNull();
+        expect(byTestId('community-admins-remove')).toBeTruthy();
+    });
+
+    it('Remove asks about the copy as what it is: no way back is taken away', async () => {
+        fx.answers[MULLUM] = cantOpen('recovery_seal_key_missing');
+        await mount();
+        await click('community-admins-remove');
+        expect(fx.alerts).toEqual([{ title: 'Remove this copy?', body: "mullum.beanpool.org's server deletes the copy it can't open. Your 12 words still work." }]);
+    });
+
+    it('a phone that turned it on there keeps saying so while the copy is kept but can\'t be opened', async () => {
+        store.set(`beanpool_community_copy_on_${MULLUM}`, '1');
+        fx.rules[MULLUM] = 'vault';
+        fx.answers[MULLUM] = cantOpen('recovery_seal_unopenable', false);
+        await mount();
+        expect(byTestId('community-admins-cant-open'), 'the rule moved, but the copy is still there to be said and removed').toBeTruthy();
+        expect(store.get(`beanpool_community_copy_on_${MULLUM}`)).toBe('1');
+    });
+});
+
+describe('CommunityAdminsRow: Turn on is offered on the server\'s own word', () => {
+    it('the rule says "this server", but the server answers that it doesn\'t offer it (a door anyone can walk through): no Turn on', async () => {
+        fx.answers[MULLUM] = { kept: false, since: null, offered: false, unopenable: null };
+        await mount();
+        expect(fx.asked).toEqual([MULLUM]);
+        expect(byTestId('community-admins-turn-on')).toBeNull();
+        expect(byTestId('community-admins-row')).toBeNull();
+    });
+
+    it('the server offers it: Turn on', async () => {
+        fx.answers[MULLUM] = { kept: false, since: null, offered: true, unopenable: null };
+        await mount();
+        expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on');
+    });
+
+    it('the server couldn\'t be asked: the rule decides, as before (tapping then says it couldn\'t reach the community)', async () => {
+        fx.answers[MULLUM] = null;
+        await mount();
+        expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on');
     });
 });

@@ -19,14 +19,20 @@ import { getMnemonic, type BeanPoolIdentity } from './identity';
 import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import type { RecoveryCopiesRule } from './vault-config';
+import { unopenableOf, type CommunityCopyUnopenable } from './community-copy-state';
+
+export { unopenableOf, type CommunityCopyUnopenable, type CommunityCopyUnopenableReason } from './community-copy-state';
 
 /** What the community's server says about this member's community copy. */
 export interface CommunityCopyStatus {
+    /** It keeps the copy and can open it: only then can its admins bring the member back. */
     kept: boolean;
     /** When it was turned on (ISO), when kept. */
     since: string | null;
     /** Whether the community offers it now (its rule is "this server", and its door is not open to anyone). */
     offered: boolean;
+    /** It keeps a copy it can't open now (its key gone, or another): never On. Null otherwise, and from a server from before. */
+    unopenable: CommunityCopyUnopenable | null;
 }
 
 /** The phone's own sentences (the server's refusals come in its own words). */
@@ -52,7 +58,8 @@ export async function communityCopyStatus(url: string, identity: BeanPoolIdentit
         if (!res.ok) return null;
         const body = await answerOf(res);
         if (typeof body.kept !== 'boolean') return null;
-        return { kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true };
+        const unopenable = body.kept ? null : unopenableOf(body.unopenable);
+        return { kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true, unopenable };
     } catch {
         return null;
     }

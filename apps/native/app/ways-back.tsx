@@ -151,8 +151,12 @@ export default function WaysBackScreen() {
             // The copy a community keeps for its admins to bring the member back from (VR3): the row's own words.
             const at = ways.communities.find(c => sameCommunity(c.url, copy.url));
             if (!at) return;
-            confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), t('Remove this way back?'),
-                t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
+            // One its server can't open is no way back now: the ask says what removing it does, and nothing more.
+            const cantOpen = !at.status?.adminsCopy && !!at.status?.adminsCopyUnopenable;
+            confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), cantOpen ? t('Remove this copy?') : t('Remove this way back?'),
+                cantOpen
+                    ? t("{community}'s server deletes the copy it can't open. Your 12 words still work.", { community: at.name })
+                    : t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
                 () => {
                     void (async () => {
                         setBusy(true);
@@ -202,7 +206,7 @@ export default function WaysBackScreen() {
         if (ways.vault.kind === 'unknown' || (ways.vault.kind === 'listed' && ways.vault.copies.length > 0)) {
             parts.push(t("BeanPool's key vault deletes its copies at once, and from its backups within 30 days, or later if the vault is paused in that time."));
         }
-        if (ways.communities.some(c => (c.status?.providers.length ?? 0) > 0 || !!c.status?.adminsCopy)) {
+        if (ways.communities.some(c => (c.status?.providers.length ?? 0) > 0 || !!c.status?.adminsCopy || !!c.status?.adminsCopyUnopenable)) {
             parts.push(t("Each community's server deletes its copy. Copies already in a server's backups stay there."));
         }
         for (const c of ways.communities.filter(c => !c.status)) {

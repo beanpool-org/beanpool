@@ -47,7 +47,7 @@ import { vaultCopyKnowledge, vaultCopyKnown } from '../vault';
 import { retryCommunityRemovals, vaultMoveOffer } from '../vault-move';
 import {
     beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom,
-    removeEverything, removeVaultCopy, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
+    removeEverything, removeVaultCopy, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
 } from '../ways-back';
 import { FakeVault, OTHER_KEY, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 import { boundSignatureValid } from './server-signature-check';
@@ -76,6 +76,8 @@ interface Community {
     fate: ((req: SentRequest) => Fate) | null;
     /** The copy it keeps for its admins to bring Kim back from (vault rethink VR3), since when; null: none. */
     admins: { since: string } | null;
+    /** A copy it keeps for its admins but can't open now (its seal key gone, or another), since when and why; null: none. */
+    adminsUnopenable: { since: string; reason: string } | null;
     /** How its delete of that copy goes: as the node answers, refused (a 5xx), or a proxy's 200 page. */
     adminsDelete: 'answered' | 'refused' | 'proxy';
     /** A server from before VR3: its status never names the copy, and it has no route to delete one. */
@@ -103,7 +105,7 @@ let kim: BeanPoolIdentity;
 function network(): Net {
     const community = (copies: string[], generation: number): Community => ({
         copies: new Set(copies), generation, down: false, deletesFail: false, deletesFailFor: new Set(), answersLostFor: new Set(),
-        deletedAt: 0, fate: null, admins: null, adminsDelete: 'answered', beforeVr3: false,
+        deletedAt: 0, fate: null, admins: null, adminsUnopenable: null, adminsDelete: 'answered', beforeVr3: false,
     });
     const net: Net = { vault: new FakeVault(), communities: { [MULLUM]: community(['google'], 4), [GLOBAL]: community([], 0) }, sent: [], statusGate: null };
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -132,13 +134,14 @@ function network(): Net {
         if (req.method === 'POST' && u.pathname === '/api/recovery/shares/status') {
             if (net.statusGate) await net.statusGate;
             const status = { generation: c.generation, enrolledSso: [...c.copies], keepers: [], total: c.copies.size, threshold: 1 };
-            return json(200, c.beforeVr3 ? status : { ...status, communityCopy: c.admins });
+            return json(200, c.beforeVr3 ? status : { ...status, communityCopy: c.admins, communityCopyUnopenable: c.adminsUnopenable });
         }
         if (req.method === 'DELETE' && u.pathname === '/api/recovery/community-copy' && !c.beforeVr3) {
             if (c.adminsDelete === 'refused') return json(503, { error: 'Try again later.', code: 'standby' });
             if (c.adminsDelete === 'proxy') return new Response('<html>Welcome to the cafe wifi</html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
-            const removed = c.admins ? 1 : 0;
+            const removed = c.admins || c.adminsUnopenable ? 1 : 0;
             c.admins = null;
+            c.adminsUnopenable = null;
             return json(200, { removed, kept: false });
         }
         const del = /^\/api\/recovery\/shares\/sso\/([a-z]+)$/.exec(u.pathname);
@@ -1011,5 +1014,37 @@ describe("your community's admins (vault rethink VR3): their copy is listed, sin
         const after = await listWaysBack(kim);
         expect(knownCopies(after)).toEqual([{ at: 'admins', url: MULLUM }]);
         expect(wordsOnly(after)).toBe(false);
+    });
+
+    it("a copy its server keeps but can't open: listed as that and removable, never a way back (#2626 deciding pass)", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.vault.copies.clear();
+        net.communities[MULLUM].copies.clear();
+        net.communities[MULLUM].adminsUnopenable = { since: SINCE, reason: 'recovery_seal_key_missing' };
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status).toEqual({ providers: [], generation: 4, adminsCopyUnopenable: { since: SINCE, reason: 'recovery_seal_key_missing' } });
+        expect(knownCopies(ways), 'it brings nobody back: not counted').toEqual([]);
+        expect(unopenableAdminsCopies(ways).map((c) => c.url)).toEqual([MULLUM]);
+        // It is kept, so the list never says nothing is (its row says the 12 words still work).
+        expect(wordsOnly(ways)).toBe(false);
+        // Removing it takes no way back away: an ordinary confirm, not "show my 12 words first".
+        expect(beforeRemoving(ways, { at: 'admins', url: MULLUM }, { hasWords: true, writtenDown: false })).toBe('confirm');
+        // Remove everything takes it too: it is still the member's key, on that server.
+        const done = await removeEverything(kim, ways);
+        expect(done.admins).toEqual([{ url: MULLUM, name: 'Mullumbimby', removal: { removed: true } }]);
+        expect(adminsAt(net, MULLUM)).toHaveLength(1);
+        expect(net.communities[MULLUM].adminsUnopenable).toBeNull();
+        expect(wordsOnly(await listWaysBack(kim))).toBe(true);
+    });
+
+    it("a reason this phone doesn't know is still 'can't open', never kept", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.communities[MULLUM].adminsUnopenable = { since: SINCE, reason: 'a_reason_from_a_later_server' };
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status?.adminsCopyUnopenable).toEqual({ since: SINCE, reason: 'recovery_seal_unopenable' });
+        expect(ways.communities[0].status?.adminsCopy).toBeUndefined();
+        expect(knownCopies(ways).some((c) => c.at === 'admins')).toBe(false);
     });
 });

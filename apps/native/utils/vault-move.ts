@@ -50,6 +50,7 @@ import { vaultMoveLaterStoreKey, vaultMoveUnfinishedStoreKey } from './storage-k
 import { connectWanted, disconnectFromVault, hasVault, signInCopiesAt, vaultStatus, VaultError } from './vault';
 import { knownCopiesRule } from './copies-rule';
 import { sameCommunity } from './ways-back-state';
+import { unopenableOf, type CommunityCopyUnopenable } from './community-copy-state';
 
 export { sameCommunity };
 
@@ -92,6 +93,11 @@ export interface CommunityCopyStatus {
      * community-copy.ts), with since when: absent or null when it keeps none, as a server from before it always answers.
      */
     adminsCopy?: { since: string | null } | null;
+    /**
+     * A copy it keeps for its admins but can't open now (its key gone, or another: utils/community-copy-state.ts), so no
+     * way back: listed, and removable, but never counted. Absent from a server from before it said so.
+     */
+    adminsCopyUnopenable?: CommunityCopyUnopenable | null;
 }
 
 /**
@@ -107,14 +113,16 @@ export async function communityCopyStatus(identity: BeanPoolIdentity, url: strin
             return null;
         }
         if (!res.ok) return null;
-        const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { enrolledSso?: unknown; generation?: unknown; communityCopy?: unknown } | null;
+        const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as {
+            enrolledSso?: unknown; generation?: unknown; communityCopy?: unknown; communityCopyUnopenable?: unknown;
+        } | null;
         if (!body || !Array.isArray(body.enrolledSso)) return null;
         const generation = typeof body.generation === 'number' && Number.isSafeInteger(body.generation) ? body.generation : null;
         const providers = [...new Set(offeredProviders(body.enrolledSso))];
         const copy = body.communityCopy && typeof body.communityCopy === 'object' ? body.communityCopy as { since?: unknown } : null;
-        return copy
-            ? { providers, generation, adminsCopy: { since: typeof copy.since === 'string' ? copy.since : null } }
-            : { providers, generation };
+        if (copy) return { providers, generation, adminsCopy: { since: typeof copy.since === 'string' ? copy.since : null } };
+        const unopenable = unopenableOf(body.communityCopyUnopenable);
+        return unopenable ? { providers, generation, adminsCopyUnopenable: unopenable } : { providers, generation };
     } catch {
         return null;
     }

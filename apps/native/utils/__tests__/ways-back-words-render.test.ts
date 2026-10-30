@@ -246,6 +246,27 @@ describe('every sentence through t(), in every state and every confirm (pseudo-l
         wholly('words only, no words on the phone');
     });
 
+    it("a copy its server keeps but can't open: listed as that, never a way back, and Remove asks plainly (#2626)", async () => {
+        fx.ways = {
+            vault: { kind: 'listed', copies: [] },
+            communities: [{ url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 3, adminsCopyUnopenable: { since: '2026-10-29T04:05:06.000Z', reason: 'recovery_seal_key_missing' } } }],
+            pending: [],
+        };
+        await mount('xx');
+        wholly("a copy its server can't open");
+        buttonsFit("a copy its server can't open");
+        act(() => root?.unmount());
+        await mount('en');
+        expect(host!.textContent).toContain("Its server can't open this copy now, so it can't bring your account back. Account Protection says what can be done. Your 12 words still work.");
+        expect(host!.textContent, 'kept, so never "nothing is kept"').not.toContain('Nothing is kept anywhere this phone can ask');
+        expect(host!.textContent).not.toContain('Keeps no copy of your account.');
+        await click(buttonNamed("Remove the copy at Mullumbimby that its server can't open"), "the copy's Remove");
+        expect(alerts.shown.at(-1)!.title).toBe('Remove this copy?');
+        expect(alerts.shown.at(-1)!.body).toBe("Mullumbimby's server deletes the copy it can't open. Your 12 words still work.");
+        await press('Remove');
+        expect(fx.removed).toEqual([[MULLUM, 'admins']]);
+    });
+
     it('each confirm: one copy, the last with the 12 words first, the last with no words, Remove everything, and the results', async () => {
         fx.everything = {
             vault: { removed: false, why: 'unverified' },

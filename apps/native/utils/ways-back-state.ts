@@ -69,7 +69,10 @@ export function isPending(w: WaysBack, url: string, provider: SsoProvider): bool
     return w.pending.some(p => p.provider === provider && sameCommunity(p.url, url));
 }
 
-/** Every copy this phone knows is kept now, not counting ones waiting to be removed. */
+/**
+ * Every copy this phone knows is kept now, not counting ones waiting to be removed. A copy a community keeps for its
+ * admins but can't open (`adminsCopyUnopenable`) is not one: it brings nobody back, so it is listed but never counted.
+ */
 export function knownCopies(w: WaysBack): CopyAt[] {
     const out: CopyAt[] = [];
     if (w.vault.kind === 'listed') for (const c of w.vault.copies) out.push({ at: 'vault', provider: c.provider });
@@ -93,12 +96,19 @@ export function everyoneAnswered(w: WaysBack): boolean {
     return w.vault.kind !== 'unknown' && w.communities.every(c => c.status !== null);
 }
 
+/** The communities that keep a copy for their admins they can't open now: listed, removable, never a way back. */
+export function unopenableAdminsCopies(w: WaysBack): CommunityPart[] {
+    return w.communities.filter(c => !c.status?.adminsCopy && !!c.status?.adminsCopyUnopenable);
+}
+
 /**
  * Nothing kept anywhere this phone can ask: every keeper answered, none keeps a copy, and no delete is waiting. The
- * member's 12 words are then their way back (with an admin's re-key, to a new key, when they are lost too).
+ * member's 12 words are then their way back (with an admin's re-key, to a new key, when they are lost too). A copy a
+ * community can't open is no way back, but it is kept: never "nothing is kept" while one is listed (its row says the
+ * 12 words still work).
  */
 export function wordsOnly(w: WaysBack): boolean {
-    return everyoneAnswered(w) && knownCopies(w).length === 0 && w.pending.length === 0;
+    return everyoneAnswered(w) && knownCopies(w).length === 0 && w.pending.length === 0 && unopenableAdminsCopies(w).length === 0;
 }
 
 /**
@@ -112,6 +122,8 @@ export type BeforeRemoving = 'confirm' | 'show-words-first' | 'no-words-on-phone
 export function beforeRemoving(
     w: WaysBack, removing: CopyAt | 'everything', phone: { hasWords: boolean; writtenDown: boolean },
 ): BeforeRemoving {
+    // Removing a copy its community can't open takes no way back away: the ask is an ordinary one.
+    if (removing !== 'everything' && removing.at === 'admins' && unopenableAdminsCopies(w).some(c => sameCommunity(c.url, removing.url))) return 'confirm';
     const left = removing === 'everything' ? [] : knownCopies(w).filter(c => !sameCopy(c, removing));
     if (left.length > 0 || phone.writtenDown) return 'confirm';
     return phone.hasWords ? 'show-words-first' : 'no-words-on-phone';

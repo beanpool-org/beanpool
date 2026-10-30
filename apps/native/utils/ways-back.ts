@@ -43,7 +43,7 @@ import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, remove
 import { sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
 
 export {
-    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, vaultCopiesBySignIn, wordsOnly,
+    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly,
     type BeforeRemoving, type CommunityPart, type CopyAt, type NotAnswered, type Removal, type VaultPart, type WaysBack,
 } from './ways-back-state';
 
@@ -161,7 +161,8 @@ export async function removeEverything(identity: BeanPoolIdentity, w: WaysBack):
         }
         return done;
     }));
-    const admins = Promise.all(w.communities.filter(c => c.status?.adminsCopy).map(async c => (
+    // A copy a community keeps for its admins but can't open goes too: it is still the member's key, there.
+    const admins = Promise.all(w.communities.filter(c => c.status?.adminsCopy || c.status?.adminsCopyUnopenable).map(async c => (
         { url: c.url, name: c.name, removal: await removeAdminsCopyFrom(identity, c) }
     )));
     return {

@@ -702,7 +702,10 @@ CREATE TABLE IF NOT EXISTS projects (
     migrated_at DATETIME,
     enterprise_pubkey TEXT REFERENCES members(public_key),
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- When a keeper first left it (db.ts noteKeeperLeftProject); NULL while none ever has. Its maker cancels a project
+    -- with no keepers only while this is NULL: one no keeper was ever bound to (db.ts mayCancelProject).
+    keeper_left_at DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at);
 CREATE INDEX IF NOT EXISTS idx_projects_unmigrated ON projects(id) WHERE migrated_at IS NULL;

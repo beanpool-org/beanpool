@@ -238,7 +238,7 @@ export const TABLES: Record<string, TableEntry> = {
     // (routes/treasury.ts, db.ts pledgeToProject).
     projects: {
         kind: 'replicated', payload: 'projects', watermark: 'updated_at',
-        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status migrated_at enterprise_pubkey created_at updated_at'),
+        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status migrated_at enterprise_pubkey created_at updated_at keeper_left_at'),
     },
     ratings: {
         kind: 'replicated-except', payload: 'ratings', watermark: 'created_at',

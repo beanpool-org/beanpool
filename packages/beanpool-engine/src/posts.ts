@@ -2341,6 +2341,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // Which of a shop's Offers its keepers featured, and when: the shopfront's, a members' page (round 3 §5), so not a
     // visitor's. The listing itself stays.
     featuredAt: 'drop',
+    // What made it (an owner's assistant): the moderators' and the standby copy's, never a visitor's.
+    createdVia: 'drop',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.

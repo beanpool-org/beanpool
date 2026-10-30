@@ -419,7 +419,8 @@ async function main(): Promise<void> {
     const seen = JSON.stringify([got, listedOpen]);
     assert(!seen.includes(b64(mkOf(photo))) && !seen.includes(b64(mkOf(handledLine))) && !seen.includes(photo.text) && !seen.includes(handledLine.text),
         'and it is given neither the key nor the words');
-    const removeIt = tool('suggest_action').run(grant, { kind: 'remove_reported', report_id: newOnDismissed[0] ?? '', reason: 'Take it down' }, 'B0UNDARY');
+    // A tool's answer may be a promise (agent/owner-posts.ts creates resize photos first); suggest_action's is not, but is awaited as any.
+    const removeIt = await tool('suggest_action').run(grant, { kind: 'remove_reported', report_id: newOnDismissed[0] ?? '', reason: 'Take it down' }, 'B0UNDARY');
     assert(!removeIt.ok, `nor may it suggest removing one, as there is no post to remove (got ${JSON.stringify(removeIt)})`);
 
     // ── 5. The form ──────────────────────────────────────────────────────────────────────────────────────────────

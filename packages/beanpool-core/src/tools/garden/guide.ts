@@ -138,14 +138,14 @@ export function zoneLineText(zone: GardenZoneId, hemisphere: Hemisphere): string
     return t('{zone} · {hemisphere}', zoneLineValues(zone, hemisphere));
 }
 
-const ENGLISH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /** A month's short name in the language shown (the date words' own; the pseudo-locale marks it, as formatDate does). */
 export function monthShortName(m: number): string {
     const i = ((m % 12) + 12) % 12;
     const lang = currentLanguage();
-    if (lang === PSEUDO_LANG) return pseudoLocalise(ENGLISH_MONTHS[i]);
-    return DATE_WORDS[lang as keyof typeof DATE_WORDS]?.monthsShort[i] ?? ENGLISH_MONTHS[i];
+    // English's from words.ts, the one table of month names (words.test.ts).
+    const english = DATE_WORDS.en?.monthsShort[i] ?? String(i + 1);
+    if (lang === PSEUDO_LANG) return pseudoLocalise(english);
+    return DATE_WORDS[lang as keyof typeof DATE_WORDS]?.monthsShort[i] ?? english;
 }
 
 /**

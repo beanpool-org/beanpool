@@ -194,12 +194,13 @@ describe('a community the member came to ask to join', () => {
     }
     beforeEach(() => { vi.mocked(api.getListedCommunityByHost).mockReset().mockResolvedValue(RIVERSIDE); });
 
-    it('no Find card on Home: it stands above the cards, says how to ask, and its ✕ lets it go (fails before: nothing)', async () => {
+    it('no Find card on Home: it stands above the cards, with Ask to join, and its ✕ lets it go (fails before: nothing)', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([])));
         const seen = vi.fn();
         render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" onAskedCommunitySeen={seen} />);
         const asked = await screen.findByTestId('home-find-asked');
-        expect(await within(asked).findByRole('status')).toHaveTextContent('To ask Riverside to join, open Find a community in the BeanPool app and choose Riverside.');
+        // Front doors S2: the web asks by itself (before: "To ask Riverside to join, open Find a community in the BeanPool app …").
+        expect(await within(asked).findByRole('button', { name: 'Ask to join Riverside' })).toBeTruthy();
         expect(screen.queryByTestId('home-card-find')).toBeNull();
         expect(api.getListedCommunityByHost).toHaveBeenCalledWith('riverside.example');
         fireEvent.click(within(asked).getByTestId('home-find-asked-close'));
@@ -255,6 +256,61 @@ describe('a community gone quiet on the web find card (front doors S13)', () => 
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-find-body');
         expect(screen.queryByTestId('home-find-not-answering-l')).toBeNull();
+    });
+});
+
+describe('Ask to join from the web find card (front doors S2)', () => {
+    const SLEEPY = { key: 'q', name: 'Sleepy Hollow', url: 'https://sleepy.example.org', memberCount: 6, distanceKm: 8 };
+    const NO_ADDRESS = { key: 'f', name: 'Riverbend', url: null, memberCount: 10, distanceKm: 20 };
+
+    it('each row with an address has Ask to join; the form sends; Home\'s waiting card then says how it fares (fails before: no button)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY, NO_ADDRESS] }, true)));
+        const sendSpy = vi.spyOn(knockModule, 'sendKnock').mockResolvedValue({ kind: 'waiting', message: 'You asked to join. No answer yet: communities usually answer within a few days.' });
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const ask = await screen.findByTestId('home-find-ask-q');
+        expect(ask).toHaveAccessibleName('Ask to join Sleepy Hollow');
+        expect(screen.queryByTestId('home-find-ask-f')).toBeNull();
+        // The row itself still links to the community's address: its public card, for a stranger (front doors S15).
+        expect(screen.getByRole('link', { name: /Sleepy Hollow/ })).toHaveAttribute('href', 'https://sleepy.example.org');
+
+        fireEvent.click(ask);
+        fireEvent.change(screen.getByTestId('home-find-ask-q-message'), { target: { value: 'I fix bikes.' } });
+        fireEvent.click(screen.getByTestId('home-find-ask-q-send'));
+        expect(await screen.findByTestId('home-find-ask-q-said')).toHaveTextContent('You asked to join. No answer yet');
+        expect(sendSpy).toHaveBeenCalledWith('https://sleepy.example.org', ME, { callsign: 'Ana', message: 'I fix bikes.' });
+        expect(await screen.findByTestId('home-waiting-card-https://sleepy.example.org')).toBeTruthy();
+        expect(screen.getByTestId('home-cancel-knock-https://sleepy.example.org')).toHaveTextContent('Cancel my request');
+        sendSpy.mockRestore();
+        readSpy.mockRestore();
+    });
+
+    it('a community this browser already asked: no second Ask to join on its row', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        expect(screen.queryByTestId('home-find-ask-q')).toBeNull();
+        readSpy.mockRestore();
+    });
+
+    it('the ?ask= landing (S15\'s link): after Join, the Find card opens on that community with its own Ask to join', async () => {
+        vi.mocked(api.getListedCommunityByHost).mockReset().mockResolvedValue({ key: 'r', name: 'Riverside', url: 'https://riverside.example', memberCount: 40, distanceKm: null });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const sendSpy = vi.spyOn(knockModule, 'sendKnock').mockResolvedValue({ kind: 'waiting', message: 'You asked to join. No answer yet: communities usually answer within a few days.' });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" />);
+        const find = await screen.findByTestId('home-card-find');
+        const asked = await within(find).findByTestId('home-find-asked');
+        expect(within(asked).getByText('Riverside')).toBeTruthy();
+        // It stands first in the card, above the listed rows.
+        expect(asked.compareDocumentPosition(within(find).getByTestId('home-find-ask-q')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        fireEvent.click(await within(asked).findByRole('button', { name: 'Ask to join Riverside' }));
+        fireEvent.change(within(asked).getByTestId('home-find-asked-ask-message'), { target: { value: 'I came from your card.' } });
+        fireEvent.click(within(asked).getByTestId('home-find-asked-ask-send'));
+        expect(await within(asked).findByTestId('home-find-asked-ask-said')).toHaveTextContent('You asked to join.');
+        expect(sendSpy).toHaveBeenCalledWith('https://riverside.example', ME, { callsign: 'Ana', message: 'I came from your card.' });
+        sendSpy.mockRestore();
     });
 });
 

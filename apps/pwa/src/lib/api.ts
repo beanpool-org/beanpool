@@ -635,6 +635,95 @@ export async function getMyInvites(publicKey: string): Promise<{ invites: Invite
     return request('GET', `/api/invite/mine/${encodeURIComponent(publicKey)}`);
 }
 
+// ===================== WANTS TO JOIN (front doors S2: the phone's utils/knock-inbox.ts) =====================
+
+/**
+ * "Wants to join": the requests to join the community this web app talks to, and their answers (design §3.3, §5.8; the
+ * server is apps/server/src/routes/knocks.ts, G6). Any member may answer where members invite: tiers gate nothing.
+ *
+ *   GET  /api/join/knocks?limit&offset       → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt }], total }
+ *   POST /api/join/knocks/:id/approve        → { knock: { id, status: 'approved' }, invite: { code, expiresAt } }
+ *   POST /api/join/knocks/:id/decline        → { knock: { id, status: 'declined' } }
+ *
+ * "Invite" is an ordinary invite, made by the member who answers, that admits the applicant's key and no other; their app
+ * finds it by itself. "Not now" tells them nothing beyond "no answer yet". Both signed by the member, at their own community.
+ */
+export const JOIN_REQUESTS_PATH = '/api/join/knocks';
+export const JOIN_REQUESTS_PAGE = 20;
+
+export interface JoinRequest {
+    id: string;
+    /** The applicant's key: the one the invite will admit. */
+    pubkey: string;
+    callsign: string;
+    message: string;
+    avatar: string | null;
+    /** Where their app says it came from (`global.beanpool.org`); not checked by anyone. */
+    fromNode: string | null;
+    createdAt: string;
+}
+
+export type JoinRequestsResult =
+    | { ok: true; knocks: JoinRequest[]; total: number }
+    /** No section: this community takes no requests (404), or this key isn't a member who can answer them (401, 403). */
+    | { ok: false; kind: 'hidden' }
+    /** The community's words, or null when it couldn't be reached or sent none: the screen says so in its own. */
+    | { ok: false; kind: 'error'; message: string | null };
+
+export type JoinRequestAnswer =
+    | { ok: true; status: 'approved' | 'declined' }
+    /** The node said no (already answered, lapsed, …), in its words, or null when it couldn't be reached. Read the list again. */
+    | { ok: false; message: string | null };
+
+function readJoinRequest(raw: unknown): JoinRequest | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const k = raw as Record<string, unknown>;
+    if (typeof k.id !== 'string' || typeof k.pubkey !== 'string' || typeof k.callsign !== 'string' || typeof k.message !== 'string') return null;
+    return {
+        id: k.id,
+        pubkey: k.pubkey,
+        callsign: k.callsign,
+        message: k.message,
+        avatar: typeof k.avatar === 'string' && k.avatar ? k.avatar : null,
+        fromNode: typeof k.fromNode === 'string' && k.fromNode ? k.fromNode : null,
+        createdAt: typeof k.createdAt === 'string' ? k.createdAt : '',
+    };
+}
+
+async function joinRequestRefusal(res: Response): Promise<string | null> {
+    const body = await res.json().catch(() => null) as { error?: unknown } | null;
+    return typeof body?.error === 'string' && body.error.trim() ? body.error : null;
+}
+
+/** The open requests on this community, newest first, signed by this browser's member. */
+export async function getJoinRequests(offset: number = 0): Promise<JoinRequestsResult> {
+    try {
+        const res = await signedFetch('GET', `${JOIN_REQUESTS_PATH}?limit=${JOIN_REQUESTS_PAGE}&offset=${Math.max(0, Math.floor(offset))}`);
+        if (res.status === 404 || res.status === 401 || res.status === 403) return { ok: false, kind: 'hidden' };
+        if (!res.ok) return { ok: false, kind: 'error', message: await joinRequestRefusal(res) };
+        const body = await res.json().catch(() => null) as { knocks?: unknown; total?: unknown } | null;
+        if (!body || !Array.isArray(body.knocks)) return { ok: false, kind: 'error', message: null };
+        const knocks = body.knocks.map(readJoinRequest).filter((k): k is JoinRequest => k !== null);
+        const total = typeof body.total === 'number' && Number.isFinite(body.total) ? body.total : knocks.length;
+        return { ok: true, knocks, total };
+    } catch {
+        return { ok: false, kind: 'error', message: null };
+    }
+}
+
+/** "Invite" (`approve`: the node makes an invite for the applicant's key, from this member) or "Not now" (`decline`). */
+export async function answerJoinRequest(id: string, verb: 'approve' | 'decline'): Promise<JoinRequestAnswer> {
+    try {
+        const res = await signedFetch('POST', `${JOIN_REQUESTS_PATH}/${encodeURIComponent(id)}/${verb}`, {});
+        if (!res.ok) return { ok: false, message: await joinRequestRefusal(res) };
+        const body = await res.json().catch(() => null) as { knock?: { status?: unknown } } | null;
+        const status = body?.knock?.status;
+        return status === 'approved' || status === 'declined' ? { ok: true, status } : { ok: true, status: verb === 'approve' ? 'approved' : 'declined' };
+    } catch {
+        return { ok: false, message: null };
+    }
+}
+
 // ===================== PROFILES =====================
 
 export interface MemberProfile {

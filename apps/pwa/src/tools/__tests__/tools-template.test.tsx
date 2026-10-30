@@ -316,7 +316,7 @@ describe('the host: only what the manifest declared', () => {
         expect('deals' in seen.host!).toBe(false);
     });
 
-    it('every permission at once: the web grants only what it has built (all but place and the event door); the rest are absent, not undefined', async () => {
+    it('every permission at once: the web grants only what it has built (all but the event door); the rest are absent, not undefined', async () => {
         // The node copy's open asks the community's server, which keeps none yet, so this browser's copy is sent; answered
         // here, and waited for, so it can't land in a later test.
         const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify(init?.method === 'PUT'
@@ -330,12 +330,13 @@ describe('the host: only what the manifest declared', () => {
         await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
         expect(fetchSpy.mock.calls.map(([url, init]) => [String(url).replace(/^.*(\/api\/)/, '$1'), init?.method])).toEqual([['/api/tools/spy', 'GET'], ['/api/tools/spy', 'PUT']]);
         await waitFor(async () => expect((await readToolRecord(OWNER, 'spy'))?.syncedAt).toBe('2026-10-21T08:00:00.000Z'));
-        // Photos, the camera, posts, deals and the pricing guide came with the Tool shed (T1.3), the first tool to ask for them.
+        // Photos, the camera, posts, deals and the pricing guide came with the Tool shed (T1.3), the first tool to ask for them;
+        // the place with Your garden (grow-food G0).
         expect(Object.keys(seen.host!).sort()).toEqual([
-            'back', 'camera', 'deals', 'doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos', 'posts', 'pricingGuide',
+            'back', 'camera', 'deals', 'doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos', 'place', 'posts', 'pricingGuide',
         ]);
         expect((seen.host as unknown as { nodeCopy: { on: boolean } }).nodeCopy).toEqual({ on: true });
-        for (const absent of ['place', 'eventDoor']) {
+        for (const absent of ['eventDoor']) {
             expect(absent in seen.host!, absent).toBe(false);
         }
     });

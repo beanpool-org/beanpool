@@ -7,7 +7,7 @@
  * Optional help for new growers, never a gate (Marty, 18 Oct): experienced growers know their seasons, and nothing
  * else in the app reads this.
  */
-import { DATE_WORDS, currentLanguage, t } from '../../words.js';
+import { DATE_WORDS, PSEUDO_LANG, currentLanguage, pseudoLocalise, t } from '../../words.js';
 import { CROPS, type Crop } from './crops.js';
 import { HEMISPHERE_WORDS, gardenZone, hemisphereOf, zoneAt, type GardenZoneId, type Hemisphere } from './zones.js';
 
@@ -140,10 +140,12 @@ export function zoneLineText(zone: GardenZoneId, hemisphere: Hemisphere): string
 
 const ENGLISH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** A month's short name in the language shown (the date words' own). */
+/** A month's short name in the language shown (the date words' own; the pseudo-locale marks it, as formatDate does). */
 export function monthShortName(m: number): string {
     const i = ((m % 12) + 12) % 12;
-    return DATE_WORDS[currentLanguage() as keyof typeof DATE_WORDS]?.monthsShort[i] ?? ENGLISH_MONTHS[i];
+    const lang = currentLanguage();
+    if (lang === PSEUDO_LANG) return pseudoLocalise(ENGLISH_MONTHS[i]);
+    return DATE_WORDS[lang as keyof typeof DATE_WORDS]?.monthsShort[i] ?? ENGLISH_MONTHS[i];
 }
 
 /**

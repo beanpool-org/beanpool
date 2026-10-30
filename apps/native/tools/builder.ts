@@ -5,7 +5,6 @@
  * host or bypass its manifest's declared permissions. Tools import only types from tools/host.ts.
  */
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     TOOL_PERMISSION_GRANTS, lendBackAroundOf, narrowHost, pricingHintFor, toolPlaceOf, withinAnswerTime,
@@ -14,7 +13,6 @@ import {
 } from '@beanpool/core';
 import { getMyPosts, getPost, pausePost, resumePost, signedGet } from '../utils/db';
 import { viewOf } from '../utils/posts-view';
-import { readStoredHome } from '../utils/home-store';
 import { keepPicked, openNeedComposer } from './doors';
 import { removeToolPhoto, toolPhotoUri } from './photos';
 import { communityKey } from './community';
@@ -80,13 +78,16 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
  * `place`: a place the phone already holds, never asked for and never sent (core toolPlaceOf): the community's own place
  * and the member's rough area from the Home answer this phone kept for this account and community, else the phone's last
  * known place where location is already allowed (as Home's own lastKnownPlace: never a permission prompt). Null for none.
+ * Home's store and the location module load on first ask, so a tool that never asks costs app start nothing.
  */
 export async function phonePlace(owner: string, url: string | null): Promise<ToolPlace | null> {
     const base = (url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) ?? '').trim();
+    const { readStoredHome } = await import('../utils/home-store');
     const answer = base ? (await readStoredHome(owner, base))?.answer : null;
     const kept = toolPlaceOf({ community: answer?.cards.community?.place, area: answer?.me?.area });
     if (kept) return kept;
     try {
+        const Location = await import('expo-location');
         const { status } = await Location.getForegroundPermissionsAsync();
         if (status !== 'granted') return null;
         const last = await Location.getLastKnownPositionAsync();

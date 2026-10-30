@@ -41,7 +41,10 @@ draft; the status is the server's, asked each time; a pause is the owner's own, 
 so one a shop "closed for now" paused stays down when it reopens; a resume while its shop is closed rejects with core's
 `TOOL_SHOP_CLOSED`, which `isShopClosedRefusal` tells from no answer), `deals` (the owner's deals as seller or lender, a loan's `backAround` when known), `pricingGuide` (a hint from the
 community's guide, never a price set), `nodeCopy`, and `reminders` (which grants no function: the host schedules what
-`due()` says). `place` and `eventDoor` are not built yet: a phone route refuses a tool that asks for them.
+`due()` says), and `place` (a place the app already has, never asked for and never sent: on the phone the community's
+place or the member's rough area from the Home answer it kept, else its last known place where location is already
+allowed; on the web the same two from the community's server; core's `toolPlaceOf` is the order; Your garden is the first
+to ask). `eventDoor` is not built yet: a phone route refuses a tool that asks for it.
 
 **The primitives** (`apps/native/tools/ui.tsx`, `apps/pwa/src/tools/ui.tsx`, the same names): `ToolScreen` (phone;
 it scrolls a box being typed in, and the buttons under it, above the keyboard),

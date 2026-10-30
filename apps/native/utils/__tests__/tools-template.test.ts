@@ -101,6 +101,13 @@ vi.mock('react-native-keyboard-controller', () => ({
 vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn(), launchCameraAsync: vi.fn(), requestCameraPermissionsAsync: vi.fn() }));
 vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'photo-ref' }));
+// The phone's own place, for Your garden's `place`: read only where location is already allowed; never a prompt.
+const loc = vi.hoisted(() => ({ status: 'denied' as string, last: null as null | { coords: { latitude: number; longitude: number } }, asked: 0 }));
+vi.mock('expo-location', () => ({
+    getForegroundPermissionsAsync: async () => ({ status: loc.status }),
+    getLastKnownPositionAsync: async () => loc.last,
+    requestForegroundPermissionsAsync: async () => { loc.asked++; return { status: loc.status }; },
+}));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return { useTheme: () => ({ theme: 'light', colors: lightColors }), useStyles: (make: (t: unknown) => unknown) => make({ theme: 'light', colors: lightColors }) };
@@ -272,7 +279,7 @@ vi.mock('@beanpool/core', async (importOriginal) => {
 
 import { DatabaseSync } from 'node:sqlite';
 import {
-    TOOLS, pseudoLocalise, setLanguage, toolFixtureProblems, toolHomeCardType, toolManifestProblems, word,
+    GARDEN, HOME_CARD_TYPES, TOOLS, pseudoLocalise, setLanguage, toolFixtureProblems, toolHomeCardType, toolManifestProblems, word,
     type ToolFixtures, type ToolManifest, type ToolScreenProps,
 } from '@beanpool/core';
 import { TOOL_APPS, phoneTools, type PhoneTool } from '../../tools/index';
@@ -294,6 +301,7 @@ import { lightColors } from '../../constants/colors';
 import { HOME_DRAWN } from '../home-cards';
 import ToolRoute from '../../app/tool/[id]';
 import ToolsScreen from '../../app/tools';
+import { homeAnswerStoreKey } from '../storage-keys';
 
 const NATIVE = path.resolve(__dirname, '../..');
 const REPO = path.resolve(NATIVE, '../..');
@@ -674,9 +682,9 @@ describe("a tool, a screen or a permission this build doesn't have", () => {
     });
 
     it("a tool that declares a permission this build's host can't grant yet: the same page, not a function missing when called", async () => {
-        // `place` (the phone grants `deals` since the Tool shed, T1.2).
-        reg.extra = [{ manifest: { ...KIT, id: 'needs-place', permissions: [...KIT.permissions, 'place'] }, app: { ...kitApp, id: 'needs-place' } }];
-        await drawTool('needs-place');
+        // `event-door` (the phone grants `deals` since the Tool shed, T1.2, and `place` since Your garden, grow-food G0).
+        reg.extra = [{ manifest: { ...KIT, id: 'needs-event', permissions: [...KIT.permissions, 'event-door'] }, app: { ...kitApp, id: 'needs-event' } }];
+        await drawTool('needs-event');
         expect(byTestId('tool-not-in-version')).not.toBeNull();
     });
 
@@ -1512,5 +1520,120 @@ describe("the doors write the map composer's own draft (app/(tabs)/map.tsx, read
         expect(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!)).toMatchObject({ postType: 'need', postTitle: 'A tent', source: 'tool', tool: 'fixture-kit' });
         expect(decideDraftOpen(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!), 'https://mullum.example')).toBe('open-tool');
         expect(nav.pushed).toHaveLength(2);
+    });
+});
+
+// ── Your garden (grow-food slice G0): the planting guide ─────────────────────────────────────────────────────────
+
+describe('Your garden (grow-food G0): the guide shows the zone line, and opens from both doors', () => {
+    const URL_HERE = 'https://mullum.example';
+    /** The Home answer this phone kept for the member here (utils/home-store.ts), with the community's place and the area. */
+    const keepHome = (place: { lat: number; lng: number } | null, area: { lat: number; lng: number } | null = null) => {
+        store.map.set(homeAnswerStoreKey(ME.publicKey, URL_HERE), JSON.stringify({
+            url: URL_HERE, publicKey: ME.publicKey, asked: 'community', etag: null, at: NOW,
+            answer: { profile: 'local', generatedAt: '', features: {}, me: area ? { area } : null, cards: place ? { community: { place } } : {} },
+        }));
+    };
+    beforeEach(() => { reg.extra = []; loc.status = 'denied'; loc.last = null; loc.asked = 0; });
+
+    it("draws the zone line in plain words from the community's place, with Change, Sow now and the map's credit", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 }); // Mullumbimby
+        await drawTool('garden', {}, 'en');
+        // Nothing chosen yet: the template's two doors; the guide is behind either, never a gate.
+        await click(byTestId('tool-door-starting'), "I'm starting out");
+        await settleUntil(() => !!byTestId('garden-zone-line'));
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Warm temperate, southern hemisphere');
+        expect(byTestId('garden-zone-line')?.textContent).toContain("From your community's place.");
+        expect(byTestId('garden-now')).not.toBeNull();
+        expect(byTestId('garden-all')?.textContent).toContain('Tomatoes');
+        expect(host.textContent).toContain('Climate map: Beck et al. (2023), CC BY 4.0');
+        expect(host.textContent).toContain('A general guide for your climate. Your neighbours know your patch better.');
+        expect(loc.asked).toBe(0);
+        await click(byTestId('garden-change'), 'Change');
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'zone' } }]);
+    });
+
+    it('every guide screen in xx at 320 dp × 1.3: every word through t(), none too wide', async () => {
+        keepHome({ lat: 6.52, lng: 3.38 }); // Lagos: wet and dry tropics, so a crop carries the rains note
+        OTHERS = [];
+        await drawTool('garden');
+        await click(byTestId('tool-door-doing'), 'I already do this');
+        await settleUntil(() => !!byTestId('garden-zone-line'));
+        expect(bypassing()).toEqual([]);
+        expect(tooWide()).toEqual([]);
+        await drawTool('garden', { screen: 'crop', crop: 'cassava' });
+        await settleUntil(() => !!byTestId('garden-crop-sow'));
+        expect(byTestId('garden-crop-note')).not.toBeNull();
+        expect(bypassing()).toEqual([]);
+        expect(tooWide()).toEqual([]);
+        await drawTool('garden', { screen: 'zone' });
+        await settleUntil(() => !!byTestId('garden-zone-found'));
+        expect(bypassing()).toEqual([]);
+        expect(tooWide()).toEqual([]);
+    });
+
+    it("Change keeps the member's own choice on this phone, which beats the place; Use my place again clears it", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await drawTool('garden', { screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'));
+        expect(byTestId('garden-zone-found')?.textContent).toContain('Warm temperate, southern hemisphere');
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+        await drawTool('garden', {}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'));
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate, southern hemisphere');
+        expect(byTestId('garden-zone-line')?.textContent).toContain('You chose this.');
+        await drawTool('garden', { screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'));
+        await click(byTestId('garden-zone-reset'), 'Use my place again');
+        await settleUntil(() => nav.backs > 1);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
+    });
+
+    it("takes the member's area, then the phone's last known place only where location is already allowed; never asks", async () => {
+        keepHome(null, { lat: 51.5, lng: -0.1 }); // London, as the member's rough area
+        await drawTool('garden', {}, 'en');
+        await click(byTestId('tool-door-doing'), 'I already do this');
+        await settleUntil(() => !!byTestId('garden-zone-line'));
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate, northern hemisphere');
+        expect(byTestId('garden-zone-line')?.textContent).toContain('From your area.');
+
+        store.map.delete(homeAnswerStoreKey(ME.publicKey, URL_HERE));
+        loc.last = { coords: { latitude: 1.35, longitude: 103.82 } }; // Singapore, but location isn't allowed here
+        await drawTool('garden', {}, 'en');
+        await settleUntil(() => !!byTestId('garden-no-zone'));
+        expect(byTestId('garden-choose')).not.toBeNull();
+        loc.status = 'granted';
+        await drawTool('garden', {}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'));
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Wet tropical, northern hemisphere');
+        expect(loc.asked).toBe(0);
+    });
+
+    it("opens from the Tools screen, the Commons tab's Tools row and Home's Your shop and tools", async () => {
+        setLanguage('en');
+        await act(async () => { root.render(createElement(ToolsScreen) as any); });
+        await settle();
+        const row = byTestId('tools-row-garden');
+        expect(row?.textContent).toContain('Your garden');
+        await click(row, 'Your garden');
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden' } }]);
+    });
+
+    it('opens from Home: Add a card offers Your garden on every node (the global one too, where the Commons tab is hidden), and its card opens the guide', async () => {
+        const card = HOME_CARD_TYPES.find((c) => c.id === toolHomeCardType('garden'));
+        expect(card).toBeDefined();
+        expect(card?.onNode({ profile: 'global', features: { beans: false } } as any)).toBe(true);
+        expect(card?.onNode({ profile: 'local', features: {} } as any)).toBe(true);
+        expect(HOME_DRAWN.has(toolHomeCardType('garden'))).toBe(true);
+        setLanguage('en');
+        const garden = phoneTools().find((t) => t.manifest.id === 'garden');
+        expect(garden).toBeDefined();
+        await act(async () => { root.render(createElement(ToolHomeBody, { tool: garden!, owner: ME.publicKey, colors: lightColors, now: NOW }) as any); });
+        await settle();
+        expect(host.textContent).toContain('What to sow this month, for your climate.');
+        await click(host.querySelector('button'), 'the card');
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'main' } }]);
     });
 });

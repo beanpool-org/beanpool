@@ -37,8 +37,10 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
     const [hidden, setHidden] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
-    const [notes, setNotes] = useState<Record<string, string>>({});
     const [done, setDone] = useState<string | null>(null);
+    // A refusal is said above the list, not under its row: the list read after it no longer has that row (answered,
+    // lapsed, joined, key replaced, gone), or no section at all (admins only), and the words must outlive it.
+    const [refusal, setRefusal] = useState<{ id: string; callsign: string; message: string } | null>(null);
 
     const load = useCallback(async () => {
         const r = await getJoinRequests();
@@ -50,6 +52,7 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
             onCount?.(r.total);
         } else if (r.kind === 'hidden') {
             setHidden(true);
+            setTotal(0);
             onCount?.(0);
         } else {
             setError(r.message ?? t(WANTS_TO_JOIN_WORDS.unreachable));
@@ -65,16 +68,17 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
         if (r.ok) {
             setRequests(list => (list ?? []).filter(k => k.id !== req.id));
             setTotal(prev => { const n = Math.max(0, prev - 1); onCount?.(n); return n; });
-            setNotes(n => ({ ...n, [req.id]: '' }));
+            setRefusal(null);
             setDone(verb === 'approve' ? t('You invited {name}. Their app will find the invite by itself.', { name: req.callsign }) : null);
             return;
         }
         // Another member got there first, or it lapsed: the community's words, then the list as it is now.
-        setNotes(n => ({ ...n, [req.id]: r.message ?? t(WANTS_TO_JOIN_WORDS.unreachable) }));
+        setDone(null);
+        setRefusal({ id: req.id, callsign: req.callsign, message: r.message ?? t(WANTS_TO_JOIN_WORDS.unreachable) });
         void load();
     };
 
-    if (hidden || (requests !== null && requests.length === 0 && !error && !done)) return null;
+    if (!refusal && (hidden || (requests !== null && requests.length === 0 && !error && !done))) return null;
 
     return (
         <section className="p-4 sm:p-6 border-b border-nature-200 dark:border-nature-800" data-testid="wants-to-join" aria-labelledby="wants-to-join-title">
@@ -84,7 +88,12 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
             <p className="m-0 mb-3 text-sm leading-snug text-nature-700 dark:text-nature-200 break-words">{t(WANTS_TO_JOIN_WORDS.help)}</p>
             {!!error && <p role="status" className="m-0 mb-3 text-sm text-bp-ink-warning break-words" data-testid="wants-to-join-error">{error}</p>}
             {!!done && <p role="status" className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="wants-to-join-done">{done}</p>}
-            {requests === null ? (
+            {!!refusal && (
+                <p role="status" className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`wants-to-join-note-${refusal.id}`}>
+                    <span dir="auto" className="font-extrabold">{refusal.callsign}</span>{' · '}<span dir="auto">{refusal.message}</span>
+                </p>
+            )}
+            {hidden ? null : requests === null ? (
                 <p className="m-0 my-3 text-sm text-nature-600 dark:text-nature-300">{t('Loading…')}</p>
             ) : requests.map(req => {
                 const meta = requestMeta(req);
@@ -98,7 +107,6 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
                             </div>
                         </div>
                         <p dir="auto" className="m-0 mt-2.5 text-sm leading-relaxed text-nature-800 dark:text-nature-100 break-words whitespace-pre-wrap">{req.message}</p>
-                        {!!notes[req.id] && <p role="status" className="m-0 mt-2 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`wants-to-join-note-${req.id}`}>{notes[req.id]}</p>}
                         <div className="flex flex-wrap gap-2 mt-3">
                             <button
                                 type="button"

@@ -57,6 +57,8 @@ for (const theme of ['light', 'dark']) {
     await shot('wants-refused', 'view=wants&refuse=1', theme, async page => {
         await page.getByRole('button', { name: 'Invite Riverbend Joe' }).click();
         await page.getByTestId('wants-to-join-note-k1').waitFor();
+        // The list read after the refusal: the row has gone, and the sentence is still there.
+        await page.getByTestId('wants-to-join-k1').waitFor({ state: 'detached' });
     });
     await shot('find-rows', 'view=find', theme, page => page.getByTestId('home-find-asked-ask').waitFor());
     await shot('ask-form', 'view=find', theme, async page => {

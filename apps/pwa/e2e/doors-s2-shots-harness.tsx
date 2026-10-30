@@ -4,7 +4,8 @@
  *
  *   ?view=wants    the list of two requests, with Invite and Not now
  *   ?view=find     the Find card: the asked community first, then two listed rows, each with Ask to join
- * `&refuse=1` makes every answer and knock a refusal in the community's words; `&dark=1` the dark theme.
+ * `&refuse=1` makes every answer and knock a refusal in the community's words (and the list read after a refused answer
+ * no longer has that row, as the node's doesn't); `&dark=1` the dark theme.
  */
 import { createRoot } from 'react-dom/client';
 import { WantsToJoin } from '../src/components/WantsToJoin';
@@ -32,14 +33,20 @@ const LISTED = [
 ];
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const answered = new Set<string>();
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     await new Promise(r => setTimeout(r, 50));
     if (url.includes('/api/global/communities')) return json(200, { communities: [{ key: 'm', name: 'Maldon Commons', url: 'https://maldon.example.org', memberCount: 23 }], total: 1 });
     if (url.includes('/api/join/knocks/') && init?.method === 'POST') {
-        return refuse ? json(409, { error: 'Another member has already answered this request.', code: 'answered' }) : json(200, { knock: { id: 'k1', status: 'approved' } });
+        const id = url.split('/api/join/knocks/')[1].split('/')[0];
+        if (refuse) answered.add(id);
+        return refuse ? json(409, { error: 'Another member has already answered this request.', code: 'answered' }) : json(200, { knock: { id, status: 'approved' } });
     }
-    if (url.includes('/api/join/knocks')) return json(200, { knocks: REQUESTS, total: 2 });
+    if (url.includes('/api/join/knocks')) {
+        const open = REQUESTS.filter(r => !answered.has(r.id));
+        return json(200, { knocks: open, total: open.length });
+    }
     if (url.endsWith('/api/join/knock')) {
         return refuse
             ? json(429, { error: 'Too many requests to join have come from this network today (5). Please try again tomorrow.', code: 'rate_limited' })

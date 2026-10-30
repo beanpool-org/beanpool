@@ -82,30 +82,77 @@ describe('Wants to join on the web', () => {
         await waitFor(() => expect(screen.queryByTestId('wants-to-join')).toBeNull());
     });
 
-    const REFUSALS: Array<[string, number, string, string]> = [
-        ['another member got there first', 409, 'answered', 'Another member has already answered this request.'],
-        ['it lapsed', 409, 'lapsed', 'This request is more than 30 days old and has lapsed. They can ask again.'],
-        ['they joined meanwhile', 409, 'already_member', 'They have already joined this community.'],
-        ['their key was replaced', 409, 'key_invalidated', 'This request came from a key that has since been replaced by a new one, so there is nothing to answer.'],
-        ['it is gone', 404, 'not_found', 'There’s no such request to join.'],
-        ['only admins answer here', 403, 'admins_only', 'Only an admin of this community can answer requests to join here.'],
-        ['a standby copy', 503, 'standby', 'This server is a standby copy of the community, not its main server. Requests to join are answered on the main server.'],
+    /**
+     * Each refusal, and what the node's list then says, as engine/knocks.ts lists (pending, inside 30 days, not a member,
+     * key not replaced): the row is gone for five of them, the list is a 403 for admins only, and only a standby still
+     * lists it.
+     */
+    const REFUSALS: Array<[string, number, string, string, 'gone' | 'hidden' | 'kept']> = [
+        ['another member got there first', 409, 'answered', 'Another member has already answered this request.', 'gone'],
+        ['it lapsed', 409, 'lapsed', 'This request is more than 30 days old and has lapsed. They can ask again.', 'gone'],
+        ['they joined meanwhile', 409, 'already_member', 'They have already joined this community.', 'gone'],
+        ['their key was replaced', 409, 'key_invalidated', 'This request came from a key that has since been replaced by a new one, so there is nothing to answer.', 'gone'],
+        ['it is gone', 404, 'not_found', 'There’s no such request to join.', 'gone'],
+        ['only admins answer here', 403, 'admins_only', 'Only an admin of this community can answer requests to join here.', 'hidden'],
+        ['a standby copy', 503, 'standby', 'This server is a standby copy of the community, not its main server. Requests to join are answered on the main server.', 'kept'],
     ];
-    for (const [why, status, code, words] of REFUSALS) {
-        it(`a refusal (${why}): the community's own words under the row, then the list read again`, async () => {
+    for (const [why, status, code, words, after] of REFUSALS) {
+        it(`a refusal (${why}): the community's own words, still there after the list is read again`, async () => {
             let reads = 0;
             stub((url, init) => {
                 if (init?.method === 'POST') return json(status, { error: words, code });
                 reads++;
-                return json(200, { knocks: [RIVER], total: 1 });
+                if (reads === 1) return json(200, { knocks: [RIVER, SKY], total: 2 });
+                if (after === 'hidden') return json(403, { error: words, code });
+                return json(200, after === 'kept' ? { knocks: [RIVER, SKY], total: 2 } : { knocks: [SKY], total: 1 });
             });
-            render(<WantsToJoin />);
+            const onCount = vi.fn();
+            render(<WantsToJoin onCount={onCount} />);
             fireEvent.click(await screen.findByRole('button', { name: 'Invite River' }));
             expect(await screen.findByTestId('wants-to-join-note-k1')).toHaveTextContent(words);
             await waitFor(() => expect(reads).toBe(2));
+            await waitFor(() => expect(onCount).toHaveBeenLastCalledWith(after === 'kept' ? 2 : after === 'hidden' ? 0 : 1));
+            // The re-read has drawn: the sentence outlives the row it was about, and says whose it was.
+            const note = screen.getByTestId('wants-to-join-note-k1');
+            expect(note).toHaveTextContent(words);
+            expect(note).toHaveTextContent('River');
+            expect(screen.queryByTestId('wants-to-join-k1') !== null).toBe(after === 'kept');
+            expect(screen.queryByTestId('wants-to-join-k2') !== null).toBe(after !== 'hidden');
             expect(screen.queryByTestId('wants-to-join-done')).toBeNull();
         });
     }
+
+    it('the last row refused and gone: the section stays to say why', async () => {
+        let reads = 0;
+        stub((url, init) => {
+            if (init?.method === 'POST') return json(409, { error: 'Another member has already answered this request.', code: 'answered' });
+            reads++;
+            return json(200, reads === 1 ? { knocks: [RIVER], total: 1 } : { knocks: [], total: 0 });
+        });
+        render(<WantsToJoin />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Not now, River' }));
+        await waitFor(() => expect(reads).toBe(2));
+        await waitFor(() => expect(screen.getByRole('heading', { name: '🚪 Wants to join (0)' })).toBeTruthy());
+        expect(screen.getByTestId('wants-to-join-note-k1')).toHaveTextContent('Another member has already answered this request.');
+        expect(screen.queryByTestId('wants-to-join-k1')).toBeNull();
+    });
+
+    it('one line says what the last answer did: a refusal replaces "You invited", and the next answer replaces the refusal', async () => {
+        stub((url, init) => {
+            if (init?.method === 'POST') {
+                return url.includes('/k1/')
+                    ? json(200, { knock: { id: 'k1', status: 'approved' }, invite: { code: 'BP-x', expiresAt: null } })
+                    : json(409, { error: 'They have already joined this community.', code: 'already_member' });
+            }
+            return json(200, { knocks: [RIVER, SKY], total: 2 });
+        });
+        render(<WantsToJoin />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Not now, Sky' }));
+        expect(await screen.findByTestId('wants-to-join-note-k2')).toHaveTextContent('They have already joined this community.');
+        fireEvent.click(await screen.findByRole('button', { name: 'Invite River' }));
+        expect(await screen.findByTestId('wants-to-join-done')).toHaveTextContent('You invited River.');
+        expect(screen.queryByTestId('wants-to-join-note-k2')).toBeNull();
+    });
 
     it('an answer that couldn\'t reach the community says so in the app\'s words', async () => {
         stub((url, init) => {

@@ -552,6 +552,11 @@ export function currentLanguage(): UiLang {
     return active.lang;
 }
 
+/** The device's words as setLanguage set them: a new object at every call, so what is built from them can tell it is stale. */
+export function currentWords(): Words {
+    return active;
+}
+
 /**
  * Whether the active language's words are a machine draft no native speaker has checked yet.
  * Always false for English ('en') and the pseudo-locale ('xx').

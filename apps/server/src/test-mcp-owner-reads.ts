@@ -125,17 +125,6 @@ async function main(): Promise<void> {
     db.prepare("UPDATE posts SET status = 'paused' WHERE id = ?").run(paused);
     const removed = post('Sourdough taken down', mia.pub);
     db.prepare("UPDATE posts SET active = 0, status = 'cancelled' WHERE id = ?").run(removed);
-    // Events: a public one in person (its place on its card), and a group's (not this community's public board).
-    const soon = new Date(Date.now() + 5 * DAY).toISOString();
-    const event = (title: string, placeName: string, lat: number, lng: number) => {
-        const id = createPost('event' as any, 'other', title, 'Words.', 0, 'fixed', mia.pub, lat, lng, [tiny], false)!.id;
-        db.prepare('UPDATE posts SET event_place_name = ?, event_start_at = ?, event_end_at = ? WHERE id = ?').run(placeName, soon, soon, id);
-        return id;
-    };
-    event('Seed swap', 'The old bowls club', -28.554321, 153.500456);
-    const choirEvent = event('Choir practice', '14 Hidden Lane', -28.6, 153.6);
-    db.prepare("UPDATE posts SET audience_scope = 'group', target_group_id = 'g-choir' WHERE id = ?").run(choirEvent);
-
     const { startHttpsServer } = await import('./https-server.js');
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
@@ -143,6 +132,19 @@ async function main(): Promise<void> {
     try {
         resetAdminAuthTarpit();
         const seeder = await connect(await makeToken(owner.pub, true));
+        // Events, made as the apps make them (through create_event): a public one in person (its place on its card), and one
+        // moved to a group (not this community's public board).
+        const soon = new Date(Date.now() + 5 * DAY).toISOString();
+        const event = async (title: string, placeName: string, lat: number, lng: number): Promise<string> => {
+            const r = await seeder.callTool({ name: 'create_event', arguments: {
+                title, description: 'Words.', start_at: soon, timezone: 'Australia/Brisbane', place_name: placeName, lat, lng, photos: [tiny],
+            } });
+            return structured(r)?.postId ?? `not made: ${errorText(r)}`;
+        };
+        const swap = await event('Seed swap', 'The old bowls club', -28.554321, 153.500456);
+        const choirEvent = await event('Choir practice', '14 Hidden Lane', -28.6, 153.6);
+        db.prepare("UPDATE posts SET audience_scope = 'group', target_group_id = 'g-choir' WHERE id = ?").run(choirEvent);
+        assert(!swap.startsWith('not made') && !choirEvent.startsWith('not made'), `two events made (${swap}; ${choirEvent})`);
         const names = (await seeder.listTools()).tools.map(t => t.name);
         assert(READ_TOOLS.every(n => names.includes(n)), `a ticked owner's assistant lists ${READ_TOOLS.join(', ')} (${names.length} tools)`);
         const FORBIDDEN = [owner.pub, mia.pub, ned.pub, bakery, admin.pub];

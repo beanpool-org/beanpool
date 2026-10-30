@@ -1041,10 +1041,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }, [publicKey]);
 
     // A knock just sent from the Find card (components/AskToJoin): read this browser's memory again, so the card says how
-    // it fares, with Cancel my request, as it does for one sent before this visit.
+    // it fares, with Cancel my request, as it does for one sent before this visit. The read only adds: the memory no longer
+    // lists a request cancelled in this visit, whose card keeps its line and whose row stays quiet until the visit ends.
     const handleAsked = () => {
         if (!publicKey) return;
-        void rememberedKnocks(publicKey).then(setKnocks);
+        void rememberedKnocks(publicKey).then(list => setKnocks(was => [...list, ...was.filter(k => !list.some(n => n.url === k.url))]));
     };
     const askedOpen = (url: string | null): boolean => {
         const origin = communityOrigin(url);

@@ -64,6 +64,22 @@ describe('Ask to join on the web', () => {
         expect(onAsked).toHaveBeenCalledTimes(1);
     });
 
+    it('"You asked to join" stays only until Home holds the request; if Home lets it go (Got it), Ask to join is back, no stale line', async () => {
+        stub(() => json(201, { knock: { status: 'pending' } }));
+        const { container, rerender } = render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} onAsked={() => {}} />);
+        const { message, send } = openForm();
+        fireEvent.change(message, { target: { value: 'Hello' } });
+        fireEvent.click(send);
+        expect(await screen.findByRole('status')).toHaveTextContent(t(KNOCK_MESSAGES.waiting));
+        // Home read its memory again (onAsked): its card says how the request fares from here.
+        rerender(<AskToJoin community={RIVERSIDE} identity={ME} asked onAsked={() => {}} />);
+        expect(container.innerHTML).toBe('');
+        // Got it on a request the community no longer holds: Home forgets it.
+        rerender(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} onAsked={() => {}} />);
+        expect(screen.getByRole('button', { name: 'Ask to join Riverside' })).toBeTruthy();
+        expect(document.body.textContent).not.toContain(t(KNOCK_MESSAGES.waiting));
+    });
+
     it('holds the member to the node\'s limits before sending anything', () => {
         const sent = stub(() => json(201, {}));
         render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);

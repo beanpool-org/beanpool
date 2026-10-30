@@ -34,8 +34,11 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
     const [message, setMessage] = useState('');
     const [problem, setProblem] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
-    // What the community said to the knock, kept under the row: waiting, or this key is a member there already.
+    // What the community said to the knock, under the row: this key is a member there already, or the request waits. A waiting
+    // one is said only until Home's memory holds it (`asked`, after onAsked): from then Home's card says how it fares, and a
+    // line kept here would outlive a Cancel or a Got it in the same visit (PR #2625 review).
     const [said, setSaid] = useState<string | null>(null);
+    useEffect(() => { if (asked) setSaid(null); }, [asked]);
     // Cancelled from this browser within the day: the node would refuse another ask until then (lib/knock.ts).
     const [cancelled, setCancelled] = useState(false);
     const id = useId();
@@ -49,7 +52,7 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
     }, [origin, identity.publicKey]);
 
     if (!origin) return <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-no-address`}>{t(KNOCK_MESSAGES.noAddress)}</p>;
-    if (said) return <p role="status" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-said`}>{said}</p>;
+    if (said && !asked) return <p role="status" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-said`}>{said}</p>;
     // Cancelled within the day: no button the node would refuse, and no line either. Home's card said so for the visit the
     // cancel was made in, and a later visit draws nothing for it (decided 29 Oct 2026, PR #2573).
     if (asked || cancelled) return null;

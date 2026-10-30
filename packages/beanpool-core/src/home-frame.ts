@@ -21,6 +21,8 @@
  */
 import { PRICING_CATEGORIES } from './pricing-catalog.js';
 import { readSkySettings } from './sky.js';
+import { isTagId } from './tags/index.js';
+import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { toolHomeCardTypes } from './tools/index.js';
 import { word, type WordKey } from './words.js';
 
@@ -148,12 +150,17 @@ export const HOME_SEARCH_KMS = [1, 2, 5, 10, 25] as const;
 /** The longest words a saved search keeps. */
 export const HOME_SEARCH_MAX_CHARS = 40;
 export type HomeSearchKind = 'offer' | 'need' | 'any';
-export type HomeSearchSettings = { q: string; kind: HomeSearchKind; category?: string; km?: (typeof HOME_SEARCH_KMS)[number] };
+/**
+ * A saved search. `tags`: the tag ids the app resolved its words to when it was saved (DESIGN-owner-seeding-tags-fable.md
+ * §4.7), at most POST_TAGS_MAX, which the node asks with the words, so a listing tagged lemon is found from "limón".
+ */
+export type HomeSearchSettings = { q: string; kind: HomeSearchKind; category?: string; km?: (typeof HOME_SEARCH_KMS)[number]; tags?: string[] };
 
 const CATEGORY_IDS: ReadonlySet<string> = new Set(PRICING_CATEGORIES.map((c) => c.id));
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** A saved search's settings, tolerant: words cut to 40 characters, an unknown kind is `any`, an unknown category or distance is none. */
+/** A saved search's settings, tolerant: words cut to 40 characters, an unknown kind is `any`, an unknown category or distance is none,
+ *  a tag this library does not know is left out (an app newer than the node), and none past POST_TAGS_MAX is kept. */
 export function readSearchSettings(raw: unknown): HomeSearchSettings {
     const s = isPlainObject(raw) ? raw : {};
     const q = typeof s.q === 'string' ? s.q.trim().slice(0, HOME_SEARCH_MAX_CHARS) : '';
@@ -161,6 +168,10 @@ export function readSearchSettings(raw: unknown): HomeSearchSettings {
     const out: HomeSearchSettings = { q, kind };
     if (typeof s.category === 'string' && CATEGORY_IDS.has(s.category)) out.category = s.category;
     if (typeof s.km === 'number' && (HOME_SEARCH_KMS as readonly number[]).includes(s.km)) out.km = s.km as HomeSearchSettings['km'];
+    if (Array.isArray(s.tags)) {
+        const tags = [...new Set(s.tags.filter((id): id is string => typeof id === 'string' && isTagId(id)))].slice(0, POST_TAGS_MAX);
+        if (tags.length > 0) out.tags = tags;
+    }
     return out;
 }
 

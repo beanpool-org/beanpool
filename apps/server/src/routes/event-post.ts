@@ -57,6 +57,8 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             // The same for a shop (engine/shops.ts assertShopForPost): an event is never in one, so one sent is a 400
             // shop_offers_only, not an event quietly made in no shop.
             shopId: b.shopId,
+            // Its tags, raw: held to the library by the engine (engine/post-fields.ts assertPostTags).
+            tags: b.tags,
             createdBy,
             beforeWrite,
             out,

@@ -22,7 +22,12 @@
 import {
     LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, type TextLimit,
     LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
+    POST_TAGS_CHARS, POST_TAGS_MAX, isTagId, postTagsOf, storedPostTags, word, wordsFor,
 } from '@beanpool/core';
+
+// A refusal with values in it, in English, its sentence marked for the way out to find again in the member's language
+// (member-words.ts), as engine/posts.ts writes them.
+const { t: tr } = wordsFor('en');
 
 /** The most Beans one listing may ask, per unit: far above any real price, and far below where arithmetic misbehaves. */
 export const POST_CREDITS_MAX = 1_000_000;
@@ -49,6 +54,8 @@ export interface PostFieldsIn {
     lat?: unknown;
     lng?: unknown;
     hours?: unknown;
+    /** Its tags: a list of ids from the library in core. Written back as the list it will be stored as (assertPostTags). */
+    tags?: unknown;
 }
 
 /** A number of units for a deal: finite, from POST_HOURS_MIN to POST_HOURS_MAX. */
@@ -105,6 +112,8 @@ export interface PostTextStored {
     title?: unknown;
     description?: unknown;
     category?: unknown;
+    /** Its tags as stored (posts.tags): one sent back by an edit passes though a newer library retired it. */
+    tags?: unknown;
 }
 
 /**
@@ -126,6 +135,36 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
     if (has('lat')) coordinate(fields.lat, 'Latitude', 90, mode);
     if (has('lng')) coordinate(fields.lng, 'Longitude', 180, mode);
     if (has('hours') && !isDealQuantity(fields.hours)) throw new Error(DEAL_QUANTITY_ERROR);
+    if (has('tags')) fields.tags = assertPostTags(fields.tags, postTagsOf(stored.tags));
+}
+
+// TAGS (DESIGN-owner-seeding-tags-fable.md §4.5, slice T2). A listing carries at most POST_TAGS_MAX ids from the library in
+// core, each one it knows: an id it does not know is refused in words, never dropped, so the author never believes a tag
+// is on a listing that is not. The same id twice is one. null or [] is none (an edit clears them so). On a create and on
+// an edit, before anything is written; the copies a standby or a peer receive keep what the sending node holds
+// (@beanpool/core copiedPostTags).
+
+export const POST_TAGS_NOT_A_LIST = word('Tags must be a list of tag ids');
+export const POST_TAGS_TOO_MANY = tr('A listing can have at most {n} tags. Take one off to add another.', { n: POST_TAGS_MAX });
+
+/**
+ * The tags as they will be stored, in the order sent, each once; refuses what no listing may carry. `kept`: the listing's
+ * tags as stored, for an edit, each of which passes as the text it already holds does (the phone's edit screen sends every
+ * field back), though a newer library has since retired it.
+ */
+export function assertPostTags(raw: unknown, kept: readonly string[] = []): string[] {
+    if (raw === null) return [];
+    if (!Array.isArray(raw)) throw new Error(POST_TAGS_NOT_A_LIST);
+    const ids: string[] = [];
+    for (const id of raw) {
+        if (typeof id !== 'string') throw new Error(POST_TAGS_NOT_A_LIST);
+        if (!isTagId(id) && !kept.includes(id)) throw new Error(tr('There is no tag "{id}". Choose one from the list.', { id: id.slice(0, 80) }));
+        if (!ids.includes(id)) ids.push(id);
+    }
+    if (ids.length > POST_TAGS_MAX) throw new Error(POST_TAGS_TOO_MANY);
+    // Five ids of the library's three levels never come near it; a bound on the column whatever the library grows to.
+    if (storedPostTags(ids).length > POST_TAGS_CHARS) throw new Error(POST_TAGS_TOO_MANY);
+    return ids;
 }
 
 // LENDABLE OFFERS (scratch/tools/DESIGN-tool-library-fable.md §2.3-2.4; DESIGN-shops-and-tools-fable.md §0 row 9, §12 S3).

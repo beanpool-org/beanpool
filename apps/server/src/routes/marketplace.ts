@@ -57,7 +57,7 @@ import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet,
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 import { setReadCaching, PHOTO_EDGE_MAX_S } from '../guest-cache.js';
-import { word } from '@beanpool/core';
+import { SEARCH_TAGS_MAX, TAG_ID_PATTERN, word } from '@beanpool/core';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -343,7 +343,7 @@ function photoKeysSince(): string {
 
 /** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
  *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
-const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo', 'lendable', 'shop'] as const;
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'tags', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo', 'lendable', 'shop'] as const;
 
 /**
  * A by-area read's query as its ETag describes it: without where the read starts, its page, the hash the phone holds, or
@@ -382,6 +382,18 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const category = ctx.query.category as string | undefined;
     const author = ctx.query.author as string | undefined;
     const q = ctx.query.q as string | undefined;
+    // `tags=a,b`: listings tagged with any of these ids or a tag under one (DESIGN-owner-seeding-tags-fable.md §4.6, engine
+    // PostFilter.tags); with `q`, a listing either finds. Well-formed ids, at most SEARCH_TAGS_MAX: garbage is a 400. An id
+    // this node's library does not know (a newer app's) is well-formed and matches nothing, so the words still find.
+    let tags: string[] | undefined;
+    if (typeof ctx.query.tags === 'string' && ctx.query.tags !== '') {
+        tags = [...new Set(ctx.query.tags.split(',').map(x => x.trim()).filter(Boolean))];
+        if (tags.length === 0 || tags.length > SEARCH_TAGS_MAX || tags.some(x => x.length > 120 || !TAG_ID_PATTERN.test(x))) {
+            ctx.status = 400;
+            ctx.body = { error: `tags is 1 to ${SEARCH_TAGS_MAX} tag ids, comma separated` };
+            return;
+        }
+    }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
     const updatedAfter = ctx.query.updatedAfter as string | undefined;
@@ -557,7 +569,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A search leaves out the listings of the authors the reader blocked (engine getPosts), so its tag describes that list
     // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
     // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
-    const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
+    const blocksPart = (q || tags) && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
     // A keeper who asks (`keeper=1`) reads one enterprise's listings as it would (engine readsAsAuthor: its paused ones too,
     // and while it is off the board), so the tag says which view this is: a member bound as a keeper, or unbound, changes
     // the answer and no listing, and the copy they held must not be confirmed with a 304. Every other read is tagged as before.
@@ -623,7 +635,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
     // no author's trust profile, photo or trade count per post.
     const listing = {
-        id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
+        id, ids, type, types, excludeEvents, category, query: q, tags, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
         neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined, shopId, asKeeper: asKeeper || undefined,
     };
@@ -725,7 +737,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
     const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        lendable, lendMaxDays, lendTerms, replacementValue, shopId } =
+        lendable, lendMaxDays, lendTerms, replacementValue, shopId, tags } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -805,6 +817,9 @@ router.post('/api/marketplace/posts', async (ctx) => {
                 lendable, lendMaxDays, lendTerms, replacementValue,
                 // The shop to put it in, raw: the engine checks it is the author's own (engine/shops.ts assertShopForPost).
                 shopId,
+                // Its tags, raw: the engine holds them to the library (engine/post-fields.ts assertPostTags). An app that
+                // sends none makes a listing as before.
+                tags,
             }
         );
         if (!post) {

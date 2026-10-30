@@ -1663,6 +1663,9 @@ export function initSchema() {
     // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
     // existing row: nothing is featured until its author or a keeper says so.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
+    // Its tags (schema.sql; DESIGN-owner-seeding-tags-fable.md §4.5). '' on every existing row: nothing is tagged until its
+    // author tags it. Their words reach search_keywords through state-engine's once-only keywordsWithTagsOnce.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
     // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.

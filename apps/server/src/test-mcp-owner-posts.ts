@@ -188,14 +188,16 @@ async function main(): Promise<void> {
         const big = await jpeg(1600, 1200);
         const small = await jpeg(640, 480);
         const versionBefore = getPostsVersion();
+        // A pin to the metre, as an assistant may send it: stored rounded to about 100 m, as both apps round it before sending.
         const offer = await client.callTool({ name: 'create_offer', arguments: {
             title: 'Quincefield sourdough loaves', description: 'Baked Saturday morning, collect from the hall.', category: 'food', beans: 6,
-            lat: -28.55, lng: 153.5, photos: [big, small],
+            lat: -28.551234, lng: 153.509876, photos: [big, small],
         } });
         const o = structured(offer);
         assert(!offer.isError && typeof o?.postId === 'string' && o.kind === 'offer' && o.asEnterprise === false && o.link === `/?post=${encodeURIComponent(o.postId)}`
             && o.postsToday === 1 && o.postsPerDay === AGENT_CREATES_PER_DAY, `create_offer posts an Offer and answers its id, its link and the day's count (${JSON.stringify(o ?? offer.content)})`);
-        const row = db.prepare('SELECT author_pubkey, created_by, created_via, type, status, updated_at, title FROM posts WHERE id = ?').get(o?.postId) as any;
+        const row = db.prepare('SELECT author_pubkey, created_by, created_via, type, status, updated_at, title, lat, lng FROM posts WHERE id = ?').get(o?.postId) as any;
+        assert(row?.lat === -28.551 && row?.lng === 153.51, `its pin is stored rounded to 3 decimals, as the apps send it (${row?.lat}, ${row?.lng})`);
         assert(row?.author_pubkey === owner.pub && row.created_by === null && row.created_via === `assistant:${grantId}` && row.type === 'offer' && row.status === 'active' && !!row.updated_at,
             `the row is the owner's own, live, with created_via = assistant:<grant id> (${JSON.stringify(row)})`);
         const photoCount = (db.prepare('SELECT COUNT(*) AS c FROM post_photos WHERE post_id = ?').get(o?.postId) as any).c;
@@ -220,13 +222,25 @@ async function main(): Promise<void> {
         assert(!need.isError && n?.kind === 'need' && (db.prepare('SELECT author_pubkey, created_via FROM posts WHERE id = ?').get(n?.postId) as any)?.created_via === `assistant:${grantId}`,
             `create_need posts a Need as the owner (${JSON.stringify(n ?? need.content)})`);
 
+        const at50 = await client.callTool({ name: 'create_offer', arguments: {
+            title: 'y'.repeat(50), description: 'A title as long as the form takes.', category: 'food', beans: 1, lat: -28.55, lng: 153.5, photos: [small],
+        } });
+        assert(!at50.isError, `a title of exactly 50, the form's most, is taken (${errorText(at50) || 'posted'})`);
+        // use_my_area said out loud: no pin asked and none sent, so the engine gives it the owner's own area as a listing without one gets.
+        const myArea = await client.callTool({ name: 'create_offer', arguments: {
+            title: 'Spare jars', description: 'A box of them.', category: 'food', beans: 1, use_my_area: true, photos: [small],
+        } });
+        const myAreaRow = db.prepare('SELECT lat, lng, author_pubkey FROM posts WHERE id = ?').get(structured(myArea)?.postId) as any;
+        assert(!myArea.isError && myAreaRow?.author_pubkey === owner.pub, `use_my_area: true posts with no pin asked (${JSON.stringify(myAreaRow ?? myArea.content)})`);
+
         const startAt = new Date(Date.now() + 7 * DAY).toISOString();
         const event = await client.callTool({ name: 'create_event', arguments: {
             title: 'Seed swap at the hall', description: 'Bring seeds, take seeds.', start_at: startAt, end_at: new Date(Date.now() + 7 * DAY + 2 * 3600_000).toISOString(),
-            place_name: 'The hall', lat: -28.55, lng: 153.5, photos: [small],
+            timezone: 'Australia/Brisbane', place_name: 'The hall', lat: -28.554321, lng: 153.500456, photos: [small],
         } });
         const e = structured(event);
-        const eRow = db.prepare('SELECT type, author_pubkey, created_via, event_start_at FROM posts WHERE id = ?').get(e?.postId) as any;
+        const eRow = db.prepare('SELECT type, author_pubkey, created_via, event_start_at, lat, lng FROM posts WHERE id = ?').get(e?.postId) as any;
+        assert(eRow?.lat === -28.554 && eRow?.lng === 153.5, `an event's pin is rounded the same (${eRow?.lat}, ${eRow?.lng})`);
         assert(!event.isError && e?.kind === 'event' && eRow?.type === 'event' && eRow.author_pubkey === owner.pub && eRow.created_via === `assistant:${grantId}`
             && Date.parse(eRow.event_start_at) === Date.parse(startAt), `create_event posts an event as the owner (${JSON.stringify(e ?? event.content)})`);
         // The answer says when it starts and ends as members see it (the clock in the event's zone), so the assistant can check it.
@@ -236,7 +250,8 @@ async function main(): Promise<void> {
         assert(typeof e?.timezone === 'string' && e.timezone === clockRow?.event_tz && e.startsLocal === clockRow.event_start_local && e.endsLocal === clockRow.event_end_local
             && e.startsLocal === clockIn(startAt, e.timezone), `the answer carries the start and end members see, in the event's zone (${e?.startsLocal} → ${e?.endsLocal}, ${e?.timezone})`);
         const online = await client.callTool({ name: 'create_event', arguments: {
-            title: 'Seed-saving talk', start_at: startAt, online: true, link: 'https://meet.example.org/seeds', photos: [small],
+            title: 'Seed-saving talk', description: 'An hour on keeping seed true.', start_at: startAt, timezone: 'Australia/Brisbane', online: true,
+            link: 'https://meet.example.org/seeds', photos: [small],
         } });
         const onRow = db.prepare('SELECT event_online, lat, lng, event_place_name, created_via FROM posts WHERE id = ?').get(structured(online)?.postId) as any;
         assert(!online.isError && onRow?.event_online === 1 && onRow.lat === null && onRow.lng === null && onRow.event_place_name === null && onRow.created_via === `assistant:${grantId}`,
@@ -267,7 +282,7 @@ async function main(): Promise<void> {
         // Every field but the one each refusal is about (2b goes through every field).
         const offerArgs = { title: 'Plum jam', description: 'Six jars from last summer.', category: 'food', beans: 4, lat: -28.55, lng: 153.5, photos: [small] };
         const needArgs = { title: 'A ride to the station', description: 'Tuesday, early.', category: 'transport', beans: 3, lat: -28.55, lng: 153.5, photos: [small] };
-        const eventArgs = { title: 'Working bee', start_at: startAt, place_name: 'The community garden', lat: -28.55, lng: 153.5, photos: [small] };
+        const eventArgs = { title: 'Working bee', description: 'Weeding and mulch.', start_at: startAt, timezone: 'Australia/Brisbane', place_name: 'The community garden', lat: -28.55, lng: 153.5, photos: [small] };
         const entArgs = { kind: 'offer', as_enterprise: kept[0]?.ref, title: 'Rye loaves', category: 'food', beans: 5, photos: [small] };
         const { photos: _noPhotos, ...offerNoPhotos } = offerArgs;
         const noPhoto = await client.callTool({ name: 'create_offer', arguments: offerNoPhotos });
@@ -309,6 +324,22 @@ async function main(): Promise<void> {
         assert(freeEnterprise.isError === true && /^beans must be more than 0/.test(errorText(freeEnterprise)) && badKind.isError === true && /^kind must be offer or need/.test(errorText(badKind)),
             `an enterprise's listing at 0 Beans, or a kind that is neither → refused as its form would (${errorText(freeEnterprise)} | ${errorText(badKind)})`);
         assert(engineRefusal.isError === true && /future/.test(errorText(engineRefusal)), `the engine's own rules answer, in its words (${errorText(engineRefusal)})`);
+        // The composers' title lengths: 50 for a listing, 140 for an event (the engine's own 200 is wider than any app sends).
+        const longOffer = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'x'.repeat(51) } });
+        const longNeed = await client.callTool({ name: 'create_need', arguments: { ...needArgs, title: 'x'.repeat(51) } });
+        const longEnt = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, title: 'x'.repeat(51) } });
+        const longEvent = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, title: 'x'.repeat(141) } });
+        const listedTools = (await client.listTools()).tools;
+        const maxOf = (n: string) => (listedTools.find(t => t.name === n)?.inputSchema as any)?.properties?.title?.maxLength;
+        assert([longOffer, longNeed, longEnt].every(r => r.isError === true && /^title is at most 50 characters/.test(errorText(r)))
+            && longEvent.isError === true && /^title is at most 140 characters/.test(errorText(longEvent))
+            && maxOf('create_offer') === 50 && maxOf('create_need') === 50 && maxOf('create_enterprise_listing') === 50 && maxOf('create_event') === 140,
+            `a listing's title over 50, an event's over 140 → refused naming the field; the schemas say so (${errorText(longOffer)} | ${errorText(longEvent)})`);
+        const { lat: _lat, lng: _lng, ...offerNoPin } = offerArgs;
+        const noPin = await client.callTool({ name: 'create_offer', arguments: offerNoPin });
+        assert(noPin.isError === true && /^lat is required: .*use_my_area: true/.test(errorText(noPin)),
+            `neither a pin nor use_my_area → refused naming lat, and saying use_my_area (${errorText(noPin)})`);
+
         const postsAfter = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
         assert(agentCreatesToday(grantId) === countBefore && postsAfter === postsBefore, `no refused call made a post or counted against the day (${countBefore} → ${agentCreatesToday(grantId)})`);
 
@@ -317,10 +348,12 @@ async function main(): Promise<void> {
         const sorted = (a: readonly string[]) => [...a].sort().join(',');
         const emptyOf = (v: unknown): unknown => Array.isArray(v) ? [] : typeof v === 'number' ? '' : '   ';
         const KINDS: Array<{ tool: string; args: Record<string, unknown>; required: string[]; schema?: string[] }> = [
-            { tool: 'create_offer', args: offerArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'] },
-            { tool: 'create_need', args: needArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'] },
-            // In person, its place too: JSON Schema's `required` cannot say "unless online", so the schema lists the three it always needs.
-            { tool: 'create_event', args: eventArgs, required: ['title', 'start_at', 'photos', 'place_name', 'lat', 'lng'], schema: ['title', 'start_at', 'photos'] },
+            // The pin unless use_my_area: JSON Schema's `required` cannot say "unless", so the schema lists the ones always needed.
+            { tool: 'create_offer', args: offerArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans', 'photos'] },
+            { tool: 'create_need', args: needArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans', 'photos'] },
+            // In person, its place too: the same "unless online".
+            { tool: 'create_event', args: eventArgs, required: ['title', 'description', 'start_at', 'timezone', 'photos', 'place_name', 'lat', 'lng'],
+                schema: ['title', 'description', 'start_at', 'timezone', 'photos'] },
             { tool: 'create_enterprise_listing', args: entArgs, required: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'] },
         ];
         const postsBefore2b = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;

@@ -32,7 +32,7 @@
  *   another member. An event's times must carry their offset: one without would be read in this server's own zone.
  */
 import crypto from 'node:crypto';
-import { PRICING_CATEGORIES } from '@beanpool/core';
+import { approximateLocation, PRICING_CATEGORIES } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { featureOffFor } from '../routes/profile-feature-gate.js';
@@ -77,27 +77,50 @@ export const AGENT_POST_CATEGORIES: readonly string[] = PRICING_CATEGORIES.map((
  * The fields each kind's composer will not post without, by the tools' own names. Each list is the tool's input schema
  * `required` and the server's re-check (missingField), so the two cannot drift:
  * - an Offer or a Need as the owner, the map's form (phone (tabs)/map.tsx handleSubmit; web MapPage handleCreatePost and
- *   lib/offer-need-submit.ts): a title, a description, a category, a place on the map and a photo, and a price where the
- *   node has Beans (neither app asks one where it has none: phone utils/market-global.ts postFormPriceInvalid);
- * - an event (phone utils/events.ts buildEventDraft; web MapPage handleCreateEvent): a title, its start and a photo; in
- *   person also its pin and the place's name (the phone asks for both), online neither. The description and the end are
- *   asked by neither app;
+ *   lib/offer-need-submit.ts): a title, a description, a category, a place and a photo, and a price where the node has
+ *   Beans (neither app asks one where it has none: phone utils/market-global.ts postFormPriceInvalid). The place is a pin
+ *   (lat and lng), or `use_my_area: true` said out loud: the owner's own area, as a listing sent without a pin gets;
+ * - an event (phone utils/events.ts buildEventDraft; web MapPage handleCreateEvent): a title, its start, a photo, what
+ *   happens and the zone it is in (design §3 item 1: the assistant has no device clock to take one from); in person also
+ *   its pin and the place's name (the phone asks for both), online neither. The end is the engine's default length;
  * - an enterprise's Offer or Need (phone treasury-post.tsx; web TreasuryDetailPage handleCreatePost): Offer or Need, the
  *   enterprise, a title, a category, a price of more than 0 Beans and a photo. Neither app asks a place or a description.
  */
 export const REQUIRED = {
-    listing: ['title', 'description', 'category', 'lat', 'lng', 'photos'],
+    listing: ['title', 'description', 'category', 'photos'],
+    /** A listing's place: its pin, unless `use_my_area: true` (listingRequiredFor). */
+    listingPlace: ['lat', 'lng'],
     /** A listing's price, required where the node has Beans (listingRequired). */
     listingPrice: ['beans'],
-    event: ['title', 'start_at', 'photos'],
+    event: ['title', 'description', 'start_at', 'timezone', 'photos'],
     /** An event in person: a JSON Schema `required` cannot say "unless online", so the schema says it in words. */
     eventInPerson: ['place_name', 'lat', 'lng'],
     enterpriseListing: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'],
 } as const;
 
-/** What create_offer and create_need require on this node now: a price only where it has Beans. */
+/** What create_offer and create_need require on this node now, in the schema: a price only where it has Beans. */
 export function listingRequired(): string[] {
     return getProfileSwitches().beans ? [...REQUIRED.listing, ...REQUIRED.listingPrice] : [...REQUIRED.listing];
+}
+
+/** What the server asks of one call: the schema's list, and the pin unless the call says `use_my_area: true`. */
+function listingRequiredFor(args: Record<string, unknown>): string[] {
+    return args.use_my_area === true ? listingRequired() : [...listingRequired(), ...REQUIRED.listingPlace];
+}
+
+/** The composers' title lengths (phone map.tsx's form 50, NewEventModal 140): the engine's own 200 is wider than any app sends. */
+export const AGENT_TITLE_MAX = { listing: 50, event: 140 } as const;
+
+function titleTooLong(args: Record<string, unknown>, max: number): string | null {
+    const title = (args.title as string).trim();
+    return title.length > max ? `title is at most ${max} characters, as the apps' form takes (this one is ${title.length}).` : null;
+}
+
+/** A pin rounded to 3 decimals (about 100 m), as both apps round it before sending (@beanpool/core approximateLocation). */
+function roundedPin(args: Record<string, unknown>): { lat: number | undefined; lng: number | undefined } {
+    const lat = num(args.lat), lng = num(args.lng);
+    if (lat === undefined || lng === undefined) return { lat, lng };
+    return approximateLocation(lat, lng);
 }
 
 const isText = (v: unknown): boolean => typeof v === 'string' && v.trim().length > 0;
@@ -109,8 +132,9 @@ const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> =
     description: { there: isText, asks: 'the details a member reads' },
     category: { there: isText, asks: `one of ${AGENT_POST_CATEGORIES.join(', ')}` },
     beans: { there: isNumber, asks: 'the price in Beans' },
-    lat: { there: isNumber, asks: 'the latitude of the place on the map' },
-    lng: { there: isNumber, asks: 'the longitude of the place on the map' },
+    lat: { there: isNumber, asks: 'the latitude of the place on the map (or use_my_area: true for your own area)' },
+    lng: { there: isNumber, asks: 'the longitude of the place on the map (or use_my_area: true for your own area)' },
+    timezone: { there: isText, asks: 'the IANA zone it is in, e.g. Australia/Melbourne' },
     photos: { there: (v) => Array.isArray(v) && v.length > 0, asks: `add 1 to ${AGENT_POST_PHOTOS_MAX} photos first (base64 JPEG or WebP)` },
     start_at: { there: isText, asks: 'when it starts, in ISO 8601 with its offset' },
     place_name: { there: isText, asks: 'the name of the place, e.g. "The old bowls club" (or online: true)' },
@@ -287,7 +311,8 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     // An enterprise's listing meets its routes' switch first, as their gate runs before the handler.
     const refused = gate(grant) ?? (asEnterprise ? enterprisesOff() : null);
     if (refused) return { ok: false, error: refused };
-    const missing = missingField(args, asEnterprise ? REQUIRED.enterpriseListing : listingRequired());
+    const missing = missingField(args, asEnterprise ? REQUIRED.enterpriseListing : listingRequiredFor(args))
+        ?? titleTooLong(args, AGENT_TITLE_MAX.listing);
     if (missing) return { ok: false, error: missing };
     if (asEnterprise && args.kind !== 'offer' && args.kind !== 'need') return { ok: false, error: 'kind must be offer or need.' };
     const who = authorFor(grant, args.as_enterprise, asEnterprise);
@@ -310,7 +335,8 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
         return { ok: false, error: `This assistant has made ${AGENT_CREATES_PER_DAY} posts today, the most a day allows: try again tomorrow (UTC).` };
     }
     const owner = grant.member;
-    const lat = num(args.lat), lng = num(args.lng);
+    // Said out loud, the owner's own area: no pin is sent, so the engine gives it the area a listing without one gets.
+    const { lat, lng } = args.use_my_area === true && !who.enterprise ? { lat: undefined, lng: undefined } : roundedPin(args);
     const priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
     try {
         let post;
@@ -349,7 +375,8 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
 async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Promise<ToolResult> {
     const refused = gate(grant);
     if (refused) return { ok: false, error: refused };
-    const missing = missingField(args, args.online === true ? REQUIRED.event : [...REQUIRED.event, ...REQUIRED.eventInPerson]) ?? unzonedTime(args);
+    const missing = missingField(args, args.online === true ? REQUIRED.event : [...REQUIRED.event, ...REQUIRED.eventInPerson])
+        ?? titleTooLong(args, AGENT_TITLE_MAX.event) ?? unzonedTime(args);
     if (missing) return { ok: false, error: missing };
     const who = authorFor(grant, args.as_enterprise, false);
     if (!who.ok) return who;
@@ -363,7 +390,7 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
     // both apps trim it.
     const body = {
         title: (args.title as string).trim(), description: typeof args.description === 'string' ? args.description.trim() : '', photos: photos.photos,
-        lat: num(args.lat), lng: num(args.lng),
+        ...roundedPin(args),
         eventStartAt: str(args.start_at, 64), eventEndAt: str(args.end_at, 64), eventTz: str(args.timezone, 64),
         eventPlaceName: str(args.place_name, 500), eventOnline: args.online === true, eventLink: str(args.link, 2000),
     };
@@ -405,21 +432,26 @@ const PHOTOS_SCHEMA = {
         + 'you were not given to post.',
 };
 const LISTING_PROPS = {
-    title: { type: 'string', description: 'what it is, in a few words' },
+    title: { type: 'string', maxLength: AGENT_TITLE_MAX.listing, description: `what it is, in a few words: at most ${AGENT_TITLE_MAX.listing} characters` },
     description: { type: 'string', description: 'the details a member reads' },
     category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: 'the Market category, as the apps offer them' },
     beans: { type: 'number', minimum: 0, description: 'the price in Beans (0 is free); required where this community has Beans, none where it has not' },
     price_type: { type: 'string', enum: ['fixed', 'hourly'], description: 'fixed (default) or hourly' },
     repeatable: { type: 'boolean', description: 'stays up after each trade' },
-    lat: { type: 'number', description: 'latitude of the place on the map' },
-    lng: { type: 'number', description: 'longitude of the place on the map' },
+    lat: { type: 'number', description: 'latitude of the place on the map, rounded to about 100 m as the apps do; required unless use_my_area' },
+    lng: { type: 'number', description: 'longitude of the place on the map, rounded the same; required unless use_my_area' },
     photos: PHOTOS_SCHEMA,
 };
 /** create_offer's and create_need's input, made when the tools are listed: a price is required only where Beans are on. */
 function ownerListingSchema(): Record<string, unknown> {
     return {
         type: 'object',
-        properties: { ...LISTING_PROPS, cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' } },
+        properties: {
+            ...LISTING_PROPS,
+            use_my_area: { type: 'boolean', description: 'true: no pin, your own area instead (as the apps place a listing sent without one); then lat and lng are not asked' },
+            cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' },
+        },
+        // The pin (lat, lng) is required too unless use_my_area is true (REQUIRED.listingPlace): a JSON Schema `required` cannot say "unless".
         required: listingRequired(),
         additionalProperties: false,
     };
@@ -500,14 +532,14 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         inputSchema: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: 'the event\'s name' },
+                title: { type: 'string', maxLength: AGENT_TITLE_MAX.event, description: `the event's name: at most ${AGENT_TITLE_MAX.event} characters` },
                 description: { type: 'string', description: 'what happens, for whom' },
                 start_at: { type: 'string', description: 'when it starts: ISO 8601 with its offset, e.g. 2026-11-07T10:00:00+11:00 (Z for UTC); one without is refused' },
                 end_at: { type: 'string', description: 'when it ends: ISO 8601 with its offset, as start_at; left out, the server\'s default length' },
                 timezone: { type: 'string', description: 'the IANA zone it is in, e.g. Australia/Melbourne' },
                 place_name: { type: 'string', description: 'the name of the place: required in person (the default), none online' },
-                lat: { type: 'number', description: 'latitude of the place on the map: required in person, none online' },
-                lng: { type: 'number', description: 'longitude of the place on the map: required in person, none online' },
+                lat: { type: 'number', description: 'latitude of the place on the map, rounded to about 100 m as the apps do: required in person, none online' },
+                lng: { type: 'number', description: 'longitude of the place on the map, rounded the same: required in person, none online' },
                 online: { type: 'boolean', description: 'online instead of in person: no place, a link' },
                 link: { type: 'string', description: 'the join link of an online event' },
                 as_enterprise: { type: 'string', description: 'host as an enterprise: its ref from my_enterprises' },

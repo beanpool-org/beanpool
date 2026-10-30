@@ -283,6 +283,15 @@ describe('a short nearby list is filled with the newest from elsewhere', () => {
         await render();
         expect(fill()).toBeNull();
         expect(node.asked).toEqual([]);
+        act(() => root.unmount());
+        root = createRoot(host);
+
+        // Signed out (no key on this phone), on the community that reads by area.
+        rememberProfile('global', BY_AREA);
+        me.identity = null;
+        await render();
+        expect(fill()).toBeNull();
+        expect(node.asked).toEqual([]);
     });
 
     it('not under Events, a group, or while a search is typed', async () => {

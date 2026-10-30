@@ -214,7 +214,7 @@ export default function ProfileSetupScreen() {
                     if (res.status === 409) {
                         const answer = await res.json().catch(() => null);
                         const serverMsg = answer?.message;
-                        if (pending && sentName !== undefined && sentName === pending.callsign && (nameRefusedForGood(res.status, answer?.error) || res.status === 409)) {
+                        if (pending && sentName !== undefined && sentName === pending.callsign && nameRefusedForGood(res.status, answer?.error)) {
                             await pendingNameRefused(url, pending, sentName);
                         }
                         setStep('name');

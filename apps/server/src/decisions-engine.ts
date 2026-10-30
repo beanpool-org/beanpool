@@ -74,6 +74,7 @@ import {
     inviteBranchOf,
     reportSuspensionTakesPrivilegedRole,
     reportSuspensionTakesRole,
+    reportPauseNeedsOwner,
     broadcast,
     dispatchPushNotification,
     isNodeAdmin,
@@ -2091,17 +2092,20 @@ export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 
  * (adminEmergencySuspend, adminLiftSuspension, adminHaltDecision, adminAccelerateDecision, state-engine assertMayPrune
  * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard, member-wizards assertMayRekey for rekey),
  * whoever is acting. A re-key of an owner or admin is asked even of themselves: the code it answers binds a key of the
- * caller's choosing to that role. No role gate sees these,
+ * caller's choosing to that role. A pause (suspend, report-suspend) is one too while the chain rules keep it for an owner,
+ * within 30 days of a vote on removing its member that ended without removing them (repauseNeedsOwner, the window
+ * pauseChainRefusal refuses it to an admin in). No role gate sees these,
  * since they turn on the target, so the routes ask the phone's step-up on exactly these (routes/admin.ts
  * stepUpIfOwnerOnly), and an owner's fresh proof on those that remove or suspend an owner (adminActionRemovesOwner). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
  */
 export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
     if (!target) return false;
-    // An owner, whose role acts or whose key waits on a re-key code (adminEmergencySuspend's own test).
-    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner';
+    // An owner, whose role acts or whose key waits on a re-key code (adminEmergencySuspend's own test); or a member only
+    // an owner may pause again (pauseChainRefusal's re-pause rule).
+    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner' || repauseNeedsOwner(target);
     if (action === 'prune') return pruneNeedsOwner(target, actor);
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
-    if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
+    if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target) || reportPauseNeedsOwner(target);
     if (action === 'rekey') return !!heldPrivilegedRole(target);
     if (action === 'lift') return !!heldRoleFor(openPauseVotes(target).map(k => k.id));
     const decision = getDecision(target);
@@ -2750,6 +2754,27 @@ function repauseWindow(subjectPubkey: string, now: number): { decision: Decision
 }
 
 /**
+ * Whether the chain rules speak to a pause of this member (pauseChainRefusal, repauseNeedsOwner): only where the community
+ * votes, since with votes off a pause opens no vote and the moderators decide (design §10 Q11), and only on a member a
+ * pause would be made on. Anyone else is refused by the guards before them, in their own words.
+ */
+function chainRulesApply(subjectPubkey: string): boolean {
+    if (!subjectPubkey || !decisionsOn()) return false;
+    const member = getMember(subjectPubkey);
+    return !!member && !member.isTreasury && mayBePaused(member);
+}
+
+/**
+ * Whether pausing this member now is an owner's act (design §3.4 rule 2): inside the window pauseChainRefusal refuses the
+ * pause to an admin in (its rule 3). adminActionNeedsOwner asks it for a suspension and a report's pause, so the routes
+ * ask that pause what they ask every owner-only one (routes/admin.ts stepUpIfOwnerOnly): an automation token, which acts
+ * for an owner at admin level, is refused it, and the phone's Manage hand-off is asked its unlock again.
+ */
+export function repauseNeedsOwner(subjectPubkey: string, now: number = Date.now()): boolean {
+    return chainRulesApply(subjectPubkey) && !!repauseWindow(subjectPubkey, now);
+}
+
+/**
  * Whether pausing this member again would be a third pause within THIRD_PAUSE_DAYS of the first (design §3.4 rule 3): two
  * pauses opened in that time, whatever their votes decided. Each pause opens its own vote (isPauseVote), so they are counted
  * by their votes' opening.
@@ -2789,17 +2814,15 @@ function caseOf(decision: Decision): string {
  *  3. Within REPAUSE_NEEDS_OWNER_DAYS of a vote that ended without removing them, only an owner (or the server's password,
  *     which only owners hold) pauses them again, and with a reason that is not that vote's case (not equal once both are
  *     trimmed: cheap, and enough to make the second reason a visible act). That pause's card says so (secondPauseOf). An
- *     admin's refusal says how that vote ended: the community decided (No), too few voted, or it was stopped.
+ *     admin's refusal says how that vote ended: the community decided (No), too few voted, or it was stopped. The routes
+ *     ask that pause what they ask every owner-only one (repauseNeedsOwner, through adminActionNeedsOwner).
  *  4. The tripwire: an admin with OPEN_PAUSES_BEFORE_PROOF pauses whose votes are still open makes another only with the
  *     owner's fresh proof, which the routes ask (`freshProof`), so a plain admin is refused and an owner proves it.
  */
 export function pauseChainRefusal(
     subjectPubkey: string, actor: string | null | undefined, reason: string, opts: { freshProof?: boolean; now?: number } = {},
 ): PauseRefusal | null {
-    if (!subjectPubkey || !decisionsOn()) return null;
-    // Only a member a pause would be made on: anyone else is refused by the guards before it, in their own words.
-    const member = getMember(subjectPubkey);
-    if (!member || member.isTreasury || !mayBePaused(member)) return null;
+    if (!chainRulesApply(subjectPubkey)) return null;
     const now = opts.now ?? Date.now();
     const coolDown = removalCoolDownRefusal(subjectPubkey, actor, now);
     if (coolDown) return { status: 403, error: coolDown, code: REMOVAL_COOL_DOWN_CODE };

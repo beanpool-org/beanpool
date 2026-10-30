@@ -155,6 +155,7 @@ import {
     mayBePaused,
     suspendReasonProblem,
     pauseChainRefusal,
+    repauseNeedsOwner,
     PauseRefusedError,
     type PauseRefusal,
     eraseRepliesOf,
@@ -7631,6 +7632,24 @@ export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
 }
 
 /**
+ * Whether actioning this report with suspendUser pauses its member where the chain rules keep that for an owner
+ * (decisions-engine.ts repauseNeedsOwner: within 30 days of a vote on removing them that ended without removing them).
+ * The route asks the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly), as on a pause that takes a role.
+ */
+export function reportPauseNeedsOwner(reportId: string): boolean {
+    const subject = reportPauseSubject(reportId);
+    return !!subject && repauseNeedsOwner(subject);
+}
+
+/** Who actioning this report with suspendUser would pause (reportSubjectOf), or null: it names nobody, or a closed account. */
+function reportPauseSubject(reportId: string): string | null {
+    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+    const subject = report ? reportSubjectOf(report) : null;
+    return subject && !isClosedAccountKey(subject) ? subject : null;
+}
+
+/**
  * Why actioning this report with suspendUser can't pause its member for `actor` now (the chain rules, the cool-down first:
  * decisions-engine.ts pauseChainRefusal), or null: asked by the route before any fresh proof, as actionReport asks it again
  * and pauseMember once more. `reason` is the admin's own, or null for the one the record would give (reportPauseReason).
@@ -7639,10 +7658,8 @@ export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
 export function reportPauseRefusal(
     reportId: string, actor: string | null | undefined, reason: string | null, opts: { freshProof?: boolean; reasonCategory?: string | null } = {},
 ): PauseRefusal | null {
-    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
-        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
-    const subject = report ? reportSubjectOf(report) : null;
-    const member = subject && !isClosedAccountKey(subject) ? getMember(subject) : undefined;
+    const subject = reportPauseSubject(reportId);
+    const member = subject ? getMember(subject) : undefined;
     if (!member || member.isTreasury || !mayBePaused(member)) return null;
     const pauseReason = reason || reportPauseReason(member.callsign || member.publicKey.slice(0, 8), opts.reasonCategory);
     return pauseChainRefusal(member.publicKey, actor, pauseReason, { freshProof: opts.freshProof });
@@ -7650,11 +7667,8 @@ export function reportPauseRefusal(
 
 /** The owner's or admin's role actioning this report with suspendUser would take away, or null (reportSuspensionTakesPrivilegedRole). */
 export function reportSuspensionTakesRole(reportId: string): 'owner' | 'admin' | null {
-    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
-        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
-    if (!report) return null;
-    const subject = reportSubjectOf(report);
-    return subject && !isClosedAccountKey(subject) ? heldPrivilegedRole(subject) : null;
+    const subject = reportPauseSubject(reportId);
+    return subject ? heldPrivilegedRole(subject) : null;
 }
 
 /**

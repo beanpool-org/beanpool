@@ -4,17 +4,20 @@
  * pauseMember, which an admin's suspension and a report's both call); this suite reaches them through the real routes.
  *
  * Boots the real server; every request goes over HTTPS through the real signature middleware and real admin sessions (an
- * admin's key session, an owner's from a computer and from the phone's Manage hand-off, and the password with a 2FA code).
- * Expo and the owners' alert channel (a stand-in ntfy on loopback) are answered here: nothing leaves this machine.
+ * admin's key session, an owner's from a computer and from the phone's Manage hand-off, an owner's automation token, and
+ * the password with a 2FA code). Expo and the owners' alert channel (a stand-in ntfy on loopback) are answered here:
+ * nothing leaves this machine.
  *
  *  1. Within 30 days of a vote that ended without removing a member (the community said No), another admin can't pause
  *     them: refused in the design's words, with the day it ended and the day it lifts, by the route, through a report and
  *     in the engine, and nothing is written. The admin who brought that vote still meets the cool-down first, which now
  *     says an owner can. An owner can, with a new reason: the same reason, trimmed, is refused. That pause's card says
- *     "Second pause in 30 days. The last vote said No.", in its record and to members.
- *  2. A third pause within 90 days of the first is refused to everyone, an owner from the phone and the server's password
- *     too, by the route, through a report and in the engine; a member with standing can still propose a Decision on them.
- *     Once the first is 90 days old, an owner may pause them again.
+ *     "Second pause in 30 days. The last vote said No.", in its record and to members. The routes ask it what they ask
+ *     a co-owner's pause, by the suspend route and through a report: an owner's automation token is refused it, and an
+ *     owner's phone hand-off 10 minutes after its unlock is asked to press Manage again; pressed just now, it is made.
+ *  2. A third pause within 90 days of the first is refused to everyone, an owner from the phone, an owner's automation
+ *     token and the server's password too, by the route, through a report and in the engine; a member with standing can
+ *     still propose a Decision on them. Once the first is 90 days old, an owner may pause them again.
  *  3. The other endings: too few voted (an admin's refusal says so, never that the community decided, and so does an
  *     owner's second pause on its card), a vote stopped before it closed (its own words, and its card), a removal the
  *     community passed that an admin halted in its window (no owner needed: the community agreed with that case), and
@@ -150,12 +153,13 @@ async function main() {
     const se = await import('./state-engine.js');
     const de = await import('./decisions-engine.js');
     const { startHttpsServer, resetAdminRateLimit } = await import('./https-server.js');
-    const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { resetAdminAuthTarpit, TOKEN_REFUSED_CODE } = await import('./admin-auth.js');
     const { db } = await import('./db/db.js');
     const { setSwitchOverride } = await import('./config/node-profile.js');
     const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
     const { ownerSessionHeaders, ownerPhoneSessionHeaders, turnOn2faForTests } = await import('./admin-auth-test-harness.js');
-    const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, STEP_UP_REQUIRED_CODE } = await import('./admin-key-auth.js');
+    const { issueAutomationToken } = await import('./automation-tokens.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
@@ -210,6 +214,9 @@ async function main() {
     grantNodeRole(mo.pubKeyHex, 'moderator', gen.pubKeyHex);
     const tams = [1, 2, 3, 4, 5, 6, 7].map(n => seed(`TripTam${n}`));
     const sid = seed('SixthSid');
+    // The second pause at the routes' owner gates: one member each, so a pause let through spoils no other check.
+    const [ivy, jude, kit] = ['IvyIrons', 'JudeJay', 'KitKerr'].map(seed);   // by the suspend route
+    const [leo, mia, ned] = ['LeoLane', 'MiaMoss', 'NedNash'].map(seed);     // through a report
 
     const sessionOf = (id: Id, role: 'admin' | 'owner') => {
         const { handshakeToken } = mintHandshakeToken(id.pubKeyHex, role);
@@ -224,6 +231,16 @@ async function main() {
     const gwenSession = ownerSessionHeaders(gen.pubKeyHex);
     const gwenPhone = () => ownerPhoneSessionHeaders(gen.pubKeyHex);
     const password = () => twoFa.headers();
+    // Otto's hand-off with its unlock 10 minutes old: past the phone's 5-minute step-up, so an owner-only change asks Manage again.
+    const ottoPhoneStale = () => {
+        const headers = ottoPhone();
+        backdateAdminSessionForTests(headers['X-Admin-Session'], 10 * 60_000);
+        return headers;
+    };
+    // An admin-scope automation token Gwen (an owner) made: it acts for her at admin level, and never makes an owner-only change.
+    const madeToken = issueAutomationToken({ name: 'Chain test script', scope: 'admin', createdBy: gen.pubKeyHex });
+    if (!madeToken.ok) throw new Error(`setup: could not make Gwen's automation token: ${madeToken.error}`);
+    const gwenToken = { Authorization: `Bearer ${madeToken.token}` };
     const fresh = () => { resetAdminAuthTarpit(); resetAdminRateLimit(); resetGatewayRateLimit(); };
     const statusOf = (id: Id) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(id.pubKeyHex) as { status: string }).status;
     const row = (decisionId: string): any => {
@@ -321,6 +338,53 @@ async function main() {
     const card2 = await cardFor(vi, vote2);
     assert(card2?.params?.secondPause?.after === 'no' && card2?.description?.startsWith('Second pause in 30 days. The last vote said No.'),
         `members read it on the card (${JSON.stringify(card2?.params?.secondPause)})`);
+    // The routes ask that pause what they ask every owner-only one (routes/admin.ts stepUpIfOwnerOnly), as they do a
+    // co-owner's: never an automation token, and from the phone's Manage hand-off its unlock again. The chain rules answer first.
+    for (const m of [ivy, jude, kit, leo, mia, ned]) {
+        const r = await pause(adaSession, m, `Took deposits for repairs and never came back, ${m.callsign}`);
+        if (r.status !== 200) throw new Error(`setup: Ada's pause of ${m.callsign}: ${r.status} ${r.text}`);
+        voteAndClose(r.body.decision.id, false);
+        if (row(r.body.decision.id).status !== 'failed' || statusOf(m) !== 'active') throw new Error(`setup: the vote on ${m.callsign} did not say No`);
+    }
+    const untouched = (m: Id) => statusOf(m) === 'active' && removalsOf(m) === 1;
+    const abeOnIvy = await pause(abeSession, ivy, 'Took a deposit for a shed and never built it');
+    assert(abeOnIvy.status === 403 && abeOnIvy.body?.code === de.REPAUSE_NEEDS_OWNER_CODE && untouched(ivy),
+        `a plain admin is still refused by the rule itself (${abeOnIvy.status} ${abeOnIvy.body?.code})`);
+    const tokenOnCoOwner = await pause(gwenToken, otto, 'A case about a co-owner, sent by a script');
+    assert(tokenOnCoOwner.status === 403 && tokenOnCoOwner.body?.code === TOKEN_REFUSED_CODE && statusOf(otto) === 'active',
+        `Gwen's admin-scope automation token is refused a co-owner's pause (${tokenOnCoOwner.status} ${tokenOnCoOwner.body?.code})`);
+    const tokenSame = await pause(gwenToken, ivy, `Took deposits for repairs and never came back, ${ivy.callsign}`);
+    assert(tokenSame.status === 400 && tokenSame.body?.code === de.REPAUSE_SAME_REASON_CODE && untouched(ivy),
+        `with the last pause's reason, the token meets the same-reason rule first (${tokenSame.status} ${tokenSame.body?.code})`);
+    const tokenOnIvy = await pause(gwenToken, ivy, 'Took two more deposits this week, seen by a script');
+    assert(tokenOnIvy.status === 403 && tokenOnIvy.body?.code === TOKEN_REFUSED_CODE && untouched(ivy),
+        `with a new reason, the token is refused Ivy's second pause as it is a co-owner's, nothing written (${tokenOnIvy.status} ${tokenOnIvy.body?.code ?? tokenOnIvy.text.slice(0, 120)})`);
+    const leoReport = se.submitReport(vi.pubKeyHex, leo.pubKeyHex, 'Took two more deposits this week')!;
+    const tokenOnLeo = await reportAction(gwenToken, leoReport.id, { reason: 'Took two more deposits this week, seen by a script' });
+    assert(tokenOnLeo.status === 403 && tokenOnLeo.body?.code === TOKEN_REFUSED_CODE && reportStatus(leoReport.id) === 'pending' && untouched(leo),
+        `and Leo's through a report, the report left as it was (${tokenOnLeo.status} ${tokenOnLeo.body?.code ?? tokenOnLeo.text.slice(0, 120)} ${reportStatus(leoReport.id)})`);
+    const stale = ottoPhoneStale();
+    const staleOnCoOwner = await pause(stale, gen, 'A case about a co-owner, from a phone left signed in');
+    assert(staleOnCoOwner.status === 403 && staleOnCoOwner.body?.code === STEP_UP_REQUIRED_CODE && statusOf(gen) === 'active',
+        `Otto's phone hand-off 10 minutes after its unlock is asked to press Manage again for a co-owner's pause (${staleOnCoOwner.status} ${staleOnCoOwner.body?.code})`);
+    const staleOnJude = await pause(stale, jude, 'Took two more deposits this week, from a phone left signed in');
+    assert(staleOnJude.status === 403 && staleOnJude.body?.code === STEP_UP_REQUIRED_CODE && untouched(jude),
+        `and for Jude's second pause, nothing written (${staleOnJude.status} ${staleOnJude.body?.code ?? staleOnJude.text.slice(0, 120)})`);
+    const miaReport = se.submitReport(vi.pubKeyHex, mia.pubKeyHex, 'Took two more deposits this week')!;
+    const staleOnMia = await reportAction(stale, miaReport.id, { reason: 'Took two more deposits this week, from a phone left signed in' });
+    assert(staleOnMia.status === 403 && staleOnMia.body?.code === STEP_UP_REQUIRED_CODE && reportStatus(miaReport.id) === 'pending' && untouched(mia),
+        `and for Mia's through a report, the report left as it was (${staleOnMia.status} ${staleOnMia.body?.code ?? staleOnMia.text.slice(0, 120)} ${reportStatus(miaReport.id)})`);
+    const kitByPhone = await pause(ottoPhone(), kit, 'Took two more deposits this week, an owner on the phone');
+    assert(kitByPhone.status === 200 && statusOf(kit) === 'disabled' && row(kitByPhone.body?.decision?.id ?? '')?.params?.secondPause?.after === 'no',
+        `with Manage pressed just now, Otto makes Kit's second pause (${kitByPhone.status} ${kitByPhone.text.slice(0, 140)})`);
+    const nedReport = se.submitReport(vi.pubKeyHex, ned.pubKeyHex, 'Took two more deposits this week')!;
+    const nedByPhone = await reportAction(ottoPhone(), nedReport.id, { reason: 'Took two more deposits this week, an owner on the phone' });
+    const nedVote = db.prepare("SELECT id FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'open'").get(ned.pubKeyHex) as { id: string } | undefined;
+    assert(nedByPhone.status === 200 && reportStatus(nedReport.id) === 'actioned' && statusOf(ned) === 'disabled'
+        && row(nedVote?.id ?? '')?.params?.secondPause?.after === 'no',
+        `and Ned's through a report (${nedByPhone.status} ${reportStatus(nedReport.id)} ${nedByPhone.text.slice(0, 140)})`);
+    // Lifted, so Otto's open pauses are as they were for the tripwire (5).
+    for (const m of [ivy, jude, kit, leo, mia, ned]) if (statusOf(m) === 'disabled') await lift(m);
 
     // ── 2. No third pause in 90 days ────────────────────────────────────────────────────────────────────────────────
     console.log('\n2. A third pause within 90 days of the first is refused to everyone');
@@ -336,6 +400,9 @@ async function main() {
     assert(pwThird.status === 403 && pwThird.body?.code === de.THIRD_PAUSE_CODE, `so is the server's password (${pwThird.status} ${pwThird.body?.code})`);
     const abeThird = await pause(abeSession, dave, 'A third case about the deposits, Abe');
     assert(abeThird.status === 403 && abeThird.body?.code === de.THIRD_PAUSE_CODE, `and an admin (${abeThird.status} ${abeThird.body?.code})`);
+    const tokenThird = await pause(gwenToken, dave, 'A third case about the deposits, sent by a script');
+    assert(tokenThird.status === 403 && tokenThird.body?.code === de.THIRD_PAUSE_CODE && tokenThird.body?.error === THIRD,
+        `and an owner's automation token, in the rule's words (${tokenThird.status} ${tokenThird.body?.code})`);
     const ottoThird = await pause(ottoSession, dave, 'A third case about the deposits, Otto');
     assert(ottoThird.status === 403 && ottoThird.body?.code === de.REMOVAL_COOL_DOWN_CODE
         && new RegExp(`until ${dayOf(endedOn(vote2) + de.REMOVAL_COOL_DOWN_DAYS * DAY)}\\.$`).test(ottoThird.body?.error ?? ''),

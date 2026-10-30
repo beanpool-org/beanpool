@@ -266,6 +266,48 @@ The MCP writer never thinks — it calls the engine. This keeps the agent as **a
 
 ---
 
+## Stage 5 — Give to Grow: the contribution & vesting loop
+
+The LEARN seed is a **one-way broadcast** unless the community can add to it. `Give to Grow` closes the loop: members contribute real local knowledge, the node verifies it, and contributors earn **Seeds** that vest and unlock **Pro shop/enterprise features**. The reward is *feature access*, never a sellable token — so the economy is never polluted and there is no farming incentive.
+
+### Two-stream corpus
+- **Stream A — AI seed.** The compressed `learn-entries.ts` corpus, authored once, deterministic rotation (see LEARN card design).
+- **Stream B — live community.** Approved member contributions stored in normal learn channels, merged into the **same**
+  LEARN card. Filters by a member's starred interests/category. A new user sees AI-curated quality *and* proof that
+  neighbours contribute — in the one card.
+
+### Contribution pipeline (human + MCP triage)
+A drafted LEARN item lands in a moderation queue as `pending` (reuse `requestPost` semantics).
+- **Human keeper** reviews → Approve / Reject / Request changes.
+- **MCP-controlled moderator** (the write-capable update) triages at scale with *pure rules*: auto-approve high-confidence
+  items (allowed category, not a duplicate, contributor in a trusted tier); only edge cases bubble to a human. No agent
+  glued to every submit — scales.
+
+### Vesting (the anti-Minds core)
+Approval mints **Seeds**, but they unlock on a schedule (e.g. 1 Seed per 30 days the item stays live and gets used/vouched):
+- Rewards are **feature access, never cash** → nothing sellable, no farming.
+- **Vesting forces return visits** — you must come back to collect; go dark and vesting pauses.
+- **Compounding** — multiple live contributions keep earning in the background, so "coming back" always has a reward waiting.
+
+### Pro-tier unlocks (shop/enterprise payoff)
+Vested Seeds cross thresholds to unlock Pro shop/enterprise features, mapped to the existing tier ladder:
+- **Level 1:** custom shop banner + menu / extra listing slots
+- **Level 2:** subscription / booking slots for your enterprise
+- **Level 3:** marketplace promo placement / featured-maker position
+
+Each unlock is *earned by giving back* — the exact "keep users returning and giving to Beanpool" outcome — and it feeds
+Single-Player value too (the maker is building their own asset).
+
+### Guardrails
+- Only **approved + real** contributions count (consistent with the "no fake bakery" stance).
+- Contributor unlock weight scales with trust floor (Elder Seeds weigh more than a fresh account) — reuses the vouch/tier system.
+- Bad apples get demoted → vesting pauses; keeps the corpus honest.
+- Unlocks are **access, not value** — the dual-currency/economy is never polluted by an invented incentive token.
+- **Terminology:** the unit is **Seeds** (or "points"), never "credits" — "credits" carries financial baggage that invites
+  Minds-style "convert to value" thinking. "Seeds" matches the bean/garden metaphor: vesting is a seed growing over time.
+
+---
+
 ## New/changed node surface
 
 **New DB tables** (SQLite, same pattern as existing schema):
@@ -310,6 +352,28 @@ CREATE TABLE IF NOT EXISTS seed_archetypes (
   created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
+-- Give-to-Grow: Seeds ledger (vested contribution points) — never a sellable token
+CREATE TABLE IF NOT EXISTS seed_ledger (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  member_id    TEXT NOT NULL,
+  source       TEXT NOT NULL,            -- contribution item id / channel
+  status       TEXT NOT NULL CHECK (status IN ('pending','vesting','vested')),
+  total_seeds  INTEGER NOT NULL DEFAULT 1,
+  vested_seeds INTEGER NOT NULL DEFAULT 0,
+  vest_period_days INTEGER NOT NULL DEFAULT 30,
+  approved_at  TEXT,
+  last_tick_at TEXT,
+  UNIQUE (member_id, source)
+);
+
+-- Pro-tier unlocks earned from vested Seeds (feature access, not value)
+CREATE TABLE IF NOT EXISTS seed_tier_unlocks (
+  member_id   TEXT NOT NULL,
+  tier        INTEGER NOT NULL,          -- 1 | 2 | 3
+  unlocked_at TEXT NOT NULL,
+  PRIMARY KEY (member_id, tier)
+);
+
 -- Resolved per-member feed (cache); invalidated when tags change or caches refresh
 CREATE TABLE IF NOT EXISTS seed_feeds (
   public_key  TEXT PRIMARY KEY REFERENCES members(public_key),
@@ -325,6 +389,9 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 - `GET  /api/garden/connect` — the CONNECT/CREW blobs within the feed (kindred matches + live archetype crews).
 - `POST /api/garden/refresh` — admin/keeper: re-run real-data hooks AND rebuild the skill index now.
 - `POST /api/garden/reload-templates` — admin: hot-reload the authored module library + archetypes (authoring path).
+- `POST /api/garden/contribute` — member submits a LEARN contribution → moderation queue (`pending`).
+- `POST /api/garden/decide` — keeper / MCP moderator: approve / reject / request-changes (creates `seed_ledger` rows on approve).
+- `POST /api/garden/tick-vests` — cron: advance Vesting for approved contributions (paused for inactive members), check tier thresholds.
 
 **Cron jobs** (node's existing scheduler): refresh `ripe`/`echo`/`market` caches on their `ttl_s`, and rebuild the `skill_index` periodically so CONNECT/CREW stay current.
 
@@ -343,6 +410,7 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 | **G4** | **CONNECT/CREW**: `skill_index` rebuild + kindred join + archetype table; `/connect` route; crew CTAs (enterprise/event) | 2–3 days |
 | **G5** | MARKET hooks (real listings/resources only), scoring/ordering, A/B test | 2–3 days |
 | **G6** | MCP write-path invocation (`gardener.seed`), guardrails + tests | 1–2 days |
+| **G7** | **Give to Grow**: `seed_ledger` + tiers, contribution route + MCP triage, vesting cron, LEARN card merge | 3–5 days |
 
 **Everything is deterministic from G0** — the system is real, honest, and testable before any data hooks land.
 
@@ -352,7 +420,7 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 
 | Trap | How the Gardener avoids it |
 |---|---|
-| **Minds-style token farming** | Nothing here pays users; content is REAL value, not a reward for joining |
+| **Minds-style token farming** | Nothing here pays users; content is REAL value, not a reward for joining. Give-to-Grow Seeds vest into **feature access only** (never a sellable token), so there's nothing to farm |
 | **Fake occupancy / fake stores** | MARKET only populated from real data; `skip` when none exists |
 | **Fake people / ghost matches** | CONNECT/CREW only surface real, opted-in, recently-active members from the skill index; never invented teammates |
 | **Brigading / spam outreach** | Only opted-in members are discoverable; feeds suggest, never auto-send; DM is the safe existing E2E channel |
@@ -370,3 +438,5 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 4. **RIPE data cost** — a weather source introduces an external dependency; acceptable on the node ring, or purely from a static seasonal table first?
 5. **Discoverability opt-in** — CONNECT/CREW need a per-member "let others find me" flag. Default ON or OFF? (Recommendation: OFF by default, prompted during onboarding — matches privacy-first posture.)
 6. **Crew standing-up UX** — when a CREW card's CTA is tapped, does it (a) pre-seed a community enterprise / working-bee draft naming the real members, or (b) send invite DMs to each member first? Recommendation: (b) invite-first, then auto-create on acceptance, so nobody is added to anything without consent.
+7. **Give-to-Grow curation** — who approves Stream-B contributions: always a human keeper, or MCP-rules auto-approve for high-confidence items (allowed category + not a duplicate + trusted tier) with humans on edge cases? Recommendation: MCP rules for scale, human on edge cases — but needs explicit trust-floor defaults.
+8. **Seeds nomenclature** — confirm the unit is **Seeds** (or "points"), never "credits". Recommendation: Seeds, to avoid financial baggage and match the bean/garden metaphor.

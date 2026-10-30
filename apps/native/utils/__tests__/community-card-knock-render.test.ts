@@ -256,7 +256,7 @@ describe("a member's request to join, on the community's card", () => {
         expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks.map((k: { url: string }) => k.url)).toEqual([ORIGIN]);
     });
 
-    it("sends this community's photo with the knock when this community's row holds one", async () => {
+    it("does not send this community's photo with the knock even when this community's row holds one", async () => {
         dbRow.profile = { avatar_url: 'bundled://fox' };
         scene.answer = { status: 'pending' };
         await open();
@@ -269,7 +269,7 @@ describe("a member's request to join, on the community's card", () => {
         });
         await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
         expect(scene.knocks).toBe(1);
-        expect(scene.sent[0].avatar).toBe('bundled://fox');
+        expect('avatar' in scene.sent[0]).toBe(false);
     });
 });
 

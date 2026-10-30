@@ -12,7 +12,7 @@ import {
 import { useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import { communityOrigin } from '../utils/community-origin';
-import { getCanonicalAvatar } from '../utils/canonical-profile';
+import { getMemberProfile } from '../utils/db';
 import {
     sendKnock, rememberedKnocks, cancelledKnocks, rememberKnock, forgetKnock, readKnockStatus, knockCardState, knockFormProblem,
     KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockCardState, type KnockStatusResult,
@@ -176,7 +176,8 @@ export default function CommunityCardScreen() {
         await askNotificationPermissionOnAction('knock', identity.publicKey);
         setSending(true);
         setFormError(null);
-        const avatar = await getCanonicalAvatar().catch(() => null);
+        // Profile S2-W: send this community's photo (or none), never the phone-wide copy (#2617).
+        const avatar = (await getMemberProfile(identity.publicKey).catch(() => null))?.avatar_url ?? null;
         // From the global community only for a member there, as Find a community says it (utils/knock-address.ts): a phone
         // waiting to be let in (S3), or one in a local community, names no community it came from.
         const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);

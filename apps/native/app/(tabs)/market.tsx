@@ -1941,7 +1941,7 @@ export default function MarketScreen() {
                             <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
                                 viewerPubkey={identity?.publicKey}
                                 onOpenPost={(postId) => router.push(`/post/${postId}`)}
-                                onOpenProfile={(publicKey, callsign) => router.push({ pathname: '/public-profile', params: { publicKey, callsign: callsign || '' } })}
+                                onOpenProfile={(publicKey, callsign) => router.push({ pathname: '/public-profile', params: { publicKey: publicKey, callsign: callsign || '' } })}
                             />
                         </View>
                     ) : (

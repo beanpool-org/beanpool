@@ -536,6 +536,8 @@ describe('Every door lands on the enterprise page', () => {
             [path.join('app', 'post', '[id].tsx')]: 3,
             [path.join('app', 'chat', '[id].tsx')]: 2,
             [path.join('app', '(tabs)', 'map.tsx')]: 1,
+            // The full Community Pulse list: a row about a member opens them.
+            [path.join('app', '(tabs)', 'market.tsx')]: 1,
             [path.join('app', '(tabs)', 'people.tsx')]: 2,
             [path.join('app', '(tabs)', 'ledger.tsx')]: 1,
             [path.join('app', 'public-profile.tsx')]: 2,

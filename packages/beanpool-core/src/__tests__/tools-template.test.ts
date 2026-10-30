@@ -149,6 +149,8 @@ describe('the checks bite', () => {
         one(toolManifestProblems({ ...good, permissions: ['reminders'], reminders: { list: [{ id: 'due:back', name: word('A reminder'), defaultOn: true }], due: () => [] } }), /reminder due:back is not 1 to 24 lowercase letters, digits and hyphens/);
         one(toolManifestProblems({ ...good, screens: ['list', 'main'] }), /start with 'main'/);
         one(toolManifestProblems({ ...good, examples: [] }), /examples/);
+        one(toolManifestProblems({ ...good, doors: 'no' as never }), /its doors, when it names them, are true or false/);
+        expect(toolManifestProblems({ ...good, doors: false })).toEqual([]);
         one(toolManifestProblems({ ...good, needs: { fee: 'money' as never } }), /needs.fee is not a node feature/);
         one(toolManifestProblems({ ...good, doc: { ...good.doc, maxBytes: TOOL_LIMITS.docBytesMax + 1 } }), /at most 131072 bytes/);
         expect(toolManifestProblems({ ...good, doc: { ...good.doc, maxBytes: TOOL_LIMITS.docBytesMax } })).toEqual([]);

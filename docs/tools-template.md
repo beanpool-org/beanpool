@@ -41,7 +41,11 @@ draft; the status is the server's, asked each time; a pause is the owner's own, 
 so one a shop "closed for now" paused stays down when it reopens; a resume while its shop is closed rejects with core's
 `TOOL_SHOP_CLOSED`, which `isShopClosedRefusal` tells from no answer), `deals` (the owner's deals as seller or lender, a loan's `backAround` when known), `pricingGuide` (a hint from the
 community's guide, never a price set), `nodeCopy`, and `reminders` (which grants no function: the host schedules what
-`due()` says). `place` and `eventDoor` are not built yet: a phone route refuses a tool that asks for them.
+`due()` says), and `place` (a place the app already has, never asked for and never sent: on the phone the community's
+place or the member's rough area from the Home answer it kept, else its last known place where location is already
+allowed; on the web the same two from the Home answer this browser kept, else from the community's server, let go at
+`PLACE_WAIT_MS`; core's `toolPlaceOf` is the order; Your garden is the first to ask). `eventDoor` is not built yet:
+a phone route refuses a tool that asks for it.
 
 **The primitives** (`apps/native/tools/ui.tsx`, `apps/pwa/src/tools/ui.tsx`, the same names): `ToolScreen` (phone;
 it scrolls a box being typed in, and the buttons under it, above the keyboard),
@@ -59,7 +63,10 @@ it scrolls a box being typed in, and the buttons under it, above the keyboard),
    `wordn('{n} thing', '{n} things')` pair with its count as `n`, so "1 thing" reads right in every language), one emoji,
    the permissions you need and no more, `doc` with `version: 1`, `empty()`, `read()`, `row()`, `examples`. Add `homeCard` and `reminders` only if the
    tool has something to say on Home or at a time. A tool's Home card is offered once from inside the tool, never added
-   to Home by itself. A tool with `node-copy` that names a bigger `doc.maxBytes` may add `tooBig(doc, maxBytes)`, a line
+   to Home by itself. An empty document opens on the template's two doors ("I already do this", "I'm starting out");
+   a tool whose first screen is worth opening on an empty document (Your garden's guide) names `doors: false` and both
+   apps open its `main` screen straight away, from every door, with no examples card and no in-tool Home-card offer
+   (its card stays in Home's Add a card). Every other tool is unchanged. A tool with `node-copy` that names a bigger `doc.maxBytes` may add `tooBig(doc, maxBytes)`, a line
    that says how to make room in its own terms (the Tool shed: about how many things to delete).
 3. **Write the document's rules and tests in core** (`<id>/doc.ts`, `<id>/__tests__/`), and `<id>/fixtures.ts`: a stored
    value of every version the tool ever wrote, and the empty, small and full documents. `read()` never throws, reads every

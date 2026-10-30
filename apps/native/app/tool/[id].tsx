@@ -354,7 +354,8 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const row = safeLine(() => manifest.row(doc, Date.now()));
     const empty = !stored || isEmptyDoc(manifest, doc);
     const onFirstScreen = screenName === manifest.screens[0];
-    const showDoors = empty && onFirstScreen;
+    // A tool whose first screen works on an empty document (manifest.doors === false) opens straight on it.
+    const showDoors = manifest.doors !== false && empty && onFirstScreen;
     const ScreenAny = Screen as React.ComponentType<{ host: unknown; params: Readonly<Record<string, string>> }>;
 
     return (

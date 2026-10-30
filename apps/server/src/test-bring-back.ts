@@ -299,6 +299,17 @@ async function runTests() {
         const noCopy = join('NoCopyNed');
         const none = await issueBringBack(adminSession, noCopy.pubKeyHex);
         assert(none.status === 409 && none.json.code === 'no_copy' && none.json.error === BRING_BACK_NO_COPY, `a member with no copy here gets no code (got ${none.status} ${none.json.code})`);
+        // A row a door stored under another spelling (the key in capitals) before the one-spelling rule is not the member
+        // whose key it is: Bring back pressed on it is refused, as Re-key is, and brings that member back on no code.
+        const sam = join('SamMember');
+        await turnOn(sam);
+        const SAM = sam.pubKeyHex.toUpperCase();
+        db.prepare("INSERT INTO members (public_key, callsign, status) VALUES (?, 'Stray Sam', 'active')").run(SAM);
+        const stray = await issueBringBack(adminSession, SAM);
+        assert(stray.status === 400 && /isn’t written the way this community keeps keys/.test(stray.json.error ?? '')
+            && !db.prepare("SELECT 1 FROM rekey_requests WHERE old_pubkey IN (?, ?) AND kind = 'bring_back'").get(sam.pubKeyHex, SAM),
+            `Bring back on a row stored under another spelling is refused, and no code is made for the member (got ${stray.status} ${stray.json.error})`);
+        db.prepare('DELETE FROM members WHERE public_key = ?').run(SAM);
     }
 
     // ── D ──

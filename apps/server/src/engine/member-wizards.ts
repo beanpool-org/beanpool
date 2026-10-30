@@ -183,9 +183,10 @@ const MISSPELT_ROW_ERROR = 'This row’s key isn’t written the way this commun
  * The wizards below lower-case the key an operator names, so a member's key in capitals still finds that member. Not
  * when that exact spelling has a row of its own: a row a door stored under another spelling before the one-spelling
  * rule (engine/member-key.ts reportMisspeltMemberKeys), which is not the member whose key it is. Lower-cased, it would
- * re-key or offboard that member instead. Such a row is removed (People → Remove), which takes its exact key.
+ * re-key or offboard that member instead. Such a row is removed (People → Remove), which takes its exact key. Bring back's
+ * code asks it too (engine/bring-back.ts issueBringBackCode).
  */
-function assertNotMisspeltRow(key: string | null | undefined): void {
+export function assertNotMisspeltRow(key: string | null | undefined): void {
     if (!key || isMemberKeySpelling(key)) return;
     if (db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(key)) throw new Error(MISSPELT_ROW_ERROR);
 }

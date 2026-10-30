@@ -28,7 +28,7 @@ import { logger, sanitizeMessage } from '../logger.js';
 import { getMember, dispatchPushNotification } from '../state-engine.js';
 import { communityCopyForRelease, sealReleaseToDevice, type SealedShare } from '@beanpool/core';
 import { hasCommunityCopy, openCommunityCopy } from './community-copy.js';
-import { REKEY_CODE_TTL_MS, assertMayRekey, getInvalidatedKeyInfo, type RekeyRequestRow } from './member-wizards.js';
+import { REKEY_CODE_TTL_MS, assertMayRekey, assertNotMisspeltRow, getInvalidatedKeyInfo, type RekeyRequestRow } from './member-wizards.js';
 
 /** The holder type a release is bound to (the AAD of sealReleaseToDevice), beside the code it was released on. */
 export const BRING_BACK_HOLDER = 'community';
@@ -66,12 +66,15 @@ export function isBringBackCode(code: string | null | undefined): boolean {
 /**
  * The admin's Bring back (POST …/rekey/issue-code with `{ kind: 'bring_back' }`): a code for the member's new phone.
  * Refused for a member with no community copy here, a removed or deleted account, the operator's own account, while a
- * re-key code holds the member's key, and to an admin for an owner or admin (assertMayRekey). An earlier bring-back
- * code of the member's stops. Writes the log line (never the code) and pushes the member's phones.
+ * re-key code holds the member's key, to an admin for an owner or admin (assertMayRekey), and for a row a door stored
+ * under another spelling (assertNotMisspeltRow, as Re-key's code asks). An earlier bring-back code of the member's
+ * stops. Writes the log line (never the code) and pushes the member's phones.
  */
 export function issueBringBackCode(memberPublicKey: string, operatorPubkey: string, now = Date.now()):
     { code: string; oldPubkey: string; callsign: string; expiresAt: string; kind: 'bring_back' } {
     assertPlainTablesWritable();
+    // Before the key is lower-cased: that row is not the member whose key it is, and lower-cased it would bring them back.
+    assertNotMisspeltRow(memberPublicKey);
     const member = (memberPublicKey || '').trim().toLowerCase();
     const operator = (operatorPubkey || '').trim().toLowerCase() || 'owner:password';
     const row = getMember(member);

@@ -95,7 +95,9 @@ describe('after joining another community: no "protect this community too"', () 
         expect(n.body).toContain('Your posts, chats and trades stay in each community.');
         expect(n.body).toContain('A sign-in you linked to get back into your account works here too');
         expect(n.body).not.toMatch(/protect your account in/i);
-        expect(Object.keys(n).sort()).toEqual(['body', 'later', 'title']);
+        // `kind`: which nudge it is, for the words layer (vault rethink VR2 adds the one for a community that keeps none).
+        expect(Object.keys(n).sort()).toEqual(['body', 'kind', 'later', 'title']);
+        expect(n.kind).toBe('vault');
         expect(n.later).toBe('Next');
         expect(n.protect).toBeUndefined();
     });

@@ -830,7 +830,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <ModerationPauseCard />
                         {/* An account made with 12 words alone, for as long as it has no sign-in: one way back, and a
                             sign-in to add (two-doors design §2.5). With the result of one that just came back. */}
-                        <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} />
+                        <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} keepsNoCopies={communityInfo?.recoveryCopies === 'none'} />
                         {/* A new account only, until the node says its limits are over (G11-e). */}
                         <NewAccountCard />
                         {/* A known community only, until the member agrees to what its admins can see (slice 6); never blocks. */}
@@ -1014,7 +1014,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     </div>
                                     <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
-                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} />
+                                <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} phoneLater={phoneLater} keepsNoCopies={communityInfo?.recoveryCopies === 'none'} />
                                 {/* Where a copy of this account is kept, as far as this browser can ask, and removing this
                                     server's (vault rethink VR1). After a removal the server's list is read again, so the
                                     line above says what it keeps now. */}

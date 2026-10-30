@@ -152,10 +152,14 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: wh
 
 // Shared with other screens: drawn as stand-ins (see the note above). NoWordsNotice's draws the label Settings hands it.
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
-vi.mock('../../components/KeeperProtectionPanel', () => ({ KeeperProtectionPanel: () => createElement('span', { 'data-later-sweep': 'KeeperProtectionPanel' }) }));
+// The panel's stand-in carries where Settings says a copy goes (its `copiesAt`); the sheet's keeps what Settings hands it.
+vi.mock('../../components/KeeperProtectionPanel', () => ({
+    KeeperProtectionPanel: ({ copiesAt }: { copiesAt?: string }) => createElement('span', { 'data-later-sweep': 'KeeperProtectionPanel', 'data-copies-at': copiesAt }),
+}));
 vi.mock('../../components/AddWordsForm', () => ({ AddWordsForm: () => createElement('span', { 'data-later-sweep': 'AddWordsForm' }) }));
 vi.mock('../../components/RecoveryKitButtons', () => ({ RecoveryKitButtons: () => createElement('span', { 'data-later-sweep': 'RecoveryKitButtons' }) }));
-vi.mock('../../components/SsoEnrolSheet', () => ({ SsoEnrolSheet: () => null }));
+const sheet = vi.hoisted(() => ({ props: null as null | { copiesAt?: string; onCopiesChanged?: () => void } }));
+vi.mock('../../components/SsoEnrolSheet', () => ({ SsoEnrolSheet: (props: { copiesAt?: string; onCopiesChanged?: () => void }) => { sheet.props = props; return null; } }));
 vi.mock('../../components/PricingGuideModal', () => ({ PricingGuideModal: () => null }));
 vi.mock('../../components/OneWayBackCard', () => ({ OneWayBackCard: () => createElement('span', { 'data-later-sweep': 'OneWayBackCard' }) }));
 vi.mock('../../components/WordsOnScreen', () => ({
@@ -180,6 +184,8 @@ const node = vi.hoisted(() => ({
     ownerChecked: null as number | null,
     blocked: [] as string[],
     lastPlan: false,
+    /** The community's rule for copies, as its info says it (vault rethink VR2); undefined: it says none, the default. */
+    rule: undefined as undefined | 'vault' | 'server' | 'none',
 }));
 const vault = vi.hoisted(() => ({ on: false, holds: [] as any[], offer: null as any, note: null as null | string }));
 vi.mock('../db', () => ({
@@ -242,6 +248,8 @@ vi.mock('../vault', async (importOriginal) => {
     return {
         ...real,
         hasVault: () => vault.on,
+        // Where a copy goes (vault-config.ts signInCopiesAt, with a community's rule since vault rethink VR2): from the same switch.
+        signInCopiesAt: (rule?: string | null) => (rule === 'none' ? 'none' : rule === 'server' ? 'community' : vault.on ? 'vault' : 'community'),
         vaultCopyKnowledge: async () => 'known',
         vaultStatus: async () => ({ holds: vault.holds }),
         approvedHolds: async () => [],
@@ -282,6 +290,7 @@ import { holdEndsWords } from '../../components/RecoveryAlertBanner';
 import { consentHeading, saveKnownConsent } from '../known-consent';
 import { OWNER_WORDS_COPY } from '../owner-words';
 import { holdEndsText } from '../vault';
+import { copiesRuleNow } from '../copies-rule';
 import SettingsScreen from '../../app/(tabs)/settings';
 
 const NODE = 'https://mullum.example';
@@ -317,6 +326,8 @@ beforeEach(() => {
     node.ownerChecked = null;
     node.blocked = [];
     node.lastPlan = false;
+    node.rule = undefined;
+    sheet.props = null;
     vault.on = false;
     vault.holds = [];
     vault.offer = null;
@@ -324,7 +335,7 @@ beforeEach(() => {
     globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
         const u = String(url);
         if (u.includes('/api/members/preferences')) return new Response(JSON.stringify({ holiday_mode: 'false' }), { status: 200 });
-        if (u.includes('/api/community/info')) return new Response(JSON.stringify({ memberCount: 14, postCount: 30, transactionCount: 9 }), { status: 200 });
+        if (u.includes('/api/community/info')) return new Response(JSON.stringify({ memberCount: 14, postCount: 30, transactionCount: 9, ...(node.rule ? { recoveryCopies: node.rule } : {}) }), { status: 200 });
         return new Response('{}', { status: 404 });
     }) as typeof fetch;
 });
@@ -483,6 +494,29 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(host.textContent).not.toContain(pseudoLocalise('Always work, anywhere.'));
         expect(panelAt()).toBeGreaterThan(-1);
         expect(panelAt()).toBeLessThan(host.innerHTML.indexOf(pseudoLocalise('🔑 12 Recovery Words')));
+    });
+
+    // Vault rethink VR2: Account Protection read the rule as the key vault, and the owners set `none` since. The sheet's
+    // connect asked the rule afresh (copies-rule.ts copiesRuleNow, which keeps the answer) and linked nothing, and tells the
+    // screen as it closes (components/SsoEnrolSheet.tsx onCopiesChanged): the screen reads the rule again, and its panel is
+    // the community's no-copies row, which offers no sign-in.
+    it('Account Protection, told the rule moved to none as the sheet closes: reads it again, and offers no sign-in', async () => {
+        const panelSays = () => host.querySelector('[data-later-sweep="KeeperProtectionPanel"]')?.getAttribute('data-copies-at');
+        vault.on = true;
+        node.rule = 'vault';
+        params.now = { section: 'protection' };
+        await renderIn('xx');
+        expect(panelSays()).toBe('vault');
+        expect(sheet.props?.copiesAt).toBe('vault');
+        node.rule = 'none';
+        expect(await copiesRuleNow(NODE)).toBe('none');
+        await settle();
+        expect(panelSays(), 'not told yet: the screen still says the key vault').toBe('vault');
+        await act(async () => { sheet.props!.onCopiesChanged!(); });
+        await settle();
+        expect(panelSays()).toBe('none');
+        expect(sheet.props?.copiesAt).toBe('none');
+        expect(bypassing(), 'keeps none').toEqual([]);
     });
 
     it('View Recovery Phrase: the CONFIRM step and the words; on a phone with none, the add form\'s way to a sign-in', async () => {

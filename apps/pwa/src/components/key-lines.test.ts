@@ -87,6 +87,7 @@ function libSentences(): string[] {
         for (const code of ['already_joined', 'removed', 'sign_in']) out.push(linkRefusalMessage(answer(400, { code }), p));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: true }));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: false }));
+        out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: false, noCopies: true }));
         const left = leaveForLink({ publicKey: 'k' } as never, p, { nonce: 'n', expiresInSeconds: 600, providers: [p], clientIds: {} }, { navigate: () => {} });
         if (!left.ok) out.push(left.message);
     }

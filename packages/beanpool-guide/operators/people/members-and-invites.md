@@ -86,6 +86,24 @@ A standby server keeps the setting from the main server, and so does a standby t
 
 A community with Beans can't open its door to anyone with a sign-in: strangers would hold credit from their first day, so the server refuses it. On the global community, which has no Beans, the door is open and nobody invites; Settings shows **Open** there, with nothing to choose.
 
+## Where members' copies go
+
+When a member links Google, Apple or Facebook as a way back into their account, the app locks a copy of their key (and their 12 words, when the phone has them) to that sign-in, so signing in brings the account back on a new phone. Your community decides where those copies go. Open **How this community works** in Settings: **Where members' copies go** is under **Ways back**. Only an owner can change it. The first-time setup shows it too, before the founding invites.
+
+- **BeanPool's key vault.** Every community starts here. Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open (the members' guide says who can open a copy). Nothing on your server needs the vault: a member's phone deposits there with its own key, and your server never calls it. The web app has no key vault client, so a copy a web-app member's join made stays on your server.
+- **This server.** Your server keeps members' copies, locked with its recovery seal (data/recovery-seal.key). The people who run it can open them. If this server is lost, those copies are lost; members' 12 words still work. The copies are in your backups and in a standby's copy (see Backups and replicas). A sign-in a member links from this community's screens keeps its copy here, and the app doesn't ask the vault for it. The app does still ask the vault, from the member's phone and with their own key, whether it holds a copy of their account, when the app or Settings opens: that is how it can offer to move one here. It contacts the vault again when a member moves or removes that copy. Your server never calls the vault.
+- **Nowhere.** This community keeps no copies and does not use BeanPool's key vault. The app offers no sign-in to link from this community's screens, and your server refuses to keep a new copy ("This community keeps no copies of members' accounts, so nothing was kept here."). Members' 12 words are their way back here, and an admin can re-key one to a new key (see Re-Key).
+
+What changing it does, and doesn't:
+
+- **Only new copies follow it.** A copy a member already has is theirs: one key is a member of many communities, and a copy made through another community also opens this one. Copies your server already keeps stay until each member removes theirs, under **Where your account can be brought back from** (Account Protection in the app, Settings in the web app). Their status, removal and the way back from them work under every choice.
+- **Every member is told**, in a notice from the community. At its next open, the app shows a card saying what it means for them: under This server it offers to move a copy from the key vault to your server; under Nowhere it shows where their copies are.
+- Each change is logged with who made it, and the owners get an alert.
+- **A phone app from before this setting ignores it**: a build with the key vault still puts copies there, whatever the community. Your server can't stop that, because the phone talks to the vault directly. A phone on the current app follows the rule.
+- **On a community with an open door**, the door takes a key vault ticket only under BeanPool's key vault. Under This server, a copy the joiner's app sends with the join is kept here; under Nowhere none is kept, and the join stands without one.
+
+A standby keeps the setting from the main server, and so does a standby that takes over. A backup carries it.
+
 ## Invites from Settings
 
 Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge gives that badge's trust, so a deeper credit line, and nothing more: badges gate nothing. It is no standing to propose a Decision; only a completed trade is.

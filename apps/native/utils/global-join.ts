@@ -87,7 +87,8 @@ import {
 import { checkVaultTicket } from '@beanpool/core';
 import { extractSub } from './sso-sheet-connect';
 import { enrolmentFromJoin, enrolmentFromVault, sealSsoShares, type KeeperEnrolmentResult } from './keeper-enrolment';
-import { depositWithVault, signInCopiesAt, vaultConfig, vaultTicket, VaultError } from './vault';
+import { depositWithVault, signInCopiesAt, vaultConfig, vaultTicket, VaultError, type SignInCopies } from './vault';
+import { knownCopiesRule } from './copies-rule';
 import {
     adoptJoinKey, commitDoorKey, countDoorJoinOut, countDoorJoinRefused, keepJoinedIdentity, keyForThisPhone, openDoorAt, releaseDoorKey,
     type JoinKey, type KeyDoor,
@@ -465,6 +466,15 @@ export function joinKeyForThisPhone(held: JoinKey | null = null): Promise<JoinKe
  * design §1.3), kept to the keys the build has built in. Empty when the door names none (a door from before V5, or one
  * whose operator set none) or only keys of another vault: then the phone asks the vault for nothing at this door.
  */
+/**
+ * Where a copy made at the door at `url` goes: its community's rule (vault rethink VR2), as the door check kept it
+ * (node-profile.ts checkGlobalDoor asks it fresh), else this build's place. The door itself takes a vault ticket only
+ * under `vault`, and keeps no copy under `none` (apps/server routes/open-join.ts).
+ */
+export async function doorCopiesAt(url: string): Promise<SignInCopies> {
+    return signInCopiesAt(await knownCopiesRule(url));
+}
+
 export function doorTicketKeys(doorKeys: { ticketKeys: string[] } | null): string[] {
     const pinned = vaultConfig()?.ticketKeys ?? [];
     return (doorKeys?.ticketKeys ?? []).filter(key => pinned.includes(key));
@@ -556,8 +566,9 @@ export async function signInAtDoor(
     const asked = await askTheDoor(provider, url, identity);
     if (asked.kind === 'answered') return asked;
     const { nonce: doorNonce, vault: doorKeys } = asked.nonce;
-    // A build without a vault: the door's own nonce, exactly as before the vault (the copy rides in the join).
-    if (signInCopiesAt() === 'community') {
+    // A build without a vault, or a door whose community keeps copies itself or none (its rule, vault rethink VR2, as the
+    // door check kept it): the door's own nonce, exactly as before the vault (a copy, where kept, rides in the join).
+    if (await doorCopiesAt(url) !== 'vault') {
         const signin = provider === 'apple'
             ? await signInWithApple(doorNonce)
             : provider === 'google'
@@ -782,7 +793,7 @@ async function sendJoin(
     // Backup offers the ordinary connect. Why it failed goes to the log; never the words or the key.
     let recovery: { shares: unknown[] } | null = null;
     let wordsSealed = false;
-    if (signInCopiesAt() === 'community') {
+    if (await doorCopiesAt(url) === 'community') {
         try {
             const sealed = await sealSsoShares(identity, signin.provider, signin.sub);
             recovery = { shares: sealed.shares };

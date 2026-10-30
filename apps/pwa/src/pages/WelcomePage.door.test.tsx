@@ -261,6 +261,65 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
 });
 
 /*
+ * The door's sign-in says who keeps a copy by the community's rule (vault rethink VR2), as the phone's door does. Where it
+ * keeps none (`none`), a sign-in only lets the member in: the door promises no locked copy and no way back, which is what
+ * Safety Backup says after the join ("This community's server keeps no copy of your account.").
+ */
+describe("the join door's sign-in, by the community's rule", () => {
+    const NO_COPIES = "This community keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back.";
+    function doorAt(info: Record<string, unknown>) {
+        stubNode(info, {
+            '/api/community/membership/': () => json(200, { isMember: false, callsign: null }),
+            '/api/members/callsign-available/': () => json(200, { available: true }),
+            '/api/join/sso-nonce': () => json(200, { nonce: 'n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'g' } }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+    }
+    /** From the lobby, as a new member named Rowan, to the sign-in buttons. */
+    async function toTheSignIn() {
+        const join = await screen.findByTestId('join-start');
+        await waitFor(() => expect(join).not.toBeDisabled());
+        fireEvent.click(join);
+        fireEvent.click(await screen.findByTestId('join-new'));
+        fireEvent.change(await screen.findByTestId('join-callsign'), { target: { value: 'Rowan' } });
+        fireEvent.click(screen.getByTestId('join-name-next'));
+        await screen.findByTestId('join-provider-google');
+    }
+
+    it('none, the two ways in: the sign-in only lets you in; no way back, no locked copy', async () => {
+        doorAt({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true }, recoveryCopies: 'none' });
+        await toTheSignIn();
+        const signIn = screen.getByTestId('door-sign-in');
+        expect(signIn).toHaveTextContent(`We keep only a scrambled reference to your sign-in, never your email or name from there. ${NO_COPIES}`);
+        expect(signIn).not.toHaveTextContent(/way back if you lose|locks a copy|bring it back|open that copy/);
+    });
+
+    it('none, the sign-in alone: why a sign-in, and that it only lets you in; no locked copy', async () => {
+        doorAt({ ...GLOBAL_OPEN, recoveryCopies: 'none' });
+        await toTheSignIn();
+        expect(screen.queryByTestId('door-words')).toBeNull();
+        expect(screen.getByText(/^Why a sign-in\?/)).toHaveTextContent(`Why a sign-in? It stops one person making many accounts. We keep only a scrambled reference to it, never your email or name from there. ${NO_COPIES}`);
+        expect(document.body).not.toHaveTextContent(/way back if you lose|locks a copy|bring it back|open that copy/);
+    });
+
+    it('a community that keeps copies (the default), the two ways in: the way back and the locked copy, as before', async () => {
+        doorAt({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } });
+        await toTheSignIn();
+        const signIn = screen.getByTestId('door-sign-in');
+        expect(signIn).toHaveTextContent('Also a way back if you lose this device.');
+        expect(signIn).toHaveTextContent("It also locks a copy of your account, so the sign-in can bring it back. The people who run this community's server can open that copy.");
+        expect(signIn).not.toHaveTextContent(NO_COPIES);
+    });
+
+    it('a community that keeps copies (the default), the sign-in alone: the locked copy, as before', async () => {
+        doorAt(GLOBAL_OPEN);
+        await toTheSignIn();
+        expect(screen.getByText(/^Why a sign-in\?/)).toHaveTextContent("It also locks a copy of your account, so this sign-in can bring it back. The people who run this community's server can open that copy.");
+        expect(document.body).not.toHaveTextContent(NO_COPIES);
+    });
+});
+
+/*
  * Safety Backup says how to put this same account on a phone later (DESIGN-global-entry-fable.md §D, slice W1):
  * restore it there, never "I'm new". The sign-in's line only where the join enrolled it (`recovery.enrolled`).
  */
@@ -373,6 +432,27 @@ describe('a 12-words member who adds a sign-in from Safety Backup (review 416172
         await waitFor(() => expect(order.some((o) => o.startsWith('funnel answered:guide_complete'))).toBe(true));
         await waitFor(() => expect(loadPendingLink()).not.toBeNull());
         expect(order).toContain('funnel answered:guide_complete:before leaving');
+    });
+
+    // Vault rethink VR2: where this community keeps no copies (its rule `none`), the sign-in is offered as what it is.
+    it('a community that keeps no copies: offered as "Add a sign-in", which only lifts the limits, never as a way back', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true }, recoveryCopies: 'none' }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+            '/api/join/link/sso-nonce': () => json(200, { nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null }),
+        });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('backup-words-only');
+        expect(within(screen.getByTestId('backup-add-sign-in')).queryByRole('button', { name: 'Add a sign-in as a second way back' })).toBeNull();
+        fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in' }));
+        const offered = await screen.findByTestId('tour-add-sign-in');
+        await within(offered).findByTestId('add-sign-in-google');
+        expect(within(offered).getByRole('heading', { level: 4 })).toHaveTextContent(/^Add a sign-in$/);
+        expect(offered).toHaveTextContent("A sign-in with Google, Apple or Facebook only lifts the limits on new 12-words accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so your 12 words are your way back.");
+        expect(offered).not.toHaveTextContent(/locks a copy|second way back/);
     });
 
     it('"Let\'s Begin!" still goes in without the sign-in: nothing is lost by changing their mind', async () => {

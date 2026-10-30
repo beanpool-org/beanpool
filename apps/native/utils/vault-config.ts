@@ -51,7 +51,24 @@ export function hasVault(): boolean {
 }
 
 /**
- * Where this build keeps members' sign-in copies, and so where it deposits, checks, disconnects and restores them:
+ * A community's rule for where members' copies go (vault rethink VR2; apps/server config/recovery-copies.ts): its
+ * /api/community/info says `recoveryCopies`. `vault`, the default: BeanPool's key vault, in a build that has one.
+ * `server`: the community's own server keeps them. `none`: this community keeps none and its screens offer none.
+ */
+export type RecoveryCopiesRule = 'vault' | 'server' | 'none';
+
+/**
+ * The rule an info answer's `recoveryCopies` says. Not said (a server from before the rule): `vault`, the default, which
+ * is what every build did there. Anything else is a rule this version doesn't know, read as `none`: a copy is never made
+ * where the community may not want one.
+ */
+export function readRecoveryCopiesRule(v: unknown): RecoveryCopiesRule {
+    if (v === undefined || v === null) return 'vault';
+    return v === 'vault' || v === 'server' ? v : 'none';
+}
+
+/**
+ * Where a sign-in copy is kept, and so where it is deposited, checked, disconnected and restored:
  * - `'vault'`: BeanPool's key vault, when the build has one ({@link vaultConfig}: an address and both pinned key lists,
  *   all well formed). Everything in this file.
  * - `'community'`: otherwise, the member's own community, exactly as the app did before the vault (utils/sso-signin.ts
@@ -59,12 +76,22 @@ export function hasVault(): boolean {
  *   The restore from a community's copy, `recoverAccountWithSso`, is not only a community build's: a vault build runs it
  *   too, with a provider the vault said, signed, that it keeps no copy for (sso-recovery.ts `vaultKeepsNoCopyFor`, PR
  *   #1336 review finding 3).
+ * - `'none'`: nowhere, for a community whose rule is `none`.
  *
  * Nothing in between: a build with a missing or malformed vault value is a community build, so no build ends up with
  * neither (the release gate, PR #1336 review finding 6). app.config.js refuses a build that sets only some of the three.
+ *
+ * With a community's rule (VR2), the community decides where a copy made from its screens goes: `server` keeps it at
+ * the community whatever the build, `none` keeps none, and `vault` keeps it where the build does. Without one (no rule
+ * asked, as for a restore, which finds a copy wherever it is), the build's own place, as before the rule. A copy a
+ * member already has stays where it is under any rule: the rule decides only where a new one goes.
  */
-export type SignInCopies = 'vault' | 'community';
+export type SignInCopies = 'vault' | 'community' | 'none';
 
-export function signInCopiesAt(): SignInCopies {
+export function signInCopiesAt(): 'vault' | 'community';
+export function signInCopiesAt(rule: RecoveryCopiesRule | null | undefined): SignInCopies;
+export function signInCopiesAt(rule?: RecoveryCopiesRule | null): SignInCopies {
+    if (rule === 'none') return 'none';
+    if (rule === 'server') return 'community';
     return hasVault() ? 'vault' : 'community';
 }

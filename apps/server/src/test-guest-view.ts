@@ -1496,6 +1496,9 @@ async function main(): Promise<void> {
             // The AI assistant endpoint (agent/mcp-route.ts): an agent token is the only way in (every guest refused, below),
             // and the owner switch that turns it off.
             'POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /api/local/admin/agent/switch', 'POST /api/local/admin/agent/switch',
+            // An owner's assistant's photo upload beside it (agent/photo-upload-route.ts): the same bearer, an owner's grant ticked
+            // "May post for me" only.
+            'POST /mcp/photos', 'GET /mcp/photos',
             // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
             'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
             // "Assistant posts a day" (#2629): an owner's fresh proof only, never a token or a guest.

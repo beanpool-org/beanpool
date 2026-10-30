@@ -181,7 +181,10 @@ export function createPhotoUploadRoutes(): Router {
         ctx.set('Cache-Control', 'no-store');
         ctx.body = { photoId: kept.photoId, expiresAt: kept.expiresAt, photosToday: agentPhotosToday(grant.id), photosPerDay: AGENT_PHOTOS_PER_DAY };
     };
-    for (const verb of ['post', 'get', 'put', 'delete'] as const) router[verb](PHOTO_UPLOAD_PATH, upload);
+    // POST carries the photo; GET is answered here too (404 while the switch is off, else 405), as /mcp's is. Every other
+    // method is no route: the router answers it 405.
+    router.post(PHOTO_UPLOAD_PATH, upload);
+    router.get(PHOTO_UPLOAD_PATH, upload);
     return router;
 }
 

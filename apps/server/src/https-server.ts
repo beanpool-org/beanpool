@@ -2158,9 +2158,9 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments. An owner's assistant, whose
     // posts carry photos, may send more (mcpBodyLimit, asked before this table).
     [MCP_BODY_PATH, MCP_BODY_MAX],
-    // An assistant's photo upload is one image as its body, read by its route (agent/photo-upload-route.ts), never JSON:
-    // a JSON body there is refused, so this reads next to none of one.
-    [MCP_PHOTOS_PATH, 1024],
+    // An assistant's photo upload is one image as its body, read by its route with its own 5 MB limit (agent/photo-upload-route.ts),
+    // never JSON: a JSON body there is refused (415), so it is read no further than the door's own.
+    [MCP_PHOTOS_PATH, MCP_BODY_MAX],
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],

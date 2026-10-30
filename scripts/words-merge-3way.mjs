@@ -78,9 +78,10 @@ export function mergeCatalog(file, b, m, p) {
     b = b || {};
     const keys = Object.keys(m);
     const prKeys = Object.keys(p);
+    // A key main removed is kept in the list too, so the loop below can refuse it when the PR changed it.
     for (let i = 0; i < prKeys.length; i++) {
         const k = prKeys[i];
-        if (k in m || k in b) continue;
+        if (k in m) continue;
         let j = i - 1;
         while (j >= 0 && !keys.includes(prKeys[j])) j--;
         keys.splice(j >= 0 ? keys.indexOf(prKeys[j]) + 1 : keys.length, 0, k);

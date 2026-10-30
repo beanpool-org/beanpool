@@ -439,6 +439,15 @@ node "$REPO_ROOT/scripts/words-merge-3way.mjs" --base t-dog --main t-dog --pr t-
 branch 37 t-bonjour1 "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Salut" "Dog=Chien" "Cat=Chat" "Bye=Au revoir"
 branch 38 t-bonjour2 "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Coucou" "Dog=Chien" "Cat=Chat" "Bye=Au revoir"
 expect 1 "train: two PRs that change the same key differently: the second is dropped, not merged" "#38: DROPPED: it does not merge with main and the PRs before it (word catalogs that cannot be merged per key: apps/pwa/words/fr.json: both sides changed \"Hello\"" -- bash "$TRAIN" 37 38
+# One PR removes "Cat", the next changes it: the change must not vanish under the removal.
+branch 44 t-nocat "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Salut" "Dog=Chien" "Bye=Au revoir"
+branch 45 t-minou "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Salut" "Dog=Chien" "Cat=Minou" "Bye=Au revoir"
+git merge-tree --write-tree t-nocat t-minou >/dev/null 2>&1 && bad "train: removing and changing \"Cat\" do not conflict, so this tests nothing" || ok "train: a PR that removes a key and one that changes it conflict"
+expect 1 "train: a key removed by one PR and changed by the next: the second is dropped, its change not lost" "#45: DROPPED: it does not merge with main and the PRs before it (word catalogs that cannot be merged per key: apps/pwa/words/fr.json: main removed \"Cat\", which the PR changed" -- bash "$TRAIN" 44 45 --no-merge
+GOTK=$(M="$REPO_ROOT/scripts/words-merge-3way.mjs" node --input-type=module -e 'const { mergeCatalog } = await import(process.env.M);
+  const b = { Hello: "Bonjour", Bye: "Au revoir" }, m = { Hello: "Bonjour" };
+  console.log(JSON.stringify(mergeCatalog("fr.json", b, m, b)), JSON.stringify(mergeCatalog("fr.json", b, b, m)));' 2>&1)
+[ "$GOTK" = '{"Hello":"Bonjour"} {"Hello":"Bonjour"}' ] && ok "words-merge-3way: a key one side removed and the other left alone stays removed" || bad "words-merge-3way: removed-and-unchanged gave $GOTK"
 
 : > "$GH_STUB_DIR/merges"
 branch 31 t-tier "tier-A,security" -- add f.txt f

@@ -116,6 +116,11 @@ export interface MarketplacePost {
      * featureOffer): one of the six the shopfront draws first. Only on a featured Offer; a visitor's copy never carries it.
      */
     featuredAt?: string;
+    /**
+     * What made it when its author's own app did not: 'assistant:<grant id>' for an owner's AI assistant (apps/server
+     * agent/owner-posts.ts). Only on the standby copy's payload (sync.ts postOfRow); the listings an app reads never carry it.
+     */
+    createdVia?: string;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;

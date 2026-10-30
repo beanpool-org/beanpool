@@ -3336,7 +3336,7 @@ export function getTransactions(publicKey?: string, limit = 50, offset = 0): Tra
 // well under this cap — anything bigger is a misbehaving or hostile client. Photos are
 // stored as base64 in SQLite and replicate to every mirror, so the cap matters.
 const MAX_POST_PHOTOS = 5;
-const MAX_PHOTO_BASE64_CHARS = 600_000; // ≈ 440 KB of binary image data
+export const MAX_PHOTO_BASE64_CHARS = 600_000; // ≈ 440 KB of binary image data
 
 function validatePostPhotos(photos: string[] | undefined): void {
     if (photos === undefined) return;
@@ -5634,6 +5634,8 @@ export function createPost(
         allowNoPhoto?: boolean;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
+        /** `assistant:<grant id>` for an owner's AI assistant (engine/posts.ts, posts.created_via). */
+        createdVia?: string;
     }
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite

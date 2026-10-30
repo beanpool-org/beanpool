@@ -10,7 +10,6 @@ import * as Location from 'expo-location';
 import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
-import { getMemberProfile } from '../utils/db';
 import {
     fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts, notAnsweringLine,
     type DirectoryCommunity, type PlaceWatch, type Point,
@@ -350,8 +349,8 @@ export default function FindCommunityScreen() {
         await askNotificationPermissionOnAction('knock', signer.publicKey);
         setSending(true);
         setFormError(null);
-        // Profile S2-W: send this community's photo (or none), never the phone-wide copy (#2617).
-        const avatar = identity ? (await getMemberProfile(signer.publicKey).catch(() => null))?.avatar_url ?? null : null;
+        // Profile S2-W: knocks do not leak another community's photo
+        const avatar = null;
         // From the global community only for a member there; otherwise the knock names no community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;

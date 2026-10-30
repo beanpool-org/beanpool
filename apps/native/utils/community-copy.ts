@@ -18,7 +18,7 @@ import { hexToBytes } from './crypto';
 import { getMnemonic, type BeanPoolIdentity } from './identity';
 import { signedDelete, signedPost } from './node-post';
 import { isGlobalCommunity } from './global-join-existing';
-import type { RecoveryCopiesRule } from './copies-rule';
+import type { RecoveryCopiesRule } from './vault-config';
 
 /** What the community's server says about this member's community copy. */
 export interface CommunityCopyStatus {

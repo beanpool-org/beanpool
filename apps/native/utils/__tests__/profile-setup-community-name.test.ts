@@ -209,6 +209,26 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK }]);
         expect(calls.updateCallsign).toEqual([]);
+        // The community holds no name for them yet, so the row (callsign is NOT NULL) takes the one shown, and the
+        // first members sync replaces it with the community's own.
+        expect(calls.updateMemberProfile.map(c => c.data.callsign)).toEqual(['Rosa']);
+    });
+
+    it('a row that arrives after the wizard opened is what Done writes back: "Rosa 2" from the first sync is not overwritten with the pre-fill "Rosa"', async () => {
+        // The wizard mounts before the new community's first members sync has written the row, so it seeds from the pre-fill.
+        community.row = null;
+        await render();
+        expect(text()).toContain('Rosa');
+        await pickPhoto();
+        await click('Next →');
+        // The first sync lands while the member is on the other steps: the node registered them as "Rosa 2" (a join clash).
+        community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
+        await click('Done');
+
+        // No name was given, so none is sent, and the row keeps the community's own name, not the one the wizard showed.
+        expect(published()).toEqual([{ publicKey: KEY, avatar: PICK }]);
+        expect(calls.updateCallsign).toEqual([]);
+        expect(calls.updateMemberProfile).toEqual([{ pubkey: KEY, data: { callsign: 'Rosa 2', avatar_url: PICK } }]);
     });
 
     it('the name the global door joined with is kept as before: shown, not re-sent, and remembered as the pre-fill', async () => {

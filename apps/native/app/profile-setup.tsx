@@ -228,8 +228,14 @@ export default function ProfileSetupScreen() {
                 const updated = await updateCallsign(finalCallsign);
                 if (updated) setIdentity(updated);
             }
+            // The name this community's row is given back. One that was sent is the community's now. With none sent, the row
+            // keeps the name it holds AT THIS MOMENT: the first members sync of a community just joined can land while the
+            // member is on the other steps (the node may have registered "Rosa 2" for a join clash), after the wizard was
+            // seeded from the pre-fill, and writing the name it merely showed would put the other community's name over it.
+            // Only a community that holds none yet takes the shown name (callsign is NOT NULL); its first sync replaces it.
+            const rowName = sentName ?? ownRowOf(await getMemberProfile(identity.publicKey))?.callsign ?? finalCallsign;
             await updateMemberProfile(identity.publicKey, {
-                callsign: sentName ?? finalCallsign,
+                callsign: rowName,
                 // Only a pick from this session is written back to the members row; `undefined`
                 // is COALESCEd away and leaves the synced value alone.
                 avatar_url: pendingAvatar ?? undefined,

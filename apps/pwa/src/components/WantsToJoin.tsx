@@ -124,7 +124,7 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
                                 disabled={!!busy}
                                 aria-label={busy === req.id ? t('Inviting {name}...', { name: req.callsign }) : t('Invite {name}', { name: req.callsign })}
                                 aria-busy={busy === req.id}
-                                className={`min-h-[44px] px-[18px] rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[15px] font-extrabold cursor-pointer disabled:cursor-default ${busy === req.id ? 'opacity-60' : ''}`}
+                                className="min-h-[44px] px-[18px] rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[15px] font-extrabold cursor-pointer disabled:cursor-default disabled:opacity-60"
                             >
                                 {t('Invite', undefined, 'button: let them in')}
                             </button>
@@ -134,7 +134,7 @@ export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) 
                                 disabled={!!busy}
                                 aria-label={busy === req.id ? t('Declining {name}...', { name: req.callsign }) : t('Not now, {name}', { name: req.callsign })}
                                 aria-busy={busy === req.id}
-                                className={`min-h-[44px] px-[18px] rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 text-[15px] font-bold cursor-pointer disabled:cursor-default ${busy === req.id ? 'opacity-60' : ''}`}
+                                className="min-h-[44px] px-[18px] rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 text-[15px] font-bold cursor-pointer disabled:cursor-default disabled:opacity-60"
                             >
                                 {t('Not now')}
                             </button>

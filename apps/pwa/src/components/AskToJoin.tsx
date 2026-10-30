@@ -150,7 +150,7 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
                     disabled={sending}
                     aria-busy={sending}
                     data-testid={`${tid}-send`}
-                    className={`min-h-[44px] px-5 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer disabled:cursor-default ${sending ? 'opacity-60' : ''}`}
+                    className="min-h-[44px] px-5 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer disabled:cursor-default disabled:opacity-60"
                 >
                     {sending ? t('Sending…') : t('Send')}
                 </button>

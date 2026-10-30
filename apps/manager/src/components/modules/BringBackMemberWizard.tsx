@@ -3,21 +3,24 @@ import {
     issueBringBackCodeApi,
     cancelRekeyCodeApi,
     bindRekeyByMatchApi,
+    declineRekeyProposalApi,
     fetchRekeyStatusApi,
     RekeyBindError,
+    type RekeyProposal,
     type RekeyStatusResponse,
 } from '../../lib/node-client';
 import { generateOfflineQrUrl } from '../../lib/qr';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
-import { rekeyLink, rekeyTimeLeft } from './RekeyMemberWizard';
+import { askedAt, rekeyLink, rekeyTimeLeft, REKEY_PROPOSALS_POLL_MS } from './RekeyMemberWizard';
 
 /**
  * Bring back (vault rethink VR3, scratch/fable-design/DESIGN-vault-rethink-fable.md §4.3 and §4.5): the member's SAME key
  * on their new phone, from the copy they keep with this community, beside Re-key's NEW key. The re-key's code-and-digits
  * flow: a BB- code, their new phone asks on it and shows two digits, the admin types them, and the node releases the copy
  * to that phone alone. Nothing moves and nobody is suspended. An owner for an owner or admin (the node's rule, as a
- * re-key's), with the fresh proof.
+ * re-key's), with the fresh proof. The same brakes as Re-key's step 2: the phones that asked on the code, read every few
+ * seconds, each with Not theirs, and a warning when codes like it are being guessed at.
  */
 
 /** The admin's two ways, side by side (design §4.5). */
@@ -50,6 +53,23 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
     const [now, setNow] = useState(() => Date.now());
     const proof = useFreshProof();
     const binding = useRef(false);
+    // The phones that asked on the code (Re-key's step 2 reads the same): the admin turns away any that isn't theirs, and
+    // can see that their phone hasn't asked yet, or that others took the code's places.
+    const [proposals, setProposals] = useState<RekeyProposal[]>([]);
+    const [declining, setDeclining] = useState<string | null>(null);
+    // Someone is guessing at codes starting like this one (the node's per-prefix count, #1783 review N3).
+    const [underAttack, setUnderAttack] = useState<RekeyStatusResponse['codeUnderAttack'] | null>(null);
+    // The node no longer holds this code, so its phones are no longer this code's: 'expired' when it ran out (the node marks
+    // it before this page's clock does), 'elsewhere' when it was used, cancelled or replaced on another screen.
+    const [gone, setGone] = useState<false | 'expired' | 'elsewhere'>(false);
+
+    /** A code made, cancelled or put away here starts clean: nothing of the one before it shows. */
+    const forgetCodeState = () => {
+        setProposals([]);
+        setUnderAttack(null);
+        setGone(false);
+        setStopped(false);
+    };
 
     const read = useCallback(async () => {
         setStatusFailed(false);
@@ -60,6 +80,8 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
             if (pending?.kind === 'bring_back' && pending.code && new Date(pending.expires_at).getTime() > Date.now()) {
                 setCode(pending.code);
                 setExpiresAt(pending.expires_at);
+                setProposals(s.proposals ?? []);
+                setUnderAttack(s.codeUnderAttack ?? null);
             }
         } catch {
             setStatusFailed(true);
@@ -73,6 +95,34 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         return () => clearInterval(id);
     }, [code]);
 
+    // While the code waits: which phones asked on it, and whether codes like it are being guessed at.
+    useEffect(() => {
+        if (!code || done || stopped || gone) return;
+        let live = true;
+        const id = setInterval(async () => {
+            try {
+                const s = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+                if (!live) return;
+                const pending = s.pendingRequest;
+                if (pending?.kind === 'bring_back' && pending.code === code) {
+                    setProposals(s.proposals ?? []);
+                    setUnderAttack(s.codeUnderAttack ?? null);
+                } else if (!(pending?.kind === 'bring_back' && !pending.code)) {
+                    // A code held back from this reader (a phone session past its step-up window) can't be told apart, so
+                    // it is left as it was; anything else means the node holds this code no more.
+                    const ranOut = !pending && !!expiresAt && new Date(expiresAt).getTime() - Date.now() < 60000;
+                    setGone(ranOut ? 'expired' : 'elsewhere');
+                }
+            } catch {
+                // The next read tries again; the cards stay as they were.
+            }
+        }, REKEY_PROPOSALS_POLL_MS);
+        return () => {
+            live = false;
+            clearInterval(id);
+        };
+    }, [code, expiresAt, done, stopped, gone, nodeUrl, member.publicKey, adminPassword, tfaToken]);
+
     const kept = status?.communityCopy?.kept === true;
     const rekeyWaiting = status?.pendingRequest && status.pendingRequest.kind !== 'bring_back';
     const expired = !!expiresAt && new Date(expiresAt).getTime() < now;
@@ -84,9 +134,9 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         try {
             const res = await issueBringBackCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken, ...(fresh ? [fresh] : []));
             proof.close();
+            forgetCodeState();
             setCode(res.code);
             setExpiresAt(res.expiresAt);
-            setStopped(false);
             setTypedMatch('');
         } catch (err: unknown) {
             if (proof.checkError(err, (c) => makeCode(c), fresh)) return;
@@ -128,6 +178,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
         setError(null);
         try {
             await cancelRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            forgetCodeState();
             setCode(null);
             setExpiresAt(null);
             setChecked(false);
@@ -137,6 +188,22 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
             setBusy(false);
         }
     };
+
+    /** "Not theirs": the phone is turned away (its poll answers declined), and its card goes. */
+    const decline = async (key: string) => {
+        setDeclining(key);
+        setError(null);
+        try {
+            await declineRekeyProposalApi(nodeUrl, member.publicKey, key, adminPassword, tfaToken);
+            setProposals((list) => list.filter((p) => p.newPubkey !== key));
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to decline that phone');
+        } finally {
+            setDeclining(null);
+        }
+    };
+
+    const waiting = !expired && !stopped && !gone;
 
     return (
         <ModalBackdrop onClose={onClose} className="fixed inset-0 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in font-sans">
@@ -197,8 +264,12 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
                         <p className="m-0 font-bold text-amber-200 break-words" data-testid="bring-back-in-person">{ONLY_IN_PERSON}</p>
                         <div className="bg-nature-900/90 border border-nature-700/80 p-4 rounded-2xl text-center space-y-2">
                             <span className="text-2xl font-mono font-extrabold tracking-widest text-amber-300 bg-black/40 px-4 py-2 rounded-xl border border-amber-900/60 break-all inline-block" data-testid="bring-back-code">{code}</span>
-                            {expired || stopped ? (
-                                <p className="m-0 text-amber-300">{stopped ? 'Three wrong numbers were typed, so this code has stopped.' : 'This code has expired.'} Make a new one with them there.</p>
+                            {!waiting ? (
+                                <p className="m-0 text-amber-300" data-testid="bring-back-code-ended">
+                                    {gone === 'elsewhere' && !stopped && !expired
+                                        ? 'This code is no longer waiting: it was used, cancelled or replaced on another screen. Open the member again to see where they are.'
+                                        : `${stopped ? 'Three wrong numbers were typed, so this code has stopped.' : 'This code has expired.'} Make a new one with them there.`}
+                                </p>
                             ) : (
                                 <>
                                     <img src={generateOfflineQrUrl(rekeyLink(nodeUrl, code))} data-qr-value={rekeyLink(nodeUrl, code)} alt={`QR code for ${code}`} className="mx-auto w-40 h-40 max-w-full rounded-lg bg-white p-1" />
@@ -206,10 +277,17 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
                                 </>
                             )}
                         </div>
+                        {waiting && underAttack && (
+                            <div data-testid="bring-back-under-attack" className="p-3 bg-red-950/60 border border-red-800/80 rounded-2xl text-[11px] leading-relaxed text-red-200 break-words">
+                                {underAttack.refusing
+                                    ? 'Someone is guessing at codes like this one, so phones asking with it are turned away for the rest of the hour. Cancel it and make a new code: a new one starts differently.'
+                                    : `Someone has tried ${underAttack.wrongTries} wrong codes like this one in the last hour. A phone you don't recognise is someone else's: press Not theirs.`}
+                            </div>
+                        )}
                         <p className="m-0 leading-relaxed break-words">
                             Have them open BeanPool on the new phone → <strong>Already a Member? Restore Account</strong> → <strong>An admin gave me a re-key code</strong>, and scan this or type the code and your community's name. Their phone shows two digits.
                         </p>
-                        {!expired && !stopped && (
+                        {waiting && (
                             <label className="block space-y-1.5">
                                 <span className="block font-bold text-amber-200">Type the number on their phone:</span>
                                 <div className="flex flex-wrap items-center gap-2">
@@ -226,8 +304,38 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
                                 </div>
                             </label>
                         )}
-                        {expired || stopped ? (
-                            <button type="button" onClick={() => { setCode(null); setExpiresAt(null); setStopped(false); setChecked(false); }} className="text-nature-400 underline">Make a new code</button>
+                        {/* The phones that asked: the admin types the number on the phone in front of them, and turns away the rest */}
+                        {waiting && (
+                            <div className="space-y-2" data-testid="bring-back-proposals">
+                                {proposals.length === 0 ? (
+                                    <p className="m-0 text-[11px] text-nature-400">Waiting for their phone to ask…</p>
+                                ) : (
+                                    <>
+                                        <p className="m-0 text-[11px] text-nature-300 break-words">
+                                            {proposals.length === 1 ? 'One phone has asked.' : `${proposals.length} phones have asked.`} More than theirs means someone else has the code: press Not theirs on any you don't recognise, or cancel the code and make a new one with them here.
+                                        </p>
+                                        {proposals.map((p) => (
+                                            <div key={p.newPubkey} data-testid="bring-back-proposal" className="p-3 bg-nature-900/80 border border-nature-700/80 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+                                                <p className="text-nature-200 m-0 break-words min-w-0">
+                                                    A phone asked at {askedAt(p.proposedAt)} · key{' '}
+                                                    <span className="font-mono">{p.newPubkey.slice(0, 6)}…</span>
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    disabled={busy || declining !== null}
+                                                    onClick={() => decline(p.newPubkey)}
+                                                    className="shrink-0 px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 text-xs font-semibold"
+                                                >
+                                                    {declining === p.newPubkey ? 'Declining…' : 'Not theirs'}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        )}
+                        {!waiting ? (
+                            <button type="button" onClick={() => { forgetCodeState(); setCode(null); setExpiresAt(null); setChecked(false); }} className="text-nature-400 underline">Make a new code</button>
                         ) : (
                             <button type="button" disabled={busy} onClick={cancel} className="text-nature-400 underline">Cancel this code</button>
                         )}

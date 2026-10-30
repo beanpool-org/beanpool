@@ -1,6 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BringBackMemberWizard, BRING_BACK_WORDS, ONLY_IN_PERSON, REKEY_INSTEAD_WORDS } from './BringBackMemberWizard';
+import { REKEY_PROPOSALS_POLL_MS } from './RekeyMemberWizard';
 import * as nodeClient from '../../lib/node-client';
 
 /** Bring back beside Re-Key (vault rethink VR3): the admin's window, against a mocked node client. */
@@ -48,6 +49,68 @@ describe('BringBackMemberWizard', () => {
         fireEvent.click(screen.getByTestId('bring-back-confirm'));
         expect(await screen.findByTestId('bring-back-done')).toBeDefined();
         expect(bind).toHaveBeenLastCalledWith('http://localhost:3000', member.publicKey, 'BB-1234-5678', '47', undefined, undefined);
+    });
+
+    describe('the same brakes as Re-Key: the phones that asked, Not theirs, and codes being guessed at', () => {
+        const phoneA = 'c'.repeat(64);
+        const phoneB = 'd'.repeat(64);
+        const waitingCode = (extra: Partial<nodeClient.RekeyStatusResponse> = {}): nodeClient.RekeyStatusResponse => ({
+            ...base,
+            pendingRequest: { id: 1, code: 'BB-1234-5678', kind: 'bring_back', old_pubkey: member.publicKey, new_pubkey: null, operator_pubkey: 'b'.repeat(64), status: 'pending', created_at: '', expires_at: new Date(Date.now() + 3_600_000).toISOString() },
+            communityCopy: { kept: true, since: null },
+            ...extra,
+        });
+
+        it('each phone that asked has a card with Not theirs, which turns it away; the guessing warning shows beside the code', async () => {
+            vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(waitingCode({
+                proposals: [{ newPubkey: phoneA, proposedAt: new Date().toISOString() }, { newPubkey: phoneB, proposedAt: new Date().toISOString() }],
+                codeUnderAttack: { wrongTries: 4, refusing: false },
+            }));
+            const decline = vi.spyOn(nodeClient, 'declineRekeyProposalApi').mockResolvedValue({ success: true, declined: true, declines: 1 });
+            render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+            expect((await screen.findAllByTestId('bring-back-proposal')).length).toBe(2);
+            expect(screen.getByTestId('bring-back-proposals').textContent).toContain('2 phones have asked.');
+            expect(screen.getByTestId('bring-back-under-attack').textContent).toContain("Someone has tried 4 wrong codes like this one in the last hour. A phone you don't recognise is someone else's: press Not theirs.");
+
+            fireEvent.click(within(screen.getAllByTestId('bring-back-proposal')[1]).getByRole('button', { name: 'Not theirs' }));
+            await waitFor(() => expect(screen.getAllByTestId('bring-back-proposal').length).toBe(1));
+            expect(decline).toHaveBeenCalledWith('http://localhost:3000', member.publicKey, phoneB, undefined, undefined);
+            expect(screen.getByTestId('bring-back-proposals').textContent).toContain('One phone has asked.');
+            expect(screen.getByTestId('bring-back-proposal').textContent).toContain(phoneA.slice(0, 6));
+        });
+
+        it('a code being guessed at so hard that phones are turned away: cancel it and make a new one', async () => {
+            vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(waitingCode({ proposals: [], codeUnderAttack: { wrongTries: 10, refusing: true } }));
+            render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+            expect((await screen.findByTestId('bring-back-under-attack')).textContent).toContain('phones asking with it are turned away for the rest of the hour. Cancel it and make a new code');
+        });
+
+        it('no phone has asked yet: the window says so, and no warning shows', async () => {
+            vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(waitingCode({ proposals: [] }));
+            render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+            expect((await screen.findByTestId('bring-back-proposals')).textContent).toContain('Waiting for their phone to ask…');
+            expect(screen.queryByTestId('bring-back-under-attack')).toBeNull();
+        });
+
+        it('the phones are read again while the code waits; a code the node no longer holds says so and takes no number', async () => {
+            vi.useFakeTimers({ shouldAdvanceTime: true });
+            try {
+                vi.spyOn(nodeClient, 'fetchRekeyStatusApi')
+                    .mockResolvedValueOnce(waitingCode({ proposals: [] }))
+                    .mockResolvedValueOnce(waitingCode({ proposals: [{ newPubkey: phoneA, proposedAt: new Date().toISOString() }] }))
+                    .mockResolvedValue({ ...base, communityCopy: { kept: true, since: null } });
+                render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+                expect((await screen.findByTestId('bring-back-proposals')).textContent).toContain('Waiting for their phone to ask…');
+                await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS); });
+                expect(screen.getAllByTestId('bring-back-proposal').length).toBe(1);
+                await act(async () => { await vi.advanceTimersByTimeAsync(REKEY_PROPOSALS_POLL_MS); });
+                expect(screen.getByTestId('bring-back-code-ended').textContent).toContain('This code is no longer waiting: it was used, cancelled or replaced on another screen.');
+                expect(screen.queryByTestId('bring-back-proposals')).toBeNull();
+                expect(screen.queryByTestId('bring-back-number')).toBeNull();
+            } finally {
+                vi.useRealTimers();
+            }
+        });
     });
 
     it('a member with no copy here: "no", and no code to make', async () => {

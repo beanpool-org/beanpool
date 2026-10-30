@@ -133,7 +133,7 @@ function find(map: ReadonlyMap<string, readonly string[]>, text: string): readon
 
 /**
  * The label index for one language: built from `words` (wordsFor(lang, catalogs), or the device's language when left
- * out). 551 tags, two labels each: a few milliseconds, once per language.
+ * out). 546 tags, two labels each: a few milliseconds, once per language.
  */
 export function buildTagIndex(words?: Translate): TagIndex {
     const lang = words?.lang ?? currentLanguage();

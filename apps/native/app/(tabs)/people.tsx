@@ -1182,7 +1182,7 @@ export default function PeopleScreen() {
                                 </View>
                             )}
                             {identity && anchorUrl && takesKnocks && (
-                                <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} />
+                                <WantsToJoin anchorUrl={anchorUrl} identity={identity} onCount={setKnockCount} canSee={mayInvite} />
                             )}
                             {identity && isGlobalNode && <MyJoinRequests identity={identity} />}
 

@@ -38,8 +38,8 @@ const knockMessage = (message: string): string => (message === KNOCK_UNREACHABLE
  * "Wants to join (n)" (design §3.3): people asking to join this (local) community, for any member to answer. Hidden
  * where the community takes no requests. `onCount` tells People how many are waiting, for its Invites pill.
  */
-export function WantsToJoin({ anchorUrl, identity, onCount }: {
-    anchorUrl: string; identity: BeanPoolIdentity; onCount?: (n: number) => void;
+export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
+    anchorUrl: string; identity: BeanPoolIdentity; onCount?: (n: number) => void; canSee?: boolean;
 }) {
     const { colors } = useTheme();
     const [requests, setRequests] = useState<JoinRequest[] | null>(null);
@@ -74,6 +74,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
     }));
 
     const load = useCallback(async () => {
+        if (!canSee) return;
         const r = await fetchJoinRequests(anchorUrl, identity);
         if (r.ok) {
             setRequests(r.knocks);
@@ -88,7 +89,7 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
         } else {
             setError(knockMessage(r.message));
         }
-    }, [anchorUrl, identity, onCount]);
+    }, [anchorUrl, identity, onCount, canSee]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -115,12 +116,17 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
         load();
     };
 
+    if (!canSee) return null;
     if (!refusal && (hidden || (requests !== null && requests.length === 0 && !error && !done))) return null;
 
     return (
         <View>
-            <Text style={styles.header} accessibilityRole="header">{tn(total, '🚪 Wants to join ({n})', '🚪 Wants to join ({n})')}</Text>
-            <Text style={styles.help}>{t(KNOCK_WORDS.help)}</Text>
+            {requests !== null && (
+                <>
+                    <Text style={styles.header} accessibilityRole="header">{tn(total, '🚪 Wants to join ({n})', '🚪 Wants to join ({n})')}</Text>
+                    <Text style={styles.help}>{t(KNOCK_WORDS.help)}</Text>
+                </>
+            )}
             {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
             {!!done && <Text style={styles.note} accessibilityLiveRegion="polite">{done}</Text>}
             {!!refusal && (
@@ -128,9 +134,9 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
                     <Text style={styles.refusalName}>{refusal.callsign}</Text>{' · '}{refusal.message}
                 </Text>
             )}
-            {hidden ? null : requests === null ? (
+            {hidden ? null : requests === null && !error ? (
                 <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 12 }} />
-            ) : requests.map(req => (
+            ) : requests?.map(req => (
                 <View key={req.id} style={styles.card}>
                     <View style={styles.who}>
                         <MemberAvatar avatarUrl={req.avatar} pubkey={req.pubkey} callsign={req.callsign} size={44} />

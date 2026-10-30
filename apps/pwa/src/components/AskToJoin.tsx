@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { t } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
@@ -44,6 +44,20 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
     const id = useId();
     const tid = testId ?? `ask-to-join-${community.key ?? origin ?? 'community'}`;
 
+    const buttonRef = useRef<HTMLButtonElement | null>(null);
+    const nameRef = useRef<HTMLInputElement | null>(null);
+    const wasOpen = useRef(false);
+
+    useEffect(() => {
+        if (open) {
+            nameRef.current?.focus();
+            wasOpen.current = true;
+        } else if (wasOpen.current) {
+            buttonRef.current?.focus();
+            wasOpen.current = false;
+        }
+    }, [open]);
+
     useEffect(() => {
         if (!origin) return;
         let alive = true;
@@ -87,6 +101,7 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
         return (
             <div className="py-1">
                 <button
+                    ref={buttonRef}
                     type="button"
                     onClick={() => { setOpen(true); setProblem(null); }}
                     aria-label={t('Ask to join {name}', { name: label })}
@@ -109,6 +124,7 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
         >
             <label htmlFor={`${id}-name`} className="block mb-1 text-sm font-bold text-nature-900 dark:text-nature-100">{t('Your name')}</label>
             <input
+                ref={nameRef}
                 id={`${id}-name`}
                 className={fieldClass}
                 value={callsign}

@@ -47,6 +47,17 @@ describe('Ask to join on the web', () => {
         expect(screen.getByText('0/280')).toBeTruthy();
     });
 
+    it('focus moves into the form on open and back to the button on Cancel', () => {
+        render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);
+        const button = screen.getByRole('button', { name: 'Ask to join Riverside' });
+        fireEvent.click(button);
+        const name = screen.getByLabelText('Your name');
+        expect(document.activeElement).toBe(name);
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        const restoredButton = screen.getByRole('button', { name: 'Ask to join Riverside' });
+        expect(document.activeElement).toBe(restoredButton);
+    });
+
     it('sends the knock to the community itself, says "You asked to join", remembers it, and tells Home', async () => {
         const sent = stub(() => json(201, { knock: { status: 'pending' } }));
         const onAsked = vi.fn();

@@ -213,9 +213,34 @@ describe('Wants to join on the web', () => {
         await waitFor(() => { expect(onCount).toHaveBeenCalledWith(0); expect(container.innerHTML).toBe(''); });
     });
 
-    it('the list can\'t be read: said, never an empty list', async () => {
+    it('the list can\'t be read on first load: error shown, no endless "Loading…", and no "(0)" heading', async () => {
         stub(() => { throw new TypeError('Failed to fetch'); });
         render(<WantsToJoin />);
         expect(await screen.findByTestId('wants-to-join-error')).toHaveTextContent(WANTS_TO_JOIN_WORDS.unreachable);
+        expect(screen.queryByText('Loading…')).toBeNull();
+        expect(screen.queryByRole('heading')).toBeNull();
+    });
+
+    it('a 5xx/429 does not reveal the section to a member who otherwise wouldn\'t see it', async () => {
+        for (const status of [500, 429]) {
+            stub(() => json(status, { error: 'Server error', code: 'error' }));
+            const onCount = vi.fn();
+            const { container } = render(<WantsToJoin canSee={false} onCount={onCount} />);
+            await new Promise(r => setTimeout(r, 20));
+            expect(container.innerHTML).toBe('');
+            expect(screen.queryByTestId('wants-to-join')).toBeNull();
+            cleanup();
+        }
+    });
+
+    it('a 5xx/429 shows the error (no loading, no (0) heading) to a member who may see it', async () => {
+        for (const status of [500, 429]) {
+            stub(() => json(status, { error: 'Server busy', code: 'busy' }));
+            render(<WantsToJoin canSee={true} />);
+            expect(await screen.findByTestId('wants-to-join-error')).toHaveTextContent('Server busy');
+            expect(screen.queryByText('Loading…')).toBeNull();
+            expect(screen.queryByRole('heading')).toBeNull();
+            cleanup();
+        }
     });
 });

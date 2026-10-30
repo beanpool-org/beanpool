@@ -77,9 +77,9 @@ async function settle() {
     for (let i = 0; i < 5; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)); });
 }
 
-async function draw(onCount?: (n: number) => void) {
+async function draw(onCount?: (n: number) => void, canSee?: boolean) {
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(WantsToJoin, { anchorUrl: ANCHOR, identity: ME, onCount }) as any); });
+    await act(async () => { root!.render(createElement(WantsToJoin, { anchorUrl: ANCHOR, identity: ME, onCount, canSee }) as any); });
     await settle();
 }
 
@@ -182,5 +182,35 @@ describe('Wants to join on the phone', () => {
         await tap('Not now, River');
         expect(byTestId('wants-to-join-note-k1')?.textContent).toBe("River · Couldn't reach your community. Check your connection and try again.");
         expect(host.textContent).toContain('I grow tomatoes by the river.');
+    });
+
+    it('the list can\'t be read on first load: error shown, no endless spinner, and no "(0)" heading', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Network request failed'); }));
+        await draw();
+        expect(host.querySelector('[data-spinner]')).toBeNull();
+        expect(heading()).toBeNull();
+        expect(host.textContent).toContain("Couldn't reach your community. Check your connection and try again.");
+    });
+
+    it('a 5xx/429 does not reveal the section to a member who otherwise wouldn\'t see it', async () => {
+        for (const status of [500, 429]) {
+            vi.stubGlobal('fetch', vi.fn(async () => json(status, { error: 'Server error' })));
+            await draw(undefined, false);
+            expect(host.innerHTML).toBe('');
+            act(() => root?.unmount());
+            root = null;
+        }
+    });
+
+    it('a 5xx/429 shows the error (no spinner, no (0) heading) to a member who may see it', async () => {
+        for (const status of [500, 429]) {
+            vi.stubGlobal('fetch', vi.fn(async () => json(status, { error: 'Server busy' })));
+            await draw(undefined, true);
+            expect(host.textContent).toContain('Server busy');
+            expect(host.querySelector('[data-spinner]')).toBeNull();
+            expect(heading()).toBeNull();
+            act(() => root?.unmount());
+            root = null;
+        }
     });
 });

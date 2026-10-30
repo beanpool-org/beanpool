@@ -31,7 +31,7 @@ function requestMeta(r: JoinRequest): string {
  * for any member who may invite to answer, as the phone's knocks screen. Hidden where the community takes no requests or
  * the member can't answer them (the node's 404 / 403). `onCount` tells People how many wait, for its Invites tab.
  */
-export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
+export function WantsToJoin({ onCount, canSee = true }: { onCount?: (n: number) => void; canSee?: boolean }) {
     const [requests, setRequests] = useState<JoinRequest[] | null>(null);
     const [total, setTotal] = useState(0);
     const [hidden, setHidden] = useState(false);
@@ -43,6 +43,7 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
     const [refusal, setRefusal] = useState<{ id: string; callsign: string; message: string } | null>(null);
 
     const load = useCallback(async () => {
+        if (!canSee) return;
         const r = await getJoinRequests();
         if (r.ok) {
             setRequests(r.knocks);
@@ -57,7 +58,7 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
         } else {
             setError(r.message ?? t(WANTS_TO_JOIN_WORDS.unreachable));
         }
-    }, [onCount]);
+    }, [onCount, canSee]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -82,14 +83,19 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
         void load();
     };
 
+    if (!canSee) return null;
     if (!refusal && (hidden || (requests !== null && requests.length === 0 && !error && !done))) return null;
 
     return (
-        <section className="p-4 sm:p-6 border-b border-nature-200 dark:border-nature-800" data-testid="wants-to-join" aria-labelledby="wants-to-join-title">
-            <h2 id="wants-to-join-title" className="m-0 mb-1 text-xl font-extrabold text-nature-950 dark:text-white break-words">
-                {tn(total, '🚪 Wants to join ({n})', '🚪 Wants to join ({n})')}
-            </h2>
-            <p className="m-0 mb-3 text-sm leading-snug text-nature-700 dark:text-nature-200 break-words">{t(WANTS_TO_JOIN_WORDS.help)}</p>
+        <section className="p-4 sm:p-6 border-b border-nature-200 dark:border-nature-800" data-testid="wants-to-join" aria-labelledby={requests !== null ? "wants-to-join-title" : undefined}>
+            {requests !== null && (
+                <>
+                    <h2 id="wants-to-join-title" className="m-0 mb-1 text-xl font-extrabold text-nature-950 dark:text-white break-words">
+                        {tn(total, '🚪 Wants to join ({n})', '🚪 Wants to join ({n})')}
+                    </h2>
+                    <p className="m-0 mb-3 text-sm leading-snug text-nature-700 dark:text-nature-200 break-words">{t(WANTS_TO_JOIN_WORDS.help)}</p>
+                </>
+            )}
             {!!error && <p role="status" className="m-0 mb-3 text-sm text-bp-ink-warning break-words" data-testid="wants-to-join-error">{error}</p>}
             {!!done && <p role="status" className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="wants-to-join-done">{done}</p>}
             {!!refusal && (
@@ -97,9 +103,9 @@ export function WantsToJoin({ onCount }: { onCount?: (n: number) => void }) {
                     <span dir="auto" className="font-extrabold">{refusal.callsign}</span>{' · '}<span dir="auto">{refusal.message}</span>
                 </p>
             )}
-            {hidden ? null : requests === null ? (
+            {hidden ? null : requests === null && !error ? (
                 <p className="m-0 my-3 text-sm text-nature-600 dark:text-nature-300">{t('Loading…')}</p>
-            ) : requests.map(req => {
+            ) : requests?.map(req => {
                 const meta = requestMeta(req);
                 return (
                     <div key={req.id} className="mb-3 p-3.5 rounded-2xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900" data-testid={`wants-to-join-${req.id}`}>

@@ -17,6 +17,7 @@ Chats that belong to a group, an enterprise or an event are under **Groups**, no
 - Search with **Search chats, posts, partners...**.
 - The filter button sorts by **Recent** or **Unread** (and, where your community uses Beans, by the Beans in each deal, highest or lowest first), and can show **Unread Only** or **Friends Only**.
 - On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top.
+- On the phone, a chat with a deal that needs you has the same tag under the name as in the web app (below): **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. A chat where you only have a finished deal to rate says **Review Needed**.
 
 In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter. A chat with a deal that needs you has a tag under the name, **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. It counts only the deals where the next step is yours: Beans of yours held in trust, or a request on your listing waiting for your answer. A deal where you are the one being paid adds nothing to it. A chat with a finished deal you haven't rated also says **Action Needed: Review Partner**.
 
@@ -29,7 +30,7 @@ When you and the other person have a deal, it is pinned above the messages, on t
 - **If you are paying,** the card has **Release** and **Cancel**. Release only once the other person has done what you agreed. Both ask you to confirm first. Release cannot be undone; Cancel gives the Beans back to you.
 - **If you are being paid,** the card says **⏳ Awaiting release**. The Beans are held for you, and only the person paying can release them.
 - **When a deal is finished** and you haven't rated it, the card has **⭐ Review**.
-- **If the other person has asked for your listing** (in the web app), the card says **Waiting on you: answer**. No Beans are held yet, so it has no buttons of its own: tap it to open the listing and answer there.
+- **If the other person has asked for your listing,** the card says **Waiting on you: answer**. No Beans are held yet, so it has no buttons of its own: tap it to open the listing and answer there.
 
 When you are paying for just one deal in the chat, it is in the bar above the messages instead of a card: **⚠️ Action Required: Release Credits** with **Release** and **Cancel** on the phone, **🔒 Trust Hold** with **✅ Release Credits** and **Cancel** in the web app. If you are paying for several, the bar has the newest and the cards have the rest.
 

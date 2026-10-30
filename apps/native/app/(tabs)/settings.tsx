@@ -744,13 +744,16 @@ export default function SettingsScreen() {
                     }
                     if (!edited.contact) {
                         setContact(profile.contact_value ?? '');
-                        if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
+                        setContactVisibility((profile.contact_visibility as any) || 'community');
                     }
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
                     else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 } else {
                     if (!edited.bio) setBio('');
-                    if (!edited.contact) setContact('');
+                    if (!edited.contact) {
+                        setContact('');
+                        setContactVisibility('community');
+                    }
                     if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 }
             }

@@ -94,7 +94,8 @@ export function shardProblems(ciText, testAllText) {
         for (const [pkg, got] of Object.entries(parts)) {
             const n = Number(got[0].split('/')[1]);
             const want = Array.from({ length: n }, (_, i) => `${i + 1}/${n}`).join(' ');
-            if (got.slice().sort().join(' ') !== want) problems.push(`${pkg}'s vitest shards are ${got.join(' ')}, not ${want}`);
+            // By shard number, not as strings: "10/10" sorts before "2/10".
+            if (got.slice().sort((a, b) => parseInt(a) - parseInt(b)).join(' ') !== want) problems.push(`${pkg}'s vitest shards are ${got.join(' ')}, not ${want}`);
         }
     }
     // The server-suite shards: server_shard i/K on each shard that runs server_suites, and only there, 1/K to K/K.
@@ -139,6 +140,16 @@ test('every test-all check runs in exactly one CI shard', () => {
     assert.ok(checkNames(TEST_ALL).length >= 30, `found ${checkNames(TEST_ALL).length} checks in test-all.sh`);
     assert.ok(shardsOf(CI).length >= 10, `found ${shardsOf(CI).length} shards in ci.yml`);
     assert.deepEqual(shardProblems(CI, TEST_ALL), []);
+});
+
+test('a package split into ten vitest shards or more passes, and one of them missing fails', () => {
+    const pwa = (n) => Array.from({ length: n }, (_, i) => `          - { name: vitest-pwa-${i + 1}, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=${i + 1}/${n}" }\n`).join('');
+    const ten = CI.replace(/^ {10}- \{ name: vitest-pwa-1,.*\n {10}- \{ name: vitest-pwa-2,.*\n/m, pwa(10));
+    assert.notEqual(ten, CI);
+    assert.deepEqual(shardProblems(ten, TEST_ALL), []);
+    const nine = ten.replace(/^ {10}- \{ name: vitest-pwa-10,.*\n/m, '');
+    assert.notEqual(nine, ten);
+    assert.match(shardProblems(nine, TEST_ALL).join('\n'), /@beanpool\/pwa's vitest shards are 1\/10 .* 9\/10, not 1\/10 2\/10 .* 10\/10/);
 });
 
 test('the aggregate job carries the required check name, alone, and fails unless every shard passed', () => {

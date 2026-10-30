@@ -158,8 +158,8 @@
         <p class="callout"><strong>這與 Google Play 上的是同一個應用程式，以同一把金鑰簽署。</strong> 無論你手機上原有的 BeanPool 來自 Google Play 還是這裡，它都會覆蓋安裝在上面，並保留你的帳戶。</p>
 
         <h2 id="download">下載</h2>
-        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.83/BeanPool-1.2.83-305.apk"><span class="apk-label">下載 BeanPool <span data-apk="version">1.2.83</span></span></a></p>
-        <p>版本 <span data-apk="version">1.2.83</span>，檔案大小 <span data-apk="mb">166</span> MB：盡量使用 Wi-Fi。檔案來自 BeanPool 在 <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a> 上的發行版本。</p>
+        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.84/BeanPool-1.2.84-306.apk"><span class="apk-label">下載 BeanPool <span data-apk="version">1.2.84</span></span></a></p>
+        <p>版本 <span data-apk="version">1.2.84</span>，檔案大小 <span data-apk="mb">160</span> MB：盡量使用 Wi-Fi。檔案來自 BeanPool 在 <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a> 上的發行版本。</p>
 
         <h2 id="install">安裝</h2>
         <ol>
@@ -167,7 +167,7 @@
             <li>第一次安裝時，Android 會請你允許瀏覽器安裝應用程式。在開啟的設定中允許，然後返回。</li>
             <li>確認安裝。如果手機上已有 BeanPool，Android 會稱之為更新。然後開啟 BeanPool。</li>
         </ol>
-        <p id="not-installed">如果 Android 提示應用程式未安裝，因為它與手機上已有的應用程式衝突，請查看你的 BeanPool 版本：在手機的設定中，進入「應用程式」，再點 BeanPool。版本 <span data-apk="version">1.2.83</span> 或更新的版本不需要這裡的任何東西：保留它即可。更舊的版本是用另一把金鑰簽署的，例如測試版。這種情況下，請先寫下你的 12 個助記詞（見<a href="#words">下文</a>），解除安裝 BeanPool，再安裝這個檔案。打開 BeanPool，點按<strong>已經是會員?還原帳號</strong>，然後點按<strong>透過 12 個助記詞找回</strong>。</p>
+        <p id="not-installed">如果 Android 提示應用程式未安裝，因為它與手機上已有的應用程式衝突，請查看你的 BeanPool 版本：在手機的設定中，進入「應用程式」，再點 BeanPool。版本 <span data-apk="version">1.2.84</span> 或更新的版本不需要這裡的任何東西：保留它即可。更舊的版本是用另一把金鑰簽署的，例如測試版。這種情況下，請先寫下你的 12 個助記詞（見<a href="#words">下文</a>），解除安裝 BeanPool，再安裝這個檔案。打開 BeanPool，點按<strong>已經是會員?還原帳號</strong>，然後點按<strong>透過 12 個助記詞找回</strong>。</p>
 
         <h2 id="updates">更新</h2>
         <p>從這裡下載的應用程式不會自動更新。有新版本時，BeanPool 會告訴你：回到本頁面，下載新版本，並覆蓋安裝在現有版本之上。你的帳戶和應用程式中的一切都會保留。</p>
@@ -179,12 +179,12 @@
         <p>這個檔案與 Google Play 上的 BeanPool 使用同一把金鑰簽署。其憑證的 SHA-256 指紋為：</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>在裝有 Android 建置工具的電腦上執行：</p>
-        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>
+        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.84-306.apk</span></code></p>
         <p>它應顯示相同的指紋，格式與 apksigner 的寫法一致：</p>
         <p><code class="apk-code" id="apk-digest" dir="ltr">Signer #1 certificate SHA-256 digest: 46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81</code></p>
         <p>Android 只會安裝以同一把金鑰簽署的更新，因此以其他任何金鑰簽署的檔案都無法取代你的 BeanPool。</p>
         <p>檔案本身的 SHA-256：</p>
-        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">ef6112f14891ad653e7ad0d06cc0aa061fa5a97907c84b9055cfdd6229c06089</code></p>
+        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">76dc8a47e74fc8e0f531d678a35a5b94da5c73ec6e3325c0ce395a614fea9f72</code></p>
 
         <h2 id="other-ways">取得 BeanPool 的其他方式</h2>
         <ul>

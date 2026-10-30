@@ -2679,9 +2679,10 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
  * caller (route, test, or future code).
  *
  * Reloads only the ledger account balances (mirrors the boot + importRemoteState
- * reloads). COMMONS_BALANCE is deliberately NOT reseeded here: the crowdfund paths
- * never touch the commons pool, and reseeding from the DB could roll back
- * in-memory demurrage not yet persisted.
+ * reloads). COMMONS_BALANCE is deliberately NOT reseeded here: any pledge from a
+ * closed account already moved to the Commons in memory via moveToCommons
+ * (closedPledgeToCommons), and reseeding from the DB could roll back in-memory
+ * demurrage not yet persisted.
  */
 export function reconcileLedgerFromDb(): void {
     const accounts = db.prepare("SELECT public_key as id, balance, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];

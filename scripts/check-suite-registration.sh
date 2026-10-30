@@ -43,7 +43,7 @@ on_disk=$(find "$SUITE_DIR" -maxdepth 1 -name 'test-*.ts' -exec basename {} .ts 
 
 registered=$(node --input-type=module -e "
   const m = await import(process.argv[1]);
-  for (const name of [...m.SUITES, ...m.VARIANTS.map((v) => v.name)]) console.log(name);
+  for (const name of [...m.SUITES.map((s) => typeof s === 'string' ? s : s.name), ...m.VARIANTS.map((v) => v.name)]) console.log(name);
 " "$PWD/$RUNNER" | grep -E '^test-[a-z0-9-]+$' | sort -u)
 if [ -z "$registered" ]; then
   echo "❌ Could not read the suite list from $RUNNER"

@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { LANGS, setLanguage, t } from '../../../words.js';
-import { CLIMATE_GRID, CLIMATE_RUNS } from '../climate-layer.js';
+import { CLIMATE_GRID, CLIMATE_RUNS } from '../climate.table.js';
 import { CROPS, cropById, type Crop } from '../crops.js';
 import { GARDEN_DOC_VERSION, emptyGardenDoc, readGardenDoc, withGardenClimate } from '../doc.js';
 import {
@@ -176,7 +176,7 @@ describe('the bundled data', () => {
         expect(runs).not.toBeNull();
         expect(climateLayer()?.cells).toBe(720 * 360);
         expect(CLIMATE_RUNS.length).toBeLessThan(30_000);
-        const file = readFileSync(fileURLToPath(new URL('../climate-layer.ts', import.meta.url)));
+        const file = readFileSync(fileURLToPath(new URL('../climate.table.ts', import.meta.url)));
         expect(file.byteLength).toBeLessThan(100_000);
         expect(file.toString()).toContain('CC BY 4.0');
         expect(file.toString()).toContain('Beck');

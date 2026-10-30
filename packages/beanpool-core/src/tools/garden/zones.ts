@@ -1,14 +1,14 @@
 /**
  * Your garden's seven plain climate zones (scratch/tools/DESIGN-grow-food-fable.md §2.2, slice G0), the Köppen-Geiger
  * classes each one gathers, and the zone of a place, worked out on the device from the bundled coarse map
- * (climate-layer.ts: Beck et al. 2023, CC BY 4.0, at 0.5°, about 55 km a cell). Nothing is asked of a server: the
+ * (climate.table.ts: Beck et al. 2023, CC BY 4.0, at 0.5°, about 55 km a cell). Nothing is asked of a server: the
  * place never leaves the device. Coasts, valleys and mountains will sometimes come out wrong, so every screen that
  * shows the zone has Change. Pure: no I/O.
  *
  * The zone mapping is ours and CC0 (NOTICE): any community may copy it into its own guide.
  */
 import { word, type WordKey } from '../../words.js';
-import { CLIMATE_GRID, CLIMATE_RUNS } from './climate-layer.js';
+import { CLIMATE_GRID, CLIMATE_RUNS } from './climate.table.js';
 
 export type GardenZoneId = 'tropical-wet' | 'tropical-seasonal' | 'dry' | 'warm' | 'mild' | 'cold' | 'short';
 export type Hemisphere = 'north' | 'south';

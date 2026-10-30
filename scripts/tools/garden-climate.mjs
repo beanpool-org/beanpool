@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// garden-climate.mjs — writes Your garden's climate layer (packages/beanpool-core/src/tools/garden/climate-layer.ts) from
+// garden-climate.mjs — writes Your garden's climate layer (packages/beanpool-core/src/tools/garden/climate.table.ts) from
 // Beck et al. (2023)'s Köppen-Geiger map at 0.5° (CC BY 4.0, https://doi.org/10.6084/m9.figshare.21789074): the file
 // 1991_2020/koppen_geiger_0p5.tif inside koppen_geiger_tif.zip. Run once by hand when the map is updated; nothing in the
 // apps or the tests fetches it.
@@ -16,7 +16,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const OUT = path.join(ROOT, 'packages/beanpool-core/src/tools/garden/climate-layer.ts');
+const OUT = path.join(ROOT, 'packages/beanpool-core/src/tools/garden/climate.table.ts');
 
 // Beck et al.'s legend, 1..30 (legend.txt in the zip), to the zone letters b..h; 0 (sea, no data) is a.
 const CLASSES = ['Af', 'Am', 'Aw', 'BWh', 'BWk', 'BSh', 'BSk', 'Csa', 'Csb', 'Csc', 'Cwa', 'Cwb', 'Cwc', 'Cfa', 'Cfb', 'Cfc',

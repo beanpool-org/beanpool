@@ -3621,5 +3621,42 @@
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Impossibile rimuovere l'account dal nodo. Gli accordi con deposito di garanzia attivi potrebbero dover essere prima risolti.",
   "{amount} · held in trust": "{amount} · in garanzia",
   "Cancel Initiative & Refund Backers": "Annullare l'iniziativa e rimborsare i sostenitori",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Annullare l'iniziativa e rimborsare i sostenitori?\n\nQuesto chiuderà l'iniziativa e rimborserà immediatamente tutti gli impegni in deposito ai rispettivi sostenitori. Una promessa proveniente da un conto che da allora è stato chiuso (eliminato o un'attività liquidata) va invece ai Beni Comuni, come il resto dei fagioli di un conto chiuso, e quella di tutti gli altri torna comunque a loro."
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Annullare l'iniziativa e rimborsare i sostenitori?\n\nQuesto chiuderà l'iniziativa e rimborserà immediatamente tutti gli impegni in deposito ai rispettivi sostenitori. Una promessa proveniente da un conto che da allora è stato chiuso (eliminato o un'attività liquidata) va invece ai Beni Comuni, come il resto dei fagioli di un conto chiuso, e quella di tutti gli altri torna comunque a loro.",
+  "Please give a name of at least 2 characters.": "Inserisci un nome di almeno 2 caratteri.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Il nome deve avere al massimo {n} carattere.",
+    "other": "Il nome deve avere al massimo {n} caratteri."
+  },
+  "Please say a few words about yourself.": "Scrivi qualche parola su di te.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Il messaggio deve avere al massimo {n} carattere.",
+    "other": "Il messaggio deve avere al massimo {n} caratteri."
+  },
+  "You are already a member of this community.": "Sei già membro di questa comunità.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Persone che chiedono di unirti a questa comunità. Invita crea un invito utilizzabile solo dalla loro chiave, che la loro app troverà automaticamente. Non ora comunica semplicemente che \"non c'è ancora risposta\".",
+  "Couldn't reach your community. Check your connection and try again.": "Impossibile raggiungere la tua comunità. Controlla la connessione e riprova.",
+  "Asked today": "Richiesto oggi",
+  "Asked yesterday": "Richiesto ieri",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Richiesto {n} giorno fa",
+    "other": "Richiesto {n} giorni fa"
+  },
+  "from {node}": "da {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Hai invitato {name}. La sua app troverà l'invito automaticamente.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Vuole entrare ({n})",
+    "other": "🚪 Vogliono entrare ({n})"
+  },
+  "Inviting {name}...": "Invito di {name} in corso...",
+  "Invite {name}": "Invita {name}",
+  "Declining {name}...": "Rifiuto di {name} in corso...",
+  "Not now, {name}": "Non ora, {name}",
+  "Invite\u0004button: let them in": "Invita",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Inviti ({n})",
+    "other": "🎟️ Inviti ({n})"
+  },
+  "Ask to join {name}": "Chiedi di unirti a {name}",
+  "A few words about yourself": "Qualche parola su di te",
+  "Where you live, what you'd like to share or learn": "Dove vivi, cosa vorresti condividere o imparare"
 }

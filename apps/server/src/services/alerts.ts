@@ -165,6 +165,7 @@ export type AlertKey =
     | 'reg.notice'
     | 'reports.new' | 'reports.child' | 'reports.child-more'
     | 'door.busy'
+    | 'knock.busy'
     | 'knock.waiting'
     | 'requests.flood';
 
@@ -242,6 +243,8 @@ const ROWS: Record<AlertKey, Row> = {
     'reports.child-more': { title: 'more child-safety reports waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
     /** More new members in a day than DOOR_BUSY_NEW_MEMBERS_PER_DAY (engine/door-signal.ts doorBusy): told when it rises. */
     'door.busy': { title: 'sign-ups busier than usual', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
+    /** The node-wide knock ceiling reached (engine/knocks.ts KNOCK_RULES): told at most once per UTC day when an applicant is turned away as busy. */
+    'knock.busy': { title: 'requests to join ceiling reached', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
     /** A request to join has waited 7 days without an answer (front doors S1). */
     'knock.waiting': { title: 'a request to join is waiting', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
     /** Signed requests turned away for room in the nonce store (nonceConditions): 4 when a member is, or the newer accounts' share is full. */

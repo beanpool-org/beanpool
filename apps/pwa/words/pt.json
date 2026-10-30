@@ -3621,5 +3621,42 @@
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Falha ao purgar a conta do nó. Negociações ativas em custódia podem precisar ser resolvidas antes.",
   "{amount} · held in trust": "{amount} · em custódia",
   "Cancel Initiative & Refund Backers": "Cancelar iniciativa e reembolsar apoiadores",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Cancelar iniciativa e reembolsar apoiadores?\n\nIsso encerrará a iniciativa e reembolsará imediatamente todas as contribuições em custódia aos apoiadores. Um apoio de uma conta que foi encerrada desde então (eliminada ou um empreendimento liquidado) vai para os Bens Comuns, como aconteceu com o resto dos feijões de uma conta encerrada, e o de todos os outros ainda lhes é devolvido."
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Cancelar iniciativa e reembolsar apoiadores?\n\nIsso encerrará a iniciativa e reembolsará imediatamente todas as contribuições em custódia aos apoiadores. Um apoio de uma conta que foi encerrada desde então (eliminada ou um empreendimento liquidado) vai para os Bens Comuns, como aconteceu com o resto dos feijões de uma conta encerrada, e o de todos os outros ainda lhes é devolvido.",
+  "Please give a name of at least 2 characters.": "Informe um nome de pelo menos 2 caracteres.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Por favor, limite seu nome a {n} caractere.",
+    "other": "Por favor, limite seu nome a {n} caracteres."
+  },
+  "Please say a few words about yourself.": "Fale algumas palavras sobre você.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Por favor, limite sua mensagem a {n} caractere.",
+    "other": "Por favor, limite sua mensagem a {n} caracteres."
+  },
+  "You are already a member of this community.": "Você já é membro desta comunidade.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Pessoas pedindo para entrar nesta comunidade. Convidar cria um convite que apenas a chave delas pode usar, e o app delas o encontra sozinho. Agora não apenas informa \"nenhuma resposta ainda\".",
+  "Couldn't reach your community. Check your connection and try again.": "Não foi possível contatar sua comunidade. Verifique sua conexão e tente novamente.",
+  "Asked today": "Pedido hoje",
+  "Asked yesterday": "Pedido ontem",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Pedido há {n} dia",
+    "other": "Pedido há {n} dias"
+  },
+  "from {node}": "de {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Você convidou {name}. O app dessa pessoa encontrará o convite sozinho.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Quer entrar ({n})",
+    "other": "🚪 Querem entrar ({n})"
+  },
+  "Inviting {name}...": "Convidando {name}...",
+  "Invite {name}": "Convidar {name}",
+  "Declining {name}...": "Recusando {name}...",
+  "Not now, {name}": "Agora não, {name}",
+  "Invite\u0004button: let them in": "Convidar",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Convites ({n})",
+    "other": "🎟️ Convites ({n})"
+  },
+  "Ask to join {name}": "Pedir para entrar em {name}",
+  "A few words about yourself": "Algumas palavras sobre você",
+  "Where you live, what you'd like to share or learn": "Onde você mora, o que gostaria de compartilhar ou aprender"
 }

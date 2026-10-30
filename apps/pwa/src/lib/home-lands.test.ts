@@ -19,14 +19,16 @@ describe('GET /api/home names the landings this app opens', () => {
     });
     afterEach(() => { globalThis.fetch = realFetch; });
 
-    it('lands=enterprise,group,invite, with or without the cards and a point', async () => {
+    it('lands=enterprise,group,invite,people, with or without the cards and a point', async () => {
         const { getHome } = await import('./api');
         await getHome({ cards: ['needs', 'decide'] }).catch(() => undefined);
         await getHome({}).catch(() => undefined);
         expect(calls.length).toBe(2);
         // `invite`: HomePage's needsLine opens { to: 'invite', id } on the group (its info, with Join), and { to: 'invites' } on Commons.
-        expect(new URL(calls[0], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite');
+        // `people`: { to: 'people' } opens People → Invites, which lists requests to join on the web since front doors S2
+        // (PR #2625 review: before, the web never got the line, and an owner's count sat in the admin line, landing on settings).
+        expect(new URL(calls[0], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite,people');
         expect(new URL(calls[0], 'https://node.example').searchParams.get('cards')).toBe('needs,decide');
-        expect(new URL(calls[1], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite');
+        expect(new URL(calls[1], 'https://node.example').searchParams.get('lands')).toBe('enterprise,group,invite,people');
     });
 });

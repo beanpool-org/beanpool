@@ -3593,7 +3593,6 @@
   "Cancel request": "Cancelar solicitud",
   "Nothing here yet. Be the first:": "Nada por aquí todavía. Sé el primero:",
   "🔑 FOUNDING": "🔑 FUNDADOR",
-  "To ask {name} to join, open Find a community in the BeanPool app and choose {name}.": "Para pedir unirte a {name}, abre Buscar una comunidad en la app de BeanPool y elige {name}.",
   "{name} isn't in the list of communities yet. Try again in an hour, or ask one of its members for an invite.": "{name} aún no está en la lista de comunidades. Inténtalo de nuevo en una hora o pide una invitación a uno de sus miembros.",
   "Choose a banner photo, or keep this one": "Elige una foto de banner o conserva esta",
   "Your picture, until you choose a banner.": "Tu imagen, hasta que elijas un banner.",
@@ -3623,5 +3622,42 @@
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "No se pudo purgar la cuenta del nodo. Es posible que primero deban resolverse acuerdos de custodia activos.",
   "{amount} · held in trust": "{amount} · en custodia",
   "Cancel Initiative & Refund Backers": "Cancelar iniciativa y reembolsar a los aportantes",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "¿Cancelar iniciativa y reembolsar a los patrocinadores?\n\nEsto cerrará la iniciativa y reembolsará de inmediato todos los fondos respaldados en custodia a sus patrocinadores. Un aporte de una cuenta que desde entonces se ha cerrado (eliminada, o un emprendimiento que se ha liquidado) va a los Bienes comunes en su lugar, como lo hicieron el resto de los frijoles de una cuenta cerrada, y el de todos los demás aún regresa a ellos."
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "¿Cancelar iniciativa y reembolsar a los patrocinadores?\n\nEsto cerrará la iniciativa y reembolsará de inmediato todos los fondos respaldados en custodia a sus patrocinadores. Un aporte de una cuenta que desde entonces se ha cerrado (eliminada, o un emprendimiento que se ha liquidado) va a los Bienes comunes en su lugar, como lo hicieron el resto de los frijoles de una cuenta cerrada, y el de todos los demás aún regresa a ellos.",
+  "Please give a name of at least 2 characters.": "Por favor ingresa un nombre de al menos 2 caracteres.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Mantén tu nombre en {n} carácter como máximo.",
+    "other": "Mantén tu nombre en {n} caracteres como máximo."
+  },
+  "Please say a few words about yourself.": "Por favor escribe unas palabras sobre ti.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Mantén tu mensaje en {n} carácter como máximo.",
+    "other": "Mantén tu mensaje en {n} caracteres como máximo."
+  },
+  "You are already a member of this community.": "Ya eres miembro de esta comunidad.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Personas que piden unirse a esta comunidad. Invitar genera una invitación que solo su clave puede usar, y su app la encuentra sola. Ahora no solo les indica \"sin respuesta todavía\".",
+  "Couldn't reach your community. Check your connection and try again.": "No se pudo conectar con tu comunidad. Revisa tu conexión y vuelve a intentarlo.",
+  "Asked today": "Solicitado hoy",
+  "Asked yesterday": "Solicitado ayer",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Solicitado hace {n} día",
+    "other": "Solicitado hace {n} días"
+  },
+  "from {node}": "de {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Invitaste a {name}. Su app encontrará la invitación sola.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Quiere unirse ({n})",
+    "other": "🚪 Quieren unirse ({n})"
+  },
+  "Inviting {name}...": "Invitando a {name}...",
+  "Invite {name}": "Invitar a {name}",
+  "Declining {name}...": "Rechazando a {name}...",
+  "Not now, {name}": "Ahora no, {name}",
+  "Invite\u0004button: let them in": "Invitar",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Invitaciones ({n})",
+    "other": "🎟️ Invitaciones ({n})"
+  },
+  "Ask to join {name}": "Solicitar unirse a {name}",
+  "A few words about yourself": "Unas palabras sobre ti",
+  "Where you live, what you'd like to share or learn": "Dónde vives, qué te gustaría compartir o aprender"
 }

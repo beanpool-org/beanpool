@@ -3620,5 +3620,42 @@
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "پاکسازی حساب از سرور انجام نشد. معامله‌های امانی فعال ممکن است ابتدا نیاز به تعیین تکلیف داشته باشند.",
   "{amount} · held in trust": "{amount} · در امانت",
   "Cancel Initiative & Refund Backers": "لغو طرح و بازپرداخت به حامیان",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "لغو طرح و استرداد وجوه به حامیان؟\n\nاین کار طرح را می‌بندد و بلافاصله تمام تعهدهای امانی را به حامیانشان بازمی‌گرداند. تعهد حسابی که از آن زمان بسته شده است (حذف شده، یا طرح تجاری که برچیده شده است) در عوض به اموال عمومی می‌رود، همان‌طور که بقیه لوبیاهای یک حساب بسته شده رفتند، و تعهدات سایر افراد همچنان به آن‌ها بازمی‌گردد."
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "لغو طرح و استرداد وجوه به حامیان؟\n\nاین کار طرح را می‌بندد و بلافاصله تمام تعهدهای امانی را به حامیانشان بازمی‌گرداند. تعهد حسابی که از آن زمان بسته شده است (حذف شده، یا طرح تجاری که برچیده شده است) در عوض به اموال عمومی می‌رود، همان‌طور که بقیه لوبیاهای یک حساب بسته شده رفتند، و تعهدات سایر افراد همچنان به آن‌ها بازمی‌گردد.",
+  "Please give a name of at least 2 characters.": "لطفاً نامی با حداقل ۲ نویسه وارد کنید.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "لطفاً نام خود را حداکثر در {n} نویسه بنویسید.",
+    "other": "لطفاً نام خود را حداکثر در {n} نویسه بنویسید."
+  },
+  "Please say a few words about yourself.": "لطفاً چند کلمه درباره خودتان بگویید.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "لطفاً پیامتان را حداکثر در {n} نویسه بنویسید.",
+    "other": "لطفاً پیامتان را حداکثر در {n} نویسه بنویسید."
+  },
+  "You are already a member of this community.": "شما از قبل عضو این جامعه هستید.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "افرادی که درخواست پیوستن به این جامعه را دارند. دکمه «دعوت» دعوت‌نامه‌ای می‌سازد که فقط با کلید آن‌ها قابل استفاده است و برنامه‌شان خودبه‌خود آن را پیدا می‌کند. گزینه «فعلاً نه» به آن‌ها فقط می‌گوید «هنوز پاسخی نیامده است».",
+  "Couldn't reach your community. Check your connection and try again.": "ارتباط با جامعه شما برقرار نشد. اتصال خود را بررسی کرده و دوباره امتحان کنید.",
+  "Asked today": "امروز درخواست داده",
+  "Asked yesterday": "دیروز درخواست داده",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "{n} روز پیش درخواست داده",
+    "other": "{n} روز پیش درخواست داده"
+  },
+  "from {node}": "از {node}",
+  "You invited {name}. Their app will find the invite by itself.": "شما {name} را دعوت کردید. برنامه آن‌ها خودش دعوت‌نامه را پیدا خواهد کرد.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 درخواست پیوستن ({n})",
+    "other": "🚪 درخواست پیوستن ({n})"
+  },
+  "Inviting {name}...": "در حال دعوت {name}...",
+  "Invite {name}": "دعوت {name}",
+  "Declining {name}...": "در حال رد درخواست {name}...",
+  "Not now, {name}": "فعلاً نه، {name}",
+  "Invite\u0004button: let them in": "دعوت",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ دعوت‌ها ({n})",
+    "other": "🎟️ دعوت‌ها ({n})"
+  },
+  "Ask to join {name}": "درخواست پیوستن به {name}",
+  "A few words about yourself": "چند کلمه درباره خودتان",
+  "Where you live, what you'd like to share or learn": "کجا زندگی می‌کنید، چه چیزهایی را دوست دارید به اشتراک بگذارید یا یاد بگیرید"
 }

@@ -3620,5 +3620,42 @@
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Imeshindwa kufuta akaunti kutoka kwenye seva. Huenda makubaliano amilifu ya amana yanapaswa kutatuliwa kwanza.",
   "{amount} · held in trust": "{amount} · kwenye amana",
   "Cancel Initiative & Refund Backers": "Ghairi Mpango na Uwarejeshee Wafadhili",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Ghairi Mradi na Urejeshe Fedha kwa Wafadhili?\n\nHii itafunga mradi na kurejesha mara moja ahadi zote zilizowekwa kwenye amana kwa wafadhili wao. Ahadi kutoka kwa akaunti ambayo imefungwa tangu wakati huo (iliyofutwa, au biashara iliyomalizika) huenda kwa Commons badala yake, kama maharagwe mengine ya akaunti iliyofungwa, na ya kila mtu mwingine bado inarudi kwao."
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Ghairi Mradi na Urejeshe Fedha kwa Wafadhili?\n\nHii itafunga mradi na kurejesha mara moja ahadi zote zilizowekwa kwenye amana kwa wafadhili wao. Ahadi kutoka kwa akaunti ambayo imefungwa tangu wakati huo (iliyofutwa, au biashara iliyomalizika) huenda kwa Commons badala yake, kama maharagwe mengine ya akaunti iliyofungwa, na ya kila mtu mwingine bado inarudi kwao.",
+  "Please give a name of at least 2 characters.": "Tafadhali weka jina lenye angalau herufi 2.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Tafadhali weka jina lako lisiwe zaidi ya herufi {n}.",
+    "other": "Tafadhali weka jina lako lisiwe zaidi ya herufi {n}."
+  },
+  "Please say a few words about yourself.": "Tafadhali sema maneno machache kukuhusu.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Tafadhali weka ujumbe wako usiwe zaidi ya herufi {n}.",
+    "other": "Tafadhali weka ujumbe wako usiwe zaidi ya herufi {n}."
+  },
+  "You are already a member of this community.": "Tayari wewe ni mwanachama wa jumuiya hii.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Watu wanaoomba kujiunga na jumuiya hii. Kualika kunatengeneza mwaliko ambao ni ufunguo wao tu unaoweza kuutumia, na programu yao huupata yenyewe. Sio sasa huwaambia tu \"bado hakuna jibu\".",
+  "Couldn't reach your community. Check your connection and try again.": "Haikuweza kufikia jumuiya yako. Angalia muunganisho wako kisha ujaribu tena.",
+  "Asked today": "Aliomba leo",
+  "Asked yesterday": "Aliomba jana",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Aliomba siku {n} iliyopita",
+    "other": "Aliomba siku {n} zilizopita"
+  },
+  "from {node}": "kutoka {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Umemwalika {name}. Programu yake itapata mwaliko yenyewe.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Anataka kujiunga ({n})",
+    "other": "🚪 Wanataka kujiunga ({n})"
+  },
+  "Inviting {name}...": "Inamwalika {name}...",
+  "Invite {name}": "Mwalike {name}",
+  "Declining {name}...": "Inakataa {name}...",
+  "Not now, {name}": "Sio sasa, {name}",
+  "Invite\u0004button: let them in": "Mwalike",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Mwaliko ({n})",
+    "other": "🎟️ Mialiko ({n})"
+  },
+  "Ask to join {name}": "Omba kujiunga na {name}",
+  "A few words about yourself": "Maneno machache kukuhusu",
+  "Where you live, what you'd like to share or learn": "Unapoishi, kile ungependa kushiriki au kujifunza"
 }

@@ -145,7 +145,7 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
 // (@beanpool/core copiedPostTags).
 
 export const POST_TAGS_NOT_A_LIST = word('Tags must be a list of tag ids');
-export const POST_TAGS_TOO_MANY = tr('A listing can have at most {n} tags. Take one off to add another.', { n: POST_TAGS_MAX });
+const tooManyTags = () => tr('A listing can have at most {n} tags. Take one off to add another.', { n: POST_TAGS_MAX });
 
 /**
  * The tags as they will be stored, in the order sent, each once; refuses what no listing may carry. `kept`: the listing's
@@ -161,9 +161,9 @@ export function assertPostTags(raw: unknown, kept: readonly string[] = []): stri
         if (!isTagId(id) && !kept.includes(id)) throw new Error(tr('There is no tag "{id}". Choose one from the list.', { id: id.slice(0, 80) }));
         if (!ids.includes(id)) ids.push(id);
     }
-    if (ids.length > POST_TAGS_MAX) throw new Error(POST_TAGS_TOO_MANY);
+    if (ids.length > POST_TAGS_MAX) throw new Error(tooManyTags());
     // Five ids of the library's three levels never come near it; a bound on the column whatever the library grows to.
-    if (storedPostTags(ids).length > POST_TAGS_CHARS) throw new Error(POST_TAGS_TOO_MANY);
+    if (storedPostTags(ids).length > POST_TAGS_CHARS) throw new Error(tooManyTags());
     return ids;
 }
 

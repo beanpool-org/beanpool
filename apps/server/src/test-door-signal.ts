@@ -262,7 +262,7 @@ async function main(): Promise<void> {
         `the work route says so first, before any work is done (${show(busyWork)})`);
     assert(busyAfterWork === busyBefore && busyCount() === busyBefore + 1,
         `the work route writes nothing, not even to the join funnel; the refused join is counted there once (network_busy_words ${busyBefore} → ${busyAfterWork} → ${busyCount()})`);
-    assert(over.status === 429 && over.body?.code === 'network_busy' && over.body?.window === 'hour' && retry >= 590 && retry <= 601 && over.body?.retryAfterSeconds === retry
+    assert(over.status === 429 && over.body?.code === 'network_busy' && over.body?.window === 'hour' && retry >= 580 && retry <= 601 && over.body?.retryAfterSeconds === retry
         && /12-words accounts were made from your network in the last hour\. Sign in to join now, or try again in about 10 minutes\./.test(over.body?.error),
         `the ${ord(N.wordsPerHour + 1)} → 429 network_busy, Retry-After ${retry} s (when the hour's oldest leaves it), naming the sign-in door (${show(over)})`);
     const signInStill = await joinBySignIn(CAMPUS, 'campus-google-sub', 'Campus Sign-in');

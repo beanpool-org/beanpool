@@ -16,6 +16,7 @@ import { viewOf } from '../utils/posts-view';
 import { keepPicked, openNeedComposer } from './doors';
 import { removeToolPhoto, toolPhotoUri } from './photos';
 import { communityKey } from './community';
+import { homeAnswerStoreKey } from '../utils/storage-keys';
 
 /** What the route knows when it builds a tool's host. */
 export interface PhoneHostContext<D> {
@@ -76,15 +77,14 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
 
 /**
  * `place`: a place the phone already holds, never asked for and never sent (core toolPlaceOf): the community's own place
- * and the member's rough area from the Home answer this phone kept for this account and community, else the phone's last
- * known place where location is already allowed (as Home's own lastKnownPlace: never a permission prompt). Null for none.
- * Home's store and the location module load on first ask, so a tool that never asks costs app start nothing.
+ * and the member's rough area from the Home answer this phone kept for this account and community (utils/home-store.ts
+ * writes it under this key; read here as it is stored, so the host never loads Home's modules), else the phone's last
+ * known place where location is already allowed (as Home's own lastKnownPlace: never a permission prompt). The location
+ * module loads on first ask, so a tool that never asks costs app start nothing. Null for none.
  */
 export async function phonePlace(owner: string, url: string | null): Promise<ToolPlace | null> {
     const base = (url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) ?? '').trim();
-    const { readStoredHome } = await import('../utils/home-store');
-    const answer = base ? (await readStoredHome(owner, base))?.answer : null;
-    const kept = toolPlaceOf({ community: answer?.cards.community?.place, area: answer?.me?.area });
+    const kept = base ? keptHomePlace(owner, base, await AsyncStorage.getItem(homeAnswerStoreKey(owner, base)).catch(() => null)) : null;
     if (kept) return kept;
     try {
         const Location = await import('expo-location');
@@ -92,6 +92,18 @@ export async function phonePlace(owner: string, url: string | null): Promise<Too
         if (status !== 'granted') return null;
         const last = await Location.getLastKnownPositionAsync();
         return last ? toolPlaceOf({ device: { lat: last.coords.latitude, lng: last.coords.longitude } }) : null;
+    } catch {
+        return null;
+    }
+}
+
+/** The place in a kept Home answer, only for this account and community (as readStoredHome holds it); null for none. */
+export function keptHomePlace(owner: string, url: string, raw: string | null): ToolPlace | null {
+    try {
+        const kept = raw ? JSON.parse(raw) : null;
+        const same = (u: unknown) => typeof u === 'string' && u.trim().replace(/\/+$/, '').toLowerCase() === url.trim().replace(/\/+$/, '').toLowerCase();
+        if (!kept || kept.publicKey !== owner || !same(kept.url)) return null;
+        return toolPlaceOf({ community: kept.answer?.cards?.community?.place, area: kept.answer?.me?.area });
     } catch {
         return null;
     }

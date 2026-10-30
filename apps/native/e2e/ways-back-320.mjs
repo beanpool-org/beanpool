@@ -103,7 +103,7 @@ const STUBS = {
     // page's query), the phone's lock (always yes) and the turn-on, all here; nothing is sealed or sent.
     // This phone turned it on here (the row's marker) whenever the community keeps the copy: the row then asks even where it
     // is no longer offered.
-    '@react-native-async-storage/async-storage': `export default { getItem: async () => (globalThis.__copy?.kept ? '1' : null), setItem: async () => {}, removeItem: async () => {} };`,
+    '@react-native-async-storage/async-storage': `export default { getItem: async () => (globalThis.__copy?.kept || globalThis.__copy?.unopenable ? '1' : null), setItem: async () => {}, removeItem: async () => {} };`,
     'LocalAuth': `export const authenticateUser = async () => true;`,
     'copies-rule': `export const copiesRuleForScreen = async () => (globalThis.__offered ? 'server' : 'vault');`,
     'community-copy': `
@@ -156,7 +156,11 @@ const covered = (sso) => protectionFrom({ enrolled: sso.map(() => 'sso'), genera
 const hasWords = q.get('words') !== 'none';
 // "Your community's admins" (VR3): offered here (the rule "this server"), and whether the community keeps the copy.
 globalThis.__offered = q.get('offered') !== 'no';
-globalThis.__copy = q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered } : { kept: false, since: null, offered: globalThis.__offered };
+// A copy it keeps but can't open (#2626): its key gone (`cantopen-key`), or another key in its place (`cantopen-other`).
+const CANT_OPEN = { 'cantopen-key': 'recovery_seal_key_missing', 'cantopen-other': 'recovery_seal_unopenable' }[q.get('copy') || ''];
+globalThis.__copy = q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
+    : CANT_OPEN ? { kept: false, since: null, offered: globalThis.__offered, unopenable: { since: '2026-10-29T04:05:06.000Z', reason: CANT_OPEN } }
+    : { kept: false, since: null, offered: globalThis.__offered };
 const protection = q.get('signin') === 'google' ? covered(['google']) : protectionFrom(null);
 const noop = () => {};
 
@@ -189,6 +193,15 @@ const WAYS = {
             { url: 'https://bellingen.beanpool.org', name: 'Bellingen', status: null },
         ],
         pending: [{ url: MULLUM, provider: 'apple' }],
+    },
+    // A copy Mullumbimby keeps for its admins but can't open now (#2626): listed, removable, never a way back.
+    cantopen: {
+        vault: { kind: 'listed', copies: [] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, adminsCopyUnopenable: { since: '2026-10-29T04:05:06.000Z', reason: 'recovery_seal_key_missing' } } },
+            { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
+        ],
+        pending: [],
     },
     // Only the copy Mullumbimby keeps for its admins (VR3): the last way back this phone knows of.
     adminsonly: {
@@ -429,6 +442,7 @@ try {
             ['state=none&words=none', 'Ways back, nothing kept anywhere, no 12 words on the phone'],
             ['state=result', 'Ways back, after Remove everything'],
             ['state=adminsonly', "Ways back, only the copy for your community's admins"],
+            ['state=cantopen', "Ways back, a copy for your community's admins its server can't open"],
         ];
         for (const [query, label] of WAYS_CASES) {
             await open(`place=ways&${query}&scheme=${scheme}`);
@@ -465,6 +479,10 @@ try {
             ['copy=off', "Account Protection, your community's admins, offered", /Turn on/],
             ['copy=on', "Account Protection, your community's admins, on since a date", /On in Mullumbimby since/],
             ['copy=on&offered=no', "Account Protection, your community's admins, kept where it is no longer offered", /no longer offers this to new members/],
+            // A copy its server keeps but can't open (#2626): never On, and what can be done.
+            ['copy=cantopen-key', "Account Protection, your community's admins, kept but its server's key is gone", /The people who run it can put that key back/],
+            ['copy=cantopen-other', "Account Protection, your community's admins, kept under another key, offered", /Turn it on again to make a copy it can open/],
+            ['copy=cantopen-other&offered=no', "Account Protection, your community's admins, kept under another key, no longer offered", /no longer makes new copies/],
         ];
         for (const [query, label, shows] of ADMINS_CASES) {
             await open(`place=admins&${query}&scheme=${scheme}`);

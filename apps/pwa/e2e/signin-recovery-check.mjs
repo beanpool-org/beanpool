@@ -381,6 +381,10 @@ try {
         { name: 'admins-only-confirm', enrolled: [], kept: true, confirm: true },
         { name: 'admins-and-google', enrolled: ['google'], kept: true, confirm: false },
         { name: 'admins-off', enrolled: [], kept: false, confirm: false },
+        // A copy kept here that this server can't open (#2626): said as that in both boxes, never listed as a way back,
+        // and removing it asks plainly (no 12 words line: no way back goes with it).
+        { name: 'admins-cantopen-key-confirm', enrolled: [], kept: false, cantOpen: 'recovery_seal_key_missing', confirm: true },
+        { name: 'admins-cantopen-other', enrolled: [], kept: false, cantOpen: 'recovery_seal_unopenable', confirm: false },
     ];
     for (const theme of ['light', 'dark']) {
         for (const ac of ADMINS_CASES) {
@@ -389,7 +393,9 @@ try {
                 const url = route.request().url();
                 const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
                 if (url.includes('/api/recovery/shares/status')) return json({ enrolledSso: ac.enrolled, communityCopy: ac.kept ? { since: SINCE } : null });
-                if (url.includes('/api/recovery/community-copy/status')) return json({ kept: ac.kept, since: ac.kept ? SINCE : null, offered: true });
+                if (url.includes('/api/recovery/community-copy/status')) {
+                    return json({ kept: ac.kept, since: ac.kept ? SINCE : null, offered: true, unopenable: ac.cantOpen ? { since: SINCE, reason: ac.cantOpen } : null });
+                }
                 if (url.includes('/api/community/info')) return json({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', recoveryCopies: 'server' });
                 if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
                 return route.continue();
@@ -405,10 +411,13 @@ try {
             }, theme);
             await page.waitForSelector('[data-testid="community-admins-section"]');
             if (ac.kept) await page.waitForSelector('[data-testid="community-admins-on"]');
+            if (ac.cantOpen) await page.waitForSelector('[data-testid="community-admins-cant-open"]');
             await page.getByRole('button', { name: /Where your account can be brought back from/ }).click();
             await page.waitForSelector('[data-testid="ways-back"]');
             if (ac.confirm) {
-                await page.getByRole('button', { name: "Remove the copy at this community's server that its admins can bring you back from" }).click();
+                await page.getByRole('button', {
+                    name: ac.cantOpen ? "Remove the copy at this community's server that it can't open" : "Remove the copy at this community's server that its admins can bring you back from",
+                }).click();
                 await page.waitForSelector('[data-testid="ways-back-confirm"]');
             }
             await page.evaluate(() => document.fonts.ready);
@@ -462,6 +471,7 @@ try {
                     faint,
                     short,
                     listed: !!list.querySelector('[data-testid="ways-back-admins-copy"]'),
+                    cantOpenListed: !!list.querySelector('[data-testid="ways-back-admins-cant-open"]'),
                     keepsNone: /Keeps no copy of your account/.test(list.textContent),
                     wordsFirst: list.querySelector('[data-testid="ways-back-words-first"]')?.textContent ?? null,
                 };
@@ -471,8 +481,10 @@ try {
             for (const f of m.faint) failures.push(`${shot}: too faint to read: ${f}`);
             for (const sh of m.short) failures.push(`${shot}: the button "${sh}" is under 44px tall`);
             if (m.listed !== ac.kept) failures.push(`${shot}: the copy for the admins is ${m.listed ? '' : 'not '}listed`);
-            if (ac.kept && m.keepsNone) failures.push(`${shot}: "Keeps no copy" while the server keeps one`);
-            if (ac.confirm && !m.wordsFirst) failures.push(`${shot}: removing the last copy doesn't ask about the 12 words first`);
+            if (m.cantOpenListed !== !!ac.cantOpen) failures.push(`${shot}: the copy this server can't open is ${m.cantOpenListed ? '' : 'not '}listed as that`);
+            if ((ac.kept || ac.cantOpen) && m.keepsNone) failures.push(`${shot}: "Keeps no copy" while the server keeps one`);
+            if (ac.confirm && ac.kept && !m.wordsFirst) failures.push(`${shot}: removing the last copy doesn't ask about the 12 words first`);
+            if (ac.confirm && ac.cantOpen && m.wordsFirst) failures.push(`${shot}: removing a copy that is no way back asks about the 12 words first`);
             if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
             console.log(`${shot}: listed ${m.listed}, ${m.faint.length} faint, ${m.short.length} short buttons, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
             await context.close();

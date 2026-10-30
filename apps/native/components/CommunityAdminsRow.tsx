@@ -11,6 +11,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { t, word } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles } from '../app/ThemeContext';
@@ -36,6 +37,12 @@ export const COMMUNITY_ADMINS_ROW = {
     noLongerOffered: word('{community} no longer offers this to new members. Your copy there still works until you remove it.'),
     turnedOn: word('On. If you lose this phone, go and see one of your admins with your new phone.'),
 } as const;
+
+/**
+ * This phone turned it on at this community: the row asks the community about the copy only then, or where it is
+ * offered, so no other community is asked on every visit to Account Protection.
+ */
+const turnedOnKey = (url: string): string => `beanpool_community_copy_on_${url}`;
 
 /** The community's name as the row says it: its saved name, else its address. */
 function placeOf(url: string, name?: string | null): string {
@@ -70,8 +77,13 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
         setUrl(at);
         if (!at) return;
         const rule = await copiesRuleForScreen(at).catch(() => null);
-        setOffered(offersCommunityCopy(at, rule));
-        if (identity) setStatus(await communityCopyStatus(at, identity));
+        const offeredHere = offersCommunityCopy(at, rule);
+        setOffered(offeredHere);
+        const turnedOnHere = await AsyncStorage.getItem(turnedOnKey(at)).catch(() => null);
+        if (!identity || (!offeredHere && !turnedOnHere)) return;
+        const now = await communityCopyStatus(at, identity);
+        setStatus(now);
+        if (now && !now.kept && turnedOnHere) await AsyncStorage.removeItem(turnedOnKey(at)).catch(() => {});
     }, [identity]);
     useEffect(() => { void read(); }, [read]);
 
@@ -88,6 +100,7 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
         setBusy(true);
         try {
             await turnOnCommunityCopy(url, identity);
+            await AsyncStorage.setItem(turnedOnKey(url), '1').catch(() => {});
             setStatus(await communityCopyStatus(url, identity));
             setJustOn(true);
         } catch (e) {
@@ -107,6 +120,7 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
                     setJustOn(false);
                     try {
                         await removeCommunityCopy(url, identity);
+                        await AsyncStorage.removeItem(turnedOnKey(url)).catch(() => {});
                         setStatus(await communityCopyStatus(url, identity));
                     } catch (e) {
                         setError(keyLineWords(e instanceof Error ? e.message : String(e)));

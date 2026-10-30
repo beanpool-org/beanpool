@@ -23,6 +23,15 @@ export const COMMUNITY_ADMINS_WEB = {
     turnedOn: word('On. If you lose this device, go and see one of your admins with your new phone or browser.'),
 } as const;
 
+/** This browser turned it on here: the server is asked about the copy only then, or where it is offered. */
+const TURNED_ON_KEY = 'beanpool_community_copy_on';
+function turnedOnHere(): boolean {
+    try { return localStorage.getItem(TURNED_ON_KEY) === '1'; } catch { return false; }
+}
+function rememberTurnedOn(on: boolean): void {
+    try { if (on) localStorage.setItem(TURNED_ON_KEY, '1'); else localStorage.removeItem(TURNED_ON_KEY); } catch { /* a convenience only */ }
+}
+
 /** The sentences lib/community-copy.ts throws, said in the reader's language; anything else (the server's) as given. */
 function said(message: string): string {
     if (message === WEB_COMMUNITY_COPY_TEXT.unreachable) return t('Couldn’t reach your community, so nothing changed. Try again in a moment.');
@@ -45,9 +54,15 @@ export function CommunityAdminsSection({ identity, offeredHere }: Props) {
 
     useEffect(() => {
         let live = true;
-        if (identity) webCommunityCopyStatus().then((s) => { if (live) setStatus(s); });
+        if (identity && (offeredHere || turnedOnHere())) {
+            webCommunityCopyStatus().then((s) => {
+                if (!live) return;
+                setStatus(s);
+                if (s && !s.kept) rememberTurnedOn(false);
+            });
+        }
         return () => { live = false; };
-    }, [identity]);
+    }, [identity, offeredHere]);
 
     if (!identity) return null;
     const kept = status?.kept === true;
@@ -59,6 +74,7 @@ export function CommunityAdminsSection({ identity, offeredHere }: Props) {
         setJustOn(false);
         try {
             await webTurnOnCommunityCopy(identity);
+            rememberTurnedOn(true);
             setStatus(await webCommunityCopyStatus());
             setJustOn(true);
         } catch (e) {
@@ -74,6 +90,7 @@ export function CommunityAdminsSection({ identity, offeredHere }: Props) {
         setJustOn(false);
         try {
             await webRemoveCommunityCopy();
+            rememberTurnedOn(false);
             setStatus(await webCommunityCopyStatus());
         } catch (e) {
             setError(said(e instanceof Error ? e.message : String(e)));

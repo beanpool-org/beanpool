@@ -44,7 +44,15 @@ function flip(value: string): string {
  * Written by sealSeedToCopyKey when it was added (VR3), from the vector words above: the shape every community copy has.
  * Opened here so a later change to the format can't strand a copy a server already keeps. The key is a test value.
  */
-const FIRST_COPY: { copy: SealedShare; copyKey: string } | null = null;
+const FIRST_COPY: { copy: SealedShare; copyKey: string } | null = {
+    copy: {
+        encryptedShare: 'XcaOQRba6ZJyNGlaVTR+zq8ApNYTYDEA5mz3TVuSL4g=',
+        shareIv: 'LRpOWduwBzEYIKxlVAXJceeuMNPRbcNO',
+        shareTag: 'DKaIaQVbbKxulO9d9DSiUw==',
+        kdfParams: "{\"alg\":\"copykey-xc20p-v1\",\"words\":{\"alg\":\"bip39-bits-xc20p-v1\",\"iv\":\"EbjboWEZLJIbREzrTvJvw3qQdQjAIKj5\",\"ct\":\"/Ac5OmxwHhEc7Bx+umfB4Ok=\",\"tag\":\"+hYziYQuXAopUNjTXUcO/w==\"}}",
+    },
+    copyKey: 'tFrKoEx+A6pdY7SG2YE5JIvMqK7v9Au09mRmfqprkKk=',
+};
 
 describe('the community copy: sealSeedToCopyKey / openSeedWithCopyKey', () => {
     it('round-trips the seed and the 12 words, as the account the copy was made for', () => {

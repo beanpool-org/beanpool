@@ -4,7 +4,8 @@ import {
 } from '@beanpool/core';
 
 export interface TagPickerProps {
-    value: string[];
+    value?: string[];
+    tags?: string[];
     onChange: (tags: string[]) => void;
     category?: string;
     title?: string;
@@ -13,13 +14,15 @@ export interface TagPickerProps {
 }
 
 export function TagPicker({
-    value = [],
+    value,
+    tags,
     onChange,
     category,
     title = '',
     description = '',
     testID = 'tag-picker',
 }: TagPickerProps) {
+    const selectedTags = value ?? tags ?? [];
     const [isOpen, setIsOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -41,11 +44,11 @@ export function TagPicker({
     const index = useMemo(() => tagIndex(), [isOpen]);
 
     const toggleTag = (id: string) => {
-        if (value.includes(id)) {
-            onChange(value.filter((t) => t !== id));
+        if (selectedTags.includes(id)) {
+            onChange(selectedTags.filter((t) => t !== id));
         } else {
-            if (value.length >= POST_TAGS_MAX) return;
-            onChange([...value, id]);
+            if (selectedTags.length >= POST_TAGS_MAX) return;
+            onChange([...selectedTags, id]);
         }
     };
 
@@ -83,7 +86,7 @@ export function TagPicker({
 
             {/* Chips row */}
             <div className="flex flex-wrap gap-2 items-center">
-                {value.map((id) => {
+                {selectedTags.map((id) => {
                     const label = index.label(id);
                     if (!label && !isTagId(id)) return null;
                     return (
@@ -100,7 +103,7 @@ export function TagPicker({
                     );
                 })}
 
-                {value.length < POST_TAGS_MAX && (
+                {selectedTags.length < POST_TAGS_MAX && (
                     <button
                         type="button"
                         onClick={() => setIsOpen(true)}
@@ -180,7 +183,7 @@ export function TagPicker({
                                         <div className="flex flex-wrap gap-2">
                                             {searchResults.map((id) => {
                                                 const label = index.label(id);
-                                                const selected = value.includes(id);
+                                                const selected = selectedTags.includes(id);
                                                 return (
                                                     <button
                                                         key={id}
@@ -212,7 +215,7 @@ export function TagPicker({
                                             <div className="flex flex-wrap gap-2">
                                                 {suggestions.map((id) => {
                                                     const label = index.label(id);
-                                                    const selected = value.includes(id);
+                                                    const selected = selectedTags.includes(id);
                                                     return (
                                                         <button
                                                             key={id}
@@ -266,7 +269,7 @@ export function TagPicker({
                                                                         {items.length > 0 ? (
                                                                             items.map((item) => {
                                                                                 const itemLabel = index.label(item.id) || item.id;
-                                                                                const selected = value.includes(item.id);
+                                                                                const selected = selectedTags.includes(item.id);
                                                                                 return (
                                                                                     <button
                                                                                         key={item.id}
@@ -289,14 +292,14 @@ export function TagPicker({
                                                                                 type="button"
                                                                                 onClick={() => toggleTag(group.id)}
                                                                                 className={`min-h-[44px] px-3.5 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
-                                                                                    value.includes(group.id)
+                                                                                    selectedTags.includes(group.id)
                                                                                         ? 'bg-bp-primary text-white dark:bg-terra-500'
                                                                                         : 'bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700'
                                                                                 }`}
-                                                                                aria-pressed={value.includes(group.id)}
+                                                                                aria-pressed={selectedTags.includes(group.id)}
                                                                             >
                                                                                 <span>{groupLabel}</span>
-                                                                                {value.includes(group.id) && <span aria-hidden="true">✓</span>}
+                                                                                {selectedTags.includes(group.id) && <span aria-hidden="true">✓</span>}
                                                                             </button>
                                                                         )}
                                                                     </div>

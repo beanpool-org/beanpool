@@ -10,7 +10,8 @@ import { useTheme, useStyles } from '../app/ThemeContext';
 import { hapticTick, hapticWarning } from '../utils/haptics';
 
 export interface TagPickerProps {
-    value: string[];
+    value?: string[];
+    tags?: string[];
     onChange: (tags: string[]) => void;
     category?: string;
     title?: string;
@@ -19,13 +20,15 @@ export interface TagPickerProps {
 }
 
 export function TagPicker({
-    value = [],
+    value,
+    tags,
     onChange,
     category,
     title = '',
     description = '',
     testID = 'tag-picker',
 }: TagPickerProps) {
+    const selectedTags = value ?? tags ?? [];
     const { colors, theme } = useTheme();
     const [sheetVisible, setSheetVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -210,16 +213,16 @@ export function TagPicker({
     const index = useMemo(() => tagIndex(), [sheetVisible]);
 
     const toggleTag = (id: string) => {
-        if (value.includes(id)) {
+        if (selectedTags.includes(id)) {
             hapticTick();
-            onChange(value.filter((t) => t !== id));
+            onChange(selectedTags.filter((t) => t !== id));
         } else {
-            if (value.length >= POST_TAGS_MAX) {
+            if (selectedTags.length >= POST_TAGS_MAX) {
                 hapticWarning();
                 return;
             }
             hapticTick();
-            onChange([...value, id]);
+            onChange([...selectedTags, id]);
         }
     };
 
@@ -257,7 +260,7 @@ export function TagPicker({
             </View>
 
             <View style={styles.chipsRow}>
-                {value.map((id) => {
+                {selectedTags.map((id) => {
                     const label = index.label(id);
                     if (!label && !isTagId(id)) return null;
                     return (
@@ -274,7 +277,7 @@ export function TagPicker({
                     );
                 })}
 
-                {value.length < POST_TAGS_MAX && (
+                {selectedTags.length < POST_TAGS_MAX && (
                     <Pressable
                         style={styles.addBtn}
                         onPress={() => setSheetVisible(true)}
@@ -346,7 +349,7 @@ export function TagPicker({
                                         <View style={styles.chipsRow}>
                                             {searchResults.map((id) => {
                                                 const label = index.label(id);
-                                                const selected = value.includes(id);
+                                                const selected = selectedTags.includes(id);
                                                 return (
                                                     <Pressable
                                                         key={id}
@@ -375,7 +378,7 @@ export function TagPicker({
                                             <View style={styles.chipsRow}>
                                                 {suggestions.map((id) => {
                                                     const label = index.label(id);
-                                                    const selected = value.includes(id);
+                                                    const selected = selectedTags.includes(id);
                                                     return (
                                                         <Pressable
                                                             key={id}
@@ -427,7 +430,7 @@ export function TagPicker({
                                                                     {items.length > 0 ? (
                                                                         items.map((item) => {
                                                                             const itemLabel = index.label(item.id) || item.id;
-                                                                            const selected = value.includes(item.id);
+                                                                            const selected = selectedTags.includes(item.id);
                                                                             return (
                                                                                 <Pressable
                                                                                     key={item.id}
@@ -447,15 +450,15 @@ export function TagPicker({
                                                                         })
                                                                     ) : (
                                                                         <Pressable
-                                                                            style={[styles.chip, value.includes(group.id) && styles.chipSelected]}
+                                                                            style={[styles.chip, selectedTags.includes(group.id) && styles.chipSelected]}
                                                                             onPress={() => toggleTag(group.id)}
                                                                             accessibilityRole="button"
-                                                                            accessibilityState={{ selected: value.includes(group.id) }}
+                                                                            accessibilityState={{ selected: selectedTags.includes(group.id) }}
                                                                         >
-                                                                            <Text style={[styles.chipText, value.includes(group.id) && styles.chipTextSelected]}>
+                                                                            <Text style={[styles.chipText, selectedTags.includes(group.id) && styles.chipTextSelected]}>
                                                                                 {groupLabel}
                                                                             </Text>
-                                                                            {value.includes(group.id) && (
+                                                                            {selectedTags.includes(group.id) && (
                                                                                 <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />
                                                                             )}
                                                                         </Pressable>

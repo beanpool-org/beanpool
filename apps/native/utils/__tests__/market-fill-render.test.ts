@@ -80,7 +80,8 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsy
 vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: async () => ({ status: 'denied' }), getLastKnownPositionAsync: async () => null,
 }));
-vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => {}, isPillarSyncActive: () => false, syncLandedOnThisCopy: async () => false, PILLAR_SYNC_ENDED: 'pillar_sync_ended' }));
+// The first sync has landed on this copy: the screen reads what it wrote and leaves its first-sync wait (the fill waits for that).
+vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => {}, isPillarSyncActive: () => false, syncLandedOnThisCopy: async () => true, PILLAR_SYNC_ENDED: 'pillar_sync_ended' }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return {

@@ -44,11 +44,12 @@ export function AskedCommunity({ host, identity, asked, onAsked, onClose }: {
     const name = listed?.name ?? host;
     const facts = listed ? communityFacts(listed) : '';
     return (
-        <div ref={at} data-testid="home-find-asked" className="relative mb-2 rounded-xl border-2 border-bp-ink-info p-3 pr-12">
-            <p dir="auto" className="m-0 text-base font-bold break-words text-text-primary">{name}</p>
-            {facts && <p className="m-0 text-sm break-words text-text-primary">{facts}</p>}
+        // The ✕'s room is kept beside the name and facts only, so Ask to join's form below has the box's whole width.
+        <div ref={at} data-testid="home-find-asked" className="relative mb-2 rounded-xl border-2 border-bp-ink-info p-3">
+            <p dir="auto" className="m-0 pr-10 text-base font-bold break-words text-text-primary">{name}</p>
+            {facts && <p className="m-0 pr-10 text-sm break-words text-text-primary">{facts}</p>}
             {row !== 'loading' && !listed && (
-                <p role="status" className="m-0 mt-1 text-sm break-words text-text-primary">{t(ASKED_COMMUNITY_WORDS.notListed, { name })}</p>
+                <p role="status" className="m-0 mt-1 pr-10 text-sm break-words text-text-primary">{t(ASKED_COMMUNITY_WORDS.notListed, { name })}</p>
             )}
             {listed && (
                 <AskToJoin community={listed} identity={identity} asked={asked(listed.url)} onAsked={onAsked} testId="home-find-asked-ask" />

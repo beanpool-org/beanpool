@@ -50,8 +50,9 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
 
     if (!origin) return <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-no-address`}>{t(KNOCK_MESSAGES.noAddress)}</p>;
     if (said) return <p role="status" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-said`}>{said}</p>;
-    if (asked) return null;
-    if (cancelled) return <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid={`${tid}-cancelled`}>{t(KNOCK_MESSAGES.cancelled)}</p>;
+    // Cancelled within the day: no button the node would refuse, and no line either. Home's card said so for the visit the
+    // cancel was made in, and a later visit draws nothing for it (decided 29 Oct 2026, PR #2573).
+    if (asked || cancelled) return null;
 
     const send = async () => {
         const wrong = knockFormProblem({ callsign, message });
@@ -98,7 +99,7 @@ export function AskToJoin({ community, identity, asked, onAsked, testId }: {
     const fieldClass = 'w-full box-border rounded-xl border border-nature-300 dark:border-nature-600 bg-white dark:bg-nature-950 text-nature-950 dark:text-white px-3 py-2.5 text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
     return (
         <form
-            className="mt-1 mb-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-oat-50 dark:bg-nature-900"
+            className="mt-1 mb-2"
             onSubmit={(e) => { e.preventDefault(); void send(); }}
             aria-label={t('Ask to join {name}', { name: label })}
             data-testid={`${tid}-form`}

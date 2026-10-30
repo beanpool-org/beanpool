@@ -5,7 +5,7 @@
  * real lib/knock.ts sendKnock. Fails before S2: the web had no Ask to join (AskedCommunity said to open the app).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { t } from '@beanpool/core';
 import { AskToJoin } from './AskToJoin';
 import { KNOCK_MESSAGES, rememberedKnocks } from '../lib/knock';
@@ -114,14 +114,24 @@ describe('Ask to join on the web', () => {
         expect(container.innerHTML).toBe('');
     });
 
-    it('cancelled within the day: said so, with nothing to press', async () => {
+    it('cancelled within the day: nothing to press, and no line (Home said so in the visit it was cancelled: #2573)', async () => {
         localStorage.setItem('beanpool_knocks', JSON.stringify({
             pubkey: ME.publicKey,
             knocks: [{ url: 'https://riverside.example.org', name: 'Riverside', key: 'r', sentAt: new Date(Date.now() - 7_200_000).toISOString(), cancelledAt: new Date(Date.now() - 3_600_000).toISOString() }],
         }));
+        const { container } = render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);
+        await waitFor(() => expect(container.innerHTML).toBe(''));
+        expect(document.body.textContent).not.toContain(t(KNOCK_MESSAGES.cancelled));
+    });
+
+    it('a request cancelled more than a day ago: Ask to join again', async () => {
+        localStorage.setItem('beanpool_knocks', JSON.stringify({
+            pubkey: ME.publicKey,
+            knocks: [{ url: 'https://riverside.example.org', name: 'Riverside', key: 'r', sentAt: new Date(Date.now() - 50 * 3_600_000).toISOString(), cancelledAt: new Date(Date.now() - 25 * 3_600_000).toISOString() }],
+        }));
         render(<AskToJoin community={RIVERSIDE} identity={ME} asked={false} />);
-        expect(await screen.findByText(t(KNOCK_MESSAGES.cancelled))).toBeTruthy();
-        expect(screen.queryByRole('button')).toBeNull();
+        await new Promise(r => setTimeout(r, 0));
+        expect(screen.getByRole('button', { name: 'Ask to join Riverside' })).toBeTruthy();
     });
 
     it('no usable address: said so, nothing to press', () => {

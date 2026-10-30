@@ -169,3 +169,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/community/register` in `apps/server/src/routes/community.ts` called `registerMember` without `try/catch` or null checking on the returned member object.
 **Learning:** Registration domain functions can throw or return `null` on invalid callsigns or bad key inputs. Calling them without `try/catch` produces unhandled 500 server errors or returns `{ success: true, member: null }` on failure.
 **Pattern:** A domain function that returns `null` for a refusal gets a 400 with a plain sentence. Anything it THROWS is a server fault: answer 500 with `memberErrorText(e, SERVER_FAULT_TEXT)`, never 400 (see test-ticket-redeem-fault.ts, #1198). A test that pins the old answer (here test-visitors-cant-act) changes in the same PR.
+
+## 2026-10-28 - [Missing try/catch in POST /api/local/admin/alerts/test]
+**Issue:** `POST /api/local/admin/alerts/test` in `apps/server/src/routes/alerts.ts` called `sendTestAlert` without a `try/catch` block.
+**Learning:** Outbound network notifications or alert channel dispatchers can fail due to socket errors or invalid webhook targets, causing unhandled promise rejections if uncaught in route handlers.
+**Pattern:** Enclose external notification dispatches in route handlers with `try/catch` blocks that set `ctx.status = 500` and return structured JSON error bodies.

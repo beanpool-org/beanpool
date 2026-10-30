@@ -51,9 +51,15 @@ export function createAlertsRoutes(deps: RouteDeps): Router {
     // "Send a test": one message to the channel now, and what it answered.
     router.post('/api/local/admin/alerts/test', async (ctx) => {
         if (!(await ownerOnly(ctx))) return;
-        const result = await sendTestAlert();
-        ctx.set('Cache-Control', 'no-store');
-        ctx.body = { ...result, status: getAlertsStatus() };
+        try {
+            const result = await sendTestAlert();
+            ctx.set('Cache-Control', 'no-store');
+            ctx.body = { ...result, status: getAlertsStatus() };
+        } catch (e: any) {
+            console.error('[Alerts] Test alert failed:', e);
+            ctx.status = 500;
+            ctx.body = { error: 'Test alert failed: ' + (e?.message || 'unknown error') };
+        }
     });
 
     // "Seen": the security events told so far leave the banner, and a replaced server's urgent alert ends. The history

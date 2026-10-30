@@ -189,7 +189,10 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
             vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) =>
                 (f?.author || f?.online ? [] : f?.lat != null ? [] : new Promise(() => {})) as any);
             render(<MarketplacePage identity={identity} />);
-            await vi.advanceTimersByTimeAsync(0);
+            // The fill is read only once the nearby read has come back, a few ticks after the first render: the 20 s
+            // count starts there, not at render.
+            for (let i = 0; i < 100 && fillReads().length === 0; i++) await vi.advanceTimersByTimeAsync(10);
+            expect(fillReads()).toHaveLength(1);
             expect(screen.getByText('Loading...')).toBeInTheDocument();
             await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS - 1);
             expect(screen.getByText('Loading...')).toBeInTheDocument();

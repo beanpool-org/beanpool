@@ -46,7 +46,7 @@ import { resetAgentLimits, admitAgentCall, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_P
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
 import { welcomeInstructions, promptText, PROMPTS, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
 import { AGENT_TOOLS } from './agent/tools.js';
-import { AGENT_CREATE_BODY_MAX } from './agent/owner-posts.js';
+import { AGENT_CREATE_BODY_MAX, REMOVE_ALL_CONFIRM } from './agent/owner-posts.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -311,10 +311,13 @@ async function main(): Promise<void> {
         console.log('── 3. Every tool answers redacted at the source ──');
         const answers: Record<string, any> = {};
         // The posts an owner's assistant makes are their own suite's (test-mcp-owner-posts.ts): each needs photos and makes a post.
-        for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_'))) {
-            // suggest_action (S4) files one card on r1: swept like every answer; it changes no report.
+        // So are an edit and a removal of one it made (test-mcp-owner-undo.ts): this suite's assistant made none to name.
+        for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_') && x.name !== 'update_post' && x.name !== 'remove_post')) {
+            // suggest_action (S4) files one card on r1: swept like every answer; it changes no report. remove_all_i_made (S2),
+            // said out loud, answers that it removed nothing: this assistant made nothing.
             const args: Record<string, unknown> = t.name === 'report_get' ? { report_id: r1!.id }
                 : t.name === 'suggest_action' ? { kind: 'dismiss_report', report_id: r1!.id, reason: 'Swept: the reporter may be mistaken.' }
+                : t.name === 'remove_all_i_made' ? { confirm: REMOVE_ALL_CONFIRM }
                 : ['reports_list', 'knocks_list'].includes(t.name) ? { include_text: true, ...(t.name === 'reports_list' ? { status: 'all' } : {}) } : {};
             const r = await client.callTool({ name: t.name, arguments: args });
             answers[t.name] = r;

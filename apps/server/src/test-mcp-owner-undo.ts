@@ -211,8 +211,12 @@ async function main(): Promise<void> {
         const newLines = adminLines().slice(linesBefore).map(l => JSON.parse(l.metadata));
         assert(newLines.length === 1 && newLines[0].grant === A.id && newLines[0].via === 'assistant' && newLines[0].count === 3
             && [madeA[0], madeA[2], madeA[3]].every(id => newLines[0].posts.includes(id)), `one ADMIN line names the grant and the three ids (${JSON.stringify(newLines)})`);
-        const agentLine = (db.prepare("SELECT metadata FROM system_logs WHERE category = 'AGENT' AND message = 'Assistant wrote' AND metadata LIKE '%remove_all_i_made%' ORDER BY rowid DESC LIMIT 1").get() as any)?.metadata ?? '';
-        assert(removed.every(id => agentLine.includes(id)), 'the AGENT line of remove_all_i_made names the ids too');
+        // The run that removed them (the refused second run and the wrong confirm are AGENT lines too, ok false, naming none).
+        const removeAllLines = (db.prepare("SELECT metadata FROM system_logs WHERE category = 'AGENT' AND message = 'Assistant wrote' AND metadata LIKE '%remove_all_i_made%' ORDER BY rowid")
+            .all() as Array<{ metadata: string }>).map(l => JSON.parse(l.metadata));
+        const agentLine = removeAllLines.filter(l => l.ok === true);
+        assert(agentLine.length === 1 && removed.every(id => agentLine[0].removed?.includes(id)) && removeAllLines.filter(l => l.ok !== true).every(l => l.removed === undefined),
+            `the AGENT line of remove_all_i_made names the ids too; the refused runs' name none (${JSON.stringify(removeAllLines.map(l => ({ ok: l.ok, removed: l.removed?.length })))})`);
 
         // ── 7. createdVia on the author's own read only ──────────────────────────────────────────────
         const own = getPosts({ id: madeB, viewerPubkey: owner.pub })[0];

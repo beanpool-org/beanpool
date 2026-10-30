@@ -3866,5 +3866,52 @@
   "Got an idea that needs Beans? Start a project.": "Маєте ідею, для якої потрібні боби? Створіть проект.",
   "Something that keeps going and trades? Start an enterprise.": "Справа, яка діятиме постійно й вестиме обміни? Створіть підприємство.",
   "Start one with +: a chat group, a project or an enterprise.": "Створіть нову за допомогою +: чат-групу, проект або підприємство.",
-  "No projects to back yet": "Поки немає проектів для підтримки"
+  "No projects to back yet": "Поки немає проектів для підтримки",
+  "Please give a name of at least 2 characters.": "Вкажіть ім’я довжиною принаймні 2 символи.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Будь ласка, обмежте ім’я {n} символом.",
+    "few": "Будь ласка, обмежте ім’я {n} символами.",
+    "many": "Будь ласка, обмежте ім’я {n} символами.",
+    "other": "Будь ласка, обмежте ім’я {n} символу."
+  },
+  "Please say a few words about yourself.": "Напишіть кілька слів про себе.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Будь ласка, обмежте повідомлення {n} символом.",
+    "few": "Будь ласка, обмежте повідомлення {n} символами.",
+    "many": "Будь ласка, обмежте повідомлення {n} символами.",
+    "other": "Будь ласка, обмежте повідомлення {n} символу."
+  },
+  "You are already a member of this community.": "Ви вже є учасником цієї спільноти.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Люди, які просять приєднатися до цієї спільноти. Кнопка «Запросити» створює запрошення, яке може використати лише їхній ключ, і їхній застосунок знайде його автоматично. Кнопка «Не зараз» лише залишає для них статус «відповіді ще немає».",
+  "Couldn't reach your community. Check your connection and try again.": "Не вдалося зв'язатися з вашою спільнотою. Перевірте з'єднання та спробуйте ще раз.",
+  "Asked today": "Подано запит сьогодні",
+  "Asked yesterday": "Подано запит учора",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Подано запит {n} день тому",
+    "few": "Подано запит {n} дні тому",
+    "many": "Подано запит {n} днів тому",
+    "other": "Подано запит {n} днів тому"
+  },
+  "from {node}": "з {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Ви запросили {name}. Їхній застосунок знайде запрошення автоматично.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Хоче приєднатися ({n})",
+    "few": "🚪 Хочуть приєднатися ({n})",
+    "many": "🚪 Хочуть приєднатися ({n})",
+    "other": "🚪 Хочуть приєднатися ({n})"
+  },
+  "Inviting {name}...": "Запрошуємо {name}...",
+  "Invite {name}": "Запросити {name}",
+  "Declining {name}...": "Відхиляємо {name}...",
+  "Not now, {name}": "Не зараз, {name}",
+  "Invite\u0004button: let them in": "Запросити",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Запрошення ({n})",
+    "few": "🎟️ Запрошення ({n})",
+    "many": "🎟️ Запрошень ({n})",
+    "other": "🎟️ Запрошення ({n})"
+  },
+  "Ask to join {name}": "Подати запит на вступ до {name}",
+  "A few words about yourself": "Кілька слів про себе",
+  "Where you live, what you'd like to share or learn": "Де ви живете, чим хочете поділитися або чого навчитися"
 }

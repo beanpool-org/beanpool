@@ -3617,5 +3617,42 @@
   "Something that keeps going and trades? Start an enterprise.": "தொடர்ந்து இயங்கி வர்த்தகம் செய்கிறதா? ஒரு கூட்டு முயற்சியைத் தொடங்குங்கள்.",
   "Start one with +: a chat group, a project or an enterprise.": "+ மூலம் ஒன்றைத் தொடங்குங்கள்: அரட்டைக் குழு, ஒரு திட்டம் அல்லது ஒரு கூட்டு முயற்சி.",
   "No projects to back yet": "ஆதரிக்க இன்னும் திட்டங்கள் இல்லை",
-  "🤝 Your deals": "🤝 உங்கள் ஒப்பந்தங்கள்"
+  "🤝 Your deals": "🤝 உங்கள் ஒப்பந்தங்கள்",
+  "Please give a name of at least 2 characters.": "குறைந்தது 2 எழுத்துக்கள் கொண்ட பெயரை உள்ளிடவும்.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "உங்கள் பெயரை {n} எழுத்துக்குள் வைக்கவும்.",
+    "other": "உங்கள் பெயரை {n} எழுத்துகளுக்குள் வைக்கவும்."
+  },
+  "Please say a few words about yourself.": "உங்களைப் பற்றி சில வார்த்தைகளைக் கூறவும்.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "உங்கள் செய்தியை {n} எழுத்துக்குள் வைக்கவும்.",
+    "other": "உங்கள் செய்தியை {n} எழுத்துகளுக்குள் வைக்கவும்."
+  },
+  "You are already a member of this community.": "நீங்கள் ஏற்கனவே இந்தச் சமூகத்தில் உறுப்பினராக உள்ளீர்கள்.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "இந்தச் சமூகத்தில் இணையக் கோரும் நபர்கள். அழைப்பது அவர்களின் சாவி மட்டுமே பயன்படுத்தக்கூடிய ஓர் அழைப்பை உருவாக்குகிறது, அவர்களின் செயலி அதைத் தானாகவே கண்டறியும். இப்போதைக்கு வேண்டாம் என்பது \"இன்னும் பதில் வரவில்லை\" என்பதைத் தவிர வேறு எதையும் தெரிவிக்காது.",
+  "Couldn't reach your community. Check your connection and try again.": "உங்கள் சமூகத்தை இணைக்க முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்துவிட்டு மீண்டும் முயற்சிக்கவும்.",
+  "Asked today": "இன்று கேட்கப்பட்டது",
+  "Asked yesterday": "நேற்று கேட்கப்பட்டது",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "{n} நாளுக்கு முன் கேட்கப்பட்டது",
+    "other": "{n} நாட்களுக்கு முன் கேட்கப்பட்டது"
+  },
+  "from {node}": "{node}-இலிருந்து",
+  "You invited {name}. Their app will find the invite by itself.": "நீங்கள் {name}-ஐ அழைத்துள்ளீர்கள். அவர்களின் செயலி தானாகவே அழைப்பைக் கண்டறியும்.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 இணைய விரும்புகிறார் ({n})",
+    "other": "🚪 இணைய விரும்புகிறார்கள் ({n})"
+  },
+  "Inviting {name}...": "{name}-ஐ அழைக்கிறது...",
+  "Invite {name}": "{name}-ஐ அழைக்கவும்",
+  "Declining {name}...": "{name}-ஐ நிராகரிக்கிறது...",
+  "Not now, {name}": "இப்போது வேண்டாம், {name}",
+  "Invite\u0004button: let them in": "அழைக்கவும்",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ அழைப்பு ({n})",
+    "other": "🎟️ அழைப்புகள் ({n})"
+  },
+  "Ask to join {name}": "{name}-இல் இணையக் கேள்",
+  "A few words about yourself": "உங்களைப் பற்றி சில வார்த்தைகள்",
+  "Where you live, what you'd like to share or learn": "நீங்கள் எங்கு வசிக்கிறீர்கள், எதைப் பகிர அல்லது கற்றுக்கொள்ள விரும்புகிறீர்கள்"
 }

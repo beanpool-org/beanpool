@@ -15,7 +15,7 @@ No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
-On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved. After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved. After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again. In the web app, each community on the card is a link to its own page, with **Ask to join** under it. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app.
 
 Not in the global community yet? Tap the bean at the top left and, under **Your communities**, tap **Global community**, then join it with the account you have: see "More than one community". With no account yet, tap **Explore BeanPool worldwide** on the app's first screen: see "Joining BeanPool".
 
@@ -76,7 +76,7 @@ From there you can **Ask to join** that community, **Get the app**, or **Look ar
 
 People can ask to join your community from the global community. When someone asks, owners and admins get a notification (**Someone asked to join your community.**) and a count on **Home** under **Needs you** (**2 people asked to join**). In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if nobody answers within 3 days, the count is shown to every member on **Home** so someone can welcome them.
 
-Tapping the line or the notification opens them in the phone app. Or tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. Requests are answered in the phone app: the web app doesn't list them.
+Tapping the line or the notification opens them in the phone app. Or tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. In the web app, open **People**, then **Invites**: the same list, with the same two buttons.
 
 - **Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.
 - **Not now:** they are not told. They keep seeing "no answer yet", and can't ask again for 30 days.

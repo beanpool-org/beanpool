@@ -3618,5 +3618,42 @@
   "Something that keeps going and trades? Start an enterprise.": "کچھ ایسا جو مسلسل چلتا رہے اور کاروبار کرے؟ انٹرپرائز شروع کریں۔",
   "Start one with +: a chat group, a project or an enterprise.": "+ کے ساتھ شروع کریں: ایک چیٹ گروپ، پروجیکٹ یا انٹرپرائز۔",
   "No projects to back yet": "حمایت کے لیے ابھی کوئی پروجیکٹ نہیں ہے",
-  "🤝 Your deals": "🤝 آپ کے معاہدے"
+  "🤝 Your deals": "🤝 آپ کے معاہدے",
+  "Please give a name of at least 2 characters.": "براہ کرم کم از کم 2 حروف پر مشتمل نام درج کریں۔",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "براہ کرم اپنا نام {n} حرف تک رکھیں۔",
+    "other": "براہ کرم اپنا نام {n} حروف تک رکھیں۔"
+  },
+  "Please say a few words about yourself.": "براہ کرم اپنے بارے میں چند الفاظ بتائیں۔",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "براہ کرم اپنا پیغام {n} حرف تک رکھیں۔",
+    "other": "براہ کرم اپنا پیغام {n} حروف تک رکھیں۔"
+  },
+  "You are already a member of this community.": "آپ پہلے ہی اس کمیونٹی کے رکن ہیں۔",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "وہ لوگ جو اس کمیونٹی میں شامل ہونے کی درخواست کر رہے ہیں۔ 'دعوت دیں' سے ایسی دعوت بنتی ہے جسے صرف ان کی کلید استعمال کر سکتی ہے، اور ان کی ایپ اسے خود تلاش کر لیتی ہے۔ 'ابھی نہیں' انہیں صرف یہی بتاتا ہے کہ \"ابھی تک کوئی جواب نہیں آیا\"۔",
+  "Couldn't reach your community. Check your connection and try again.": "آپ کی کمیونٹی سے رابطہ نہیں ہو سکا۔ اپنا انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+  "Asked today": "آج پوچھا گیا",
+  "Asked yesterday": "کل پوچھا گیا",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "{n} دن پہلے پوچھا گیا",
+    "other": "{n} دن پہلے پوچھا گیا"
+  },
+  "from {node}": "{node} کی طرف سے",
+  "You invited {name}. Their app will find the invite by itself.": "آپ نے {name} کو دعوت دی۔ ان کی ایپ خود ہی دعوت تلاش کر لے گی۔",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 شامل ہونا چاہتے ہیں ({n})",
+    "other": "🚪 شامل ہونا چاہتے ہیں ({n})"
+  },
+  "Inviting {name}...": "{name} کو دعوت دی جا رہی ہے...",
+  "Invite {name}": "{name} کو دعوت دیں",
+  "Declining {name}...": "{name} کی درخواست رد کی جا رہی ہے...",
+  "Not now, {name}": "ابھی نہیں، {name}",
+  "Invite\u0004button: let them in": "دعوت دیں",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ دعوت نامے ({n})",
+    "other": "🎟️ دعوت نامے ({n})"
+  },
+  "Ask to join {name}": "{name} میں شامل ہونے کی درخواست کریں",
+  "A few words about yourself": "اپنے بارے میں چند الفاظ",
+  "Where you live, what you'd like to share or learn": "آپ کہاں رہتے ہیں، کیا شیئر کرنا یا سیکھنا چاہتے ہیں"
 }

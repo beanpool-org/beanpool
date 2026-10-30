@@ -3619,5 +3619,42 @@
   "Got an idea that needs Beans? Start a project.": "Une idée qui a besoin de haricots ? Lancez un projet.",
   "Something that keeps going and trades? Start an enterprise.": "Un projet durable qui effectue des échanges ? Lancez une entreprise.",
   "Start one with +: a chat group, a project or an enterprise.": "Créez-en un avec + : un groupe de discussion, un projet ou une entreprise.",
-  "No projects to back yet": "Aucun projet à soutenir pour le moment"
+  "No projects to back yet": "Aucun projet à soutenir pour le moment",
+  "Please give a name of at least 2 characters.": "Veuillez indiquer un nom d'au moins 2 caractères.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Veuillez limiter votre nom à {n} caractère.",
+    "other": "Veuillez limiter votre nom à {n} caractères."
+  },
+  "Please say a few words about yourself.": "Veuillez écrire quelques mots sur vous.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Veuillez limiter votre message à {n} caractère.",
+    "other": "Veuillez limiter votre message à {n} caractères."
+  },
+  "You are already a member of this community.": "Vous êtes déjà membre de cette communauté.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Personnes demandant à rejoindre cette communauté. Inviter génère une invitation utilisable uniquement avec leur clé, et leur application la trouve automatiquement. Pas maintenant indique simplement « pas encore de réponse ».",
+  "Couldn't reach your community. Check your connection and try again.": "Impossible de joindre votre communauté. Vérifiez votre connexion et réessayez.",
+  "Asked today": "Demande envoyée aujourd'hui",
+  "Asked yesterday": "Demande envoyée hier",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Demande envoyée il y a {n} jour",
+    "other": "Demande envoyée il y a {n} jours"
+  },
+  "from {node}": "de {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Vous avez invité {name}. Son application trouvera l'invitation automatiquement.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Demande à rejoindre ({n})",
+    "other": "🚪 Demandes à rejoindre ({n})"
+  },
+  "Inviting {name}...": "Invitation de {name}...",
+  "Invite {name}": "Inviter {name}",
+  "Declining {name}...": "Refus de {name}...",
+  "Not now, {name}": "Pas maintenant, {name}",
+  "Invite\u0004button: let them in": "Inviter",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Invitations ({n})",
+    "other": "🎟️ Invitations ({n})"
+  },
+  "Ask to join {name}": "Demander à rejoindre {name}",
+  "A few words about yourself": "Quelques mots sur vous",
+  "Where you live, what you'd like to share or learn": "Où vous vivez, ce que vous aimeriez partager ou apprendre"
 }

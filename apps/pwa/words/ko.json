@@ -3494,5 +3494,37 @@
   "Got an idea that needs Beans? Start a project.": "콩이 필요한 좋은 아이디어가 있나요? 프로젝트를 시작해 보세요.",
   "Something that keeps going and trades? Start an enterprise.": "지속적으로 거래하며 운영하고 싶다면? 기업을 시작해 보세요.",
   "Start one with +: a chat group, a project or an enterprise.": "+ 버튼으로 대화 모임, 프로젝트 또는 기업을 시작해 보세요.",
-  "No projects to back yet": "아직 후원할 프로젝트가 없어요"
+  "No projects to back yet": "아직 후원할 프로젝트가 없어요",
+  "Please give a name of at least 2 characters.": "이름은 2자 이상 입력해 주세요.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "other": "이름은 {n}자 이하로 입력해 주세요."
+  },
+  "Please say a few words about yourself.": "간단한 자기소개를 입력해 주세요.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "other": "메시지는 {n}자 이하로 입력해 주세요."
+  },
+  "You are already a member of this community.": "이미 이 커뮤니티의 멤버예요.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "이 커뮤니티에 가입을 신청한 사람들이에요. '초대'를 누르면 상대방의 키만 쓸 수 있는 초대장이 만들어져 상대방 앱이 알아서 찾아요. '나중에'를 누르면 \"아직 응답이 없어요\" 외에는 아무것도 전달되지 않아요.",
+  "Couldn't reach your community. Check your connection and try again.": "커뮤니티에 연결할 수 없어요. 네트워크 연결을 확인하고 다시 시도해 주세요.",
+  "Asked today": "오늘 신청함",
+  "Asked yesterday": "어제 신청함",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "other": "{n}일 전 신청함"
+  },
+  "from {node}": "{node}에서",
+  "You invited {name}. Their app will find the invite by itself.": "{name}님을 초대했어요. 상대방 앱이 알아서 초대장을 찾을 거예요.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "other": "🚪 가입 요청 ({n})"
+  },
+  "Inviting {name}...": "{name}님 초대 중...",
+  "Invite {name}": "{name}님 초대",
+  "Declining {name}...": "{name}님 거절 중...",
+  "Not now, {name}": "나중에, {name}님",
+  "Invite\u0004button: let them in": "초대",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "other": "🎟️ 초대 ({n})"
+  },
+  "Ask to join {name}": "{name} 참여 신청",
+  "A few words about yourself": "간단한 자기소개",
+  "Where you live, what you'd like to share or learn": "사는 곳, 나누고 싶거나 배우고 싶은 것"
 }

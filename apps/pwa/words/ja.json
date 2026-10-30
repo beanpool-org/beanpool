@@ -3494,5 +3494,37 @@
   "Something that keeps going and trades? Start an enterprise.": "継続して取引を行う活動ですか？事業体を立ち上げましょう。",
   "Start one with +: a chat group, a project or an enterprise.": "「+」でグループを立ち上げましょう：チャットグループ、プロジェクト、または事業体。",
   "No projects to back yet": "応援できるプロジェクトはまだありません",
-  "🤝 Your deals": "🤝 あなたの取引"
+  "🤝 Your deals": "🤝 あなたの取引",
+  "Please give a name of at least 2 characters.": "名前は2文字以上で入力してください。",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "other": "名前は{n}文字以内にしてください。"
+  },
+  "Please say a few words about yourself.": "自己紹介を一言入力してください。",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "other": "メッセージは{n}文字以内にしてください。"
+  },
+  "You are already a member of this community.": "あなたはこのコミュニティのメンバーにすでになっています。",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "このコミュニティへの参加を申請している人たち。「招待」を押すと、その人の鍵だけが使える招待が作成され、相手のアプリが自動で見つけます。「今はしない」を選ぶと、相手には「まだ返答はありません」とだけ表示されます。",
+  "Couldn't reach your community. Check your connection and try again.": "コミュニティに接続できませんでした。通信環境を確認してもう一度お試しください。",
+  "Asked today": "今日申請",
+  "Asked yesterday": "昨日申請",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "other": "{n}日前に申請"
+  },
+  "from {node}": "{node}から",
+  "You invited {name}. Their app will find the invite by itself.": "{name}さんを招待しました。相手のアプリが自動的に招待を見つけます。",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "other": "🚪 参加申請（{n}）"
+  },
+  "Inviting {name}...": "{name}さんを招待中...",
+  "Invite {name}": "{name}さんを招待",
+  "Declining {name}...": "{name}さんを保留中...",
+  "Not now, {name}": "今はしない、{name}さん",
+  "Invite\u0004button: let them in": "招待",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "other": "🎟️ 招待（{n}）"
+  },
+  "Ask to join {name}": "{name}への参加を申請",
+  "A few words about yourself": "簡単な自己紹介",
+  "Where you live, what you'd like to share or learn": "お住まいの地域、共有したいことや学びたいことなど"
 }

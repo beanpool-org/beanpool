@@ -3618,5 +3618,42 @@
   "Something that keeps going and trades? Start an enterprise.": "Etwas Dauerhaftes, das handelt? Starte einen Betrieb.",
   "Start one with +: a chat group, a project or an enterprise.": "Starte eine mit +: eine Chatgruppe, ein Projekt oder einen Betrieb.",
   "No projects to back yet": "Noch keine Projekte zum Unterstützen",
-  "🤝 Your deals": "🤝 Deine Vereinbarungen"
+  "🤝 Your deals": "🤝 Deine Vereinbarungen",
+  "Please give a name of at least 2 characters.": "Bitte gib einen Namen mit mindestens 2 Zeichen ein.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Bitte beschränke deinen Namen auf {n} Zeichen.",
+    "other": "Bitte beschränke deinen Namen auf {n} Zeichen."
+  },
+  "Please say a few words about yourself.": "Bitte sage ein paar Worte über dich.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Bitte beschränke deine Nachricht auf {n} Zeichen.",
+    "other": "Bitte beschränke deine Nachricht auf {n} Zeichen."
+  },
+  "You are already a member of this community.": "Du bist bereits Mitglied dieser Community.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Personen, die dieser Community beitreten möchten. „Einladen“ erstellt eine Einladung, die nur ihr Schlüssel nutzen kann, und ihre App findet sie automatisch. „Nicht jetzt“ teilt ihnen lediglich mit: „Noch keine Antwort“.",
+  "Couldn't reach your community. Check your connection and try again.": "Deine Community konnte nicht erreicht werden. Prüfe deine Verbindung und versuche es erneut.",
+  "Asked today": "Heute angefragt",
+  "Asked yesterday": "Gestern angefragt",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Vor {n} Tag angefragt",
+    "other": "Vor {n} Tagen angefragt"
+  },
+  "from {node}": "von {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Du hast {name} eingeladen. Die App der Person findet die Einladung automatisch.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Möchte beitreten ({n})",
+    "other": "🚪 Möchten beitreten ({n})"
+  },
+  "Inviting {name}...": "{name} wird eingeladen...",
+  "Invite {name}": "{name} einladen",
+  "Declining {name}...": "{name} wird abgelehnt...",
+  "Not now, {name}": "Nicht jetzt, {name}",
+  "Invite\u0004button: let them in": "Einladen",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Einladung ({n})",
+    "other": "🎟️ Einladungen ({n})"
+  },
+  "Ask to join {name}": "Beitritt zu {name} anfragen",
+  "A few words about yourself": "Ein paar Worte über dich",
+  "Where you live, what you'd like to share or learn": "Wo du wohnst, was du teilen oder lernen möchtest"
 }

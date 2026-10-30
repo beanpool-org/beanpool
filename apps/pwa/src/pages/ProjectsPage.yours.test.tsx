@@ -1,10 +1,11 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { ProjectsPage } from './ProjectsPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, Group, YourChat } from '../lib/api';
-import { getTreasuries, getGroups, getYourGroups } from '../lib/api';
+import { getTreasuries, getGroups, getYourGroups, getCommunityMe } from '../lib/api';
+import { resetReaderFeaturesOnce } from '../lib/features';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { resolveAvatarUrl } from '../lib/avatar';
 
@@ -43,6 +44,7 @@ vi.mock('../lib/api', () => ({
     getAllMembers: vi.fn(async () => []),
     getGroups: vi.fn(async () => []),
     getYourGroups: vi.fn(async () => ({ items: [] })),
+    getCommunityMe: vi.fn(async () => ({ tier: 'member', features: null })),
     createEnterprise: vi.fn(async () => ({ success: true })),
 }));
 
@@ -58,6 +60,7 @@ const otherMemberKey = 'other-public-key-2222';
 describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.1 §3.5, §5 S4)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        resetReaderFeaturesOnce();
         vi.mocked(communityInfoOnce).mockResolvedValue({
             memberCount: 3,
             postCount: 0,
@@ -66,6 +69,14 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             profile: 'local',
             features: { beans: true, enterprises: true, decisions: true } as any,
         });
+        vi.mocked(getTreasuries).mockResolvedValue({ treasuries: [] });
+        vi.mocked(getGroups).mockResolvedValue([]);
+        vi.mocked(getYourGroups).mockResolvedValue({ items: [] });
+        vi.mocked(getCommunityMe).mockResolvedValue({ tier: 'member', features: null } as any);
+    });
+
+    afterEach(() => {
+        resetReaderFeaturesOnce();
     });
 
     it('page title is "Commons" (drops "The" and the 🌱 before it)', async () => {
@@ -82,8 +93,10 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
     it('four chips in the phone order, and no "My groups" chip', async () => {
         render(<ProjectsPage identity={me} />);
         const chipsContainer = await screen.findByTestId('group-filter-chips');
-        const chipLabels = within(chipsContainer).getAllByRole('button').map(b => b.textContent?.trim());
-        expect(chipLabels).toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        await waitFor(() => {
+            const chipLabels = within(chipsContainer).getAllByRole('button').map(b => b.textContent?.trim());
+            expect(chipLabels).toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        });
         expect(screen.queryByRole('button', { name: 'My groups' })).toBeNull();
     });
 
@@ -99,8 +112,10 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
         render(<ProjectsPage identity={me} />);
         const chipsContainer = await screen.findByTestId('group-filter-chips');
-        const chipLabels = within(chipsContainer).getAllByRole('button').map(b => b.textContent?.trim());
-        expect(chipLabels).toEqual(['All', '👥 Chat groups']);
+        await waitFor(() => {
+            const chipLabels = within(chipsContainer).getAllByRole('button').map(b => b.textContent?.trim());
+            expect(chipLabels).toEqual(['All', '👥 Chat groups']);
+        });
         expect(screen.queryByRole('button', { name: '🌱 Projects' })).toBeNull();
         expect(screen.queryByRole('button', { name: '🏛️ Enterprises' })).toBeNull();
     });
@@ -211,6 +226,8 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         expect(yoursBlock).toBeInTheDocument();
 
         // Lead kept project is first, then keeper enterprise
+        await within(yoursBlock).findByText('Shade House');
+        await within(yoursBlock).findByText('Community Eggs');
         const yoursTitles = within(yoursBlock).getAllByRole('heading', { level: 4 }).map(h => h.textContent?.trim());
         expect(yoursTitles).toEqual(['Shade House', 'Community Eggs']);
 
@@ -233,7 +250,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
         // Unkept enterprise is in Find, NOT in Yours
         expect(within(yoursBlock).queryByText('Community Bakery')).toBeNull();
-        expect(screen.getByText('Community Bakery')).toBeInTheDocument();
+        expect(await screen.findByText('Community Bakery')).toBeInTheDocument();
     });
 
     it('a group with viewerRole is under Yours, not in Find, and opens chat', async () => {
@@ -287,12 +304,12 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         render(<ProjectsPage identity={me} onNavigate={onNavigate} />);
 
         const yoursBlock = await screen.findByTestId('commons-yours');
-        expect(within(yoursBlock).getByText('Garden Crew')).toBeInTheDocument();
+        expect(await within(yoursBlock).findByText('Garden Crew')).toBeInTheDocument();
         expect(within(yoursBlock).queryByText('Pottery Guild')).toBeNull();
 
         // In Find, Pottery Guild is present, but Garden Crew is NOT
-        const findSection = screen.getByTestId('commons-chat-groups');
-        expect(within(findSection).getByText('Pottery Guild')).toBeInTheDocument();
+        const findSection = await screen.findByTestId('commons-chat-groups');
+        expect(await within(findSection).findByText('Pottery Guild')).toBeInTheDocument();
         expect(within(findSection).queryByText('Garden Crew')).toBeNull();
 
         // Clicking the group in Yours opens its chat
@@ -302,22 +319,22 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
     it('Find heading changes dynamically with the chip', async () => {
         render(<ProjectsPage identity={me} />);
-        await waitFor(() => expect(screen.getByTestId('group-filter-chips')).toBeInTheDocument());
+        const chipsContainer = await screen.findByTestId('group-filter-chips');
 
         // Default 'All' chip
-        expect(screen.getByRole('heading', { name: 'Groups, projects and enterprises here' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Groups, projects and enterprises here' })).toBeInTheDocument();
 
         // Click '🌱 Projects'
-        fireEvent.click(screen.getByRole('button', { name: '🌱 Projects' }));
-        expect(screen.getByRole('heading', { name: 'Projects to back' })).toBeInTheDocument();
+        fireEvent.click(await within(chipsContainer).findByRole('button', { name: '🌱 Projects' }));
+        expect(await screen.findByRole('heading', { name: 'Projects to back' })).toBeInTheDocument();
 
         // Click '🏛️ Enterprises'
-        fireEvent.click(screen.getByRole('button', { name: '🏛️ Enterprises' }));
-        expect(screen.getByRole('heading', { name: 'Enterprises here' })).toBeInTheDocument();
+        fireEvent.click(await within(chipsContainer).findByRole('button', { name: '🏛️ Enterprises' }));
+        expect(await screen.findByRole('heading', { name: 'Enterprises here' })).toBeInTheDocument();
 
         // Click '👥 Chat groups'
-        fireEvent.click(screen.getByRole('button', { name: '👥 Chat groups' }));
-        expect(screen.getByRole('heading', { name: 'Groups you could join' })).toBeInTheDocument();
+        fireEvent.click(await within(chipsContainer).findByRole('button', { name: '👥 Chat groups' }));
+        expect(await screen.findByRole('heading', { name: 'Groups you could join' })).toBeInTheDocument();
     });
 
     it('Yours empty line variants (Beans/enterprises on vs off)', async () => {
@@ -361,7 +378,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
         render(<ProjectsPage identity={me} />);
         const findSection = await screen.findByTestId('commons-chat-groups');
-        expect(within(findSection).getByText('Chess Club')).toBeInTheDocument();
+        expect(await within(findSection).findByText('Chess Club')).toBeInTheDocument();
         expect(within(findSection).getByText('INVITED')).toBeInTheDocument();
     });
 
@@ -384,7 +401,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
         render(<ProjectsPage identity={me} />);
         const findSection = await screen.findByTestId('commons-chat-groups');
-        expect(within(findSection).getByText('Debate Society')).toBeInTheDocument();
+        expect(await within(findSection).findByText('Debate Society')).toBeInTheDocument();
         expect(within(findSection).getByText('Pending')).toBeInTheDocument();
         expect(within(findSection).queryByText('MEMBER')).toBeNull();
         expect(within(screen.getByTestId('commons-yours')).queryByText('Debate Society')).toBeNull();
@@ -411,11 +428,11 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         render(<ProjectsPage identity={me} onOpenTreasury={onOpenTreasury} />);
 
         const yoursBlock = await screen.findByTestId('commons-yours');
-        expect(within(yoursBlock).getByText('Shade House')).toBeInTheDocument();
+        expect(await within(yoursBlock).findByText('Shade House')).toBeInTheDocument();
         expect(within(yoursBlock).getByText('Leader')).toBeInTheDocument();
         expect(within(yoursBlock).getByText('Project')).toBeInTheDocument();
 
-        const manageBtn = within(yoursBlock).getByRole('button', { name: /Manage Shade House/i });
+        const manageBtn = await within(yoursBlock).findByRole('button', { name: /Manage Shade House/i });
         expect(manageBtn).toBeInTheDocument();
         fireEvent.click(manageBtn);
         expect(onOpenTreasury).toHaveBeenCalledWith('treasury-shade', 'manage');
@@ -506,8 +523,8 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
             joinPolicy: 'open', memberCount: 5, viewerRole: 'convenor', viewerStatus: 'active', description: 'Gardening team',
             createdAt: '2026-01-01T00:00:00Z',
         };
-        vi.mocked(getGroups).mockResolvedValue([myGroup]);
-        vi.mocked(getYourGroups).mockRejectedValue(new Error('Network error'));
+        vi.mocked(getGroups).mockResolvedValueOnce([myGroup]);
+        vi.mocked(getYourGroups).mockRejectedValueOnce(new Error('Network error'));
         render(<ProjectsPage identity={me} />);
         const yoursBlock = await screen.findByTestId('commons-yours');
         expect(await within(yoursBlock).findByText('Could not load your groups.')).toBeInTheDocument();
@@ -515,8 +532,8 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
     });
 
     it('your-groups empty while /api/groups fails: Yours says "Nothing of yours yet", not "Could not load your groups."', async () => {
-        vi.mocked(getGroups).mockRejectedValue(new Error('Network error'));
-        vi.mocked(getYourGroups).mockResolvedValue({ items: [] });
+        vi.mocked(getGroups).mockRejectedValueOnce(new Error('Network error'));
+        vi.mocked(getYourGroups).mockResolvedValueOnce({ items: [] });
         render(<ProjectsPage identity={me} />);
         const yoursBlock = await screen.findByTestId('commons-yours');
         expect(await within(yoursBlock).findByText(/Nothing of yours yet/)).toBeInTheDocument();
@@ -621,13 +638,13 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         const yoursBlock = await screen.findByTestId('commons-yours');
 
         // Eggs card accessible name includes PAUSED, Enterprise, Lead keeper
-        const eggsCard = within(yoursBlock).getByRole('button', {
+        const eggsCard = await within(yoursBlock).findByRole('button', {
             name: 'Community Eggs, PAUSED, Enterprise, Lead keeper',
         });
         expect(eggsCard).toBeInTheDocument();
 
         // Shade House card accessible name includes FUNDED, Project, Leader
-        const shadeCard = within(yoursBlock).getByRole('button', {
+        const shadeCard = await within(yoursBlock).findByRole('button', {
             name: 'Shade House, FUNDED, Project, Leader',
         });
         expect(shadeCard).toBeInTheDocument();
@@ -636,15 +653,15 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
     it('Yours heading is an h2 and chips have type="button" with aria-pressed', async () => {
         render(<ProjectsPage identity={me} />);
         const yoursBlock = await screen.findByTestId('commons-yours');
-        const heading = within(yoursBlock).getByRole('heading', { level: 2, name: 'Yours' });
+        const heading = await within(yoursBlock).findByRole('heading', { level: 2, name: 'Yours' });
         expect(heading).toBeInTheDocument();
 
-        const chipsContainer = screen.getByTestId('group-filter-chips');
-        const allChip = within(chipsContainer).getByRole('button', { name: 'All' });
+        const chipsContainer = await screen.findByTestId('group-filter-chips');
+        const allChip = await within(chipsContainer).findByRole('button', { name: 'All' });
         expect(allChip).toHaveAttribute('type', 'button');
         expect(allChip).toHaveAttribute('aria-pressed', 'true');
 
-        const projectsChip = within(chipsContainer).getByRole('button', { name: '🌱 Projects' });
+        const projectsChip = await within(chipsContainer).findByRole('button', { name: '🌱 Projects' });
         expect(projectsChip).toHaveAttribute('type', 'button');
         expect(projectsChip).toHaveAttribute('aria-pressed', 'false');
     });
@@ -703,7 +720,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
         render(<ProjectsPage identity={me} />);
         const yoursBlock = await screen.findByTestId('commons-yours');
-        const card = within(yoursBlock).getByRole('button', {
+        const card = await within(yoursBlock).findByRole('button', {
             name: 'Suspended Lead Org, Enterprise, Keeper',
         });
         expect(card).toBeInTheDocument();
@@ -733,7 +750,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
 
         render(<ProjectsPage identity={me} />);
         const yoursBlock = await screen.findByTestId('commons-yours');
-        const card = within(yoursBlock).getByRole('button', {
+        const card = await within(yoursBlock).findByRole('button', {
             name: 'Bad Avatar Org, Enterprise, Keeper',
         });
         expect(card).toBeInTheDocument();

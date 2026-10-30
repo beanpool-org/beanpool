@@ -239,8 +239,12 @@ async function main(): Promise<void> {
         const copied = (payload?.posts ?? []).find((p: any) => p.id === o?.postId);
         assert(copied?.createdVia === `assistant:${grantId}` && (payload?.posts ?? []).filter((p: any) => p.createdVia).length === 1,
             `the standby copy's payload carries created_via for it, and for no other post (${copied?.createdVia})`);
-        const asRead = JSON.stringify(getPosts({ id: o?.postId, viewerPubkey: owner.pub }));
-        assert(asRead.includes('Quincefield') && !/created_?via|assistant:/i.test(asRead), 'the listings an app reads never carry it');
+        // Slice S2 (design §2.8) narrows "never in an app's read" to "never to anyone but its author": the owner's own read
+        // carries it ("via assistant" on their own listing), another member's never.
+        const asRead = JSON.stringify(getPosts({ id: o?.postId, viewerPubkey: owner2.pub }));
+        const ownRead = getPosts({ id: o?.postId, viewerPubkey: owner.pub })[0];
+        assert(asRead.includes('Quincefield') && !/created_?via|assistant:/i.test(asRead) && ownRead?.createdVia === `assistant:${grantId}`,
+            `another member's read never carries it; the author's own does (${ownRead?.createdVia})`);
 
         // ── 1b. Through the node's own image store, disk and S3 ─────────────────────────────────────
         type PhotoRow = { storage_key: string | null; photo_data: string | null };

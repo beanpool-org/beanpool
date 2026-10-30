@@ -941,6 +941,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        destructive: true,
         inputSchema: { type: 'object', properties: POST_ID_PROP, required: ['post_id'], additionalProperties: false },
         outputSchema: REMOVED_OUT,
         run: (grant, args) => removeMade(grant, args),
@@ -954,6 +955,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        destructive: true,
         inputSchema: {
             type: 'object',
             properties: { confirm: { type: 'string', const: REMOVE_ALL_CONFIRM, description: `exactly "${REMOVE_ALL_CONFIRM}"` } },

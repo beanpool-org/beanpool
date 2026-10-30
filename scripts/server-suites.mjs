@@ -210,6 +210,8 @@ export const SUITES = [
     'test-admin-mcp-suggestions',
     'test-admin-mcp-oauth',
     'test-mcp-owner-posts',
+    'test-mcp-owner-reads',
+    'test-mcp-owner-undo',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',

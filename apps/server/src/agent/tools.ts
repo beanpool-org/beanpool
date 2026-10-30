@@ -80,6 +80,8 @@ export interface AgentTool {
     /** Only a grant ticked "May post for me" has it (agent/owner-posts.ts): listed and callable. */
     posts?: boolean;
     write?: boolean;
+    /** Takes something down (remove_post, remove_all_i_made): the MCP annotation says so. */
+    destructive?: boolean;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
     /** A create (agent/owner-posts.ts) answers once its photos are resized; every other tool answers at once. */

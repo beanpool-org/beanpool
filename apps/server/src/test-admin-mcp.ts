@@ -275,22 +275,26 @@ async function main(): Promise<void> {
         console.log('── 2. tools/list and prompts/list ──');
         const tools = (await client.listTools()).tools;
         const names = tools.map(t => t.name).sort();
-        assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'community_totals', 'connection_info', 'create_enterprise_listing', 'create_event',
-            'create_need', 'create_offer', 'knocks_list', 'my_enterprises', 'node_overview', 'report_get', 'reports_list', 'safety_settings', 'server_health',
-            'suggest_action', 'take_backup']),
-        `an owner's assistant has the ten S1 tools, S4's suggest_action and the owner's posts (MCP-OWNER-POSTS) (${names.join(', ')})`);
+        assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'categories', 'community_area', 'community_totals', 'connection_info',
+            'create_enterprise_listing', 'create_event', 'create_need', 'create_offer', 'knocks_list', 'listings_search', 'my_enterprises', 'my_posts',
+            'node_overview', 'remove_all_i_made', 'remove_post', 'report_get', 'reports_list', 'safety_settings', 'server_health',
+            'suggest_action', 'take_backup', 'update_post']),
+        `an owner's assistant has the ten S1 tools, S4's suggest_action, the owner's posts (MCP-OWNER-POSTS) and S2's reads and undo (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
-        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'knocks_list,my_enterprises,report_get,reports_list',
+        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,listings_search,my_enterprises,my_posts,report_get,reports_list',
             'the tools that can return member text say it is data');
         const tb = tools.find(t => t.name === 'take_backup');
         const sa = tools.find(t => t.name === 'suggest_action');
         // The posts an owner's assistant makes (agent/owner-posts.ts): writes, neither idempotent nor destructive.
         const creates = tools.filter(t => t.name.startsWith('create_'));
+        const S2_WRITES = ['update_post', 'remove_post', 'remove_all_i_made'];
         assert(tb?.annotations?.readOnlyHint === false && tb?.annotations?.idempotentHint === true && tb?.annotations?.destructiveHint === false
             && sa?.annotations?.readOnlyHint === false && sa?.annotations?.idempotentHint === false && sa?.annotations?.destructiveHint === false
             && creates.length === 4 && creates.every(t => t.annotations?.readOnlyHint === false && t.annotations?.idempotentHint === false && t.annotations?.destructiveHint === false)
-            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && !t.name.startsWith('create_')).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false),
-        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action and the four creates are writes, neither idempotent nor destructive');
+            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && !t.name.startsWith('create_') && !S2_WRITES.includes(t.name)).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false)
+            // Slice S2: an edit is a write, not destructive; the two removals are destructive.
+            && S2_WRITES.every(n => { const a = tools.find(t => t.name === n)?.annotations; return a?.readOnlyHint === false && a?.idempotentHint === false && a?.destructiveHint === (n !== 'update_post'); }),
+        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action, the four creates and update_post are writes, neither idempotent nor destructive; remove_post and remove_all_i_made are destructive');
         const prompts = (await client.listPrompts()).prompts.map(p => p.name).sort();
         assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'draft-announcement', 'safety-settings-check', 'summarise-reports', 'triage-report',
             'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu (${prompts.join(', ')})`);

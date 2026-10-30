@@ -17,7 +17,7 @@ import { recoveryWordsMatchSeed, sealSeedToCopyKey, toEd25519Seed } from '@beanp
 import { hexToBytes } from './crypto';
 import { getMnemonic, type BeanPoolIdentity } from './identity';
 import { signedDelete, signedPost } from './node-post';
-import { isGlobalCommunity } from './global-join-existing';
+import { GLOBAL_NODE_URL } from './global-node-url';
 import type { RecoveryCopiesRule } from './vault-config';
 
 /** What the community's server says about this member's community copy. */
@@ -38,7 +38,7 @@ export const COMMUNITY_COPY_TEXT = {
 
 /** Whether this phone offers the community path at `url` under `rule`: "this server", and never the global community. */
 export function offersCommunityCopy(url: string | null | undefined, rule: RecoveryCopiesRule | null | undefined): boolean {
-    return !!url && rule === 'server' && !isGlobalCommunity(url);
+    return !!url && rule === 'server' && url.trim().replace(/\/+$/, '').toLowerCase() !== GLOBAL_NODE_URL;
 }
 
 async function answerOf(res: Response): Promise<any> {

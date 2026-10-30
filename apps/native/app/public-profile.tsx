@@ -552,10 +552,6 @@ export default function PublicProfileScreen() {
 
         const localUpdate: any = {
             callsign: nameToUse,
-            avatar_url: viewerProfile?.avatar_url || null,
-            bio: viewerProfile?.bio || '',
-            contact_value: viewerProfile?.contact_value || '',
-            contact_visibility: viewerProfile?.contact_visibility || 'hidden',
             archetype: jsonStr,
         };
         await updateMemberProfile(identity.publicKey, localUpdate);
@@ -568,7 +564,7 @@ export default function PublicProfileScreen() {
             if (url) {
                 const payloadObj: any = {
                     publicKey: identity.publicKey,
-                    callsign: nameToUse,
+                    ...(nameToUse ? { callsign: nameToUse } : {}),
                     archetype: publicArchetype,
                 };
                 const bodyString = JSON.stringify(payloadObj);

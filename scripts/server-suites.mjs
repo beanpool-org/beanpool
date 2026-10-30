@@ -70,6 +70,7 @@ export const SUITES = [
     'test-purge-during-rekey',
     'test-rekey-cancel',
     'test-rekey-redeem',
+    'test-bring-back',
     'test-removed-member-delete',
     'test-keeper-deposit',
     'test-keeper-routes',

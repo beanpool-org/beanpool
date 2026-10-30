@@ -3499,5 +3499,37 @@
   "Cancel Initiative & Refund Backers": "Hủy sáng kiến & hoàn tiền cho người ủng hộ",
   "Second pause in 30 days. The last vote said No.": "Lần tạm dừng thứ hai trong 30 ngày. Lần bỏ phiếu trước có kết quả Không.",
   "Second pause in 30 days. Too few members voted on the last one.": "Lần tạm dừng thứ hai trong 30 ngày. Lần bỏ phiếu trước có quá ít thành viên tham gia.",
-  "Second pause in 30 days. The last vote was stopped before it closed.": "Lần tạm dừng thứ hai trong 30 ngày. Lần bỏ phiếu trước đã bị dừng trước khi kết thúc."
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Lần tạm dừng thứ hai trong 30 ngày. Lần bỏ phiếu trước đã bị dừng trước khi kết thúc.",
+  "Please give a name of at least 2 characters.": "Vui lòng nhập tên có ít nhất 2 ký tự.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "other": "Vui lòng giữ tên trong vòng {n} ký tự."
+  },
+  "Please say a few words about yourself.": "Vui lòng chia sẻ đôi lời về bản thân.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "other": "Vui lòng giữ tin nhắn trong vòng {n} ký tự."
+  },
+  "You are already a member of this community.": "Bạn đã là thành viên của cộng đồng này.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Những người đang xin tham gia cộng đồng này. Nút Mời sẽ tạo một lời mời mà chỉ khóa của họ mới dùng được, và ứng dụng của họ sẽ tự tìm thấy lời mời. Nút Để sau chỉ thông báo cho họ rằng \"chưa có phản hồi\".",
+  "Couldn't reach your community. Check your connection and try again.": "Không thể kết nối với cộng đồng của bạn. Hãy kiểm tra kết nối mạng và thử lại.",
+  "Asked today": "Đã gửi yêu cầu hôm nay",
+  "Asked yesterday": "Đã gửi yêu cầu hôm qua",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "other": "Đã gửi yêu cầu {n} ngày trước"
+  },
+  "from {node}": "từ {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Bạn đã mời {name}. Ứng dụng của họ sẽ tự tìm thấy lời mời.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "other": "🚪 Muốn tham gia ({n})"
+  },
+  "Inviting {name}...": "Đang mời {name}...",
+  "Invite {name}": "Mời {name}",
+  "Declining {name}...": "Đang từ chối {name}...",
+  "Not now, {name}": "Để sau, {name}",
+  "Invite\u0004button: let them in": "Mời",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "other": "🎟️ Lời mời ({n})"
+  },
+  "Ask to join {name}": "Yêu cầu tham gia {name}",
+  "A few words about yourself": "Đôi lời về bản thân",
+  "Where you live, what you'd like to share or learn": "Nơi bạn sống, điều bạn muốn chia sẻ hoặc học hỏi"
 }

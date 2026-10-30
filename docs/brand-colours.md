@@ -42,6 +42,17 @@ fails below the bar: words on each fill and its hover, each chip's ink on its ti
 card of both apps (`INK_GROUNDS`; the test reads the web's three grounds per theme from `apps/pwa/src/index.css`, so
 a new or changed web ground is judged too). In dark the web's `--bg-secondary` (`#384038`) is the hardest ground.
 
+That test judges the library's own pairs. A screen can still set them wrong: the Save Profile button was `text.heading`
+under `text.inverse`, the same `#ffffff` in dark, for two weeks. Two checks read the screens: `pwa_dark_classes` draws the
+web app's class strings in dark, and `native_dark_contrast` (`apps/native/utils/button-contrast.ts`, run by
+`scripts/test-all.sh`) reads the phone's `app/`, `components/` and `tools/`, pairs each piece of words with the background its own
+screen sets behind it, and fails below the bar in light or dark, naming `file:line` and both colours. A fill under words
+is `brand.fill` / `accent.fill` / `feedback.*.solid` with `text.onBrand` / `onAccent` / `onDanger` / `onGold`, never a
+`text.*` token under `text.inverse`. A reviewed exception goes in `apps/native/utils/button-contrast-exceptions.ts` with a
+reason and the two lines the report prints beside the colours (it excuses that pair, not the same colours elsewhere in the
+file); one that excuses nothing fails. The report also says how much it could not read (a style table built in another file,
+or handed to a child as a prop adds no colours), and the check fails when that number grows.
+
 ## The roles
 
 Fill roles have `fill`, `hover` (pressed on the phone) and `on` (the words). The test checks that every row below

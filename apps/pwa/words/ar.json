@@ -4119,5 +4119,62 @@
   "Cancel Initiative & Refund Backers": "إلغاء المبادرة ورد الأموال للداعمين",
   "Second pause in 30 days. The last vote said No.": "الإيقاف المؤقت الثاني خلال 30 يومًا. قال التصويت السابق: لا.",
   "Second pause in 30 days. Too few members voted on the last one.": "الإيقاف المؤقت الثاني خلال 30 يومًا. صوّت عدد قليل جدًا من الأعضاء في التصويت السابق.",
-  "Second pause in 30 days. The last vote was stopped before it closed.": "الإيقاف المؤقت الثاني خلال 30 يومًا. أُوقف التصويت السابق قبل أن يُغلق."
+  "Second pause in 30 days. The last vote was stopped before it closed.": "الإيقاف المؤقت الثاني خلال 30 يومًا. أُوقف التصويت السابق قبل أن يُغلق.",
+  "Please give a name of at least 2 characters.": "يُرجى إدخال اسم مكون من حرفين على الأقل.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "zero": "يُرجى ألا يتجاوز اسمك {n} حرف.",
+    "one": "يُرجى ألا يتجاوز اسمك حرفًا واحدًا ({n}).",
+    "two": "يُرجى ألا يتجاوز اسمك حرفين ({n}).",
+    "few": "يُرجى ألا يتجاوز اسمك {n} أحرف.",
+    "many": "يُرجى ألا يتجاوز اسمك {n} حرفًا.",
+    "other": "يُرجى ألا يتجاوز اسمك {n} حرف."
+  },
+  "Please say a few words about yourself.": "يُرجى كتابة بضع كلمات عن نفسك.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "zero": "يُرجى ألا تتجاوز رسالتك {n} حرف.",
+    "one": "يُرجى ألا تتجاوز رسالتك حرفًا واحدًا ({n}).",
+    "two": "يُرجى ألا تتجاوز رسالتك حرفين ({n}).",
+    "few": "يُرجى ألا تتجاوز رسالتك {n} أحرف.",
+    "many": "يُرجى ألا تتجاوز رسالتك {n} حرفًا.",
+    "other": "يُرجى ألا تتجاوز رسالتك {n} حرف."
+  },
+  "You are already a member of this community.": "أنت عضو بالفعل في هذا المجتمع.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "أشخاص يطلبون الانضمام إلى هذا المجتمع. خيار «دعوة» ينشئ دعوة لا يمكن استخدامها إلا بمفتاحهم، ويجدها تطبيقهم تلقائيًا. خيار «ليس الآن» لا يخبرهم بأكثر من \"لا يوجد رد بعد\".",
+  "Couldn't reach your community. Check your connection and try again.": "تعذر الوصول إلى مجتمعك. تحقق من اتصالك وحاول مجددًا.",
+  "Asked today": "طُلب اليوم",
+  "Asked yesterday": "طُلب بالأمس",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "zero": "طُلب منذ {n} يوم",
+    "one": "طُلب منذ يوم واحد",
+    "two": "طُلب منذ يومين",
+    "few": "طُلب منذ {n} أيام",
+    "many": "طُلب منذ {n} يومًا",
+    "other": "طُلب منذ {n} يوم"
+  },
+  "from {node}": "من {node}",
+  "You invited {name}. Their app will find the invite by itself.": "لقد دعوت {name}. سيجد تطبيقه الدعوة تلقائيًا.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "zero": "🚪 يرغب في الانضمام ({n})",
+    "one": "🚪 يرغب في الانضمام",
+    "two": "🚪 يرغبان في الانضمام",
+    "few": "🚪 {n} يودون الانضمام",
+    "many": "🚪 {n} يودون الانضمام",
+    "other": "🚪 {n} يودون الانضمام"
+  },
+  "Inviting {name}...": "جارٍ دعوة {name}...",
+  "Invite {name}": "دعوة {name}",
+  "Declining {name}...": "جارٍ رفض طلب {name}...",
+  "Not now, {name}": "ليس الآن، يا {name}",
+  "Invite\u0004button: let them in": "دعوة",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "zero": "🎟️ لا دعوات ({n})",
+    "one": "🎟️ دعوة واحدة",
+    "two": "🎟️ دعوتان",
+    "few": "🎟️ {n} دعوات",
+    "many": "🎟️ {n} دعوةً",
+    "other": "🎟️ {n} دعوة"
+  },
+  "Ask to join {name}": "طلب الانضمام إلى {name}",
+  "A few words about yourself": "بضع كلمات عن نفسك",
+  "Where you live, what you'd like to share or learn": "أين تعيش، وما تود مشاركته أو تعلمه"
 }

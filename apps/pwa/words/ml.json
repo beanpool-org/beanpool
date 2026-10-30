@@ -3623,5 +3623,42 @@
   "Cancel Initiative & Refund Backers": "സംരംഭം റദ്ദാക്കി പിന്തുണച്ചവർക്ക് തുക തിരികെ നൽകുക",
   "Second pause in 30 days. The last vote said No.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ടിന്റെ ഫലം 'അല്ല' എന്നായിരുന്നു.",
   "Second pause in 30 days. Too few members voted on the last one.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ടിൽ വളരെ കുറച്ച് അംഗങ്ങളേ വോട്ട് ചെയ്തുള്ളൂ.",
-  "Second pause in 30 days. The last vote was stopped before it closed.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ട് അവസാനിക്കുന്നതിന് മുമ്പ് നിർത്തിവച്ചു."
+  "Second pause in 30 days. The last vote was stopped before it closed.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ട് അവസാനിക്കുന്നതിന് മുമ്പ് നിർത്തിവച്ചു.",
+  "Please give a name of at least 2 characters.": "കുറഞ്ഞത് 2 അക്ഷരങ്ങളുള്ള ഒരു പേര് നൽകുക.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "പേര് {n} അക്ഷരത്തിൽ ഒതുക്കുക.",
+    "other": "പേര് {n} അക്ഷരങ്ങളിൽ ഒതുക്കുക."
+  },
+  "Please say a few words about yourself.": "നിങ്ങളെക്കുറിച്ച് ചുരുക്കം ചില വാക്കുകൾ പറയുക.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "സന്ദേശം {n} അക്ഷരത്തിൽ ഒതുക്കുക.",
+    "other": "സന്ദേശം {n} അക്ഷരങ്ങളിൽ ഒതുക്കുക."
+  },
+  "You are already a member of this community.": "നിങ്ങൾ ഇതിനകം ഈ കമ്മ്യൂണിറ്റിയിലെ ഒരംഗമാണ്.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "ഈ കമ്മ്യൂണിറ്റിയിൽ ചേരാൻ അഭ്യർത്ഥിക്കുന്ന ആളുകൾ. ക്ഷണം അവരുടെ കീക്ക് മാത്രം ഉപയോഗിക്കാൻ കഴിയുന്ന ഒന്നാണ്, അവരുടെ ആപ്പ് അത് സ്വയം കണ്ടെത്തും. 'ഇപ്പോഴില്ല' എന്നത് \"ഇതുവരെ മറുപടിയില്ല\" എന്ന് മാത്രമാണ് അവരെ അറിയിക്കുക.",
+  "Couldn't reach your community. Check your connection and try again.": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുമായി ബന്ധപ്പെടാൻ കഴിഞ്ഞില്ല. കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.",
+  "Asked today": "ഇന്ന് ചോദിച്ചു",
+  "Asked yesterday": "ഇന്നലെ ചോദിച്ചു",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "{n} ദിവസം മുമ്പ് ചോദിച്ചു",
+    "other": "{n} ദിവസങ്ങൾക്ക് മുമ്പ് ചോദിച്ചു"
+  },
+  "from {node}": "{node}-ൽ നിന്ന്",
+  "You invited {name}. Their app will find the invite by itself.": "നിങ്ങൾ {name}-നെ ക്ഷണിച്ചു. അവരുടെ ആപ്പ് ക്ഷണം സ്വയം കണ്ടെത്തും.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 ചേരാൻ ആഗ്രഹിക്കുന്നു ({n})",
+    "other": "🚪 ചേരാൻ ആഗ്രഹിക്കുന്നു ({n})"
+  },
+  "Inviting {name}...": "{name}-നെ ക്ഷണിക്കുന്നു...",
+  "Invite {name}": "{name}-നെ ക്ഷണിക്കുക",
+  "Declining {name}...": "{name}-നെ നിരസിക്കുന്നു...",
+  "Not now, {name}": "ഇപ്പോഴില്ല, {name}",
+  "Invite\u0004button: let them in": "ക്ഷണിക്കുക",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ ക്ഷണം ({n})",
+    "other": "🎟️ ക്ഷണങ്ങൾ ({n})"
+  },
+  "Ask to join {name}": "{name}-ൽ ചേരാൻ അഭ്യർത്ഥിക്കുക",
+  "A few words about yourself": "നിങ്ങളെക്കുറിച്ച് ചുരുക്കം ചില വാക്കുകൾ",
+  "Where you live, what you'd like to share or learn": "നിങ്ങൾ താമസിക്കുന്ന സ്ഥലം, എന്താണ് പങ്കിടാനോ പഠിക്കാനോ ആഗ്രഹിക്കുന്നത്"
 }

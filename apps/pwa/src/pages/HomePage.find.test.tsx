@@ -24,6 +24,8 @@ vi.mock('../lib/api', () => ({
     getCommunityMe: vi.fn(async () => ({ probation: null })),
     watchPlace: vi.fn(),
     getListedCommunityByHost: vi.fn(async () => null),
+    // lib/knock's own calls (where a test doesn't stub them): no network here, as a browser offline would say.
+    signedFetchAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
 }));
 vi.mock('../components/AddressSearch', () => ({
     AddressSearch: ({ onPick }: { onPick: (r: unknown) => void }) => (
@@ -194,12 +196,13 @@ describe('a community the member came to ask to join', () => {
     }
     beforeEach(() => { vi.mocked(api.getListedCommunityByHost).mockReset().mockResolvedValue(RIVERSIDE); });
 
-    it('no Find card on Home: it stands above the cards, says how to ask, and its ✕ lets it go (fails before: nothing)', async () => {
+    it('no Find card on Home: it stands above the cards, with Ask to join, and its ✕ lets it go (fails before: nothing)', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(longMember([])));
         const seen = vi.fn();
         render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" onAskedCommunitySeen={seen} />);
         const asked = await screen.findByTestId('home-find-asked');
-        expect(await within(asked).findByRole('status')).toHaveTextContent('To ask Riverside to join, open Find a community in the BeanPool app and choose Riverside.');
+        // Front doors S2: the web asks by itself (before: "To ask Riverside to join, open Find a community in the BeanPool app …").
+        expect(await within(asked).findByRole('button', { name: 'Ask to join Riverside' })).toBeTruthy();
         expect(screen.queryByTestId('home-card-find')).toBeNull();
         expect(api.getListedCommunityByHost).toHaveBeenCalledWith('riverside.example');
         fireEvent.click(within(asked).getByTestId('home-find-asked-close'));
@@ -255,6 +258,129 @@ describe('a community gone quiet on the web find card (front doors S13)', () => 
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-find-body');
         expect(screen.queryByTestId('home-find-not-answering-l')).toBeNull();
+    });
+});
+
+describe('Ask to join from the web find card (front doors S2)', () => {
+    const SLEEPY = { key: 'q', name: 'Sleepy Hollow', url: 'https://sleepy.example.org', memberCount: 6, distanceKm: 8 };
+    const NO_ADDRESS = { key: 'f', name: 'Riverbend', url: null, memberCount: 10, distanceKm: 20 };
+
+    it('each row with an address has Ask to join; the form sends; Home\'s waiting card then says how it fares (fails before: no button)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY, NO_ADDRESS] }, true)));
+        const sendSpy = vi.spyOn(knockModule, 'sendKnock').mockResolvedValue({ kind: 'waiting', message: 'You asked to join. No answer yet: communities usually answer within a few days.' });
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const ask = await screen.findByTestId('home-find-ask-q');
+        expect(ask).toHaveAccessibleName('Ask to join Sleepy Hollow');
+        expect(screen.queryByTestId('home-find-ask-f')).toBeNull();
+        // The row itself still links to the community's address: its public card, for a stranger (front doors S15).
+        expect(screen.getByRole('link', { name: /Sleepy Hollow/ })).toHaveAttribute('href', 'https://sleepy.example.org');
+
+        fireEvent.click(ask);
+        fireEvent.change(screen.getByTestId('home-find-ask-q-message'), { target: { value: 'I fix bikes.' } });
+        fireEvent.click(screen.getByTestId('home-find-ask-q-send'));
+        expect(await screen.findByTestId('home-waiting-card-https://sleepy.example.org')).toBeTruthy();
+        expect(sendSpy).toHaveBeenCalledWith('https://sleepy.example.org', ME, { callsign: 'Ana', message: 'I fix bikes.' });
+        // Cancel comes with the card's status read (it says "Checking…" until then).
+        expect(await screen.findByTestId('home-cancel-knock-https://sleepy.example.org')).toHaveTextContent('Cancel my request');
+        // The card is the one place that says how it fares: the row has no line of its own beside it, which would outlive a
+        // Cancel or a Got it in this visit, and no second Ask to join (PR #2625 review: it said "No answer yet" here).
+        expect(screen.queryByTestId('home-find-ask-q-said')).toBeNull();
+        expect(screen.queryByTestId('home-find-ask-q')).toBeNull();
+        sendSpy.mockRestore();
+        readSpy.mockRestore();
+    });
+
+    it('a community this browser already asked: no second Ask to join on its row', async () => {
+        await rememberKnock(ME.publicKey, SLEEPY, new Date());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+        expect(screen.queryByTestId('home-find-ask-q')).toBeNull();
+        readSpy.mockRestore();
+    });
+
+    it('the ?ask= landing (S15\'s link): after Join, the Find card opens on that community with its own Ask to join', async () => {
+        vi.mocked(api.getListedCommunityByHost).mockReset().mockResolvedValue({ key: 'r', name: 'Riverside', url: 'https://riverside.example', memberCount: 40, distanceKm: null });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+        const sendSpy = vi.spyOn(knockModule, 'sendKnock').mockResolvedValue({ kind: 'waiting', message: 'You asked to join. No answer yet: communities usually answer within a few days.' });
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} askedCommunity="riverside.example" />);
+        const find = await screen.findByTestId('home-card-find');
+        const asked = await within(find).findByTestId('home-find-asked');
+        expect(within(asked).getByText('Riverside')).toBeTruthy();
+        // It stands first in the card, above the listed rows.
+        expect(asked.compareDocumentPosition(within(find).getByTestId('home-find-ask-q')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        fireEvent.click(await within(asked).findByRole('button', { name: 'Ask to join Riverside' }));
+        fireEvent.change(within(asked).getByTestId('home-find-asked-ask-message'), { target: { value: 'I came from your card.' } });
+        fireEvent.click(within(asked).getByTestId('home-find-asked-ask-send'));
+        // Home's waiting card says how it fares; the box keeps no line of its own beside it (PR #2625 review).
+        expect(await within(find).findByTestId('home-waiting-card-https://riverside.example')).toBeTruthy();
+        expect(sendSpy).toHaveBeenCalledWith('https://riverside.example', ME, { callsign: 'Ana', message: 'I came from your card.' });
+        const box = screen.getByTestId('home-find-asked');
+        expect(within(box).queryByTestId('home-find-asked-ask-said')).toBeNull();
+        expect(within(box).queryByRole('button', { name: 'Ask to join Riverside' })).toBeNull();
+        sendSpy.mockRestore();
+        readSpy.mockRestore();
+    });
+
+    /** Ask Sleepy Hollow from its row; resolves with Home's waiting card for it. */
+    async function askSleepy() {
+        fireEvent.click(await screen.findByTestId('home-find-ask-q'));
+        fireEvent.change(screen.getByTestId('home-find-ask-q-message'), { target: { value: 'I fix bikes.' } });
+        fireEvent.click(screen.getByTestId('home-find-ask-q-send'));
+        return screen.findByTestId('home-waiting-card-https://sleepy.example.org');
+    }
+
+    describe('the row after the request is sent, in the same visit (PR #2625 review: "No answer yet" stayed)', () => {
+        const WAITING = 'You asked to join. No answer yet: communities usually answer within a few days.';
+        afterEach(() => { vi.restoreAllMocks(); });
+
+        it('Cancel my request: the card says it was cancelled, and the row says nothing stale and offers no Ask to join', async () => {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+            vi.spyOn(knockModule, 'sendKnock').mockResolvedValue({ kind: 'waiting', message: WAITING });
+            vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+            vi.spyOn(window, 'confirm').mockReturnValue(true);
+            // The real cancelKnock: the community says yes, and the browser marks the request cancelled.
+            vi.mocked(api.signedFetchAt).mockResolvedValueOnce(new Response('{}', { status: 200 }));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await askSleepy();
+            fireEvent.click(await screen.findByTestId('home-cancel-knock-https://sleepy.example.org'));
+            expect(await screen.findByTestId('home-waiting-cancelled-https://sleepy.example.org')).toHaveTextContent(CANCELLED_LINE);
+            expect(document.body.textContent).not.toContain('No answer yet');
+            expect(screen.queryByTestId('home-find-ask-q-said')).toBeNull();
+            expect(screen.queryByTestId('home-find-ask-q')).toBeNull();
+        });
+
+        it('Got it on a request the community no longer holds: the row offers Ask to join again, with no stale line', async () => {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY] }, true)));
+            vi.spyOn(knockModule, 'sendKnock').mockResolvedValue({ kind: 'waiting', message: WAITING });
+            vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'none' } });
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await askSleepy();
+            fireEvent.click(await screen.findByTestId('home-gotit-knock-https://sleepy.example.org'));
+            await waitFor(() => expect(screen.queryByTestId('home-waiting-card-https://sleepy.example.org')).toBeNull());
+            expect(await screen.findByTestId('home-find-ask-q')).toHaveAccessibleName('Ask to join Sleepy Hollow');
+            expect(screen.queryByTestId('home-find-ask-q-said')).toBeNull();
+            expect(document.body.textContent).not.toContain('No answer yet');
+        });
+
+        it('one request cancelled, then another sent: the cancelled card keeps its line, and its row offers nothing the node would refuse', async () => {
+            const BYRON = { key: 'b', name: 'Byron', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+            await rememberKnock(ME.publicKey, BYRON, new Date(Date.now() - 3_600_000));
+            vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ communities: [SLEEPY, BYRON] }, true)));
+            vi.spyOn(knockModule, 'sendKnock').mockResolvedValue({ kind: 'waiting', message: WAITING });
+            vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+            vi.spyOn(window, 'confirm').mockReturnValue(true);
+            vi.mocked(api.signedFetchAt).mockResolvedValueOnce(new Response('{}', { status: 200 }));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            fireEvent.click(await screen.findByTestId(`home-cancel-knock-${BYRON.url}`));
+            await screen.findByTestId(`home-waiting-cancelled-${BYRON.url}`);
+            await askSleepy();
+            expect(screen.getByTestId(`home-waiting-cancelled-${BYRON.url}`)).toHaveTextContent(CANCELLED_LINE);
+            expect(screen.queryByTestId('home-find-ask-b')).toBeNull();
+        });
     });
 });
 

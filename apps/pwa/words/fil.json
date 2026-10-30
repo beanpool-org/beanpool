@@ -3623,5 +3623,42 @@
   "Cancel Initiative & Refund Backers": "Kanselahin ang Inisyatiba at Ibalik ang Pondo sa mga Tagasuporta",
   "Second pause in 30 days. The last vote said No.": "Ikalawang pag-pause sa loob ng 30 araw. Hindi ang pasya ng huling botohan.",
   "Second pause in 30 days. Too few members voted on the last one.": "Ikalawang pag-pause sa loob ng 30 araw. Masyadong kaunti ang bumoto sa huling botohan.",
-  "Second pause in 30 days. The last vote was stopped before it closed.": "Ikalawang pag-pause sa loob ng 30 araw. Itinigil ang huling botohan bago ito nagsara."
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Ikalawang pag-pause sa loob ng 30 araw. Itinigil ang huling botohan bago ito nagsara.",
+  "Please give a name of at least 2 characters.": "Mangyaring magbigay ng pangalan na may kahit 2 character.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Mangyaring panatilihin ang iyong pangalan sa {n} character.",
+    "other": "Mangyaring panatilihin ang iyong pangalan sa {n} na character."
+  },
+  "Please say a few words about yourself.": "Mangyaring magsabi ng ilang salita tungkol sa iyong sarili.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Mangyaring panatilihin ang iyong mensahe sa {n} character.",
+    "other": "Mangyaring panatilihin ang iyong mensahe sa {n} na character."
+  },
+  "You are already a member of this community.": "Miyembro ka na ng komunidad na ito.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Mga taong humihiling na sumali sa komunidad na ito. Ang 'Mag-imbita' ay gumagawa ng imbitasyon na tanging ang kanilang key ang makakagamit, at kusa itong mahahanap ng kanilang app. Ang 'Hindi muna' ay walang ibang sinasabi kundi \"wala pang sagot\".",
+  "Couldn't reach your community. Check your connection and try again.": "Hindi maabot ang iyong komunidad. Pakitingnan ang iyong koneksyon at subukang muli.",
+  "Asked today": "Naghiling ngayon",
+  "Asked yesterday": "Naghiling kahapon",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Naghiling {n} araw na ang nakalipas",
+    "other": "Naghiling {n} araw na ang nakalipas"
+  },
+  "from {node}": "mula sa {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Inimbita mo si {name}. Kusa itong mahahanap ng kanilang app.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Gustong sumali ({n})",
+    "other": "🚪 Gustong sumali ({n})"
+  },
+  "Inviting {name}...": "Iniimbita si {name}...",
+  "Invite {name}": "Imbitahan si {name}",
+  "Declining {name}...": "Tinanggihan si {name}...",
+  "Not now, {name}": "Hindi muna, {name}",
+  "Invite\u0004button: let them in": "Imbitahan",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Mga Imbitasyon ({n})",
+    "other": "🎟️ Mga Imbitasyon ({n})"
+  },
+  "Ask to join {name}": "Humiling na sumali sa {name}",
+  "A few words about yourself": "Ilang salita tungkol sa iyong sarili",
+  "Where you live, what you'd like to share or learn": "Kung saan ka nakatira, kung ano ang gusto mong ibahagi o matutunan"
 }

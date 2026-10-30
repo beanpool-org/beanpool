@@ -3871,5 +3871,52 @@
   "Cancel Initiative & Refund Backers": "Отменить инициативу и вернуть средства участникам",
   "Second pause in 30 days. The last vote said No.": "Вторая пауза за 30 дней. На прошлом голосовании ответили «Нет».",
   "Second pause in 30 days. Too few members voted on the last one.": "Вторая пауза за 30 дней. В прошлом голосовании проголосовало слишком мало членов сообщества.",
-  "Second pause in 30 days. The last vote was stopped before it closed.": "Вторая пауза за 30 дней. Прошлое голосование остановили до его закрытия."
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Вторая пауза за 30 дней. Прошлое голосование остановили до его закрытия.",
+  "Please give a name of at least 2 characters.": "Имя должно содержать не менее 2 символов.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Имя не должно превышать {n} символ.",
+    "few": "Имя не должно превышать {n} символа.",
+    "many": "Имя не должно превышать {n} символов.",
+    "other": "Имя не должно превышать {n} символа."
+  },
+  "Please say a few words about yourself.": "Пожалуйста, расскажите немного о себе.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Сообщение не должно превышать {n} символ.",
+    "few": "Сообщение не должно превышать {n} символа.",
+    "many": "Сообщение не должно превышать {n} символов.",
+    "other": "Сообщение не должно превышать {n} символа."
+  },
+  "You are already a member of this community.": "Вы уже состоите в этом сообществе.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Люди, желающие вступить в это сообщество. «Пригласить» создаёт приглашение, которое может использовать только их ключ, и приложение найдёт его автоматически. «Не сейчас» лишь сообщит «ответа пока нет».",
+  "Couldn't reach your community. Check your connection and try again.": "Не удалось связаться с вашим сообществом. Проверьте подключение и повторите попытку.",
+  "Asked today": "Запрос сегодня",
+  "Asked yesterday": "Запрос вчера",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Запрос отправлен {n} день назад",
+    "few": "Запрос отправлен {n} дня назад",
+    "many": "Запрос отправлен {n} дней назад",
+    "other": "Запрос отправлен {n} дня назад"
+  },
+  "from {node}": "с {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Вы пригласили {name}. Приложение пользователя само найдёт приглашение.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Хочет вступить ({n})",
+    "few": "🚪 Хотят вступить ({n})",
+    "many": "🚪 Хотят вступить ({n})",
+    "other": "🚪 Хотят вступить ({n})"
+  },
+  "Inviting {name}...": "Приглашение {name}...",
+  "Invite {name}": "Пригласить {name}",
+  "Declining {name}...": "Отклонение {name}...",
+  "Not now, {name}": "Не сейчас, {name}",
+  "Invite\u0004button: let them in": "Пригласить",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Приглашения ({n})",
+    "few": "🎟️ Приглашения ({n})",
+    "many": "🎟️ Приглашения ({n})",
+    "other": "🎟️ Приглашения ({n})"
+  },
+  "Ask to join {name}": "Запросить вступление в {name}",
+  "A few words about yourself": "Пара слов о себе",
+  "Where you live, what you'd like to share or learn": "Где вы живёте, чем хотите поделиться или чему научиться"
 }

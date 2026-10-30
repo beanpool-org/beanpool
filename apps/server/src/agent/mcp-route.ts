@@ -12,7 +12,10 @@
  *      slice S2), and nothing else (no session, cookie, password or other scope), whose member is an owner or an admin NOW
  *      (lose the role, lose the assistant) → else 401 (403 for another scope), the 401 naming where to sign in (RFC 9728);
  *   5. 60 calls a minute and 2,000 a day per token → 429 in words;
- *   6. then the tools (agent/tools.ts), each answer redacted at its source, every tool call written to the AGENT log.
+ *   6. then the tools (agent/tools.ts), each answer redacted at its source, every tool call written to the AGENT log (a post an
+ *      owner's assistant made, agent/owner-posts.ts, with its id).
+ * A body is at most 64 KiB, read before any of this, but for a bearer that is an owner's assistant now, whose posts carry photos
+ * (mcpBodyLimit).
  * An `agent` token reaches nothing but this (admin-auth.ts checkAutomationToken refuses it everywhere else).
  */
 import Router from '@koa/router';
@@ -36,10 +39,13 @@ import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
+import { AGENT_CREATE_BODY_MAX } from './owner-posts.js';
 import { PROMPTS, promptText, welcomeInstructions, type WelcomeFacts } from './welcome.js';
 
 export const MCP_PATH = '/mcp';
 export const AGENT_SWITCH_PATH = '/api/local/admin/agent/switch';
+/** An MCP message's body: a method, an id and a few arguments (https-server.ts reads no more before the route runs). */
+export const MCP_BODY_MAX = 64 * 1024;
 
 /** The owner switch: on unless an owner turned it off. */
 export function aiAssistantsAllowed(): boolean {
@@ -177,6 +183,17 @@ export function agentGrantFrom(ctx: any): GrantCheck {
     };
 }
 
+/**
+ * How much of a request to /mcp the server reads (https-server.ts, before a byte is buffered): 64 KiB, as for any assistant,
+ * unless the switch is on and the bearer is an owner's assistant now, whose posts carry up to four photos
+ * (agent/owner-posts.ts AGENT_CREATE_BODY_MAX). The bearer is checked again, with everything else, when the route runs.
+ */
+export function mcpBodyLimit(ctx: any): number {
+    if (!aiAssistantsAllowed() || ctx.method !== 'POST') return MCP_BODY_MAX;
+    const check = agentGrantFrom(ctx);
+    return check.ok && check.grant.role === 'owner' ? AGENT_CREATE_BODY_MAX : MCP_BODY_MAX;
+}
+
 function welcomeFacts(ctx: any, grant: AgentGrant): WelcomeFacts {
     return {
         community: cleanMemberText(directoryName(), 120) || 'this community',
@@ -223,13 +240,15 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
         }
         let out;
         try {
-            out = tool.run(grant, args, newBoundary());
+            out = await tool.run(grant, args, newBoundary());
         } catch (e) {
             logger.warn('AGENT', 'Assistant call failed', { ...logBase, tool: tool.name, args: argNames, ms: Date.now() - started, error: e instanceof Error ? e.name : 'error' });
             return { content: [{ type: 'text' as const, text: 'The server could not answer that now: try again later.' }], isError: true };
         }
         logger.info('AGENT', tool.write ? 'Assistant wrote' : 'Assistant read', {
             ...logBase, tool: tool.name, args: argNames, rows: out.ok ? out.rows : 0, ok: out.ok, ms: Date.now() - started,
+            // The post an owner's assistant made (agent/owner-posts.ts): the audit names it.
+            ...(out.ok && typeof out.result.postId === 'string' ? { post: out.result.postId } : {}),
         });
         if (!out.ok) return { content: [{ type: 'text' as const, text: out.error }], isError: true };
         return { content: [{ type: 'text' as const, text: JSON.stringify(out.result) }], structuredContent: out.result };

@@ -289,7 +289,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         const args: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
         let out;
         try {
-            out = tool.run(grant, args, newBoundary());
+            out = await tool.run(grant, args, newBoundary());
         } catch (e) {
             logger.warn('ADMIN', 'AI assistant preview failed', { tool: tool.name, error: e instanceof Error ? e.name : 'error' });
             ctx.status = 500;

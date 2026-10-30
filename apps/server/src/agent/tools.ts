@@ -9,7 +9,8 @@
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *
  * Slice S1: reads, and `take_backup` for owner grants. Slice S4: `suggest_action`, which changes nothing: it files a card the
- * member approves on their phone (agent/suggestions.ts).
+ * member approves on their phone (agent/suggestions.ts). MCP-OWNER-POSTS: an owner's grant also posts Offers, Needs, events and
+ * enterprise listings for them, photos required, 50 a day (agent/owner-posts.ts).
  */
 import os from 'node:os';
 import { db } from '../db/db.js';
@@ -36,9 +37,10 @@ import { backupLockState } from '../services/sealed-backup.js';
 import { getBackupStatus } from '../services/backup-puller.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE, type Fenced } from './fence.js';
 import {
-    admitAgentBackup, agentBackupsToday, agentCallsToday, returnAgentBackup,
-    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, AGENT_LIST_MAX,
+    admitAgentBackup, agentBackupsToday, agentCallsToday, agentCreatesToday, returnAgentBackup,
+    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, AGENT_CREATES_PER_DAY, AGENT_LIST_MAX,
 } from './limits.js';
+import { OWNER_POST_TOOLS } from './owner-posts.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -75,7 +77,8 @@ export interface AgentTool {
     write?: boolean;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
-    run: (grant: AgentGrant, args: Record<string, unknown>, boundary: string) => ToolResult;
+    /** A create (agent/owner-posts.ts) answers once its photos are resized; every other tool answers at once. */
+    run: (grant: AgentGrant, args: Record<string, unknown>, boundary: string) => ToolResult | Promise<ToolResult>;
 }
 
 /** A tool's description, made from its row (§7: two sentences, a third where member text can appear). */
@@ -504,7 +507,8 @@ export const AGENT_TOOLS: AgentTool[] = [
         outputSchema: OBJ({
             name: STR, member: STR, role: STR, via: STR, createdAt: STR_OR_NULL, expiresAt: STR_OR_NULL,
             calls: OBJ({ today: NUM, perMinute: NUM, perDay: NUM }), backups: OBJ({ today: NUM, perDay: NUM }), tools: ARR, cannot: ARR,
-        }),
+            posts: OBJ({ today: NUM, perDay: NUM }),
+        }, ['name', 'member', 'role', 'via', 'createdAt', 'expiresAt', 'calls', 'backups', 'tools', 'cannot']),
         run: (grant) => ({
             ok: true, rows: 1,
             result: {
@@ -516,6 +520,8 @@ export const AGENT_TOOLS: AgentTool[] = [
                 expiresAt: iso(grant.expiresAt),
                 calls: { today: agentCallsToday(grant.id), perMinute: AGENT_CALLS_PER_MINUTE, perDay: AGENT_CALLS_PER_DAY },
                 backups: { today: agentBackupsToday(grant.id), perDay: AGENT_BACKUPS_PER_DAY },
+                // The posts an owner's assistant made today (agent/owner-posts.ts); an admin's grant posts none.
+                ...(grant.role === 'owner' ? { posts: { today: agentCreatesToday(grant.id), perDay: AGENT_CREATES_PER_DAY } } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
                 cannot: AGENT_CANNOT,
             },
@@ -617,6 +623,9 @@ AGENT_TOOLS.push({
         };
     },
 });
+
+// An owner's assistant posts for them: Offers, Needs, events and enterprise listings (agent/owner-posts.ts).
+AGENT_TOOLS.push(...OWNER_POST_TOOLS);
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {

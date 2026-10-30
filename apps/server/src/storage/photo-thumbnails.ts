@@ -75,7 +75,7 @@ export function thumbnailReads(): number {
 let sharpLoaded: Promise<typeof sharp | null> | null = null;
 
 /** sharp, loaded once; null, logged once, where it won't load. */
-function loadSharp(): Promise<typeof sharp | null> {
+export function loadSharp(): Promise<typeof sharp | null> {
     sharpLoaded ??= import('sharp').then(m => {
         const lib = m.default;
         // One resize at a time, on one thread, and nothing kept in libvips' operation cache: a small node's memory and
@@ -146,6 +146,32 @@ function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
     const run = queue.then(work, work);
     queue = run.catch(() => undefined);
     return run;
+}
+
+/** The longest side of a stored listing photo (photos stay 800 px): what the apps resize to before they send one. */
+export const PHOTO_MAX_SIDE = 800;
+
+/**
+ * A photo an owner's AI assistant sends (agent/owner-posts.ts), made what the apps send: at most {@link PHOTO_MAX_SIDE} on
+ * its longest side, turned upright from its EXIF orientation, re-encoded in its own format (JPEG or WebP, quality 70) with
+ * no metadata. Null when sharp won't load, or the bytes can't be read or have a side over the decoder's ceiling. One resize
+ * at a time, in the small copies' queue: a 1 vCPU node is never asked to resize several together.
+ */
+export async function resizeToStoredPhoto(photo: Buffer, format: 'jpeg' | 'webp'): Promise<Buffer | null> {
+    const lib = await loadSharp();
+    if (!lib) return null;
+    return oneAtATime(async () => {
+        try {
+            const head = await lib(photo, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+            if (!head.width || !head.height || head.width > MAX_INPUT_SIDE || head.height > MAX_INPUT_SIDE) return null;
+            const image = lib(photo, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error' })
+                .rotate()
+                .resize({ width: PHOTO_MAX_SIDE, height: PHOTO_MAX_SIDE, fit: 'inside', withoutEnlargement: true });
+            return await (format === 'jpeg' ? image.jpeg({ quality: 70, mozjpeg: true }) : image.webp({ quality: 70, effort: 4 })).toBuffer();
+        } catch {
+            return null;
+        }
+    });
 }
 
 /**

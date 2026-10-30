@@ -1,13 +1,15 @@
 /**
  * Limits per agent grant, kept by the server (admin MCP design §2): 60 calls a minute and 2,000 a day, answered 429 in
- * words past either; lists of at most 50 rows; at most 2 backups a day. Counted in memory by grant id: a restart starts
- * the counts again, which an assistant cannot cause.
+ * words past either; lists of at most 50 rows; at most 2 backups a day; at most 50 posts made a day by an owner's assistant
+ * (agent/owner-posts.ts). Counted in memory by grant id: a restart starts the counts again, which an assistant cannot cause.
  */
 
 export const AGENT_CALLS_PER_MINUTE = 60;
 export const AGENT_CALLS_PER_DAY = 2000;
 export const AGENT_BACKUPS_PER_DAY = 2;
 export const AGENT_LIST_MAX = 50;
+/** Offers, Needs, events and enterprise listings one owner's assistant may make in a UTC day (on top of the calls above). */
+export const AGENT_CREATES_PER_DAY = 50;
 
 const MINUTE_MS = 60_000;
 
@@ -17,6 +19,7 @@ interface Counts {
     day: string;
     dayCalls: number;
     dayBackups: number;
+    dayCreates: number;
 }
 
 const counts = new Map<string, Counts>();
@@ -32,13 +35,14 @@ function countsOf(grantId: string, now: number): Counts {
     let c = counts.get(grantId);
     const day = utcDay(now);
     if (!c) {
-        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0 };
+        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0, dayCreates: 0 };
         counts.set(grantId, c);
     }
     if (c.day !== day) {
         c.day = day;
         c.dayCalls = 0;
         c.dayBackups = 0;
+        c.dayCreates = 0;
     }
     if (now - c.minuteFrom >= MINUTE_MS) {
         c.minuteFrom = now;
@@ -94,6 +98,24 @@ export function admitAgentBackup(grantId: string, now = Date.now()): boolean {
 export function returnAgentBackup(grantId: string, now = Date.now()): void {
     const c = countsOf(grantId, now);
     if (c.dayBackups > 0) c.dayBackups--;
+}
+
+export function agentCreatesToday(grantId: string, now = Date.now()): number {
+    return countsOf(grantId, now).dayCreates;
+}
+
+/** Whether this grant may make another post today; counts it when it may. */
+export function admitAgentCreate(grantId: string, now = Date.now()): boolean {
+    const c = countsOf(grantId, now);
+    if (c.dayCreates >= AGENT_CREATES_PER_DAY) return false;
+    c.dayCreates++;
+    return true;
+}
+
+/** A post that was admitted but not made (refused by the engine, a photo it could not take): not counted after all. */
+export function returnAgentCreate(grantId: string, now = Date.now()): void {
+    const c = countsOf(grantId, now);
+    if (c.dayCreates > 0) c.dayCreates--;
 }
 
 /** Calls let in today (UTC) from every assistant, revoked ones included. */

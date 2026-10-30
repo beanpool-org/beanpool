@@ -792,11 +792,15 @@ async function testLongRefusals(): Promise<void> {
     const server = http.createServer(app.callback());
     await new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
     const base = `http://127.0.0.1:${(server.address() as any).port}`;
+    // The server runs in this process, so CPU time around the request is the way out's own work: measured that way, a busy
+    // runner's wall clock can't fail it (it did on CI, 116.8 and 143.6 ms, 30 Oct; and locally under load, 27 and 28 Oct).
     const timed = async (i: number, lang?: string) => {
         const started = performance.now();
+        const c0 = process.cpuUsage();
         const res = await fetch(`${base}/api/recovery/collect/sso?i=${i}`, { headers: lang ? { 'X-Language': lang } : {} });
         const text = await res.text();
-        return { status: res.status, text, ms: performance.now() - started };
+        const cpu = process.cpuUsage(c0);
+        return { status: res.status, text, ms: performance.now() - started, cpuMs: (cpu.user + cpu.system) / 1000 };
     };
     try {
         for (const [catalog, words] of catalogs) {
@@ -811,8 +815,8 @@ async function testLongRefusals(): Promise<void> {
         for (const [i, [what]] of LONG.entries()) {
             const none = await timed(i);
             const fr = await timed(i, 'fr');
-            assert(fr.status === 400 && fr.text === none.text && fr.ms < none.ms + LONG_REFUSAL_MS,
-                `over HTTP, ${what}: with X-Language: fr, the answer without it byte for byte, in ${fr.ms.toFixed(1)} ms (${none.ms.toFixed(1)} ms without)`);
+            assert(fr.status === 400 && fr.text === none.text && fr.cpuMs < none.cpuMs + LONG_REFUSAL_MS,
+                `over HTTP, ${what}: with X-Language: fr, the answer without it byte for byte, in ${fr.cpuMs.toFixed(1)} ms CPU (${none.cpuMs.toFixed(1)} ms without; ${fr.ms.toFixed(1)} ms wall)`);
         }
 
         // Just under the longest the way out reads (member-words.ts LONGEST_REFUSAL_READ, 2,000 characters), with every

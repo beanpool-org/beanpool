@@ -68,7 +68,7 @@
             <li>Freeze a member's credit, or unfreeze it.</li>
             <li>Give a member the right to vouch for newcomers, or take it away.</li>
             <li>Remove a lead keeper from an enterprise, or a leader from a project.</li>
-            <li>Remove a member from the community, or reinstate them.</li>
+            <li>Remove a member from the community, or reinstate them. Nobody proposes a removal: that vote opens when an admin suspends the member (see &quot;Emergency suspension&quot;).</li>
         </ul>
         <p>About the Commons:</p>
         <ul>
@@ -120,6 +120,7 @@
         </ul>
         <h2>Removing a member</h2>
         <ul>
+            <li>In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. For now one thing still does without a vote: an owner can remove a member together with everyone they invited, and everyone those people invited.</li>
             <li>If a removal passes, the member is suspended and their credit frozen at once.</li>
             <li>After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.</li>
             <li>A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.</li>
@@ -138,11 +139,24 @@
             <li>An admin can suspend another admin. No vote removes an owner or admin, so whatever the vote decides, the suspension ends when it closes, and they keep their role.</li>
         </ul>
         <p>On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.</p>
+        <h2>A fair vote on removing a member</h2>
+        <ul>
+            <li><strong>The member is told at once.</strong> When the vote on removing you opens, BeanPool tells you on your phone, and the web app tells you the next time you open it.</li>
+            <li><strong>You can reply.</strong> In <strong>Commons</strong>, open <strong>Decide</strong> and tap <strong>Reply to this case</strong> on the vote about you. Everyone who reads the vote sees your reply beside the case. You can change it until the vote closes, unless an admin takes it down (below).</li>
+            <li><strong>The vote names who brought the case:</strong> the admin who suspended the member. If an owner used the server's password, it says an owner did.</li>
+            <li><strong>A false case can be hidden.</strong> When a case is shown to be false, an admin can hide it. Members then read the admin's reason in its place. Hiding a case doesn't stop the vote: an admin stops it by halting it, which lifts the suspension.</li>
+            <li><strong>A reply that harms someone can be taken down.</strong> If a reply gives someone's address or phone number, or threatens them, an owner or admin can take it down, with a reason. The reply is deleted, and members read the reason in its place. The member is told, and can't write another reply on that vote. The vote carries on.</li>
+            <li><strong>A false accusation can be reported.</strong> The member the vote is about can tap <strong>Report this case as false</strong>. The report goes to the admins and owners, and names whoever brought the case.</li>
+            <li><strong>No second case for a while.</strong> After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can.</li>
+            <li><strong>Everyone who can vote is told.</strong> When the vote opens, each member who can vote on it gets an alert on their phone, if their <strong>Direct Messages</strong> alerts are on. The alert never says who the vote is about.</li>
+        </ul>
         <h2>What admins can and cannot do</h2>
         <p>Your community's server has owners and admins. They look after it.</p>
         <ul>
             <li>An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.</li>
             <li>If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.</li>
+            <li>An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.</li>
+            <li>An admin cannot remove a member without the community's vote. Where the people who run the server have switched community votes off, the admins remove members themselves.</li>
             <li>Admins can give members the right to vouch for newcomers.</li>
             <li>Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.</li>
             <li>Admins sort out stuck trades, but never one they are part of.</li>
@@ -170,6 +184,7 @@
             <li><strong>Votes among the keepers:</strong> in an enterprise with two or more keepers, any keeper can propose paying Beans out of the enterprise's own account (never more than it holds, never to themselves, and to a keeper only out of what it has earned, with the 1.5% trade fee), removing a keeper, or, in an enterprise but not a project, making another keeper the lead. The keepers at the time it opens vote; more than half must vote; 60% Yes to pay out or remove, more than half to choose a lead. It runs 7 days or ends sooner once the answer can't change, and is carried out by itself. Only the keepers see it. While it is open it shows how many have voted; Yes and No show once it closes. Nobody sees who voted how, but in a very small group the result and who has voted can show it. These votes never touch the Commons or anyone's standing in the community: those are community Decisions. A vote can't remove the lead (vote for a new lead instead), the only keeper, or a keeper whose pledge covers a debt. A keeper can't propose their own removal; they step down instead.</li>
             <li><strong>If the lead leaves or is removed,</strong> the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.</li>
             <li><strong>Winding up:</strong> the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. Nothing finishes a wind-up by itself: after the 7 days, the lead keeper, the only keeper or a community admin has to finish closing it, and it can't be finished while a trade is still open. When it closes, any beans left go to the Commons.</li>
+            <li><strong>Cancelling a project:</strong> before a project reaches its goal, its leader or a community admin can cancel it, and every pledge goes back to the person who made it. If it has no leader, its only collaborator can cancel it; with two or more and no leader, only a community admin can. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it.</li>
         </ul>
         <h2>Groups and convenors</h2>
         <p>A group is run by its convenors, and one of them is its <strong>lead convenor</strong>. Whoever creates a group is its first lead convenor.</p>
@@ -197,7 +212,7 @@
             <li><a href="groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
             <li><a href="people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 160.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 161.</p>
     </main>
 </body>
 </html>

@@ -14,7 +14,7 @@ import { howItWorksSubtitle } from '../utils/beans-off';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../utils/avatar-value';
-import { keepPendingProfileChange, pendingNameAccepted, pendingProfileChange } from '../utils/pending-profile-sync';
+import { keepPendingProfileChange, nameRefusedForGood, pendingNameAccepted, pendingNameRefused, pendingProfileChange } from '../utils/pending-profile-sync';
 import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
@@ -212,8 +212,13 @@ export default function ProfileSetupScreen() {
                     const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, { method: 'POST', headers, body: bodyString });
                     if (res.status === 409) {
+                        const answer = await res.json().catch(() => null);
+                        const serverMsg = answer?.message;
+                        if (pending && sentName !== undefined && sentName === pending.callsign && (nameRefusedForGood(res.status, answer?.error) || res.status === 409)) {
+                            await pendingNameRefused(url, pending, sentName);
+                        }
                         setStep('name');
-                        setError(t('That name was just taken — please pick another.'));
+                        setError(serverMsg || t('That name was just taken — please pick another.'));
                         return; // finally clears loading; name-step effect refreshes suggestions
                     }
                     published = res.ok;

@@ -249,7 +249,7 @@ async function main(): Promise<void> {
             const kept = s3Rows[0]?.storage_key ? objects.get(s3Rows[0].storage_key) : undefined;
             const keptSize = kept ? imageSize(kept.bytes) : null;
             const signedOk = (await fakeS3.log()).filter(e => e.method === 'PUT').every(e => e.authOk && !e.error);
-            assert(!viaS3.isError && s3Rows.length === 1 && s3Rows[0].photo_data === null && s3Rows[0].storage_key?.startsWith(`posts/${structured(viaS3)?.postId}/`)
+            assert(!viaS3.isError && s3Rows.length === 1 && s3Rows[0].photo_data === null && !!s3Rows[0].storage_key?.startsWith(`posts/${structured(viaS3)?.postId}/`)
                 && !!kept && kept.mime === 'image/jpeg' && !!keptSize && keptSize.width === 800 && keptSize.height === 600 && signedOk,
                 `on the S3-compatible store (global's R2), the photo is put in the bucket, signed, made 800 × 600; the row holds its key (${errorText(viaS3) || s3Rows[0]?.storage_key}; ${JSON.stringify(keptSize)})`);
             await bc.close().catch(() => {});

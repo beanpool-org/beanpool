@@ -258,6 +258,20 @@ async function main() {
         db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), id);
         de.tickDecisions();
     };
+    /**
+     * A vote moved `days` back in time, as if made then (when it opened, closed, paused and was halted). Removal S4's rules
+     * turn on when pauses happen (a second within 30 days of a vote is an owner's, a third in 90 days nobody's), and this
+     * suite makes its pauses in one afternoon: where a step means "later", the earlier vote is dated so.
+     */
+    const age = (decisionId: string, days: number) => {
+        const r: any = db.prepare('SELECT * FROM decisions WHERE id = ?').get(decisionId);
+        const shift = (iso: string | null) => (iso ? new Date(Date.parse(iso) - days * DAY).toISOString() : iso);
+        const params = JSON.parse(r.params || '{}');
+        if (params.pausedAt) params.pausedAt = shift(params.pausedAt);
+        db.prepare(`UPDATE decisions SET opens_at = ?, closes_at = ?, created_at = ?, admin_halted_at = ?, grace_period_ends_at = ?, params = ?
+            WHERE id = ?`).run(shift(r.opens_at), shift(r.closes_at), shift(r.created_at), shift(r.admin_halted_at), shift(r.grace_period_ends_at),
+            JSON.stringify(params), decisionId);
+    };
     const cardFor = async (reader: Id, decisionId: string) => {
         fresh();
         const r = await signed('GET', '/api/commons/decisions', reader);
@@ -577,6 +591,8 @@ async function main() {
     assert(gwenReport.status === 403 && gwenReport.body?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(otto) === 'active',
         `nor through a report, refused before any fresh proof too (${gwenReport.status} ${gwenReport.text.slice(0, 120)})`);
     // Another admin can; Abe lifts it by hand before its vote closes, which ends it without removing Dave: Abe waits now.
+    // A month on: within 30 days of a vote another admin can't (removal S4, test-removal-chain), Ada's cool-down still holds.
+    age(daveVote, 31);
     const abePause = await pause(abeSession, dave, 'Another complaint about the bike repairs');
     const abeVote = abePause.body?.decision?.id as string;
     assert(abePause.status === 200 && statusOf(dave) === 'disabled', `another admin can pause him: Abe (${abePause.status})`);
@@ -592,6 +608,7 @@ async function main() {
     const pwAgain = await admin(`/api/local/admin/users/${erin.pubKeyHex}/suspend`, password(), { reason: 'Threatened a member again this week' });
     assert(pwAgain.status === 403 && pwAgain.body?.code === de.REMOVAL_COOL_DOWN_CODE && statusOf(erin) === 'active',
         `the server's password waits on Erin (${pwAgain.status})`);
+    age(erinVote, 31); // a month on, as above: the password's cool-down still holds, and another admin may
     const adaOnErin = await pause(adaSession, erin, 'Threatened a member again this week');
     assert(adaOnErin.status === 200, `Ada, another proposer, can (${adaOnErin.status})`);
     fresh();
@@ -604,7 +621,10 @@ async function main() {
     assert(halted.status === 200 && statusOf(gus) === 'active', `Abe halts it in the window; Gus is back (${halted.status})`);
     const adaOnGus = await pause(adaSession, gus, 'Sold another bike that was not his');
     assert(adaOnGus.status === 200, `Ada, whose case the community passed, may pause Gus again (${adaOnGus.status} ${adaOnGus.text.slice(0, 160)})`);
-    // After 90 days it lifts.
+    // After 90 days it lifts. Dated so: Ada's pause 91 days back in all (so it is no longer one of two pauses in 90 days,
+    // removal S4), and Abe's lift a month back (so another admin's pause is no longer an owner's).
+    age(daveVote, 60);
+    age(abeVote, 31);
     db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(ago((de.REMOVAL_COOL_DOWN_DAYS + 1) * DAY), daveVote);
     const adaLater = await pause(adaSession, dave, 'Took deposits for repairs again, months later');
     assert(adaLater.status === 200 && statusOf(dave) === 'disabled', `${de.REMOVAL_COOL_DOWN_DAYS} days after his vote ended, Ada may pause Dave again (${adaLater.status} ${adaLater.text.slice(0, 160)})`);

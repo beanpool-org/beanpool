@@ -1286,7 +1286,6 @@
   "Groups\u0004talk pane": "Nhóm",
   "People\u0004talk pane": "Mọi người",
   "🔓 Release Credits": "🔓 Giải phóng tín dụng",
-  "📦 Fulfill Order": "📦 Hoàn tất đơn hàng",
   "⭐ Leave Review": "⭐ Viết đánh giá",
   "⚡ Action Required": "⚡ Cần xử lý",
   "Transaction": "Giao dịch",
@@ -1298,9 +1297,6 @@
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "other": "Cần đánh giá ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "other": "Hoàn tất đơn hàng ({n})"
   },
   "New\u0004conversation": "Mới",
   "Action Required": "Cần hành động",

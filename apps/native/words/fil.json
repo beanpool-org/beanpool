@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "Mga Grupo",
   "People\u0004talk pane": "Mga Tao",
   "🔓 Release Credits": "🔓 I-release ang Kredito",
-  "📦 Fulfill Order": "📦 Tuparin ang Order",
   "⭐ Leave Review": "⭐ Mag-iwan ng Review",
   "⚡ Action Required": "⚡ Kinakailangang Aksyon",
   "Transaction": "Transaksyon",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Kailangan ang Review ({n})",
     "other": "Kailangan ang Review ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Tuparin ang Order ({n})",
-    "other": "Tuparin ang Order ({n})"
   },
   "New\u0004conversation": "Bago",
   "Action Required": "Kinakailangang Aksyon",

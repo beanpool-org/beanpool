@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "গ্রুপ",
   "People\u0004talk pane": "মানুষজন",
   "🔓 Release Credits": "🔓 ক্রেডিট রিলিজ করুন",
-  "📦 Fulfill Order": "📦 অর্ডার সম্পন্ন করুন",
   "⭐ Leave Review": "⭐ রিভিউ দিন",
   "⚡ Action Required": "⚡ পদক্ষেপ প্রয়োজন",
   "Transaction": "লেনদেন",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "রিভিউ প্রয়োজন ({n})",
     "other": "রিভিউ প্রয়োজন ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "অর্ডার সম্পন্ন করুন ({n})",
-    "other": "অর্ডার সম্পন্ন করুন ({n})"
   },
   "New\u0004conversation": "নতুন",
   "Action Required": "পদক্ষেপ প্রয়োজন",

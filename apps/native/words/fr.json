@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "Groupes",
   "People\u0004talk pane": "Membres",
   "🔓 Release Credits": "🔓 Débloquer les crédits",
-  "📦 Fulfill Order": "📦 Traiter la commande",
   "⭐ Leave Review": "⭐ Laisser un avis",
   "⚡ Action Required": "⚡ Action requise",
   "Transaction": "Transaction",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Avis requis ({n})",
     "other": "Avis requis ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Traiter la commande ({n})",
-    "other": "Traiter les commandes ({n})"
   },
   "New\u0004conversation": "Nouvelle",
   "Action Required": "Action requise",

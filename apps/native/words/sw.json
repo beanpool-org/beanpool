@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "Vikundi",
   "People\u0004talk pane": "Watu",
   "🔓 Release Credits": "🔓 Toa Salio",
-  "📦 Fulfill Order": "📦 Tekeleza Agizo",
   "⭐ Leave Review": "⭐ Acha Maoni",
   "⚡ Action Required": "⚡ Hatua Inahitajika",
   "Transaction": "Muamala",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Maoni Yanahitajika ({n})",
     "other": "Maoni Yanahitajika ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Tekeleza Agizo ({n})",
-    "other": "Tekeleza Maagizo ({n})"
   },
   "New\u0004conversation": "Mpya",
   "Action Required": "Hatua Inahitajika",

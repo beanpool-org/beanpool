@@ -1349,7 +1349,6 @@
   "Groups\u0004talk pane": "Gruplar",
   "People\u0004talk pane": "Kişiler",
   "🔓 Release Credits": "🔓 Kredileri Serbest Bırak",
-  "📦 Fulfill Order": "📦 Siparişi Karşıla",
   "⭐ Leave Review": "⭐ Değerlendirme Yap",
   "⚡ Action Required": "⚡ Eylem Gerekli",
   "Transaction": "İşlem",
@@ -1364,10 +1363,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Değerlendirme Gerekli ({n})",
     "other": "Değerlendirme Gerekli ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Siparişi Karşıla ({n})",
-    "other": "Siparişi Karşıla ({n})"
   },
   "New\u0004conversation": "Yeni",
   "Action Required": "Eylem Gerekli",

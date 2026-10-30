@@ -1287,7 +1287,6 @@
   "Groups\u0004talk pane": "Grup",
   "People\u0004talk pane": "Orang",
   "🔓 Release Credits": "🔓 Lepaskan Kredit",
-  "📦 Fulfill Order": "📦 Selesaikan Pesanan",
   "⭐ Leave Review": "⭐ Beri Ulasan",
   "⚡ Action Required": "⚡ Tindakan Diperlukan",
   "Transaction": "Transaksi",
@@ -1299,9 +1298,6 @@
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "other": "Perlu Ulasan ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "other": "Selesaikan Pesanan ({n})"
   },
   "New\u0004conversation": "Baru",
   "Action Required": "Tindakan Diperlukan",

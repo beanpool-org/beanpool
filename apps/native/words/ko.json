@@ -1286,7 +1286,6 @@
   "Groups\u0004talk pane": "모임",
   "People\u0004talk pane": "사람",
   "🔓 Release Credits": "🔓 크레딧 지급",
-  "📦 Fulfill Order": "📦 주문 이행",
   "⭐ Leave Review": "⭐ 후기 남기기",
   "⚡ Action Required": "⚡ 확인 필요",
   "Transaction": "거래",
@@ -1298,9 +1297,6 @@
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "other": "후기 작성 필요 ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "other": "주문 이행 ({n})"
   },
   "New\u0004conversation": "새 대화",
   "Action Required": "확인 필요",

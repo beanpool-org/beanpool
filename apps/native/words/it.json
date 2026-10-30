@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "Gruppi",
   "People\u0004talk pane": "Persone",
   "🔓 Release Credits": "🔓 Sblocca crediti",
-  "📦 Fulfill Order": "📦 Evadi ordine",
   "⭐ Leave Review": "⭐ Lascia una recensione",
   "⚡ Action Required": "⚡ Azione richiesta",
   "Transaction": "Transazione",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Recensione necessaria ({n})",
     "other": "Recensioni necessarie ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Evadi ordine ({n})",
-    "other": "Evadi ordini ({n})"
   },
   "New\u0004conversation": "Nuova",
   "Action Required": "Azione richiesta",

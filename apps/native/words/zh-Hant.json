@@ -1286,7 +1286,6 @@
   "Groups\u0004talk pane": "群組",
   "People\u0004talk pane": "成員",
   "🔓 Release Credits": "🔓 撥付信用額度",
-  "📦 Fulfill Order": "📦 履行訂單",
   "⭐ Leave Review": "⭐ 留下評價",
   "⚡ Action Required": "⚡ 需要處理",
   "Transaction": "交易",
@@ -1298,9 +1297,6 @@
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "other": "需要評價 ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "other": "履行訂單 ({n})"
   },
   "New\u0004conversation": "新",
   "Action Required": "需要處理",

@@ -1349,7 +1349,6 @@
   "Groups\u0004talk pane": "گروه‌ها",
   "People\u0004talk pane": "افراد",
   "🔓 Release Credits": "🔓 آزادسازی اعتبار",
-  "📦 Fulfill Order": "📦 انجام سفارش",
   "⭐ Leave Review": "⭐ ثبت نظر",
   "⚡ Action Required": "⚡ اقدام لازم",
   "Transaction": "معامله",
@@ -1364,10 +1363,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "نیاز به ثبت نظر ({n})",
     "other": "نیاز به ثبت نظر ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "انجام سفارش ({n})",
-    "other": "انجام سفارش ({n})"
   },
   "New\u0004conversation": "جدید",
   "Action Required": "اقدام لازم",

@@ -1472,7 +1472,6 @@
   "Groups\u0004talk pane": "Групи",
   "People\u0004talk pane": "Люди",
   "🔓 Release Credits": "🔓 Виплатити бали",
-  "📦 Fulfill Order": "📦 Виконати замовлення",
   "⭐ Leave Review": "⭐ Залишити відгук",
   "⚡ Action Required": "⚡ Потрібна дія",
   "Transaction": "Обмін",
@@ -1493,12 +1492,6 @@
     "few": "Потрібні відгуки ({n})",
     "many": "Потрібно відгуків ({n})",
     "other": "Потрібні відгуки ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Виконати замовлення ({n})",
-    "few": "Виконати замовлення ({n})",
-    "many": "Виконати замовлення ({n})",
-    "other": "Виконати замовлення ({n})"
   },
   "New\u0004conversation": "Новий",
   "Action Required": "Потрібна дія",

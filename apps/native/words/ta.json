@@ -1350,7 +1350,6 @@
   "Groups\u0004talk pane": "குழுக்கள்",
   "People\u0004talk pane": "நபர்கள்",
   "🔓 Release Credits": "🔓 கிரெடிட்களை விடுவி",
-  "📦 Fulfill Order": "📦 ஆர்டரை நிறைவேற்று",
   "⭐ Leave Review": "⭐ மதிப்புரை எழுதுங்கள்",
   "⚡ Action Required": "⚡ நடவடிக்கை தேவை",
   "Transaction": "பரிவர்த்தனை",
@@ -1365,10 +1364,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "மதிப்புரை தேவை ({n})",
     "other": "மதிப்புரை தேவை ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "ஆர்டரை நிறைவேற்று ({n})",
-    "other": "ஆர்டரை நிறைவேற்று ({n})"
   },
   "New\u0004conversation": "புதியது",
   "Action Required": "நடவடிக்கை தேவை",

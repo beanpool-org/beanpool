@@ -1596,7 +1596,6 @@
   "Groups\u0004talk pane": "المجموعات",
   "People\u0004talk pane": "الأشخاص",
   "🔓 Release Credits": "🔓 تحرير الرصيد",
-  "📦 Fulfill Order": "📦 تلبية الطلب",
   "⭐ Leave Review": "⭐ كتابة تقييم",
   "⚡ Action Required": "⚡ إجراء مطلوب",
   "Transaction": "معاملة",
@@ -1623,14 +1622,6 @@
     "few": "{n} مراجعات مطلوبة",
     "many": "{n} مراجعةً مطلوبة",
     "other": "{n} مراجعة مطلوبة"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "zero": "لا طلبات للتلبية ({n})",
-    "one": "تلبية الطلب",
-    "two": "تلبية الطلبين",
-    "few": "تلبية {n} طلبات",
-    "many": "تلبية {n} طلبًا",
-    "other": "تلبية {n} طلب"
   },
   "New\u0004conversation": "جديدة",
   "Action Required": "إجراء مطلوب",

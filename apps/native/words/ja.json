@@ -1286,7 +1286,6 @@
   "Groups\u0004talk pane": "グループ",
   "People\u0004talk pane": "仲間",
   "🔓 Release Credits": "🔓 クレジットを支払う",
-  "📦 Fulfill Order": "📦 注文を完了する",
   "⭐ Leave Review": "⭐ レビューを書く",
   "⚡ Action Required": "⚡ 対応が必要",
   "Transaction": "取引",
@@ -1298,9 +1297,6 @@
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "other": "レビューが必要 ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "other": "注文の完了 ({n})"
   },
   "New\u0004conversation": "新規",
   "Action Required": "対応が必要",

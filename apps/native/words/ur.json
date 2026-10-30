@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "گروپس",
   "People\u0004talk pane": "افراد",
   "🔓 Release Credits": "🔓 کریڈٹ جاری کریں",
-  "📦 Fulfill Order": "📦 آرڈر مکمل کریں",
   "⭐ Leave Review": "⭐ رائے دیں",
   "⚡ Action Required": "⚡ کارروائی درکار ہے",
   "Transaction": "لین دین",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "جائزہ درکار ہے ({n})",
     "other": "جائزے درکار ہیں ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "آرڈر مکمل کریں ({n})",
-    "other": "آرڈر مکمل کریں ({n})"
   },
   "New\u0004conversation": "نئی",
   "Action Required": "کارروائی درکار ہے",

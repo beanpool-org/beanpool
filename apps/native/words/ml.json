@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "ഗ്രൂപ്പുകൾ",
   "People\u0004talk pane": "ആളുകൾ",
   "🔓 Release Credits": "🔓 ക്രെഡിറ്റുകൾ നൽകുക",
-  "📦 Fulfill Order": "📦 ഓർഡർ പൂർത്തിയാക്കുക",
   "⭐ Leave Review": "⭐ അവലോകനം നൽകുക",
   "⚡ Action Required": "⚡ നടപടി വേണം",
   "Transaction": "ഇടപാട്",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "അവലോകനം വേണം ({n})",
     "other": "അവലോകനം വേണം ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "ഓർഡർ പൂർത്തിയാക്കുക ({n})",
-    "other": "ഓർഡർ പൂർത്തിയാക്കുക ({n})"
   },
   "New\u0004conversation": "പുതിയത്",
   "Action Required": "നടപടി വേണം",

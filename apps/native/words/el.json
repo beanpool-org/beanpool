@@ -1348,7 +1348,6 @@
   "Groups\u0004talk pane": "Ομάδες",
   "People\u0004talk pane": "Άτομα",
   "🔓 Release Credits": "🔓 Αποδέσμευση πιστώσεων",
-  "📦 Fulfill Order": "📦 Εκπλήρωση παραγγελίας",
   "⭐ Leave Review": "⭐ Υποβολή αξιολόγησης",
   "⚡ Action Required": "⚡ Απαιτείται ενέργεια",
   "Transaction": "Συναλλαγή",
@@ -1363,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Χρειάζεται αξιολόγηση ({n})",
     "other": "Χρειάζονται αξιολογήσεις ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Εκπλήρωση παραγγελίας ({n})",
-    "other": "Εκπλήρωση παραγγελιών ({n})"
   },
   "New\u0004conversation": "Νέο",
   "Action Required": "Απαιτείται ενέργεια",

@@ -1350,7 +1350,6 @@
   "Groups\u0004talk pane": "समूह",
   "People\u0004talk pane": "लोग",
   "🔓 Release Credits": "🔓 क्रेडिट जारी करें",
-  "📦 Fulfill Order": "📦 ऑर्डर पूरा करें",
   "⭐ Leave Review": "⭐ समीक्षा लिखें",
   "⚡ Action Required": "⚡ कार्रवाई आवश्यक",
   "Transaction": "लेनदेन",
@@ -1365,10 +1364,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "समीक्षा आवश्यक ({n})",
     "other": "समीक्षाएँ आवश्यक ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "ऑर्डर पूरा करें ({n})",
-    "other": "ऑर्डर पूरे करें ({n})"
   },
   "New\u0004conversation": "नया",
   "Action Required": "कार्रवाई आवश्यक",

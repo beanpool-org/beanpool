@@ -1472,7 +1472,6 @@
   "Groups\u0004talk pane": "Группы",
   "People\u0004talk pane": "Люди",
   "🔓 Release Credits": "🔓 Разблокировать кредиты",
-  "📦 Fulfill Order": "📦 Выполнить заказ",
   "⭐ Leave Review": "⭐ Оставить отзыв",
   "⚡ Action Required": "⚡ Требуется действие",
   "Transaction": "Сделка",
@@ -1493,12 +1492,6 @@
     "few": "Нужны отзывы ({n})",
     "many": "Нужны отзывы ({n})",
     "other": "Нужны отзывы ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Выполнить заказ ({n})",
-    "few": "Выполнить заказы ({n})",
-    "many": "Выполнить заказы ({n})",
-    "other": "Выполнить заказы ({n})"
   },
   "New\u0004conversation": "Новая беседа",
   "Action Required": "Требуется действие",

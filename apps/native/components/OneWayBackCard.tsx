@@ -25,6 +25,9 @@ import {
 } from '../utils/one-way-back';
 import { anchorUrl } from '../utils/node-post';
 import { vaultCopyKnown } from '../utils/vault';
+import { GLOBAL_NODE_URL } from '../utils/global-node-url';
+import { getSavedNodes } from '../utils/nodes';
+import { communityName } from '../utils/community-name';
 import { t, word } from '@beanpool/core';
 
 /**
@@ -171,6 +174,25 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
         await show(await oneWayBackFromNode(key, where, standing, now, { vaultCopy: vault }));
     }, [identity]);
 
+    // The community the record is about, where it isn't the global community (a door anyone can join, joined with 12
+    // words: app/join-open-door.tsx), named as the door screens name it: its saved name, else its host. The sheet says it
+    // where it would say "the global community".
+    const recordUrl = record?.url;
+    const [doorName, setDoorName] = useState<string | undefined>(undefined);
+    useEffect(() => {
+        if (!recordUrl || sameCommunity(recordUrl, GLOBAL_NODE_URL)) {
+            setDoorName(undefined);
+            return;
+        }
+        let live = true;
+        setDoorName(communityName({ url: recordUrl }));
+        void getSavedNodes().catch(() => []).then((saved) => {
+            const alias = saved.find((n) => sameCommunity(n.url, recordUrl))?.alias ?? null;
+            if (live) setDoorName(communityName({ url: recordUrl, alias }));
+        });
+        return () => { live = false; };
+    }, [recordUrl]);
+
     useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
     // Home's answer arrived with the community's word, or the account's dismissal changed: read again.
     const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}` : '';
@@ -200,6 +222,7 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeW
             visible={linking}
             identity={identity}
             url={record.url}
+            community={doorName}
             colors={colors}
             onClose={() => setLinking(false)}
             onLinked={() => { void refresh('now'); }}

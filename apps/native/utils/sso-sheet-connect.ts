@@ -26,13 +26,44 @@
  *
  * A build without a vault (vault.ts `signInCopiesAt`) connects exactly as the app did before the vault: the member's
  * community's nonce (sso-signin.ts `startSsoSignIn`), the provider, and the deposit at that community (`url`).
+ *
+ * ## The community's rule (vault rethink VR2, design §5.3)
+ *
+ * In a build with the vault, the community the phone is on (`url`) says where members' copies go (utils/copies-rule.ts),
+ * asked at this moment: `server` connects at the community as a build without a vault does, so the vault is never
+ * contacted; `none` links nothing and opens no sheet, in the community's words; `vault` goes to the vault. Not answered
+ * and never heard: nothing is linked, as the phone can't tell the community wants a copy made. With no community at all
+ * (`url` null), the vault, as before the rule. A build without a vault asks nothing new before the community's nonce:
+ * every copy goes to the community, whose server refuses one it keeps none of (409 `no_copies_here`). That refusal is
+ * the rule `none`, said in its words as a build with the vault says it, and only then is the rule asked, once, so the
+ * screen finds the community's fresh answer when it reads where a copy goes again.
+ *
+ * The screen that opened the sheet told the member where the copy goes (`shownAt`), from its own, earlier read of the
+ * rule. A copy goes only there: when the rule asked now sends it elsewhere (the owners changed it since, or that read got
+ * no answer), nothing is linked, no ticket is asked for and no sheet opens, so the member reads where it goes first.
  */
 
 import { signInWithProvider, startSsoSignIn, SsoSignInError } from './sso-signin';
-import type { SsoProvider } from './sso-signin';
+import type { SsoProvider, SsoSignIn } from './sso-signin';
 import { enrolSsoKeeper, type KeeperEnrolmentResult } from './keeper-enrolment';
 import type { BeanPoolIdentity } from './identity';
 import { rememberConnectWanted, signInCopiesAt, vaultTicket, VaultError, VAULT_MESSAGES, type VaultFailure } from './vault';
+import type { SignInCopies } from './vault-config';
+import { copiesRuleNow } from './copies-rule';
+
+/**
+ * What a member reads when the community keeps no copies, can't be asked where it keeps them, or now keeps them somewhere
+ * other than the screen said. Plain English (this file is beside the 12 words' key path); the screens translate them
+ * (components/welcome/welcome-lines.ts).
+ */
+export const CONNECT_RULE_MESSAGES = {
+    none: "Your community keeps no copies of members' accounts, so no sign-in was linked. Your 12 words are your way back there.",
+    unknown: "Your community couldn't be asked where it keeps copies, so no sign-in was linked. Try again when you're connected.",
+    changed: 'Your community changed where it keeps copies, so no sign-in was linked. Close this to see where a copy goes now, then link it again.',
+} as const;
+
+/** The code a community's refusal carries where it keeps no copies (apps/server config/recovery-copies.ts NO_COPIES_HERE). */
+export const NO_COPIES_HERE = 'no_copies_here';
 
 /**
  * Decode the `sub` claim from a JWT id_token without signature verification. The copy is sealed to it, and the vault
@@ -52,6 +83,11 @@ export function extractSub(idToken: string): string {
         }
     } catch {}
     throw new Error('ID token missing subject claim (sub).');
+}
+
+/** Nothing linked and nothing to offer again: the community's rule said no, or couldn't be asked. */
+function nothingLinked(error: string): KeeperEnrolmentResult {
+    return { enrolled: [], generation: null, skipped: [], available: 0, error };
 }
 
 /** Nothing linked, in the member's words: the vault's refusal, or ours. A paused vault is offered again later. */
@@ -77,6 +113,12 @@ export async function connectAndDeposit(options: {
      */
     copyAt?: 'community';
     /**
+     * Where the screen that opened the sheet told the member the copy goes (its `copiesAt`, from the community's rule as
+     * that screen read it). A copy is made only there: when the rule asked now sends it elsewhere, nothing is linked
+     * (`CONNECT_RULE_MESSAGES.changed`). Absent: wherever the rule says now.
+     */
+    shownAt?: SignInCopies;
+    /**
      * The phone's lock, asked before anything starts. The sheet hands it Settings' check (LocalAuth.authenticateUser);
      * null only for a key the join wizard has just made, the member's own new account.
      */
@@ -92,7 +134,21 @@ export async function connectAndDeposit(options: {
     }
     // Closed while the check was up: nothing starts.
     if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    // A build without a vault, and an account a claim made: the copy goes to the community, exactly as before the rule,
+    // with exactly the requests it always made. The community's own server holds its rule there: under `none` its nonce
+    // answers 409 `no_copies_here`, nothing is kept, and the member reads the rule's sentence (`connectAtCommunity`). A
+    // claim's community was claimed a moment ago, so its rule is the default, and nothing of ours is in its path (Marty,
+    // 24 Oct).
     if (signInCopiesAt() === 'community' || options.copyAt === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
+    // A build with the vault: the community's rule, asked now (the header's "The community's rule").
+    const rule = options.url ? await copiesRuleNow(options.url) : undefined;
+    if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    if (rule === null) return nothingLinked(CONNECT_RULE_MESSAGES.unknown);
+    const at = signInCopiesAt(rule);
+    if (at === 'none') return nothingLinked(CONNECT_RULE_MESSAGES.none);
+    // The member was told it goes elsewhere: never a copy of the key where they weren't told it would be.
+    if (options.shownAt && options.shownAt !== at) return nothingLinked(CONNECT_RULE_MESSAGES.changed);
+    if (at === 'community') return connectAtCommunity({ ...options, url: options.url ?? null });
 
     let grant: { ticket: string; nonce: string };
     try {
@@ -119,7 +175,10 @@ export async function connectAndDeposit(options: {
     return result.error ? notLinked(identity, provider, result.error, result.failure) : result;
 }
 
-/** A build without a vault: exactly the connect the app made before the vault, at the member's community. */
+/**
+ * A build without a vault: exactly the connect the app made before the vault, at the member's community. A nonce refused
+ * because the community keeps no copies is its rule `none` ({@link keepsNoCopiesNow}).
+ */
 async function connectAtCommunity(options: {
     provider: SsoProvider;
     url: string | null;
@@ -129,7 +188,13 @@ async function connectAtCommunity(options: {
 }): Promise<KeeperEnrolmentResult> {
     const { provider, url, identity, signal } = options;
     if (!url) return { enrolled: [], generation: null, skipped: [], available: 0, error: 'No node configured yet.' };
-    const signin = await startSsoSignIn(provider, url, identity);
+    let signin: SsoSignIn;
+    try {
+        signin = await startSsoSignIn(provider, url, identity);
+    } catch (e) {
+        if (e instanceof SsoSignInError && e.code === NO_COPIES_HERE) return keepsNoCopiesNow(url, signal);
+        throw e;
+    }
     await options.onSignedIn();
     if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
 
@@ -140,4 +205,16 @@ async function connectAtCommunity(options: {
         idToken: signin.idToken,
         nonce: signin.nonce,
     });
+}
+
+/**
+ * The community's nonce said it keeps no copies (409 `no_copies_here`), so no sheet opened: nothing linked, in the rule's
+ * words, as when a build with the vault asks the rule first (never the node's answer as it came). This connect asked
+ * nothing before the nonce, so the screen that opened the sheet went by an earlier read that said a copy is kept: the rule
+ * is asked once now, and the community's fresh answer is kept for that screen's next read (utils/copies-rule.ts).
+ */
+async function keepsNoCopiesNow(url: string, signal: AbortSignal): Promise<KeeperEnrolmentResult> {
+    await copiesRuleNow(url);
+    if (signal.aborted) throw new SsoSignInError('cancelled', 'Sign-in was cancelled.');
+    return nothingLinked(CONNECT_RULE_MESSAGES.none);
 }

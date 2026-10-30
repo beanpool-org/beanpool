@@ -15,7 +15,7 @@ import type { Protection } from '../utils/protection-state';
 import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
 import { SSO_PROVIDER_NAMES as PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
-import { hasVault } from '../utils/vault-config';
+import { hasVault, type SignInCopies } from '../utils/vault-config';
 import { t, tn, word } from '@beanpool/core';
 import { welcomeLineWords } from './welcome/welcome-lines';
 import { WhoCanOpen } from './WhoCanOpen';
@@ -76,6 +76,19 @@ export const SIGN_IN_ROW = {
     whoCanOpenButton: word('Who can open it'),
 } as const;
 
+/**
+ * A community whose rule is that it keeps no copies (vault rethink VR2, design §5.3 "Nowhere"): its screens offer no
+ * sign-in, at the vault or at the community, and say why; a copy the member made before, here or elsewhere, is theirs
+ * (the community can't remove it). In place of the sign-in row, at Safety Backup and in Account Protection.
+ */
+export const NO_COPIES_ROW = {
+    title: word('🔑 Your 12 words are your way back here'),
+    keepsNone: word("This community keeps no copies of members' accounts and doesn't use BeanPool's key vault, so no sign-in can be linked here."),
+    keepWords: word('Keep your 12 words written down: without them, an admin can only move your Beans and name to a new key.'),
+    noWords: word('This phone has no 12 words: if you lose it, an admin can only move your Beans and name to a new key.'),
+    yoursStay: word('A copy you made before, here or in another community, is still yours until you remove it.'),
+} as const;
+
 /** The sentences above, for t() where they are shown. */
 const PANEL_WORDS = {
     signInCopyOpeners: SIGN_IN_COPY_OPENERS,
@@ -106,6 +119,7 @@ export function KeeperProtectionPanel({
     protection,
     communityName,
     copyAt,
+    copiesAt,
     onProtectSso,
     onDisconnectSso,
     hasWords,
@@ -137,6 +151,12 @@ export function KeeperProtectionPanel({
      * no copy at our key vault in a self-hosted community's first owner's path), as SsoEnrolSheet's copyAt deposits it.
      */
     copyAt?: 'community';
+    /**
+     * Where a copy made here goes, by the community's rule (utils/vault-config.ts signInCopiesAt, vault rethink VR2): the
+     * vault, the community, or nowhere (NO_COPIES_ROW in place of the sign-in row). Absent: where this build keeps copies,
+     * as before the rule.
+     */
+    copiesAt?: SignInCopies;
     onProtectSso?: (provider: SsoProvider) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
 }): React.JSX.Element {
@@ -146,15 +166,33 @@ export function KeeperProtectionPanel({
         ? ['apple', 'google', 'facebook']
         : ['google', 'facebook'];
 
-    // Where this build keeps the copy (utils/vault.ts `signInCopiesAt`). One copy at the key vault covers every
-    // community, so there the heading names none; without a vault each community keeps its own, so it names this one.
-    const atVault = hasVault() && copyAt !== 'community';
+    // Where a copy made here goes: the community's rule, else this build's place (utils/vault.ts `signInCopiesAt`). One
+    // copy at the key vault covers every community, so there the heading names none; at a community each keeps its own,
+    // so it names this one.
+    const mode: SignInCopies = copyAt === 'community' && copiesAt !== 'none' ? 'community' : copiesAt ?? (hasVault() ? 'vault' : 'community');
+    const atVault = mode === 'vault';
     const community = atVault ? null : formatCommunityName(communityName);
     const coveredHeading = community ? t("🛡️ You're covered on {community}", { community }) : t("🛡️ You're covered");
     const copyOpeners = atVault ? t(PANEL_WORDS.vaultCopyOpeners) : t(PANEL_WORDS.signInCopyOpeners);
     const covered = protection.state === 'covered';
-    // Account Protection's sign-in row on its own: the words row above it already says what the words are.
-    const rowOnly = waysBack && atVault && !covered && hasWords;
+    // Account Protection's sign-in row on its own: the words row above it already says what the words are. Only in a build
+    // with a key vault, whose Account Protection puts the words first, at the vault or at a community that keeps copies
+    // itself (its rule): a build without one draws the panel as it always did.
+    const rowOnly = waysBack && hasVault() && !covered && hasWords;
+
+    // This community keeps no copies: the words are the way back here, and nothing is offered (NO_COPIES_ROW).
+    if (mode === 'none') {
+        return (
+            <View style={[styles.panel, styles.wordsOnly]} testID="no-copies-row">
+                <Text style={styles.heading} accessibilityRole="header">{t(NO_COPIES_ROW.title)}</Text>
+                <Text style={styles.body}>
+                    <Text>{t(NO_COPIES_ROW.keepsNone)}</Text>{' '}
+                    <Text>{hasWords ? t(NO_COPIES_ROW.keepWords) : t(NO_COPIES_ROW.noWords)}</Text>
+                </Text>
+                <Text style={styles.footnote}>{t(NO_COPIES_ROW.yoursStay)}</Text>
+            </View>
+        );
+    }
     // Whether the row may say the vault's copy holds the 12 words (SIGN_IN_ROW): not of a copy Account Protection finds.
     const copyHasWords = hasWords && !(covered && waysBack);
     const openersLine = (

@@ -261,6 +261,14 @@ export function vaultCopyKnownStoreKey(publicKey: string): string {
     return `beanpool_vault_copy_known:${publicKey.toLowerCase()}`;
 }
 
+/**
+ * The rule for where members' copies go that one account last saw in each of its communities (utils/copies-rule.ts),
+ * as JSON `{ <community address>: <rule> }`: a rule that differs from it shows Home's "rule changed" card once.
+ */
+export function copiesRuleSeenStoreKey(publicKey: string): string {
+    return `beanpool_copies_rule_seen:${publicKey.toLowerCase()}`;
+}
+
 /** The key vault holds one account said "Yes, it's me" to on this phone (utils/vault.ts `approvedHolds`). */
 export function vaultApprovedHoldsStoreKey(publicKey: string): string {
     return `beanpool_vault_approved_holds:${publicKey.toLowerCase()}`;

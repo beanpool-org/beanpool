@@ -10,6 +10,7 @@ import { SettingsPage } from './SettingsPage';
 import * as api from '../lib/api';
 import { NO_WORDS_HERE, SIGN_IN_COPY_OPENERS, SIGN_IN_COPY_WORDS_ONLY, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
+import { ONE_WAY_BACK_WORDS } from '../components/OneWayBack';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -118,6 +119,61 @@ describe('Settings: sign-in recovery', () => {
         renderSettings();
         await screen.findByTestId('signin-recovery');
         expect(screen.queryByTestId('signin-recovery-where')).toBeNull();
+    });
+
+    // Vault rethink VR2: a community whose rule is that it keeps no copies says so where the line says where the copy is.
+    it("a community that keeps no copies: said with none here, and a copy from before stays until it's removed", async () => {
+        const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, recoveryCopies: 'none' as const };
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(NONE);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings();
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-where').textContent)
+            .toBe("This community keeps no copies of members' accounts: your 12 words are your way back here."));
+        cleanup();
+        resetCommunityInfoOnce();
+
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(NONE);
+        vi.mocked(api.getSignInRecovery).mockResolvedValue(['google']);
+        renderSettings();
+        await waitFor(() => expect(screen.getByTestId('signin-recovery-where').textContent)
+            .toBe("This community's server keeps the copy of your account that your sign-in opens. This community keeps no new copies now. This one stays until you remove it."));
+        cleanup();
+        resetCommunityInfoOnce();
+
+        // `server` and `vault` read as before: the web app keeps its own copy on this server either way.
+        vi.mocked(api.getCommunityInfo).mockResolvedValue({ ...NONE, recoveryCopies: 'server' });
+        vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+        renderSettings();
+        await screen.findByTestId('signin-recovery');
+        await waitFor(() => expect(api.getCommunityInfo).toHaveBeenCalled());
+        expect(screen.getByTestId('signin-recovery-where').textContent).toBe("This community's server keeps no copy of your account that a sign-in opens.");
+    });
+
+    // The same rule on the card a 12-words member sees here (components/OneWayBack.tsx): where this community keeps no
+    // copies, its sign-in only lifts the limits, as the phone's add-a-sign-in sheet says.
+    it("a community that keeps no copies: the one-way-back card's sign-in promises no copy and no way back", async () => {
+        const NONE = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global' as const, recoveryCopies: 'none' as const };
+        const wordsOnly = { publicKey: 'me-pk', probation: { rules: 'words', keptPosts: 0, ageEndsAt: null }, mute: { muted: false, until: null } } as unknown as api.CommunityStanding;
+        const me = vi.spyOn(api, 'getCommunityMe').mockResolvedValue(wordsOnly);
+        try {
+            vi.mocked(api.getCommunityInfo).mockResolvedValue(NONE);
+            vi.mocked(api.getSignInRecovery).mockResolvedValue([]);
+            renderSettings();
+            const card = await screen.findByTestId('one-way-back-settings');
+            await waitFor(() => expect(within(card).getByTestId('add-sign-in')).toHaveTextContent(ONE_WAY_BACK_WORDS.whyNoCopies));
+            expect(card).not.toHaveTextContent(/locks a copy|second way back/);
+            cleanup();
+            resetCommunityInfoOnce();
+
+            // `server`: as before, a copy on this server that the people who run it can open.
+            vi.mocked(api.getCommunityInfo).mockResolvedValue({ ...NONE, recoveryCopies: 'server' });
+            renderSettings();
+            const asBefore = await screen.findByTestId('one-way-back-settings');
+            await waitFor(() => expect(api.getCommunityInfo).toHaveBeenCalled());
+            expect(within(asBefore).getByTestId('add-sign-in')).toHaveTextContent(ONE_WAY_BACK_WORDS.why);
+        } finally {
+            me.mockRestore();
+        }
     });
 
     it('the node could not be asked: no line at all, and the banner as it was', async () => {

@@ -6,11 +6,11 @@
  * Ledger (app/(tabs)/ledger.tsx), its Wallet tab, through react-native-web in headless Chromium, as e2e/peek-320.mjs
  * draws its screens.
  *
- * What is drawn: the Wallet with beans held in trust (the IN ESCROW total and a Held in Trust row whose deal the phone
+ * What is drawn: the Wallet with beans held in trust (the HELD IN TRUST total and a Held in Trust row whose deal the phone
  * has, beside a hold it has no deal for and Beans from a member), and the Wallet with nothing held (no total).
  *
  * Text at 1.3× is Android's font scale: every Text's fontSize and lineHeight times 1.3, layout in dp as is. Each state
- * fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; the IN ESCROW total or a hold's
+ * fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; the HELD IN TRUST total or a hold's
  * row under 44dp tall; the held row missing its button role; text under 4.5:1 contrast with what it is drawn on (3:1 from
  * 18.66px bold or 24px).
  *
@@ -248,14 +248,14 @@ try {
             // The metrics of the wallet strip start together: each one's icon, value and label sit at the top whatever the neighbours' labels do
             // (a label that wraps to two lines beside one that doesn't must not push the shorter one's content down).
             const metrics = [...document.querySelectorAll('div[dir]')]
-                .filter((el) => el.children.length === 0 && /^(COMMONS|CREDIT FLOOR|IN ESCROW)/.test(el.textContent.trim()))
+                .filter((el) => el.children.length === 0 && /^(COMMONS|CREDIT FLOOR|HELD IN TRUST)/.test(el.textContent.trim()))
                 .map((label) => label.parentElement);
             if (metrics.length < 2) out.push('the wallet strip: expected two or three metrics, found ' + metrics.length);
             for (let i = 0; i < 3; i++) {
                 const tops = metrics.filter((m) => m.children[i]).map((m) => m.children[i].getBoundingClientRect().top);
                 if (tops.length && Math.max(...tops) - Math.min(...tops) > 1) out.push('the wallet strip metrics do not start together: part ' + (i + 1) + ' of each sits ' + (Math.max(...tops) - Math.min(...tops)).toFixed(1) + 'px apart');
             }
-            door('ledger-in-escrow', 'the IN ESCROW total', total);
+            door('ledger-in-escrow', 'the HELD IN TRUST total', total);
             door('ledger-held-row', 'a Held in Trust row with a deal', heldRow);
             return out;
         }, { WIDTH, total, heldRow });

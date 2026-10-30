@@ -81,7 +81,12 @@ export type SsoFailure =
     | 'provider';
 
 export class SsoSignInError extends Error {
-    constructor(readonly reason: SsoFailure, message: string) {
+    /**
+     * `code`: the node's own code for its refusal, where its answer named one ({@link fetchSsoNonce}). Like `reason`, it
+     * is for a decision, never read from the message: `no_copies_here` says the community keeps no copies of members'
+     * accounts (its rule, vault rethink VR2), which the connect says in the rule's words (utils/sso-sheet-connect.ts).
+     */
+    constructor(readonly reason: SsoFailure, message: string, readonly code?: string) {
         super(message);
         this.name = 'SsoSignInError';
     }
@@ -165,9 +170,19 @@ export async function fetchSsoNonce(
     }
     if (!res.ok) {
         const detail = await res.text().catch(() => '');
-        throw new SsoSignInError('nonce', `Your node would not start a sign-in (${res.status}): ${detail.slice(0, 200)}`);
+        throw new SsoSignInError('nonce', `Your node would not start a sign-in (${res.status}): ${detail.slice(0, 200)}`, refusalCode(detail));
     }
     return readNonceResponse(await res.json().catch(() => ({})));
+}
+
+/** The `code` a node's refusal names (`{ error, code }`), or undefined when it names none or isn't JSON. */
+function refusalCode(detail: string): string | undefined {
+    try {
+        const code = (JSON.parse(detail) as { code?: unknown } | null)?.code;
+        return typeof code === 'string' ? code : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 /**

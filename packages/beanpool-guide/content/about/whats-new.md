@@ -13,6 +13,7 @@ On the phone you get these with an up-to-date app; in a web browser, when your c
 - **Your 12 words first.** **Account Protection** lists **Your 12 words** first, then **A sign-in you link**.
 - **In a web browser.** **Safety Backup** and Settings say whether the community's server keeps a copy of your account: on the global community it does, for a sign-in you joined with. The web app never uses BeanPool's key vault.
 - **Where your account can be brought back from.** In **Account Protection**, a new screen lists every copy of your account your phone can find, at the key vault (with the day each was made) and at your communities' servers, with **Remove** next to each and **Remove everything**. Before the last one goes, it asks **Show my 12 words first?**. The web app's Settings lists the copy that community's server keeps. See "Getting your account back".
+- **Your community chooses where copies go.** Its owners can keep members' copies at BeanPool's key vault, on the community's own server, or nowhere. The app follows the choice when you link a sign-in, and a card on **Home** tells you when it changes. A copy you already have stays yours. See "Getting your account back".
 
 ## The global community, near you
 

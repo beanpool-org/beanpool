@@ -383,6 +383,24 @@ export function isNodeWrapped(kdfParams: string | null | undefined): boolean {
 }
 
 /**
+ * A release whose copy is gone (engine/recovery-release.ts forgetOldReleasedCopies, vault rethink VR2): its three copy
+ * fields are emptied and its `kdf_params` keeps only the scheme names, marked, so the record that a release happened
+ * stays and classifies as before ({@link isSingleBlobSsoStored} reads `inner`) and the boot's wrap never mistakes it for
+ * a copy stored before the wrap ({@link isNodeWrapped} is true of it). Nothing opens it: its nonce is empty.
+ */
+export function releasedCopyGoneKdf(kdfParams: string | null | undefined): string {
+    const parsed = parseKdf(kdfParams);
+    const inner = parsed?.alg === NODE_WRAP_ALG ? parsed.inner : parsed?.alg;
+    return JSON.stringify({ alg: NODE_WRAP_ALG, inner: typeof inner === 'string' ? inner : null, copy: 'gone' });
+}
+
+/** Whether a release's copy was emptied ({@link releasedCopyGoneKdf}). */
+export function isReleasedCopyGone(kdfParams: string | null | undefined): boolean {
+    const parsed = parseKdf(kdfParams);
+    return parsed?.alg === NODE_WRAP_ALG && parsed.copy === 'gone';
+}
+
+/**
  * Whether a STORED row is a single-blob sign-in copy, wrapped or not, without the key: what the threshold logic asks of
  * rows it never hands out.
  */
@@ -484,8 +502,9 @@ function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySe
     { shares: number; releases: number } {
     const shares = (db.prepare(`SELECT id, owner_pubkey, holder_type, holder_ref, encrypted_share, share_iv, share_tag, kdf_params
         FROM recovery_shares`).all() as ShareRow[]).filter(r => which(r.kdf_params));
+    // A release whose copy is gone holds nothing to lock (releasedCopyGoneKdf).
     const releases = (db.prepare(`SELECT id, collection_id, share_id, holder_type, payload, payload_iv, payload_tag, kdf_params
-        FROM recovery_releases`).all() as ReleaseRow[]).filter(r => which(r.kdf_params));
+        FROM recovery_releases`).all() as ReleaseRow[]).filter(r => which(r.kdf_params) && !isReleasedCopyGone(r.kdf_params));
     if (shares.length === 0 && releases.length === 0) return { shares: 0, releases: 0 };
 
     // Every row mapped before anything is written: a row that cannot be mapped fails the run and changes nothing. A map

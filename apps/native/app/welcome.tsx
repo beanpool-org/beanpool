@@ -35,7 +35,10 @@ import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } fro
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
 import { type LinkAnswer } from '../utils/join-link';
 import { startOneWayBack } from '../utils/one-way-back';
-import { signInCopiesAt } from '../utils/vault-config';
+import { signInCopiesAt, type SignInCopies } from '../utils/vault-config';
+import { copiesRuleForScreen } from '../utils/copies-rule';
+import { doorKeeperWords, globalPlace } from '../utils/open-door-words';
+import { anchorUrl as currentAnchorUrl } from '../utils/node-post';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
@@ -369,6 +372,14 @@ export default function WelcomeScreen() {
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
+    /**
+     * Where a copy made at Safety Backup goes: the joined community's rule (vault rethink VR2, utils/copies-rule.ts),
+     * read as the step opens, and again as the guide after it opens (a resumed onboarding can open there first); this
+     * build's place until then and when the community never said.
+     */
+    const [backupCopiesAt, setBackupCopiesAt] = useState<SignInCopies>(() => signInCopiesAt());
+    /** Read the rule again: the sheet found it moved on since the step read it, and linked nothing. */
+    const [backupCopiesRead, setBackupCopiesRead] = useState(0);
     const [inviterName, setInviterName] = useState<string | null>(null);
     const [inviteCommunityName, setInviteCommunityName] = useState<string | null>(null);
     const [clipboardMayHaveInvite, setClipboardMayHaveInvite] = useState(false);
@@ -377,6 +388,18 @@ export default function WelcomeScreen() {
     // --- The global community's open door (utils/global-join.ts; design §2.3). Sign in once, choose a
     // name, join; then the same steps as an invite. `joinFlow` says which door this wizard came in by. ---
     const [joinFlow, setJoinFlow] = useState<OnboardingFlow>('invite');
+    // Safety Backup's copies: where the community just joined keeps them (the sign-in row's words and what it offers), and
+    // the guide's: whether its Getting Back In card offers a sign-in.
+    useEffect(() => {
+        if (mode !== 'seedBackup' && mode !== 'onboardingGuide') return;
+        let live = true;
+        void (async () => {
+            const url = await currentAnchorUrl().catch(() => null);
+            const rule = url ? await copiesRuleForScreen(url) : null;
+            if (live) setBackupCopiesAt(signInCopiesAt(rule));
+        })();
+        return () => { live = false; };
+    }, [mode, backupCopiesRead]);
     const [globalPhase, setGlobalPhase] = useState<DoorPhase>('checking');
     /** What the member reads on the `unavailable`, `restore` and `closed` screens. */
     const [globalMessage, setGlobalMessage] = useState<string | null>(null);
@@ -394,6 +417,8 @@ export default function WelcomeScreen() {
      * Backup. A door without it looks exactly as before: the sign-in alone.
      */
     const [wordsDoor, setWordsDoor] = useState(false);
+    /** Where a copy made at this door goes (the global community's rule, VR2), from the door check; this build's place until then. */
+    const [globalDoorCopies, setGlobalDoorCopies] = useState<SignInCopies>(() => signInCopiesAt());
     const [doorWay, setDoorWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
     /**
@@ -421,6 +446,13 @@ export default function WelcomeScreen() {
      * nudge, and Manage signed by the account the claim made, which the app holds only once the wizard ends.
      */
     const [claimedName, setClaimedName] = useState<string | null>(null);
+    /**
+     * Another community's open door this wizard came in by (slice S2), named as its How it Works card names it: what Safety
+     * Backup's add-a-sign-in sheet and its notice say in place of "the global community" (VR2's sentences by the rule).
+     */
+    const otherDoorName = joinFlow === 'global' && createAnchorUrl && createAnchorUrl !== GLOBAL_NODE_URL
+        ? communityName({ url: createAnchorUrl, alias: claimedName })
+        : undefined;
     const [ownerAddresses, setOwnerAddresses] = useState<string[] | null | undefined>(undefined);
     const ownerManage = useManageNode(pendingIdentity);
     useEffect(() => {
@@ -1052,6 +1084,9 @@ export default function WelcomeScreen() {
                     return;
                 }
                 setJoinBeansOn(beansOn(check.profile.features));
+                // Where a copy made at this door goes, by the global community's rule (vault rethink VR2): the join follows
+                // this same answer, kept (global-join.ts doorCopiesAt), and so do the sign-in's sentences.
+                setGlobalDoorCopies(signInCopiesAt(check.profile.recoveryCopies));
                 // Two ways in, side by side, where the door has the 12-words one; the sign-in alone where it doesn't.
                 const words = wordsDoorOn(check.profile.features);
                 setWordsDoor(words);
@@ -2381,6 +2416,7 @@ export default function WelcomeScreen() {
                             protection={protection}
                             hasWords={hasMnemonic(pendingIdentity)}
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
+                            copiesAt={backupCopiesAt}
                             communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
                             onProtectSso={Platform.OS !== 'web' ? (prov) => {
                                 if (prov) setSsoProvider(prov);
@@ -2389,7 +2425,7 @@ export default function WelcomeScreen() {
                         />
                         )}
                         {linked && (
-                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked)}</Text>
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked, otherDoorName)}</Text>
                         )}
                         {/* The sign-in the member joined with used to protect another account: said here too, as the
                             protection sheet says it (PR #1336 review finding 9). */}
@@ -2416,7 +2452,9 @@ export default function WelcomeScreen() {
                             identity={pendingIdentity}
                             askPhoneLock={!pendingWordsAreNew}
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
+                            copiesAt={backupCopiesAt}
                             onClose={() => setShowSsoSheet(false)}
+                            onCopiesChanged={() => setBackupCopiesRead((n) => n + 1)}
                             onEnrolled={(result) => {
                                 setEnrolment(result);
                                 setShowSsoSheet(false);
@@ -2551,14 +2589,15 @@ export default function WelcomeScreen() {
 
                         {/* The one secondary action for a 12-words member: skippable, like the tickbox above. In by a
                             claim, the sign-in's copy is kept by the community claimed, never by us: no global community,
-                            no key vault (Marty, 24 Oct). */}
+                            no key vault (Marty, 24 Oct). Where the community keeps no copies (its rule `none`, VR2), a
+                            sign-in is no way back, so the button doesn't call it one, as the web's doesn't. */}
                         {wordsMember && Platform.OS !== 'web' && (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginTop: 8 }]}
                                 onPress={() => (joinFlow === 'claim' ? setShowSsoSheet(true) : setShowLinkSheet(true))}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.secondaryBtnText}>{WORDS_BACKUP_TEXT.addSignIn}</Text>
+                                <Text style={styles.secondaryBtnText}>{backupCopiesAt === 'none' ? t('Add a sign-in') : t(WORDS_BACKUP_TEXT.addSignIn)}</Text>
                             </Pressable>
                         )}
                         <LinkSignInSheet
@@ -2566,6 +2605,7 @@ export default function WelcomeScreen() {
                             visible={showLinkSheet}
                             identity={pendingIdentity}
                             url={joinFlow === 'global' && createAnchorUrl ? createAnchorUrl : GLOBAL_NODE_URL}
+                            community={otherDoorName}
                             askPhoneLock={!pendingWordsAreNew}
                             onClose={() => setShowLinkSheet(false)}
                             onLinked={(answer) => {
@@ -2574,6 +2614,10 @@ export default function WelcomeScreen() {
                                 // The record too: a restart comes back to the panel a sign-in member sees.
                                 updatePendingOnboarding({ joinDoor: undefined, ...(answer?.enrolment ? { joinEnrolment: answer.enrolment } : {}) }).catch(() => {});
                                 setJoinDoor(null);
+                                // No copy because the community keeps none, which the link may have heard only now (its
+                                // fresh answer kept, utils/join-link.ts): the step reads the rule again, so the panel under
+                                // the notice says so too.
+                                if (answer?.noCopies) setBackupCopiesRead((n) => n + 1);
                             }}
                         />
 
@@ -2734,9 +2778,14 @@ export default function WelcomeScreen() {
                             ) : (
                                 <Text style={[guideStyles.cardText, { marginBottom: 8 }]}>{welcomeLineWords(NO_WORDS_WAY_BACK)}</Text>
                             )}
-                            <Text style={guideStyles.bulletItem}>
-                                {t('🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.')}
-                            </Text>
+                            {/* Not where the community keeps no copies (its rule `none`, VR2): a sign-in linked there brings
+                                nothing back. Left out, not swapped for the no-copies row's sentence, which says none can be
+                                linked: a 12-words member at the global community can still add one, for the limits. */}
+                            {backupCopiesAt !== 'none' && (
+                                <Text style={guideStyles.bulletItem}>
+                                    {t('🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.')}
+                                </Text>
+                            )}
                         </View>
 
                         {/* Card 5: Where to Start */}
@@ -3116,9 +3165,17 @@ export default function WelcomeScreen() {
         const doorWays = doorWaysOut(globalPhase, loading);
         const wordsWay = doorWay === 'words';
         const wordsState = doorWork.state('words');
-        const signInNote = signInCopiesAt() === 'vault'
-            ? t('BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
-            : t('The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');
+        // Who keeps a copy for the sign-in, by the door's rule (VR2). Where the global community keeps none, and above the
+        // sign-in alone where it keeps the copy itself, in the open door's own words (utils/open-door-words.ts).
+        const doorKeeper = doorKeeperWords(globalPlace(GLOBAL_NODE_URL), globalDoorCopies);
+        const signInNote = globalDoorCopies === 'none'
+            ? doorKeeper.choose
+            : globalDoorCopies === 'vault'
+                ? t('BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
+                : t('The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.');
+        const signInLine = globalDoorCopies === 'vault'
+            ? t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')
+            : doorKeeper.signIn;
         return (
             <SafeAreaView style={styles.container}>
                 <StatusBar style={dark ? 'light' : 'dark'} />
@@ -3194,6 +3251,7 @@ export default function WelcomeScreen() {
                                         busy={doorWork.busy}
                                         wordsProblem={wordsState?.phase === 'failed' ? welcomeLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                         signInNote={signInNote}
+                                        keepsNoCopies={globalDoorCopies === 'none'}
                                         colors={colors}
                                     />
                                 </>
@@ -3205,7 +3263,7 @@ export default function WelcomeScreen() {
                                         {t('Meet people from everywhere and find a community near you. No invite needed.')}
                                     </Text>
                                     <Text style={[styles.subtitle, { marginTop: -12 }]}>
-                                        {t('To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.')}
+                                        {signInLine}
                                     </Text>
 
                                     {loading && (

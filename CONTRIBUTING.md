@@ -139,7 +139,9 @@ BeanPool is governed as a **commons**. No single organisation or individual owns
 
 ## Licensing
 
-By contributing to this repository you agree that your contributions will be licensed under the [MIT License](LICENSE).
+BeanPool is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only); see [NOTICE](NOTICE). By contributing to this repository you agree that your contributions are licensed under the same licence.
+
+As Signal does, we will ask outside contributors to sign a short Contributor Licence Agreement before a first contribution is merged, so that the apps can keep shipping in the app stores. Until that is in place, please open an issue before you send a pull request.
 
 ---
 

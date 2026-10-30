@@ -179,4 +179,4 @@ cd apps/server && pnpm dev                      # the server, with hot reload
 
 ## Licence
 
-[MIT](LICENSE)
+BeanPool is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only), from version 1.2.32. You may use, change and share it; if you share a changed version, or run one that people use over a network, you must offer its source code under the same licence. Releases up to 1.2.31 were MIT and stay so for those copies. The BeanPool name and logo are not covered by the licence. See [NOTICE](NOTICE).

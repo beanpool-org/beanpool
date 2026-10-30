@@ -460,6 +460,9 @@ grep -qF "#33: RIDES ALONE: it touches ledger or money paths (packages/beanpool-
 grep -qF "#39: RIDES ALONE: it changes a line that moves Beans" <<<"$OUT" && ok "train: ...and one changing a line that writes a balance" || bad "train: the balance-writing PR rode"
 [ "$(merges)" = "32" ] && ok "train: ...while the plain PR merges" || bad "train: merged \"$(merges)\", not 32"
 expect 0 "train: a tier-A PR alone is a train of one" "train: #31 merged" -- bash "$TRAIN" 31
+branch 48 t-lower "" -- sh -c 'mkdir -p apps/server/src/routes && echo "db.prepare(\"update accounts set last_updated_at = ?, balance = ? where public_key = ?\")" > apps/server/src/routes/members.ts'
+branch 49 t-plain2 "" -- add j.txt j
+expect 1 "train: a balance write in lower case, another column first, rides alone too" "#48: RIDES ALONE: it changes a line that moves Beans" -- bash "$TRAIN" 48 49 --no-merge
 
 : > "$GH_STUB_DIR/merges"
 branch 34 t-cired "" -- add h.txt h

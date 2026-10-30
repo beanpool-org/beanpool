@@ -19,7 +19,7 @@
 #           check) merges nothing, and says so.
 #
 # Who rides: at most 4. A PR labelled tier-A, or touching ledger or money paths ($MONEY_PATHS, or a changed line that calls
-# conservingTransaction or writes accounts SET balance), rides alone: in a train of two or more it is left out with a line. A RED GitHub
+# conservingTransaction or writes accounts SET balance, in any case), rides alone: in a train of two or more it is left out with a line. A RED GitHub
 # "Run BeanPool Test-All Pipeline" on a PR's head holds it, before the run and again before merging; pending never holds.
 # If main or any PR head moves during the run, or a PR's CI goes red, nothing is merged: run the train again.
 #
@@ -113,8 +113,10 @@ rides_alone() {
   mb=$(git merge-base "$MAIN_SHA" "$1") || { echo "shares no history with main"; return; }
   files=$(git diff --name-only "$mb" "$1" | grep -E "$MONEY_PATHS" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && { echo "touches ledger or money paths (${files% })"; return; }
-  # -G takes an extended regex: a bare | (\| would be a literal bar, and match nothing).
-  files=$(git diff --name-only -G 'conservingTransaction|accounts SET balance' "$mb" "$1" | head -3 | tr '\n' ' ')
+  # -G takes an extended regex: a bare | (\| would be a literal bar, and match nothing). -i: SQL is written in any case,
+  # and other columns may come before balance. It reads one line at a time, so an UPDATE split over lines is not seen
+  # here; a new raw balance write must raise scripts/check-balance-writes.mjs's baseline, which is a money path above.
+  files=$(git diff --name-only -i -G 'conservingTransaction|accounts[[:space:]]+SET[[:space:]][^;]*balance[[:space:]]*=' "$mb" "$1" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && echo "changes a line that moves Beans: conservingTransaction or accounts SET balance (${files% })"
 }
 

@@ -410,6 +410,8 @@ export function completeRekey(
     const tellOwners = privileged ? roleKeyReplacedAlert(privileged, cleanOld, operator) : accountMovedAlert(operator);
     /** The member's own recovery copies deleted (they hold the replaced seed). */
     let signInCopiesRemoved = 0;
+    /** Their community copy deleted (vault rethink VR3), kept in the move's record. */
+    let communityCopyRemoved = 0;
 
     // Atomic execution inside conservingTransaction
     conservingTransaction(() => {
@@ -438,8 +440,9 @@ export function completeRekey(
         // The copies they keep for someone else are that person's, and only renamed to the new key.
         signInCopiesRemoved = deleteAllShares(cleanOld);
         // (p1) The member's community copy (engine/community-copy.ts) holds the replaced seed too: it goes, with a tombstone,
-        // and the member turns the path on again from the new phone. Counted with the sign-in copies, so the phone is told.
-        signInCopiesRemoved += deleteCommunityCopy(cleanOld);
+        // and the member turns "Your community's admins" on again from the new phone (Account Protection shows it off).
+        // Not a sign-in, so never counted as one: the phone's "Link your sign-in again" is about sign-ins only.
+        communityCopyRemoved = deleteCommunityCopy(cleanOld);
         moveKeeperCopiesToNewKey(cleanOld, cleanNew);
         // (p2) Requests to join (G6): a knock the member made before they joined, and the knocks they answered. Left on
         // the invalidated key, the old knock would be back on the members' list and an approval would let that key in
@@ -472,6 +475,7 @@ export function completeRekey(
                 completedAt: nowIso,
                 // Kept with the move, so the phone that asks again is told to link a sign-in only when one was removed.
                 signInCopiesRemoved,
+                communityCopyRemoved,
             })
         );
 

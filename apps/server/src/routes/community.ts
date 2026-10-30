@@ -104,6 +104,7 @@ import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
 import { chargeNearestPeopleRead, chargePeopleSearch } from '../nearest-people-budget.js';
 import { membersSnapshotKey, sendMembersSnapshot, snapshotSendWeight, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
+import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -1570,7 +1571,18 @@ router.get('/api/member/re-enroll/status', async (ctx) => {
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
-    ctx.body = rekeyRedeemStatus(ctx.query.code, signer);
+    try {
+        ctx.body = rekeyRedeemStatus(ctx.query.code, signer);
+    } catch (e: any) {
+        // A bring-back's release is opened from the recovery seal at the poll (engine/bring-back.ts): a server that can't
+        // open it (no seal key, a standby) says so, and the phone asks again.
+        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) {
+            ctx.status = 503;
+            ctx.body = { error: e.message, code: (e as any).code };
+            return;
+        }
+        throw e;
+    }
 });
 
 router.get('/api/profile/:publicKey', async (ctx) => {

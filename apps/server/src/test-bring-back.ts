@@ -40,7 +40,7 @@ import {
     PUSH_NOTICE_KINDS,
 } from '@beanpool/core';
 import { db } from './db/db.js';
-import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, adminPruneUser, purgeMemberSelf } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, adminPruneUser, purgeMemberSelf, COMMUNITY_DECISION_ACTOR } from './state-engine.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { initTls } from './services/tls.js';
@@ -143,7 +143,7 @@ const adminStatus = (session: string, pk: string) => as(session, 'GET', `/api/lo
 const bindByNumber = (session: string, pk: string, code: string, match: unknown) => as(session, 'POST', `/api/local/admin/members/${pk}/rekey/complete`, { code, match });
 const copyRow = (pk: string) => db.prepare('SELECT * FROM community_copies WHERE owner_pubkey = ?').get(pk) as Record<string, string> | undefined;
 const memberRow = (pk: string) => db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status: string } | undefined;
-const tombstoned = (pk: string) => !!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'community_copies' AND row_id = ?").get(pk);
+const tombstoned = (pk: string) => !!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'community_copies' AND row_key = ?").get(pk);
 
 /** The admin brings `member` back to a new phone: code, ask, number. Returns the phone and the code. */
 async function bringBack(session: string, member: Keypair): Promise<{ phone: Keypair; code: string; bind: Answer }> {
@@ -358,7 +358,7 @@ async function runTests() {
         const code3 = (await issueBringBack(adminSession, kim.pubKeyHex)).json.code as string;
         const p3 = makeKeypair();
         const a3 = await ask(p3, code3);
-        adminPruneUser(kim.pubKeyHex, owner.pubKeyHex);
+        adminPruneUser(kim.pubKeyHex, COMMUNITY_DECISION_ACTOR);
         const afterPrune = await bindByNumber(adminSession, kim.pubKeyHex, code3, a3.json.match);
         assert(afterPrune.status >= 400 && (await poll(p3, code3)).json.state !== 'released', `a member removed since the code is not brought back (got ${afterPrune.status})`);
         const prunedIssue = await issueBringBack(adminSession, kim.pubKeyHex);
@@ -369,9 +369,11 @@ async function runTests() {
         await turnOn(hal);
         setNodeRole('backup');
         try {
-            const sOn = await turnOn(makeKeypair());
+            const before = copyRow(hal.pubKeyHex)?.created_at;
+            const sOn = await turnOn(hal);
             const sIssue = await issueBringBack(adminSession, hal.pubKeyHex);
             assert(sOn.status >= 400 && sIssue.status >= 400, `a standby refuses a turn-on and a code (got ${sOn.status}, ${sIssue.status})`);
+            assert(copyRow(hal.pubKeyHex)?.created_at === before, '...keeps the copy it holds as it was');
             assert(!db.prepare("SELECT 1 FROM rekey_requests WHERE old_pubkey = ? AND kind = 'bring_back'").get(hal.pubKeyHex), '...and writes none');
         } finally {
             setNodeRole('primary');
@@ -390,7 +392,8 @@ async function runTests() {
         assert(done.status === 200 && !copyRow(rex.pubKeyHex) && !copyRow(phone.pubKeyHex) && tombstoned(rex.pubKeyHex),
             'a re-key to a new key removes the copy of the old one (it holds the replaced seed), with a tombstone');
         const bound2 = await poll(phone, code);
-        assert(bound2.json.state === 'bound' && bound2.json.linkSignInAgain === true, 'and the new phone is asked to turn its ways back on again');
+        assert(bound2.json.state === 'bound' && bound2.json.linkSignInAgain === false,
+            'the new phone is not told a sign-in was removed: the community copy is no sign-in (Account Protection shows it off)');
 
         const del = join('DelMember');
         await turnOn(del);

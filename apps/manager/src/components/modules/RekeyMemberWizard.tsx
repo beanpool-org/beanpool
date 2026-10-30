@@ -153,6 +153,8 @@ export function RekeyMemberWizard({
         setUnderAttack(status.codeUnderAttack ?? null);
         const pending = status.pendingRequest;
         if (!pending) return;
+        // A Bring back code (vault rethink VR3) holds nothing and is shown in Bring back's own window, never as a re-key's.
+        if (pending.kind === 'bring_back') return;
         const isExpired = new Date(pending.expires_at).getTime() < Date.now();
         if (isExpired) return;
         setExpiresAt(pending.expires_at);

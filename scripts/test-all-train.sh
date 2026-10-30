@@ -19,8 +19,9 @@
 #           check) merges nothing, and says so.
 #
 # Who rides: at most 4. A PR labelled tier-A, or touching ledger or money paths ($MONEY_PATHS, or a changed line that calls
-# conservingTransaction or writes accounts SET balance, in any case), rides alone: in a train of two or more it is left out with a line. A RED GitHub
-# "Run BeanPool Test-All Pipeline" on a PR's head holds it, before the run and again before merging; pending never holds.
+# conservingTransaction or writes accounts SET balance, in any case), rides alone: in a train of two or more PRs still riding
+# (not dropped or held) it is left out with a line. A RED GitHub "Run BeanPool Test-All Pipeline" on a PR's head holds it,
+# before the run and again before merging; pending never holds.
 # If main or any PR head moves during the run, or a PR's CI goes red, nothing is merged: run the train again.
 #
 #   --no-merge   test, bisect and report, but merge and push nothing
@@ -268,7 +269,10 @@ for i in $(riding); do
     red) fate "$i" "HELD: GitHub's \"$CHECK_NAME\" is red on its head $(short "${HEAD[$i]}")"; continue ;;
     unknown) fate "$i" "HELD: GitHub's checks on its head $(short "${HEAD[$i]}") could not be read"; continue ;;
   esac
-  if [ ${#PRS[@]} -gt 1 ]; then
+done
+# After the drops and holds above, so a PR that rides alone counts only the PRs still riding with it.
+for i in $(riding); do
+  if [ "$(riding | wc -l | tr -d ' ')" -gt 1 ]; then
     eval "labels=\$LABELS_$i"
     why=$(rides_alone "${HEAD[$i]}" "$labels")
     [ -n "$why" ] && fate "$i" "RIDES ALONE: it $why; run: bash scripts/test-all-train.sh ${NUM[$i]}"

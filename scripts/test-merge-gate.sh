@@ -463,6 +463,12 @@ expect 0 "train: a tier-A PR alone is a train of one" "train: #31 merged" -- bas
 branch 48 t-lower "" -- sh -c 'mkdir -p apps/server/src/routes && echo "db.prepare(\"update accounts set last_updated_at = ?, balance = ? where public_key = ?\")" > apps/server/src/routes/members.ts'
 branch 49 t-plain2 "" -- add j.txt j
 expect 1 "train: a balance write in lower case, another column first, rides alone too" "#48: RIDES ALONE: it changes a line that moves Beans" -- bash "$TRAIN" 48 49 --no-merge
+# Given with a merged PR and one GitHub holds, the tier-A PR is the only one still riding: a train of one.
+branch 46 t-tier2 "tier-A" -- add k.txt k
+branch 47 t-cired2 "" -- add l.txt l
+echo "failure" > "$GH_STUB_DIR/ci-$(git rev-parse t-cired2)"
+OUT=$(bash "$TRAIN" 46 47 21 --no-merge 2>&1)
+grep -qF "#46: WOULD MERGE" <<<"$OUT" && ! grep -qF "RIDES ALONE" <<<"$OUT" && ok "train: a tier-A PR whose companions were dropped or held rides, alone" || { bad "train: the tier-A PR was left out with no PR riding beside it"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
 
 : > "$GH_STUB_DIR/merges"
 branch 34 t-cired "" -- add h.txt h

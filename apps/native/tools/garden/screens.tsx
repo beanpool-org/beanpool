@@ -135,6 +135,16 @@ export function Zone({ host }: GardenScreenProps) {
      * says it wasn't kept (a full disk, as the Tool shed's Save says it), and the screen stays.
      */
     const keeping = useRef(false);
+    /**
+     * Whether the member has left this screen (the header's ←, Android's back, a swipe) while the write was out: the
+     * choice is still kept, but going back is not done a second time, which would pop the guide too (the web's stack
+     * would empty). Set again on each mount: StrictMode mounts twice. As the Tool shed's Edit does.
+     */
+    const left = useRef(false);
+    useEffect(() => {
+        left.current = false;
+        return () => { left.current = true; };
+    }, []);
     const [problem, setProblem] = useState<string | null>(null);
     const keep = async (climate: { zone: (typeof GARDEN_ZONES)[number]['id']; hemisphere: Hemisphere } | null) => {
         if (keeping.current) return;
@@ -144,10 +154,12 @@ export function Zone({ host }: GardenScreenProps) {
             await host.doc.set(withGardenClimate(host.doc.get(), climate));
         } catch {
             keeping.current = false;
+            // Left while it was out: nothing to say to a screen that isn't there.
+            if (left.current) return;
             setProblem(t("Couldn't save it on this phone. Try again."));
             return;
         }
-        host.back();
+        if (!left.current) host.back();
     };
     const choose = (zone: (typeof GARDEN_ZONES)[number]['id']) => keep({ zone, hemisphere });
     const usePlaceAgain = () => keep(null);

@@ -461,11 +461,6 @@ expect 1 "train: a red GitHub Test-All on a PR's head holds it" "#34: HELD: GitH
 [ "$(merges)" = "35" ] && ok "train: ...a pending one does not" || bad "train: merged \"$(merges)\", not 35"
 grep -qE 'repos/owner/repo/commits/[0-9a-f]{40}/check-runs\?check_name=Run%20BeanPool%20Test-All%20Pipeline' "$GH_STUB_DIR/api" && ok "train: ...read from the head's check-runs, by the required check's name" || bad "train: no check-runs call by name: $(tail -1 "$GH_STUB_DIR/api")"
 
-: > "$GH_STUB_DIR/merges"
-branch 36 t-load "" -- add FAIL-test-load slow
-expect 0 "train: a red run the load recheck calls load is green, and merges" "load recheck: every failure passed alone" -- env TEST_ALL_RECHECK="$LOAD" bash "$TRAIN" 36
-[ "$(merges)" = "36" ] && ok "train: ...#36 merged" || bad "train: merged \"$(merges)\", not 36"
-
 # Another merge lands on main between two of the train's: main is no longer the tree the train tested, so it stops there.
 : > "$GH_STUB_DIR/merges"
 branch 40 t-s1 "" -- add s1.txt s1
@@ -489,9 +484,16 @@ printf '%s\n' 'a:test:  ❯ src/a.test.ts (3 tests | 1 failed) 20ms' 'a:test:  T
   'b:test:  ❯ src/b.test.ts (2 tests | 1 failed) 20ms' 'b:test:  Test Files  2 failed | 1 passed (3)' \
   'c:test:  ❯ src/c.test.ts (2 tests | 1 failed) 20ms' 'c:test:  Test Files  1 failed (1)' 'c:test: ⎯⎯ Unhandled Errors ⎯⎯' \
   '  Failed:    a#test, b#test, c#test, guide#test' > "$P/test.log"
-GOTP=$(bash -c 'eval "$(sed -n "/^failing_parts() {/,/^}/p" "$1")"; failing_parts "$2"' _ "$TRAIN" "$P" | tr '\n' ';')
+sed -n '/^failing_parts() {/,/^}/p' "$TRAIN" > "$T/failing_parts.sh"
+GOTP=$(bash -c '. "$1" && failing_parts "$2"' _ "$T/failing_parts.sh" "$P" | tr '\n' ';')
 [ "$GOTP" = "stage pwa_wide_pages;vitest a src/a.test.ts;package b;package c;package guide;" ] \
   && ok "train: a red run's parts: an unfinished check, one vitest file, and three packages run whole" || bad "train: parts read as: $GOTP"
+
+# Last: #36 leaves its FAIL file on main, so every train after it would be red.
+: > "$GH_STUB_DIR/merges"
+branch 36 t-load "" -- add FAIL-test-load slow
+expect 0 "train: a red run the load recheck calls load is green, and merges" "load recheck: every failure passed alone" -- env TEST_ALL_RECHECK="$LOAD" bash "$TRAIN" 36
+[ "$(merges)" = "36" ] && ok "train: ...#36 merged" || bad "train: merged \"$(merges)\", not 36"
 cd "$W" || exit 1
 
 echo ""

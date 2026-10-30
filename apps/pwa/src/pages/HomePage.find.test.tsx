@@ -281,7 +281,8 @@ describe('Ask to join from the web find card (front doors S2)', () => {
         fireEvent.click(screen.getByTestId('home-find-ask-q-send'));
         expect(await screen.findByTestId('home-waiting-card-https://sleepy.example.org')).toBeTruthy();
         expect(sendSpy).toHaveBeenCalledWith('https://sleepy.example.org', ME, { callsign: 'Ana', message: 'I fix bikes.' });
-        expect(screen.getByTestId('home-cancel-knock-https://sleepy.example.org')).toHaveTextContent('Cancel my request');
+        // Cancel comes with the card's status read (it says "Checking…" until then).
+        expect(await screen.findByTestId('home-cancel-knock-https://sleepy.example.org')).toHaveTextContent('Cancel my request');
         // The card is the one place that says how it fares: the row has no line of its own beside it, which would outlive a
         // Cancel or a Got it in this visit, and no second Ask to join (PR #2625 review: it said "No answer yet" here).
         expect(screen.queryByTestId('home-find-ask-q-said')).toBeNull();

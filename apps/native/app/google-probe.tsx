@@ -23,6 +23,7 @@ import { anchorUrl, signedPost } from '../utils/node-post';
 import { SsoSignInError, fetchSsoNonce, signInWithGoogle } from '../utils/sso-signin';
 import { encodeBase64 } from '../utils/crypto';
 import type { BeanPoolIdentity } from '../utils/identity';
+import { palette } from '../constants/colors';
 
 /**
  * Which form of the nonce Google echoed — and this is a measurement, not a check.
@@ -232,11 +233,12 @@ export default function GoogleProbeScreen() {
                 </Text>
             )}
             
-            <TouchableOpacity 
-                style={[styles.button, { backgroundColor: '#4285F4', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }]} 
+            {/* blue-600 under the white words, 5.17:1 (Google's #4285F4 was 3.56). */}
+            <TouchableOpacity
+                style={[styles.button, { backgroundColor: palette.blue600, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }]} 
                 onPress={signIn}
             >
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>{t('Sign in with Google')}</Text>
+                <Text style={{ color: palette.white, fontSize: 16, fontWeight: '600' }}>{t('Sign in with Google')}</Text>
             </TouchableOpacity>
 
             {error && <Text style={styles.error} accessibilityRole="alert">{error}</Text>}

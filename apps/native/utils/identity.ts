@@ -11,7 +11,7 @@ import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { forgetAllPulseTokens } from './pulse-token-store';
 import {
     ADMIN_KNOCKS_COUNT_STORE_KEY, CANONICAL_PROFILE_STORE_KEY, FAV_CATEGORIES_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY,
-    KNOCK_ROLE_STORE_KEY, KNOCKS_STORE_KEY, MESSAGE_REQUESTS_STORE_PREFIX, NOTIFICATION_PERMISSION_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX,
+    KNOCK_KEY_STORE_KEY, KNOCK_ROLE_STORE_KEY, KNOCKS_STORE_KEY, MESSAGE_REQUESTS_STORE_PREFIX, NOTIFICATION_PERMISSION_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PENDING_PROFILE_STORE_PREFIX,
     PUSH_REGISTERED_AT_STORE_KEY,
     PUSH_REGISTRATIONS_DUE_STORE_KEY, TYPED_PLACE_STORE_KEY,
 } from './storage-keys';
@@ -558,6 +558,8 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage, secret
     await storage.removeItem('beanpool:identity');
     await storage.removeItem('beanpool_guest_nodes');
     await storage.removeItem(KNOCKS_STORE_KEY);
+    // The mark that a knock made this key and its words were never shown (utils/knock-key.ts): it names this key.
+    await storage.removeItem(KNOCK_KEY_STORE_KEY);
     // The background sync's notes on this account's requests to join (utils/sync-notices.ts): its role on the community
     // and the count of open requests it last saw. Both name its key (#2523 review 4383895884).
     await storage.removeItem(KNOCK_ROLE_STORE_KEY);

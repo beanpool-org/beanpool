@@ -317,8 +317,9 @@ export default function SettingsScreen() {
         visibilityOptionLabel: { fontSize: 15, fontWeight: '700', color: colors.text.heading },
         visibilityOptionLabelActive: { color: theme === 'dark' ? colors.feedback.info.fg : palette.blue800 },
         visibilityOptionDesc: { fontSize: 12, color: colors.text.muted, marginTop: 1 },
-        visibilityOptionDescActive: { color: colors.feedback.info.solid },
-        visibilityCheck: { fontSize: 18, fontWeight: '800', color: colors.feedback.info.solid },
+        // The blue ink, not the fill: info.solid was 3.38:1 on info.bg in light, 4.35 in dark.
+        visibilityOptionDescActive: { color: colors.feedback.info.fg },
+        visibilityCheck: { fontSize: 18, fontWeight: '800', color: colors.feedback.info.fg },
 
         // ─── Archetype Card ───
     }));

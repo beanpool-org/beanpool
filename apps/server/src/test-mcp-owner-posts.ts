@@ -354,10 +354,25 @@ async function main(): Promise<void> {
         const offRequired = ((await client.listTools()).tools.find(x => x.name === 'create_offer')?.inputSchema as any)?.required ?? [];
         const { beans: _beans, ...offerNoPrice } = offerArgs;
         const noPrice = await client.callTool({ name: 'create_offer', arguments: { ...offerNoPrice, photos: [] } });
+        // Beans off turns enterprises off too (config/node-profile.ts lockToLedger), and the enterprise routes answer 404 feature_off
+        // before their handler (routes/profile-feature-gate.ts), a gate /mcp never meets: the tools ask it themselves.
+        const postsWhileOff = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
+        const countWhileOff = agentCreatesToday(grantId);
+        const enterprisesOff = getProfileSwitches().enterprises === false;
+        const keptWhileOff = structured(await client.callTool({ name: 'my_enterprises', arguments: {} }))?.enterprises;
+        const eventAsEnterprise = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, as_enterprise: kept[0]?.ref } });
+        const listingAsEnterprise = await client.callTool({ name: 'create_enterprise_listing', arguments: entArgs });
+        const madeWhileOff = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c - postsWhileOff;
         setSwitchOverride('beans', true);
         assert(beansOff && !offRequired.includes('beans') && offRequired.includes('title') && /^photos is required/.test(errorText(noPrice))
             && getProfileSwitches().beans === true && listedRequiresBeans(OWNER_POST_TOOLS),
             `with Beans off, create_offer asks no price (schema: ${offRequired.join(', ')}; ${errorText(noPrice).slice(0, 40)}), and asks one again when they are on`);
+        const keptAgain = structured(await client.callTool({ name: 'my_enterprises', arguments: {} }))?.enterprises ?? [];
+        assert(enterprisesOff && Array.isArray(keptWhileOff) && keptWhileOff.length === 0
+            && eventAsEnterprise.isError === true && errorText(eventAsEnterprise) === 'Enterprises are switched off on this node.'
+            && listingAsEnterprise.isError === true && errorText(listingAsEnterprise) === 'Enterprises are switched off on this node.'
+            && madeWhileOff === 0 && agentCreatesToday(grantId) === countWhileOff && keptAgain.length === 1,
+            `with enterprises off, my_enterprises lists none and posting as one is refused in its routes' words, nothing made or counted; on again, it is listed (${JSON.stringify(keptWhileOff)}; ${errorText(eventAsEnterprise) || JSON.stringify(structured(eventAsEnterprise))} | ${errorText(listingAsEnterprise)})`);
 
         while (agentCreatesToday(grantId) < AGENT_CREATES_PER_DAY) admitAgentCreate(grantId);
         const fiftyFirst = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'One too many' } });

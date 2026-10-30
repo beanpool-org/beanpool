@@ -7,8 +7,9 @@
  *   owners' switch, the bearer check and the door's 60 a minute and 2,000 a day. An admin's assistant is never offered
  *   them; one that calls them anyway is refused in words.
  * - The node posts on the owner's behalf: the author is the owner's own member key, or an enterprise they keep NOW
- *   (canOperateTreasury, the keepers route's own check). No key reaches the assistant: an enterprise is named by a
- *   reference made from its key (enterpriseRef), matched only among the ones the owner keeps.
+ *   (canOperateTreasury, the keepers route's own check), only while the enterprise routes' switches are on (their profile
+ *   gate, asked here). No key reaches the assistant: an enterprise is named by a reference made from its key
+ *   (enterpriseRef), matched only among the ones the owner keeps.
  * - Each tool runs what its HTTP route runs after the signature check, in the same order and through the same engine call
  *   (routes/marketplace.ts POST /api/marketplace/posts; routes/treasury.ts POST /api/treasury/:treasury/{offer,need,event}),
  *   so the mute, probation and daily-post limits, the engine's validation (text limits, categories, place, reach, an event's
@@ -33,7 +34,8 @@
 import crypto from 'node:crypto';
 import { PRICING_CATEGORIES } from '@beanpool/core';
 import { db } from '../db/db.js';
-import { getProfileSwitches } from '../config/node-profile.js';
+import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
+import { featureOffFor } from '../routes/profile-feature-gate.js';
 import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS } from '../state-engine.js';
 import { createEventFromBody } from '../routes/event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
@@ -141,8 +143,19 @@ const BLOCKED = new Set(['disabled', 'suspended', 'pruned']);
 const statusOf = (pk: string): string | undefined =>
     (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as { status?: string } | undefined)?.status;
 
-/** The enterprises this member keeps now, as routes/treasury.ts requireOperator would let them act for each. */
+/**
+ * Why nothing can be posted as an enterprise here now, in its routes' words; null while it can. /api/treasury/* answers 404
+ * feature_off while the enterprises or treasuries switch is off (routes/profile-feature-gate.ts, before any handler, and
+ * Beans off turns both off): a gate /mcp never meets, so the tools ask it themselves.
+ */
+function enterprisesOff(): string | null {
+    const off = featureOffFor('/api/treasury', undefined, 'POST');
+    return off ? featureOffMessage(off) : null;
+}
+
+/** The enterprises this member keeps now, as routes/treasury.ts requireOperator would let them act for each; none while they are off. */
 function keptEnterprises(member: string): Array<{ key: string; name: string }> {
+    if (enterprisesOff()) return [];
     const rows = db.prepare(`SELECT o.treasury_pubkey AS key, m.callsign AS name FROM treasury_operators o
         JOIN members m ON m.public_key = o.treasury_pubkey
         WHERE o.member_pubkey = ? AND m.is_treasury = 1 ORDER BY m.callsign`).all(member) as Array<{ key: string; name: string | null }>;
@@ -160,6 +173,8 @@ function authorFor(grant: AgentGrant, ref: unknown, required: boolean): Author {
             ? { ok: false, error: 'Name the enterprise with as_enterprise: my_enterprises lists the ones you may post as.' }
             : { ok: true, author: grant.member, enterprise: false };
     }
+    const off = enterprisesOff();
+    if (off) return { ok: false, error: off };
     if (typeof ref !== 'string') return { ok: false, error: 'as_enterprise is the ref my_enterprises gives.' };
     const hit = keptEnterprises(grant.member).find((e) => enterpriseRef(e.key) === ref.trim());
     if (!hit) return { ok: false, error: 'That is not an enterprise you keep now: my_enterprises lists the ones you may post as.' };
@@ -269,7 +284,8 @@ interface ListingArgs {
 
 /** An Offer or a Need, as the owner (POST /api/marketplace/posts) or as an enterprise they keep (/api/treasury/:t/{offer,need}). */
 async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnterprise }: ListingArgs): Promise<ToolResult> {
-    const refused = gate(grant);
+    // An enterprise's listing meets its routes' switch first, as their gate runs before the handler.
+    const refused = gate(grant) ?? (asEnterprise ? enterprisesOff() : null);
     if (refused) return { ok: false, error: refused };
     const missing = missingField(args, asEnterprise ? REQUIRED.enterpriseListing : listingRequired());
     if (missing) return { ok: false, error: missing };

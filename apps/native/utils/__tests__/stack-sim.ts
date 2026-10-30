@@ -1,8 +1,10 @@
 /**
  * A stack of screens run by the real StackRouter (the one expo-router's Stack runs on), for the cases that need to know what
- * is LEFT in the stack: a router.push adds a route, router.back pops the top, and a screen's own navigation.goBack() removes
- * its own route and no other. The screens are the app's own, drawn one per route, each under its own route and navigation,
- * as native-stack mounts them (every route stays mounted while it is covered).
+ * is LEFT in the stack: a router.push adds a route, router.back pops the top, and a screen's own navigation.goBack() pops the
+ * top too: react-navigation adds the screen's route as the action's `source` and no `target`, and the stack honours a source
+ * only when the target is its own key. A screen that must take out its own copy dispatches a POP that names both. The
+ * screens are the app's own, drawn one per route, each under its own route and navigation, as native-stack mounts them
+ * (every route stays mounted while it is covered).
  */
 import { createContext, createElement, useContext, useSyncExternalStore, type ComponentType, type ReactElement } from 'react';
 import { CommonActions, StackActions, StackRouter, type NavigationAction } from '@react-navigation/routers';
@@ -11,6 +13,7 @@ export interface SimRoute { key: string; name: string; params?: Record<string, u
 export interface SimNavigation {
     isFocused(): boolean;
     goBack(): void;
+    dispatch(action: NavigationAction): void;
     getState(): { key: string; index: number; routes: SimRoute[] };
     addListener(): () => void;
 }
@@ -40,8 +43,10 @@ export function createStack() {
     };
     const navigationFor = (key: string): SimNavigation => ({
         isFocused: () => state.routes[state.index].key === key,
-        // As react-navigation binds a screen's goBack: this route is the source, this stack the target.
-        goBack: () => dispatch({ ...CommonActions.goBack(), source: key, target: state.key }),
+        // As react-navigation binds a screen's actions (useNavigationCache): this route is the source, and only the source.
+        // The action's own `target` stays whatever the screen put on it.
+        goBack: () => dispatch({ source: key, ...CommonActions.goBack() }),
+        dispatch: (action) => dispatch({ source: key, ...action }),
         getState: () => state,
         addListener: () => () => {},
     });

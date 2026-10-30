@@ -18,7 +18,7 @@ import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useRoute } from '@react-navigation/native';
+import { StackActions, useRoute } from '@react-navigation/native';
 import { formatNumber, t, upperCase } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getMemberProfile, getReachablePeers } from '../utils/db';
@@ -310,13 +310,16 @@ export default function NewListingScreen() {
     }, [showNewPost, identity?.publicKey]);
 
     /**
-     * Take THIS copy out of the stack, wherever it sits. `navigation.goBack()` is this screen's own: the stack removes
-     * this route and no other (a POP with this route as its source), where `router.back()` pops whichever screen is on
-     * top. Does nothing once the route is gone (the look door's dismissAll has taken it).
+     * Take THIS copy out of the stack, wherever it sits. The stack's POP honours its `source` only when the action's
+     * `target` is the stack's own key: a bare `navigation.goBack()` carries a source and no target (react-navigation adds
+     * only the source), so the stack ignores it and pops the screen on top, which is not always this one (a third tap's
+     * copy, a tool opened over a covered chooser). So the target is named here. `router.back()` pops the top as well.
+     * Does nothing once the route is gone (the look door's dismissAll has taken it).
      */
     const removeThisCopy = () => {
-        if (!navigation.getState()?.routes.some((r) => r.key === route.key)) return;
-        navigation.goBack();
+        const stack = navigation.getState();
+        if (!stack?.routes.some((r) => r.key === route.key)) return;
+        navigation.dispatch({ ...StackActions.pop(1), source: route.key, target: stack.key });
     };
 
     /**

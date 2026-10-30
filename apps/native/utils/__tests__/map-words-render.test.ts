@@ -44,6 +44,7 @@ vi.mock('expo-router', async () => {
     const { RouteCtx } = await import('./stack-sim');
     const solo = {
         addListener: () => () => {}, isFocused: () => true, goBack: () => { nav.pushed.push('goBack'); },
+        dispatch: () => { nav.pushed.push('goBack'); },
         getState: () => ({ key: 'solo', index: 0, routes: [SOLO_ROUTE] }),
     };
     return {
@@ -61,7 +62,8 @@ vi.mock('expo-router', async () => {
 vi.mock('@react-navigation/native', async () => {
     const { useContext } = await import('react');
     const { RouteCtx } = await import('./stack-sim');
-    return { useRoute: () => useContext(RouteCtx)?.route ?? SOLO_ROUTE };
+    const { StackActions } = await import('@react-navigation/routers');
+    return { StackActions, useRoute: () => useContext(RouteCtx)?.route ?? SOLO_ROUTE };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({

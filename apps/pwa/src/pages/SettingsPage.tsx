@@ -31,6 +31,7 @@ import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { WaysBackSection } from '../components/WaysBackSection';
+import { CommunityAdminsSection } from '../components/CommunityAdminsSection';
 import { MemberAvatar } from '../components/MemberAvatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
@@ -1023,6 +1024,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     hasWords={hasWords}
                                     onShowWords={() => setMode('seed')}
                                     onChanged={() => { getSignInRecovery().then(setSignInRecovery); }}
+                                />
+                                {/* The third way back (vault rethink VR3): your community's admins, where this community keeps
+                                    copies itself and is not the global community, or where it already keeps this member's. */}
+                                <CommunityAdminsSection
+                                    identity={identity}
+                                    offeredHere={communityInfo?.recoveryCopies === 'server' && !isAppsGlobal(communityInfo, pageHost)}
                                 />
                             </div>
                         </div>

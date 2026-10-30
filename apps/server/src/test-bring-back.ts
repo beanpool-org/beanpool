@@ -212,12 +212,18 @@ async function runTests() {
         assert(bad.status === 400 && bad.json.code === 'bad_copy', `a copy of another scheme is refused (got ${bad.status})`);
         const st = await copyStatus(mia);
         assert(st.json.kept === true && st.json.since === on.json.since, 'the status says kept, since the turn-on');
+        // "Where your account can be brought back from" (VR1) reads every community's copies from one signed status.
+        const shares = await signedReq(mia, 'POST', '/api/recovery/shares/status', {});
+        assert(shares.status === 200 && shares.json.communityCopy?.since === on.json.since && Array.isArray(shares.json.enrolledSso),
+            `the copies' status lists the community copy, since the turn-on (got ${JSON.stringify(shares.json.communityCopy)})`);
 
         const tom = join('TomMember');
         await turnOn(tom);
         const off = await signedReq(tom, 'DELETE', '/api/recovery/community-copy', {});
         assert(off.status === 200 && off.json.removed === 1 && !copyRow(tom.pubKeyHex) && tombstoned(tom.pubKeyHex),
             'turning it off deletes the copy here, with a tombstone so a standby drops it too');
+        const sharesOff = await signedReq(tom, 'POST', '/api/recovery/shares/status', {});
+        assert(sharesOff.status === 200 && sharesOff.json.communityCopy === null, `...and the copies' status lists none (got ${JSON.stringify(sharesOff.json.communityCopy)})`);
     }
 
     // ── B ──

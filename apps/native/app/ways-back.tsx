@@ -32,8 +32,8 @@ import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import { anchorUrl } from '../utils/node-post';
 import { copiesAtFor } from '../utils/copies-rule';
 import {
-    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeCommunityCopyFrom, removeEverything, removeVaultCopy, sameCommunity,
-    wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
+    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom, removeEverything, removeVaultCopy,
+    sameCommunity, wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
 } from '../utils/ways-back';
 
 export { ErrorBoundary };
@@ -58,12 +58,23 @@ function communityResult(name: string, removal: Removal): string {
         : t("Not removed yet: {community} didn't answer. The app tries again each time it opens.", { community: name });
 }
 
+/** What removing a community's copy for its admins says (VR3): gone on its own answer, or not, to try again. */
+function adminsResult(name: string, removal: Removal): string {
+    return removal.removed
+        ? t('Removed from {community}.', { community: name })
+        : t("Not removed: {community} couldn't do it just now. Try again later.", { community: name });
+}
+
 /** Remove everything's result, keeper by keeper: only what each one's own answer says. */
 function everythingResult(done: EverythingRemoved): string[] {
     const lines: string[] = [];
     if (done.vault) lines.push(done.vault.removed ? t("Removed from BeanPool's key vault.") : vaultNotRemoved(done.vault.why));
     for (const c of done.communities) {
         const line = communityResult(c.name, c.removal);
+        if (!lines.includes(line)) lines.push(line);
+    }
+    for (const c of done.admins) {
+        const line = adminsResult(c.name, c.removal);
         if (!lines.includes(line)) lines.push(line);
     }
     for (const c of done.notAsked) lines.push(t("{community} didn't answer, so nothing kept there was removed. Open this screen again later.", { community: c.name }));
@@ -136,6 +147,24 @@ export default function WaysBackScreen() {
 
     const onRemove = (copy: CopyAt) => {
         if (!identity || !ways || busy) return;
+        if (copy.at === 'admins') {
+            // The copy a community keeps for its admins to bring the member back from (VR3): the row's own words.
+            const at = ways.communities.find(c => sameCommunity(c.url, copy.url));
+            if (!at) return;
+            confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), t('Remove this way back?'),
+                t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
+                () => {
+                    void (async () => {
+                        setBusy(true);
+                        try {
+                            await after([adminsResult(at.name, await removeAdminsCopyFrom(identity, at))]);
+                        } finally {
+                            setBusy(false);
+                        }
+                    })();
+                });
+            return;
+        }
         const name = SSO_PROVIDER_NAMES[copy.provider];
         const community = copy.at === 'community' ? ways.communities.find(c => sameCommunity(c.url, copy.url)) : undefined;
         if (copy.at === 'community' && !community) return;
@@ -173,7 +202,7 @@ export default function WaysBackScreen() {
         if (ways.vault.kind === 'unknown' || (ways.vault.kind === 'listed' && ways.vault.copies.length > 0)) {
             parts.push(t("BeanPool's key vault deletes its copies at once, and from its backups within 30 days, or later if the vault is paused in that time."));
         }
-        if (ways.communities.some(c => (c.status?.providers.length ?? 0) > 0)) {
+        if (ways.communities.some(c => (c.status?.providers.length ?? 0) > 0 || !!c.status?.adminsCopy)) {
             parts.push(t("Each community's server deletes its copy. Copies already in a server's backups stay there."));
         }
         for (const c of ways.communities.filter(c => !c.status)) {

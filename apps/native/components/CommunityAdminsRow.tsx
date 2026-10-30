@@ -9,9 +9,10 @@
  * success: On only once the server answered that it keeps the copy. Holds at 320 dp and 1.3× text: every line wraps.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from 'expo-router';
 import { t, word } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles } from '../app/ThemeContext';
@@ -85,7 +86,8 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
         setStatus(now);
         if (now && !now.kept && turnedOnHere) await AsyncStorage.removeItem(turnedOnKey(at)).catch(() => {});
     }, [identity]);
-    useEffect(() => { void read(); }, [read]);
+    // Asked again each time Account Protection comes into view: "Where your account can be brought back from" removes it too.
+    useFocusEffect(useCallback(() => { void read(); }, [read]));
 
     if (!url || !identity) return null;
     const kept = status?.kept === true;

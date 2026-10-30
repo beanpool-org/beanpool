@@ -32,10 +32,14 @@ export interface WaysBack {
     pending: PendingRemoval[];
 }
 
-/** One copy to remove: a sign-in's at the vault, or a sign-in's at a community. */
+/**
+ * One copy to remove: a sign-in's at the vault, a sign-in's at a community, or the copy a community's admins can bring
+ * the member back from (`admins`: "Your community's admins", vault rethink VR3), one per community.
+ */
 export type CopyAt =
     | { at: 'vault'; provider: SsoProvider }
-    | { at: 'community'; url: string; provider: SsoProvider };
+    | { at: 'community'; url: string; provider: SsoProvider }
+    | { at: 'admins'; url: string };
 
 /** What a removal did. `remembered`: a community's delete that didn't land, kept and tried again. */
 export type Removal = { removed: true } | { removed: false; why: NotAnswered | 'refused' | 'remembered' };
@@ -73,12 +77,16 @@ export function knownCopies(w: WaysBack): CopyAt[] {
         for (const provider of c.status?.providers ?? []) {
             if (!isPending(w, c.url, provider)) out.push({ at: 'community', url: c.url, provider });
         }
+        if (c.status?.adminsCopy) out.push({ at: 'admins', url: c.url });
     }
     return out;
 }
 
-const sameCopy = (a: CopyAt, b: CopyAt) => a.at === b.at && a.provider === b.provider
-    && (a.at === 'vault' || (b.at === 'community' && sameCommunity(a.url, b.url)));
+function sameCopy(a: CopyAt, b: CopyAt): boolean {
+    if (a.at === 'vault') return b.at === 'vault' && a.provider === b.provider;
+    if (a.at === 'admins') return b.at === 'admins' && sameCommunity(a.url, b.url);
+    return b.at === 'community' && a.provider === b.provider && sameCommunity(a.url, b.url);
+}
 
 /** Whether every keeper answered: the vault (when the build has one) and every saved community. */
 export function everyoneAnswered(w: WaysBack): boolean {

@@ -87,6 +87,11 @@ function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
 export interface CommunityCopyStatus {
     providers: SsoProvider[];
     generation: number | null;
+    /**
+     * The copy its admins can bring the member back from ("Your community's admins", vault rethink VR3; utils/
+     * community-copy.ts), with since when: absent or null when it keeps none, as a server from before it always answers.
+     */
+    adminsCopy?: { since: string | null } | null;
 }
 
 /**
@@ -102,10 +107,14 @@ export async function communityCopyStatus(identity: BeanPoolIdentity, url: strin
             return null;
         }
         if (!res.ok) return null;
-        const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { enrolledSso?: unknown; generation?: unknown } | null;
+        const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { enrolledSso?: unknown; generation?: unknown; communityCopy?: unknown } | null;
         if (!body || !Array.isArray(body.enrolledSso)) return null;
         const generation = typeof body.generation === 'number' && Number.isSafeInteger(body.generation) ? body.generation : null;
-        return { providers: [...new Set(offeredProviders(body.enrolledSso))], generation };
+        const providers = [...new Set(offeredProviders(body.enrolledSso))];
+        const copy = body.communityCopy && typeof body.communityCopy === 'object' ? body.communityCopy as { since?: unknown } : null;
+        return copy
+            ? { providers, generation, adminsCopy: { since: typeof copy.since === 'string' ? copy.since : null } }
+            : { providers, generation };
     } catch {
         return null;
     }
@@ -149,6 +158,24 @@ export async function removeCommunityCopy(identity: BeanPoolIdentity, url: strin
     if (body.removed !== provider) return notGone;
     const generation = body.generation;
     return { gone: true, generation: typeof generation === 'number' && Number.isSafeInteger(generation) ? generation : null };
+}
+
+/**
+ * Remove the copy the community at `url` keeps for its admins to bring the member back from ("Your community's admins",
+ * vault rethink VR3): the signed DELETE utils/community-copy.ts sends. Gone only on the community's own answer
+ * (routes/keepers.ts): a 2xx whose JSON says it keeps none now (`kept: false`), never a proxy's page. Not remembered when
+ * it doesn't land: the member is told so, and tries again. Never throws.
+ */
+export async function removeAdminsCopy(identity: BeanPoolIdentity, url: string): Promise<boolean> {
+    let res: Response | null;
+    try {
+        res = await within(signedDelete(url, '/api/recovery/community-copy', identity), COMMUNITY_TIMEOUT_MS);
+    } catch {
+        return false;
+    }
+    if (!res?.ok) return false;
+    const body = await within(res.json().catch(() => null), COMMUNITY_TIMEOUT_MS) as { kept?: unknown } | null;
+    return !!body && typeof body === 'object' && body.kept === false;
 }
 
 /**

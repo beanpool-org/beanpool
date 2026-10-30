@@ -655,12 +655,16 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const legacySso = ssoShares.some(s => !isSingleBlobSso(s.kdfParams));
         const threshold = isSingle ? 1 : memberThreshold(keepers.some(k => k.holderType === 'sso'));
         const effectiveTotal = (isSingle && !legacySso) ? ssoShares.length : total;
+        // The member's community copy here (vault rethink VR3, engine/community-copy.ts), so "Where your account can be
+        // brought back from" lists it beside the sign-ins' copies, wherever it was turned on. Opens nothing.
+        const copy = communityCopyStatus(owner);
 
         ctx.status = 200;
         ctx.body = {
             generation: getCurrentGeneration(owner),
             keepers,
             enrolledSso,
+            communityCopy: copy.kept ? { since: copy.since } : null,
             total,
             threshold,
             canAffordToLose: Math.max(0, effectiveTotal - threshold),

@@ -84,7 +84,10 @@ export async function turnOnCommunityCopy(url: string, identity: BeanPoolIdentit
     return { since: body.since };
 }
 
-/** Turn it off: the community deletes the copy and its key. Throws with a sentence when it couldn't be asked. */
+/**
+ * Turn it off: the community deletes the copy and its key. Resolves only on the community's own answer that it keeps
+ * none now (`kept: false`), never on a proxy's page; throws with a sentence otherwise.
+ */
 export async function removeCommunityCopy(url: string, identity: BeanPoolIdentity): Promise<void> {
     let res: Response;
     try {
@@ -92,8 +95,7 @@ export async function removeCommunityCopy(url: string, identity: BeanPoolIdentit
     } catch {
         throw new Error(COMMUNITY_COPY_TEXT.unreachable);
     }
-    if (!res.ok) {
-        const body = await answerOf(res);
-        throw new Error(typeof body.error === 'string' ? body.error : COMMUNITY_COPY_TEXT.unreachable);
-    }
+    const body = await answerOf(res);
+    if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : COMMUNITY_COPY_TEXT.unreachable);
+    if (body.kept !== false) throw new Error(COMMUNITY_COPY_TEXT.unreachable);
 }

@@ -40,7 +40,7 @@ vi.mock('expo-router', async () => {
     const { useEffect: effect } = await import('react');
     return {
         router: {
-            push: (to: unknown) => { nav.pushed.push(to); }, navigate() {}, setParams() {}, back() {},
+            push: (to: unknown) => { nav.pushed.push(to); }, navigate() {}, setParams() {}, back: () => { nav.pushed.push('back'); },
             canGoBack: () => true, canDismiss: () => false, dismissAll() {}, replace() {},
         },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
@@ -129,7 +129,8 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 // Their own screens and sweeps (the poll and event composers, the pricing guide), closed until opened; none is opened here.
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
-vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
+// The event form says only whether it is open: the listing screen opens it for `?newPost=event`.
+vi.mock('../../components/NewEventModal', () => ({ NewEventModal: ({ visible }: { visible: boolean }) => (visible ? createElement('div', { 'data-testid': 'event-form' }) : null) }));
 vi.mock('../../components/info-content/PricingInfoModal', () => ({ PricingInfoModal: () => null }));
 vi.mock('../../components/PricingGuideModal', () => ({ PricingGuideModal: () => null }));
 vi.mock('../node-post', () => ({
@@ -496,6 +497,58 @@ describe('the Map in English: the words are as they were', () => {
         expect(byText('Confirm Pin')).not.toBeNull();
         await click(host.querySelector('[data-testid="map"]'), 'the map');
         expect(byText('Confirm Pin ✓')).not.toBeNull();
+    });
+});
+
+describe('the listing screen (app/new-listing.tsx): the form out of the map, opened by its link', () => {
+    const title = () => host.querySelector('input[placeholder="What do you need/offer?"]') as HTMLInputElement | null;
+
+    it('newPost=need opens the form on Need: the fee line is the Need\'s', async () => {
+        net.answer = community({ getBalance: { isBlockedFromTrading: false } });
+        params.now = { newPost: 'need' };
+        await renderIn('en', listing());
+        expect(title(), 'the form').not.toBeNull();
+        expect(host.textContent).not.toContain('Contributions First');
+        await type(byLabel('Price'), '10');
+        expect(host.textContent).toContain('1.5% fee: Fulfiller receives 9.85 B.');
+        // Photos are asked for, as every Offer and Need asks.
+        expect(Array.from(host.querySelectorAll('span')).some((x) => x.textContent === 'PHOTOS * (min 1)')).toBe(true);
+    });
+
+    it('a tool door\'s fresh draft opens prefilled, nothing asked', async () => {
+        store.map.set('beanpool_offer_draft', JSON.stringify({
+            anchorUrl: NODE, postType: 'offer', postTitle: 'Lawnmower for loan', postDescription: 'Sharp blade.', postCategory: 'tools',
+            postCredits: '5', postPriceType: 'daily', postPhotos: ['data:image/jpeg;base64,abc'], source: 'tool', tool: 'fixture-kit', savedAt: Date.now(),
+        }));
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        expect(said()).toEqual([]);
+        expect(title()?.value).toBe('Lawnmower for loan');
+        expect(host.textContent).toContain('1/5 PHOTOS');
+    });
+
+    it('newPost=event opens the event form; ✕ on the form takes the member back', async () => {
+        params.now = { newPost: 'event' };
+        await renderIn('en', listing());
+        expect(host.querySelector('[data-testid="event-form"]')).not.toBeNull();
+        expect(title()).toBeNull();
+        root.unmount();
+        root = createRoot(host);
+        nav.pushed.length = 0;
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        await click(byLabel('Close'), 'the form\'s ✕');
+        expect(nav.pushed).toEqual(['back']);
+        expect(title()).toBeNull();
+    });
+
+    it('"Not now" on the profile question takes the member back: the screen never sits empty', async () => {
+        net.answer = community({ getMemberProfile: {} });
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        expect(said()[0]).toBe('Finish your profile first');
+        await pressAlert('Not now');
+        expect(nav.pushed).toEqual(['back']);
     });
 });
 

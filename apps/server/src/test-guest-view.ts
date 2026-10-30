@@ -1459,6 +1459,7 @@ async function main(): Promise<void> {
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',
             'POST /api/recovery/collect/hub',
+            'POST /api/recovery/community-copy', 'POST /api/recovery/community-copy/status', 'DELETE /api/recovery/community-copy',
             'POST /api/recovery/collect/mine', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/sso-nonce',
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',

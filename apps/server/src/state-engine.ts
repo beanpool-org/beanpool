@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
@@ -73,6 +73,7 @@ import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
 import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
+import { deleteCommunityCopy } from './engine/community-copy.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledges.js';
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
@@ -294,7 +295,6 @@ import {
     hasListedOffer as hasListedOfferEngine,
     hasLiveOffer as hasLiveOfferEngine,
     liveOfferCount as liveOfferCountEngine,
-    generateSearchKeywords as generateSearchKeywordsEngine,
     CONTRIBUTION_REQUIRED_ERROR,
     COVENANT_REQUIRED_ERROR,
     type MarketplacePost,
@@ -386,6 +386,7 @@ import {
     type EventTimeOut
 } from './engine/posts.js';
 import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
+import { postSearchKeywords, postSearchKeywordsWithSynonyms } from './engine/search-keywords.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -505,9 +506,6 @@ import {
 
 
 
-// Load synonym map for FTS5 search keyword expansion from @beanpool/core
-const synonymMap: Record<string, string[]> = { ...SYNONYM_MAP };
-delete (synonymMap as any)._meta;
 
 /**
  * Run a SELECT whose only large dynamic input is a single `IN (...)` array, splitting that
@@ -532,11 +530,11 @@ function selectInChunks<T = any>(
 }
 
 /**
- * Generate hidden search keywords by expanding post content through the synonym map.
- * e.g. title "Fresh Lemons" → keywords "fruit citrus produce food tree"
+ * Generate hidden search keywords by expanding post content through the synonym map, and its tags' words.
+ * e.g. title "Fresh Lemons" → keywords "fruit citrus produce food tree" (engine/search-keywords.ts)
  */
-export function generateSearchKeywords(title: string, description: string, category: string): string {
-    return generateSearchKeywordsEngine(title, description, category, synonymMap);
+export function generateSearchKeywords(title: string, description: string, category: string, tags: readonly string[] = []): string {
+    return postSearchKeywordsWithSynonyms(title, description, category, tags);
 }
 
 // ===================== TYPES =====================
@@ -957,6 +955,8 @@ export function initStateEngine(): void {
 
     // FTS5: Backfill search keywords for existing posts that don't have them
     backfillSearchKeywords();
+    // Once: every listing's words again, with the synonyms and its tags (tags slice T2).
+    keywordsWithTagsOnce();
 
     // Purge legacy synthetic wallet entries that leaked into the members table
     purgeSyntheticMembers();
@@ -1194,7 +1194,7 @@ export function becomeMainServerInPlace(): void {
  * Also rebuilds the FTS5 index to ensure it's in sync.
  */
 function backfillSearchKeywords(): void {
-    const posts = db.prepare(`SELECT id, title, description, category FROM posts WHERE search_keywords = '' OR search_keywords IS NULL`).all() as any[];
+    const posts = db.prepare(`SELECT id, title, description, category, tags FROM posts WHERE search_keywords = '' OR search_keywords IS NULL`).all() as any[];
     if (posts.length === 0) return;
 
     console.log(`🔍 Backfilling FTS5 search keywords for ${posts.length} posts...`);
@@ -1221,7 +1221,7 @@ function backfillSearchKeywords(): void {
         if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
         const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
         for (const p of posts) {
-            const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general');
+            const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general', postTagsOf(p.tags));
             update.run(keywords, p.id);
         }
         if (touch) db.exec(touch);
@@ -1266,6 +1266,55 @@ function backfillSearchKeywords(): void {
     }
     
     console.log(`✅ FTS5 search keywords backfilled for ${posts.length} posts.`);
+}
+
+/** The node_config marker of keywordsWithTagsOnce: per server (replication-manifest.ts, `migration_*`). */
+const KEYWORDS_WITH_TAGS_MARKER = 'migration_search_keywords_tags_v1';
+
+/**
+ * Once on each server (a node_config marker): every listing's search words written again as its own writer now writes them
+ * (engine/search-keywords.ts, DESIGN-owner-seeding-tags-fable.md §4.6, slice T2), so each holds its tags' words, and words
+ * the synonym map made are made by the builder that keeps every script's letters (the one before dropped every letter
+ * outside a-z, and ran the words either side of one together). A listing whose words are its category alone was made or
+ * edited here, and is written so again (postSearchKeywords: no synonyms, as before); any other was given its synonyms by
+ * a boot's backfill or by the main server it was copied from, and is written with them (postSearchKeywordsWithSynonyms).
+ * One with no words is backfillSearchKeywords's, which runs first.
+ *
+ * As backfillSearchKeywords does, it leaves every listing's updated_at as it was: posts_touch_updated_at is set aside
+ * inside the transaction and put back as the database held it, so no listing rises up the board or travels again. posts_au
+ * (whose WHEN includes search_keywords) re-indexes each row whose words changed, one statement a row, so the index stays
+ * whole without a rebuild. A page of rowids at a time, so a large board is never read whole into memory. A failure
+ * writes nothing, marker included, and the next boot tries again.
+ */
+export function keywordsWithTagsOnce(): void {
+    try {
+        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(KEYWORDS_WITH_TAGS_MARKER)) return;
+        let changed = 0;
+        db.transaction(() => {
+            const touch = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_touch_updated_at'`).get() as { sql: string } | undefined)?.sql;
+            if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
+            const page = db.prepare(`SELECT rowid, id, title, description, category, tags, search_keywords FROM posts WHERE rowid > ? ORDER BY rowid LIMIT 500`);
+            const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
+            for (let after = 0; ;) {
+                const rows = page.all(after) as Array<{ rowid: number; id: string; title: string | null; description: string | null; category: string | null; tags: string | null; search_keywords: string | null }>;
+                if (rows.length === 0) break;
+                for (const p of rows) {
+                    const held = (p.search_keywords ?? '').trim();
+                    if (!held) continue;
+                    const category = p.category || 'general';
+                    const write = held === category ? postSearchKeywords : postSearchKeywordsWithSynonyms;
+                    const keywords = write(p.title || '', p.description || '', category, postTagsOf(p.tags));
+                    if (keywords !== p.search_keywords) { update.run(keywords, p.id); changed++; }
+                }
+                after = rows[rows.length - 1].rowid;
+            }
+            if (touch) db.exec(touch);
+            db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(KEYWORDS_WITH_TAGS_MARKER, new Date().toISOString());
+        })();
+        if (changed > 0) console.log(`🔍 Search words written again for ${changed} listing(s), with their tags.`);
+    } catch (e) {
+        console.warn('[FTS] Could not write the listings\' search words again (the next boot tries again):', e);
+    }
 }
 
 /**
@@ -2677,9 +2726,10 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
  * caller (route, test, or future code).
  *
  * Reloads only the ledger account balances (mirrors the boot + importRemoteState
- * reloads). COMMONS_BALANCE is deliberately NOT reseeded here: the crowdfund paths
- * never touch the commons pool, and reseeding from the DB could roll back
- * in-memory demurrage not yet persisted.
+ * reloads). COMMONS_BALANCE is deliberately NOT reseeded here: any pledge from a
+ * closed account already moved to the Commons in memory via moveToCommons
+ * (closedPledgeToCommons), and reseeding from the DB could roll back in-memory
+ * demurrage not yet persisted.
  */
 export function reconcileLedgerFromDb(): void {
     const accounts = db.prepare("SELECT public_key as id, balance, last_demurrage_epoch as lastDemurrageEpoch FROM accounts").all() as any[];
@@ -5632,6 +5682,8 @@ export function createPost(
         replacementValue?: unknown;
         /** The shop to put it in (engine/shops.ts assertShopForPost). */
         shopId?: unknown;
+        /** Its tags: ids from the library in core (engine/post-fields.ts assertPostTags). */
+        tags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
@@ -5642,8 +5694,9 @@ export function createPost(
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
     // number of Beans never reaches a listing, whichever route made it.
-    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng };
+    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng, tags: options?.tags };
     assertPostFields(postFields, 'create');
+    if (options?.tags !== undefined) options = { ...options, tags: postFields.tags };
     title = postFields.title as string;
     description = postFields.description as string;
     category = postFields.category as string;
@@ -5693,7 +5746,7 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
     // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
     // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
     // sent back unchanged, is not held to a length limit it was stored before (#1493).
-    const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    const storedText = db.prepare('SELECT title, description, category, tags FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     // A keeper may edit their enterprise's Offer or Need signed with their own key: the signed caller only, by the rule the
@@ -9015,6 +9068,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Through deleteAllShares, which writes the tombstone that deletes them on a standby too. Not in a try: a copy left
         // behind here would still bring the deleted account back, so a failure fails the deletion instead.
         deleteAllShares(publicKey);
+        // And their community copy (engine/community-copy.ts), with its tombstone: the same reason, not in a try either.
+        deleteCommunityCopy(publicKey);
         try {
             // By the owner each row names, which a server that took over has too (its sessions stay each server's own), and
             // by their sessions here, for a row made before rows named their owner.

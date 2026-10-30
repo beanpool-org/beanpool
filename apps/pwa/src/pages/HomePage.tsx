@@ -43,6 +43,7 @@ import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlac
 import { useCommunityInfo } from '../lib/features';
 import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import { AskedCommunity } from '../components/AskedCommunity';
+import { AskToJoin } from '../components/AskToJoin';
 import {
     NOTICES_SEEN_EVENT, beansAmount, beansLines, cardTitle, closesIn, closesWords, communityFacts, communityLine, communityName, dealStatusLine, dealTitleLine,
     dealsLine, decideLine, distanceText, enterpriseLatestLine, findBody, findListed, findOffersStart, frameOf, groupLastLine, homeEventRepeats, homeEventWhen, isHomeCardId,
@@ -1038,6 +1039,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         });
         return () => { alive = false; };
     }, [publicKey]);
+
+    // A knock just sent from the Find card (components/AskToJoin): read this browser's memory again, so the card says how
+    // it fares, with Cancel my request, as it does for one sent before this visit. The read only adds: the memory no longer
+    // lists a request cancelled in this visit, whose card keeps its line and whose row stays quiet until the visit ends.
+    const handleAsked = () => {
+        if (!publicKey) return;
+        void rememberedKnocks(publicKey).then(list => setKnocks(was => [...list, ...was.filter(k => !list.some(n => n.url === k.url))]));
+    };
+    const askedOpen = (url: string | null): boolean => {
+        const origin = communityOrigin(url);
+        return !!origin && knocks.some(k => k.url === origin && !k.cancelledAt);
+    };
 
     const knockKey = knocks.map(k => k.url).join(' ');
     useEffect(() => {
@@ -2052,7 +2065,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 const nearby = nearbyLine(f);
                 return (
                     <HomeCard key={id} {...common}>
-                        {askedCommunity && identity && <AskedCommunity host={askedCommunity} onClose={() => onAskedCommunitySeen?.()} />}
+                        {askedCommunity && identity && <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />}
                         <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-body">{findBody(f)}</p>
                         {more.map(cm => {
                             const facts = communityFacts(cm);
@@ -2065,6 +2078,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                         ? <HomeLine href={cm.url} external label={t('{text}. Opens its page.', { text })}><span dir="auto" className="min-w-0 break-words font-semibold underline">{text}</span></HomeLine>
                                         : <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words">{text}</p>}
                                     {quiet && <p className="m-0 pb-1 text-xs italic text-nature-700 dark:text-nature-200 break-words" data-testid={`home-find-not-answering-${cm.key}`}>{quiet}</p>}
+                                    {identity && cm.url && <AskToJoin community={cm} identity={identity} asked={askedOpen(cm.url)} onAsked={handleAsked} testId={`home-find-ask-${cm.key}`} />}
                                 </Fragment>
                             );
                         })}
@@ -2627,7 +2641,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 {/* The community the member came to ask to join, where Home draws no Find card to hold it: Find is held on Home
                     only for a global member's first 30 days, and a member may take it off (PR #2551 review). */}
                 {askedCommunity && identity && answer && !shown.some(c => c.type === 'find') && (
-                    <AskedCommunity host={askedCommunity} onClose={() => onAskedCommunitySeen?.()} />
+                    <AskedCommunity host={askedCommunity} identity={identity} asked={askedOpen} onAsked={handleAsked} onClose={() => onAskedCommunitySeen?.()} />
                 )}
                 {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
                     own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.

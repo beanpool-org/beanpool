@@ -130,6 +130,7 @@ import { getProfileSwitches } from '../config/node-profile.js';
 import { isMemberKeySpelling } from './member-key.js';
 import { assertMayStorePhotoBytes, incomingPhotoBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { dispatchPushNotification } from '../state-engine.js';
+import { logger } from '../logger.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -290,6 +291,24 @@ export function knockerRefusal(pubkey: string): 'already_member' | 'account_clos
     return null;
 }
 
+let lastCeilingAlertUtcDay: string | null = null;
+
+export function _resetKnockCeilingAlertForTests(): void {
+    lastCeilingAlertUtcDay = null;
+}
+
+function maybeAlertKnockCeiling(now: number): void {
+    const todayUtc = new Date(now).toISOString().slice(0, 10);
+    if (lastCeilingAlertUtcDay === todayUtc) return;
+    lastCeilingAlertUtcDay = todayUtc;
+    const madeToday = (db.prepare('SELECT COUNT(*) AS n FROM join_requests WHERE created_at >= ?').get(iso(now - DAY_MS)) as { n: number }).n;
+    const openRecently = (db.prepare(`SELECT COUNT(*) AS n FROM join_requests WHERE ${LISTED}`)
+        .get(iso(now - KNOCK_RULES.openCountedDays * DAY_MS)) as { n: number }).n;
+    const detail = `${madeToday} requests to join in the last 24 hours (ceiling ${KNOCK_RULES.perNodePerDay}), ${openRecently} open (cap ${KNOCK_RULES.openAtOnce}): new requests turned away as busy.`;
+    logger.warn('SYS', `🚪 Requests to join ceiling reached: ${detail}`);
+    void import('../services/alerts.js').then((alerts) => alerts.raiseOnce('knock.busy', detail)).catch(() => { });
+}
+
 /**
  * Record a knock, or say why not. Every check runs here in one transaction with the write, so two knocks from one key
  * at once can't both land (the partial unique index is the backstop).
@@ -334,6 +353,9 @@ export function submitKnock(input: KnockInput, now = Date.now()): KnockOutcome {
             if (input.avatar) keepNewestPhotos(now);
             return { ok: true, id, reopened: false };
         })();
+        if (!res.ok && res.reason === 'busy') {
+            maybeAlertKnockCeiling(now);
+        }
         if (res.ok && incomingBytes > 0) recordStoredPhotoBytes(pubkey, incomingBytes, now);
         return res;
     } catch (e: any) {

@@ -4,10 +4,11 @@ import { getMemberDisplayName, getMemberAvatar, getMemberRawAvatar, fmtDate, fmt
 import { PruneBranchModal } from './PruneBranchModal';
 import { Avatar } from '../common/Avatar';
 import { RekeyMemberWizard } from './RekeyMemberWizard';
+import { BringBackMemberWizard } from './BringBackMemberWizard';
 import { OffboardMemberWizard } from './OffboardMemberWizard';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
-import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions } from '../../lib/node-client';
+import { emergencySuspendMember, liftMemberSuspension, fetchNodeDecisionsOn, fetchAdminDecisions, fetchRekeyStatusApi } from '../../lib/node-client';
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { t } from '../../lib/fresh-proof';
@@ -116,6 +117,10 @@ export function MemberDetailModal({
     const [showPruneConfirm, setShowPruneConfirm] = useState(false);
     const [showPruneBranch, setShowPruneBranch] = useState(false);
     const [showRekeyWizard, setShowRekeyWizard] = useState(false);
+    const [showBringBack, setShowBringBack] = useState(false);
+    // Whether the member keeps a community copy here (vault rethink VR3), which an admin needs to know before offering Bring
+    // back: null until the node says, and from a node before it.
+    const [broughtBackHere, setBroughtBackHere] = useState<boolean | null>(null);
     const [showOffboardWizard, setShowOffboardWizard] = useState(false);
     const [roleLoading, setRoleLoading] = useState(false);
     const [roleError, setRoleError] = useState<string | null>(null);
@@ -162,6 +167,15 @@ export function MemberDetailModal({
         });
         return () => { live = false; };
     }, [nodeUrl, pubkey, adminPassword, tfaToken]);
+    useEffect(() => {
+        setBroughtBackHere(null);
+        if (!nodeUrl || !pubkey) return;
+        let live = true;
+        fetchRekeyStatusApi(nodeUrl, pubkey, adminPassword, tfaToken)
+            .then((s) => { if (live) setBroughtBackHere(typeof s?.communityCopy?.kept === 'boolean' ? s.communityCopy.kept : null); })
+            .catch(() => { /* the line stays away; the wizard reads it again */ });
+        return () => { live = false; };
+    }, [nodeUrl, pubkey, adminPassword, tfaToken, showBringBack]);
     // A row stored under another spelling of a key is no member's account (the server's isMemberKeySpelling): Prune tidies it
     // away wherever the community votes, as the node itself tells an operator to.
     const strayRow = !!pubkey && !/^[0-9a-f]{64}$/.test(pubkey);
@@ -831,6 +845,20 @@ export function MemberDetailModal({
                                 <span>🔑 Re-Key</span>
                             </button>
 
+                            <button
+                                disabled={isFrozen}
+                                onClick={() => setShowBringBack(true)}
+                                className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
+                                    isFrozen
+                                        ? 'opacity-50 cursor-not-allowed bg-nature-900 text-nature-500 border-nature-800'
+                                        : 'bg-nature-900 hover:bg-nature-800 text-nature-200 border-nature-600'
+                                }`}
+                                title="Bring back: their same key on a new phone, from the copy they keep with this community, after you check them in person"
+                                data-testid="bring-back-button"
+                            >
+                                <span>↩️ Bring back</span>
+                            </button>
+
                             {mayOffboard && (
                                 <button
                                     onClick={() => setShowOffboardWizard(true)}
@@ -863,6 +891,11 @@ export function MemberDetailModal({
                             )}
                         </div>
                     )}
+                    {broughtBackHere !== null && (
+                        <p className="m-0 text-[11px] text-nature-400" data-testid="can-be-brought-back">
+                            {broughtBackHere ? 'Can be brought back by this community: yes.' : 'Can be brought back by this community: no.'}
+                        </p>
+                    )}
                     {removalIsTheVote && (
                         <p className="m-0 text-[11px] text-nature-400" data-testid="removal-is-the-vote">
                             {removalNote}
@@ -883,6 +916,17 @@ export function MemberDetailModal({
                         onClose();
                     }}
                     onClose={() => setShowPruneBranch(false)}
+                />
+            )}
+
+            {showBringBack && (
+                <BringBackMemberWizard
+                    member={{ publicKey: pubkey, callsign: member?.callsign ? String(member.callsign) : displayName }}
+                    nodeUrl={nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')}
+                    adminPassword={adminPassword}
+                    tfaToken={tfaToken}
+                    onRekeyInstead={() => { setShowBringBack(false); setShowRekeyWizard(true); }}
+                    onClose={() => setShowBringBack(false)}
                 />
             )}
 

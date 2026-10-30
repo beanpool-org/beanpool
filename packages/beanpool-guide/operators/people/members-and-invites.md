@@ -68,6 +68,8 @@ If a request waits **3 days** without an answer in an Invite community (any memb
 
 If a request waits **7 days** with no answer, the server sends an operator alert (knock.waiting: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
 
+If a burst of requests reaches the ceiling (30 made in any 24 hours, or 50 open from the last 3 days), the server turns new requests away and sends an operator alert (knock.busy: "requests to join ceiling reached"). Applicants are told "This community isn't taking new requests right now" meanwhile, and it clears by itself as older requests lapse or are answered. Because any web page's visitors can now send a request to join directly to your community (open CORS on the server's request-to-join address), this ceiling answers the risk of a flood from the web. The alert is told at most once per UTC day, kept in memory, so restarting the server can send it again on the same day.
+
 **While no new members are being taken** (the community is paused), **Who can join** shows **Paused**, and **Paused: nobody new for now** is the choice marked when you open it. Pick **Invite** or **Known** and save to take new members again; the page says what that changes, and every member is told. Until the page has loaded, there is nothing to save: if it can't load, tap **Retry**.
 
 **While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The **Who can join** row says so, in the server's words, with what would end it, and cannot be opened until the preview is off.
@@ -197,6 +199,18 @@ You can't make a code for your own account: it would sign you out, with nobody l
 If they already moved to a new key, the window opens on **Already moved to** that key and the date. A new code would stop the phone they use now, so you type NEW CODE first. Do that only if the new phone is lost too.
 
 **Cancel this code** undoes a code nobody has used: their key works again and they can sign in again, and they are back to what they were before the code (active, or still suspended if they were suspended already). A suspension made before or while the code waited, from their page or on a report, stays after a cancel; **Lift suspension** on their page lifts it if that's no longer right, and lifted, it stays lifted. A report dealt with without suspending them changes nothing. Whoever may make the code may cancel it; for an owner or an admin, that is an owner. A code that was used or has run out can't be cancelled. A code made before this server kept the earlier status puts them back to active, unless a report may have suspended them (one dealt with before this server noted which reports did): then they stay suspended, the window says so, and **Lift suspension** lifts it. Completing the code doesn't lift a suspension either: their new key stays suspended until it is lifted.
+
+## Bring back
+
+**Bring back**, beside **Re-Key** on a member's page, gives a member their **same key** on a new phone, from the copy they keep with this community. They turned it on themselves (**Your community's admins** in their Account Protection), which this server allows only when it keeps members' copies itself (**This server**, under Where members' copies go) and isn't open to anyone. The member's page says **Can be brought back by this community: yes** or **no**.
+
+- Use it, like Re-Key, only for someone you have checked in person. Nothing is moved and nobody is suspended: their Beans, name, chats and every community stay on the key they had, and their other phones keep working. Re-Key gives a NEW key, for someone whose way back is gone.
+- Tick that you have checked them in person, then **Make a bring-back code**. The code starts BB- and lasts **24 hours**. Their phones are told at once that an admin is bringing their account back.
+- They scan or type it on the new phone as a re-key code (**An admin gave me a re-key code**). Their phone shows two digits: type them and press **Bring them back**. The server seals the copy to that phone alone, and the phone opens it as their account. Their phones are told again.
+- The same brakes as Re-Key: the window lists each phone that has asked on the code, and **Not theirs** turns one away; it warns you when codes like it are being guessed at. A number no waiting phone shows is a wrong try, three stop the code, and a pasted key never completes a bring-back.
+- Only an owner can bring back an owner or an admin. You can't bring back your own account. While a re-key code holds their key, cancel it first.
+- This server keeps a record of each bring-back: whose account, which admin, when, and the start of the new phone's key. Never the code and never the copy.
+- The copy and the key that opens it are kept together under this server's recovery seal, so whoever runs this server can open them. A server without its recovery-seal key keeps none. A server that has lost that key, or has another one (restored from a backup that didn't carry it), can't open the copies it holds: **Make a bring-back code** and **Bring them back** say so and use nothing up, and Re-Key gives the member a new key instead. A standby holds them locked; a take-over brings them back with the seal key. A re-key to a new key removes the member's copy (it holds the old key), and so does deleting the account.
 
 ## Things to know
 

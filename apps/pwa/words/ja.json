@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, ledger and invite top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, ledger and invite top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "「{name}」はこのコミュニティですでに使われています。別の名前を選んでください。",
@@ -1722,7 +1722,7 @@
   "Not finished yet": "まだ完了していません",
   "Reload page": "ページを再読み込み",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "このブラウザは別のBeanPoolアカウントを保持しているため、このアカウントは保存されませんでした。",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "完全な鍵更新（re-key）コードではありません。「RK-」で始まり、8文字の英数字が続きます。",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "完全なコードではありません。「RK-」または「BB-」で始まり、8文字の英数字が続きます。",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "このブラウザで開始した参加手続きがまだ待機中です。先にそれを完了してから、コードに戻ってください。",
   "This browser couldn’t keep the key safely, so nothing was sent.": "このブラウザで鍵を安全に保持できなかったため、何も送信されませんでした。",
   "Show this number to your admin": "この番号を管理者に提示してください",
@@ -3492,9 +3492,41 @@
   "Held in Trust & Deals": "エスクローと取引",
   "Held in Trust & Deals Notifications": "エスクローと取引の通知",
   "Bid approved! The Beans are held in trust.": "提案が承認されました！信託エスクローに資金が預けられました。",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "取り組みを中止して支援者に返金しますか？\n\nこれにより取り組みは終了し、エスクローに預けられているすべてのプレッジが支援者に直ちに返金されます。",
   "{amount} 🫘 held in trust": "エスクロー預かり中：{amount} 🫘",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "ノードからのアカウントの完全削除に失敗しました。進行中のエスクロー取引を先に解決する必要がある可能性があります。",
   "{amount} · held in trust": "{amount} · エスクロー中",
-  "Cancel Initiative & Refund Backers": "取り組みを取り消して支援者に返金"
+  "Cancel Initiative & Refund Backers": "取り組みを取り消して支援者に返金",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "取り組みを中止して支援者に返金しますか？\n\nこれにより取り組みは終了し、エスクローに預けられているすべてのプレッジが支援者に直ちに返金されます。その後に閉鎖されたアカウント（削除されたアカウント、または清算された事業者）からのプレッジは、閉鎖されたアカウントの残りのビーンズと同様に代わりにコモンズに送られ、他の全員のプレッジはそのまま各自に返金されます。",
+  "Please give a name of at least 2 characters.": "名前は2文字以上で入力してください。",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "other": "名前は{n}文字以内にしてください。"
+  },
+  "Please say a few words about yourself.": "自己紹介を一言入力してください。",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "other": "メッセージは{n}文字以内にしてください。"
+  },
+  "You are already a member of this community.": "あなたはこのコミュニティのメンバーにすでになっています。",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "このコミュニティへの参加を申請している人たち。「招待」を押すと、その人の鍵だけが使える招待が作成され、相手のアプリが自動で見つけます。「今はしない」を選ぶと、相手には「まだ返答はありません」とだけ表示されます。",
+  "Couldn't reach your community. Check your connection and try again.": "コミュニティに接続できませんでした。通信環境を確認してもう一度お試しください。",
+  "Asked today": "今日申請",
+  "Asked yesterday": "昨日申請",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "other": "{n}日前に申請"
+  },
+  "from {node}": "{node}から",
+  "You invited {name}. Their app will find the invite by itself.": "{name}さんを招待しました。相手のアプリが自動的に招待を見つけます。",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "other": "🚪 参加申請（{n}）"
+  },
+  "Inviting {name}...": "{name}さんを招待中...",
+  "Invite {name}": "{name}さんを招待",
+  "Declining {name}...": "{name}さんを保留中...",
+  "Not now, {name}": "今はしない、{name}さん",
+  "Invite\u0004button: let them in": "招待",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "other": "🎟️ 招待（{n}）"
+  },
+  "Ask to join {name}": "{name}への参加を申請",
+  "A few words about yourself": "簡単な自己紹介",
+  "Where you live, what you'd like to share or learn": "お住まいの地域、共有したいことや学びたいことなど"
 }

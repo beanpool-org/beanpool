@@ -6,7 +6,13 @@ import type Database from 'better-sqlite3';
 import {
     elidedWord,
     foldApostrophes,
+    joinCompounds,
+    knownSearchTags,
     parseReachPeers,
+    plainWords,
+    postTagsOf,
+    tagById,
+    tagSearchWords,
     type PostReach,
     type AudienceScope,
     word
@@ -234,6 +240,11 @@ export interface MarketplacePost {
     /** The server's search words for it, synonyms included (generateSearchKeywords). Carried by the replication export only. */
     searchKeywords?: string;
     /**
+     * Its tags from the library in core (DESIGN-owner-seeding-tags-fable.md §4.5): ids such as `food.fruit.lemon`, at most
+     * five. Public with the listing, as its category is. Absent when it has none, so an untagged listing reads as before.
+     */
+    tags?: string[];
+    /**
      * Great-circle km from the point the reader gave (`PostFilter.near`), to 0.1 km; null for a post with no place.
      * Absent when no point was given (G4).
      */
@@ -265,6 +276,13 @@ export interface PostFilter {
      */
     syncPage?: SyncPage;
     query?: string;
+    /**
+     * Listings tagged with any of these ids or with a tag under one (`food.fruit` finds `food.fruit.lemon`): the list
+     * route's `tags=`, a saved-search card's ids (DESIGN-owner-seeding-tags-fable.md §4.6). Only ids the library knows are
+     * asked (knownSearchTags), so nothing from outside becomes a pattern. With `query`, a listing either finds is read:
+     * the Market sends the member's words and the ids they resolved to, so a listing tagged lemon is found from "limón".
+     */
+    tags?: string[];
     authorPubkey?: string;
     viewerPubkey?: string;
     /**
@@ -641,20 +659,43 @@ export function validatePostPhotos(photos: string[] | undefined): void {
     }
 }
 
-export function generateSearchKeywords(title: string, description: string, category: string, synonymMap?: Record<string, string[]>): string {
-    const text = `${title} ${description}`.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+/**
+ * The words a listing is also found by, beyond its own title and description, which posts_fts holds already: its category,
+ * the synonyms of its words, and each of its tags' words (DESIGN-owner-seeding-tags-fable.md §4.6): the words of its id
+ * (`food fruit lemon`), of its English label and of every tag above it, its aliases and the words the old synonym map
+ * keyed it by (core's tagSearchWords). So "fruit" or "citrus" finds a listing tagged lemon, in whatever language its
+ * author wrote it. A tag this library does not know adds nothing.
+ *
+ * The text is parted as a search parts it (core's joinCompounds): letters of every script kept, a compound joined (wi-fi
+ * → wifi, as the synonyms are keyed), every other punctuation mark a space. The ASCII strip it replaces deleted every
+ * other letter outright, so a Russian or Spanish word vanished and the words either side of it, or of a comma, ran
+ * together: "Тыква, pumpkin" read as one "pumpkin", "eggs,milk" as "eggsmilk" (neither found), "café" as "caf".
+ */
+export function generateSearchKeywords(title: string, description: string, category: string, synonymMap?: Record<string, string[]>, tags?: readonly string[]): string {
     const expanded = new Set<string>();
     expanded.add(category);
+    for (const id of tags ?? []) {
+        const tag = tagById(id);
+        if (!tag) continue;
+        for (const part of id.split('.')) for (const w of plainWords(part)) expanded.add(w);
+        for (const w of tagSearchWords(id)) expanded.add(w);
+        for (const key of tag.synonymKeys ?? []) expanded.add(key.toLowerCase());
+    }
 
     if (!synonymMap) return [...expanded].join(' ');
+    const text = joinCompounds(`${title} ${description}`);
 
+    // The map's own keys only: "constructor" or "toString" in a listing read Object.prototype's function, and iterating it
+    // threw: the node's boot backfill (state-engine.ts backfillSearchKeywords) stopped at such a listing.
+    const synonymsOf = (key: string): string[] | undefined =>
+        Object.prototype.hasOwnProperty.call(synonymMap, key) && Array.isArray(synonymMap[key]) ? synonymMap[key] : undefined;
     const lookup = (word: string): string[] | undefined => {
-        if (synonymMap[word]) return synonymMap[word];
-        if (word.endsWith('ies')) { const stem = word.slice(0, -3) + 'y'; if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('es')) { const stem = word.slice(0, -2); if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('s')) { const stem = word.slice(0, -1); if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('ing')) { const stem = word.slice(0, -3); if (synonymMap[stem]) return synonymMap[stem]; }
-        if (word.endsWith('ed')) { const stem = word.slice(0, -2); if (synonymMap[stem]) return synonymMap[stem]; }
+        if (synonymsOf(word)) return synonymsOf(word);
+        if (word.endsWith('ies')) { const stem = word.slice(0, -3) + 'y'; if (synonymsOf(stem)) return synonymsOf(stem); }
+        if (word.endsWith('es')) { const stem = word.slice(0, -2); if (synonymsOf(stem)) return synonymsOf(stem); }
+        if (word.endsWith('s')) { const stem = word.slice(0, -1); if (synonymsOf(stem)) return synonymsOf(stem); }
+        if (word.endsWith('ing')) { const stem = word.slice(0, -3); if (synonymsOf(stem)) return synonymsOf(stem); }
+        if (word.endsWith('ed')) { const stem = word.slice(0, -2); if (synonymsOf(stem)) return synonymsOf(stem); }
         return undefined;
     };
 
@@ -671,14 +712,10 @@ export function generateSearchKeywords(title: string, description: string, categ
         }
         if (i < len - 1) {
             const two = `${word} ${allWords[i+1]}`;
-            if (synonymMap[two]) {
-                for (const syn of synonymMap[two]) expanded.add(syn);
-            }
+            for (const syn of synonymsOf(two) ?? []) expanded.add(syn);
             if (i < len - 2) {
                 const three = `${two} ${allWords[i+2]}`;
-                if (synonymMap[three]) {
-                    for (const syn of synonymMap[three]) expanded.add(syn);
-                }
+                for (const syn of synonymsOf(three) ?? []) expanded.add(syn);
             }
         }
     }
@@ -732,6 +769,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         ...lendFieldsOf(db, row),
         ...(typeof row.shop_id === 'string' && row.shop_id ? { shopId: row.shop_id } : {}),
         ...(typeof row.featured_at === 'string' && row.featured_at ? { featuredAt: row.featured_at } : {}),
+        ...(typeof row.tags === 'string' && row.tags ? { tags: postTagsOf(row.tags) } : {}),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -1274,7 +1312,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     eventOnline: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
-    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, asKeeper: null, sync: null, beansOnly: null,
+    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, tags: null, authorPubkey: null, asKeeper: null, sync: null, beansOnly: null,
     lendable: null, shopId: null, inShop: null, nearestPerShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
@@ -1509,6 +1547,20 @@ function searchCondition(query: string | undefined): { sql: string; params: stri
         params.push(anywhere, anywhere);
     }
     return { sql: `(${sql})`, params };
+}
+
+/**
+ * The tag filter (PostFilter.tags), as one condition on `p` and its parameters; null when no tags were asked. Each id
+ * matches the listing's own tag or any under it: `(' ' || tags || ' ') LIKE '% <id> %'` or `'% <id>.%'`, OR'd. Only ids
+ * the library knows are asked, and an id is lowercase letters, digits, dots and hyphens (TAG_ID_PATTERN), so none holds a
+ * LIKE wildcard. Asked only for ids it does not know, it matches nothing, as a word nobody wrote does.
+ */
+function tagCondition(tags: readonly unknown[] | undefined): { sql: string; params: string[] } | null {
+    if (!tags || tags.length === 0) return null;
+    const ids = knownSearchTags(tags);
+    if (ids.length === 0) return { sql: '0', params: [] };
+    const sql = ids.map(() => `(' ' || p.tags || ' ') LIKE ? OR (' ' || p.tags || ' ') LIKE ?`).join(' OR ');
+    return { sql: `(${sql})`, params: ids.flatMap(id => [`% ${id} %`, `% ${id}.%`]) };
 }
 
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
@@ -1943,7 +1995,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         }
     }
 
-    const search = searchCondition(filter?.query);
+    // The words and the tags (PostFilter.tags), a listing either finds read: one condition, held to a search's rules below.
+    const words = searchCondition(filter?.query);
+    const tagged = tagCondition(filter?.tags);
+    const search = words && tagged
+        ? { sql: `(${words.sql} OR ${tagged.sql})`, params: [...words.params, ...tagged.params] }
+        : words ?? tagged;
     if (search) {
         where += ` AND ${search.sql}`;
         params.push(...search.params);
@@ -2345,6 +2402,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // (DESIGN-shops-and-tools-fable.md §4, §9.4; apps/server routes/shops.ts). So the id links the listings its owner
     // put in the one front window, as the shop card does, and no others: their listings outside it stay apart.
     shopId: 'keep',
+    // Public with the listing, as its category is (DESIGN-owner-seeding-tags-fable.md §4.9).
+    tags: 'keep',
     // Which of a shop's Offers its keepers featured, and when: the shopfront's, a members' page (round 3 §5), so not a
     // visitor's. The listing itself stays.
     featuredAt: 'drop',

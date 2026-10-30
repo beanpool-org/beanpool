@@ -13,7 +13,7 @@ export type ComposePostType = 'offer' | 'need' | 'poll' | 'event';
 
 /**
  * Which form a choice opens:
- * - `offer-need-form` — the map's own New Post sheet, with the type preselected
+ * - `offer-need-form` — the New Post sheet (app/new-listing.tsx), with the type preselected
  * - `poll-modal` — NewPollModal
  * - `event-modal` — NewEventModal
  */
@@ -80,7 +80,7 @@ export function composeCarriesPin(type: ComposePostType): boolean {
 }
 
 /**
- * What the map should open for a `?newPost=` deep link.
+ * What the listing screen (app/new-listing.tsx) should open for a `?newPost=` deep link.
  *
  * `newPost=true` is the long-standing link the Market tab uses, and it opens the chooser. A named type
  * opens that form directly — which is what stops the Market tab's own Offer and Need rows from bouncing
@@ -146,7 +146,7 @@ export function isRestorableDraft(draft: unknown, anchorUrl: string | null): boo
 export type DraftOpenDecision = 'open-tool' | 'ask-unfinished' | 'start-fresh';
 
 /**
- * What `openComposer` in map.tsx should do with a saved draft:
+ * What `openComposer` in app/new-listing.tsx should do with a saved draft:
  * - `open-tool` — a tool door has just written the draft and opened the composer: open it without asking
  * - `ask-unfinished` — the draft is a member's unfinished post (or a tool's its door didn't open, {@link TOOL_DRAFT_FRESH_MS}),
  *   ask whether to continue or start fresh

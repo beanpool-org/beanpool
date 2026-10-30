@@ -1852,7 +1852,7 @@ export default function PostDetailModal() {
                             accessibilityLabel={t('Post your own offer')}
                             style={styles.pulsePostOfferBtn}
                             onPress={() => {
-                                router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } });
+                                router.push({ pathname: '/new-listing', params: { newPost: 'true' } });
                             }}
                         >
                             <Text style={styles.pulsePostOfferBtnText}>
@@ -2391,7 +2391,7 @@ export default function PostDetailModal() {
                             <Pressable
                                 accessibilityRole="button"
                                 style={{ marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center' }}
-                                onPress={() => { setShowContributionRequired(false); router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } }); }}
+                                onPress={() => { setShowContributionRequired(false); router.push({ pathname: '/new-listing', params: { newPost: 'true' } }); }}
                             >
                                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{t('➕ Create an Offer')}</Text>
                             </Pressable>

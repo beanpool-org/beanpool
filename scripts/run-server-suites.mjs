@@ -7,7 +7,7 @@
 // to fit in a few minutes on a laptop.
 //
 // EACH RUN gets its own mkdtemp BEANPOOL_DATA_DIR and TMPDIR, runs as `tsx src/<suite>.ts` from apps/server (PATH as
-// `pnpm exec` sets it) in a process group of its own, and has SERVER_SUITES_TIMEOUT seconds (300). A run past that is
+// `pnpm exec` sets it) in a process group of its own, and has its limit (300 s; a run's own timeoutS in server-suites.mjs; SERVER_SUITES_TIMEOUT overrides both). A run past that is
 // killed: its process group, and every process descended from it, by PID. Never by name or pattern: other worktrees
 // run the same suites on this machine. Anything its group left behind when it exited normally is killed too.
 //
@@ -28,7 +28,7 @@
 // Env:
 //   TEST_ALL_JOBS           runs at a time. Default 3 on CI, else the core count minus 4, at least 1.
 //   SERVER_SUITES_ONLY      run only these (run ids or suite names, space or comma separated), e.g. to reproduce one.
-//   SERVER_SUITES_TIMEOUT   seconds per run, default 300.
+//   SERVER_SUITES_TIMEOUT   seconds per run for EVERY run when set (overrides each run's timeoutS); default 300, or the run's timeoutS.
 //   SERVER_SUITES_SUMMARY   file to write the short timing summary to (test-all.sh prints it in its report).
 //   TEST_ALL_LOG_DIR        when set (CI), the logs of failing runs are copied to $TEST_ALL_LOG_DIR/server-suites/.
 //   SERVER_SUITES_KEEP_LOGS a folder: every run's log, passing or not, is copied there as <run id>.log (a lane's counts).
@@ -45,6 +45,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVER_DIR = path.join(ROOT, 'apps/server');
 const TSX = path.join(ROOT, 'node_modules/.bin/tsx');
 const TIMEOUT_S = Number(process.env.SERVER_SUITES_TIMEOUT || 300);
+// A run's limit: SERVER_SUITES_TIMEOUT when it is set (it overrides every run), else the run's own timeoutS
+// (server-suites.mjs: 600 for the few that cross 300 under load), else 300.
+const TIMEOUT_FROM_ENV = !!process.env.SERVER_SUITES_TIMEOUT;
+const limitOf = (run) => (TIMEOUT_FROM_ENV ? TIMEOUT_S : (run.timeoutS ?? TIMEOUT_S));
 const KILL_GRACE_MS = 10_000;
 const FAILED_LOG_LINES = 300; // a failing run's whole log up to this; past it, its ✗ lines and the last 200
 const SUMMARY_TOP = 15;
@@ -63,8 +67,12 @@ const JOBS = Math.max(1, Number(process.env.TEST_ALL_JOBS) || (process.env.CI ? 
 
 function buildRuns() {
     const runs = [
-        ...SUITES.map((name) => ({ id: name, name, label: '', env: {} })),
-        ...VARIANTS.map((v) => ({ id: v.tag ? `${v.name}(${v.tag})` : v.name, name: v.name, tag: v.tag, label: v.label || '', env: v.env || {} })),
+        ...SUITES.map((entry) => {
+            const name = typeof entry === 'string' ? entry : entry.name;
+            const timeoutS = typeof entry === 'string' ? undefined : entry.timeoutS;
+            return { id: name, name, label: '', env: {}, timeoutS };
+        }),
+        ...VARIANTS.map((v) => ({ id: v.tag ? `${v.name}(${v.tag})` : v.name, name: v.name, tag: v.tag, label: v.label || '', env: v.env || {}, timeoutS: v.timeoutS })),
     ];
     const problems = [];
     const seen = new Set();
@@ -190,6 +198,7 @@ function runOne(run, workDir) {
         live.set(child.pid, run);
 
         let timedOut = false;
+        const limitS = limitOf(run);
         const timer = setTimeout(() => {
             timedOut = true;
             const tree = descendants(child.pid);
@@ -200,7 +209,7 @@ function runOne(run, workDir) {
                 signal(child.pid, [...tree, ...descendants(child.pid)], 'SIGKILL');
                 done();
             }, KILL_GRACE_MS)));
-        }, TIMEOUT_S * 1000);
+        }, limitS * 1000);
 
         const finish = (code, sig) => {
             clearTimeout(timer);
@@ -245,7 +254,8 @@ async function runAll(runs, jobs, root, results) {
             results.push(r);
             // ✘, not ✗: scripts/test-all-lib.sh counts every ✗ line as a failing assertion of the suite above it.
             const mark = r.status === 'pass' ? '✓' : '✘';
-            const why = r.status === 'timeout' ? ` TIMEOUT after ${TIMEOUT_S}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}`
+            const limitS = limitOf(r);
+            const why = r.status === 'timeout' ? ` TIMEOUT after ${limitS}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}`
                 : r.status === 'nocount' ? ' exit 0 with no closing count (NO-COUNT)' : '';
             console.log(`${mark} ${r.id}${why}  ${fmt(r.seconds)}  [${results.length}/${total}]`);
             if (process.env.SERVER_SUITES_KEEP_LOGS) {
@@ -283,7 +293,7 @@ async function main() {
     const serial = runs.filter((r) => SERIAL[r.id]);
 
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-'));
-    console.log(`Server suites: ${pooled.length} runs, ${JOBS} at a time (${cores} cores), then ${serial.length} serial; ${TIMEOUT_S}s limit each`);
+    console.log(`Server suites: ${pooled.length} runs, ${JOBS} at a time (${cores} cores), then ${serial.length} serial; ${TIMEOUT_FROM_ENV ? `${TIMEOUT_S}s limit each` : `${TIMEOUT_S}s limit each (${[...pooled, ...serial].filter(r => r.timeoutS).length} with their own)`}`);
     if (Object.keys(known).length === 0) console.log('  (no recorded durations yet, so manifest order; the next run goes longest first)');
 
     const results = [];
@@ -335,7 +345,8 @@ async function main() {
             console.log('…');
             console.log(lines.slice(-200).join('\n'));
         }
-        const how = r.status === 'timeout' ? `killed after ${TIMEOUT_S}s` : r.status === 'nocount' ? 'exit 0 with no closing count' : `exit ${r.code ?? r.signal}`;
+        const limitS = limitOf(r);
+        const how = r.status === 'timeout' ? `killed after ${limitS}s` : r.status === 'nocount' ? 'exit 0 with no closing count' : `exit ${r.code ?? r.signal}`;
         console.log(`── ${r.id}: ${how}, ${fmt(r.seconds)}; log ${r.log}`);
     }
     if (process.env.TEST_ALL_LOG_DIR) {

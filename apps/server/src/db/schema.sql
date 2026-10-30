@@ -348,6 +348,11 @@ CREATE TABLE IF NOT EXISTS posts (
     -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
     -- an older database by db.ts.
     created_via TEXT,
+    -- Its tags from the library in core (DESIGN-owner-seeding-tags-fable.md §4.5; @beanpool/core tags/post-tags.ts): ids
+    -- such as food.fruit.lemon, space-separated, at most 5 in 200 characters, each one the library knows when a member
+    -- sets them (engine/post-fields.ts). Their words are in search_keywords; the Market's tag filter is a LIKE on this
+    -- column (beanpool-engine posts.ts tagCondition). '' on every row without. Added to an older database by db.ts.
+    tags TEXT NOT NULL DEFAULT '',
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).
@@ -2660,7 +2665,10 @@ CREATE TABLE IF NOT EXISTS rekey_requests (
     -- The member’s status before the code suspended them; a cancelled code puts it back (NULL on a code made before it was kept).
     prior_status     TEXT,
     -- Wrong numbers the admin typed for this code's phones (engine/rekey-redeem.ts bindRekeyByMatch); the third stops the code.
-    wrong_matches    INTEGER NOT NULL DEFAULT 0
+    wrong_matches    INTEGER NOT NULL DEFAULT 0,
+    -- 'rekey' (a NEW key: the member's rows move to it) or 'bring_back' (engine/bring-back.ts: the SAME key comes back
+    -- to the new phone from the member's community copy; nothing moves, nobody is suspended).
+    kind             TEXT NOT NULL DEFAULT 'rekey'
 );
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);
@@ -2693,6 +2701,32 @@ CREATE TABLE IF NOT EXISTS rekey_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_old ON rekey_audit_log(old_pubkey);
 CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_new ON rekey_audit_log(new_pubkey);
+
+-- A member's community copy (vault rethink VR3, engine/community-copy.ts): their key and 12 words, sealed by their own app
+-- under a random key, and that key, together wrapped under this server's recovery seal (services/recovery-seal-key.ts),
+-- never stored any other way. One per member. An admin's Bring back (engine/bring-back.ts) seals the two to the member's
+-- new phone. A plain table: a standby holds the wrapped rows, which only the community's recovery seal opens.
+CREATE TABLE IF NOT EXISTS community_copies (
+    owner_pubkey TEXT PRIMARY KEY,
+    copy_ct      TEXT NOT NULL,
+    copy_iv      TEXT NOT NULL,
+    copy_tag     TEXT NOT NULL,
+    kdf_params   TEXT NOT NULL,
+    created_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at   DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- This server's record of each bring-back it released (engine/bring-back.ts): whose account, which admin, when, and a
+-- prefix of the new phone's throwaway key. Never the code and never the copy.
+CREATE TABLE IF NOT EXISTS bring_back_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_pubkey   TEXT NOT NULL,
+    operator_pubkey TEXT NOT NULL,
+    released_to     TEXT NOT NULL,
+    released_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_bring_back_log_member ON bring_back_log(member_pubkey);
 
 -- A completed re-key's succession statement (group chats, DESIGN-group-chat-line-display-fable.md §5): the new key's
 -- signature naming this key as its own before it (`succession_sig`), over the `succession_at` it signed. Set once, by the

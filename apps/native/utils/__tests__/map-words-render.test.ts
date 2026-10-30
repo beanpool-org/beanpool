@@ -7,8 +7,11 @@
  * pill, the event and listing previews, ADD POST and its chooser, the New Post form (every field, the price and fee,
  * the toggles, the reach chooser), dropping a pin, and the alerts.
  *
+ * The New Post form and its chooser are a screen of their own since MAP-FORM (app/new-listing.tsx): the map's + and its
+ * `?newPost=` link open it, and the form's cases render it, inside the same provider, with the same stand-ins.
+ *
  * The map itself and its pins (components/Map, UnifiedMapPin) draw no words: they are stand-ins here, a box that hears
- * a tap and a button per pin. Google's map labels and what members wrote (titles, names, places) are shown as written.
+ * a tap and a button per pin. The form's own pin map (react-native-maps) is the same stand-in. Google's map labels and what members wrote (titles, names, places) are shown as written.
  * React Native's host components are profile-events-words-harness.ts's plain tags.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,15 +35,35 @@ vi.mock('react-native', async () => {
     return { ...native, ScrollView };
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
-const nav = vi.hoisted(() => ({ pushed: [] as unknown[] }));
+// `stack`: a case that needs what is LEFT in the stack sets a stack-sim.ts stack, and the router acts on it as well as recording.
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[], stack: null as null | ReturnType<typeof import('./stack-sim').createStack> }));
+// A screen drawn alone (no stack): the one route it is, focused, with no copy under it.
+const SOLO_ROUTE = vi.hoisted(() => ({ key: 'solo-route', name: 'new-listing' }));
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
-    return {
-        router: { push: (to: unknown) => { nav.pushed.push(to); }, navigate() {}, setParams() {}, back() {} },
-        useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
-        useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
-        useLocalSearchParams: () => params.now,
+    const { useEffect: effect, useContext } = await import('react');
+    const { RouteCtx } = await import('./stack-sim');
+    const solo = {
+        addListener: () => () => {}, isFocused: () => true, goBack: () => { nav.pushed.push('goBack'); },
+        dispatch: () => { nav.pushed.push('goBack'); },
+        getState: () => ({ key: 'solo', index: 0, routes: [SOLO_ROUTE] }),
     };
+    return {
+        router: {
+            push: (to: unknown) => { nav.pushed.push(to); nav.stack?.push(to); }, navigate() {}, setParams() {},
+            back: () => { nav.pushed.push('back'); nav.stack?.back(); },
+            canGoBack: () => nav.stack?.canGoBack() ?? true, canDismiss: () => nav.stack?.canDismiss() ?? false,
+            dismissAll() { nav.stack?.dismissAll(); }, replace(to: unknown) { nav.stack?.replace(to); },
+        },
+        useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
+        useNavigation: () => useContext(RouteCtx)?.navigation ?? solo,
+        useLocalSearchParams: () => (useContext(RouteCtx) ? (useContext(RouteCtx)!.route.params ?? {}) : params.now),
+    };
+});
+vi.mock('@react-navigation/native', async () => {
+    const { useContext } = await import('react');
+    const { RouteCtx } = await import('./stack-sim');
+    const { StackActions } = await import('@react-navigation/routers');
+    return { StackActions, useRoute: () => useContext(RouteCtx)?.route ?? SOLO_ROUTE };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -62,6 +85,15 @@ vi.mock('../../components/Map', async () => {
         onClick: (e: { stopPropagation(): void }) => { e.stopPropagation(); onPress?.({ stopPropagation() {} }); },
     }, children);
     return { default: MapView, Marker, Circle: () => null, Callout: () => null, PROVIDER_DEFAULT: 'default' };
+});
+// The listing form's own pin map: the same stand-in, a box that drops a pin where it is tapped.
+vi.mock('react-native-maps', async () => {
+    const MapView = forwardRef((props: Record<string, any>, ref) => {
+        useImperativeHandle(ref, () => ({ animateToRegion() {}, fitToCoordinates() {} }));
+        return createElement('div', { 'data-testid': 'map', onClick: () => props.onPress?.({ nativeEvent: { coordinate: TAP } }) }, props.children);
+    });
+    const Marker = ({ coordinate, children }: Record<string, any>) => createElement('button', { 'data-marker': `${coordinate.latitude},${coordinate.longitude}` }, children);
+    return { default: MapView, Marker, Circle: () => null, PROVIDER_DEFAULT: 'default' };
 });
 vi.mock('../../components/UnifiedMapPin', () => ({
     PinVisual: () => null, MapMarkerManager: () => null, ClusterCaptureManager: () => null,
@@ -114,7 +146,8 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 // Their own screens and sweeps (the poll and event composers, the pricing guide), closed until opened; none is opened here.
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
-vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
+// The event form says only whether it is open: the listing screen opens it for `?newPost=event`.
+vi.mock('../../components/NewEventModal', () => ({ NewEventModal: ({ visible }: { visible: boolean }) => (visible ? createElement('div', { 'data-testid': 'event-form' }) : null) }));
 vi.mock('../../components/info-content/PricingInfoModal', () => ({ PricingInfoModal: () => null }));
 vi.mock('../../components/PricingGuideModal', () => ({ PricingGuideModal: () => null }));
 vi.mock('../node-post', () => ({
@@ -131,6 +164,9 @@ import { LanguageRow } from '../../components/LanguagePicker';
 import { bracketed, bypassing as bypassingIn, unfit, widthOf, SCALE } from './profile-events-words-harness';
 import { categoryEmoji } from '../../constants/categories';
 import MapScreen from '../../app/(tabs)/map';
+import NewListingScreen from '../../app/new-listing';
+import { router } from 'expo-router';
+import { createStack } from './stack-sim';
 
 const NODE = 'https://mullum.example';
 const DAY = 24 * 60 * 60 * 1000;
@@ -186,6 +222,7 @@ beforeEach(() => {
     net.answer = community();
     params.now = {};
     nav.pushed.length = 0;
+    nav.stack = null;
     alerts.said.length = 0;
     alerts.buttons = [];
     mapsKey.on = true;
@@ -228,10 +265,11 @@ const buttonHolding = (shown: string) => Array.from(host.querySelectorAll('butto
 const marker = (p: { lat: number; lng: number }) => host.querySelector(`[data-marker="${p.lat},${p.lng}"]`);
 const bypassing = () => bypassingIn(host, WRITTEN, alerts.said);
 const said = () => alerts.said;
-/** The New Post form, opened the way the Market's Offer row opens it (`/map?newPost=offer`). */
+/** The New Post form, opened the way the Market's Offer row opens it (`/new-listing?newPost=offer`). */
+const listing = () => createElement(NewListingScreen);
 async function openForm(lang: UiLang) {
     params.now = { newPost: 'offer' };
-    await renderIn(lang);
+    await renderIn(lang, listing());
     expect(host.querySelector('input[placeholder]'), 'the form').not.toBeNull();
 }
 
@@ -283,6 +321,12 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
     it('ADD POST opens the chooser; with no community it says so', async () => {
         await renderIn('xx');
         await click(buttonHolding(xx('ADD POST')), 'ADD POST');
+        // The chooser is on the listing screen: the + opens it with the link the Market's rows used.
+        expect(nav.pushed).toEqual([{ pathname: '/new-listing', params: { newPost: 'true' } }]);
+        root.unmount();
+        root = createRoot(host);
+        params.now = { newPost: 'true' };
+        await renderIn('xx', listing());
         expect(host.textContent).toContain(xx('Create New Post'));
         expect(bypassing(), 'the chooser').toEqual([]);
         root.unmount();
@@ -339,7 +383,7 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         expect(host.textContent).toContain(xx('No price here: say in the description what you would like in return, or that it is free.'));
         expect(byLabel(xx('Price'))).toBeNull();
         expect(bypassing(), 'the form without Beans').toEqual([]);
-        // Sent with nothing filled in. The line hides itself 3 s later on a bare timer in map.tsx, run here on a fake clock so it
+        // Sent with nothing filled in. The line hides itself 3 s later on a bare timer in the form, run here on a fake clock so it
         // never outlives the test: left running, it fired after the file's jsdom was gone ("window is not defined", CI 23 Oct).
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
         const submit = byText(xx('📂 Select a category'));
@@ -399,19 +443,32 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         root.unmount();
         root = createRoot(host);
 
+        // The map's `?newPost=` link is passed on to the listing screen as it came, and the map opens nothing itself.
         alerts.said.length = 0;
-        net.answer = community({ getMemberProfile: {} });
+        nav.pushed.length = 0;
         params.now = { newPost: 'offer' };
         await renderIn('xx');
+        expect(nav.pushed).toEqual([{ pathname: '/new-listing', params: { newPost: 'offer' } }]);
+        expect(said()).toEqual([]);
+        root.unmount();
+        root = createRoot(host);
+
+        alerts.said.length = 0;
+        // Profile S2 (Marty 29 Oct): a photo in canonical-profile does not satisfy this community's gate.
+        store.map.set('beanpool_canonical_profile', JSON.stringify({ avatar: 'bundled://bean-green' }));
+        net.answer = community({ getMemberProfile: {} });
+        params.now = { newPost: 'offer' };
+        await renderIn('xx', listing());
         expect(said()).toEqual([xx('Finish your profile first'), xx("Your community likes to know who they're dealing with, so you need a photo before you can post. It only takes a moment."), xx('Not now'), xx('Set up profile')]);
+        store.map.delete('beanpool_canonical_profile');
         root.unmount();
         root = createRoot(host);
 
         alerts.said.length = 0;
         net.answer = community();
         store.map.set('beanpool_offer_draft', JSON.stringify({ anchorUrl: NODE, postType: 'offer', postTitle: 'Half-written', postPhotos: [] }));
-        await renderIn('xx');
-        expect(said()).toEqual([xx('Unfinished post'), xx('You started a post earlier. Continue it, or start fresh?'), xx('Start fresh'), xx('Continue')]);
+        await renderIn('xx', listing());
+        expect(said()).toEqual([xx('Unfinished post'), xx('You started a post earlier. Continue it, or start fresh?'), xx('Cancel'), xx('Start fresh'), xx('Continue')]);
         await pressAlert(xx('Continue'));
         expect(bypassing()).toEqual([]);
     });
@@ -463,6 +520,157 @@ describe('the Map in English: the words are as they were', () => {
         expect(byText('Confirm Pin')).not.toBeNull();
         await click(host.querySelector('[data-testid="map"]'), 'the map');
         expect(byText('Confirm Pin ✓')).not.toBeNull();
+    });
+});
+
+describe('the listing screen (app/new-listing.tsx): the form out of the map, opened by its link', () => {
+    const title = () => host.querySelector('input[placeholder="What do you need/offer?"]') as HTMLInputElement | null;
+
+    it('newPost=need opens the form on Need: the fee line is the Need\'s', async () => {
+        net.answer = community({ getBalance: { isBlockedFromTrading: false } });
+        params.now = { newPost: 'need' };
+        await renderIn('en', listing());
+        expect(title(), 'the form').not.toBeNull();
+        expect(host.textContent).not.toContain('Contributions First');
+        await type(byLabel('Price'), '10');
+        expect(host.textContent).toContain('1.5% fee: Fulfiller receives 9.85 B.');
+        // Photos are asked for, as every Offer and Need asks.
+        expect(Array.from(host.querySelectorAll('span')).some((x) => x.textContent === 'PHOTOS * (min 1)')).toBe(true);
+    });
+
+    it('a tool door\'s fresh draft opens prefilled, nothing asked', async () => {
+        store.map.set('beanpool_offer_draft', JSON.stringify({
+            anchorUrl: NODE, postType: 'offer', postTitle: 'Lawnmower for loan', postDescription: 'Sharp blade.', postCategory: 'tools',
+            postCredits: '5', postPriceType: 'daily', postPhotos: ['data:image/jpeg;base64,abc'], source: 'tool', tool: 'fixture-kit', savedAt: Date.now(),
+        }));
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        expect(said()).toEqual([]);
+        expect(title()?.value).toBe('Lawnmower for loan');
+        expect(host.textContent).toContain('1/5 PHOTOS');
+    });
+
+    it('newPost=event opens the event form; ✕ on the form takes the member back', async () => {
+        params.now = { newPost: 'event' };
+        await renderIn('en', listing());
+        expect(host.querySelector('[data-testid="event-form"]')).not.toBeNull();
+        expect(title()).toBeNull();
+        root.unmount();
+        root = createRoot(host);
+        nav.pushed.length = 0;
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        await click(byLabel('Close'), 'the form\'s ✕');
+        expect(nav.pushed).toEqual(['back']);
+        expect(title()).toBeNull();
+    });
+
+    it('"Not now" on the profile question takes the member back: the screen never sits empty', async () => {
+        net.answer = community({ getMemberProfile: {} });
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        expect(said()[0]).toBe('Finish your profile first');
+        await pressAlert('Not now');
+        expect(nav.pushed).toEqual(['back']);
+    });
+
+    it('"Cancel" on the unfinished post question takes the member back: the screen never sits empty', async () => {
+        net.answer = community();
+        store.map.set('beanpool_offer_draft', JSON.stringify({ anchorUrl: NODE, postType: 'offer', postTitle: 'Half-written', postPhotos: [] }));
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        expect(said()[0]).toBe('Unfinished post');
+        await pressAlert('Cancel');
+        expect(nav.pushed).toEqual(['back']);
+    });
+});
+
+/**
+ * One listing screen, for every door. expo-router's push always adds a route, so a second tap before the first screen has
+ * covered the window pushed a second /new-listing: each opened its own chooser, and the one underneath, once its chooser
+ * closed, could not leave (it was not the screen showing), so it stayed in the stack drawing nothing and taking every tap.
+ * These run the real StackRouter (stack-sim.ts): what is asserted is what is LEFT in the stack.
+ */
+describe('a double tap on any door never stacks two listing screens', () => {
+    const Other = () => createElement('div', { 'data-testid': 'other' });
+    const SCREENS = { index: MapScreen, 'new-listing': NewListingScreen, other: Other };
+    const choosers = () => Array.from(host.querySelectorAll('[data-modal]')).filter((m) => m.textContent?.includes('Create New Post'));
+    const chooserCancel = () => host.querySelector('[data-modal] [aria-label="Cancel"]');
+    const forms = () => host.querySelectorAll('input[placeholder="What do you need/offer?"]');
+    const opened = (n: number) => nav.pushed.filter((p) => typeof p === 'object' || (typeof p === 'string' && p.startsWith('/new-listing'))).length === n;
+
+    async function mapInStack() {
+        nav.stack = createStack();
+        await renderIn('en', nav.stack.host(SCREENS));
+        expect(nav.stack.names()).toEqual(['index']);
+        return nav.stack;
+    }
+    /** `n` taps on a door in a row, before anything has been drawn between them. */
+    const tapTimes = async (n: number, door: () => unknown) => {
+        await act(async () => { for (let i = 0; i < n; i++) door(); });
+        await settle(10);
+    };
+
+    for (const [name, taps] of [['a double tap', 2], ['a triple tap', 3]] as const) {
+        it(`${name} on ADD POST opens one /new-listing and one chooser; Cancel returns to the map with nothing left`, async () => {
+            const stack = await mapInStack();
+            const add = buttonHolding('ADD POST') as HTMLElement;
+            await tapTimes(taps, () => add.click());
+            expect(opened(taps), 'every tap pushed, as the door does').toBe(true);
+            expect(stack.names()).toEqual(['index', 'new-listing']);
+            expect(choosers()).toHaveLength(1);
+            await click(chooserCancel(), 'the chooser\'s Cancel');
+            expect(stack.names()).toEqual(['index']);
+            expect(host.querySelector('[data-modal]')).toBeNull();
+        });
+    }
+
+    it('a double and a triple tap on the Market\'s + (the same link) leave one screen; the chooser\'s pick opens one form, ✕ returns', async () => {
+        const stack = await mapInStack();
+        await tapTimes(2, () => router.push({ pathname: '/new-listing', params: { newPost: 'true' } }));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(choosers()).toHaveLength(1);
+        await click(host.querySelector('[data-modal] [aria-label^="Offer:"]'), 'Offer in the one chooser');
+        expect(forms()).toHaveLength(1);
+        await click(byLabel('Close'), 'the form\'s ✕');
+        expect(stack.names()).toEqual(['index']);
+        await tapTimes(3, () => router.push({ pathname: '/new-listing', params: { newPost: 'true' } }));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(choosers()).toHaveLength(1);
+    });
+
+    it('a tool door\'s link (a string, with its type) twice or three times opens one form, and ✕ leaves nothing behind', async () => {
+        const stack = await mapInStack();
+        await tapTimes(3, () => router.push('/new-listing?newPost=offer'));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(forms()).toHaveLength(1);
+        await click(byLabel('Close'), 'the form\'s ✕');
+        expect(stack.names()).toEqual(['index']);
+        expect(forms()).toHaveLength(0);
+        await tapTimes(2, () => router.push('/new-listing?newPost=need'));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(forms()).toHaveLength(1);
+    });
+
+    it('a copy covered by another screen (a tool opened over it) takes itself out when its chooser closes: never left empty', async () => {
+        const stack = await mapInStack();
+        await tapTimes(1, () => router.push({ pathname: '/new-listing', params: { newPost: 'true' } }));
+        expect(choosers()).toHaveLength(1);
+        await tapTimes(1, () => stack.pushOther());
+        expect(stack.names()).toEqual(['index', 'new-listing', 'other']);
+        await click(chooserCancel(), 'the covered copy\'s Cancel');
+        expect(stack.names()).toEqual(['index', 'other']);
+        expect(host.querySelector('[data-modal]')).toBeNull();
+    });
+
+    it('a screen opened over a listing screen later is not a second tap: the form under it stays, with what the member typed', async () => {
+        const stack = await mapInStack();
+        await tapTimes(1, () => router.push('/new-listing?newPost=offer'));
+        await type(forms()[0], 'Lawnmower');
+        await tapTimes(1, () => stack.pushOther());
+        await tapTimes(1, () => router.push('/new-listing?newPost=need'));
+        expect(stack.names()).toEqual(['index', 'new-listing', 'other', 'new-listing']);
+        expect((forms()[0] as HTMLInputElement).value).toBe('Lawnmower');
     });
 });
 
@@ -520,7 +728,7 @@ describe('the Map at 320 dp with 1.3× text, in the pseudo-locale', () => {
         await click(byText(xx('🤝 Chosen')), 'Chosen');
         // The sheet: 320 dp less its 14 dp padding a side.
         const found = unfit(host, 320 - 2 * 14, WRITTEN);
-        // map.tsx's go is words only (Marty, 20 Oct): its layout is not changed here. These rows hold translated words
+        // The form moved as it was (MAP-FORM), its layout with it (map.tsx's go was words only, Marty, 20 Oct). These rows hold translated words
         // beside each other without wrapping; measured in xx and listed in the PR for Marty's call. Anything new fails.
         const KNOWN = [`stuck in a row: ${xx('My location')}`, `stuck in a row: ${xx('Drop a pin')}`, `stuck in a row: ${xx('New Post')}`];
         expect(found.filter((line) => !KNOWN.includes(line))).toEqual([]);

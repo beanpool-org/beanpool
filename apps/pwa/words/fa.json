@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» در این جامعه از قبل گرفته شده است. نام دیگری انتخاب کنید.",
@@ -2089,7 +2089,7 @@
   "Not finished yet": "هنوز تمام نشده",
   "Reload page": "بازخوانی صفحه",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "این مرورگر حساب BeanPool دیگری دارد، بنابراین این حساب در اینجا ذخیره نشد.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "این یک کد کامل تغییر کلید نیست. با RK- شروع می‌شود و هشت حرف و رقم دارد.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "این یک کد کامل نیست. با RK- یا BB- شروع می‌شود و هشت حرف و رقم دارد.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "عضویتی که در این مرورگر شروع کرده‌اید هنوز منتظر است. ابتدا آن را به پایان برسانید، سپس به کد خود بازگردید.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "این مرورگر نتوانست کلید را با امنیت نگه دارد، بنابراین چیزی ارسال نشد.",
   "Show this number to your admin": "این شماره را به مدیر خود نشان دهید",
@@ -3616,9 +3616,46 @@
   "Held in Trust & Deals": "امانت و معاملات",
   "Held in Trust & Deals Notifications": "اعلان‌های امانت و معاملات",
   "Bid approved! The Beans are held in trust.": "پیشنهاد قیمت تأیید شد! مبالغ امانی در صندوق قفل گردید.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "لغو طرح و استرداد وجوه به حامیان؟\n\nاین کار طرح را می‌بندد و بلافاصله تمام تعهدهای امانی را به حامیانشان بازمی‌گرداند.",
   "{amount} 🫘 held in trust": "{amount} 🫘 در امانت",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "پاکسازی حساب از سرور انجام نشد. معامله‌های امانی فعال ممکن است ابتدا نیاز به تعیین تکلیف داشته باشند.",
   "{amount} · held in trust": "{amount} · در امانت",
-  "Cancel Initiative & Refund Backers": "لغو طرح و بازپرداخت به حامیان"
+  "Cancel Initiative & Refund Backers": "لغو طرح و بازپرداخت به حامیان",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "لغو طرح و استرداد وجوه به حامیان؟\n\nاین کار طرح را می‌بندد و بلافاصله تمام تعهدهای امانی را به حامیانشان بازمی‌گرداند. تعهد حسابی که از آن زمان بسته شده است (حذف شده، یا طرح تجاری که برچیده شده است) در عوض به اموال عمومی می‌رود، همان‌طور که بقیه لوبیاهای یک حساب بسته شده رفتند، و تعهدات سایر افراد همچنان به آن‌ها بازمی‌گردد.",
+  "Please give a name of at least 2 characters.": "لطفاً نامی با حداقل ۲ نویسه وارد کنید.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "لطفاً نام خود را حداکثر در {n} نویسه بنویسید.",
+    "other": "لطفاً نام خود را حداکثر در {n} نویسه بنویسید."
+  },
+  "Please say a few words about yourself.": "لطفاً چند کلمه درباره خودتان بگویید.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "لطفاً پیامتان را حداکثر در {n} نویسه بنویسید.",
+    "other": "لطفاً پیامتان را حداکثر در {n} نویسه بنویسید."
+  },
+  "You are already a member of this community.": "شما از قبل عضو این جامعه هستید.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "افرادی که درخواست پیوستن به این جامعه را دارند. دکمه «دعوت» دعوت‌نامه‌ای می‌سازد که فقط با کلید آن‌ها قابل استفاده است و برنامه‌شان خودبه‌خود آن را پیدا می‌کند. گزینه «فعلاً نه» به آن‌ها فقط می‌گوید «هنوز پاسخی نیامده است».",
+  "Couldn't reach your community. Check your connection and try again.": "ارتباط با جامعه شما برقرار نشد. اتصال خود را بررسی کرده و دوباره امتحان کنید.",
+  "Asked today": "امروز درخواست داده",
+  "Asked yesterday": "دیروز درخواست داده",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "{n} روز پیش درخواست داده",
+    "other": "{n} روز پیش درخواست داده"
+  },
+  "from {node}": "از {node}",
+  "You invited {name}. Their app will find the invite by itself.": "شما {name} را دعوت کردید. برنامه آن‌ها خودش دعوت‌نامه را پیدا خواهد کرد.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 درخواست پیوستن ({n})",
+    "other": "🚪 درخواست پیوستن ({n})"
+  },
+  "Inviting {name}...": "در حال دعوت {name}...",
+  "Invite {name}": "دعوت {name}",
+  "Declining {name}...": "در حال رد درخواست {name}...",
+  "Not now, {name}": "فعلاً نه، {name}",
+  "Invite\u0004button: let them in": "دعوت",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ دعوت‌ها ({n})",
+    "other": "🎟️ دعوت‌ها ({n})"
+  },
+  "Ask to join {name}": "درخواست پیوستن به {name}",
+  "A few words about yourself": "چند کلمه درباره خودتان",
+  "Where you live, what you'd like to share or learn": "کجا زندگی می‌کنید، چه چیزهایی را دوست دارید به اشتراک بگذارید یا یاد بگیرید"
 }

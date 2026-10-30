@@ -1,19 +1,23 @@
 /**
- * Lounge L1 (review of #2573): the web app's signed status and cancel calls to a community, through the real middleware.
+ * Lounge L1 (review of #2573) and front doors S2: the web app's signed knock, status and cancel calls to a community,
+ * through the real middleware.
  *
  * An applicant's web app runs on its own node (the global one), so every call to the community it asked is cross-origin,
  * and the signed headers (X-Public-Key, X-Signature, ...) make a browser preflight each. Before this, the preflight got a bare
  * 204 with no Access-Control-Allow-Origin for any origin the operator had not listed, so the browser refused the call and
- * the web app said "Couldn't reach this community" every time. These two routes carry no cookie and no credential (the
+ * the web app said "Couldn't reach this community" every time. These three routes carry no cookie and no credential (the
  * signature is in the headers, and the node answers only for the signer), so any origin may make them, and nothing else is
  * opened:
  *
- *   1. The preflight of GET /api/join/knock/status and POST /api/join/knock/cancel from an unlisted origin allows that
- *      origin (`*`, never credentials), the method of that route alone, and exactly the headers the web app signs with.
+ *   1. The preflight of POST /api/join/knock (S2: the web app's own Ask to join), GET /api/join/knock/status and POST
+ *      /api/join/knock/cancel from an unlisted origin allows that origin (`*`, never credentials), the method of that
+ *      route alone, and exactly the headers the web app signs with.
  *   2. The real calls, signed as the web app signs them (bound to the host), come back readable: status `none`, and a
- *      cancel of a request that was never made `not_found`, each with the origin allowed.
- *   3. Nothing else is opened: the knock itself, the members' list, an answer, the rest of /api/join, the Market, and the
- *      node's status give an unlisted origin no allowance.
+ *      cancel of a request that was never made `not_found`, each with the origin allowed; then a knock (201, pending),
+ *      a second one's refusal in the node's words, and its status (`pending`).
+ *   3. Nothing else is opened: the members' list, an answer, the rest of /api/join, the Market, and the node's status give
+ *      an unlisted origin no allowance. (Until S2 the knock itself was on this list: the web app had no Ask to join, and
+ *      the phone, which sent it, is no browser.)
  *   4. An origin the operator lists keeps its own rule on the same two routes: its origin back, with credentials.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-knock-cors.ts
@@ -61,11 +65,11 @@ async function preflight(path: string, method: string, origin: string, headers: 
 }
 
 /** A call signed the way the web app signs it, from `origin`. */
-async function signedCall(id: Id, method: 'GET' | 'POST', path: string, origin: string): Promise<{ res: Response; body: any }> {
+async function signedCall(id: Id, method: 'GET' | 'POST', path: string, origin: string, sent: unknown = {}): Promise<{ res: Response; body: any }> {
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
     const url = `${BASE}${path}`;
-    const text = method === 'POST' ? '{}' : '';
+    const text = method === 'POST' ? JSON.stringify(sent) : '';
     const bound = await buildBoundRequestHeaders({
         method, url, body: text, publicKeyHex: id.pk, sign: bytes => crypto.sign(null, Buffer.from(bytes), id.priv),
     });
@@ -108,6 +112,17 @@ async function main(): Promise<void> {
     assert(!statusHeaders.includes('x-admin-password') && !statusHeaders.includes('authorization') && !statusHeaders.includes('x-csrf-token'),
         'status: no admin or session header is allowed from any origin');
 
+    const knockPre = await preflight('/api/join/knock', 'POST', WEB);
+    assert(knockPre.status === 204, `OPTIONS /api/join/knock: 204 (${knockPre.status})`);
+    assert(header(knockPre, 'access-control-allow-origin') === '*', `knock: any origin allowed (ACAO ${header(knockPre, 'access-control-allow-origin')})`);
+    assert(header(knockPre, 'access-control-allow-credentials') === null, `knock: never with credentials (ACAC ${header(knockPre, 'access-control-allow-credentials')})`);
+    assert(lower(header(knockPre, 'access-control-allow-methods')).includes('post') && !lower(header(knockPre, 'access-control-allow-methods')).includes('get'),
+        `knock: POST alone (ACAM ${header(knockPre, 'access-control-allow-methods')})`);
+    const knockHeaders = lower(header(knockPre, 'access-control-allow-headers'));
+    assert(SIGNED_HEADERS.every(h => knockHeaders.includes(h)), `knock: every header the web app signs with is allowed (ACAH ${header(knockPre, 'access-control-allow-headers')})`);
+    assert(!knockHeaders.includes('x-admin-password') && !knockHeaders.includes('authorization') && !knockHeaders.includes('x-csrf-token'),
+        'knock: no admin or credential header is allowed');
+
     const cancelPre = await preflight('/api/join/knock/cancel', 'POST', WEB);
     assert(cancelPre.status === 204, `OPTIONS /api/join/knock/cancel: 204 (${cancelPre.status})`);
     assert(header(cancelPre, 'access-control-allow-origin') === '*', `cancel: any origin allowed (ACAO ${header(cancelPre, 'access-control-allow-origin')})`);
@@ -126,11 +141,21 @@ async function main(): Promise<void> {
     const cancel = await signedCall(applicant, 'POST', '/api/join/knock/cancel', WEB);
     assert(cancel.res.status === 404 && cancel.body?.code === 'not_found', `a signed cancel of a request never made: not_found, no false success (${cancel.res.status} ${JSON.stringify(cancel.body)})`);
     assert(header(cancel.res, 'access-control-allow-origin') === '*', `the refusal is readable from the web app (ACAO ${header(cancel.res, 'access-control-allow-origin')})`);
+    const knock = await signedCall(applicant, 'POST', '/api/join/knock', WEB, {
+        message: 'I live by the river and grow tomatoes.', callsign: 'River', fromNode: 'global.example', toNode: new URL(BASE).host,
+    });
+    assert(knock.res.status === 201 && knock.body?.knock?.status === 'pending', `a signed knock from the web app: 201 pending (${knock.res.status} ${JSON.stringify(knock.body)})`);
+    assert(header(knock.res, 'access-control-allow-origin') === '*' && header(knock.res, 'access-control-allow-credentials') === null,
+        `the knock's answer is readable from the web app, with no credentials (ACAO ${header(knock.res, 'access-control-allow-origin')})`);
+    const again = await signedCall(applicant, 'POST', '/api/join/knock', WEB, { message: 'Again', callsign: 'River' });
+    assert(again.res.status === 409 && again.body?.code === 'knock_open' && header(again.res, 'access-control-allow-origin') === '*',
+        `a second knock from the web app: its refusal readable, in the node's words (${again.res.status} ${JSON.stringify(again.body)})`);
+    const pending = await signedCall(applicant, 'GET', '/api/join/knock/status', WEB);
+    assert(pending.res.status === 200 && pending.body?.status === 'pending', `its status from the web app: pending (${pending.res.status} ${JSON.stringify(pending.body)})`);
 
     // ── 3. nothing else is opened ──
     console.log('\n── 3. nothing else is opened ──');
     const closed: Array<[string, string]> = [
-        ['/api/join/knock', 'POST'],
         ['/api/join/knocks', 'GET'],
         ['/api/join/knocks/1/approve', 'POST'],
         ['/api/join/knocks/1/decline', 'POST'],
@@ -147,6 +172,8 @@ async function main(): Promise<void> {
     }
     const wrongMethod = await preflight('/api/join/knock/status', 'POST', WEB);
     assert(!lower(header(wrongMethod, 'access-control-allow-methods')).includes('post'), 'status never allows a write from another origin');
+    const knockGet = await preflight('/api/join/knock', 'GET', WEB);
+    assert(!lower(header(knockGet, 'access-control-allow-methods')).includes('get'), 'the knock allows only its POST from another origin');
 
     // ── 4. a listed origin keeps its rule ──
     console.log('\n── 4. an origin the operator lists keeps its own rule ──');
@@ -162,7 +189,7 @@ async function main(): Promise<void> {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ The web app can read and cancel its request to a community; no other route is opened.');
+    console.log('⭐️ The web app can ask a community, read and cancel its request; no other route is opened.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

@@ -30,7 +30,9 @@ export function gardenHomeLines(doc: GardenDoc, now: number): ToolLine[] {
     const hemi = hemisphere ?? 'north';
     const n = sowNow(zone, hemi, monthOf(now)).length;
     return [
-        { key: wordn('{n} crop to sow this month', '{n} crops to sow this month'), n, screen: 'main' },
+        n === 0
+            ? { key: word('Nothing to sow outdoors this month.'), screen: 'main' }
+            : { key: wordn('{n} crop to sow this month', '{n} crops to sow this month'), n, screen: 'main' },
         { key: word('{zone} · {hemisphere}'), values: zoneLineValues(zone, hemi), screen: 'zone' },
     ];
 }

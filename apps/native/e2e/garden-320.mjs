@@ -56,8 +56,8 @@ const STUBS = {
     `,
     'ThemeContext': `export const useTheme = () => globalThis.__theme; export const useStyles = (make) => make(globalThis.__theme);`,
     'expo-router': `export const router = { back() {}, push() {}, replace() {}, navigate() {}, canGoBack: () => true }; export const useFocusEffect = () => {};`,
-    'react-native-keyboard-controller': `import React from 'react'; import { ScrollView } from 'react-native'; export const KeyboardAwareScrollView = ({ bottomOffset, ...p }) => React.createElement(ScrollView, p);`,
-    '@expo/vector-icons': `import React from 'react'; import { Text } from 'react-native'; export const MaterialCommunityIcons = ({ size, color }) => React.createElement(Text, { style: { fontSize: size, color, lineHeight: size } }, '›');`,
+    'react-native-keyboard-controller': `import React from 'react'; import { ScrollView } from 'react-native-web'; export const KeyboardAwareScrollView = ({ bottomOffset, ...p }) => React.createElement(ScrollView, p);`,
+    '@expo/vector-icons': `import React from 'react'; import { Text } from 'react-native-web'; export const MaterialCommunityIcons = ({ size, color }) => React.createElement(Text, { style: { fontSize: size, color, lineHeight: size } }, '›');`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {
@@ -206,7 +206,7 @@ try {
         await page.getByText('Warm temperate · southern hemisphere').waitFor();
         await measure(`${scheme} · the guide, from the community's place`);
         await open(`screen=crop&key=tomato&scheme=${scheme}`);
-        await page.getByText('First harvest').waitFor();
+        await page.getByText('First harvest', { exact: true }).waitFor();
         await measure(`${scheme} · a crop's page, tomatoes`);
         await open(`screen=crop&key=cassava&scheme=${scheme}`);
         await page.getByText('Not usually grown outdoors in this climate.').waitFor();

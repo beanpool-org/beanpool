@@ -63,19 +63,19 @@ export function Main({ host }: GardenScreenProps) {
             </ToolSection>
             <ToolSection title={t('Sow now')} testID="garden-now">
                 {view.now.length === 0 ? <ToolNote text={t('Nothing to sow outdoors this month.')} testID="garden-now-none" /> : view.now.map((c) => (
-                    <ToolRow key={c.id} icon={c.icon} title={t(c.name)} state={harvestLine(c)} onPress={() => open(c.id)} testID={`garden-now-${c.id}`} />
+                    <ToolRow key={c.id} icon={c.icon} title={t(c.name)} wrap state={harvestLine(c)} onPress={() => open(c.id)} testID={`garden-now-${c.id}`} />
                 ))}
             </ToolSection>
             {view.soon.length > 0 ? (
                 <ToolSection title={t('Soon')} testID="garden-soon">
                     {view.soon.map(({ crop: c, from }) => (
-                        <ToolRow key={c.id} icon={c.icon} title={t(c.name)} state={soonLine(from)} onPress={() => open(c.id)} testID={`garden-soon-${c.id}`} />
+                        <ToolRow key={c.id} icon={c.icon} title={t(c.name)} wrap state={soonLine(from)} onPress={() => open(c.id)} testID={`garden-soon-${c.id}`} />
                     ))}
                 </ToolSection>
             ) : null}
             <ToolSection title={t('All crops')} testID="garden-all">
                 {view.all.map((c) => (
-                    <ToolRow key={c.id} icon={c.icon} title={t(c.name)} state={cropPage(c, fix.zone, fix.hemisphere).sow} onPress={() => open(c.id)} testID={`garden-all-${c.id}`} />
+                    <ToolRow key={c.id} icon={c.icon} title={t(c.name)} wrap state={cropPage(c, fix.zone, fix.hemisphere).sow} onPress={() => open(c.id)} testID={`garden-all-${c.id}`} />
                 ))}
             </ToolSection>
             <Foot />
@@ -142,7 +142,7 @@ export function Zone({ host }: GardenScreenProps) {
                 {GARDEN_ZONES.map((z) => {
                     const on = current?.zone === z.id && current.hemisphere === hemisphere;
                     return (
-                        <ToolRow key={z.id} icon={on ? '✅' : ZONE_ICONS[z.id]} title={on ? t('{zone} (chosen)', { zone: t(z.name) }) : t(z.name)} state={t(z.line)}
+                        <ToolRow key={z.id} wrap icon={on ? '✅' : ZONE_ICONS[z.id]} title={on ? t('{zone} (chosen)', { zone: t(z.name) }) : t(z.name)} state={t(z.line)}
                             onPress={() => { void choose(z.id); }} testID={`garden-zone-${z.id}`} />
                     );
                 })}

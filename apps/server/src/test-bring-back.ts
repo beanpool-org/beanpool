@@ -35,7 +35,6 @@ process.env.BEANPOOL_ADDRESSES = 'mullum.test';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 import {
     communityCopyFromRelease, isKeySealedCopy, openReleaseOnDevice, openSeedWithCopyKey, sealSeedToCopyKey,
     PUSH_NOTICE_KINDS,
@@ -90,6 +89,7 @@ function fromSeed(seed: Uint8Array, words?: string[]): Keypair {
 const makeKeypair = (): Keypair => fromSeed(new Uint8Array(crypto.randomBytes(32)));
 // Test phrases only (a BIP-39 vector), never a real account's: the apps' derivation, seed = SHA256(SHA256(words)).
 const WORDS = 'abandon ability able about above absent absorb abstract absurd abuse access accident'.split(' ');
+const sha256 = (b: Uint8Array): Uint8Array => new Uint8Array(crypto.createHash('sha256').update(b).digest());
 const wordsAccount = (): Keypair => fromSeed(sha256(sha256(Buffer.from(WORDS.join(' '), 'utf8'))), WORDS);
 const bound = (text: string) => Buffer.concat([Buffer.from([0xff]), Buffer.from(text, 'utf8')]);
 

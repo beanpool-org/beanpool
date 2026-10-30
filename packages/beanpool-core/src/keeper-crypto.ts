@@ -62,6 +62,7 @@ import { scryptAsync } from '@noble/hashes/scrypt.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
+import { packCopyCommunities, unpackCopyCommunities, type CopyCommunity } from './copy-communities.js';
 import { assertRecoveryCsprngAvailable } from './recovery-split.js';
 import {
     isWellFormedRecoveryPhrase,
@@ -87,6 +88,11 @@ export const KEEPER_ALG_SSO_SINGLE = 'scrypt-xc20p-single-v1';
  * The name says what is inside (the words' 132 bits) and how (XChaCha20-Poly1305).
  */
 export const KEEPER_ALG_SSO_WORDS = 'bip39-bits-xc20p-v1';
+/**
+ * The member's list of communities riding in a copy, in `kdfParams.communities` (vault rethink VR5; copy-communities.ts).
+ * UTF-8 JSON under XChaCha20-Poly1305, its key derived from the copy's own, like the words box.
+ */
+export const KEEPER_ALG_COPY_COMMUNITIES = 'communities-json-xc20p-v1';
 
 /** Checks whether a kdfParams string explicitly specifies the single-blob SSO algorithm. */
 export function isSingleBlobSso(kdfParams: string | null | undefined): boolean {
@@ -138,10 +144,12 @@ const AAD_SSO = utf8ToBytes('beanpool-keeper-sso-v1');
 const AAD_SSO_SINGLE = utf8ToBytes('beanpool-keeper-sso-single-v1');
 const AAD_REWRAP = utf8ToBytes('beanpool-keeper-rewrap-v1');
 const AAD_SSO_WORDS = utf8ToBytes('beanpool-keeper-sso-words-v1');
+const AAD_COPY_COMMUNITIES = utf8ToBytes('beanpool-keeper-copy-communities-v1');
 
 const HKDF_INFO_MEMBER = utf8ToBytes('beanpool-keeper-share');
 const HKDF_INFO_REWRAP = utf8ToBytes('beanpool-keeper-rewrap');
 const HKDF_INFO_SSO_WORDS = utf8ToBytes('beanpool-keeper-sso-words');
+const HKDF_INFO_COPY_COMMUNITIES = utf8ToBytes('beanpool-keeper-copy-communities');
 
 /**
  * Raised when a fragment cannot be sealed or opened.
@@ -465,7 +473,7 @@ export async function sealShareToSso(
  */
 async function sealSso(
     share: Uint8Array, provider: string, sub: string,
-    alg: string, checksum?: Uint8Array | string, words?: Uint8Array,
+    alg: string, checksum?: Uint8Array | string, words?: Uint8Array, communities?: Uint8Array,
 ): Promise<SealedShare> {
     if (!provider || !sub) {
         throw new KeeperCryptoError('A sign-in fragment needs both a provider and a subject claim.');
@@ -489,6 +497,8 @@ async function sealSso(
             alg: KEEPER_ALG_SSO_WORDS, iv: box.shareIv, ct: box.encryptedShare, tag: box.shareTag,
         } satisfies SealedSsoWords;
     }
+    // After the words box, so a copy without a list draws its random bytes exactly as before (the frozen vectors).
+    if (communities && communities.length > 0) kdfParamsObj.communities = sealCommunitiesBox(key, communities);
     return {
         ...seal(key, share, aad),
         // N/r/p travel with the fragment so raising the cost later does not strand what is already
@@ -525,6 +535,56 @@ export interface SealSeedToSsoOptions {
      * Null, undefined or empty: the seed alone, exactly as before.
      */
     words?: readonly string[] | null;
+    /**
+     * The member's communities, to ride in the copy when the member chose that (vault rethink VR5). Packed by
+     * copy-communities.ts `packCopyCommunities`: at most 20, name and address only, bounded in bytes; what doesn't fit is
+     * left out (a caller that wants to say how many packs first and passes `kept`). Null, undefined, or nothing valid:
+     * no list box, and the copy is exactly what it was before lists.
+     */
+    communities?: readonly CopyCommunity[] | null;
+}
+
+/**
+ * The list's own box: the packed bytes under a key derived from the copy's key (the sign-in copy's scrypt output, or a
+ * community copy's random key), with its own AAD and a fresh nonce. An app that predates lists never reads the field,
+ * and nothing but the copy's key opens it.
+ */
+function sealCommunitiesBox(copyKey: Uint8Array, packed: Uint8Array): SealedCopyCommunities {
+    const box = seal(communitiesKey(copyKey), packed, AAD_COPY_COMMUNITIES);
+    return { alg: KEEPER_ALG_COPY_COMMUNITIES, iv: box.shareIv, ct: box.encryptedShare, tag: box.shareTag };
+}
+
+function communitiesKey(copyKey: Uint8Array): Uint8Array {
+    return hkdf(sha256, copyKey, undefined, HKDF_INFO_COPY_COMMUNITIES, 32);
+}
+
+/** The list's box inside `kdfParams`. All three byte fields base64. */
+interface SealedCopyCommunities {
+    alg: typeof KEEPER_ALG_COPY_COMMUNITIES;
+    iv: string;
+    ct: string;
+    tag: string;
+}
+
+/** What a copy says about the list: the communities when it carries a readable one, and which case it is. Never throws. */
+function openCommunitiesBox(copyKey: Uint8Array, box: unknown): Pick<OpenedSsoSeed, 'communities' | 'communitiesStatus'> {
+    if (box === undefined || box === null) return { communities: null, communitiesStatus: 'absent' };
+    try {
+        const b = box as Record<string, unknown>;
+        if (typeof box !== 'object' || b.alg !== KEEPER_ALG_COPY_COMMUNITIES) throw new KeeperCryptoError('not a list box');
+        const packed = open(communitiesKey(copyKey), {
+            encryptedShare: b.ct as string, shareIv: b.iv as string, shareTag: b.tag as string, kdfParams: '',
+        }, AAD_COPY_COMMUNITIES);
+        return { communities: unpackCopyCommunities(packed), communitiesStatus: 'carried' };
+    } catch {
+        return { communities: null, communitiesStatus: 'unreadable' };
+    }
+}
+
+/** The packed bytes for a sealer, or undefined for no list box. */
+function packedCommunities(list: readonly CopyCommunity[] | null | undefined): Uint8Array | undefined {
+    const { bytes } = packCopyCommunities(list ?? []);
+    return bytes.length ? bytes : undefined;
 }
 
 /**
@@ -560,8 +620,9 @@ export async function sealSeedToSso(
         );
     }
     const words = options?.words;
+    const communities = packedCommunities(options?.communities);
     if (!words || words.length === 0) {
-        return sealSso(seed, provider, sub, KEEPER_ALG_SSO_SINGLE);
+        return sealSso(seed, provider, sub, KEEPER_ALG_SSO_SINGLE, undefined, undefined, communities);
     }
     if (!isWellFormedRecoveryPhrase(words)) {
         throw new KeeperCryptoError('The words to seal with this seed are not 12 words from the BIP-39 English list.');
@@ -571,7 +632,7 @@ export async function sealSeedToSso(
     }
     const packed = packRecoveryWords(words);
     try {
-        return await sealSso(seed, provider, sub, KEEPER_ALG_SSO_SINGLE, undefined, packed);
+        return await sealSso(seed, provider, sub, KEEPER_ALG_SSO_SINGLE, undefined, packed, communities);
     } finally {
         packed.fill(0);
     }
@@ -593,6 +654,17 @@ export interface OpenedSsoSeed {
      * - `mismatch`: the words opened and make a different key. Never returned as words.
      */
     wordsStatus: 'carried' | 'absent' | 'unreadable' | 'mismatch';
+    /**
+     * The member's communities, when the copy carries a readable list (vault rethink VR5). Otherwise null, and
+     * {@link communitiesStatus} says which. Like the words, the list never makes an open fail.
+     */
+    communities: CopyCommunity[] | null;
+    /**
+     * - `carried`: the list came back (empty only if every entry in it was unusable).
+     * - `absent`: the copy carries no list (made before lists, or the member chose not to).
+     * - `unreadable`: it has a list box that did not open or decode. The seed and the words are unaffected.
+     */
+    communitiesStatus: 'carried' | 'absent' | 'unreadable';
 }
 
 /**
@@ -614,19 +686,20 @@ export async function openSeedFromSso(
     if (seed.length !== KEY_LEN) {
         throw new KeeperCryptoError(`A single-blob sign-in fragment holds ${seed.length} bytes, not a ${KEY_LEN}-byte seed.`);
     }
-    if (params.words === undefined || params.words === null) {
-        return { seed, words: null, wordsStatus: 'absent' };
-    }
+    return { seed, ...openWordsBox(key, params.words, seed), ...openCommunitiesBox(key, params.communities) };
+}
+
+/** The words box of a copy, as {@link OpenedSsoSeed} reports it. Never throws. */
+function openWordsBox(copyKey: Uint8Array, box: unknown, seed: Uint8Array): Pick<OpenedSsoSeed, 'words' | 'wordsStatus'> {
+    if (box === undefined || box === null) return { words: null, wordsStatus: 'absent' };
     let words: string[];
     try {
-        words = openSsoWords(key, params.words);
+        words = openSsoWords(copyKey, box);
     } catch {
-        return { seed, words: null, wordsStatus: 'unreadable' };
+        return { words: null, wordsStatus: 'unreadable' };
     }
-    if (!recoveryWordsMatchSeed(words, seed)) {
-        return { seed, words: null, wordsStatus: 'mismatch' };
-    }
-    return { seed, words, wordsStatus: 'carried' };
+    if (!recoveryWordsMatchSeed(words, seed)) return { words: null, wordsStatus: 'mismatch' };
+    return { words, wordsStatus: 'carried' };
 }
 
 function openSsoWords(ssoKey: Uint8Array, box: unknown): string[] {
@@ -712,6 +785,8 @@ export function sealSeedToCopyKey(seed: Uint8Array, options?: SealSeedToSsoOptio
                 packed.fill(0);
             }
         }
+        const communities = packedCommunities(options?.communities);
+        if (communities) params.communities = sealCommunitiesBox(key, communities);
         const copy = { ...seal(key, seed, copyKeyAad(ed25519.getPublicKey(seed))), kdfParams: JSON.stringify(params) };
         return { copy, copyKey: b64(key) };
     } finally {
@@ -751,15 +826,7 @@ export function openSeedWithCopyKey(
     if (Buffer.from(ed25519.getPublicKey(seed)).toString('hex') !== Buffer.from(member).toString('hex')) {
         throw new KeeperCryptoError('A community copy opened, but it makes another account\'s key.');
     }
-    if (params.words === undefined || params.words === null) return { seed, words: null, wordsStatus: 'absent' };
-    let words: string[];
-    try {
-        words = openSsoWords(key, params.words);
-    } catch {
-        return { seed, words: null, wordsStatus: 'unreadable' };
-    }
-    if (!recoveryWordsMatchSeed(words, seed)) return { seed, words: null, wordsStatus: 'mismatch' };
-    return { seed, words, wordsStatus: 'carried' };
+    return { seed, ...openWordsBox(key, params.words, seed), ...openCommunitiesBox(key, params.communities) };
 }
 
 /** Re-derive the sign-in key from a freshly obtained `sub` and open the fragment. */

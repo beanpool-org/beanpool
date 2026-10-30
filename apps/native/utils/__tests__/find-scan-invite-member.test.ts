@@ -60,6 +60,13 @@ vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
+// The root layout's link readers below reach the phone's key store and lock prompt (utils/identity.ts, utils/node-admin.ts).
+vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined) }));
+vi.mock('expo-local-authentication', () => ({
+    SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
+    getEnrolledLevelAsync: vi.fn(),
+    authenticateAsync: vi.fn(),
+}));
 vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: vi.fn(async () => ({ status: 'denied', canAskAgain: false })),
     getLastKnownPositionAsync: vi.fn(async () => null),

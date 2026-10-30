@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
 import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { DeviceEventEmitter } from 'react-native';
 
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
@@ -31,6 +32,16 @@ vi.mock('react-native', () => {
         return createElement(tag, attrs, children);
     };
     const listener = () => ({ remove() {} });
+    // A real one: the screen listens to the node's sync ticks, and a test emits them.
+    const bus = new Map<string, Set<(...args: unknown[]) => void>>();
+    const DeviceEventEmitter = {
+        addListener: (name: string, cb: (...args: unknown[]) => void) => {
+            if (!bus.has(name)) bus.set(name, new Set());
+            bus.get(name)!.add(cb);
+            return { remove() { bus.get(name)?.delete(cb); } };
+        },
+        emit: (name: string, ...args: unknown[]) => { for (const cb of [...(bus.get(name) ?? [])]) cb(...args); },
+    };
     const FlatList = ({ data, renderItem, keyExtractor, ListHeaderComponent, ListFooterComponent, ListEmptyComponent }: Record<string, any>) => createElement('div', null,
         ListHeaderComponent,
         (data ?? []).length
@@ -50,7 +61,7 @@ vi.mock('react-native', () => {
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => s },
         Alert: { alert() {} },
         Linking: { openURL: async () => {} },
-        DeviceEventEmitter: { addListener: listener, emit() {} },
+        DeviceEventEmitter,
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
@@ -156,8 +167,10 @@ const farOf = (n: number) => Array.from({ length: n }, (_, i) => ({
     credits: 0, photos: [], lat: 48.8, lng: 2.3, createdAt: new Date().toISOString(),
 }));
 /** The node's answer to the elsewhere read, and the urls it was asked. */
-const node = vi.hoisted(() => ({ rows: [] as unknown[], asked: [] as string[], fail: false }));
-const holds = (near: unknown[]) => { net.answer = (name) => (name === 'getPosts' ? Promise.resolve(near) : name in EMPTY ? Promise.resolve(EMPTY[name]) : undefined); };
+// `held`, while `hold` is on: each read waits there, with the rows it was asked under, until the test lets it land.
+const node = vi.hoisted(() => ({ rows: [] as unknown[], asked: [] as string[], fail: false, hold: false, held: [] as Array<() => void> }));
+// A fresh array each time, as a read of the phone's database gives one: that is what makes `posts` change on a sync tick.
+const holds = (near: unknown[]) => { net.answer = (name) => (name === 'getPosts' ? Promise.resolve([...near]) : name in EMPTY ? Promise.resolve(EMPTY[name]) : undefined); };
 
 let host: HTMLDivElement;
 let root: Root;
@@ -169,6 +182,8 @@ beforeEach(() => {
     node.rows = [];
     node.asked.length = 0;
     node.fail = false;
+    node.hold = false;
+    node.held.length = 0;
     params.now = {};
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
@@ -179,18 +194,21 @@ beforeEach(() => {
         const u = String(url);
         if (u.includes('/api/marketplace/posts')) {
             node.asked.push(u);
+            const rows = node.rows;
+            if (node.hold) await new Promise<void>(resolve => { node.held.push(resolve); });
             if (node.fail) return new Response('nope', { status: 500 });
-            return new Response(JSON.stringify(node.rows));
+            return new Response(JSON.stringify(rows));
         }
         return new Response('{}');
     }) as typeof fetch;
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); });
+afterEach(() => { vi.useRealTimers(); act(() => root.unmount()); host.remove(); });
 
 const settle = async () => { for (let i = 0; i < 8; i++) await act(async () => {}); };
 const render = async () => { await act(async () => { root.render(createElement(MarketScreen) as any); }); await settle(); };
 const text = () => host.textContent ?? '';
 const fill = () => host.querySelector('[data-testid="market-fill"]');
+const tick = async () => { await act(async () => { DeviceEventEmitter.emit('sync_data_updated'); }); await settle(); };
 const count = (title: string) => (text().match(new RegExp(`${title}(?!\\d)`, 'g')) ?? []).length;
 
 describe('a short nearby list is filled with the newest from elsewhere', () => {
@@ -300,5 +318,83 @@ describe('a short nearby list is filled with the newest from elsewhere', () => {
         await render();
         expect(fill()).toBeNull();
         expect(node.asked).toEqual([]);
+    });
+});
+
+describe('the fill is read again only when it should be (sync ticks change `posts` all the time)', () => {
+    it('ticks while the read is out neither cancel it nor ask again: one read, and the cards land', async () => {
+        node.rows = farOf(3);
+        node.hold = true;
+        await render();
+        expect(node.asked).toHaveLength(1);
+        // The node pushes a sync tick every 40 ms or so; the fill read is slower than all eight.
+        for (let i = 0; i < 8; i++) await tick();
+        expect(node.asked).toHaveLength(1);
+        // Still waiting: the section is up with its spinner and no card.
+        expect(fill()!.textContent).not.toContain('Far');
+        expect(fill()!.querySelector('[data-spinner="true"]')).not.toBeNull();
+        await act(async () => { node.held.forEach(release => release()); });
+        await settle();
+        expect(fill()).not.toBeNull();
+        for (const title of ['Far 0', 'Far 1', 'Far 2']) expect(fill()!.textContent).toContain(title);
+        expect(fill()!.querySelector('[data-spinner="true"]')).toBeNull();
+        expect(node.asked).toHaveLength(1);
+    });
+
+    it('ticks inside a minute of an answer do not read again; the first after a minute does', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        node.rows = farOf(2);
+        await render();
+        expect(node.asked).toHaveLength(1);
+        for (let i = 0; i < 3; i++) await tick();
+        expect(node.asked).toHaveLength(1);
+        vi.setSystemTime(Date.now() + 59_000);
+        await tick();
+        expect(node.asked).toHaveLength(1);
+        vi.setSystemTime(Date.now() + 2_000);
+        await tick();
+        expect(node.asked).toHaveLength(2);
+        // The answer stays on screen throughout.
+        expect(fill()!.textContent).toContain('Far 0');
+    });
+
+    it('a read that failed is not a read: the next tick tries again, once the node is back', async () => {
+        node.fail = true;
+        await render();
+        // The failure is stored, so the spinner has ended: the old empty state, with its link.
+        expect(fill()).toBeNull();
+        expect(host.querySelector('[data-spinner="true"]')).toBeNull();
+        expect(host.querySelector('[data-testid="market-see-elsewhere"]')).not.toBeNull();
+        // (A failure is not stamped, so the change of `posts` after the first sync has already tried again on mount.)
+        const failed = node.asked.length;
+        node.fail = false;
+        node.rows = farOf(2);
+        await tick();
+        expect(node.asked).toHaveLength(failed + 1);
+        expect(fill()).not.toBeNull();
+        expect(fill()!.textContent).toContain('Far 0');
+        expect(host.querySelector('[data-testid="market-see-elsewhere"]')).toBeNull();
+    });
+
+    it('a read for filters the member has left does not land over the new one', async () => {
+        node.rows = farOf(2);
+        node.hold = true;
+        await render();
+        expect(node.asked).toHaveLength(1);
+        // The member picks Offers while the first read (All) is out: a read of its own starts, with its own rows.
+        node.rows = [{ ...farOf(1)[0], id: 'far-offer', title: 'Offer only' }];
+        await act(async () => { pick.select!('offers'); });
+        await settle();
+        expect(node.asked).toHaveLength(2);
+        expect(node.held).toHaveLength(2);
+        // The newer read lands first, then the older one.
+        await act(async () => { node.held[1](); });
+        await settle();
+        expect(fill()!.textContent).toContain('Offer only');
+        await act(async () => { node.held[0](); });
+        await settle();
+        expect(fill()).not.toBeNull();
+        expect(fill()!.textContent).toContain('Offer only');
+        expect(fill()!.textContent).not.toContain('Far 0');
     });
 });

@@ -1022,18 +1022,27 @@ export default function MarketScreen() {
     });
     const fillKey = `${filter}|${categoryFilter}`;
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: any[] | null } | null>(null);
-    const elsewhereReadAt = useRef(0);
+    // The fill's latest read: its filters, when it came back (0 until it has, and left 0 if it failed, so the next
+    // change of `posts` tries again), and whether it is still out.
+    const elsewhereReadRef = useRef<{ key: string; at: number; out: boolean } | null>(null);
     useEffect(() => {
         if (!fillNeeded) return;
-        // Read again with the nearby list, not more often than a minute for the same filters.
-        if (elsewhere?.key === fillKey && Date.now() - elsewhereReadAt.current < 60_000) return;
-        let live = true;
+        // `posts` is a fresh array on every sync tick the node pushes, so a change of it is not a reason to ask again on
+        // its own: a minute per filter (the web's FILL_REREAD_MS), and never while a read for these filters is out. A
+        // read already out is not cancelled by the next change either: with ticks quicker than the read, each one threw
+        // its answer away and asked again, and a member with nothing near sat on the spinner. While a later read is out
+        // the earlier answer stays on screen.
+        const last = elsewhereReadRef.current;
+        if (last && last.key === fillKey && (last.out || Date.now() - last.at < 60_000)) return;
+        const read = { key: fillKey, at: 0, out: true };
+        elsewhereReadRef.current = read;
         readElsewhere(filter, categoryFilter).then(rows => {
-            if (!live) return;
-            elsewhereReadAt.current = Date.now();
-            setElsewhere({ key: fillKey, posts: rows });
+            read.out = false;
+            // Only an answer is stamped: a read that failed (null) is stored, so the spinner ends, but is not a read.
+            if (rows) read.at = Date.now();
+            // Dropped only if the member has since moved to other filters, whose read has replaced this one.
+            if (elsewhereReadRef.current === read) setElsewhere({ key: read.key, posts: rows });
         });
-        return () => { live = false; };
     }, [fillNeeded, fillKey, posts]);
     const elsewhereRead = fillNeeded && elsewhere?.key === fillKey ? elsewhere.posts : null;
     const fillPending = fillNeeded && elsewhere?.key !== fillKey;

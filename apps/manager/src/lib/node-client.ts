@@ -3077,7 +3077,16 @@ export interface RekeyStatusResponse {
         status: string;
         created_at: string;
         expires_at: string;
+        /** 'bring_back' for a Bring back code (vault rethink VR3); absent or 'rekey' for a re-key's. */
+        kind?: 'rekey' | 'bring_back';
     } | null;
+    /**
+     * Whether the member keeps a community copy here (vault rethink VR3), so Bring back can give them their same key on a
+     * new phone. Absent from a node before it.
+     */
+    communityCopy?: { kept: boolean; since: string | null };
+    /** This node's bring-backs of the member, newest first: who and when. */
+    bringBacks?: Array<{ operatorPubkey: string; releasedAt: string }>;
     /** The phones that asked on the pending code (#1768), oldest first: only beside the code itself. */
     proposals?: RekeyProposal[];
     /** Wrong numbers typed on the pending code so far; the third stops it. */
@@ -3122,6 +3131,8 @@ export interface CompleteRekeyResponse {
     callsign: string;
     /** Sign-in copies (hub, sso) of the old key the move deleted: the member links a sign-in again only when this is > 0. */
     signInCopiesRemoved?: number;
+    /** A Bring back code's number was typed (vault rethink VR3): nothing moved, and `newPubkey` is absent. */
+    broughtBack?: boolean;
 }
 
 /**
@@ -3196,6 +3207,31 @@ export async function issueRekeyCodeApi(
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify(proofField(code)),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throwIfFreshProof(res.status, body);
+        throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+/**
+ * Make a Bring back code (vault rethink VR3): the member's SAME key back on a new phone, from the copy they keep with this
+ * community. Who may make a re-key code may make one (an owner for an owner or admin, with the fresh proof in `code`).
+ */
+export async function issueBringBackCodeApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string,
+    code?: string
+): Promise<IssueRekeyCodeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/issue-code`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...proofField(code), kind: 'bring_back' }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));

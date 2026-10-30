@@ -95,7 +95,7 @@ export default function BeanPoolSheet() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5, textTransform: 'uppercase' },
         scroll: { padding: 16 },
         searchBox: { flexDirection: 'row', alignItems: 'center', minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, paddingLeft: 12 },
         searchInput: { flex: 1, minWidth: 0, minHeight: 48, fontSize: 16, color: colors.text.body, paddingVertical: 8, paddingHorizontal: 8 },

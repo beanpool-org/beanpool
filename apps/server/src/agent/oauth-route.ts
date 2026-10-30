@@ -6,7 +6,9 @@
  *   POST /oauth/register                              RFC 7591: public clients; https or localhost redirects; braked
  *   GET  /oauth/authorize                             the consent page: who asks, where its answers go, what it reads,
  *                                                     then the phone's QR sign-in with the two-digit number match
- *   POST /oauth/authorize/:id/wait | /confirm         the page's poll and its digits (bound to the page by a cookie)
+ *   POST /oauth/authorize/:id/wait | /confirm         the page's poll and its digits (bound to the page by a cookie); the
+ *                                                     digits carry the page's "May post for me" tick (default off), which
+ *                                                     the grant keeps (agent/owner-posts.ts: only then does it post)
  *   POST /oauth/token                                 code → tokens (PKCE S256, exact redirect, resource), refresh rotation
  *   POST /oauth/revoke                                RFC 7009
  *
@@ -39,7 +41,7 @@ import { forgetAgentGrant } from './limits.js';
 import { aiAssistantsAllowed, logRefusal, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import {
     consentRequest, dropConsentRequest, exchangeCode, findClient, holdConsentRequest, isPendingRegistration, issueCode,
-    markRegistrationOpened, OAUTH_SCOPE, redirectHost, refreshGrant, registerClient, revokeByToken, type OAuthGrantView, type TokenResult,
+    markRegistrationOpened, OAUTH_SCOPE, redirectHost, refreshGrant, registerClient, revokeByToken, setConsentCanPost, type OAuthGrantView, type TokenResult,
 } from './oauth.js';
 import { dropSuggestionsOf } from './suggestions.js';
 import { offersSuggestions } from './tools.js';
@@ -119,7 +121,7 @@ function tellOwners(kind: 'connected' | 'reuse' | 'revoked', grant: OAuthGrantVi
     if (kind === 'connected') {
         noteSecurityEvent({
             key: 'sec.agent', actor: grant.member, actorRole: role ?? 'admin',
-            detail: agentConnectedWords(name, role ?? 'admin', role === 'owner', offersSuggestions(), role === 'owner'),
+            detail: agentConnectedWords(name, role ?? 'admin', role === 'owner', offersSuggestions(), role === 'owner' && grant.canPost === true),
         });
         return;
     }
@@ -168,8 +170,10 @@ export function consentWords(clientName: string, sendsTo: string, community: str
         lines: [
             `Everything it reads goes to ${sendsTo}. If you did not just add ${community} as a connector in your assistant, close this page.`,
             'It will read: the server\'s health, backups and totals; the reports waiting for moderators; the join requests; what needs an admin now.',
-            // An owner's assistant acts without approval in two ways (agent/owner-posts.ts, take_backup): said before it is approved.
-            'If you are an owner, it can also take a backup and post Offers, Needs and events for you (as you, or as an enterprise you keep), at once, with no approval. '
+            // An owner's assistant acts without approval in two ways (take_backup; and agent/owner-posts.ts, only with the page's
+            // "May post for me" ticked): said before it is approved.
+            'If you are an owner, it can also take a backup; and, only if you tick “May post for me” below, post Offers, Needs and events for you '
+                + '(as you, or as an enterprise you keep), at once, with no approval. '
                 + 'Anything else it can only SUGGEST, and a suggestion changes nothing until you approve it on your phone.',
             'It can never read messages, balances, keys, addresses, photos or logs, or change settings, roles, keys or money.',
             `To connect it, scan this code with the BeanPool app on your phone (Manage → Manage this community from a computer), check that the phone names ${sendsTo}, and type the two digits it shows.`,
@@ -374,7 +378,9 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
         if (off(ctx)) return;
         const id = ctx.params.id;
         if (!isPairingId(id) || !consentRequest(id)) { ctx.status = 404; ctx.body = { status: 'unknown' }; return; }
+        // The page's "May post for me" goes with its digits (this browser's, right): the code, and the grant, carry it (default off).
         const res = confirmPairing(id, ctx.cookies.get(bindingCookieName(id)) || undefined, (ctx as any).requestBody?.code);
+        if (res.kind === 'agent-approved') setConsentCanPost(id, (ctx as any).requestBody?.canPost === true);
         answer(ctx, id, res);
     });
 
@@ -430,7 +436,7 @@ h1{font-size:1.2rem}p{margin:.6rem 0}.qr{background:#fff;display:inline-block;pa
 <h1 id="who">${escapeHtml(p.words.heading)}</h1>${lines}
 <div class="qr">${p.svg}</div>
 <p class="muted">The phone should show the code <span class="code">${escapeHtml(p.shortCode)}</span>.</p>
-<form id="confirm" hidden><label for="digits">Type the two digits your phone shows: </label><input id="digits" inputmode="numeric" maxlength="2" autocomplete="off"> <button type="submit">Connect</button></form>
+<form id="confirm" hidden><p><label><input type="checkbox" id="canpost"> May post for me: an owner's assistant posts Offers, Needs and events as you, at once, with no approval</label></p><label for="digits">Type the two digits your phone shows: </label><input id="digits" inputmode="numeric" maxlength="2" autocomplete="off"> <button type="submit">Connect</button></form>
 <p id="status" role="status" class="muted">Waiting for your phone…</p>
 <script nonce="${p.nonce}">
 (function(){
@@ -446,7 +452,7 @@ function show(r){
 }
 function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{}),credentials:'same-origin'}).then(function(x){return x.json()}).catch(function(){return null})}
 function poll(){post(base+'/wait').then(show)}
-form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value}).then(show)});
+form.addEventListener('submit',function(e){e.preventDefault();post(base+'/confirm',{code:document.getElementById('digits').value,canPost:document.getElementById('canpost').checked===true}).then(show)});
 poll();
 })();
 </script></body></html>`;

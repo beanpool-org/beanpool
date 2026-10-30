@@ -8,9 +8,13 @@
  *      the standby copy's payload carries created_via, the AGENT log names the post, and the answer carries no key.
  *   2. Refusals in words, none counted against the day: no photo, a PNG, a photo over the per-photo cap, a JPEG cut off halfway
  *      (its header still whole), an event's time with no offset (or a date with no time), an enterprise the owner does not keep
- *      (or a made-up ref), the 51st post in a UTC day. Every field the phone's and the web's composer require for
+ *      (or a made-up ref), a title longer than the forms take, a listing with neither a pin nor use_my_area. Every field the phone's and the web's composer require for
  *      each kind (Marty, 30 Oct: "all the mandatory fields should be mandatory even if seeding through MCP") is in the tool's
  *      input schema and, left out or empty, refused by the server in words that name it; a price only where Beans are on.
+ *   2c. "May post for me" (design Q1): a token made without the tick lists no posting tool, is refused if it calls one, and
+ *      says so in connection_info; the list shows the tick. "Assistant posts a day", an owners' setting: 100 by default (the
+ *      101st refused); set to 1,000 the 1,001st is refused; set back to 100 it holds at once; out of range, or from an admin,
+ *      refused; each change alerts the owners (sec.agent) and is shown on the list and in connection_info.
  *   3. An admin's assistant has none of the tools (and is refused if it calls one); its maker no longer an owner or admin → 401;
  *      a body over 64 KiB from anyone but an owner's assistant → 413; the owner switch off → 404; the grant revoked → 401.
  *   4. The ledger audit is the same after as before: posting moves no Bean.
@@ -39,7 +43,8 @@ import { getProfileSwitches, setSwitchOverride } from './config/node-profile.js'
 import { db } from './db/db.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import { imageSize } from './storage/image-metadata.js';
-import { admitAgentCreate, agentCreatesToday, AGENT_CREATES_PER_DAY } from './agent/limits.js';
+import { admitAgentCreate, agentCreatesToday, AGENT_POSTS_PER_DAY_DEFAULT } from './agent/limits.js';
+import { getAlertsStatus } from './services/alerts.js';
 import { OWNER_POST_TOOLS, enterpriseRef } from './agent/owner-posts.js';
 import type { AgentGrant } from './agent/tools.js';
 
@@ -174,7 +179,7 @@ async function main(): Promise<void> {
         const ownerS = await keySignIn(owner);
         const owner2S = await keySignIn(owner2);
         assert(!!ownerS && !!owner2S, 'two owners sign in with their keys');
-        const made = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s Claude' } });
+        const made = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s Claude', canPost: true } });
         assert(made.status === 201 && typeof made.body?.token === 'string', `an owner makes an agent token (${made.status})`);
         const TOKEN: string = made.body.token;
         const grantId: string = made.body.grant.id;
@@ -195,7 +200,7 @@ async function main(): Promise<void> {
         } });
         const o = structured(offer);
         assert(!offer.isError && typeof o?.postId === 'string' && o.kind === 'offer' && o.asEnterprise === false && o.link === `/?post=${encodeURIComponent(o.postId)}`
-            && o.postsToday === 1 && o.postsPerDay === AGENT_CREATES_PER_DAY, `create_offer posts an Offer and answers its id, its link and the day's count (${JSON.stringify(o ?? offer.content)})`);
+            && o.postsToday === 1 && o.postsPerDay === AGENT_POSTS_PER_DAY_DEFAULT && AGENT_POSTS_PER_DAY_DEFAULT === 100, `create_offer posts an Offer and answers its id, its link and the day's count (${JSON.stringify(o ?? offer.content)})`);
         const row = db.prepare('SELECT author_pubkey, created_by, created_via, type, status, updated_at, title, lat, lng FROM posts WHERE id = ?').get(o?.postId) as any;
         assert(row?.lat === -28.551 && row?.lng === 153.51, `its pin is stored rounded to 3 decimals, as the apps send it (${row?.lat}, ${row?.lng})`);
         assert(row?.author_pubkey === owner.pub && row.created_by === null && row.created_via === `assistant:${grantId}` && row.type === 'offer' && row.status === 'active' && !!row.updated_at,
@@ -360,7 +365,7 @@ async function main(): Promise<void> {
         const kindGrants: string[] = [];
         for (const k of KINDS) {
             // A token of its own for each kind: two calls a field stay inside the door's 60 a minute.
-            const t = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: `Olive's ${k.tool} check` } });
+            const t = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: `Olive's ${k.tool} check`, canPost: true } });
             kindGrants.push(t.body?.grant?.id);
             const kc = await connect(t.body?.token);
             const listed = (await kc.listTools()).tools.find(x => x.name === k.tool);
@@ -407,18 +412,77 @@ async function main(): Promise<void> {
             && madeWhileOff === 0 && agentCreatesToday(grantId) === countWhileOff && keptAgain.length === 1,
             `with enterprises off, my_enterprises lists none and posting as one is refused in its routes' words, nothing made or counted; on again, it is listed (${JSON.stringify(keptWhileOff)}; ${errorText(eventAsEnterprise) || JSON.stringify(structured(eventAsEnterprise))} | ${errorText(listingAsEnterprise)})`);
 
-        while (agentCreatesToday(grantId) < AGENT_CREATES_PER_DAY) admitAgentCreate(grantId);
-        const fiftyFirst = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'One too many' } });
-        assert(fiftyFirst.isError === true && new RegExp(`${AGENT_CREATES_PER_DAY} posts today`).test(errorText(fiftyFirst))
-            && (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c === postsAfter, `the ${AGENT_CREATES_PER_DAY + 1}st post in a day → refused, nothing made (${errorText(fiftyFirst)})`);
+        // ── 2c. "May post for me", and the owners' "Assistant posts a day" ───────────────────────────
+        console.log('── 2c. "May post for me" is ticked or the assistant cannot post; "Assistant posts a day" is the owners\' ──');
+        // The four per-kind check grants go first: a member holds at most 5 assistants.
+        for (const g of kindGrants) await call('POST', `/api/local/admin/agent/grants/${encodeURIComponent(g)}/revoke`, { headers: asSession(ownerS), body: {} });
+        const unticked = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s reader' } });
+        const uc = await connect(unticked.body?.token);
+        const readerTools = (await uc.listTools()).tools.map(t => t.name);
+        const readerCall = await uc.callTool({ name: 'create_offer', arguments: offerArgs });
+        const readerInfo = structured(await uc.callTool({ name: 'connection_info', arguments: {} }));
+        const ownInfo = structured(await client.callTool({ name: 'connection_info', arguments: {} }));
+        assert(unticked.status === 201 && unticked.body?.grant?.canPost === false && readerTools.includes('take_backup')
+            && !readerTools.some(t => t.startsWith('create_') || t === 'my_enterprises') && readerCall.isError === true && /no tool "create_offer"/.test(errorText(readerCall))
+            && readerInfo?.canPost === false && readerInfo?.posts === undefined && ownInfo?.canPost === true && ownInfo?.posts?.perDay === 100,
+            `a token made without "May post for me" lists no posting tool and is refused one; connection_info says which (${readerTools.length} tools; ${errorText(readerCall)})`);
+        await uc.close().catch(() => {});
+        const notTicked = await OWNER_POST_TOOLS.find(t => t.name === 'create_offer')!.run({ id: 'y', name: 'y', member: owner.pub, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: false } as AgentGrant, offerArgs, 'b0b0b0b0');
+        assert(!notTicked.ok && /without "May post for me"/.test(notTicked.ok ? '' : notTicked.error), `an owner's grant not ticked is refused by the tool itself (${notTicked.ok ? '' : notTicked.error})`);
+        const listed = await call('GET', '/api/local/admin/agent/grants', { headers: asSession(ownerS) });
+        const rowOf = (id: string) => (listed.body?.grants ?? []).find((g: any) => g.id === id);
+        assert(rowOf(grantId)?.canPost === true && rowOf(unticked.body?.grant?.id)?.canPost === false && typeof rowOf(grantId)?.postsToday === 'number'
+            && listed.body?.postsPerDay === 100 && listed.body?.postsPerDayMin === 1 && listed.body?.postsPerDayMax === 1000,
+            `the list shows each assistant's tick and posts today, and "Assistant posts a day" (${listed.body?.postsPerDay}, ${listed.body?.postsPerDayMin}–${listed.body?.postsPerDayMax})`);
+
+        // A ticked grant of its own for the day's count, so the door's 60 a minute holds for the rest.
+        const capT = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s seeder', canPost: true } });
+        const capId: string = capT.body?.grant?.id;
+        const cc = await connect(capT.body?.token);
+        // Default 100: the 101st is refused.
+        while (agentCreatesToday(capId) < 100) admitAgentCreate(capId);
+        const hundredFirst = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'One too many' } });
+        assert(hundredFirst.isError === true && /made 100 posts today, the most a day this community's owners allow/.test(errorText(hundredFirst))
+            && (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c === postsAfter, `by default the 101st post in a day → refused, nothing made (${errorText(hundredFirst)})`);
+        // An owner sets 1,000 (Marty, 30 Oct: seeding the global node): it takes effect at once, and the 1,001st is refused.
+        // As the second owner: the first has used their hour's security lines connecting and disconnecting (alerts.ts raiseBounded).
+        const set1000 = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: asSession(owner2S), body: { perDay: 1000 } });
+        const after1000 = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Seeding day' } });
+        const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
+        assert(set1000.status === 200 && set1000.body?.postsPerDay === 1000 && !after1000.isError && structured(after1000)?.postsPerDay === 1000 && structured(after1000)?.postsToday === 101
+            && told.some(d => /changed how many posts each owner's AI assistant may make a day, from 100 to 1,000/.test(d)),
+            `an owner sets 1,000: the 101st is taken at once, and the owners are told (${set1000.status}; ${errorText(after1000) || structured(after1000)?.postsToday}; ${told.join(' | ')})`);
+        while (agentCreatesToday(capId) < 1000) admitAgentCreate(capId);
+        const thousandFirst = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Past a thousand' } });
+        const info1000 = structured(await cc.callTool({ name: 'connection_info', arguments: {} }));
+        const listed1000 = await call('GET', '/api/local/admin/agent/grants', { headers: asSession(owner2S) });
+        assert(thousandFirst.isError === true && /made 1000 posts today/.test(errorText(thousandFirst)) && info1000?.posts?.perDay === 1000 && info1000?.posts?.today === 1000
+            && listed1000.body?.postsPerDay === 1000, `set to 1,000, the 1,001st is refused; connection_info and the list say 1,000 (${errorText(thousandFirst)})`);
+        // Back to 100: it holds at once, for a grant already past it.
+        const set100 = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: asSession(owner2S), body: { perDay: 100 } });
+        const after100 = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Back to a hundred' } });
+        const toldBack = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
+        assert(set100.status === 200 && after100.isError === true && /made 100 posts today/.test(errorText(after100))
+            && toldBack.some(d => /from 1,000 to 100/.test(d)), `set back to 100, the next post is refused at once (${errorText(after100)})`);
+        await cc.close().catch(() => {});
+        const outOfRange = await Promise.all([0, 1001, 1.5, '50', null].map(perDay => call('POST', '/api/local/admin/agent/posts-per-day', { headers: asSession(ownerS), body: { perDay } })));
+        assert(outOfRange.every(r => r.status === 400 && /whole number from 1 to 1,000/.test(r.body?.error ?? '')),
+            `0, 1,001, 1.5, a string or nothing → 400 in words (${outOfRange.map(r => r.status).join(', ')})`);
+        grantNodeRole(keeper.pub, 'admin', 'SYSTEM');
+        const keeperAdminS = await keySignIn(keeper);
+        const byAdmin = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: asSession(keeperAdminS), body: { perDay: 500 } });
+        const byToken = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: bearer(TOKEN), body: { perDay: 500 } });
+        revokeNodeRole(keeper.pub, 'admin', owner.pub);
+        assert(byAdmin.status === 403 && byToken.status >= 400 && byToken.status < 500 && (await call('GET', '/api/local/admin/agent/grants', { headers: asSession(ownerS) })).body?.postsPerDay === 100,
+            `an admin, or a token, cannot change it (${byAdmin.status}, ${byToken.status})`);
 
         // ── 3. Who may, and the door ────────────────────────────────────────────────────────────────
         console.log('── 3. Only an owner\'s assistant; the door still decides ──');
         const ownerOnlyRun = OWNER_POST_TOOLS.find(t => t.name === 'create_offer')!;
-        const asAdmin = await ownerOnlyRun.run({ id: 'x', name: 'x', member: owner2.pub, role: 'admin', via: 'token', createdAt: 0, expiresAt: null } as AgentGrant,
+        const asAdmin = await ownerOnlyRun.run({ id: 'x', name: 'x', member: owner2.pub, role: 'admin', via: 'token', createdAt: 0, expiresAt: null, canPost: true } as AgentGrant,
             { title: 'x', photos: [small] }, 'b0b0b0b0');
         assert(!asAdmin.ok && /Only an owner's assistant can post/.test(asAdmin.ok ? '' : asAdmin.error), 'a grant whose role is admin is refused by the tool itself, in words');
-        const made2 = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(owner2S), body: { name: 'Ottilie\'s assistant' } });
+        const made2 = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(owner2S), body: { name: 'Ottilie\'s assistant', canPost: true } });
         assert(made2.status === 201, `a second owner makes an agent token (${made2.status})`);
         grantNodeRole(owner2.pub, 'admin', 'SYSTEM');
         const c2 = await connect(made2.body.token);

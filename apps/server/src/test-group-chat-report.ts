@@ -407,7 +407,7 @@ async function main(): Promise<void> {
         `a further repeat finds the new one and adds nothing (got ${show(handledAgain)})`);
 
     // The assistant (agent/tools.ts) calls a message's report what it is, and still never sees its key or its words.
-    const grant: AgentGrant = { id: 'test-grant', name: 'Test', member: owner.pk, role: 'owner', via: 'token', createdAt: Date.now(), expiresAt: null };
+    const grant: AgentGrant = { id: 'test-grant', name: 'Test', member: owner.pk, role: 'owner', via: 'token', createdAt: Date.now(), expiresAt: null, canPost: false };
     const tool = (name: string) => AGENT_TOOLS.find((t) => t.name === name)!;
     const got = tool('report_get').run(grant, { report_id: repId }, 'B0UNDARY') as any;
     const listedOpen = tool('reports_list').run(grant, { include_text: true }, 'B0UNDARY') as any;

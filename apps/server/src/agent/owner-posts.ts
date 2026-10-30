@@ -6,6 +6,9 @@
  * - Owner grants only, read at call time (grant.role, which agent/mcp-route.ts reads afresh on every request), behind the
  *   owners' switch, the bearer check and the door's 60 a minute and 2,000 a day. An admin's assistant is never offered
  *   them; one that calls them anyway is refused in words.
+ * - And only a grant ticked "May post for me" when it was connected (the token form, the consent page; default off: design
+ *   Q1, what keeps a leaked read-only token from posting). Without it the tools are not listed (tools.ts toolsFor), and a
+ *   call is refused in words.
  * - The node posts on the owner's behalf: the author is the owner's own member key, or an enterprise they keep NOW
  *   (canOperateTreasury, the keepers route's own check), only while the enterprise routes' switches are on (their profile
  *   gate, asked here). No key reaches the assistant: an enterprise is named by a reference made from its key
@@ -23,7 +26,8 @@
  *   MAX_PHOTO_BASE64_CHARS), made here what the apps send (at most 800 px, no metadata: storage/photo-thumbnails.ts
  *   resizeToStoredPhoto), then held to the routes' photo rule. One the node can't read (cut off after a whole header) is
  *   refused, never stored as sent. No composer offers a preset tile instead of a photo, so neither does this.
- * - 50 posts per grant per UTC day (limits.ts AGENT_CREATES_PER_DAY); one the engine refuses is not counted.
+ * - The owners' "Assistant posts a day" per grant per UTC day (limits.ts agentPostsPerDay: 100 unless an owner sets 1 to 1,000),
+ *   read on every post; one the engine refuses is not counted.
  * - The row records `created_via = 'assistant:<grant id>'` (schema.sql posts.created_via); the AGENT line of every create
  *   names the post id (mcp-route.ts). Revoking the grant or turning the switch off stops the next call at the door; posts
  *   made stay, and are deleted as any post is.
@@ -49,7 +53,7 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { memberErrorText } from '../routes/member-error-text.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
-import { admitAgentCreate, agentCreatesToday, returnAgentCreate, AGENT_CREATES_PER_DAY } from './limits.js';
+import { admitAgentCreate, agentCreatesToday, agentPostsPerDay, returnAgentCreate } from './limits.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 export const AGENT_POST_PHOTOS_MIN = 1;
@@ -276,12 +280,17 @@ function num(v: unknown): number | undefined {
 /** The refusals before anything else: an owner's grant, a server still this community's, and the day's count left. */
 function gate(grant: AgentGrant): string | null {
     if (grant.role !== 'owner') return "Only an owner's assistant can post: an admin's cannot.";
+    if (!grant.canPost) return NOT_TICKED;
     const replaced = getReplacedInfo();
     if (replaced) return `${replaced.message} This server takes no new posts; use the one that took over.`;
-    if (agentCreatesToday(grant.id) >= AGENT_CREATES_PER_DAY) {
-        return `This assistant has made ${AGENT_CREATES_PER_DAY} posts today, the most a day allows: try again tomorrow (UTC).`;
-    }
+    if (agentCreatesToday(grant.id) >= agentPostsPerDay()) return dayFull();
     return null;
+}
+
+const NOT_TICKED = 'This assistant was connected without "May post for me", so it cannot post. The owner can connect it again with that ticked.';
+
+function dayFull(): string {
+    return `This assistant has made ${agentPostsPerDay()} posts today, the most a day this community's owners allow: try again tomorrow (UTC).`;
 }
 
 /** An event's start and end as stored: the clock its members see, in its zone, so the assistant can check what it posted. */
@@ -294,7 +303,7 @@ function answer(grant: AgentGrant, kind: 'offer' | 'need' | 'event', postId: str
             postId, kind, asEnterprise,
             link: `/?post=${encodeURIComponent(postId)}`,
             ...clock,
-            postsToday: agentCreatesToday(grant.id), postsPerDay: AGENT_CREATES_PER_DAY,
+            postsToday: agentCreatesToday(grant.id), postsPerDay: agentPostsPerDay(),
         },
     };
 }
@@ -332,7 +341,7 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     if (!photos.ok) return photos;
     // Counted before the post is made, so two calls at once cannot both take the last one; given back when it is not made.
     if (!admitAgentCreate(grant.id)) {
-        return { ok: false, error: `This assistant has made ${AGENT_CREATES_PER_DAY} posts today, the most a day allows: try again tomorrow (UTC).` };
+        return { ok: false, error: dayFull() };
     }
     const owner = grant.member;
     // Said out loud, the owner's own area: no pin is sent, so the engine gives it the area a listing without one gets.
@@ -383,7 +392,7 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
     const photos = await photosFrom(args.photos);
     if (!photos.ok) return photos;
     if (!admitAgentCreate(grant.id)) {
-        return { ok: false, error: `This assistant has made ${AGENT_CREATES_PER_DAY} posts today, the most a day allows: try again tomorrow (UTC).` };
+        return { ok: false, error: dayFull() };
     }
     const owner = grant.member;
     // The body the apps send (routes/event-post.ts reads it): instants, the zone, the place or the link; the text trimmed as
@@ -467,8 +476,8 @@ const POST_OUT = {
     },
     required: ['postId', 'kind', 'asEnterprise', 'link', 'postsToday', 'postsPerDay'],
 };
-const LIMITS_WORDS = `at most ${AGENT_CREATES_PER_DAY} posts a day, under the member's own posting limits; the post is the owner's, `
-    + 'deleted as any post is, and moderators see it was made by an assistant';
+const LIMITS_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), under the member's own posting "
+    + "limits; the post is the owner's, deleted as any post is, and moderators see it was made by an assistant";
 
 /** The rows agent/tools.ts adds to its table: owner-only, all of them. */
 export const OWNER_POST_TOOLS: AgentTool[] = [
@@ -479,10 +488,12 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         never: "an enterprise's key, balance, keepers or listings",
         memberText: true,
         ownerOnly: true,
+        posts: true,
         inputSchema: { type: 'object', properties: {}, additionalProperties: false },
         outputSchema: { type: 'object', properties: { enterprises: { type: 'array' } }, required: ['enterprises'] },
         run: (grant, _args, boundary) => {
             if (grant.role !== 'owner') return { ok: false, error: "Only an owner's assistant can post: an admin's cannot." };
+            if (!grant.canPost) return { ok: false, error: NOT_TICKED };
             const kept = keptEnterprises(grant.member);
             return {
                 ok: true, rows: kept.length,
@@ -502,6 +513,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         reads: `nothing: it posts an Offer in the Market as the member this assistant acts for, with 1 to ${AGENT_POST_PHOTOS_MAX} photos; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
+        posts: true,
         write: true,
         // Read each time the tools are listed (agent/mcp-route.ts): whether a price is required follows the Beans switch.
         get inputSchema() { return ownerListingSchema(); },
@@ -515,6 +527,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         reads: `nothing: it posts a Need in the Market as the member this assistant acts for, with 1 to ${AGENT_POST_PHOTOS_MAX} photos; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
+        posts: true,
         write: true,
         get inputSchema() { return ownerListingSchema(); },
         outputSchema: POST_OUT,
@@ -528,6 +541,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
             + `${AGENT_POST_PHOTOS_MAX} photos; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
+        posts: true,
         write: true,
         inputSchema: {
             type: 'object',
@@ -559,6 +573,7 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
             + `from my_enterprises), with 1 to ${AGENT_POST_PHOTOS_MAX} photos; an enterprise's Need needs a live Offer of its own first; ${LIMITS_WORDS}`,
         never: "anything but the new post's id and its link, an enterprise's key, or another member's data",
         ownerOnly: true,
+        posts: true,
         write: true,
         inputSchema: {
             type: 'object',

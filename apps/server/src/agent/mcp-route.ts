@@ -38,7 +38,7 @@ import { logAddressTag } from '../log-address.js';
 import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
-import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
+import { grantPosts, offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
 import { AGENT_CREATE_BODY_MAX } from './owner-posts.js';
 import { PROMPTS, promptText, welcomeInstructions, type WelcomeFacts } from './welcome.js';
 
@@ -160,7 +160,7 @@ export function agentGrantFrom(ctx: any): GrantCheck {
         if (r !== 'owner' && r !== 'admin') return { ok: false, status: 401, error: 'Invalid, revoked or expired token', grantId: g.id };
         return {
             ok: true,
-            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null },
+            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null, canPost: g.canPost === true },
         };
     }
     if (!m || !looksLikeAutomationToken(m[1])) return { ok: false, status: 401, error: UNAUTHORISED };
@@ -178,20 +178,20 @@ export function agentGrantFrom(ctx: any): GrantCheck {
         ok: true,
         grant: {
             id: record.id, name: record.name, member: record.createdBy, role, via: 'token',
-            createdAt: record.createdAt, expiresAt: record.expiresAt,
+            createdAt: record.createdAt, expiresAt: record.expiresAt, canPost: record.canPost === true,
         },
     };
 }
 
 /**
  * How much of a request to /mcp the server reads (https-server.ts, before a byte is buffered): 64 KiB, as for any assistant,
- * unless the switch is on and the bearer is an owner's assistant now, whose posts carry up to four photos
+ * unless the switch is on and the bearer is an owner's assistant now ticked "May post for me", whose posts carry up to four photos
  * (agent/owner-posts.ts AGENT_CREATE_BODY_MAX). The bearer is checked again, with everything else, when the route runs.
  */
 export function mcpBodyLimit(ctx: any): number {
     if (!aiAssistantsAllowed() || ctx.method !== 'POST') return MCP_BODY_MAX;
     const check = agentGrantFrom(ctx);
-    return check.ok && check.grant.role === 'owner' ? AGENT_CREATE_BODY_MAX : MCP_BODY_MAX;
+    return check.ok && grantPosts(check.grant) ? AGENT_CREATE_BODY_MAX : MCP_BODY_MAX;
 }
 
 function welcomeFacts(ctx: any, grant: AgentGrant): WelcomeFacts {
@@ -202,6 +202,7 @@ function welcomeFacts(ctx: any, grant: AgentGrant): WelcomeFacts {
         role: grant.role,
         canBackup: grant.role === 'owner',
         canSuggest: offersSuggestions(),
+        canPost: grantPosts(grant),
     };
 }
 

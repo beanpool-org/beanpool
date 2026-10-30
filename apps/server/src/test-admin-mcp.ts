@@ -44,7 +44,7 @@ import { getAlertsStatus, updateAlerts } from './services/alerts.js';
 import { db, rebuildSystemLogsCheck } from './db/db.js';
 import { resetAgentLimits, admitAgentCall, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_PER_DAY } from './agent/limits.js';
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
-import { welcomeInstructions, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
+import { welcomeInstructions, promptText, PROMPTS, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
 import { AGENT_TOOLS } from './agent/tools.js';
 import { AGENT_CREATE_BODY_MAX } from './agent/owner-posts.js';
 
@@ -234,7 +234,8 @@ async function main(): Promise<void> {
             && !(getLocalConfig().automationTokens ?? []).some((t: any) => t.scope === 'agent'),
         `the automation-token route makes no agent token: it points to Connected assistants (${show(viaOldRoute)})`);
         const before = Date.now();
-        const tAgent = await make(asSession(ownerS), { name: 'Claude Desktop' });
+        // Ticked "May post for me" (agent/owner-posts.ts): an owner's assistant has the posting tools only then.
+        const tAgent = await make(asSession(ownerS), { name: 'Claude Desktop', canPost: true });
         assert(tAgent.status === 201 && /^bp_[0-9a-f]{12}_[0-9a-f]{64}$/.test(tAgent.body?.token ?? ''), `an owner's key session makes an agent token (${tAgent.status})`);
         const AGENT: string = tAgent.body.token;
         secrets.push(AGENT);
@@ -254,14 +255,20 @@ async function main(): Promise<void> {
         const facts = { community: 'BeanPool Node', url: `https://localhost:${port}`, callsign: 'Olive', role: 'owner' as const };
         const communityNow = /connected to "([^"]+)"/.exec(instructions)?.[1] ?? '';
         const urlNow = /server at (\S+), acting/.exec(instructions)?.[1] ?? '';
+        // This grant is ticked "May post for me": its welcome adds the posts, live at once (agent/owner-posts.ts); one not ticked is §6's.
+        const postsWelcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true, canPost: true });
         const s4Welcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true });
-        assert(instructions === s4Welcome && instructions.includes('acting for Olive, who is an owner there'),
+        assert(instructions === postsWelcome && instructions.includes('acting for Olive, who is an owner there'),
             `initialize returns the welcome, made for this grant (${instructions.slice(0, 120)}…)`);
+        assert(/; take a backup; post Offers, Needs and events as Olive \(or as an enterprise they keep\), live at once with no approval; and SUGGEST/.test(instructions)
+            && /A post is made at once, public to members: post only what Olive asked for, and after each say that you posted it, with its link\./.test(instructions)
+            && !/post Offers|A post is made/.test(s4Welcome),
+            'a grant ticked "May post for me" is told it posts at once and must say so; one not ticked is told nothing of posts');
         assert(s4Welcome === designWelcome(communityNow, urlNow, 'Olive', 'owner')
             .replace('dismiss or act on a report, restore a post, lift a mute, answer a join request, send an announcement', SUGGESTABLE_WORDS),
             'with suggestions and backups (S4) the welcome is §6 word for word, its list of suggestions the kinds built');
         assert(/SUGGEST actions \(dismiss or act on a report, restore a post hidden by reports\)/.test(instructions) && !/lift a mute|answer a join request|send an announcement/.test(instructions)
-            && /; take a backup; and SUGGEST/.test(instructions) && /approve a suggestion; reach another server\./.test(instructions),
+            && /; take a backup; and SUGGEST/.test(s4Welcome) && /approve a suggestion; reach another server\./.test(instructions),
             'it promises only the suggestions it can file (no mute, join request or announcement yet) and says the assistant cannot approve one');
 
         // ── 2. tools/list, prompts/list ───────────────────────────────────────────────────────────
@@ -289,9 +296,12 @@ async function main(): Promise<void> {
             'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu (${prompts.join(', ')})`);
         const p1 = await client.getPrompt({ name: 'summarise-reports', arguments: { status: 'open', since: '14' } });
         const p1Text = (p1.messages[0]?.content as any)?.text ?? '';
-        assert(p1Text.startsWith(PROMPT_RULE) && p1Text.endsWith("Nothing changes without Olive's approval.") && /last 14 days/.test(p1Text)
+        // A ticked grant's prompts end saying its posts are the exception; one not ticked ends as before.
+        const plainClose = promptText(PROMPTS.find(p => p.name === 'what-needs-me')!, {}, { ...facts, canBackup: true, canSuggest: true });
+        assert(p1Text.startsWith(PROMPT_RULE) && p1Text.endsWith("Nothing changes without Olive's approval, except a post Olive asks you to make, which is live at once.")
+            && plainClose.endsWith("Nothing changes without Olive's approval.") && /last 14 days/.test(p1Text)
             && /Offer one suggest_action per report; never file one I did not ask for\./.test(p1Text),
-            'a prompt opens with the member-text rule, ends with "nothing changes without Olive\'s approval", and offers one suggestion per report, never unasked');
+            'a prompt opens with the member-text rule, ends with "nothing changes without Olive\'s approval" (but the posts asked for, for a ticked grant), and offers one suggestion per report, never unasked');
 
         // ── 3. Every tool, swept ──────────────────────────────────────────────────────────────────
         console.log('── 3. Every tool answers redacted at the source ──');

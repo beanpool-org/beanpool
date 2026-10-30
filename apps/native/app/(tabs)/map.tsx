@@ -562,7 +562,7 @@ export default function MapScreen() {
                     onRegionChangeComplete={(r: any) => {
                         setCurrentRegion(r);
                     }}
-                    onPress={(e: any) => {
+                    onPress={() => {
                         if (selectedPostPreview) setSelectedPostPreview(null);
                         // A tap on the map closes the category panel without changing the filter.
                         closeCategoryPanel();

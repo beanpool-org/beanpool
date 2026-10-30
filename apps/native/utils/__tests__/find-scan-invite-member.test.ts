@@ -56,6 +56,10 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn(async () => undefined) }));
 vi.mock('expo-web-browser', () => ({ openBrowserAsync: vi.fn(async () => undefined) }));
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
+});
 vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: vi.fn(async () => ({ status: 'denied', canAskAgain: false })),
     getLastKnownPositionAsync: vi.fn(async () => null),

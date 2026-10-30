@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { PRICING_CATEGORIES } from '../pricing-catalog.js';
+import { searchTermsFor } from '../search-terms.js';
 import { SYNONYM_MAP } from '../synonyms.js';
 import { CONTEXT_SEPARATOR, wordsFor } from '../words.js';
 import {
@@ -92,6 +93,16 @@ describe('the label index', () => {
         expect(index.byAlias('fruit')).toContain('food.fruit');
     });
 
+    it('reads a compound as search does, parted and joined: "Wi-Fi" finds the label "Wifi"', () => {
+        const index = buildTagIndex(wordsFor('en'));
+        expect(searchTermsFor('wi-fi')).toContain('wifi');
+        expect(index.byName('Wi-Fi')).toEqual(['tech.internet.wifi']);
+        expect(index.byName('wi\u2011fi')).toEqual(['tech.internet.wifi']);
+        expect(index.search('wi-fi')).toEqual(['tech.internet.wifi']);
+        expect(index.byName('Off-grid power')).toEqual(['energy.solar.off-grid-power']);
+        expect(index.byName('offgrid power')).toEqual(['energy.solar.off-grid-power']);
+    });
+
     it('a drafted language: its labels find the tags, with or without accents, and English still does', () => {
         const es = wordsFor('es', [{
             _meta: { language: 'es', review: 'machine' },
@@ -139,6 +150,9 @@ describe('suggestTags', () => {
         expect(suggestTags('Lemons/limes', '', { index })).toEqual(suggestTags('Lemons limes', '', { index }));
         expect(suggestTags('Tomatoes,basil', '', { index })).toEqual(['food.vegetables.tomato', 'food.herbs.basil']);
         expect(suggestTags('Eggs&milk', '', { index })).toEqual(['food.dairy.milk', 'food.eggs']);
+        // A compound is also looked up joined, as search looks it up.
+        expect(suggestTags('Wi-Fi setup', '', { index })).toEqual(['tech.internet.wifi']);
+        expect(suggestTags('Wi-Fi setup', '', { index })).toEqual(suggestTags('Wifi setup', '', { index }));
         expect(suggestTags('Food', '', { index })).toEqual([]);
         expect(suggestTags('', '', { index })).toEqual([]);
     });

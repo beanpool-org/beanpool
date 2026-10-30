@@ -4,7 +4,7 @@
  * the Market's search and the assistant's tags_search all read one index, built once per language.
  */
 import { CONTEXT_SEPARATOR, currentLanguage, t, type Words } from '../words.js';
-import { plainWords } from '../search-terms.js';
+import { joinCompounds, plainWords } from '../search-terms.js';
 import { TAG_LIBRARY, type TagDef } from './library.js';
 
 export { TAG_LIBRARY, type TagDef } from './library.js';
@@ -74,10 +74,19 @@ export function tagText(text: string): string {
     return out;
 }
 
+/** The forms a text is keyed and found by: tagText, and tagText with each compound joined as a search looks it up ("wi-fi" →
+ *  wifi, search-terms.ts queryWords), so "Wi-Fi" finds the label "Wifi" and "tshirt" a label "T-shirt". */
+function tagForms(text: string): string[] {
+    const words = tagText(text);
+    const joined = tagText(joinCompounds(text));
+    return joined === words ? [words] : [words, joined];
+}
+
 /** The words of one language turned into tag ids. */
 export interface TagIndex {
     readonly lang: string;
-    /** The tags a word or phrase names: a label in this language or in English, or a word the old synonym map keyed. */
+    /** The tags a word or phrase names: a label in this language or in English, or a word the old synonym map keyed; a
+     *  compound as written or joined ("Wi-Fi" finds "Wifi"). */
     byName(text: string): readonly string[];
     /** The tags an English broader word is on: a tag's words (for it and everything under it) or its aliases. */
     byAlias(text: string): readonly string[];
@@ -90,11 +99,20 @@ export interface TagIndex {
 type Translate = Pick<Words, 'lang' | 't'>;
 
 function add(map: Map<string, string[]>, text: string, id: string): void {
-    const key = tagText(text);
-    if (!key) return;
-    const list = map.get(key);
-    if (!list) map.set(key, [id]);
-    else if (!list.includes(id)) list.push(id);
+    for (const key of tagForms(text)) {
+        if (!key) continue;
+        const list = map.get(key);
+        if (!list) map.set(key, [id]);
+        else if (!list.includes(id)) list.push(id);
+    }
+}
+
+function find(map: ReadonlyMap<string, readonly string[]>, text: string): readonly string[] {
+    for (const key of tagForms(text)) {
+        const ids = map.get(key);
+        if (ids) return ids;
+    }
+    return [];
 }
 
 /**
@@ -118,22 +136,22 @@ export function buildTagIndex(words?: Translate): TagIndex {
         for (const key of tag.synonymKeys ?? []) add(names, key, tag.id);
         for (const w of tag.words ?? []) add(aliases, w, tag.id);
         for (const w of tag.aliases ?? []) add(aliases, w, tag.id);
-        own.push([tagText(label), tag.id]);
-        if (lang !== 'en') english.push([tagText(en), tag.id]);
+        for (const form of tagForms(label)) own.push([form, tag.id]);
+        if (lang !== 'en') for (const form of tagForms(en)) english.push([form, tag.id]);
     }
     const matches = (text: string, q: string) => text.startsWith(q) || text.includes(` ${q}`);
     return {
         lang,
-        byName: (text) => names.get(tagText(text)) ?? [],
-        byAlias: (text) => aliases.get(tagText(text)) ?? [],
+        byName: (text) => find(names, text),
+        byAlias: (text) => find(aliases, text),
         search(text, limit = 8) {
-            const q = tagText(text);
-            if (q.length < 2) return [];
+            const qs = tagForms(text);
+            if (qs[0].length < 2) return [];
             const out: string[] = [];
             for (const list of [own, english]) {
                 for (const [label, id] of list) {
                     if (out.length >= limit) return out;
-                    if (matches(label, q) && !out.includes(id)) out.push(id);
+                    if (qs.some((q) => matches(label, q)) && !out.includes(id)) out.push(id);
                 }
             }
             return out;

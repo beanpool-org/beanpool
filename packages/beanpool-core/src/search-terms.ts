@@ -79,10 +79,16 @@ export function compoundWords(text: string): string[] {
     const words: string[] = [];
     for (const chunk of text.toLowerCase().replace(NOT_WORD_SPACE, ' ').split(/\s+/)) {
         const bare = chunk.replace(ASCII_MARKS_AROUND, '');
-        if (COMPOUND.test(bare)) words.push(foldApostrophes(bare.replace(/[‐‑]/g, '-')));
+        if (COMPOUND.test(bare)) words.push(foldApostrophes(bare.replace(/[\u2010\u2011]/g, '-')));
         else words.push(...plainWords(chunk));
     }
     return words;
+}
+
+/** A text with each compound joined, as queryWords looks it up (wi-fi → wifi: the joined form is what the synonyms are keyed
+ *  on): "Wi-Fi setup" → "wifi setup". The tag index keys and finds a text by this form too, so "Wi-Fi" finds the label "Wifi". */
+export function joinCompounds(text: string): string {
+    return compoundWords(text).map((w) => w.replace(COMPOUND_JOINS, '')).join(' ');
 }
 
 /** The words of a query: a compound whole and joined (wi-fi, wifi: the joined form is what the synonyms are looked up on),

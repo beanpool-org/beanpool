@@ -415,3 +415,14 @@ describe('TakeoverLockPanel — check a code', () => {
         expect((within(again).getByLabelText('Recovery code') as HTMLInputElement).value).toBe('');
     });
 });
+
+describe('TakeoverLockPanel — an owner\'s way back is the community\'s (vault rethink VR8)', () => {
+    it('the card cross-links the app\'s Ways back, whatever the lock says', async () => {
+        mockNode({ [statusRoute]: { json: SEALED }, [backupRoute]: { json: { role: 'primary', backupLock: LOCKED } } });
+        render(<TakeoverLockPanel activeNode={node} />);
+        const line = await screen.findByTestId('takeover-ways-back');
+        expect(line).toHaveTextContent("Each owner's own key opens it, so an owner's way back is also the community's.");
+        expect(line).toHaveTextContent('Settings → Account Protection → Where your account can be brought back from');
+        expect(line).toHaveTextContent('Only an owner can bring an owner back.');
+    });
+});

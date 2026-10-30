@@ -73,6 +73,7 @@ import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
 import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
+import { deleteCommunityCopy } from './engine/community-copy.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledges.js';
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
@@ -9067,6 +9068,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Through deleteAllShares, which writes the tombstone that deletes them on a standby too. Not in a try: a copy left
         // behind here would still bring the deleted account back, so a failure fails the deletion instead.
         deleteAllShares(publicKey);
+        // And their community copy (engine/community-copy.ts), with its tombstone: the same reason, not in a try either.
+        deleteCommunityCopy(publicKey);
         try {
             // By the owner each row names, which a server that took over has too (its sessions stay each server's own), and
             // by their sessions here, for a row made before rows named their owner.

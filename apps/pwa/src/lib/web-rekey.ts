@@ -14,6 +14,9 @@
  * not bound.
  */
 
+import {
+    communityCopyFromRelease, openReleaseOnDevice, openSeedWithCopyKey, toEd25519Pkcs8, type SealedShare,
+} from '@beanpool/core';
 import { generateIdentity, type BeanPoolIdentity, type PendingJoin } from './identity';
 
 /** How often the screen asks whether the admin has bound this device. */
@@ -21,18 +24,30 @@ export const WEB_REKEY_POLL_MS = 3000;
 /** How long the new key's record says it waits: the code's own life. */
 export const WEB_REKEY_TTL_MS = 24 * 60 * 60 * 1000;
 
-const CODE = /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/;
+/** `RK-` (a re-key: a NEW key) or `BB-` (a bring-back: the SAME key, vault rethink VR3), and two groups of four hex digits. */
+const CODE = /^(RK|BB)-[0-9A-F]{4}-[0-9A-F]{4}$/;
 
-/** The code as the admin's screen spells it, whatever case, spaces or missing dashes were typed. */
+/**
+ * The code as the admin's screen spells it, whatever case, spaces or missing dashes were typed. Eight hex digits alone
+ * are a re-key code, as before bring-backs (`BB` is two hex digits too): only ten characters starting RK or BB name it.
+ */
 export function cleanRekeyCode(raw: unknown): string {
     if (typeof raw !== 'string') return '';
     const s = raw.trim().toUpperCase().replace(/\s+/g, '');
-    const hex = s.replace(/^RK-?/, '').replace(/-/g, '');
-    return /^[0-9A-F]{8}$/.test(hex) ? `RK-${hex.slice(0, 4)}-${hex.slice(4)}` : s;
+    const bare = s.replace(/-/g, '');
+    const named = /^(RK|BB)[0-9A-F]{8}$/.test(bare);
+    const prefix = named ? bare.slice(0, 2) : 'RK';
+    const hex = named ? bare.slice(2) : bare;
+    return /^[0-9A-F]{8}$/.test(hex) ? `${prefix}-${hex.slice(0, 4)}-${hex.slice(4)}` : s;
 }
 
 export function isRekeyCode(raw: unknown): boolean {
     return CODE.test(cleanRekeyCode(raw));
+}
+
+/** A bring-back code (`BB-`): the same key comes back, nothing moves (vault rethink VR3). */
+export function isBringBackCode(raw: unknown): boolean {
+    return isRekeyCode(raw) && cleanRekeyCode(raw).startsWith('BB-');
 }
 
 /** The `?rekey=` a dashboard's QR opens this page with, or null. */
@@ -48,6 +63,8 @@ export function rekeyCodeFromSearch(search: string): string | null {
 export type WebRekeyAnswer =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
+    /** A bring-back the admin confirmed with this device's number: the member's copy and its key, sealed to the asking key. */
+    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare }
     | { state: 'declined' }
     | { state: 'gone' }
     | { state: 'refused'; message: string; code?: string }
@@ -70,6 +87,8 @@ export interface WebRekeyDeps {
     signReEnrollAsk(code: string, privateKeyHex: string): Promise<{ signature: string; signedFor: string }>;
     signedFetchWithKey(method: string, path: string, body: unknown, privateKeyHex: string, publicKeyHex: string): Promise<Response>;
     generateIdentity?: (callsign: string) => Promise<BeanPoolIdentity>;
+    /** A bring-back's account saved as this browser's, never over another (lib/identity.ts importIdentity). */
+    importIdentity?: (identity: BeanPoolIdentity) => Promise<void>;
 }
 
 export const WEB_REKEY_TEXT = {
@@ -98,6 +117,10 @@ function readAnswer(status: number, body: any): WebRekeyAnswer {
     if (status === 200 && body && typeof body.state === 'string') {
         if (body.state === 'waiting' && typeof body.match === 'string') return { state: 'waiting', match: body.match, expiresAt: String(body.expiresAt ?? '') };
         if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), linkSignInAgain: body.linkSignInAgain === true };
+        if (body.state === 'released' && typeof body.memberKey === 'string' && /^[0-9a-f]{64}$/.test(body.memberKey)
+            && body.release && typeof body.release === 'object') {
+            return { state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare };
+        }
         if (body.state === 'declined') return { state: 'declined' };
         if (body.state === 'gone') return { state: 'gone' };
     }
@@ -136,6 +159,45 @@ export async function pollWebRekey(code: string, key: WebRekeyKey, deps: WebReke
 export async function finishWebRekey(key: WebRekeyKey, answer: { callsign: string }, deps: WebRekeyDeps): Promise<BeanPoolIdentity> {
     const member = { ...key.identity, callsign: answer.callsign || key.identity.callsign };
     if (key.madeHere) await deps.completePendingJoin(member);
+    return member;
+}
+
+/** A bring-back's release that didn't open to the account it names: nothing is saved. */
+export const WEB_BRING_BACK_NOT_OPENED = 'What your community sent didn’t open to your account, so nothing was saved. Ask the admin to try again.';
+
+const toHex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+/**
+ * A bring-back (vault rethink VR3): open the release with the key this browser asked with, then the member's community
+ * copy with the key beside it, as the account the answer names (core openSeedWithCopyKey checks the seed makes it).
+ * Returns the member, keyed as this browser keeps keys (PKCS8, as mnemonic.ts makes them); throws an Error with
+ * {@link WEB_BRING_BACK_NOT_OPENED} when anything doesn't open.
+ */
+export function openWebBringBack(code: string, key: WebRekeyKey, answer: Extract<WebRekeyAnswer, { state: 'released' }>): BeanPoolIdentity {
+    try {
+        const released = openReleaseOnDevice(answer.release, key.identity.privateKey, { collectionId: cleanRekeyCode(code), holderType: 'community' });
+        const copy = communityCopyFromRelease(released);
+        const opened = openSeedWithCopyKey(copy.copy, copy.copyKey, answer.memberKey);
+        return {
+            publicKey: answer.memberKey,
+            privateKey: toHex(toEd25519Pkcs8(opened.seed)),
+            callsign: answer.callsign,
+            createdAt: new Date().toISOString(),
+            ...(opened.words ? { mnemonic: opened.words } : {}),
+        } as BeanPoolIdentity;
+    } catch {
+        throw new Error(WEB_BRING_BACK_NOT_OPENED);
+    }
+}
+
+/**
+ * Save a bring-back's account as this browser's: first the account (refused, nothing changed, when this browser holds
+ * another: IdentityHeldError), then the key this ask made is let go (it was never an account; the node bound nothing).
+ */
+export async function finishWebBringBack(key: WebRekeyKey, member: BeanPoolIdentity, deps: WebRekeyDeps): Promise<BeanPoolIdentity> {
+    if (!deps.importIdentity) throw new Error(WEB_REKEY_TEXT.unreachable);
+    await deps.importIdentity(member);
+    if (key.madeHere) await deps.releaseSentPendingJoin({ kind: 'abandoned', publicKey: key.identity.publicKey, sentAt: key.sentAt }).catch(() => {});
     return member;
 }
 

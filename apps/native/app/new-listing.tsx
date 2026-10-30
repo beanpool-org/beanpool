@@ -611,11 +611,12 @@ export default function NewListingScreen() {
                 resetNewPost();
                 setShowNewPost(false);
                 setPosting(false);
-                // On to the member's deals, as from the map's sheet. This screen goes first, so Back from there is not
+                // On to the member's deals, where the map's sheet sent them (by `/`, which Home passed on to the
+                // Market: map.tsx could not name the Market itself). This screen goes first, so Back from there is not
                 // the form again; the map reads its pins afresh when it shows (its useFocusEffect).
                 left.current = true;
                 if (router.canDismiss()) router.dismissAll();
-                router.push({ pathname: '/', params: { tab: 'deals', dealsTab: 'active' } });
+                router.push({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'active' } });
             }, 300);
         } catch (e: any) {
             console.error(e);

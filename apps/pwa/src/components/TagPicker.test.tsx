@@ -76,11 +76,11 @@ describe('TagPicker Web Component', () => {
 
         // English search from 2 chars
         const enResults = index.search('le');
-        expect(enResults.some(t => t.id === 'food.fruit.lemon')).toBe(true);
+        expect(enResults.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
 
         // Spanish search from 2 chars
         const esResults = index.search('lim');
-        expect(esResults.some(t => t.id === 'food.fruit.lemon')).toBe(true);
+        expect(esResults.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
     });
 
     it('suggests up to 8 tags from title, description and category', () => {

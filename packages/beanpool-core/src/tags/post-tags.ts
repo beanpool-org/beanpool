@@ -12,7 +12,9 @@ export const POST_TAGS_CHARS = 200;
 
 /** The ids a stored `posts.tags` holds, in its order; [] for none. */
 export function postTagsOf(stored: unknown): string[] {
-    return typeof stored === 'string' && stored ? stored.split(' ').filter(Boolean) : [];
+    if (Array.isArray(stored)) return stored.filter((t): t is string => typeof t === 'string' && Boolean(t));
+    if (typeof stored === 'string' && stored.trim()) return stored.trim().split(/\s+/).filter(Boolean);
+    return [];
 }
 
 /** The column's value for these ids: space-separated, '' for none. */

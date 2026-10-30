@@ -39,14 +39,14 @@ describe('TagPicker logic', () => {
         // Search from 2 characters in English
         const enMatches = index.search('le');
         expect(enMatches.length).toBeGreaterThan(0);
-        expect(enMatches.some(t => t.id === 'food.fruit.lemon')).toBe(true);
+        expect(enMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
 
         // Search in Spanish ("lim" or "limón")
         const esMatches = index.search('lim');
-        expect(esMatches.some(t => t.id === 'food.fruit.lemon')).toBe(true);
+        expect(esMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
 
         const esFullMatches = index.search('limón');
-        expect(esFullMatches.some(t => t.id === 'food.fruit.lemon')).toBe(true);
+        expect(esFullMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
     });
 
     it('returns up to 8 suggested tags from title, description and category', () => {

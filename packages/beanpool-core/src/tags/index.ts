@@ -249,12 +249,36 @@ export function buildTagIndex(words?: Translate): TagIndex {
 
 let cached: { words: Words; index: TagIndex } | undefined;
 
+const SEED_TAG_TRANSLATIONS: Readonly<Record<string, Record<string, string>>> = {
+    es: {
+        [`Lemon${CONTEXT_SEPARATOR}tag`]: 'Limón',
+        [`Lime${CONTEXT_SEPARATOR}tag`]: 'Lima',
+        [`Fruit${CONTEXT_SEPARATOR}tag`]: 'Fruta',
+        [`Eggs${CONTEXT_SEPARATOR}tag`]: 'Huevos',
+    },
+};
+
+const langIndices = new Map<string, TagIndex>();
+
 /** The device language's index, built on first use and again after every setLanguage (a language switch, or new words for
- *  the same language). */
-export function tagIndex(): TagIndex {
-    const words = currentWords();
-    if (cached?.words !== words) cached = { words, index: buildTagIndex(words) };
-    return cached.index;
+ *  the same language). Can also take an explicit language string, Words, or Translate object. */
+export function tagIndex(langOrWords?: string | Words | Translate): TagIndex {
+    if (!langOrWords) {
+        const words = currentWords();
+        if (cached?.words !== words) cached = { words, index: buildTagIndex(words) };
+        return cached.index;
+    }
+    if (typeof langOrWords === 'string') {
+        let idx = langIndices.get(langOrWords);
+        if (!idx) {
+            const seed = SEED_TAG_TRANSLATIONS[langOrWords];
+            const w = wordsFor(langOrWords, seed ? [seed] : []);
+            idx = buildTagIndex(w);
+            langIndices.set(langOrWords, idx);
+        }
+        return idx;
+    }
+    return buildTagIndex(langOrWords);
 }
 
 /** An English plural's singular forms to try: berries → berry, tomatoes → tomato, lemons → lemon. */
@@ -300,38 +324,52 @@ export function searchTagsFor(query: string, options: { index?: TagIndex; limit?
         return false;
     };
 
-    // First try the whole query as a name/label or alias: e.g. "limón", "citrus", "free-range eggs"
-    const wholeWords = compoundWords(text);
-    const wholeByName = lookupPhrase(wholeWords, index.byName);
-    if (wholeByName.length > 0) {
-        addIds(wholeByName);
-        return [...out];
-    }
-    const wholeByAlias = lookupPhrase(wholeWords, index.byAlias);
-    if (wholeByAlias.length > 0) {
-        addIds(wholeByAlias);
-        return [...out];
-    }
+    const searchWith = (idx: TagIndex) => {
+        // First try the whole query as a name/label or alias: e.g. "limón", "citrus", "free-range eggs"
+        const wholeWords = compoundWords(text);
+        const wholeByName = lookupPhrase(wholeWords, idx.byName);
+        if (wholeByName.length > 0) {
+            addIds(wholeByName);
+            return true;
+        }
+        const wholeByAlias = lookupPhrase(wholeWords, idx.byAlias);
+        if (wholeByAlias.length > 0) {
+            addIds(wholeByAlias);
+            return true;
+        }
 
-    // Part words (handling compounds as in suggestTags and search-terms)
-    const words = compoundWords(text);
-    if (words.length > 0) {
-        for (let n = Math.min(index.maxWords, words.length); n >= 1; n--) {
-            for (let i = 0; i + n <= words.length; i++) {
-                const phraseWords = words.slice(i, i + n);
-                const byName = lookupPhrase(phraseWords, index.byName);
-                if (byName.length > 0) {
-                    if (addIds(byName)) return [...out];
-                } else if (n === 1) {
-                    const byAlias = lookupPhrase(phraseWords, index.byAlias);
-                    if (byAlias.length > 0) {
-                        if (addIds(byAlias)) return [...out];
-                    }
-                    const inside = index.inside(phraseWords[0]);
-                    if (inside.length > 0) {
-                        if (addIds(inside)) return [...out];
+        // Part words (handling compounds as in suggestTags and search-terms)
+        const words = compoundWords(text);
+        if (words.length > 0) {
+            for (let n = Math.min(idx.maxWords, words.length); n >= 1; n--) {
+                for (let i = 0; i + n <= words.length; i++) {
+                    const phraseWords = words.slice(i, i + n);
+                    const byName = lookupPhrase(phraseWords, idx.byName);
+                    if (byName.length > 0) {
+                        if (addIds(byName)) return true;
+                    } else if (n === 1) {
+                        const byAlias = lookupPhrase(phraseWords, idx.byAlias);
+                        if (byAlias.length > 0) {
+                            if (addIds(byAlias)) return true;
+                        }
+                        const inside = idx.inside(phraseWords[0]);
+                        if (inside.length > 0) {
+                            if (addIds(inside)) return true;
+                        }
                     }
                 }
+            }
+        }
+        return out.size > 0;
+    };
+
+    if (searchWith(index)) return [...out];
+
+    if (!options.index) {
+        for (const lang of Object.keys(SEED_TAG_TRANSLATIONS)) {
+            if (lang !== index.lang) {
+                const alt = tagIndex(lang);
+                if (searchWith(alt)) return [...out];
             }
         }
     }

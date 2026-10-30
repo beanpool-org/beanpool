@@ -3,7 +3,7 @@
 // "Show everywhere" already makes, without a tap and without repeating one. From 8 near, nothing changes.
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FILL_BELOW, FILL_MAX } from '@beanpool/core';
+import { FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS } from '@beanpool/core';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
@@ -124,6 +124,14 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
         expect(within(fill).getByText('Far 0')).toBeInTheDocument();
     });
 
+    it('7 real near listings + a pulse: the fill still shows', async () => {
+        const pulse = listing('pulse-post', 'Daily thought', { authorCallsign: 'Daily Pulse' });
+        vi.mocked(api.getMarketplacePosts).mockImplementation(node([...nearOf(7), pulse], farOf(2)));
+        render(<MarketplacePage identity={identity} />);
+        const fill = await screen.findByTestId('market-fill');
+        expect(within(fill).getByText('Far 0')).toBeInTheDocument();
+    });
+
     it('never takes the list past a page', async () => {
         vi.mocked(api.getMarketplacePosts).mockImplementation(node(nearOf(3), farOf(120)));
         render(<MarketplacePage identity={identity} />);
@@ -156,7 +164,7 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
         expect(nearReads().at(-1)).toMatchObject({ type: 'offer', category: 'services' });
     });
 
-    it('a search applies to both parts', async () => {
+    it('no fill while a search is typed (the phone\'s rule)', async () => {
         vi.mocked(api.getMarketplacePosts).mockImplementation(node(
             [listing('near-bike', 'Bicycle repair'), listing('near-jam', 'Jam jars')],
             [listing('far-bike', 'Bicycle pump', { lat: 48.8, lng: 2.3 }), listing('far-tea', 'Tea', { lat: 48.8, lng: 2.3 })],
@@ -166,8 +174,31 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
         fireEvent.change(screen.getByPlaceholderText('Search marketplace...'), { target: { value: 'bicycle' } });
         await waitFor(() => expect(screen.queryByText('Jam jars')).toBeNull());
         expect(screen.getByText('Bicycle repair')).toBeInTheDocument();
+        // The fill is turned off while searching
+        expect(screen.queryByTestId('market-fill')).toBeNull();
+        expect(screen.queryByText('Bicycle pump')).toBeNull();
+        // Clearing the search restores the fill
+        fireEvent.change(screen.getByPlaceholderText('Search marketplace...'), { target: { value: '' } });
+        await screen.findByTestId('market-fill');
         expect(within(screen.getByTestId('market-fill')).getByText('Bicycle pump')).toBeInTheDocument();
-        expect(screen.queryByText('Tea')).toBeNull();
+    });
+
+    it('a fill read gives up after 20 s (READ_TIMEOUT_MS) and does not hold Loading forever', async () => {
+        vi.useFakeTimers();
+        try {
+            vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) =>
+                (f?.author || f?.online ? [] : f?.lat != null ? [] : new Promise(() => {})) as any);
+            render(<MarketplacePage identity={identity} />);
+            await vi.advanceTimersByTimeAsync(0);
+            expect(screen.getByText('Loading...')).toBeInTheDocument();
+            await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS - 1);
+            expect(screen.getByText('Loading...')).toBeInTheDocument();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(screen.queryByText('Loading...')).toBeNull();
+            expect(screen.getByTestId('market-see-elsewhere')).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('Show everywhere and Near your area still work, and the list is not filled on top of everywhere', async () => {

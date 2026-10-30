@@ -1374,7 +1374,7 @@ export async function getMarketplacePosts(filter?: {
     online?: boolean;
     /** Enterprise's listings as its keeper reads them: includes paused listings (routes/marketplace.ts). */
     keeper?: boolean;
-}): Promise<MarketplacePost[]> {
+}, signal?: AbortSignal): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
@@ -1396,7 +1396,7 @@ export async function getMarketplacePosts(filter?: {
     }
     if (filter?.sort) params.set('sort', filter.sort);
     if (filter?.online) params.set('online', '1');
-    return request('GET', `/api/marketplace/posts?${params}`);
+    return request('GET', `/api/marketplace/posts?${params}`, undefined, signal);
 }
 
 export async function createMarketplacePost(post: {

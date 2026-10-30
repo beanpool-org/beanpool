@@ -2,10 +2,10 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-23",
+    "updated": "2026-10-30",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” এই কমিউনিটিতে আগেই নেওয়া হয়ে গেছে। অন্য একটি নাম বেছে নিন।",
@@ -3619,5 +3619,8 @@
   "Got an idea that needs Beans? Start a project.": "এমন কোনো ধারণা আছে যার জন্য শিম প্রয়োজন? একটি প্রকল্প শুরু করুন।",
   "Something that keeps going and trades? Start an enterprise.": "এমন কিছু যা নিয়মিত চলবে এবং লেনদেন করবে? একটি উদ্যোগ শুরু করুন।",
   "Start one with +: a chat group, a project or an enterprise.": "+ দিয়ে একটি শুরু করুন: একটি চ্যাট গ্রুপ, একটি প্রকল্প বা একটি উদ্যোগ।",
-  "No projects to back yet": "সমর্থন করার মতো এখনো কোনো প্রকল্প নেই"
+  "No projects to back yet": "সমর্থন করার মতো এখনো কোনো প্রকল্প নেই",
+  "Second pause in 30 days. The last vote said No.": "30 দিনের মধ্যে দ্বিতীয়বার স্থগিত। আগের ভোটের ফল ছিল 'না'।",
+  "Second pause in 30 days. Too few members voted on the last one.": "30 দিনের মধ্যে দ্বিতীয়বার স্থগিত। আগের ভোটে খুব কম সদস্য ভোট দিয়েছিলেন।",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "30 দিনের মধ্যে দ্বিতীয়বার স্থগিত। আগের ভোটটি শেষ হওয়ার আগেই থামিয়ে দেওয়া হয়েছিল।"
 }

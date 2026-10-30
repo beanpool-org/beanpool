@@ -2,10 +2,10 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-23",
+    "updated": "2026-10-30",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "fagioli",
@@ -6127,5 +6127,8 @@
   "Nothing within 250 km yet.": "Ancora nulla nel raggio di 250 km.",
   "See what people post elsewhere ›": "Guarda cosa pubblicano altrove ›",
   "Set your area": "Imposta la tua zona",
-  "The purpose statement is what the community judges the project or enterprise against.": "La comunità valuta il progetto o l'impresa in base alla dichiarazione d'intenti."
+  "The purpose statement is what the community judges the project or enterprise against.": "La comunità valuta il progetto o l'impresa in base alla dichiarazione d'intenti.",
+  "Second pause in 30 days. The last vote said No.": "Seconda pausa in 30 giorni. L'ultima votazione ha detto No.",
+  "Second pause in 30 days. Too few members voted on the last one.": "Seconda pausa in 30 giorni. All'ultima votazione hanno votato troppo pochi membri.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Seconda pausa in 30 giorni. L'ultima votazione è stata fermata prima della chiusura."
 }

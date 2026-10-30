@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-30",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” ഈ കമ്മ്യൂണിറ്റിയിൽ ഇതിനകം എടുത്തുകഴിഞ്ഞു. മറ്റൊരു പേര് തിരഞ്ഞെടുക്കുക.",
@@ -3619,5 +3619,8 @@
   "Got an idea that needs Beans? Start a project.": "പയർ ആവശ്യമുള്ള ഒരു ആശയമുണ്ടോ? ഒരു പ്രോജക്റ്റ് ആരംഭിക്കുക.",
   "Something that keeps going and trades? Start an enterprise.": "തുടർന്നും പ്രവർത്തിക്കുകയും ഇടപാടുകൾ നടത്തുകയും ചെയ്യുന്ന ഒന്നാണോ? ഒരു സംരംഭം ആരംഭിക്കുക.",
   "Start one with +: a chat group, a project or an enterprise.": "+ ഉപയോഗിച്ച് ഒരെണ്ണം ആരംഭിക്കുക: ഒരു ചാറ്റ് ഗ്രൂപ്പ്, ഒരു പ്രോജക്റ്റ് അല്ലെങ്കിൽ ഒരു സംരംഭം.",
-  "No projects to back yet": "പിന്തുണയ്ക്കാൻ ഇതുവരെ പ്രോജക്റ്റുകളൊന്നുമില്ല"
+  "No projects to back yet": "പിന്തുണയ്ക്കാൻ ഇതുവരെ പ്രോജക്റ്റുകളൊന്നുമില്ല",
+  "Second pause in 30 days. The last vote said No.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ടിന്റെ ഫലം 'അല്ല' എന്നായിരുന്നു.",
+  "Second pause in 30 days. Too few members voted on the last one.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ടിൽ വളരെ കുറച്ച് അംഗങ്ങളേ വോട്ട് ചെയ്തുള്ളൂ.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ട് അവസാനിക്കുന്നതിന് മുമ്പ് നിർത്തിവച്ചു."
 }

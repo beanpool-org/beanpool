@@ -130,7 +130,7 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
             )}
             {kept && !offered && <p className="text-xs text-nature-600 dark:text-nature-300 m-0">{t(COMMUNITY_ADMINS_WEB.noLongerOffered)}</p>}
             {justOn && kept && <p role="status" className="text-xs m-0">{t(COMMUNITY_ADMINS_WEB.turnedOn)}</p>}
-            {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 m-0">{error}</p>}
+            {error && <p role="alert" className="text-xs text-red-600 dark:text-red-300 m-0">{error}</p>}
             <div className="flex flex-wrap gap-2">
                 {canTurnOn && (
                     <button type="button" disabled={busy} onClick={turnOn} className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill text-bp-commit-on text-sm font-semibold disabled:opacity-50" data-testid="community-admins-turn-on">

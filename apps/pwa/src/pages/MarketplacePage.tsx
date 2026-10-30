@@ -24,7 +24,7 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
-    FILL_BELOW, elsewhereFill, wantsFill,
+    FILL_BELOW, FILL_MAX, elsewhereFill, wantsFill,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -1288,7 +1288,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     useEffect(() => {
         if (!fillWanted) return;
         let live = true;
-        getMarketplacePosts(fillFilter)
+        // One page (the node's own 50), so the fill never holds more than core's FILL_MAX.
+        getMarketplacePosts({ ...fillFilter, limit: FILL_MAX })
             .then(rows => { if (live) setElsewhere({ key: fillKey, posts: rows }); })
             .catch(() => { if (live) setElsewhere({ key: fillKey, posts: null }); });
         return () => { live = false; };

@@ -769,6 +769,8 @@ describe('Remove everything', () => {
                 { url: MULLUM, name: 'Mullumbimby', provider: 'google', removal: { removed: true } },
                 { url: GLOBAL, name: 'Global community', provider: 'google', removal: { removed: true } },
             ],
+            // Neither keeps a copy for its admins (vault rethink VR3): nothing to remove there.
+            admins: [],
             notAsked: [],
         });
         expect(vaultDeletes(net).map((s) => s.body)).toEqual([expect.objectContaining({ all: true })]);
@@ -968,7 +970,7 @@ describe("your community's admins (vault rethink VR3): their copy is listed, sin
         expect(knownCopies(await listWaysBack(kim)).some((c) => c.at === 'admins')).toBe(false);
     });
 
-    for (const [what, how] of [['refuses it (a standby, a 5xx)', 'refused'], ['answers with a proxy's page', 'proxy']] as const) {
+    for (const [what, how] of [['refuses it (a standby, a 5xx)', 'refused'], ["answers with a proxy's page", 'proxy']] as const) {
         it(`a community that ${what}: not removed, still listed, and not remembered as waiting`, async () => {
             const net = network();
             await kimsPhone(net);

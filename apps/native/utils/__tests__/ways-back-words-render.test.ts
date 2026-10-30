@@ -3,8 +3,9 @@
  * "Where your account can be brought back from" (vault rethink VR1; app/ways-back.tsx drawing
  * components/WaysBackList.tsx), rendered for real inside the real LanguageProvider: every state of the list (the vault's
  * copies with since and a last restore, a vault that couldn't say, communities that keep a copy, keep none, didn't
- * answer, a delete still waiting, the words-only line), every confirm (one copy, the last one with the 12 words first,
- * the last one on a phone with no words, Remove everything) and every result line.
+ * answer, a delete still waiting, the words-only line, the copy a community keeps for its admins, VR3), every confirm
+ * (one copy, the last one with the 12 words first, the last one on a phone with no words, Remove everything, the admins'
+ * copy) and every result line.
  *
  * In the pseudo-locale (`xx`: every sentence accented, padded and bracketed) any text, label or alert with letters
  * outside a bracket bypassed t(). In English, what each confirm offers and that a result says only what each keeper
@@ -91,6 +92,7 @@ const fx = vi.hoisted(() => ({
     writtenDown: false,
     everything: null as any,
     removed: [] as unknown[],
+    adminsRemoval: { removed: true } as any,
 }));
 vi.mock('../ways-back', async (importOriginal) => {
     const real = await importOriginal<typeof import('../ways-back')>();
@@ -102,6 +104,7 @@ vi.mock('../ways-back', async (importOriginal) => {
         removeVaultCopy: async (_i: unknown, provider: string) => { fx.removed.push(['vault', provider]); return { removed: true }; },
         removeCommunityCopyFrom: async (_i: unknown, c: { url: string }, provider: string) => { fx.removed.push([c.url, provider]); return { removed: false, why: 'remembered' }; },
         removeEverything: async () => { fx.removed.push('everything'); return fx.everything; },
+        removeAdminsCopyFrom: async (_i: unknown, c: { url: string }) => { fx.removed.push([c.url, 'admins']); return fx.adminsRemoval; },
     };
 });
 
@@ -114,14 +117,14 @@ const WORDS = 'apple banana cherry delta eagle fabric garden hollow island jungl
 /** Shown as they are in every language: the sign-ins' names, the communities' own names, the dates' digits. */
 const AS_WRITTEN = ['Google', 'Apple', 'Facebook', 'Mullumbimby', 'Global community', 'Bellingen'];
 
-/** Every state at once: the vault's two copies (one brought the account back), and three communities. */
+/** Every state at once: the vault's two copies (one brought the account back), and three communities, one keeping a copy for its admins. */
 const FULL: WaysBack = {
     vault: { kind: 'listed', copies: [
         { provider: 'google', since: '2026-10-03', lastReleasedAt: Date.UTC(2026, 9, 12, 9) },
         { provider: 'facebook', since: '2026-10-20', lastReleasedAt: null },
     ] },
     communities: [
-        { url: MULLUM, name: 'Mullumbimby', status: { providers: ['google', 'apple'], generation: 3 } },
+        { url: MULLUM, name: 'Mullumbimby', status: { providers: ['google', 'apple'], generation: 3, adminsCopy: { since: '2026-10-29T04:05:06.000Z' } } },
         { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
         { url: BELL, name: 'Bellingen', status: null },
     ],
@@ -149,7 +152,7 @@ let root: Root | null = null;
 let host: HTMLElement | null = null;
 beforeEach(() => {
     alerts.shown.length = 0; nav.pushed.length = 0; fx.removed.length = 0;
-    fx.ways = FULL; fx.writtenDown = false; fx.everything = null;
+    fx.ways = FULL; fx.writtenDown = false; fx.everything = null; fx.adminsRemoval = { removed: true };
     me.identity.mnemonic = WORDS;
     setLanguage('en');
 });
@@ -247,6 +250,7 @@ describe('every sentence through t(), in every state and every confirm (pseudo-l
         fx.everything = {
             vault: { removed: false, why: 'unverified' },
             communities: [{ url: MULLUM, name: 'Mullumbimby', provider: 'google', removal: { removed: false, why: 'remembered' } }],
+            admins: [{ url: MULLUM, name: 'Mullumbimby', removal: { removed: false, why: 'unreachable' } }],
             notAsked: [{ url: BELL, name: 'Bellingen' }],
         };
         await mount('xx');
@@ -341,6 +345,7 @@ describe('what each confirm offers, and what a result says (English)', () => {
         fx.everything = {
             vault: { removed: false, why: 'paused' },
             communities: [{ url: MULLUM, name: 'Mullumbimby', provider: 'google', removal: { removed: false, why: 'remembered' } }],
+            admins: [{ url: MULLUM, name: 'Mullumbimby', removal: { removed: false, why: 'unreachable' } }],
             notAsked: [{ url: BELL, name: 'Bellingen' }],
         };
         await mount('en');
@@ -356,7 +361,33 @@ describe('what each confirm offers, and what a result says (English)', () => {
         expect(text).toContain("Not removed: BeanPool's key vault is paused for a little while. Try again later.");
         expect(text).toContain("Not removed yet: Mullumbimby didn't answer. The app tries again each time it opens.");
         expect(text).toContain("Bellingen didn't answer, so nothing kept there was removed. Open this screen again later.");
+        expect(text).toContain("Not removed: Mullumbimby couldn't do it just now. Try again later.");
         expect(text).not.toMatch(/Removed from/);
+    });
+
+    it("the copy Mullumbimby keeps for its admins (VR3): its row with since when, its own confirm, and only what Mullumbimby answered", async () => {
+        await mount('en');
+        // Drawn under Mullumbimby, after its sign-in copies and before the next community (the host stubs carry no testID).
+        const text = host!.textContent!;
+        const row = text.slice(text.indexOf('Mullumbimby'), text.indexOf('Global community'));
+        expect(row).toContain("Your community's admins");
+        expect(row).toContain('A locked copy an admin can bring your account back from, when they see you in person.');
+        expect(row).toMatch(/Kept since 29 Oct 2026/);
+        await click(buttonNamed('Remove the copy at Mullumbimby that its admins can bring you back from'), 'Remove the admins copy');
+        const a = alerts.shown.at(-1)!;
+        // Other copies stay (the vault's, Mullumbimby's Google): an ordinary confirm, in the row's own words.
+        expect(a.title).toBe('Remove this way back?');
+        expect(a.body).toBe("Mullumbimby's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.");
+        expect(a.buttons.map(b => b.text)).toEqual(['Cancel', 'Remove']);
+        await press('Remove');
+        expect(fx.removed).toEqual([[MULLUM, 'admins']]);
+        expect(host!.textContent).toContain('Removed from Mullumbimby.');
+
+        fx.adminsRemoval = { removed: false, why: 'unreachable' };
+        await click(buttonNamed('Remove the copy at Mullumbimby that its admins can bring you back from'), 'Remove the admins copy again');
+        await press('Remove');
+        expect(host!.textContent).toContain("Not removed: Mullumbimby couldn't do it just now. Try again later.");
+        expect(host!.textContent).not.toContain('Removed from Mullumbimby.');
     });
 
     it('the list in English: since, the last restore, a delete waiting, a community that did not answer', async () => {

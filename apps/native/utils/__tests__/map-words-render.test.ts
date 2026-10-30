@@ -454,10 +454,13 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         root = createRoot(host);
 
         alerts.said.length = 0;
+        // Profile S2 (Marty 29 Oct): a photo in canonical-profile does not satisfy this community's gate.
+        store.map.set('beanpool_canonical_profile', JSON.stringify({ avatar: 'bundled://bean-green' }));
         net.answer = community({ getMemberProfile: {} });
         params.now = { newPost: 'offer' };
         await renderIn('xx', listing());
         expect(said()).toEqual([xx('Finish your profile first'), xx("Your community likes to know who they're dealing with, so you need a photo before you can post. It only takes a moment."), xx('Not now'), xx('Set up profile')]);
+        store.map.delete('beanpool_canonical_profile');
         root.unmount();
         root = createRoot(host);
 

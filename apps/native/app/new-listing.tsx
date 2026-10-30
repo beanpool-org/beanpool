@@ -21,8 +21,8 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { StackActions, useRoute } from '@react-navigation/native';
 import { formatNumber, t, upperCase } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createPost, getBalance, getMemberProfile, getReachablePeers } from '../utils/db';
-import { getCanonicalAvatar } from '../utils/canonical-profile';
+import { createPost, getBalance, getReachablePeers } from '../utils/db';
+import { hasUsableAvatar as sharedHasUsableAvatar } from '../utils/profile-status';
 import { askForPostPhoto } from '../utils/post-photo';
 import { useIdentity } from './IdentityContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -410,16 +410,10 @@ export default function NewListingScreen() {
         setPostReachPeers(Array.isArray(d.postReachPeers) ? d.postReachPeers : []);
     };
 
-    // Posting requires a profile photo. Resolve it from this node's row first,
-    // then the canonical (node-independent) copy — matching the publish path —
-    // so a user who set a photo on ANY community isn't asked again.
+    // Posting requires a profile photo in THIS community (Profile S2, Marty 29 Oct:
+    // the photo of a listing is that community's). A photo chosen elsewhere does not count.
     const hasUsableAvatar = async (): Promise<boolean> => {
-        if (!identity) return false;
-        try {
-            const p = await getMemberProfile(identity.publicKey);
-            if (p?.avatar_url) return true;
-        } catch {}
-        return !!(await getCanonicalAvatar());
+        return identity ? sharedHasUsableAvatar(identity.publicKey) : false;
     };
 
     // Open the composer, but check the profile photo UP FRONT (so nobody

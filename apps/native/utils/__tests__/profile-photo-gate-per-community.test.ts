@@ -5,6 +5,8 @@
  * so a member listed there with a picture they never chose there. Now the gate asks again, in the words it always had.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const phone = vi.hoisted(() => ({
     /** This community's own row for the member, as the copy open holds it. */
@@ -54,5 +56,11 @@ describe('the photo gate asks about this community\'s own row', () => {
         phone.row = { avatar_url: null };
         await hasUsableAvatar(ME);
         expect(canonicalAvatar).not.toHaveBeenCalled();
+    });
+
+    it('the listing form (app/new-listing.tsx) gates on this community only, never canonical-profile', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/new-listing.tsx'), 'utf-8');
+        expect(src).not.toContain('getCanonicalAvatar');
+        expect(src).toContain('sharedHasUsableAvatar(identity.publicKey)');
     });
 });

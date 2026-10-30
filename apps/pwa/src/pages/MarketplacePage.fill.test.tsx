@@ -193,7 +193,9 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
             expect(screen.getByText('Loading...')).toBeInTheDocument();
             await vi.advanceTimersByTimeAsync(READ_TIMEOUT_MS - 1);
             expect(screen.getByText('Loading...')).toBeInTheDocument();
-            await vi.advanceTimersByTimeAsync(1);
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(1);
+            });
             expect(screen.queryByText('Loading...')).toBeNull();
             expect(screen.getByTestId('market-see-elsewhere')).toBeInTheDocument();
         } finally {

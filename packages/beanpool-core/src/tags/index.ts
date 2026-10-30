@@ -95,6 +95,8 @@ function tagForms(text: string): string[] {
 /** The words of one language turned into tag ids. */
 export interface TagIndex {
     readonly lang: string;
+    /** The word count of the longest name in the index, so suggestTags knows how wide a window to slide. */
+    readonly maxWords: number;
     /** The tags a word or phrase names: a label in this language or in English, or a word the old synonym map keyed; a
      *  compound as written or joined ("Wi-Fi" finds "Wifi"). A label in this language beats the rest: Spanish "pan" is
      *  bread, never frying pans by the English synonym word "pan". */
@@ -166,12 +168,18 @@ export function buildTagIndex(words?: Translate): TagIndex {
     }
     // This language's names written without spaces, the longest first: what inside() looks for in a run.
     const unspaced = [...names.keys()].filter((name) => UNSPACED.test(name) && !name.includes(' ')).sort((a, b) => b.length - a.length);
+    let maxWords = 1;
+    for (const key of names.keys()) {
+        const count = key.split(' ').length;
+        if (count > maxWords) maxWords = count;
+    }
     // How near a label is to what is typed: the label itself 0, the label's start 1, a later word's start 2, anywhere in a
     // label of a script written without spaces 3; none -1.
     const nearness = (label: string, q: string) => (label === q ? 0 : label.startsWith(q) ? 1 : label.includes(` ${q}`) ? 2
         : UNSPACED.test(q) && label.includes(q) ? 3 : -1);
     return {
         lang,
+        maxWords,
         byName(text) {
             const mine = find(ownNames, text);
             return mine.length ? mine : find(names, text);

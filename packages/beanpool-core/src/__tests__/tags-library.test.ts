@@ -209,6 +209,8 @@ describe('suggestTags', () => {
         // A compound is also looked up joined, as search looks it up.
         expect(suggestTags('Wi-Fi setup', '', { index })).toEqual(['tech.internet.wifi']);
         expect(suggestTags('Wi-Fi setup', '', { index })).toEqual(suggestTags('Wifi setup', '', { index }));
+        // Labels of four or more words match whole.
+        expect(suggestTags('Odd jobs and help', '', { index })).toEqual(['labour.help']);
         expect(suggestTags('Food', '', { index })).toEqual([]);
         expect(suggestTags('', '', { index })).toEqual([]);
     });
@@ -239,6 +241,12 @@ describe('suggestTags', () => {
         const en = buildTagIndex(wordsFor('en'));
         expect(en.byName('pan')).toEqual(['goods.kitchen.frying-pans']);
         expect(suggestTags('Pan', '', { index: en })).toEqual(['goods.kitchen.frying-pans']);
+        // A four-word label in a drafted language matches whole and beats an English one word.
+        const esFour = buildTagIndex(wordsFor('es', [{
+            [tag('Bread')]: 'Pan casero', [tag('Frying pans')]: 'Sartenes', [tag('Sourdough')]: 'Pan de masa madre',
+        }]));
+        expect(suggestTags('Pan de masa madre', '', { index: esFour })).toEqual(['food.bakery.sourdough']);
+        expect(suggestTags('Pan de masa madre casero', '', { index: esFour })).toEqual(['food.bakery.sourdough']);
     });
 
     it('suggests from the names inside a title written without spaces (Chinese, Japanese)', () => {

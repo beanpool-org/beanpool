@@ -546,6 +546,25 @@ describe('NodeRolesPanel: a second owner is the first owner\'s way back (vault r
         expect(banner.textContent).toContain("Your key also unlocks this community's backups. Keep your words, and make a second owner, so one can bring the other back.");
     });
 
+    it('the one owner signed in with their key: the banner, in the same words', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin]);
+        await renderPanel({ kind: 'key', memberPubkey: ALICE, role: 'owner' });
+        const banner = await screen.findByTestId('second-owner-banner');
+        expect(banner.textContent).toContain("Your key also unlocks this community's backups. Keep your words, and make a second owner, so one can bring the other back.");
+    });
+
+    it('an admin or a moderator sees no banner: their key unlocks no backups, and only an owner can add an owner', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin, carolModerator]);
+        for (const viewer of [{ kind: 'key', memberPubkey: BOB, role: 'admin' }, { kind: 'key', memberPubkey: CAROL, role: 'moderator' }] as const) {
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<NodeRolesPanel activeNode={node} members={members} viewer={viewer} onChanged={vi.fn()} />); });
+            // The roles have loaded (the one owner's row shows), so the banner's absence is the rule, not a read still out.
+            expect(await screen.findByTestId(`role-row-${ALICE}`)).toBeInTheDocument();
+            expect(screen.queryByTestId('second-owner-banner'), `${viewer.role} viewer`).toBeNull();
+            view!.unmount();
+        }
+    });
+
     it('two owners: no banner', async () => {
         fetchRoles.mockResolvedValue([aliceOwner, { ...bobAdmin, role: 'owner' as const }]);
         await renderPanel();

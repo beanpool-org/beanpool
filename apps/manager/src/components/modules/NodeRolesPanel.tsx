@@ -338,7 +338,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                 </div>
             )}
 
-            {oneOwner && (
+            {/* Only to whoever can make an owner (an owner's key or the password): an admin's key unlocks no backups and an
+                admin can't add an owner, so the banner would tell them something false and offer them nothing to do. */}
+            {oneOwner && canManage && (
                 <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/40 space-y-1" data-testid="second-owner-banner">
                     <p className="text-sm font-bold text-amber-200 m-0">Add a second owner</p>
                     <p className="text-xs text-nature-200 m-0 leading-relaxed" style={{ overflowWrap: 'anywhere' }}>

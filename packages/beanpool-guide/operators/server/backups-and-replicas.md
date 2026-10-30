@@ -177,7 +177,7 @@ Like the words, this is what the owner's phone reported; the server cannot check
 
 ### An owner's way back is the community's
 
-Because an owner's key opens the backups and the take-over keys, an owner who keeps their 12 words, and a community with a second owner, can always open them. **Who can unlock this community** says so, and points each owner to their ways back in the app (**Settings**, **Account Protection**, **Where your account can be brought back from**). With one owner, **Owners & admins** shows **Add a second owner**: only an owner can bring an owner back. Nothing of your server, your recovery code or your keys is kept in BeanPool's key vault.
+Because an owner's key opens the backups and the take-over keys, an owner who keeps their 12 words, and a community with a second owner, can always open them. **Who can unlock this community** says so, and points each owner to their ways back in the app (**Settings**, **Account Protection**, **Where your account can be brought back from**). With one owner, **Owners & admins** shows **Add a second owner** to that owner and to the admin password (an admin, who can't add an owner, doesn't see it): only an owner can bring an owner back. Nothing of your server, your recovery code or your keys is kept in BeanPool's key vault.
 
 ## Backups that are not locked
 

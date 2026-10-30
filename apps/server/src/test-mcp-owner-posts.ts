@@ -438,12 +438,15 @@ async function main(): Promise<void> {
         const emptyOf = (v: unknown): unknown => Array.isArray(v) ? [] : typeof v === 'number' ? '' : '   ';
         const KINDS: Array<{ tool: string; args: Record<string, unknown>; required: string[]; schema?: string[] }> = [
             // The pin unless use_my_area: JSON Schema's `required` cannot say "unless", so the schema lists the ones always needed.
-            { tool: 'create_offer', args: offerArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans', 'photos'] },
-            { tool: 'create_need', args: needArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans', 'photos'] },
+            // Nor "one of": since slice S4 a photo may come from photos, photo_urls or photo_ids, so no schema requires `photos`
+            // itself, and the server still refuses a post with none, naming photos (each kind's `required` below).
+            { tool: 'create_offer', args: offerArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans'] },
+            { tool: 'create_need', args: needArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans'] },
             // In person, its place too: the same "unless online".
             { tool: 'create_event', args: eventArgs, required: ['title', 'description', 'start_at', 'timezone', 'photos', 'place_name', 'lat', 'lng'],
-                schema: ['title', 'description', 'start_at', 'timezone', 'photos'] },
-            { tool: 'create_enterprise_listing', args: entArgs, required: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'] },
+                schema: ['title', 'description', 'start_at', 'timezone'] },
+            { tool: 'create_enterprise_listing', args: entArgs, required: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'],
+                schema: ['kind', 'as_enterprise', 'title', 'category', 'beans'] },
         ];
         const postsBefore2b = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
         const kindGrants: string[] = [];

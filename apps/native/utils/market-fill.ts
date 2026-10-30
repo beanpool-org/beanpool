@@ -89,7 +89,9 @@ export interface FillInputs {
 export function fillWanted(i: FillInputs): boolean {
     const nearCount = typeof i.shownNear === 'number'
         ? i.shownNear
-        : i.shownNear.filter(p => !isNodePulsePost(p)).length;
+        : Array.isArray(i.shownNear)
+        ? i.shownNear.filter(p => !isNodePulsePost(p)).length
+        : 0;
     return !!i.profile?.features?.nearbyListings && i.member && i.ready && !i.noArea && !i.searching
         && i.filter !== 'events' && !i.groupFiltered && !i.distancePicked && wantsFill(nearCount);
 }

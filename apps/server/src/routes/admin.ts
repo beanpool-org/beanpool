@@ -2773,18 +2773,18 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     const { pubkey } = ctx.params;
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
-    // Spelt as issueRekeyCode spells it (member-wizards cleanOld).
     const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
-    if (!(await rekeyProof(ctx, String(pubkey).trim().toLowerCase(), body.code ?? ctx.get('x-fresh-proof')))) return;
-
     // `kind: 'bring_back'` (vault rethink VR3, engine/bring-back.ts): the member's SAME key back from their community copy,
-    // beside Re-key's new key. Asked the same proof as a re-key (rekeyProof): an owner for an owner or admin.
+    // beside Re-key's new key. Asked the same proof as a re-key (rekeyProof): an owner for an owner or admin. The kind's
+    // value before the proof, as handleEnrol checks a role's: a misspelt kind must not spend a code (#2018 NB2).
     const kind = body.kind === undefined || body.kind === null ? 'rekey' : body.kind;
     if (kind !== 'rekey' && kind !== 'bring_back') {
         ctx.status = 400;
         ctx.body = { error: "kind must be 'rekey' or 'bring_back'" };
         return;
     }
+    // Spelt as issueRekeyCode spells it (member-wizards cleanOld).
+    if (!(await rekeyProof(ctx, String(pubkey).trim().toLowerCase(), body.code ?? ctx.get('x-fresh-proof')))) return;
 
     try {
         const result = kind === 'bring_back' ? issueBringBackCode(pubkey, effectiveActor) : issueRekeyCode(pubkey, effectiveActor);

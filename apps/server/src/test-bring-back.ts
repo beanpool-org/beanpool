@@ -282,6 +282,12 @@ async function runTests() {
         await turnOn(admin2);
         const adminOnAdmin = await issueBringBack(adminSession, admin2.pubKeyHex);
         assert(adminOnAdmin.status === 403, `nor another admin, as a re-key asks (got ${adminOnAdmin.status})`);
+        // The kind is read before the owner's fresh proof is asked, so a misspelt one never spends a code (#2018 NB2): an
+        // owner's key session making an owner's code is asked the proof (from their phone), and a misspelt kind is not.
+        const proofAsked = await issueBringBack(ownerSession, coOwner.pubKeyHex);
+        const misspeltKind = await as(ownerSession, 'POST', `/api/local/admin/members/${coOwner.pubKeyHex}/rekey/issue-code`, { kind: 'bring-back' });
+        assert(proofAsked.status === 403 && proofAsked.json.phoneRequired === true && misspeltKind.status === 400 && /^kind must be/.test(misspeltKind.json.error ?? ''),
+            `a misspelt kind is refused before the owner's fresh proof is asked (got ${misspeltKind.status} ${misspeltKind.json.error}; a right one is asked the proof: ${proofAsked.status})`);
         // An owner's key session asks for the fresh proof each time for an owner's or admin's (rekeyProof); the engine's
         // own rule is what this pins, so the owner's call is made as the engine sees it.
         const { issueBringBackCode } = await import('./engine/bring-back.js');

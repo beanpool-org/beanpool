@@ -99,7 +99,7 @@ export function issueBringBackCode(memberPublicKey: string, operatorPubkey: stri
     const row = getMember(member);
     if (!row) throw refusal(404, 'Member not found');
     if (row.status === 'pruned') throw refusal(409, BRING_BACK_GONE, 'account_gone');
-    assertMayRekey(member, operator);
+    assertMayRekey(member, operator, 'bring_back');
     if (operator === member) throw refusal(409, BRING_BACK_OWN_KEY, 'own_key');
     if (getInvalidatedKeyInfo(member)) throw refusal(409, BRING_BACK_REKEY_WAITING, 'rekey_waiting');
     if (!hasCommunityCopy(member)) throw refusal(409, BRING_BACK_NO_COPY, 'no_copy');

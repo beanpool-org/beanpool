@@ -87,7 +87,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'That code is for another community. Check the community’s name or address and try again.': word('That code is for another community. Check the community’s name or address and try again.'),
     'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.': word('Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.'),
     'This phone’s account changed while you waited, so nothing was saved. Start again.': word('This phone’s account changed while you waited, so nothing was saved. Start again.'),
-    'That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.': word('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.'),
+    'That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.': word('That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.'),
     'That isn’t a community address the app can use.': word('That isn’t a community address the app can use.'),
     // utils/rekey-redeem.ts openBringBack (vault rethink VR3): a bring-back's release that didn't open to the account.
     // utils/community-copy.ts COMMUNITY_COPY_TEXT (vault rethink VR3): turning "Your community's admins" on or off.

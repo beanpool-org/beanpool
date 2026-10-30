@@ -38,6 +38,14 @@ import { word } from '@beanpool/core';
 export const REKEY_CODE_NOT_VALID = word('That code isn’t valid. Ask the admin for a new one.');
 /** A phone that already holds an account here (a member, a visitor or a closed account). */
 export const REKEY_KEY_HAS_ACCOUNT = word('This phone already has an account in this community, so it can’t take over another one. Use a phone with no account here, or ask the admin to paste its key instead.');
+/**
+ * The same, to a phone that typed a bring-back's code (BB-): a bring-back is never finished with a pasted key
+ * (completeRekey refuses one, and the Bring back window has no paste), so the only way is a phone with no account here.
+ */
+export const BRING_BACK_KEY_HAS_ACCOUNT = word('This phone already has an account in this community, so it can’t take over another one. To be brought back, use a phone with no account here.');
+/** The admin acts on a code that isn't waiting any more: a re-key's, or a bring-back's, each in its own window's words. */
+export const REKEY_NO_LIVE_CODE = word('This member has no re-key code waiting. Make a new code.');
+export const BRING_BACK_NO_LIVE_CODE = word('This member has no bring-back code waiting. Make a new code.');
 /** A code that has taken all the phones it will. */
 export const REKEY_CODE_FULL = word('This code can’t take any more phones. Ask the admin for a new one.');
 /** An address's wrong codes this hour are used up. */
@@ -202,10 +210,11 @@ export function proposeRekey(rawCode: unknown, newKey: string, address: string, 
     }
 
     // Any row here: a member (a member re-keying someone else from their own phone), a visitor's row, a closed account.
-    // Asked before the code, whatever the code is, so the answer to such a key says nothing about which codes are live.
+    // Asked before the code, whatever the code is, so the answer to such a key says nothing about which codes are live:
+    // its words go by the code as typed (BB-: a bring-back's), never by a row.
     if (db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(newKey)
         || db.prepare('SELECT 1 FROM invalidated_keys WHERE public_key = ?').get(newKey)) {
-        throw new RekeyRedeemRefusal(409, 'key_has_account', REKEY_KEY_HAS_ACCOUNT);
+        throw new RekeyRedeemRefusal(409, 'key_has_account', code.startsWith('BB') ? BRING_BACK_KEY_HAS_ACCOUNT : REKEY_KEY_HAS_ACCOUNT);
     }
     if (!isLive(req, now)) {
         noteWrongCode(code, address, now);
@@ -272,8 +281,12 @@ export function declineRekeyProposal(oldPublicKey: string, newPublicKey: string,
     const cleanOperator = (operator || '').trim().toLowerCase() || 'owner:password';
     const req = db.prepare("SELECT * FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC, id DESC LIMIT 1")
         .get(cleanOld) as RekeyRequestRow | undefined;
-    if (!isLive(req, now)) throw new RekeyRedeemRefusal(404, 'no_live_code', word('This member has no re-key code waiting. Make a new code.'));
-    assertMayRekey(cleanOld, cleanOperator);
+    if (!isLive(req, now)) {
+        // Said in the words of the window it came from: the member's last code says which (a bring-back's, or a re-key's).
+        const last = req ?? db.prepare('SELECT kind FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1').get(cleanOld) as { kind?: string } | undefined;
+        throw new RekeyRedeemRefusal(404, 'no_live_code', last?.kind === 'bring_back' ? BRING_BACK_NO_LIVE_CODE : REKEY_NO_LIVE_CODE);
+    }
+    assertMayRekey(cleanOld, cleanOperator, req.kind === 'bring_back' ? 'bring_back' : 'rekey');
     const at = new Date(now).toISOString();
     const changed = db.prepare('UPDATE rekey_proposals SET declined_at = ? WHERE code = ? AND new_pubkey = ? AND declined_at IS NULL').run(at, req.code, cleanNew).changes;
     if (changed !== 1) throw new RekeyRedeemRefusal(404, 'no_such_phone', word('No phone with that key is waiting on this code.'));
@@ -298,9 +311,10 @@ export function bindRekeyByMatch(oldPublicKey: string, rawCode: unknown, rawMatc
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
     if (!req || req.old_pubkey !== cleanOld || !isLive(req, now)) {
-        throw new RekeyRedeemRefusal(404, 'no_live_code', word('This member has no re-key code waiting. Make a new code.'));
+        // A bring-back's code (BB-) is said as one: the Bring back window typed it.
+        throw new RekeyRedeemRefusal(404, 'no_live_code', code.startsWith('BB') ? BRING_BACK_NO_LIVE_CODE : REKEY_NO_LIVE_CODE);
     }
-    assertMayRekey(cleanOld, cleanOperator);
+    assertMayRekey(cleanOld, cleanOperator, req.kind === 'bring_back' ? 'bring_back' : 'rekey');
     const match = typeof rawMatch === 'string' ? rawMatch.trim() : '';
     if (!/^\d{2}$/.test(match)) throw new RekeyRedeemRefusal(400, 'match_required', word('Type the two digits on their phone.'));
 

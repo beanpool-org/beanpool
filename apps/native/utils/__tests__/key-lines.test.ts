@@ -106,7 +106,7 @@ const WHOLE: string[] = [
     'Could not reach the node.', 'The node refused the sign-in.',
     SIGNIN_QUESTION, SIGNIN_WARNING, AGENT_QUESTION, AGENT_WARNING, DIGITS_PRIVATE,
     ...Object.values(REKEY_TEXT),
-    'That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.',
+    'That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.',
     'That isn’t a community address the app can use.',
     'That is not a community address the app can use.', 'Could not reach the server.', "That address doesn't answer like a BeanPool server.",
     ...(['wrong-code', 'code-changed', 'no-code', 'wrong-server', 'check-again'] as const).map((kind) => claimOutcomeMessage({ kind }, 'Riverbend')),

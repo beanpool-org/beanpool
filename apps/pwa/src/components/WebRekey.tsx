@@ -124,7 +124,7 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
 
     const ask = async () => {
         setError(null);
-        if (!isRekeyCode(code)) { setError(() => () => t('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.')); return; }
+        if (!isRekeyCode(code)) { setError(() => () => t('That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.')); return; }
         setPhase('asking');
         try {
             key.current = await webRekeyKey(deps);

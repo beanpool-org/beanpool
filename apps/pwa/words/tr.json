@@ -2,10 +2,10 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, pwa tools top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct pwa); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, pwa tools top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct pwa); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-23",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» bu toplulukta zaten alınmış. Başka bir ad seçin.",
@@ -2089,7 +2089,7 @@
   "Not finished yet": "Henüz bitmedi",
   "Reload page": "Sayfayı yenile",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "Bu tarayıcı başka bir BeanPool hesabı tutuyor, bu nedenle bu hesap buraya kaydedilmedi.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Bu tam bir anahtar yenileme kodu değil. RK- ile başlar ve sekiz harf ve rakamdan oluşur.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "Bu tam bir kod değil. RK- veya BB- ile başlar ve sekiz harf ve rakamdan oluşur.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "Bu tarayıcıda başlattığınız bir katılım hâlâ bekliyor. Önce onu tamamlayın, ardından kodunuza geri dönün.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "Bu tarayıcı anahtarı güvenle saklayamadı, bu yüzden hiçbir şey gönderilmedi.",
   "Show this number to your admin": "Bu numarayı yöneticinize gösterin",

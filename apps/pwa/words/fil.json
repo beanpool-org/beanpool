@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-23",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "Kinuha na ang «{name}» sa komunidad na ito. Pumili ng ibang pangalan.",
@@ -2088,7 +2088,7 @@
   "Not finished yet": "Hindi pa tapos",
   "Reload page": "I-reload ang pahina",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "May hawak na ibang BeanPool account ang browser na ito, kaya hindi na-save ang isang ito rito.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Hindi iyon buong re-key code. Nagsisimula ito sa RK- at may walong titik at numero.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "Hindi iyon buong code. Nagsisimula ito sa RK- o BB- at may walong titik at numero.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "Naghihintay pa rin ang pagsaling sinimulan mo sa browser na ito. Tapusin muna ito, saka bumalik sa iyong code.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "Hindi maitago ng browser na ito ang susi nang ligtas, kaya walang ipinadala.",
   "Show this number to your admin": "Ipakita ang numerong ito sa iyong admin",

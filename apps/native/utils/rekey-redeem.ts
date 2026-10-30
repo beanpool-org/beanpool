@@ -194,7 +194,7 @@ function letsGoIn(startedAt: number): string {
  */
 export async function beginRekey(community: string, rawCode: string, deps: RekeyDeps): Promise<RekeySlot> {
     const code = cleanRekeyCode(rawCode);
-    if (!CODE.test(code)) throw new Error('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.');
+    if (!CODE.test(code)) throw new Error('That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.');
     const url = rekeyCommunityUrl(community);
     if (!url) throw new Error('That isn’t a community address the app can use.');
     let held = await deps.slot.get();

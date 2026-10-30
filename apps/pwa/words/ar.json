@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits fix round 1: the right digits, no count, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits fix round 1: the right digits, no count, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "\"{name}\" مستخدم بالفعل في هذا المجتمع. اختر اسمًا آخر.",
@@ -2317,7 +2317,7 @@
   "Not finished yet": "لم ينتهِ بعد",
   "Reload page": "إعادة تحميل الصفحة",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "يحتفظ هذا المتصفح بحساب BeanPool آخر، لذا لم يتم حفظ هذا الحساب هنا.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "ليس هذا رمز إعادة مفتاح كاملاً. يبدأ بـ RK- ويحتوي على ثمانية أحرف وأرقام.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "هذا ليس رمزاً كاملاً. يبدأ بـ RK- أو BB- ويحتوي على ثمانية أحرف وأرقام.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "لا يزال الانضمام الذي بدأته في هذا المتصفح قيد الانتظار. أنهِه أولًا، ثم عُد إلى رمزك.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "لم يتمكن هذا المتصفح من الاحتفاظ بالمفتاح بأمان، لذا لم يتم إرسال أي شيء.",
   "Show this number to your admin": "أظهر هذا الرقم لمشرفك",

@@ -200,11 +200,12 @@ function shortKey(key: string): string {
  * A re-key moves the member's node role to the new key, and only an owner may change an owner's or admin's role
  * (node-roles): an owner's or admin's re-key (a role held aside while suspended counts) by anyone but an owner, the
  * password or the member themselves is refused, 403, before any write. Both steps ask it: a code an owner issued is
- * no licence for an admin to bind the new key. An admin re-keying a member or a moderator is untouched.
+ * no licence for an admin to bind the new key. An admin re-keying a member or a moderator is untouched. A bring-back
+ * (engine/bring-back.ts) is held to the same rule, and its refusal says bring back (`flow`), as its window does.
  */
-export function assertMayRekey(cleanOld: string, cleanOperator: string): void {
+export function assertMayRekey(cleanOld: string, cleanOperator: string, flow: 'rekey' | 'bring_back' = 'rekey'): void {
     if (!heldPrivilegedRole(cleanOld) || cleanOperator === cleanOld || isOwnerLevelActor(cleanOperator)) return;
-    const err: any = new Error('Only an owner can re-key an owner or admin');
+    const err: any = new Error(flow === 'bring_back' ? 'Only an owner can bring back an owner or admin' : 'Only an owner can re-key an owner or admin');
     err.status = 403;
     throw err;
 }
@@ -567,7 +568,7 @@ function cancelBringBackCode(req: RekeyRequestRow, cleanOld: string, cleanOperat
     { cancelled: true; oldPubkey: string; callsign: string; status: string } {
     const member = getMember(cleanOld);
     if (!member) throw refusal(404, 'Member not found');
-    assertMayRekey(cleanOld, cleanOperator);
+    assertMayRekey(cleanOld, cleanOperator, 'bring_back');
     const live = req.status === 'pending' && new Date(req.expires_at).getTime() >= Date.now();
     if (!live || db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(req.id).changes !== 1) {
         throw refusal(409, 'There is no bring-back code waiting for this member to cancel.');

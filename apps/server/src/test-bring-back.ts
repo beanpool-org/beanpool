@@ -554,6 +554,52 @@ async function runTests() {
         }
     }
 
+    // ── K ──
+    section('K. A refusal in the bring-back flow is said as a bring-back, never as a re-key; a re-key\'s stay its own');
+    {
+        const { issueBringBackCode } = await import('./engine/bring-back.js');
+        const { bindRekeyByMatch, declineRekeyProposal, REKEY_KEY_HAS_ACCOUNT, BRING_BACK_KEY_HAS_ACCOUNT, REKEY_NO_LIVE_CODE, BRING_BACK_NO_LIVE_CODE } = await import('./engine/rekey-redeem.js');
+        const { cancelRekeyCode } = await import('./engine/member-wizards.js');
+        const thrown = (f: () => unknown): any => { try { f(); return null; } catch (e) { return e; } };
+        const OWNER_ONLY = 'Only an owner can bring back an owner or admin';
+
+        // An admin, for an owner's account: the window is Bring back, and so is the sentence, at each of its steps. (The
+        // number, Not theirs and Cancel are asked of the engine: the routes ask an owner's fresh proof before them.)
+        const byAdmin = await issueBringBack(adminSession, coOwner.pubKeyHex);
+        assert(byAdmin.status === 403 && byAdmin.json.error === OWNER_ONLY, `an admin's Bring back for an owner is refused in bring-back's words (got ${byAdmin.status} ${byAdmin.json.error})`);
+        const pending = db.prepare("SELECT code FROM rekey_requests WHERE old_pubkey = ? AND kind = 'bring_back' AND status = 'pending'").get(coOwner.pubKeyHex) as { code: string } | undefined;
+        const ownersCode = pending?.code ?? issueBringBackCode(coOwner.pubKeyHex, owner.pubKeyHex).code;
+        const steps = [
+            thrown(() => bindRekeyByMatch(coOwner.pubKeyHex, ownersCode, '00', admin.pubKeyHex)),
+            thrown(() => declineRekeyProposal(coOwner.pubKeyHex, makeKeypair().pubKeyHex, admin.pubKeyHex)),
+            thrown(() => cancelRekeyCode(coOwner.pubKeyHex, admin.pubKeyHex)),
+        ];
+        assert(steps.every(e => e?.status === 403 && e?.message === OWNER_ONLY), `...and so are its number, Not theirs and Cancel (got ${steps.map(e => e?.message).join(' | ')})`);
+
+        // A phone that already has an account here, typing a bring-back's code: never sent to ask for a pasted key, which a
+        // bring-back never takes. A re-key's code keeps its own sentence.
+        const bbHasAccount = await ask(mia, 'BB-0000-0000');
+        const rkHasAccount = await ask(mia, 'RK-0000-0000');
+        assert(bbHasAccount.status === 409 && bbHasAccount.json.error === BRING_BACK_KEY_HAS_ACCOUNT && !/paste/.test(bbHasAccount.json.error ?? ''),
+            `a phone with an account here typing BB- is told to use a phone with no account, never to have its key pasted (got ${bbHasAccount.status} ${bbHasAccount.json.error})`);
+        assert(rkHasAccount.status === 409 && rkHasAccount.json.error === REKEY_KEY_HAS_ACCOUNT, `...and RK- still gets the re-key sentence (got ${rkHasAccount.json.error})`);
+
+        // The number typed on a code that isn't waiting any more: a bring-back's is said as one, a re-key's as before.
+        const bbGone = await bindByNumber(adminSession, mia.pubKeyHex, 'BB-0000-0000', '12');
+        const rkGone = await bindByNumber(adminSession, mia.pubKeyHex, 'RK-0000-0000', '12');
+        assert(bbGone.status === 404 && bbGone.json.error === BRING_BACK_NO_LIVE_CODE && rkGone.status === 404 && rkGone.json.error === REKEY_NO_LIVE_CODE,
+            `no code waiting: "bring-back code" for BB-, "re-key code" for RK- (got ${bbGone.json.error} | ${rkGone.json.error})`);
+
+        // Not theirs, after the member's bring-back code was cancelled: said as a bring-back's too.
+        const wes = join('WesMember');
+        await turnOn(wes);
+        const wesCode = (await issueBringBack(adminSession, wes.pubKeyHex)).json.code as string;
+        const cancelled = await as(adminSession, 'POST', `/api/local/admin/members/${wes.pubKeyHex}/rekey/cancel`, {});
+        const lateDecline = await as(adminSession, 'POST', `/api/local/admin/members/${wes.pubKeyHex}/rekey/proposals/${makeKeypair().pubKeyHex}/decline`, {});
+        assert(/^BB-/.test(wesCode ?? '') && cancelled.status === 200 && lateDecline.status === 404 && lateDecline.json.error === BRING_BACK_NO_LIVE_CODE,
+            `Not theirs on a cancelled bring-back code says no bring-back code is waiting (got ${cancelled.status}, ${lateDecline.status} ${lateDecline.json.error})`);
+    }
+
     console.log(`\n${passed}/${run} checks passed`);
     if (passed !== run) process.exitCode = 1;
     process.exit();

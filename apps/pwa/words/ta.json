@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-23",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” இந்தச் சமூகத்தில் ஏற்கெனவே எடுக்கப்பட்டுவிட்டது. வேறொரு பெயரைத் தேர்ந்தெடுக்கவும்.",
@@ -2077,7 +2077,7 @@
   "Not finished yet": "இன்னும் முடியவில்லை",
   "Reload page": "பக்கத்தை மீண்டும் ஏற்று",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "இந்த உலாவி மற்றொரு BeanPool கணக்கை வைத்துள்ளது, எனவே இது இங்கே சேமிக்கப்படவில்லை.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "அது முழுமையான சாவி மாற்றக் குறியீடு அல்ல. அது RK- எனத் தொடங்கி எட்டு எழுத்துகள் மற்றும் எண்களைக் கொண்டிருக்கும்.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "அது முழுமையான குறியீடு அல்ல. அது RK- அல்லது BB- எனத் தொடங்கி எட்டு எழுத்துகள் மற்றும் எண்களைக் கொண்டிருக்கும்.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "இந்த உலாவியில் நீங்கள் தொடங்கிய இணைப்பு இன்னும் காத்திருக்கிறது. முதலில் அதை முடிக்கவும், பின்னர் உங்கள் குறியீட்டிற்கு வரவும்.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "இந்த உலாவியால் சாவியைப் பாதுகாப்பாக வைத்திருக்க முடியவில்லை, எனவே எதுவும் அனுப்பப்படவில்லை.",
   "Show this number to your admin": "இந்த எண்ணை உங்கள் நிர்வாகியிடம் காட்டவும்",

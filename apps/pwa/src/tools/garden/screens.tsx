@@ -53,7 +53,7 @@ export function Main({ host }: GardenScreenProps) {
     }
     const month = new Date(host.now()).getMonth();
     const view = guideView(fix.zone, fix.hemisphere, month);
-    const open = (id: string) => host.navigate('crop', { crop: id });
+    const open = (id: string) => host.navigate('crop', { key: id });
     return (
         <div data-testid="garden-main" className="min-w-0">
             <ToolSection>
@@ -88,7 +88,7 @@ export function Main({ host }: GardenScreenProps) {
 export function Crop({ host, params }: GardenScreenProps) {
     const doc = host.doc.get();
     const place = usePlace(host);
-    const crop = cropById(params.crop ?? '');
+    const crop = cropById(params.key ?? '');
     const fix = gardenZoneFix(doc.settings, place ?? null);
     if (!crop) return <div data-testid="garden-crop" className="min-w-0"><ToolEmpty icon="🌱" title={t('This crop isn\'t in this version of the app.')} testId="garden-crop-missing" /></div>;
     if (!fix) {

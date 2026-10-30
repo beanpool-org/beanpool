@@ -1561,7 +1561,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         await settleUntil(() => !!byTestId('garden-zone-line'));
         expect(bypassing()).toEqual([]);
         expect(tooWide()).toEqual([]);
-        await drawTool('garden', { screen: 'crop', crop: 'cassava' });
+        await drawTool('garden', { screen: 'crop', key: 'cassava' });
         await settleUntil(() => !!byTestId('garden-crop-sow'));
         expect(byTestId('garden-crop-note')).not.toBeNull();
         expect(bypassing()).toEqual([]);

@@ -979,48 +979,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         return () => { offView(); offTie(); };
     }, [typeFilter, categoryFilter, beansOnly, groupFilter, identity?.publicKey, fitsNear]);
 
-    // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
-    useEffect(() => {
-        if (posts.length === 0 || isVisitor) return;
-        const now = Date.now();
-        const uniqueAuthors = [...new Set(posts.map(p => p.authorPublicKey))];
-        const uncachedAuthors = uniqueAuthors.filter(pk => {
-            if (ratingsInFlightRef.current.has(pk)) return false;
-            const cached = ratingsCacheRef.current.get(pk);
-            return !cached || (now - cached.fetchedAt > RATINGS_CACHE_TTL_MS);
-        });
-
-        if (uncachedAuthors.length === 0) return;
-
-        uncachedAuthors.forEach(pk => ratingsInFlightRef.current.add(pk));
-
-        Promise.all(
-            uncachedAuthors.map(pk =>
-                getMemberRatings(pk)
-                    .then(r => [pk, { average: r.average, count: r.count }] as const)
-                    // A failed fetch yields null, NOT a zero rating. Caching {average: 0, count: 0}
-                    // would show an established member as unrated for the full cache TTL because
-                    // of one transient blip — in a marketplace where the rating is the trust
-                    // signal, that is worse than showing nothing. Leaving it uncached lets the
-                    // next cycle retry; the in-flight set and the poll cadence bound the retries.
-                    .catch(() => [pk, null] as const)
-            )
-        ).then(results => {
-            const fetchedAt = Date.now();
-            setAuthorRatingsCache(prev => {
-                const next = { ...prev };
-                for (const [pk, rating] of results) {
-                    if (!rating) continue;
-                    ratingsCacheRef.current.set(pk, { rating, fetchedAt });
-                    next[pk] = rating;
-                }
-                return next;
-            });
-        }).finally(() => {
-            uncachedAuthors.forEach(pk => ratingsInFlightRef.current.delete(pk));
-        });
-    }, [posts]);
-
     // On a community where people are asked for, not read whole (lib/members-on-demand, the worldwide one), each listing
     // carries its author's face (authorAvatarUrl) and nothing is read for it. Elsewhere, and while the node hasn't said,
     // the faces come from the member directory, as before.
@@ -1312,6 +1270,52 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 if (fillReadRef.current === read) setElsewhere({ key: read.key, posts: rows });
             });
     }, [fillWanted, fillKey, fillStamp]);
+
+    // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll.
+    // The authors of the fill are asked for too, once it is read and while it is shown: its listings are not in `posts`,
+    // and a card without its author's stars is a card without the trust signal (the same listings under "Show
+    // everywhere" have it, there `posts` is that read). The cache and the in-flight set make an author in both parts one ask.
+    useEffect(() => {
+        const fillPosts = fillWanted && elsewhere?.key === fillKey ? elsewhere.posts ?? [] : [];
+        if ((posts.length === 0 && fillPosts.length === 0) || isVisitor) return;
+        const now = Date.now();
+        const uniqueAuthors = [...new Set([...posts, ...fillPosts].map(p => p.authorPublicKey))];
+        const uncachedAuthors = uniqueAuthors.filter(pk => {
+            if (ratingsInFlightRef.current.has(pk)) return false;
+            const cached = ratingsCacheRef.current.get(pk);
+            return !cached || (now - cached.fetchedAt > RATINGS_CACHE_TTL_MS);
+        });
+
+        if (uncachedAuthors.length === 0) return;
+
+        uncachedAuthors.forEach(pk => ratingsInFlightRef.current.add(pk));
+
+        Promise.all(
+            uncachedAuthors.map(pk =>
+                getMemberRatings(pk)
+                    .then(r => [pk, { average: r.average, count: r.count }] as const)
+                    // A failed fetch yields null, NOT a zero rating. Caching {average: 0, count: 0}
+                    // would show an established member as unrated for the full cache TTL because
+                    // of one transient blip — in a marketplace where the rating is the trust
+                    // signal, that is worse than showing nothing. Leaving it uncached lets the
+                    // next cycle retry; the in-flight set and the poll cadence bound the retries.
+                    .catch(() => [pk, null] as const)
+            )
+        ).then(results => {
+            const fetchedAt = Date.now();
+            setAuthorRatingsCache(prev => {
+                const next = { ...prev };
+                for (const [pk, rating] of results) {
+                    if (!rating) continue;
+                    ratingsCacheRef.current.set(pk, { rating, fetchedAt });
+                    next[pk] = rating;
+                }
+                return next;
+            });
+        }).finally(() => {
+            uncachedAuthors.forEach(pk => ratingsInFlightRef.current.delete(pk));
+        });
+    }, [posts, elsewhere, fillWanted, fillKey]);
 
     const inputStyle: React.CSSProperties = {
         width: '100%', padding: '0.5rem', background: 'var(--bg-secondary)',

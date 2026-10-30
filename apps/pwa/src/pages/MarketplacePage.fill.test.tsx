@@ -334,4 +334,42 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
             expect(fillReads()).toHaveLength(2);
         });
     });
+
+    // The stars are the trust signal on a card (PostAuthorTrust). They come from the ratings the page fetches for the
+    // authors of the listings it holds; the fill's authors are not in the nearby list, so they are asked for too.
+    describe('the fill cards carry their author\'s stars, as the same listings do under "Show everywhere"', () => {
+        const bea = (n: number) => Array.from({ length: n }, (_, i) =>
+            listing(`bea-${i}`, `Bea ${i}`, { lat: 48.8, lng: 2.3, authorPublicKey: 'member-bea', authorCallsign: 'Bea', createdAt: `2026-10-29T0${i}:00:00Z` }));
+
+        beforeEach(() => {
+            vi.spyOn(api, 'getMemberRatings').mockImplementation(async (pk: string) =>
+                (pk === 'member-bea' ? { average: 4, count: 3 } : { average: 0, count: 0 }) as any);
+        });
+
+        it('a newcomer with nothing near: every fill card shows its author\'s stars', async () => {
+            vi.mocked(api.getMarketplacePosts).mockImplementation(node([], bea(2)));
+            render(<MarketplacePage identity={identity} />);
+            const fill = await screen.findByTestId('market-fill');
+            await waitFor(() => expect(within(fill).getAllByText('★★★★')).toHaveLength(2));
+            expect(api.getMemberRatings).toHaveBeenCalledWith('member-bea');
+        });
+
+        it('a fill author who is also a nearby author is asked for once', async () => {
+            const near = nearOf(2).map(p => ({ ...p, authorPublicKey: 'member-bea', authorCallsign: 'Bea' }));
+            vi.mocked(api.getMarketplacePosts).mockImplementation(node(near, bea(2)));
+            render(<MarketplacePage identity={identity} />);
+            const fill = await screen.findByTestId('market-fill');
+            await waitFor(() => expect(within(fill).getAllByText('★★★★')).toHaveLength(2));
+            expect(vi.mocked(api.getMemberRatings).mock.calls.filter(([pk]) => pk === 'member-bea')).toHaveLength(1);
+        });
+
+        it('with 8 near there is no fill, and no rating is asked for its authors', async () => {
+            vi.mocked(api.getMarketplacePosts).mockImplementation(node(nearOf(FILL_BELOW), bea(2)));
+            render(<MarketplacePage identity={identity} />);
+            await screen.findByText('Near 7');
+            await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+            expect(screen.queryByTestId('market-fill')).toBeNull();
+            expect(vi.mocked(api.getMemberRatings).mock.calls.map(([pk]) => pk)).not.toContain('member-bea');
+        });
+    });
 });

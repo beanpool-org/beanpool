@@ -13,7 +13,7 @@
  * (fake-vault.ts, which checks each request's signature and signs its answers as the vault does) and answers two
  * communities itself, checking that every request is signed by Kim's key for that community.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 const mem = vi.hoisted(() => ({ async: new Map<string, string>(), secure: new Map<string, string>() }));
@@ -707,25 +707,43 @@ describe('a community that can\'t be reached: "not yet removed", remembered, and
             return null;
         }
 
-        it("a seeded sweep with nobody else changing Mullum's copies: every one goes, and nothing waits", async () => {
-            const random = seeded(2570);
-            const wrong: string[] = [];
-            for (let i = 0; i < 250; i++) {
-                const w = await sweepTrial(random, false);
-                if (w) wrong.push(`trial ${i}: ${w}`);
+        describe("a seeded sweep with nobody else changing Mullum's copies: every one goes, and nothing waits", () => {
+            let random: () => number;
+            beforeAll(() => {
+                random = seeded(2570);
+            });
+            for (let chunk = 0; chunk < 5; chunk++) {
+                const start = chunk * 50;
+                const end = start + 50;
+                it(`trials ${start}–${end - 1}`, async () => {
+                    const wrong: string[] = [];
+                    for (let i = start; i < end; i++) {
+                        const w = await sweepTrial(random, false);
+                        if (w) wrong.push(`trial ${i}: ${w}`);
+                    }
+                    expect(wrong).toEqual([]);
+                }, 60_000);
             }
-            expect(wrong).toEqual([]);
-        }, 60_000);
+        });
 
-        it('a seeded sweep with a copy linked again from another device meanwhile: that copy is never sent a delete, and nothing waits', async () => {
-            const random = seeded(4402938538);
-            const wrong: string[] = [];
-            for (let i = 0; i < 250; i++) {
-                const w = await sweepTrial(random, true);
-                if (w) wrong.push(`trial ${i}: ${w}`);
+        describe('a seeded sweep with a copy linked again from another device meanwhile: that copy is never sent a delete, and nothing waits', () => {
+            let random: () => number;
+            beforeAll(() => {
+                random = seeded(4402938538);
+            });
+            for (let chunk = 0; chunk < 5; chunk++) {
+                const start = chunk * 50;
+                const end = start + 50;
+                it(`trials ${start}–${end - 1}`, async () => {
+                    const wrong: string[] = [];
+                    for (let i = start; i < end; i++) {
+                        const w = await sweepTrial(random, true);
+                        if (w) wrong.push(`trial ${i}: ${w}`);
+                    }
+                    expect(wrong).toEqual([]);
+                }, 60_000);
             }
-            expect(wrong).toEqual([]);
-        }, 60_000);
+        });
     });
 
     it('the move card never offers to move a copy that is waiting to be removed', async () => {

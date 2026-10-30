@@ -44,7 +44,7 @@ fi
 
 # CI's shards (.github/workflows/ci.yml) each run a part of this: TEST_ALL_ONLY="name name" runs only the checks named
 # (each must be a check below), SERVER_SUITES_SHARD=i/K only the i-th of K parts of the server suites, and
-# TEST_ALL_TEST_SLICE adds turbo arguments to the `test` check (`--filter=beanpool-pillar -- --shard=1/2`). A run
+# TEST_ALL_TEST_SLICE adds turbo arguments to the `test` check (`--only --filter=beanpool-pillar -- --shard=1/2`). A run
 # narrowed by TEST_ALL_ONLY never records green. Without it, --all is the merge gate's full run as before: it drops the
 # other two, as it drops SERVER_SUITES_ONLY. Not passed on to the checks (merge_gate runs this script again inside).
 TEST_ALL_ONLY=$(echo ${TEST_ALL_ONLY:-})
@@ -426,8 +426,9 @@ run_check "directory_register" bash scripts/test-directory-register.sh
 
 # Every GitHub workflow pins its actions to a full commit SHA, says what its token may do, and gates the job that moves
 # the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
-# the repository's workflows and each edit the check exists to catch. Instant.
-run_check "workflows" node --test scripts/check-workflows.test.mjs
+# the repository's workflows and each edit the check exists to catch. check-ci-shards.test.mjs: every check here runs in
+# exactly one of CI's shards (.github/workflows/ci.yml) and the required check's name is on the aggregate job alone. Instant.
+run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs
 
 # No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.

@@ -257,6 +257,26 @@ export function tagIndex(): TagIndex {
     return cached.index;
 }
 
+/** An English plural's singular forms to try: berries → berry, tomatoes → tomato, lemons → lemon. */
+export function singulars(word: string): string[] {
+    const out: string[] = [];
+    if (word.length > 4 && word.endsWith('ies')) out.push(`${word.slice(0, -3)}y`);
+    if (word.length > 4 && /(?:oes|ches|shes|xes|sses)$/.test(word)) out.push(word.slice(0, -2));
+    if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) out.push(word.slice(0, -1));
+    return out;
+}
+
+export function lookupPhrase(words: string[], find: (text: string) => readonly string[]): readonly string[] {
+    const found = find(words.join(' '));
+    if (found.length) return found;
+    const head = words.slice(0, -1);
+    for (const last of singulars(words[words.length - 1])) {
+        const again = find([...head, last].join(' '));
+        if (again.length) return again;
+    }
+    return [];
+}
+
 /**
  * Resolves a search query's typed words into tag ids through the label index (DESIGN-owner-seeding-tags-fable.md §4.7).
  * Reads the member's language and English: "limón" in Spanish resolves to `food.fruit.lemon`, and "citrus" to the
@@ -281,24 +301,33 @@ export function searchTagsFor(query: string, options: { index?: TagIndex; limit?
     };
 
     // First try the whole query as a name/label or alias: e.g. "limón", "citrus", "free-range eggs"
-    if (addIds(index.byName(text))) return [...out];
-    if (addIds(index.byAlias(text))) return [...out];
+    const wholeWords = compoundWords(text);
+    const wholeByName = lookupPhrase(wholeWords, index.byName);
+    if (wholeByName.length > 0) {
+        addIds(wholeByName);
+        return [...out];
+    }
+    const wholeByAlias = lookupPhrase(wholeWords, index.byAlias);
+    if (wholeByAlias.length > 0) {
+        addIds(wholeByAlias);
+        return [...out];
+    }
 
     // Part words (handling compounds as in suggestTags and search-terms)
     const words = compoundWords(text);
     if (words.length > 0) {
         for (let n = Math.min(index.maxWords, words.length); n >= 1; n--) {
             for (let i = 0; i + n <= words.length; i++) {
-                const phrase = words.slice(i, i + n).join(' ');
-                const byName = index.byName(phrase);
+                const phraseWords = words.slice(i, i + n);
+                const byName = lookupPhrase(phraseWords, index.byName);
                 if (byName.length > 0) {
                     if (addIds(byName)) return [...out];
                 } else if (n === 1) {
-                    const byAlias = index.byAlias(phrase);
+                    const byAlias = lookupPhrase(phraseWords, index.byAlias);
                     if (byAlias.length > 0) {
                         if (addIds(byAlias)) return [...out];
                     }
-                    const inside = index.inside(phrase);
+                    const inside = index.inside(phraseWords[0]);
                     if (inside.length > 0) {
                         if (addIds(inside)) return [...out];
                     }

@@ -66,7 +66,10 @@ export async function webTurnOnCommunityCopy(identity: BeanPoolIdentity): Promis
     return { since: body.since };
 }
 
-/** Turn it off: the server deletes the copy and its key. Throws with a sentence when it couldn't be asked. */
+/**
+ * Turn it off: the server deletes the copy and its key. Resolves only on the server's own answer that it keeps none now
+ * (`kept: false`), never on a proxy's page; throws with a sentence otherwise.
+ */
 export async function webRemoveCommunityCopy(): Promise<void> {
     let res: Response;
     try {
@@ -74,8 +77,7 @@ export async function webRemoveCommunityCopy(): Promise<void> {
     } catch {
         throw new Error(WEB_COMMUNITY_COPY_TEXT.unreachable);
     }
-    if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-        throw new Error(typeof body.error === 'string' ? body.error : WEB_COMMUNITY_COPY_TEXT.unreachable);
-    }
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : WEB_COMMUNITY_COPY_TEXT.unreachable);
+    if (body.kept !== false) throw new Error(WEB_COMMUNITY_COPY_TEXT.unreachable);
 }

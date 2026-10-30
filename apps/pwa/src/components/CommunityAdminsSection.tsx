@@ -2,14 +2,15 @@
  * Settings → "Your community's admins" (vault rethink VR3, community-held placement; DESIGN-vault-rethink-fable.md §4.3,
  * §4.5): the web app can turn it on, as the phone can. Shown where the community keeps copies itself and this is not
  * the global community (`offered`), or wherever this server already keeps this member's copy (a rule moved since: the
- * copy is the member's until they remove it). On is said only on the server's own answer. The flow is
- * lib/community-copy.ts.
+ * copy is the member's until they remove it). On is said only on the server's own answer, which SettingsPage asks for
+ * and shares with "Where your account can be brought back from" (it lists and removes the copy too), so the two always
+ * say the same. The flow is lib/community-copy.ts.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { t, word } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
-    webCommunityCopyStatus, webRemoveCommunityCopy, webTurnOnCommunityCopy, WEB_COMMUNITY_COPY_TEXT, type WebCommunityCopyStatus,
+    webRemoveCommunityCopy, webTurnOnCommunityCopy, WEB_COMMUNITY_COPY_TEXT, type WebCommunityCopyStatus,
 } from '../lib/community-copy';
 
 export const COMMUNITY_ADMINS_WEB = {
@@ -23,15 +24,6 @@ export const COMMUNITY_ADMINS_WEB = {
     turnedOn: word('On. If you lose this device, go and see one of your admins with your new phone or browser.'),
 } as const;
 
-/** This browser turned it on here: the server is asked about the copy only then, or where it is offered. */
-const TURNED_ON_KEY = 'beanpool_community_copy_on';
-function turnedOnHere(): boolean {
-    try { return localStorage.getItem(TURNED_ON_KEY) === '1'; } catch { return false; }
-}
-function rememberTurnedOn(on: boolean): void {
-    try { if (on) localStorage.setItem(TURNED_ON_KEY, '1'); else localStorage.removeItem(TURNED_ON_KEY); } catch { /* a convenience only */ }
-}
-
 /** The sentences lib/community-copy.ts throws, said in the reader's language; anything else (the server's) as given. */
 function said(message: string): string {
     if (message === WEB_COMMUNITY_COPY_TEXT.unreachable) return t('Couldn’t reach your community, so nothing changed. Try again in a moment.');
@@ -44,25 +36,16 @@ interface Props {
     identity: BeanPoolIdentity | null;
     /** The community keeps copies itself (`recoveryCopies: 'server'`) and is not the global community. */
     offeredHere: boolean;
+    /** The server's answer about this member's copy (SettingsPage asks): undefined while asking, null when it couldn't be asked. */
+    status: WebCommunityCopyStatus | null | undefined;
+    /** After a turn-on or a removal: the page asks the server again, and the answer comes back as `status`. */
+    onChanged: () => Promise<unknown>;
 }
 
-export function CommunityAdminsSection({ identity, offeredHere }: Props) {
-    const [status, setStatus] = useState<WebCommunityCopyStatus | null>(null);
+export function CommunityAdminsSection({ identity, offeredHere, status, onChanged }: Props) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [justOn, setJustOn] = useState(false);
-
-    useEffect(() => {
-        let live = true;
-        if (identity && (offeredHere || turnedOnHere())) {
-            webCommunityCopyStatus().then((s) => {
-                if (!live) return;
-                setStatus(s);
-                if (s && !s.kept) rememberTurnedOn(false);
-            });
-        }
-        return () => { live = false; };
-    }, [identity, offeredHere]);
 
     if (!identity) return null;
     const kept = status?.kept === true;
@@ -74,8 +57,7 @@ export function CommunityAdminsSection({ identity, offeredHere }: Props) {
         setJustOn(false);
         try {
             await webTurnOnCommunityCopy(identity);
-            rememberTurnedOn(true);
-            setStatus(await webCommunityCopyStatus());
+            await onChanged();
             setJustOn(true);
         } catch (e) {
             setError(said(e instanceof Error ? e.message : String(e)));
@@ -90,8 +72,7 @@ export function CommunityAdminsSection({ identity, offeredHere }: Props) {
         setJustOn(false);
         try {
             await webRemoveCommunityCopy();
-            rememberTurnedOn(false);
-            setStatus(await webCommunityCopyStatus());
+            await onChanged();
         } catch (e) {
             setError(said(e instanceof Error ? e.message : String(e)));
         } finally {
@@ -103,21 +84,22 @@ export function CommunityAdminsSection({ identity, offeredHere }: Props) {
     return (
         <div className="rounded-2xl border border-nature-200 dark:border-nature-700 p-4 space-y-2" data-testid="community-admins-section">
             <div className="text-[15px] font-bold">{t(COMMUNITY_ADMINS_WEB.title)}</div>
-            <p className="text-xs text-nature-500 dark:text-nature-300 leading-relaxed m-0">{t(COMMUNITY_ADMINS_WEB.body)}</p>
+            {/* nature-600 on white is 4.9:1 (WaysBackSection measured the pair); 500 is under 4.5:1. */}
+            <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed m-0">{t(COMMUNITY_ADMINS_WEB.body)}</p>
             {kept && (
                 <p className="text-sm font-semibold m-0" data-testid="community-admins-on">
                     {t(COMMUNITY_ADMINS_WEB.on, { date: since && Number.isFinite(since.getTime()) ? since.toLocaleDateString() : '…' })}
                 </p>
             )}
-            {kept && !offeredHere && <p className="text-xs text-nature-500 dark:text-nature-300 m-0">{t(COMMUNITY_ADMINS_WEB.noLongerOffered)}</p>}
+            {kept && !offeredHere && <p className="text-xs text-nature-600 dark:text-nature-300 m-0">{t(COMMUNITY_ADMINS_WEB.noLongerOffered)}</p>}
             {justOn && kept && <p role="status" className="text-xs m-0">{t(COMMUNITY_ADMINS_WEB.turnedOn)}</p>}
             {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 m-0">{error}</p>}
             {kept ? (
-                <button type="button" disabled={busy} onClick={remove} className="px-4 py-2 rounded-xl border border-nature-300 dark:border-nature-600 text-sm font-semibold disabled:opacity-50" data-testid="community-admins-remove">
+                <button type="button" disabled={busy} onClick={remove} className="min-h-[44px] px-4 py-2 rounded-xl border border-nature-300 dark:border-nature-600 text-sm font-semibold disabled:opacity-50" data-testid="community-admins-remove">
                     {t(COMMUNITY_ADMINS_WEB.remove)}
                 </button>
             ) : (
-                <button type="button" disabled={busy} onClick={turnOn} className="px-4 py-2 rounded-xl bg-bp-commit-fill text-bp-commit-on text-sm font-semibold disabled:opacity-50" data-testid="community-admins-turn-on">
+                <button type="button" disabled={busy} onClick={turnOn} className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill text-bp-commit-on text-sm font-semibold disabled:opacity-50" data-testid="community-admins-turn-on">
                     {t(COMMUNITY_ADMINS_WEB.turnOn)}
                 </button>
             )}

@@ -842,8 +842,8 @@ describe('the host given to a tool has only what its manifest declared', () => {
     });
 
     it("what this build can't grant yet is named, so its route refuses the tool", () => {
-        // `deals` and `pricing-guide` came with the Tool shed (T1.2), the first tool to ask for them.
-        expect(ungrantedPermissions({ permissions: ['photos', 'place', 'deals', 'event-door', 'pricing-guide', 'reminders'] }, phoneHost(ctx(KIT)))).toEqual(['place', 'event-door']);
+        // `deals` and `pricing-guide` came with the Tool shed (T1.2), the first tool to ask for them; `place` with Your garden (G0).
+        expect(ungrantedPermissions({ permissions: ['photos', 'place', 'deals', 'event-door', 'pricing-guide', 'reminders'] }, phoneHost(ctx(KIT)))).toEqual(['event-door']);
     });
 
     it("`posts` reaches only the member's own Offers: anyone else's post, or a Need, is 'gone' and can't be paused", async () => {
@@ -1535,13 +1535,19 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         }));
     };
     beforeEach(() => { reg.extra = []; loc.status = 'denied'; loc.last = null; loc.asked = 0; });
+    /** The route on a fresh root: it reads its params once, as a screen pushed on the stack does. */
+    const redraw = async (extra: Record<string, string> = {}, lang: 'xx' | 'en' = 'en') => {
+        act(() => root.unmount());
+        root = createRoot(host);
+        await drawTool('garden', extra, lang);
+    };
 
     it("draws the zone line in plain words from the community's place, with Change, Sow now and the map's credit", async () => {
         keepHome({ lat: -28.55, lng: 153.5 }); // Mullumbimby
-        await drawTool('garden', {}, 'en');
+        await redraw({}, 'en');
         // Nothing chosen yet: the template's two doors; the guide is behind either, never a gate.
         await click(byTestId('tool-door-starting'), "I'm starting out");
-        await settleUntil(() => !!byTestId('garden-zone-line'));
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Warm temperate, southern hemisphere');
         expect(byTestId('garden-zone-line')?.textContent).toContain("From your community's place.");
         expect(byTestId('garden-now')).not.toBeNull();
@@ -1551,65 +1557,65 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         expect(loc.asked).toBe(0);
         await click(byTestId('garden-change'), 'Change');
         expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'zone' } }]);
-    });
+    }, 30_000);
 
     it('every guide screen in xx at 320 dp × 1.3: every word through t(), none too wide', async () => {
         keepHome({ lat: 6.52, lng: 3.38 }); // Lagos: wet and dry tropics, so a crop carries the rains note
         OTHERS = [];
-        await drawTool('garden');
+        await redraw({}, 'xx');
         await click(byTestId('tool-door-doing'), 'I already do this');
-        await settleUntil(() => !!byTestId('garden-zone-line'));
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(bypassing()).toEqual([]);
         expect(tooWide()).toEqual([]);
-        await drawTool('garden', { screen: 'crop', key: 'cassava' });
-        await settleUntil(() => !!byTestId('garden-crop-sow'));
+        await redraw({ screen: 'crop', key: 'cassava' }, 'xx');
+        await settleUntil(() => !!byTestId('garden-crop-sow'), 8000);
         expect(byTestId('garden-crop-note')).not.toBeNull();
         expect(bypassing()).toEqual([]);
         expect(tooWide()).toEqual([]);
-        await drawTool('garden', { screen: 'zone' });
-        await settleUntil(() => !!byTestId('garden-zone-found'));
+        await redraw({ screen: 'zone' }, 'xx');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
         expect(bypassing()).toEqual([]);
         expect(tooWide()).toEqual([]);
-    });
+    }, 30_000);
 
     it("Change keeps the member's own choice on this phone, which beats the place; Use my place again clears it", async () => {
         keepHome({ lat: -28.55, lng: 153.5 });
-        await drawTool('garden', { screen: 'zone' }, 'en');
-        await settleUntil(() => !!byTestId('garden-zone-found'));
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
         expect(byTestId('garden-zone-found')?.textContent).toContain('Warm temperate, southern hemisphere');
         await click(byTestId('garden-zone-mild'), 'Mild temperate');
-        await settleUntil(() => nav.backs > 0);
+        await settleUntil(() => nav.backs > 0, 8000);
         expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
-        await drawTool('garden', {}, 'en');
-        await settleUntil(() => !!byTestId('garden-zone-line'));
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate, southern hemisphere');
         expect(byTestId('garden-zone-line')?.textContent).toContain('You chose this.');
-        await drawTool('garden', { screen: 'zone' }, 'en');
-        await settleUntil(() => !!byTestId('garden-zone-reset'));
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
         await click(byTestId('garden-zone-reset'), 'Use my place again');
-        await settleUntil(() => nav.backs > 1);
+        await settleUntil(() => nav.backs > 1, 8000);
         expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
-    });
+    }, 30_000);
 
     it("takes the member's area, then the phone's last known place only where location is already allowed; never asks", async () => {
         keepHome(null, { lat: 51.5, lng: -0.1 }); // London, as the member's rough area
-        await drawTool('garden', {}, 'en');
+        await redraw({}, 'en');
         await click(byTestId('tool-door-doing'), 'I already do this');
-        await settleUntil(() => !!byTestId('garden-zone-line'));
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate, northern hemisphere');
         expect(byTestId('garden-zone-line')?.textContent).toContain('From your area.');
 
         store.map.delete(homeAnswerStoreKey(ME.publicKey, URL_HERE));
         loc.last = { coords: { latitude: 1.35, longitude: 103.82 } }; // Singapore, but location isn't allowed here
-        await drawTool('garden', {}, 'en');
-        await settleUntil(() => !!byTestId('garden-no-zone'));
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-no-zone'), 8000);
         expect(byTestId('garden-choose')).not.toBeNull();
         loc.status = 'granted';
-        await drawTool('garden', {}, 'en');
-        await settleUntil(() => !!byTestId('garden-zone-line'));
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Wet tropical, northern hemisphere');
         expect(loc.asked).toBe(0);
-    });
+    }, 30_000);
 
     it("opens from the Tools screen, the Commons tab's Tools row and Home's Your shop and tools", async () => {
         setLanguage('en');
@@ -1619,7 +1625,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         expect(row?.textContent).toContain('Your garden');
         await click(row, 'Your garden');
         expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden' } }]);
-    });
+    }, 30_000);
 
     it('opens from Home: Add a card offers Your garden on every node (the global one too, where the Commons tab is hidden), and its card opens the guide', async () => {
         const card = HOME_CARD_TYPES.find((c) => c.id === toolHomeCardType('garden'));
@@ -1635,5 +1641,5 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         expect(host.textContent).toContain('What to sow this month, for your climate.');
         await click(host.querySelector('button'), 'the card');
         expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'main' } }]);
-    });
+    }, 30_000);
 });

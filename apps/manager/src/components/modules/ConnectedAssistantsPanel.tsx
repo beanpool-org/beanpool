@@ -118,6 +118,8 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     const [perDayMessage, setPerDayMessage] = useState('');
     // Changing "Assistant posts a day" asks an owner's fresh proof each time (server agent/grants-route.ts).
     const proof = useFreshProof();
+    // Connecting one ticked "May post for me" asks the same fresh proof (server agent/grants-route.ts); its own box, by the form.
+    const makeProof = useFreshProof();
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('');
     // The one-time token: component state only.
@@ -190,7 +192,8 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         await load();
     };
 
-    const handleMake = async () => {
+    // `code`: the fresh proof typed in the box, when the node asked one (a ticked "May post for me" asks it each time).
+    const handleMake = async (code?: string) => {
         setMessage('');
         const trimmed = name.trim();
         if (!trimmed) {
@@ -199,7 +202,13 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         }
         setBusy(true);
         try {
-            const { res, json } = await post(GRANTS, { name: trimmed, days, canPost });
+            const { res, json } = await post(GRANTS, { name: trimmed, days, canPost, ...proofField(code) });
+            // A ticked connect asks the owner's fresh proof: the box opens and says how (a code, the phone, or Manage again). An
+            // unticked one keeps its own answer below (a stale phone session: "press Manage again").
+            if (canPost) {
+                throwIfFreshProof(res.status, json);
+                makeProof.close();
+            }
             if (res.ok && typeof json.token === 'string') {
                 setShownToken(json.token);
                 setShownCanPost(json.grant?.canPost === true);
@@ -212,6 +221,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                 setMessage(`Not connected: ${json.error || `HTTP ${res.status}`}`);
             }
         } catch (e: unknown) {
+            if (makeProof.checkError(e, (c) => handleMake(c), code)) return;
             setMessage(e instanceof Error ? e.message : String(e));
         } finally {
             setBusy(false);
@@ -616,6 +626,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                             >
                                 Connect
                             </button>
+                            <FreshProofBox proof={makeProof} testId="agent-make-proof" />
                         </div>
                     ) : null}
 

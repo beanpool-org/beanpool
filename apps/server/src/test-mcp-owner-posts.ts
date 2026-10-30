@@ -196,7 +196,12 @@ async function main(): Promise<void> {
         const ownerS = await keySignIn(owner);
         const owner2S = await keySignIn(owner2);
         assert(!!ownerS && !!owner2S, 'two owners sign in with their keys');
-        const made = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s Claude', canPost: true } });
+        // A ticked token posts as the owner, so it asks the owner's fresh proof like every other token (#2629 deciding pass, grants-route.ts):
+        // a computer's key session is sent to the phone and no token is made; the phone's Manage just now makes it.
+        const tickedFromComputer = await call('POST', '/api/local/admin/agent/grants', { headers: ownerSessionHeaders(owner.pub), body: { name: 'Olive\'s laptop try', canPost: true } });
+        assert(tickedFromComputer.status === 403 && tickedFromComputer.body?.code === 'phone_required' && typeof tickedFromComputer.body?.token !== 'string',
+            `a computer's key session ticking "May post for me" → 403 phone_required, no token (${show(tickedFromComputer)})`);
+        const made = await call('POST', '/api/local/admin/agent/grants', { headers: ownerPhoneSessionHeaders(owner.pub), body: { name: 'Olive\'s Claude', canPost: true } });
         assert(made.status === 201 && typeof made.body?.token === 'string', `an owner makes an agent token (${made.status})`);
         const TOKEN: string = made.body.token;
         const grantId: string = made.body.grant.id;
@@ -250,7 +255,7 @@ async function main(): Promise<void> {
         resetImageStoreForTests(s3Store);
         try {
             // A ticked grant of its own, so the door's 60 a minute holds for the main one; disconnected after.
-            const bucketT = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s bucket check', canPost: true } });
+            const bucketT = await call('POST', '/api/local/admin/agent/grants', { headers: ownerPhoneSessionHeaders(owner.pub), body: { name: 'Olive\'s bucket check', canPost: true } });
             const bc = await connect(bucketT.body?.token);
             const viaS3 = await bc.callTool({ name: 'create_offer', arguments: {
                 title: 'Bucket-kept marmalade', description: 'Seville oranges, last winter.', category: 'food', beans: 2, lat: -28.55, lng: 153.5, photos: [big],
@@ -511,7 +516,7 @@ async function main(): Promise<void> {
             `the list shows each assistant's tick and posts today, and "Assistant posts a day" (${listed.body?.postsPerDay}, ${listed.body?.postsPerDayMin}–${listed.body?.postsPerDayMax})`);
 
         // A ticked grant of its own for the day's count, so the door's 60 a minute holds for the rest.
-        const capT = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s seeder', canPost: true } });
+        const capT = await call('POST', '/api/local/admin/agent/grants', { headers: ownerPhoneSessionHeaders(owner.pub), body: { name: 'Olive\'s seeder', canPost: true } });
         const capId: string = capT.body?.grant?.id;
         const cc = await connect(capT.body?.token);
         // Default 100: the 101st is refused.
@@ -565,7 +570,7 @@ async function main(): Promise<void> {
         // assistant is held to "Assistant posts a day", not to WRITER_LIMITS.postsPerDay, and never uses those up.
         console.log('── 2d. Set to 1,000, an assistant makes 1,000 real posts as the owner; the owner\'s own 100 stay theirs ──');
         const set1000Again = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: ownerPhoneSessionHeaders(owner2.pub), body: { perDay: 1000 } });
-        const seedT = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s seeding day', canPost: true } });
+        const seedT = await call('POST', '/api/local/admin/agent/grants', { headers: ownerPhoneSessionHeaders(owner.pub), body: { name: 'Olive\'s seeding day', canPost: true } });
         const seedGrant = { id: seedT.body?.grant?.id, name: 'Olive\'s seeding day', member: owner.pub, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: true } as AgentGrant;
         // Through the tool's own run, what /mcp calls after the door: 1,000 calls through the door would wait out its 60 a minute.
         const createOffer = OWNER_POST_TOOLS.find(t => t.name === 'create_offer')!;

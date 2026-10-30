@@ -226,8 +226,12 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             ctx.body = { error: `Pick from 1 to ${AGENT_TOKEN_MAX_DAYS} days` };
             return;
         }
-        // "May post for me": ticked, never assumed (default off).
-        const canPost = b.canPost === true;
+        // "May post for me": ticked, never assumed (default off), and only an owner's assistant posts. A ticked token posts as the owner
+        // for up to 90 days, so it asks the owner's fresh proof every time, as every other token does
+        // (routes/automation-tokens.ts) and as the posts-a-day number does (below): a computer's key session is sent to the phone.
+        // After the range checks: a code is spent when it is checked (#2002 NB1). An unticked token keeps the gate it had.
+        const canPost = b.canPost === true && role === 'owner';
+        if (canPost && !(await requireFreshProof(ctx, b.code, 'connect an assistant that may post for you'))) return;
         const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: now + days * DAY_MS, createdBy: me, canPost }, now);
         if (!res.ok) {
             ctx.status = 400;

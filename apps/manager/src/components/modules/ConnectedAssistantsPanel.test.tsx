@@ -234,6 +234,16 @@ describe('ConnectedAssistantsPanel', () => {
         expect(screen.queryByTestId('agent-token-value')).toBeNull();
     });
 
+    it('a ticked "May post for me" from a computer: the fresh-proof box opens by the form, and no token appears', async () => {
+        fakeNode({ grants: [], makeStatus: 403, makeBody: { error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true } });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        fireEvent.change(await screen.findByLabelText('Assistant’s name'), { target: { value: 'x' } });
+        fireEvent.click(screen.getByRole('checkbox', { name: /May post for me/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        expect(await screen.findByTestId('agent-make-proof-phone')).toHaveTextContent('Do this from your phone: open BeanPool, press Manage, then make this change there.');
+        expect(screen.queryByTestId('agent-token-value')).toBeNull();
+    });
+
     it('an owner turns AI assistants off; an admin is told only an owner can', async () => {
         const calls = fakeNode({ grants: [] });
         const { unmount } = render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);

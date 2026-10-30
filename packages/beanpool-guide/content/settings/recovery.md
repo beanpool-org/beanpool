@@ -94,7 +94,7 @@ In the phone app, open **Settings**, **Account Protection**, then **Where your a
 
 - **Your 12 words**: whether this phone has them, and **I have them written down**, which you tick yourself. The app never checks it.
 - **BeanPool's key vault**: each sign-in account it keeps a copy for, and **Kept since**, the day that copy was made. Linking the same account again makes a new copy, with a new day. If you linked more than one account of the same sign-in (two Google accounts, say), each copy is listed under that sign-in, and its **Remove** takes them all: the key vault removes a sign-in's copies together. If the vault is paused or doesn't answer, the screen says so and lists nothing there.
-- **Your communities' servers**: each community on this phone, and the sign-in accounts its server keeps a copy for, from before the key vault, from the web app, or as a community's first owner. A community that doesn't answer is shown as not answering, and nothing there is listed.
+- **Your communities' servers**: each community on this phone, and the sign-in accounts its server keeps a copy for, from before the key vault, from the web app, or as a community's first owner. Where you turned on **Your community's admins**, from this phone or another, its copy is listed there too, with **Kept since** (see "Your community's admins"). A community that doesn't answer is shown as not answering, and nothing there is listed.
 
 Tap **Remove** next to a copy, or **Remove everything** under them all. A copy shows as removed only once the key vault or the community says it is gone:
 
@@ -102,12 +102,13 @@ Tap **Remove** next to a copy, or **Remove everything** under them all. A copy s
 - A community's server deletes its copy. Copies already in that server's backups stay there (see "Who can open the copy").
 - If a community doesn't answer, the screen says **Not removed yet**, and the app tries again each time it opens. If you link that sign-in account there again in the meantime, the app leaves the new copy alone.
 - If a community couldn't be asked at all, **Remove everything** removes nothing there and says so. Open the screen again later.
+- The copy for your community's admins goes when that community says so. If it doesn't answer, the screen says it wasn't removed: open the screen and try again later.
 
 Before you remove the last copy your phone knows of, the app asks **Show my 12 words first?**, unless you ticked **I have them written down**. On a phone with no 12 words, it says plainly what is left: if you lose the phone and have no 12 words written down, an admin can only move your Beans and your name to a new key (see "Lost your phone and your 12 words"). It never stops you.
 
 Nothing is lost by removing a copy: to have that way back again, link the sign-in account in **Account Protection** (see "Protecting your account now"). In a community that keeps no copies, the screen says so in place of **Link a sign-in**: any copy it lists was made before, there or in another community, and is yours until you remove it.
 
-In the web app, **Settings** has **Where your account can be brought back from** too. It lists whether that browser has your 12 words and the copies that community's server keeps, each with **Remove**. The web app can't reach the key vault, so it says **Copies in BeanPool's key vault are managed in the phone app**.
+In the web app, **Settings** has **Where your account can be brought back from** too. It lists whether that browser has your 12 words and the copies that community's server keeps, the copy for its admins too, each with **Remove**. The web app can't reach the key vault, so it says **Copies in BeanPool's key vault are managed in the phone app**.
 
 ## What the key vault keeps about you
 
@@ -168,7 +169,7 @@ Where your community keeps copies itself (its owners chose **This server**), you
 - To get back in on a new phone, go and see an admin in person. They make a **bring-back code** (it starts BB-), and you scan or type it as a re-key code: **Already a Member? Restore Account**, then **An admin gave me a re-key code**. Your phone shows two digits; the admin types them. Your account comes back at once: **the same key**, your Beans, your name, your chats and every community you are in, with your 12 words when the copy has them. Nothing is moved, and your other phones keep working. If the new phone already has another account, the app asks **Replace this phone's account?** first.
 - When an admin makes a code for you, your phones are told ("An admin is bringing your account back on a new phone…"), and again when it goes through. If that wasn't you, tell an owner at once.
 - Only an owner can bring back an owner or an admin.
-- **Remove** turns it off: your community's server deletes the copy. A re-key to a new key, or deleting your account, removes it too.
+- **Remove** turns it off: your community's server deletes the copy. You can also remove it in **Where your account can be brought back from**, where **Remove everything** takes it with the rest. A re-key to a new key, or deleting your account, removes it too.
 - If your community later stops keeping copies, the row says so, and your copy there still works until you remove it.
 
 ## Lost your phone and your 12 words

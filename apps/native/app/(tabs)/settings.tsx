@@ -44,6 +44,7 @@ import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScr
 import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../../utils/words-put-away';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
+import { CommunityAdminsRow } from '../../components/CommunityAdminsRow';
 import { KnownConsentCard } from '../../components/KnownConsentCard';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
@@ -2457,6 +2458,10 @@ export default function SettingsScreen() {
 
                         {/* The sign-in row, second, once the key vault has answered (the words above never wait for it). */}
                         {waysBack && !protectionLoading && protectionPanel}
+
+                        {/* The third way back (vault rethink VR3): your community's admins, where the community keeps copies itself,
+                            never in the global community; or wherever it already keeps this member's copy. */}
+                        <CommunityAdminsRow communityName={protectionNodeLabel || undefined} />
 
                         {/* Every place a copy of this key is kept, as far as this phone can ask, since when, and removing
                             them (vault rethink VR1, design §5.1): app/ways-back.tsx. In every build: a community's copies

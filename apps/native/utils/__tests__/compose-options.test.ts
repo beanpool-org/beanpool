@@ -156,11 +156,11 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
     };
 
     /**
-     * map.tsx's own restoreDraft (read from the file, never edited), run on a draft as it comes back from storage, with
-     * its setters recording what the composer is given.
+     * The composer's own restoreDraft (app/new-listing.tsx, map.tsx's until MAP-FORM; read from the file, never edited),
+     * run on a draft as it comes back from storage, with its setters recording what the composer is given.
      */
     function restoredByMap(stored: string): Record<string, unknown> {
-        const map = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/map.tsx'), 'utf8');
+        const map = fs.readFileSync(path.join(__dirname, '../../app/new-listing.tsx'), 'utf8');
         const start = map.indexOf('const restoreDraft = (d: any) => {');
         expect(start).toBeGreaterThan(-1);
         const source = map.slice(start, map.indexOf('\n    };', start) + '\n    };'.length).replace('(d: any)', '(d)').replace(/^const restoreDraft = /, '');

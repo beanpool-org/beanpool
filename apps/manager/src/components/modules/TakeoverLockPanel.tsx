@@ -246,6 +246,11 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                     <p className="text-xs text-nature-400 m-0 mt-0.5">
                         This server&apos;s keys and admin sign-in, locked to its owners and to the printed recovery code, for bringing the community up on another server. Today only the recovery code opens a locked backup.
                     </p>
+                    {/* An owner's key is one of the openers, so an owner's own way back is also the community's (vault rethink
+                        VR8, design §3 item 8): the cross-link to the app's Ways back. */}
+                    <p className="text-xs text-nature-400 m-0 mt-1" data-testid="takeover-ways-back" style={{ overflowWrap: 'anywhere' }}>
+                        Each owner&apos;s own key opens it, so an owner&apos;s way back is also the community&apos;s. Keep your 12 words, and check your ways back in the BeanPool app: Settings → Account Protection → <strong>Where your account can be brought back from</strong>. Only an owner can bring an owner back.
+                    </p>
                 </div>
                 <button
                     type="button"

@@ -975,7 +975,7 @@ describe('A thing', () => {
             postDescription: "Clean it.\n\nIf it's lost or broken: $120. That is settled between us; BeanPool doesn't hold or collect it.\n\nLent for up to 7 days at a time.",
             source: 'tool', tool: 'things',
         });
-        expect(nav.pushed.at(-1)).toBe('/(tabs)/map?newPost=offer');
+        expect(nav.pushed.at(-1)).toBe('/new-listing?newPost=offer');
         // The sheet reads the member's shop each time it opens ("Put this in your shop", slice S4′); nothing is posted.
         expect(market.requests.filter((r) => !r.endsWith('/api/tools/things'))).toEqual(['GET /api/shops/mine', 'GET /api/shops/mine']);
         // Nothing posted, so nothing is said to be in the shop.

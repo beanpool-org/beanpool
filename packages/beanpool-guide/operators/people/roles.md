@@ -106,6 +106,10 @@ A community always keeps at least one active owner. Settings refuses to:
 
 To hand over, first give owner to the new person, then step down yourself.
 
+## Bringing back an owner
+
+An owner's key opens the community's locked backups and take-over keys (see Backups & replicas, "Owners' 12 words and phones"). So only an owner can **Bring back** an owner, or an admin, as only an owner can re-key one. An admin who tries is refused. Keep a second owner: with one owner, nobody else can bring that owner back, and the owner's way back is then their 12 words alone.
+
 ## A community with no owner
 
 A server with no owner, such as one set up before the claim code whose data has no founding member, shows "This community has no owner yet — add yourself" under **Owners & admins**. (A new server shows the claim card at sign-in instead: see First-time setup.) While that is true the server lets whoever is signed in make the first owner. Do it straight away.

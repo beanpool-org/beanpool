@@ -7,13 +7,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@beanpool/core';
 import {
-    completePendingJoin, loadIdentity, loadPendingJoin, markPendingJoinSent, releaseSentPendingJoin, IdentityHeldError,
+    completePendingJoin, importIdentity, loadIdentity, loadPendingJoin, markPendingJoinSent, releaseSentPendingJoin, IdentityHeldError,
     PendingJoinHeldError, type BeanPoolIdentity,
 } from '../lib/identity';
 import { signReEnrollAsk, signedFetchWithKey } from '../lib/api';
 import {
-    abandonWebRekey, askWebRekey, endsWebRekey, finishWebRekey, isRekeyCode, pollWebRekey, webRekeyKey, WEB_REKEY_POLL_MS,
-    WEB_REKEY_TEXT, type WebRekeyAnswer, type WebRekeyDeps, type WebRekeyKey,
+    abandonWebRekey, askWebRekey, endsWebRekey, finishWebBringBack, finishWebRekey, isBringBackCode, isRekeyCode, openWebBringBack, pollWebRekey,
+    webRekeyKey, WEB_BRING_BACK_NOT_OPENED, WEB_REKEY_POLL_MS, WEB_REKEY_TEXT, type WebRekeyAnswer, type WebRekeyDeps, type WebRekeyKey,
 } from '../lib/web-rekey';
 import { saidWords, type Said } from './WebJoin';
 
@@ -27,6 +27,7 @@ const defaultDeps: WebRekeyDeps = {
     releaseSentPendingJoin: (r) => releaseSentPendingJoin(r),
     signReEnrollAsk: (code, privateKeyHex) => signReEnrollAsk(code, privateKeyHex),
     signedFetchWithKey: (method, path, body, privateKeyHex, publicKeyHex) => signedFetchWithKey(method, path, body, privateKeyHex, publicKeyHex),
+    importIdentity: (identity) => importIdentity(identity),
 };
 
 interface Props {
@@ -37,7 +38,7 @@ interface Props {
     deps?: WebRekeyDeps;
 }
 
-type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain';
+type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain' | 'broughtBack';
 
 const box: React.CSSProperties = { width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid var(--border-primary, #333)', background: 'var(--bg-secondary, transparent)', color: 'inherit', fontSize: '1rem', fontFamily: 'monospace', boxSizing: 'border-box' };
 const primary: React.CSSProperties = { width: '100%', padding: '0.9rem 1rem', borderRadius: '14px', border: 'none', background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' };
@@ -81,6 +82,25 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
             }
             return;
         }
+        if (answer.state === 'released') {
+            // A bring-back (vault rethink VR3): the member's SAME key, from the copy they keep with this community.
+            if (finishing.current) return;
+            finishing.current = true;
+            try {
+                const m = await finishWebBringBack(k, openWebBringBack(code, k, answer), deps);
+                setMember(m);
+                setPhase('broughtBack');
+            } catch (e) {
+                finishing.current = false;
+                setError(() => (e instanceof IdentityHeldError
+                    ? () => t('This browser holds another BeanPool account, so this one wasn’t saved here.')
+                    : e instanceof Error && e.message === WEB_BRING_BACK_NOT_OPENED
+                        ? () => t('What your community sent didn’t open to your account, so nothing was saved. Ask the admin to try again.')
+                        : WEB_REKEY_TEXT.unreachable));
+                setPhase('form');
+            }
+            return;
+        }
         if (answer.state === 'unreachable') {
             setError(WEB_REKEY_TEXT.unreachable);
             return;
@@ -88,7 +108,7 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
         if (endsWebRekey(answer)) await abandonWebRekey(k, deps).catch(() => {});
         setError(answer.state === 'declined' ? WEB_REKEY_TEXT.declined : answer.state === 'gone' ? WEB_REKEY_TEXT.gone : answer.message);
         setPhase('form');
-    }, [deps]);
+    }, [deps, code]);
 
     // While the number shows: ask every few seconds whether the admin bound this device.
     useEffect(() => {
@@ -104,7 +124,7 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
 
     const ask = async () => {
         setError(null);
-        if (!isRekeyCode(code)) { setError(() => () => t('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.')); return; }
+        if (!isRekeyCode(code)) { setError(() => () => t('That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.')); return; }
         setPhase('asking');
         try {
             key.current = await webRekeyKey(deps);
@@ -127,7 +147,9 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
                 {/* The community this number came from, so the admin can check it is theirs (#1783 review N9). */}
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0 0 0.5rem', overflowWrap: 'anywhere' }} data-testid="web-rekey-number-host">{t('from {host}', { host: typeof window !== 'undefined' ? window.location.host : '' })}</p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                    {t("They type it on their screen. Check the address above is your community's. Your old phone stops working for good.")}
+                    {isBringBackCode(code)
+                        ? t("They type it on their screen. Check the address above is your community's. Your account comes back on this device, the same key.")
+                        : t("They type it on their screen. Check the address above is your community's. Your old phone stops working for good.")}
                 </p>
                 <p role="status" style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('Waiting for your admin…')}</p>
                 {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem' }}>{saidWords(error)}</p>}
@@ -149,6 +171,20 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
                     <input type="checkbox" checked={wroteThemDown} onChange={(e) => setWroteThemDown(e.target.checked)} /> {t('I’ve written my 12 words down')}
                 </label>
                 <button type="button" style={primary} onClick={() => setPhase('linkAgain')}>{t('Continue')}</button>
+            </div>
+        );
+    }
+    if (phase === 'broughtBack' && member) {
+        return (
+            <div data-testid="web-rekey-brought-back">
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>{t('Welcome back')}</h3>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.5 }}>{t('This device holds your account again: the same key, your Beans, your name, your chats and every community.')}</p>
+                <p style={{ fontSize: '0.9rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                    {member.mnemonic?.length
+                        ? t('Your 12 words came back with it. Settings shows them: check you have them written down.')
+                        : t('Your 12 words weren’t in the copy. Settings shows you how to keep them safe.')}
+                </p>
+                <button type="button" style={primary} onClick={() => onBound(member)}>{t('Continue')}</button>
             </div>
         );
     }

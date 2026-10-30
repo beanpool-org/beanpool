@@ -380,4 +380,22 @@ describe('Your garden on the web: both doors', () => {
         await waitFor(() => expect(onNavigate).toHaveBeenCalled());
         expect(JSON.stringify(onNavigate.mock.calls[0])).toContain('garden');
     });
+
+    it('Home: shows "Nothing to sow outdoors this month." when chosen climate has no crops to sow this month', async () => {
+        await writeToolRecord(OWNER, 'garden', {
+            body: JSON.stringify({ v: 1, settings: { zone: 'warm', hemisphere: 'north' } }),
+            updatedAt: '2026-10-20T08:00:00.000Z',
+            syncedAt: null,
+        });
+        const onNavigate = vi.fn();
+        // December in northern warm temperate: 0 crops to sow
+        const dec = Date.parse('2026-12-15T10:00:00.000Z');
+        render(<ToolHomeCard id="c1" title="Your garden" type={toolHomeCardType('garden')} publicKey={OWNER} now={dec} onNavigate={onNavigate} />);
+        const line = await screen.findByText('Nothing to sow outdoors this month.');
+        expect(line).toBeTruthy();
+        expect(screen.getByText('Warm temperate · northern hemisphere')).toBeTruthy();
+        fireEvent.click(line);
+        await waitFor(() => expect(onNavigate).toHaveBeenCalled());
+        expect(JSON.stringify(onNavigate.mock.calls[0])).toContain('garden');
+    });
 });

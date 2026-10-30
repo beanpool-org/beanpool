@@ -64,7 +64,7 @@ const onOpenPost = vi.fn();
 const onOpenProfile = vi.fn();
 
 async function show(props: Record<string, unknown> = { onOpenPost, onOpenProfile }) {
-    await act(async () => { root.render(createElement(ActivityWaterfall, props as any)); });
+    await act(async () => { root.render(createElement(ActivityWaterfall as any, props)); });
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
 const buttons = () => Array.from(host.querySelectorAll<HTMLElement>('button, [role="button"]'));

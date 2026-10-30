@@ -88,17 +88,27 @@ export function fillWanted(i: FillInputs): boolean {
         && i.filter !== 'events' && !i.groupFiltered && !i.distancePicked && wantsFill(i.shownNear);
 }
 
+/**
+ * Given up after this long: the screen does not start a second read while one is out, so a read that never answered
+ * (a radio gone cold mid-request) would hold the section on its spinner for good.
+ */
+export const READ_TIMEOUT_MS = 20_000;
+
 /** The newest from everywhere under the type and category, normalised as the feed reads rows; null when it can't be read. */
 export async function readElsewhere(filter: MarketTypeFilter, categoryFilter: string): Promise<any[] | null> {
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), READ_TIMEOUT_MS);
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return null;
         const { type, cat } = marketServerFilter(filter, categoryFilter);
         const query = `${type}${cat}&limit=${READ_LIMIT}`.replace(/^&/, '');
-        const res = await fetch(`${anchorUrl}/api/marketplace/posts?${query}`);
+        const res = await fetch(`${anchorUrl}/api/marketplace/posts?${query}`, { signal: stop.signal });
         if (!res.ok) return null;
         return normalizeServerPosts(await res.json(), anchorUrl);
     } catch {
         return null;
+    } finally {
+        clearTimeout(timer);
     }
 }

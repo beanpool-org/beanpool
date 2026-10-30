@@ -1,10 +1,12 @@
 /**
  * Settings → "Your community's admins" (vault rethink VR3, community-held placement; DESIGN-vault-rethink-fable.md §4.3,
- * §4.5): the web app can turn it on, as the phone can. Shown where the community keeps copies itself and this is not
- * the global community (`offered`), or wherever this server already keeps this member's copy (a rule moved since: the
- * copy is the member's until they remove it). On is said only on the server's own answer, which SettingsPage asks for
- * and shares with "Where your account can be brought back from" (it lists and removes the copy too), so the two always
- * say the same. The flow is lib/community-copy.ts.
+ * §4.5): the web app can turn it on, as the phone can. Shown where the server says it offers it (its status answer's
+ * `offered`: its rule is "this server" and anyone can't walk in; the page's reading of the rule only until it answers,
+ * or when it couldn't be asked), or wherever this server already keeps this member's copy (a rule moved since: the copy
+ * is the member's until they remove it). On is said only on the server's own answer that it keeps the copy and can open
+ * it; one it keeps but can't open (the key it locks copies with gone, or another in its place) is said as that, with what
+ * can be done, never On. SettingsPage asks, and shares the answer with "Where your account can be brought back from" (it
+ * lists and removes the copy too), so the two always say the same. The flow is lib/community-copy.ts.
  */
 import { useState } from 'react';
 import { formatDate, t, word } from '@beanpool/core';
@@ -22,6 +24,13 @@ export const COMMUNITY_ADMINS_WEB = {
     removeAsk: word("Remove this way back? This community's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work."),
     noLongerOffered: word('This community no longer offers this to new members. Your copy here still works until you remove it.'),
     turnedOn: word('On. If you lose this device, go and see one of your admins with your new phone or browser.'),
+    // A copy this server keeps but can't open now (its status answer's `unopenable`): never On.
+    cantOpen: word("Kept since {date}, but this community's server can't open it now, so your admins can't bring you back with it."),
+    cantOpenKeyMissing: word('The server is missing the key it locks these copies with. The people who run it can put that key back. Until then, your 12 words still work.'),
+    cantOpenTurnOnAgain: word('It was locked with a key the server no longer has. Turn it on again to make a copy it can open.'),
+    cantOpenNotOffered: word('It was locked with a key the server no longer has, and this community no longer makes new copies. You can remove it; your 12 words still work.'),
+    turnOnAgain: word('Turn on again'),
+    removeCopyAsk: word("Remove this copy? This community's server deletes the copy it can't open. Your 12 words still work."),
 } as const;
 
 /** The sentences lib/community-copy.ts throws, said in the reader's language; anything else (the server's) as given. */
@@ -34,7 +43,10 @@ function said(message: string): string {
 
 interface Props {
     identity: BeanPoolIdentity | null;
-    /** The community keeps copies itself (`recoveryCopies: 'server'`) and is not the global community. */
+    /**
+     * The page's reading of the rule: the community keeps copies itself (`recoveryCopies: 'server'`) and is not the global
+     * community. Used only until the server answers, or when it couldn't be asked: its answer's `offered` decides.
+     */
     offeredHere: boolean;
     /** The server's answer about this member's copy (SettingsPage asks): undefined while asking, null when it couldn't be asked. */
     status: WebCommunityCopyStatus | null | undefined;
@@ -49,7 +61,13 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
 
     if (!identity) return null;
     const kept = status?.kept === true;
-    if (!offeredHere && !kept) return null;
+    const unopenable = kept ? null : status?.unopenable ?? null;
+    // The server's own word on whether it offers this (a door anyone can walk through is refused there, whatever the rule).
+    const offered = status ? status.offered : offeredHere;
+    if (!offered && !kept && !unopenable) return null;
+    // Turning it on again makes a copy the server can open, where it has its key and offers it; with its key gone, it
+    // can't keep one (the server refuses), so only Remove is offered.
+    const canTurnOn = offered && !kept && unopenable?.reason !== 'recovery_seal_key_missing';
 
     const turnOn = async () => {
         setBusy(true);
@@ -66,7 +84,8 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
         }
     };
     const remove = async () => {
-        if (!window.confirm(t(COMMUNITY_ADMINS_WEB.removeAsk))) return;
+        // A copy the server can't open is no way back now: removing it takes none away, and the ask says so.
+        if (!window.confirm(unopenable ? t(COMMUNITY_ADMINS_WEB.removeCopyAsk) : t(COMMUNITY_ADMINS_WEB.removeAsk))) return;
         setBusy(true);
         setError(null);
         setJustOn(false);
@@ -80,7 +99,10 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
         }
     };
 
-    const since = status?.since ? new Date(status.since) : null;
+    const dayOf = (iso: string | null | undefined): string => {
+        const d = iso ? new Date(iso) : null;
+        return d && Number.isFinite(d.getTime()) ? formatDate(d, 'day-month-year') : '…';
+    };
     return (
         // The card the Ways back section above draws in (WaysBackSection CARD): white under its words, as their 4.5:1 needs
         // (on the page's own cream, nature-600 is 4.27:1: e2e/signin-recovery-check.mjs measured it).
@@ -90,21 +112,37 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
             <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed m-0">{t(COMMUNITY_ADMINS_WEB.body)}</p>
             {kept && (
                 <p className="text-sm font-semibold m-0" data-testid="community-admins-on">
-                    {t(COMMUNITY_ADMINS_WEB.on, { date: since && Number.isFinite(since.getTime()) ? formatDate(since, 'day-month-year') : '…' })}
+                    {t(COMMUNITY_ADMINS_WEB.on, { date: dayOf(status?.since) })}
                 </p>
             )}
-            {kept && !offeredHere && <p className="text-xs text-nature-600 dark:text-nature-300 m-0">{t(COMMUNITY_ADMINS_WEB.noLongerOffered)}</p>}
+            {/* The warn chip's tint and ink (core brand colours): a pair held at 4.5:1 in light and in dark. */}
+            {unopenable && (
+                <div className="p-3 rounded-xl bg-bp-chip-warn-tint text-bp-chip-warn-ink space-y-1" data-testid="community-admins-cant-open">
+                    <p className="text-sm font-semibold m-0">{t(COMMUNITY_ADMINS_WEB.cantOpen, { date: dayOf(unopenable.since) })}</p>
+                    <p className="text-xs m-0">
+                        {unopenable.reason === 'recovery_seal_key_missing'
+                            ? t(COMMUNITY_ADMINS_WEB.cantOpenKeyMissing)
+                            : offered
+                                ? t(COMMUNITY_ADMINS_WEB.cantOpenTurnOnAgain)
+                                : t(COMMUNITY_ADMINS_WEB.cantOpenNotOffered)}
+                    </p>
+                </div>
+            )}
+            {kept && !offered && <p className="text-xs text-nature-600 dark:text-nature-300 m-0">{t(COMMUNITY_ADMINS_WEB.noLongerOffered)}</p>}
             {justOn && kept && <p role="status" className="text-xs m-0">{t(COMMUNITY_ADMINS_WEB.turnedOn)}</p>}
             {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400 m-0">{error}</p>}
-            {kept ? (
-                <button type="button" disabled={busy} onClick={remove} className="min-h-[44px] px-4 py-2 rounded-xl border border-nature-300 dark:border-nature-600 text-sm font-semibold disabled:opacity-50" data-testid="community-admins-remove">
-                    {t(COMMUNITY_ADMINS_WEB.remove)}
-                </button>
-            ) : (
-                <button type="button" disabled={busy} onClick={turnOn} className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill text-bp-commit-on text-sm font-semibold disabled:opacity-50" data-testid="community-admins-turn-on">
-                    {t(COMMUNITY_ADMINS_WEB.turnOn)}
-                </button>
-            )}
+            <div className="flex flex-wrap gap-2">
+                {canTurnOn && (
+                    <button type="button" disabled={busy} onClick={turnOn} className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill text-bp-commit-on text-sm font-semibold disabled:opacity-50" data-testid="community-admins-turn-on">
+                        {t(unopenable ? COMMUNITY_ADMINS_WEB.turnOnAgain : COMMUNITY_ADMINS_WEB.turnOn)}
+                    </button>
+                )}
+                {(kept || unopenable) && (
+                    <button type="button" disabled={busy} onClick={remove} className="min-h-[44px] px-4 py-2 rounded-xl border border-nature-300 dark:border-nature-600 text-sm font-semibold disabled:opacity-50" data-testid="community-admins-remove">
+                        {t(COMMUNITY_ADMINS_WEB.remove)}
+                    </button>
+                )}
+            </div>
         </div>
     );
 }

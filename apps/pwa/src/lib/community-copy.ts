@@ -12,10 +12,31 @@ import { recoveryWordsMatchSeed, sealSeedToCopyKey, toEd25519Seed } from '@beanp
 import { signedFetch } from './api';
 import { getMnemonic, type BeanPoolIdentity } from './identity';
 
+/**
+ * Why this server can't open a copy it keeps (its answer's `unopenable.reason`): the key it locks copies with is gone
+ * (only the people who run it can fix that, by putting the key back), or the copy was locked with a key it no longer has
+ * (turning it on again makes a copy it can open).
+ */
+export type WebCommunityCopyUnopenableReason = 'recovery_seal_key_missing' | 'recovery_seal_unopenable';
+
 export interface WebCommunityCopyStatus {
+    /** It keeps the copy and can open it: only then can its admins bring the member back. */
     kept: boolean;
     since: string | null;
+    /** Whether the community offers it now (its rule is "this server", and its door is not open to anyone). */
     offered: boolean;
+    /** It keeps a copy it can't open now, since when and why: never On, never a way back. Null otherwise, and from a server from before. */
+    unopenable: { since: string | null; reason: WebCommunityCopyUnopenableReason } | null;
+}
+
+/** The server's `unopenable`, read. A reason this browser doesn't know is still "can't open", never "kept". */
+function unopenableOf(v: unknown): WebCommunityCopyStatus['unopenable'] {
+    if (!v || typeof v !== 'object') return null;
+    const u = v as { since?: unknown; reason?: unknown };
+    return {
+        since: typeof u.since === 'string' ? u.since : null,
+        reason: u.reason === 'recovery_seal_key_missing' ? 'recovery_seal_key_missing' : 'recovery_seal_unopenable',
+    };
 }
 
 export const WEB_COMMUNITY_COPY_TEXT = {
@@ -38,7 +59,8 @@ export async function webCommunityCopyStatus(): Promise<WebCommunityCopyStatus |
         if (!res.ok) return null;
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
         if (typeof body.kept !== 'boolean') return null;
-        return { kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true };
+        const unopenable = body.kept ? null : unopenableOf(body.unopenable);
+        return { kept: body.kept, since: typeof body.since === 'string' ? body.since : null, offered: body.offered === true, unopenable };
     } catch {
         return null;
     }

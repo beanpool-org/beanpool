@@ -50,16 +50,24 @@ async function openWaysBack() {
     return screen.getByTestId('ways-back-server');
 }
 
-/** The server as these tests play it: whether it keeps the copy, answered to every status asked. */
+/**
+ * The server as these tests play it, answered to every status asked: whether it keeps the copy, whether it offers it
+ * (its own word, which Settings goes by: the rule "This server" and a door anyone can't walk through), and a copy it
+ * keeps but can't open (`unopenable`, why: its key gone, or another).
+ */
 let kept = false;
+let offered = false;
+let unopenable: { since: string; reason: 'recovery_seal_key_missing' | 'recovery_seal_unopenable' } | null = null;
 
 beforeEach(() => {
     localStorage.clear();
     resetCommunityInfoOnce();
     kept = false;
-    vi.mocked(copyLib.webCommunityCopyStatus).mockImplementation(async () => ({ kept, since: kept ? SINCE : null, offered: true }));
-    vi.mocked(copyLib.webRemoveCommunityCopy).mockImplementation(async () => { kept = false; });
-    vi.mocked(copyLib.webTurnOnCommunityCopy).mockImplementation(async () => { kept = true; return { since: SINCE }; });
+    offered = false;
+    unopenable = null;
+    vi.mocked(copyLib.webCommunityCopyStatus).mockImplementation(async () => ({ kept, since: kept ? SINCE : null, offered, unopenable }));
+    vi.mocked(copyLib.webRemoveCommunityCopy).mockImplementation(async () => { kept = false; unopenable = null; });
+    vi.mocked(copyLib.webTurnOnCommunityCopy).mockImplementation(async () => { kept = true; unopenable = null; return { since: SINCE }; });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 afterEach(() => {
@@ -122,6 +130,7 @@ describe("Settings: your community's admins, and its copy in the Ways back list 
 
     it("offered here (rule 'This server'): Turn on, then both show it; removing it in the section takes it off the list", async () => {
         vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        offered = true;
         renderSettings();
         const section = await screen.findByTestId('community-admins-section');
         const server = await openWaysBack();
@@ -146,6 +155,88 @@ describe("Settings: your community's admins, and its copy in the Ways back list 
         expect(within(server).getByRole('button', { name: "Remove the Google copy at this community's server" })).toBeInTheDocument();
         expect(within(server).queryByTestId('ways-back-admins-copy')).toBeNull();
         expect(screen.queryByTestId('community-admins-section')).toBeNull();
+    });
+});
+
+describe("Settings: a copy this server keeps but can't open is never On, nor a way back (#2626 deciding pass)", () => {
+    it("its key gone: the section says kept but can't be opened and what the people who run it can do, with Remove only; the list shows it as that", async () => {
+        unopenable = { since: SINCE, reason: 'recovery_seal_key_missing' };
+        offered = true;
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        renderSettings();
+        const section = await screen.findByTestId('community-admins-section');
+        await waitFor(() => expect(within(section).getByTestId('community-admins-cant-open')).toBeInTheDocument());
+        const said = within(section).getByTestId('community-admins-cant-open');
+        expect(said).toHaveTextContent(/Kept since .*2026, but this community's server can't open it now, so your admins can't bring you back with it\./);
+        expect(said).toHaveTextContent('The server is missing the key it locks these copies with. The people who run it can put that key back. Until then, your 12 words still work.');
+        expect(within(section).queryByTestId('community-admins-on')).toBeNull();
+        expect(within(section).queryByTestId('community-admins-turn-on'), 'turning it on again can\'t work without the key').toBeNull();
+        expect(within(section).getByTestId('community-admins-remove')).toBeInTheDocument();
+
+        const server = await openWaysBack();
+        const row = within(server).getByTestId('ways-back-admins-cant-open');
+        expect(row).toHaveTextContent(/Kept since .*2026/);
+        expect(row).toHaveTextContent("This server can't open this copy now, so it can't bring your account back.");
+        expect(within(server).queryByTestId('ways-back-admins-copy'), 'never listed as a way back').toBeNull();
+        expect(server).not.toHaveTextContent('Keeps no copy of your account.');
+    });
+
+    it("removing it from the list asks about the copy as what it is: no words-first line, since no way back goes with it", async () => {
+        unopenable = { since: SINCE, reason: 'recovery_seal_key_missing' };
+        renderSettings();
+        const server = await openWaysBack();
+        await waitFor(() => expect(within(server).getByTestId('ways-back-admins-cant-open')).toBeInTheDocument());
+        fireEvent.click(within(server).getByRole('button', { name: "Remove the copy at this community's server that it can't open" }));
+        const box = within(server).getByTestId('ways-back-confirm');
+        expect(box).toHaveTextContent('Remove this copy?');
+        expect(box).toHaveTextContent("This community's server deletes the copy it can't open. Your 12 words still work.");
+        expect(within(box).queryByTestId('ways-back-words-first')).toBeNull();
+        fireEvent.click(within(box).getByRole('button', { name: 'Remove' }));
+        await waitFor(() => expect(copyLib.webRemoveCommunityCopy).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(within(server).queryByTestId('ways-back-admins-cant-open')).toBeNull());
+        expect(server).toHaveTextContent('Keeps no copy of your account.');
+    });
+
+    it("another key in its place, offered: Turn on again makes a copy it can open, and both then say On", async () => {
+        unopenable = { since: SINCE, reason: 'recovery_seal_unopenable' };
+        offered = true;
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        renderSettings();
+        const section = await screen.findByTestId('community-admins-section');
+        await waitFor(() => expect(within(section).getByTestId('community-admins-cant-open')).toHaveTextContent('It was locked with a key the server no longer has. Turn it on again to make a copy it can open.'));
+        const again = within(section).getByTestId('community-admins-turn-on');
+        expect(again).toHaveTextContent('Turn on again');
+        fireEvent.click(again);
+        await waitFor(() => expect(copyLib.webTurnOnCommunityCopy).toHaveBeenCalledTimes(1));
+        expect(await within(section).findByTestId('community-admins-on')).toHaveTextContent('On since');
+        expect(within(section).queryByTestId('community-admins-cant-open')).toBeNull();
+    });
+
+    it("another key in its place, no longer offered: no Turn on; it can be removed", async () => {
+        unopenable = { since: SINCE, reason: 'recovery_seal_unopenable' };
+        renderSettings();
+        const section = await screen.findByTestId('community-admins-section');
+        await waitFor(() => expect(within(section).getByTestId('community-admins-cant-open')).toHaveTextContent('and this community no longer makes new copies. You can remove it; your 12 words still work.'));
+        expect(within(section).queryByTestId('community-admins-turn-on')).toBeNull();
+        expect(within(section).getByTestId('community-admins-remove')).toBeInTheDocument();
+    });
+});
+
+describe("Settings: Turn on is offered on the server's own word (#2626 deciding pass, nit)", () => {
+    it("the rule says 'This server', but the server answers that it doesn't offer it (a door anyone can walk through): no Turn on", async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        offered = false;
+        renderSettings();
+        await waitFor(() => expect(copyLib.webCommunityCopyStatus).toHaveBeenCalled());
+        await waitFor(() => expect(screen.queryByTestId('community-admins-turn-on')).toBeNull());
+        expect(screen.queryByTestId('community-admins-section')).toBeNull();
+    });
+
+    it("the server couldn't be asked: the rule decides, as before", async () => {
+        vi.mocked(api.getCommunityInfo).mockResolvedValue(SERVER_RULE);
+        vi.mocked(copyLib.webCommunityCopyStatus).mockResolvedValue(null);
+        renderSettings();
+        expect(await screen.findByTestId('community-admins-turn-on')).toHaveTextContent('Turn on');
     });
 });
 

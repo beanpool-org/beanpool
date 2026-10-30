@@ -36,6 +36,8 @@ export const WAYS_BACK_WEB = {
     // The copy this server keeps for its admins to bring the member back from (vault rethink VR3).
     admins: word("Your community's admins"),
     adminsLine: word('A locked copy an admin can bring your account back from, when they see you in person.'),
+    // One this server keeps but can't open now (its key gone, or another): listed and removable, never a way back.
+    adminsCantOpen: word("This server can't open this copy now, so it can't bring your account back. Your community's admins, below, says what can be done. Your 12 words still work."),
 } as const;
 
 interface Props {
@@ -43,6 +45,8 @@ interface Props {
     enrolled: string[] | null | undefined;
     /** The copy this server keeps for its admins to bring the member back from (VR3), since when; null or absent: none known. */
     adminsCopy?: { since: string | null } | null;
+    /** One it keeps for them but can't open now, since when: listed and removable, never counted as a way back. */
+    adminsCopyUnopenable?: { since: string | null } | null;
     /** Whether this browser holds the 12 words. */
     hasWords: boolean;
     /** Show the 12 words (Settings' View Recovery Phrase). */
@@ -61,7 +65,7 @@ const PLAIN = `${BUTTON} bg-white dark:bg-nature-900 text-nature-900 dark:text-w
 /** Which copy the confirm is for: a sign-in's, or the admins' (VR3). */
 type Asking = JoinProvider | 'admins';
 
-export function WaysBackSection({ enrolled, adminsCopy = null, hasWords, onShowWords, onChanged }: Props) {
+export function WaysBackSection({ enrolled, adminsCopy = null, adminsCopyUnopenable = null, hasWords, onShowWords, onChanged }: Props) {
     const [open, setOpen] = useState(false);
     const [asking, setAsking] = useState<Asking | null>(null);
     const [busy, setBusy] = useState(false);
@@ -69,6 +73,8 @@ export function WaysBackSection({ enrolled, adminsCopy = null, hasWords, onShowW
     const copies = enrolled ? [...new Set(enrolled.filter(isJoinProvider))] : [];
     const admins = enrolled ? adminsCopy : null;
     const adminsSince = admins?.since ? new Date(admins.since) : null;
+    const cantOpen = enrolled && !admins ? adminsCopyUnopenable : null;
+    const cantOpenSince = cantOpen?.since ? new Date(cantOpen.since) : null;
 
     const remove = async (which: Asking) => {
         setBusy(true);
@@ -84,18 +90,23 @@ export function WaysBackSection({ enrolled, adminsCopy = null, hasWords, onShowW
     };
 
     const confirmBox = (which: Asking) => {
-        const title = which === 'admins' ? t('Remove this way back?') : t('Remove your {provider} copy?', { provider: providerLabel(which) });
+        // The admins' copy this server can't open is no way back: removing it takes none away, and the ask says so.
+        const noWayBack = which === 'admins' && !admins;
+        const title = noWayBack ? t('Remove this copy?')
+            : which === 'admins' ? t('Remove this way back?') : t('Remove your {provider} copy?', { provider: providerLabel(which) });
         // This browser can't see the vault: the server's only copy is the last way back it knows of.
-        const last = copies.length + (admins ? 1 : 0) === 1;
+        const last = !noWayBack && copies.length + (admins ? 1 : 0) === 1;
         return (
             <div data-testid="ways-back-confirm" role="alertdialog" aria-label={title}
                 className="mt-2 p-3 rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700">
                 <p className="m-0 text-sm font-bold">{title}</p>
                 {/* nature-300 in dark: SMALL's 400 is 3.8:1 on this box's nature-800 (e2e/signin-recovery-check.mjs). */}
                 <p className="m-0 mt-1 text-xs font-normal text-nature-600 dark:text-nature-300">
-                    {which === 'admins'
-                        ? t("This community's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.")
-                        : t("This community's server deletes it. Copies already in that server's backups stay there.")}
+                    {noWayBack
+                        ? t("This community's server deletes the copy it can't open. Your 12 words still work.")
+                        : which === 'admins'
+                            ? t("This community's server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.")
+                            : t("This community's server deletes it. Copies already in that server's backups stay there.")}
                 </p>
                 {last && (
                     <p data-testid="ways-back-words-first" className="m-0 mt-1 text-xs font-bold text-nature-900 dark:text-white">
@@ -142,7 +153,7 @@ export function WaysBackSection({ enrolled, adminsCopy = null, hasWords, onShowW
                             <p className={`m-0 ${SMALL}`}>{t('Checking…')}</p>
                         ) : enrolled === null ? (
                             <p className={`m-0 ${SMALL}`}>{t(WAYS_BACK_WEB.notAsked)}</p>
-                        ) : copies.length === 0 && !admins ? (
+                        ) : copies.length === 0 && !admins && !cantOpen ? (
                             <p className={`m-0 ${SMALL}`}>{t(WAYS_BACK_WEB.keepsNone)}</p>
                         ) : copies.map(p => (
                             <div key={p} className="mt-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700">
@@ -165,6 +176,21 @@ export function WaysBackSection({ enrolled, adminsCopy = null, hasWords, onShowW
                                 {asking === 'admins' ? confirmBox('admins') : (
                                     <button type="button" className={`mt-1 ${DANGER}`} disabled={busy} onClick={() => { setResult(null); setAsking('admins'); }}
                                         aria-label={t("Remove the copy at this community's server that its admins can bring you back from")}>
+                                        {t(WAYS_BACK_WEB.remove)}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {cantOpen && (
+                            <div data-testid="ways-back-admins-cant-open" className="mt-2 p-3 rounded-xl border border-nature-200 dark:border-nature-700">
+                                <p className="m-0 text-sm font-semibold">{t(WAYS_BACK_WEB.admins)}</p>
+                                {cantOpenSince && Number.isFinite(cantOpenSince.getTime()) && (
+                                    <p className={`m-0 ${SMALL}`}>{t('Kept since {date}', { date: formatDate(cantOpenSince, 'day-month-year') })}</p>
+                                )}
+                                <p className={`m-0 ${SMALL}`}>{t(WAYS_BACK_WEB.adminsCantOpen)}</p>
+                                {asking === 'admins' ? confirmBox('admins') : (
+                                    <button type="button" className={`mt-1 ${DANGER}`} disabled={busy} onClick={() => { setResult(null); setAsking('admins'); }}
+                                        aria-label={t("Remove the copy at this community's server that it can't open")}>
                                         {t(WAYS_BACK_WEB.remove)}
                                     </button>
                                 )}

@@ -3081,10 +3081,15 @@ export interface RekeyStatusResponse {
         kind?: 'rekey' | 'bring_back';
     } | null;
     /**
-     * Whether the member keeps a community copy here (vault rethink VR3), so Bring back can give them their same key on a
-     * new phone. Absent from a node before it.
+     * Whether the member keeps a community copy here that this node can open (vault rethink VR3), so Bring back can give
+     * them their same key on a new phone. One it keeps but can't open is `unopenable`, with why (its recovery-seal key
+     * missing, or another key in its place), and is never `kept`. Absent from a node before it.
      */
-    communityCopy?: { kept: boolean; since: string | null };
+    communityCopy?: {
+        kept: boolean;
+        since: string | null;
+        unopenable?: { since: string; reason: 'recovery_seal_key_missing' | 'recovery_seal_unopenable' } | null;
+    };
     /** This node's bring-backs of the member, newest first: who and when. */
     bringBacks?: Array<{ operatorPubkey: string; releasedAt: string }>;
     /** The phones that asked on the pending code (#1768), oldest first: only beside the code itself. */

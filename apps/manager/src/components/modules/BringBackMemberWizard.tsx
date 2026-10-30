@@ -124,6 +124,7 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
     }, [code, expiresAt, done, stopped, gone, nodeUrl, member.publicKey, adminPassword, tfaToken]);
 
     const kept = status?.communityCopy?.kept === true;
+    const unopenable = kept ? null : status?.communityCopy?.unopenable ?? null;
     const rekeyWaiting = status?.pendingRequest && status.pendingRequest.kind !== 'bring_back';
     const expired = !!expiresAt && new Date(expiresAt).getTime() < now;
 
@@ -233,8 +234,18 @@ export function BringBackMemberWizard({ member, nodeUrl, adminPassword, tfaToken
                         <p className="m-0 font-bold break-words" data-testid="bring-back-can">
                             {kept
                                 ? `Can be brought back by this community: yes${status.communityCopy?.since ? `, since ${new Date(status.communityCopy.since).toLocaleDateString()}` : ''}.`
-                                : 'Can be brought back by this community: no. They haven’t turned on “Your community’s admins” here, so there is nothing to bring back.'}
+                                : unopenable
+                                    ? 'Can be brought back by this community: no. This server keeps their copy but can’t open it now.'
+                                    : 'Can be brought back by this community: no. They haven’t turned on “Your community’s admins” here, so there is nothing to bring back.'}
                         </p>
+                        {/* A copy kept but unopenable (the node's status says why): what the owner, or the member, can do about it. */}
+                        {unopenable && (
+                            <p className="m-0 text-amber-300 break-words" data-testid="bring-back-cant-open">
+                                {unopenable.reason === 'recovery_seal_key_missing'
+                                    ? 'Its recovery-seal key (data/recovery-seal.key) is missing: put it back from your take-over bundle or sealed backup, and Bring back works again. Until then, Re-Key moves their Beans and name to a new key.'
+                                    : 'It was locked with a recovery-seal key this server doesn’t have. They can turn on “Your community’s admins” again in the app to make a copy it can open. Until then, Re-Key moves their Beans and name to a new key.'}
+                            </p>
+                        )}
                         {rekeyWaiting && (
                             <p className="m-0 text-amber-300 break-words">They have a re-key code waiting, which holds their key. Cancel it on Re-Key first.</p>
                         )}

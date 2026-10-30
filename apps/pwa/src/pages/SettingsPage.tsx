@@ -1034,6 +1034,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 <WaysBackSection
                                     enrolled={signInRecovery}
                                     adminsCopy={communityCopy?.kept ? { since: communityCopy.since } : null}
+                                    adminsCopyUnopenable={communityCopy?.unopenable ?? null}
                                     hasWords={hasWords}
                                     onShowWords={() => setMode('seed')}
                                     onChanged={() => { getSignInRecovery().then(setSignInRecovery); void readCommunityCopy(); }}

@@ -122,4 +122,20 @@ describe('BringBackMemberWizard', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Re-key instead' }));
         expect(onRekeyInstead).toHaveBeenCalledTimes(1);
     });
+
+    it('a copy kept here that this server can\'t open: "no", why, and what can be done; never "they haven\'t turned it on" (#2626)', async () => {
+        for (const [reason, said] of [
+            ['recovery_seal_key_missing', 'Its recovery-seal key (data/recovery-seal.key) is missing: put it back from your take-over bundle or sealed backup, and Bring back works again.'],
+            ['recovery_seal_unopenable', 'It was locked with a recovery-seal key this server doesn’t have. They can turn on “Your community’s admins” again in the app to make a copy it can open.'],
+        ] as const) {
+            vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({
+                ...base, communityCopy: { kept: false, since: null, unopenable: { since: '2026-10-05T00:00:00.000Z', reason } },
+            });
+            const { unmount } = render(<BringBackMemberWizard member={member} nodeUrl="http://localhost:3000" onRekeyInstead={() => {}} onClose={() => {}} />);
+            await waitFor(() => expect(screen.getByTestId('bring-back-can').textContent).toBe('Can be brought back by this community: no. This server keeps their copy but can’t open it now.'));
+            expect(screen.getByTestId('bring-back-cant-open').textContent).toContain(said);
+            expect(screen.queryByTestId('bring-back-make-code'), 'no code for a copy this server can\'t open').toBeNull();
+            unmount();
+        }
+    });
 });

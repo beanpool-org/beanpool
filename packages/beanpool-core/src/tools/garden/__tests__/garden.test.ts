@@ -83,7 +83,8 @@ describe('the guide in words', () => {
     it('says a window as runs of months, over the new year too', () => {
         setLanguage('en');
         expect(monthsText(monthsMask('2-4'))).toBe('Feb – Apr');
-        expect(monthsText(monthsMask('10-2,6'))).toBe('Jan – Feb, Jun, Oct – Dec');
+        // A window over the new year is one run, from where it starts: October to February.
+        expect(monthsText(monthsMask('10-2,6'))).toBe('Jun, Oct – Feb');
         expect(monthsText(ALL_MONTHS)).toBe('All year');
         expect(monthsText(0)).toBeNull();
     });
@@ -210,9 +211,12 @@ describe('the bundled data', () => {
         }
     });
 
-    it('gives every zone something to sow in every month, so the guide is never empty in either hemisphere', () => {
+    it('gives every zone but the cold two something to sow now or soon in every month, in either hemisphere', () => {
+        // A cold winter has months with nothing to sow outdoors: the guide says so (garden-now-none), never invents one.
+        expect(sowNow('cold', 'north', 11)).toEqual([]);
+        expect(sowNow('cold', 'south', 5)).toEqual([]);
         for (const z of GARDEN_ZONE_IDS) {
-            if (z === 'short') continue; // a short season has months with nothing to sow outdoors, and says so
+            if (z === 'short' || z === 'cold') continue;
             for (let m = 0; m < 12; m++) {
                 for (const h of ['north', 'south'] as const) expect([z, h, m, sowNow(z, h, m).length > 0 || sowSoon(z, h, m).length > 0]).toEqual([z, h, m, true]);
             }

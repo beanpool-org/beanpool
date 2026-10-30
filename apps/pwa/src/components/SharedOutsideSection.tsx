@@ -38,7 +38,7 @@ export function SharedOutsideSection() {
         }
     };
 
-    const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left';
+    const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
     return (
         <div data-testid="settings-shared-outside">
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden">
@@ -53,7 +53,7 @@ export function SharedOutsideSection() {
                         {shares === 'failed' && (
                             <div role="alert" className="flex flex-col items-start gap-2">
                                 <p className="m-0 text-sm text-red-700 dark:text-red-300 break-words">{t('Could not load this. Check your connection and try again.')}</p>
-                                <button type="button" onClick={load} className="min-h-[44px] px-4 rounded-xl border border-bp-ink-info text-bp-ink-info font-bold text-sm bg-transparent cursor-pointer">{t('Retry')}</button>
+                                <button type="button" onClick={load} className="min-h-[44px] px-4 rounded-xl border border-bp-ink-info text-bp-ink-info font-bold text-sm bg-transparent cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">{t('Retry')}</button>
                             </div>
                         )}
                         {Array.isArray(shares) && shares.length === 0 && (
@@ -64,7 +64,7 @@ export function SharedOutsideSection() {
                                 <span className="font-bold text-nature-900 dark:text-white break-words" dir="auto">{s.title ?? t(W.postGone)}</span>
                                 <span className="text-xs text-nature-600 dark:text-nature-300">{t(W.worksUntil, { date: formatDate(new Date(s.expiresAt), 'day-month') })}</span>
                                 <button type="button" onClick={() => stop(s.id)} disabled={stopping === s.id} data-testid="shared-outside-stop"
-                                    className="self-start min-h-[44px] px-4 rounded-xl border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 font-bold text-sm bg-transparent cursor-pointer disabled:opacity-60 break-words">
+                                    className="self-start min-h-[44px] px-4 rounded-xl border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 font-bold text-sm bg-transparent cursor-pointer disabled:opacity-60 break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
                                     {t(W.stopSharing)}
                                 </button>
                             </div>

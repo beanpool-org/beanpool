@@ -247,8 +247,9 @@ describe('every sentence through t(), in every state and every confirm (pseudo-l
     });
 
     it("a copy its server keeps but can't open: listed as that, never a way back, and Remove asks plainly (#2626)", async () => {
+        // A build without a key vault, so the only place that could say "Keeps no copy" is Mullumbimby itself.
         fx.ways = {
-            vault: { kind: 'listed', copies: [] },
+            vault: { kind: 'no-vault' },
             communities: [{ url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 3, adminsCopyUnopenable: { since: '2026-10-29T04:05:06.000Z', reason: 'recovery_seal_key_missing' } } }],
             pending: [],
         };

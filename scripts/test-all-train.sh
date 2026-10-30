@@ -87,7 +87,7 @@ summary() {
     esac
   done
   echo ""
-  [ -n "$merged" ] && merged="${merged# } merged" || merged="nothing merged"
+  [ -n "$merged" ] && merged="${merged# } $([ $MERGE -eq 1 ] && echo merged || echo "would merge (--no-merge)")" || merged="nothing merged"
   echo "train: $merged$others (logs: $LOGS)"
   exit "$1"
 }

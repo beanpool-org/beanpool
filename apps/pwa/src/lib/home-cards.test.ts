@@ -431,9 +431,9 @@ describe('enterprise latest line: positive incoming ("from"), negative outgoing 
         expect(enterpriseLatestLine({ kind: 'member', amount: -1, who: 'Ana', at: '' })).toBe('Latest: −1 Bean to Ana');
     });
 
-    it('deal / escrow: positive is "from escrow", negative is "to escrow"', () => {
-        expect(enterpriseLatestLine({ kind: 'deal', amount: 25, who: null, at: '' })).toBe('Latest: +25 Beans from escrow');
-        expect(enterpriseLatestLine({ kind: 'deal', amount: -25, who: null, at: '' })).toBe('Latest: −25 Beans to escrow');
+    it('deal / held in trust: positive is "released from trust", negative is "held in trust"', () => {
+        expect(enterpriseLatestLine({ kind: 'deal', amount: 25, who: null, at: '' })).toBe('Latest: +25 Beans released from trust');
+        expect(enterpriseLatestLine({ kind: 'deal', amount: -25, who: null, at: '' })).toBe('Latest: −25 Beans held in trust');
     });
 
     it('commons: positive is "from Commons", negative is "to Commons"', () => {

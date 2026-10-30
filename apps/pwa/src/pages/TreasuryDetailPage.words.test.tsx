@@ -353,7 +353,7 @@ describe('the enterprise page in English', () => {
         expect(bracketed()).toBe(0);
         expect(screen.getByText('Clean the coop').parentElement!.nextElementSibling!.textContent).toBe('Bidder: Dan');
         expect(screen.getByRole('button', { name: 'Approve Bid (10 🫘)' })).toBeInTheDocument();
-        expect(screen.getByText('6 🫘 in escrow')).toBeInTheDocument();
+        expect(screen.getByText('6 🫘 held in trust')).toBeInTheDocument();
         expect(screen.getByText('Egg delivery').parentElement!.nextElementSibling!.textContent).toBe('Customer: Eve');
         expect(screen.getByText('Fix the fence').parentElement!.nextElementSibling!.textContent).toBe('Worker: Member');
         expect(screen.getByText('On the map at -28.550, 153.500')).toBeInTheDocument();

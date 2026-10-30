@@ -1,7 +1,7 @@
 ---
 slug: ai-assistant
 title: AI assistants
-summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, the suggestions you approve, the listings an owner's assistant posts, its limits, and disconnecting it.
+summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor, or any MCP client you run yourself, such as Hermes or a local model) to your server, what it sees and never sees, the suggestions you approve, the listings an owner's assistant posts, its limits, and disconnecting it.
 related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees, install-with-ai
 ---
 
@@ -39,6 +39,23 @@ Under Appliance & Data, then Access & Security, **Connected assistants**:
 Admins connect theirs from their assistant, as above: only an owner makes a token. Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting).
 
 The other owners get a message when anyone connects or disconnects an assistant, and the Alerts card shows each day's calls and how many assistants are connected. Connected counts the ones that can still call: not expired, and their member still an owner or admin.
+
+## Any MCP client, including one you run yourself
+
+The server speaks the open Model Context Protocol, so you aren't tied to Claude or ChatGPT. Any assistant that is an MCP client and can send a header works with a token from the steps above: an agent you run on your own computer (Hermes, Goose, OpenHands and others), with a model you choose, a local one included. If the model runs on your own machine, what the assistant reads goes nowhere but your machine and your server.
+
+What to tell the client (the names of the settings differ from one client to another):
+
+- **Address**: your server's address with /mcp at the end, for example https://your.community.example/mcp
+- **Transport**: Streamable HTTP. The server answers a POST with JSON; there is no session to open and no server push.
+- **Header**: Authorization, written as Bearer, a space, then the token.
+
+In the client's own config file, that is one entry in its list of MCP servers:
+
+- In a YAML file (many agents call the list mcp_servers): a name for your community, then url: your address with /mcp, transport: streamable-http, and under headers, Authorization: Bearer and the token.
+- In a JSON file (many call the list mcpServers): the same three things, url, the transport if the client asks for one, and headers with Authorization.
+
+Keep the token in the client's own secrets or config file, never in a chat with it. The server refuses a request sent from a web page on another site, so the client must run as a program, not in a browser tab. Each token may make 60 calls a minute and 2,000 a day. A client that can only sign in (no header) uses the Claude or ChatGPT steps above instead.
 
 ## What it can read
 

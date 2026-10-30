@@ -887,7 +887,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionState({ id: txId, type: 'approve' });
             setActionFeedback(null);
             await treasuryApprove(pubkey, txId);
-            setActionFeedback({ type: 'success', message: t('Bid approved! Escrow funds locked in trust.') });
+            setActionFeedback({ type: 'success', message: t('Bid approved! The Beans are held in trust.') });
             await load(true);
         } catch (e: any) {
             setActionFeedback({ type: 'error', message: e.message || t('Failed to approve bid.') });
@@ -953,7 +953,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handleCancelInitiative = async () => {
         if (!pubkey || cancelling) return;
         const confirmed = window.confirm(
-            t('Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.')
+            t('Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.')
         );
         if (!confirmed) return;
         try {
@@ -1167,7 +1167,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
                 <span aria-hidden="true">🛑</span>
-                {cancelling ? t('Cancelling & Refunding Backers…') : t('Cancel Initiative & Refund Escrow')}
+                {cancelling ? t('Cancelling & Refunding Backers…') : t('Cancel Initiative & Refund Backers')}
             </button>
         </div>
     ) : null;
@@ -1575,7 +1575,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                     {d.post_title}
                                                                 </div>
                                                                 <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm shrink-0">
-                                                                    {t('{amount} 🫘 in escrow', { amount: formatNumber(d.credits) })}
+                                                                    {t('{amount} 🫘 held in trust', { amount: formatNumber(d.credits) })}
                                                                 </span>
                                                             </div>
                                                             <div className="text-xs text-nature-500 dark:text-nature-400">

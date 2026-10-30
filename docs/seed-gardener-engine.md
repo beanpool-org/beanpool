@@ -18,7 +18,11 @@ The psychology (validated against onboarding literature — Belsky's *lazy, vain
 
 The one piece of personal data we already collect cheaply is the **3 interest tags**. The Gardener's entire job is to turn those 3 strings into a real, personalised first feed — automatically, honestly, and offline.
 
-**Design constraint (hard): the engine never fabricates a person, product, or store.** It only assembles *real* content (knowledge the node curates, genuinely time-sensitive data, real member activity already on the node, real supplier/resource data). Seeding is authoring + instantiation, never invention.
+**Design constraint (hard): the engine never fabricates a person, product, or store.** It only assembles *real* content (knowledge the node curates, genuinely time-sensitive data, real member activity already on the node, real supplier/resource data) and *real people* (real, opted-in, active members). Seeding is authoring + instantiation, never invention.
+
+The engine has **two jobs**, both deterministic:
+1. **Content** — fill the first screen with real, relevant value (alone, a member is never stuck).
+2. **Belonging** — connect real members who naturally fit together (same interest, or complementary skills forming a *crew*). This is what turns "a useful app" into "a village the new member wants to stay in."
 
 ---
 
@@ -33,7 +37,8 @@ A finite set of **authored seed modules** × **real-data hooks**, instantiated p
  Stage 0  NORMALISE ── synonyms + fuzzy match ──► ~40–60 canonical categories (each = a SeedModule)
         │
         ▼
- Stage 1  INSTANTIATE ── for each module, fill 5 content-packs from REAL sources
+ Stage 1  INSTANTIATE ── for each module, fill content-packs from REAL sources
+        │                (ACTIVATION·RIPE·KNOWLEDGE·ECHO·MARKET + CONNECT·CREW people-packs)
         │
         ▼
  Stage 2  SCORE & ORDER ── relevance × timeliness × actionability (deterministic)
@@ -72,7 +77,7 @@ A member's tags resolve to 1–3 modules. Tags that match nothing funnel into `d
 
 ## Stage 1 — Real-content instantiation
 
-Each `SeedModule` is authored once (by an LLM/agent at authoring time, then frozen). At runtime it fills **five content-pack types**, each from a REAL source only:
+Each `SeedModule` is authored once (by an LLM/agent at authoring time, then frozen). At runtime it fills **seven content-pack types**, each from a REAL source only:
 
 | # | Content-pack | Real source | Example (module: `market-garden`) |
 |---|---|---|---|
@@ -80,12 +85,15 @@ Each `SeedModule` is authored once (by an LLM/agent at authoring time, then froz
 | **RIPE** | Time-sensitive, genuinely current | Region seasonal/weather table, refreshed by cron | "First frost in 14 days — cover the figs / blackberries peaking this week" |
 | **KNOWLEDGE** | A vetted starter guide for the topic | Authored per module, region-parameterised | "Growing in [City]: a 2-min local start guide" |
 | **ECHO** | Real existing node content matching the tags | Real member posts, real events, real gaps from `activity_feed`/`posts`/`events` | "Neighbour Sarah is offering seedlings" / a real repair-café event |
+| **CONNECT** | **A real, kindred member** who shares ≥1 interest | Real opted-in active member via the skill index (below) | "Roger is also into Technology — say hi" |
+| **CREW** | **A real multi-party crew** whose complementary skills could form a project | Real opted-in members across complementary modules (below) | "Electrician + plumber + builder near you could run a Repair Café" |
 | **MARKET** | Real anchor/resource listings, only when real data exists | Actual curated suppliers, resources, or real listings | Real local tool-lending resource — **never invented** |
 
 **Why each bucket is "real not fake":**
 - `ACTIVATION` / `KNOWLEDGE` → authored content is *content*, not a fabricated person; it is legitimate the moment it is written and region-corrected.
 - `RIPE` → clock/weather truth; it cannot be faked because it is true today in this region.
 - `ECHO` → genuine occupancy: it makes the node's **real** early members feel seen and gives the new user honest social proof. This is also the anti-ghost-town mechanism.
+- `CONNECT` / `CREW` → real people, never invented. A kindred match or crew is only surfaced if real, opted-in, **active** members exist in the index; empty (skip) when none. This is the belonging bridge that turns solo value into a reason to stay.
 - `MARKET` → only populated from real data; empty (`skip`) when no real listing exists. **This is the explicit "no fake bakery" guarantee.**
 
 ### The `SeedModule` record
@@ -130,6 +138,89 @@ interface RealDataHook {
 
 ---
 
+## Stage 1b — CONNECT & CREW: the belonging engine
+
+Content packs make the app *valuable alone*. The two people-packs make it a *village*. Both are authoritative, purely deterministic joins — no live agent — so they scale identically to the content packs.
+
+### The skill index (the substrate)
+Rebuilt by cron from real member signups (cheap relational scan over `member_preferences.interest_tags`, resolved through Stage 0 normalisation):
+
+```sql
+-- module -> list of REAL, opted-in, recently-active member pubkeys
+CREATE TABLE IF NOT EXISTS skill_index (
+  module_id   TEXT NOT NULL,
+  member_id   TEXT NOT NULL,
+  activity_at TEXT NOT NULL,          -- newest activity; used to prefer active members
+  PRIMARY KEY (module_id, member_id)
+);
+```
+
+Only members who (a) have resolved interest tags, (b) opt in to being discoverable, and (c) have been active within a recency window (e.g. 21 days) appear. **This is the anti-ghost / anti-fake filter — nobody is surfaced unless they are a real, current human.**
+
+### CONNECT — the kindred 1:1 pack
+For the new member, their resolved modules are joined against the skill index to find others sharing ≥1 of those same modules.
+
+```sql
+SELECT s.member_id, COUNT(*) shared
+FROM skill_index s
+WHERE s.module_id IN (:myModules)
+  AND s.member_id != :me
+GROUP BY s.member_id ORDER BY shared DESC, s.activity_at DESC
+```
+
+- **Ordering** by shared-interest count, then activity recency (most like me, then most alive).
+- **Card copy (authored once):** *"Roger is also into Technology — say hi 👋"* plus the shared tag(s).
+- **Action:** one tap opens the existing E2E-encrypted DM with a pre-filled friendly opener ("Saw we're both into Technology on Beanpool!"). Existing components — no new plumbing.
+- **Skip** when no kindred match exists; never shows a ghost.
+
+### CREW — the multi-party complementary pack
+This is the "electrician + plumber + builder" idea. A curated **archetype table** maps a set of *complementary* modules to a *real community outcome*. The engine finds whether, around the new member, at least one real, active, opted-in member exists in *each* required complementary role.
+
+```yaml
+archetypes:
+  - id: repair-cafe
+    title: "Run a Repair Café together"
+    roles:            # each role = a module the crew needs
+      - service-electrical
+      - service-plumbing
+      - service-build|handywoman
+    blurb: "You + an electrician, a plumber and a builder nearby = a full Repair Café crew."
+    target: enterprise   # surface as a community-enterprise / working-bee suggestion
+  - id: community-garden
+    title: "Start a community garden"
+    roles: [market-garden, tool-repair|makerspace, service-build]
+    blurb: "You + a gardener, a tool-repairer and a builder could stand up a community garden."
+    target: event
+  - id: market-stall-collective
+    title: "Open a shared market stall"
+    roles: [craft-fast|slow, market-garden, fermenting-preserves]
+    blurb: "Pool your produce + craft with two neighbours into one weekend market stall."
+    target: enterprise
+  # ... ~8–12 curated archetypes, authored once, frozen
+```
+
+**Rule (deterministic):**
+1. Take the new member's resolved modules.
+2. For each archetype, check: does the new member themselves fit **any** of the archetype's roles? (Match = they bring at least one required skill.)
+3. For each remaining role in that archetype, is there ≥1 real, opted-in, active member in the skill index? If **all** required roles are covered by real people (the new member counting as one), the archetype is *live*.
+4. Assemble a crew card naming the real members who fill each role + the authored `blurb` + a `target` CTA (e.g. **"Start the Repair Café enterprise"** or **"Propose a working bee"**).
+
+- **Never invents a teammate** — every named role is filled by a real member in the index; if even one role is empty, the archetype is skipped (or shown slimmed-down only if enough roles are covered and the empty one can be "invited to join your crew").
+- **Multi-party value** is the highest-leverage cold-start move: it gives 2–4 real early members a concrete, pre-curated reason to meet, not just "here are profiles."
+
+### Scoring CONNECT/CREW
+```ts
+// CONNECT: prefer many shared interests + recency
+connectScore = 1.5 × sharedInterestCount + 1.0 × recencyWeight
+
+// CREW: prefer archetypes where the new member is essential (hard-to-fill role)
+crewScore = 1.0 × rolesThisMemberFills + 1.5 × coveredRolesCount + 0.5 × (fewer total members needed = easier to stand up)
+```
+
+Same deterministic guarantee as Stage 2: tests can assert "tag set X yields exactly these kindred matches and crews."
+
+---
+
 ## Stage 2 — Deterministic scoring & ordering
 
 No LLM. A fixed weighted score, computed per assembled content item.
@@ -145,7 +236,9 @@ score = 1.5 × relevance   (3.0 exact module match, 1.5 synonym, 0.5 discovery f
 2. **RIPE** — the living pulse that proves the app is alive *today*.
 3. **KNOWLEDGE** — the take-away that makes the app feel like an expert.
 4. **ECHO** — honest occupancy + makes early members feel seen.
-5. **MARKET** — real trade/opportunity, only when real data exists.
+5. **CONNECT** — a real kindred member: "someone like me is here."
+6. **CREW** — a real multi-party project the new member could help lead.
+7. **MARKET** — real trade/opportunity, only when real data exists.
 
 Fully deterministic → unit-testable, reproducible, safe to roll out, and trivially A/B-able.
 
@@ -154,6 +247,7 @@ Fully deterministic → unit-testable, reproducible, safe to roll out, and trivi
 ## Stage 3 — Assembly & caching (the "handles any scale" part)
 
 - All content is **precomputed + cached** per module/region; RIPE/ECHO/MARKET caches refresh on `ttl_s` via **cron** — never per-user.
+- The **skill index is rebuilt by cron** (a single relational scan over resolved interest tags), so CONNECT/CREW are also cache reads at request time.
 - A member's feed on load = read cache + assemble, **< 50 ms**, zero per-user compute.
 - `N` users = `N` cache lookups. No per-user AI, no per-user DB scans.
 - Deterministic output is also what makes it safe: tests can assert "tags X,Y,Z produce exactly this feed."
@@ -198,6 +292,24 @@ CREATE TABLE IF NOT EXISTS seed_real_hooks (
   ttl_s       INTEGER NOT NULL DEFAULT 3600
 );
 
+-- Belonging engine: who is a real, opted-in, active member per resolved module (rebuilt by cron)
+CREATE TABLE IF NOT EXISTS skill_index (
+  module_id   TEXT NOT NULL,
+  member_id   TEXT NOT NULL,
+  activity_at TEXT NOT NULL,
+  PRIMARY KEY (module_id, member_id)
+);
+
+-- Belonging engine: curated complementary-role archetypes (authored once, frozen)
+CREATE TABLE IF NOT EXISTS seed_archetypes (
+  id          TEXT PRIMARY KEY,          -- e.g. 'repair-cafe'
+  title       TEXT NOT NULL,
+  roles       TEXT NOT NULL,             -- JSON array of module ids this crew needs (| = OR of aliases)
+  blurb       TEXT NOT NULL,
+  target      TEXT NOT NULL,             -- 'enterprise' | 'event' | 'group'
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 -- Resolved per-member feed (cache); invalidated when tags change or caches refresh
 CREATE TABLE IF NOT EXISTS seed_feeds (
   public_key  TEXT PRIMARY KEY REFERENCES members(public_key),
@@ -210,10 +322,11 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 **New routes** (Koa, alongside existing `routes/`):
 - `POST /api/garden/seed` — build/refresh a member's feed from tags (signed member request).
 - `GET  /api/garden/feed` — read the member's assembled feed (the client's first post-registration load).
-- `POST /api/garden/refresh` — admin/keeper: re-run real-data hooks now.
-- `POST /api/garden/reload-templates` — admin: hot-reload the authored module library (authoring path).
+- `GET  /api/garden/connect` — the CONNECT/CREW blobs within the feed (kindred matches + live archetype crews).
+- `POST /api/garden/refresh` — admin/keeper: re-run real-data hooks AND rebuild the skill index now.
+- `POST /api/garden/reload-templates` — admin: hot-reload the authored module library + archetypes (authoring path).
 
-**Cron jobs** (node's existing scheduler): refresh `ripe`/`echo`/`market` caches on their `ttl_s`.
+**Cron jobs** (node's existing scheduler): refresh `ripe`/`echo`/`market` caches on their `ttl_s`, and rebuild the `skill_index` periodically so CONNECT/CREW stay current.
 
 **Client integration** — the assembled feed is what the new member's home screen renders immediately after the 3-tag prompt. It reuses existing components (activity cards, event cards, marketplace tiles), so no new rendering system.
 
@@ -227,8 +340,9 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 | **G1** | Author a first ~10 core modules (with an LLM at authoring time, then frozen) + region-parameterised ACTIVATION/KNOWLEDGE templates | 2–3 days |
 | **G2** | RIPE hooks (seasonal table + weather feed) + cron refresh | 1–2 days |
 | **G3** | ECHO hooks over real `activity_feed`/`posts`/`events` | 1–2 days |
-| **G4** | MARKET hooks (real listings/resources only), scoring/ordering, A/B test | 2–3 days |
-| **G5** | MCP write-path invocation (`gardener.seed`), guardrails + tests | 1–2 days |
+| **G4** | **CONNECT/CREW**: `skill_index` rebuild + kindred join + archetype table; `/connect` route; crew CTAs (enterprise/event) | 2–3 days |
+| **G5** | MARKET hooks (real listings/resources only), scoring/ordering, A/B test | 2–3 days |
+| **G6** | MCP write-path invocation (`gardener.seed`), guardrails + tests | 1–2 days |
 
 **Everything is deterministic from G0** — the system is real, honest, and testable before any data hooks land.
 
@@ -240,6 +354,8 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 |---|---|
 | **Minds-style token farming** | Nothing here pays users; content is REAL value, not a reward for joining |
 | **Fake occupancy / fake stores** | MARKET only populated from real data; `skip` when none exists |
+| **Fake people / ghost matches** | CONNECT/CREW only surface real, opted-in, recently-active members from the skill index; never invented teammates |
+| **Brigading / spam outreach** | Only opted-in members are discoverable; feeds suggest, never auto-send; DM is the safe existing E2E channel |
 | **LLM-only runtime (can't scale)** | Agent writes templates once; node instantiates deterministically forever |
 | **Empty first screen** | ACTIVATION + RIPE always populate something real, even with 1 member |
 | **Nagging / guilt** | No "post an offer" pressure — the feed *gives*, it never *asks* in the first screen |
@@ -252,3 +368,5 @@ CREATE TABLE IF NOT EXISTS seed_feeds (
 2. **Region source** — which region resolution do nodes use (zip/postcode, `node_config`, manual)? Determines how `region_param` is set.
 3. **ECHO privacy** — ECHO surfaces real member content; must respect node privacy/flags (mirror the way `activity_feed` and feed visibility already work).
 4. **RIPE data cost** — a weather source introduces an external dependency; acceptable on the node ring, or purely from a static seasonal table first?
+5. **Discoverability opt-in** — CONNECT/CREW need a per-member "let others find me" flag. Default ON or OFF? (Recommendation: OFF by default, prompted during onboarding — matches privacy-first posture.)
+6. **Crew standing-up UX** — when a CREW card's CTA is tapped, does it (a) pre-seed a community enterprise / working-bee draft naming the real members, or (b) send invite DMs to each member first? Recommendation: (b) invite-first, then auto-create on acceptance, so nobody is added to anything without consent.

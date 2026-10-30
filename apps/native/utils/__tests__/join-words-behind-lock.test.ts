@@ -198,7 +198,9 @@ describe('welcome.tsx: every way into the wizard says whether it made the key', 
         expect(recordRead).toBeGreaterThan(-1);
         // Read before adoptJoinKey takes the door's mark off the record.
         expect(adopted).toBeGreaterThan(recordRead);
-        expect(create).toContain('const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);');
+        // Or one a knock made on this phone, whose words were never shown (slice S3, utils/knock-key.ts): its first join.
+        expect(create).toContain('const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey) || knockMade;');
+        expect(create).toContain('const knockMade = storedIdentity ? await knockKeyIsNew(storedIdentity.publicKey) : false;');
         expect(create).toMatch(/setPendingIdentity\(identity\);\s*setPendingNewKey\(keyIsNew \? identity\.publicKey : null\);/);
         expect(create).toMatch(/setPendingOnboarding\(\{[^}]*\.\.\.\(keyIsNew \? \{ newKey: identity\.publicKey \} : \{\}\),/);
     });
@@ -340,11 +342,11 @@ describe('a first Next whose redeem fails: the key it made is still the member\'
 });
 
 describe('welcome.tsx: Next writes that record once the key it made is on the phone, before the redeem', () => {
-    it('after createIdentity, before redeemInvite, only for a key Next made', () => {
+    it('after createIdentity, before redeemInvite, only for a key Next made (or the knock\'s: knock-join-after-lost-answer.test.ts)', () => {
         const create = slice(welcome(), 'async function handleCreate() {', '\n    }\n');
         const made = create.indexOf(': await createIdentity(callsign.trim());');
         const recorded = create.indexOf(
-            'if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);',
+            'if (!storedIdentity || knockMade) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);',
         );
         const redeemed = create.indexOf('await redeemInvite(parsedCode, identity.callsign, identity, { timeoutMs: NEXT_REQUEST_TIMEOUT_MS });');
         expect(made).toBeGreaterThan(-1);

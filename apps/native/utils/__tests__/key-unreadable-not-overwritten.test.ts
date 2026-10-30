@@ -310,6 +310,7 @@ describe('every write of the phone\'s key, by file', () => {
             'app/welcome.tsx',          // createIdentity, only when Welcome read no account (handleCreate)
             'utils/door-key.ts',        // commitDoorKey, keepJoinedIdentity (every door's: the global door's, the claim's): the stored key or none
             'utils/identity.ts',
+            'utils/knock-key.ts',       // commitKnockKey (slice S3): the key a knock drafted, only onto no account; another is refused
             'utils/rekey-redeem.ts',    // finishRekey: the key it made, only onto no account
             'utils/restore-account.ts', // saveRestoredAccount, after clearToRestore asked the member
         ]);

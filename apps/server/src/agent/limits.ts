@@ -1,13 +1,39 @@
 /**
  * Limits per agent grant, kept by the server (admin MCP design §2): 60 calls a minute and 2,000 a day, answered 429 in
- * words past either; lists of at most 50 rows; at most 2 backups a day. Counted in memory by grant id: a restart starts
- * the counts again, which an assistant cannot cause.
+ * words past either; lists of at most 50 rows; at most 2 backups a day; at most the owners' "Assistant posts a day" made
+ * by an owner's assistant (agent/owner-posts.ts). Counted in memory by grant id: a restart starts the counts again, which
+ * an assistant cannot cause.
  */
+import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 
 export const AGENT_CALLS_PER_MINUTE = 60;
 export const AGENT_CALLS_PER_DAY = 2000;
 export const AGENT_BACKUPS_PER_DAY = 2;
 export const AGENT_LIST_MAX = 50;
+/**
+ * Offers, Needs, events and enterprise listings one owner's assistant may make in a UTC day (on top of the calls above): an
+ * owners' setting, "Assistant posts a day" (Marty, 30 Oct: 100 by default, up to 1,000 for seeding a community), kept in
+ * this server's local config, read on every post, so a change takes effect at once.
+ */
+export const AGENT_POSTS_PER_DAY_DEFAULT = 100;
+export const AGENT_POSTS_PER_DAY_MIN = 1;
+export const AGENT_POSTS_PER_DAY_MAX = 1000;
+
+/** Whether a value is a day's number the owners may set: a whole number from 1 to 1,000. */
+export function isAgentPostsPerDay(v: unknown): v is number {
+    return typeof v === 'number' && Number.isInteger(v) && v >= AGENT_POSTS_PER_DAY_MIN && v <= AGENT_POSTS_PER_DAY_MAX;
+}
+
+/** The owners' "Assistant posts a day" now (a stored value out of range reads as the default). */
+export function agentPostsPerDay(): number {
+    const v = getLocalConfig().agentPostsPerDay;
+    return isAgentPostsPerDay(v) ? v : AGENT_POSTS_PER_DAY_DEFAULT;
+}
+
+export function setAgentPostsPerDay(n: number): void {
+    if (!isAgentPostsPerDay(n)) throw new Error(`Assistant posts a day is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX}`);
+    updateLocalConfig({ agentPostsPerDay: n });
+}
 
 const MINUTE_MS = 60_000;
 
@@ -17,6 +43,7 @@ interface Counts {
     day: string;
     dayCalls: number;
     dayBackups: number;
+    dayCreates: number;
 }
 
 const counts = new Map<string, Counts>();
@@ -32,13 +59,14 @@ function countsOf(grantId: string, now: number): Counts {
     let c = counts.get(grantId);
     const day = utcDay(now);
     if (!c) {
-        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0 };
+        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0, dayCreates: 0 };
         counts.set(grantId, c);
     }
     if (c.day !== day) {
         c.day = day;
         c.dayCalls = 0;
         c.dayBackups = 0;
+        c.dayCreates = 0;
     }
     if (now - c.minuteFrom >= MINUTE_MS) {
         c.minuteFrom = now;
@@ -94,6 +122,24 @@ export function admitAgentBackup(grantId: string, now = Date.now()): boolean {
 export function returnAgentBackup(grantId: string, now = Date.now()): void {
     const c = countsOf(grantId, now);
     if (c.dayBackups > 0) c.dayBackups--;
+}
+
+export function agentCreatesToday(grantId: string, now = Date.now()): number {
+    return countsOf(grantId, now).dayCreates;
+}
+
+/** Whether this grant may make another post today; counts it when it may. */
+export function admitAgentCreate(grantId: string, now = Date.now()): boolean {
+    const c = countsOf(grantId, now);
+    if (c.dayCreates >= agentPostsPerDay()) return false;
+    c.dayCreates++;
+    return true;
+}
+
+/** A post that was admitted but not made (refused by the engine, a photo it could not take): not counted after all. */
+export function returnAgentCreate(grantId: string, now = Date.now()): void {
+    const c = countsOf(grantId, now);
+    if (c.dayCreates > 0) c.dayCreates--;
 }
 
 /** Calls let in today (UTC) from every assistant, revoked ones included. */

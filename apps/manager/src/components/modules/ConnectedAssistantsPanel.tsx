@@ -4,6 +4,8 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { useInPageConfirm } from '../common/InPageConfirm';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
 
 /**
  * "Connected assistants" (admin MCP design §8, §10; slice S3; the server is apps/server agent/grants-route.ts). An owner
@@ -18,6 +20,11 @@ import { useInPageConfirm } from '../common/InPageConfirm';
  * ONCE: it lives in this component's state and nowhere else (never web storage, a log or the list), appears in the page
  * in one place only, and is dropped the moment Done is pressed or the card goes away. "Copy command" builds the
  * command line with it at the moment of copying; the line on screen shows a placeholder.
+ *
+ * An owner's assistant posts Offers, Needs and events for them only if "May post for me" was ticked when it was connected
+ * (here on the token form, or on the consent page; default off), and each row says whether it was. "Assistant posts a
+ * day" is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed by an owner with a
+ * fresh proof each time (FreshProofBox: a code, or the phone's Manage).
  */
 
 interface AgentGrantRow {
@@ -35,6 +42,9 @@ interface AgentGrantRow {
     expired: boolean;
     lastUsedAt: number | null;
     callsToday: number;
+    /** "May post for me", ticked when it was connected (a server older than it sends none). */
+    canPost?: boolean;
+    postsToday?: number;
 }
 
 interface GrantsAnswer {
@@ -48,6 +58,10 @@ interface GrantsAnswer {
     defaultDays: number;
     maxDays: number;
     perMember: number;
+    /** The owners' "Assistant posts a day" and its range (a server older than it sends none). */
+    postsPerDay?: number;
+    postsPerDayMin?: number;
+    postsPerDayMax?: number;
     grants: AgentGrantRow[];
 }
 
@@ -74,6 +88,7 @@ const DAY_CHOICES = [7, 30, 90];
 const GRANTS = '/api/local/admin/agent/grants';
 const PREVIEW = '/api/local/admin/agent/preview';
 const SWITCH = '/api/local/admin/agent/switch';
+const POSTS_PER_DAY = '/api/local/admin/agent/posts-per-day';
 const TOKEN_PLACEHOLDER = 'bp_…your token…';
 
 function formatDay(ms: number | null | undefined): string {
@@ -96,6 +111,15 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     const [listMessage, setListMessage] = useState('');
     const [name, setName] = useState('');
     const [days, setDays] = useState(30);
+    // "May post for me": off until ticked, and off again after each connect.
+    const [canPost, setCanPost] = useState(false);
+    const [shownCanPost, setShownCanPost] = useState(false);
+    const [perDayDraft, setPerDayDraft] = useState('');
+    const [perDayMessage, setPerDayMessage] = useState('');
+    // Changing "Assistant posts a day" asks an owner's fresh proof each time (server agent/grants-route.ts).
+    const proof = useFreshProof();
+    // Connecting one ticked "May post for me" asks the same fresh proof (server agent/grants-route.ts); its own box, by the form.
+    const makeProof = useFreshProof();
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('');
     // The one-time token: component state only.
@@ -168,7 +192,8 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         await load();
     };
 
-    const handleMake = async () => {
+    // `code`: the fresh proof typed in the box, when the node asked one (a ticked "May post for me" asks it each time).
+    const handleMake = async (code?: string) => {
         setMessage('');
         const trimmed = name.trim();
         if (!trimmed) {
@@ -177,21 +202,57 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         }
         setBusy(true);
         try {
-            const { res, json } = await post(GRANTS, { name: trimmed, days });
+            const { res, json } = await post(GRANTS, { name: trimmed, days, canPost, ...proofField(code) });
+            // A ticked connect asks the owner's fresh proof: the box opens and says how (a code, the phone, or Manage again). An
+            // unticked one keeps its own answer below (a stale phone session: "press Manage again").
+            if (canPost) {
+                throwIfFreshProof(res.status, json);
+                makeProof.close();
+            }
             if (res.ok && typeof json.token === 'string') {
                 setShownToken(json.token);
+                setShownCanPost(json.grant?.canPost === true);
                 setCopied(null);
                 setName('');
+                setCanPost(false);
                 await load();
             } else {
                 // The node's own words, including its "press Manage again" for a stale phone session.
                 setMessage(`Not connected: ${json.error || `HTTP ${res.status}`}`);
             }
         } catch (e: unknown) {
+            if (makeProof.checkError(e, (c) => handleMake(c), code)) return;
             setMessage(e instanceof Error ? e.message : String(e));
         } finally {
             setBusy(false);
         }
+    };
+
+    // `code`: the fresh proof typed in the box, when the node asked one (each change asks it: server grants-route.ts).
+    const handlePostsPerDay = async (code?: string) => {
+        setPerDayMessage('');
+        const n = Number(perDayDraft);
+        const min = data?.postsPerDayMin ?? 1;
+        const max = data?.postsPerDayMax ?? 1000;
+        if (!Number.isInteger(n) || n < min || n > max) {
+            setPerDayMessage(`A whole number from ${min} to ${max.toLocaleString('en')}.`);
+            return;
+        }
+        setBusy(true);
+        try {
+            const { res, json } = await post(POSTS_PER_DAY, { perDay: n, ...proofField(code) });
+            // The proof asked (a code, the phone, or Manage again): the box opens and says how; nothing else is said here.
+            throwIfFreshProof(res.status, json);
+            proof.close();
+            setPerDayMessage(res.ok ? `Saved: ${n.toLocaleString('en')} a day, from the next post.` : `Not changed: ${json.error || `HTTP ${res.status}`}`);
+            if (res.ok) setPerDayDraft('');
+        } catch (e: unknown) {
+            if (proof.checkError(e, (c) => handlePostsPerDay(c), code)) return;
+            setPerDayMessage(e instanceof Error ? e.message : String(e));
+        } finally {
+            setBusy(false);
+        }
+        await load();
     };
 
     const copyText = async (text: string, what: 'token' | 'command' | 'address') => {
@@ -341,7 +402,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-0.5 break-words">
                     Your own AI assistant (Claude, ChatGPT, Cursor) can read this server&rsquo;s health, backups, totals, reports and join
-                    requests{isOwner ? ', and take a backup' : ''}. It never sees messages, balances, keys, photos, addresses or logs, never
+                    requests{isOwner ? ', take a backup, and, if you tick “May post for me” when you connect it, post Offers, Needs and events for you at once, with no approval' : ''}. It never sees messages, balances, keys, photos, addresses or logs, never
                     learns who reported, and changes no setting, role or member. Everything it reads goes to the company that runs it.
                 </p>
             </div>
@@ -371,7 +432,10 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                     </button>
                                 </li>
                                 <li>In Claude or ChatGPT: Settings → Connectors → Add custom connector → paste it.</li>
-                                <li>Approve on your phone when it asks: check it names the assistant&rsquo;s address, then type the two digits.</li>
+                                <li>
+                                    Approve on your phone when it asks: check it names the assistant&rsquo;s address, then type the two digits.
+                                    {isOwner ? ' Tick “May post for me” on that page only if it should post for you.' : ''}
+                                </li>
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
                             <p className="text-[11px] text-nature-400 m-0 break-words">
@@ -403,6 +467,46 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                         )}
                     </div>
 
+                    {/* The owners' "Assistant posts a day" (a server older than it sends none). */}
+                    {typeof data.postsPerDay === 'number' && (
+                        <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-posts-per-day">
+                            <p className="text-xs text-white m-0 break-words">
+                                Assistant posts a day: {data.postsPerDay.toLocaleString('en')}. Each owner&rsquo;s assistant ticked &ldquo;May post for
+                                me&rdquo; may make this many posts in a day (UTC). They don&rsquo;t use up the member&rsquo;s own 100 posts a day from
+                                the app, but their photos count in the member&rsquo;s own photos for the day. Changing it asks for a fresh proof.
+                            </p>
+                            {isOwner ? (
+                                <div className="flex flex-col sm:flex-row gap-2 min-w-0">
+                                    <label htmlFor="agent-posts-per-day" className="sr-only">Assistant posts a day</label>
+                                    <input
+                                        id="agent-posts-per-day"
+                                        type="number"
+                                        inputMode="numeric"
+                                        min={data.postsPerDayMin ?? 1}
+                                        max={data.postsPerDayMax ?? 1000}
+                                        step={1}
+                                        placeholder={String(data.postsPerDay)}
+                                        value={perDayDraft}
+                                        onChange={(e) => setPerDayDraft(e.target.value)}
+                                        className="w-full sm:flex-1 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void handlePostsPerDay()}
+                                        disabled={busy || perDayDraft.trim() === ''}
+                                        className="min-h-[48px] w-full sm:w-auto px-4 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 disabled:opacity-50"
+                                    >
+                                        Save
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-nature-400 m-0 break-words">Only an owner changes this.</p>
+                            )}
+                            <FreshProofBox proof={proof} testId="agent-posts-per-day-proof" />
+                            {perDayMessage && <p className="text-[11px] text-amber-300 m-0 break-words" role="status">{perDayMessage}</p>}
+                        </div>
+                    )}
+
                     {shownToken ? (
                         <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3 min-w-0" data-testid="agent-token-shown">
                             <span className="text-xs font-semibold text-nature-300">Connect your assistant</span>
@@ -431,7 +535,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
                             <p className="text-[11px] text-amber-300 m-0 break-words">
-                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads.
+                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads{shownCanPost ? ', and can post as you' : ''}.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2">
                                 <button
@@ -501,6 +605,19 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                     ))}
                                 </select>
                             </div>
+                            <label className="flex items-start gap-2 min-h-[48px] text-xs text-nature-200 break-words">
+                                <input
+                                    type="checkbox"
+                                    checked={canPost}
+                                    onChange={(e) => setCanPost(e.target.checked)}
+                                    className="w-5 h-5 mt-0.5 shrink-0"
+                                />
+                                <span className="min-w-0">
+                                    May post for me: it posts Offers, Needs and events as you (or an enterprise you keep), at once, with no
+                                    approval, up to the posts a day set here. Leave it off and it never posts: it still reads, takes a backup when
+                                    asked, and suggests moderation steps for you to approve.
+                                </span>
+                            </label>
                             <button
                                 type="button"
                                 onClick={() => void handleMake()}
@@ -509,6 +626,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                             >
                                 Connect
                             </button>
+                            <FreshProofBox proof={makeProof} testId="agent-make-proof" />
                         </div>
                     ) : null}
 
@@ -547,6 +665,13 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                             <p className="text-[11px] text-nature-400 m-0 break-words">
                                                 Last used: {g.lastUsedAt ? formatDay(g.lastUsedAt) : 'never'} · {g.callsToday} call{g.callsToday === 1 ? '' : 's'} today
                                             </p>
+                                            {g.role === 'owner' && typeof g.canPost === 'boolean' && (
+                                                <p className="text-[11px] text-nature-400 m-0 break-words" data-testid="agent-grant-posts">
+                                                    {g.canPost
+                                                        ? `May post for me · ${g.postsToday ?? 0} post${g.postsToday === 1 ? '' : 's'} today`
+                                                        : 'Reads only: not ticked to post'}
+                                                </p>
+                                            )}
                                             <p className="text-[11px] text-nature-400 m-0 break-words">
                                                 {g.expired ? 'Expired' : g.via === 'oauth' ? 'Until disconnected, or 30 days unused' : `Until ${g.expiresAt ? formatDay(g.expiresAt) : 'disconnected'}`}
                                             </p>

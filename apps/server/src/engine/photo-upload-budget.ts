@@ -185,6 +185,23 @@ export function getMemberPhotoUsageForTests(authorPubkey: string, now = Date.now
 }
 
 /**
+ * The photo bytes `member` may still store now: the day's budget, what the last 24 hours used, and what is left; null
+ * when the budget is off. For an owner's AI assistant, which is told it in words (agent/owner-posts.ts).
+ */
+export function memberPhotoRoom(member: string, now = Date.now()): { budget: number; used: number; left: number } | null {
+    const budget = photoBytesPerMemberPerDay();
+    if (budget <= 0) return null;
+    let used = 0;
+    try {
+        used = (db.prepare('SELECT COALESCE(SUM(bytes), 0) AS used FROM photo_budget_log WHERE member_pubkey = ? AND at > ?')
+            .get(member, now - DAY_MS) as { used: number }).used;
+    } catch (e) {
+        console.warn('[PhotoBudget] Failed to read photo_budget_log usage:', e);
+    }
+    return { budget, used, left: Math.max(0, budget - used) };
+}
+
+/**
  * Asserts that the member has sufficient daily budget to store incomingBytes,
  * and that disk image storage satisfies the minimum free disk floor.
  *

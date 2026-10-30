@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { PRICING_CATEGORIES } from '../pricing-catalog.js';
 import { searchTermsFor } from '../search-terms.js';
 import { SYNONYM_MAP } from '../synonyms.js';
-import { CONTEXT_SEPARATOR, wordsFor } from '../words.js';
+import { CONTEXT_SEPARATOR, setLanguage, wordsFor } from '../words.js';
 import {
-    TAG_ID_PATTERN, TAG_LIBRARY, TAG_TOPS, buildTagIndex, isTagId, tagById, tagChildren, tagEnglish, tagParent, tagSearchWords,
+    TAG_ID_PATTERN, TAG_LIBRARY, TAG_TOPS, buildTagIndex, isTagId, tagById, tagChildren, tagEnglish, tagIndex, tagParent,
+    tagSearchWords,
 } from '../tags/index.js';
 import { suggestTags } from '../tags/suggest.js';
 import before from './fixtures/synonym-map-before-tags.json';
@@ -135,6 +136,23 @@ describe('the label index', () => {
         // Cyrillic and other scripts keep their letters.
         const ru = buildTagIndex(wordsFor('ru', [{ [`Eggs${CONTEXT_SEPARATOR}tag`]: 'Яйца' }]));
         expect(ru.byName('яйца')).toEqual(['food.eggs']);
+    });
+
+    it('the device’s index is built again after every setLanguage, even when the first top’s label stays the same', () => {
+        try {
+            setLanguage('fr', []);
+            const before = tagIndex();
+            expect(before.label('food.fruit.lemon')).toBe('Lemon');
+            expect(tagIndex()).toBe(before);
+            setLanguage('fr', [{ [`Lemon${CONTEXT_SEPARATOR}tag`]: 'Citron' }]);
+            expect(tagIndex().label('food.fruit.lemon')).toBe('Citron');
+            expect(tagIndex().byName('citron')).toEqual(['food.fruit.lemon']);
+            setLanguage('en');
+            expect(tagIndex().lang).toBe('en');
+            expect(tagIndex().label('food.fruit.lemon')).toBe('Lemon');
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('the picker’s search finds a word inside a label, the member’s language first', () => {

@@ -3,7 +3,7 @@
  * in any of the 25 languages into tag ids (DESIGN-owner-seeding-tags-fable.md §4.2, §4.7). The picker's search, suggestTags,
  * the Market's search and the assistant's tags_search all read one index, built once per language.
  */
-import { CONTEXT_SEPARATOR, currentLanguage, t, type Words } from '../words.js';
+import { CONTEXT_SEPARATOR, currentLanguage, currentWords, t, type Words } from '../words.js';
 import { joinCompounds, plainWords } from '../search-terms.js';
 import { TAG_LIBRARY, type TagDef } from './library.js';
 
@@ -216,17 +216,12 @@ export function buildTagIndex(words?: Translate): TagIndex {
     };
 }
 
-const cached = new Map<string, TagIndex>();
+let cached: { words: Words; index: TagIndex } | undefined;
 
-/** The device language's index, built on first use and again after a language switch (or its words arriving: the first
- *  top's label as translated now is part of the cache key). */
+/** The device language's index, built on first use and again after every setLanguage (a language switch, or new words for
+ *  the same language). */
 export function tagIndex(): TagIndex {
-    const firstLabel = t(TAG_LIBRARY[0].en);
-    const key = `${currentLanguage()}\u0000${firstLabel}`;
-    let index = cached.get(key);
-    if (!index) {
-        cached.clear();
-        cached.set(key, (index = buildTagIndex()));
-    }
-    return index;
+    const words = currentWords();
+    if (cached?.words !== words) cached = { words, index: buildTagIndex(words) };
+    return cached.index;
 }

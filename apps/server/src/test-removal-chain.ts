@@ -19,8 +19,8 @@
  *     own words, and its card), a removal the community passed that an admin halted in its window (no owner needed: the
  *     community agreed with that case), and 31 days on (an admin may again, and the card says nothing).
  *  4. The owners are told of every pause: one counted line a day by who acted (an admin, an owner, the admin password),
- *     on the channel and pushed to the owners only; a pause that held a role aside is told but not pushed again (its role
- *     line was); a refused pause tells nothing; with votes off a pause is told too. Nothing names the member or the case.
+ *     on the channel and pushed to the owners only; a pause that held a role aside is told by its role line alone, pushed
+ *     once; a refused pause tells nothing; with votes off a pause is told too. Nothing names the member or the case.
  *  5. The tripwire: an admin with 5 pauses whose votes are still open is refused a sixth (route, report, engine), nothing
  *     written; an owner is asked the fresh proof (from a computer: do it from the phone), and from the phone it is made;
  *     a pause refused for another reason is answered without asking any proof; the password makes one with its current code.
@@ -419,25 +419,23 @@ async function main() {
     alerts.resetAlertsForTests();
     advance(2 * HOUR);
     const ownersTokens = [gen.token, otto.token].sort();
-    // A moderator's pause holds the role aside: that pushed its own line (sec.role), so this one is told and not pushed.
-    let h0 = topicHits().length;
+    // A moderator's pause holds the role aside: its role line tells the owners (sec.role, pushed), and it is the only one.
     let q0 = ownerPushes().length;
     const moPause = await pause(abeSession, mo, 'Deleted reports about a friend of his');
     await settle();
-    assert(moPause.status === 200 && pausedLines().length === 1 && pausedLines()[0].detail === 'A member was paused in the last day, by an admin.',
-        `Abe pauses Mo: one line, "A member was paused in the last day, by an admin." (${moPause.status} ${JSON.stringify(pausedLines().map(e => e.detail))})`);
     const roleLines = alerts.getAlertsStatus().history.filter((e) => e.key === 'sec.role');
-    assert(roleLines.length === 1 && ownerPushes().length === q0 + 1,
-        `his role held aside pushed its own line, and the pause's is told without a push of its own (${roleLines.length} role, ${ownerPushes().length - q0} push)`);
+    assert(moPause.status === 200 && roleLines.length === 1 && /^A moderator lost that role, suspended by an admin\./.test(roleLines[0].detail)
+        && pausedLines().length === 0 && ownerPushes().length === q0 + 1,
+        `Abe pauses Mo, a moderator: one line, his role's, pushed once (${moPause.status} ${roleLines.map(e => e.detail).join(' | ')}; ${pausedLines().length} pause lines)`);
     await lift(mo);
     advance(2 * HOUR);
-    h0 = topicHits().length;
+    const h0 = topicHits().length;
     q0 = ownerPushes().length;
     const t1 = await pause(adaSession, tams[0], 'Sent threats in the market chat');
     await settle();
-    assert(t1.status === 200 && pausedLines()[0]?.detail === '2 members were paused in the last day, by an admin.',
-        `Ada pauses Tam1: the day's count goes to 2, by an admin (${JSON.stringify(pausedLines().map(e => e.detail))})`);
-    assert(topicHits().length === h0 + 1 && /2 members were paused in the last day, by an admin\./.test(topicHits().at(-1)?.body ?? '')
+    assert(t1.status === 200 && pausedLines()[0]?.detail === 'A member was paused in the last day, by an admin.',
+        `Ada pauses Tam1: "A member was paused in the last day, by an admin." (${JSON.stringify(pausedLines().map(e => e.detail))})`);
+    assert(topicHits().length === h0 + 1 && /A member was paused in the last day, by an admin\./.test(topicHits().at(-1)?.body ?? '')
         && /members removed, moved or paused/.test(String(topicHits().at(-1)?.headers.title ?? '')),
         `one line on the owners' channel (${topicHits().length - h0}: ${topicHits().at(-1)?.headers.title})`);
     const pushed = ownerPushes().slice(q0);
@@ -449,19 +447,19 @@ async function main() {
     await settle();
     const details = pausedLines().map(e => e.detail);
     assert(t2.status === 200 && t3.status === 200 && details.includes('A member was paused in the last day, by an owner.')
-        && details.includes('A member was paused in the last day, by the admin password.') && details.includes('2 members were paused in the last day, by an admin.'),
+        && details.includes('A member was paused in the last day, by the admin password.') && details.includes('A member was paused in the last day, by an admin.'),
         `an owner's and the password's are counted on lines of their own (${JSON.stringify(details)})`);
     const told = pausedLines().length;
     const refused = await pause(abeSession, dave, 'A refused pause tells nothing');
     await settle();
-    assert(refused.status === 403 && pausedLines().length === told && pausedLines().every(e => !/3 members/.test(e.detail)),
+    assert(refused.status === 403 && pausedLines().length === told && pausedLines().every(e => !/2 members/.test(e.detail)),
         `a refused pause tells nothing (${refused.status} ${refused.body?.code})`);
     setSwitchOverride('decisions', false);
     try {
         const off = await pause(abeSession, hal, 'Spammed the market chat, votes off');
         await settle();
-        assert(off.status === 200 && off.body?.decision?.effect === 'keep_suspension' && pausedLines().some(e => e.detail === '3 members were paused in the last day, by an admin.'),
-            `with votes off a pause is told too (${off.status} ${JSON.stringify(pausedLines().map(e => e.detail))})`);
+        assert(off.status === 200 && off.body?.decision?.effect === 'keep_suspension' && pausedLines().some(e => e.detail === '2 members were paused in the last day, by an admin.'),
+            `with votes off a pause is told too: the admins' count goes to 2 (${off.status} ${JSON.stringify(pausedLines().map(e => e.detail))})`);
     } finally {
         setSwitchOverride('decisions', true);
     }

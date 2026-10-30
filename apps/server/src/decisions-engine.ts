@@ -2854,15 +2854,17 @@ function secondPauseSentence(second: { after: 'no' | 'too_few' | 'stopped' }): s
 /**
  * The owners are told of every pause (design §3.4 rule 4), on the channel that carries an admin's removals: one sec.members
  * line a day counting them, in the words of who acted ("by an admin", "by an owner", "by the admin password"), never whom,
- * nor why (services/security-signal.ts). Under the actor's own bound, as a removal is; a pause that held a role aside is
- * only told, since dropNodeRoleRow pushed its own line (sec.role). Called inside the pause's transaction: the alert book
- * tells it once that is over, and only if the record is there (a rolled-back pause paused nobody).
+ * nor why (services/security-signal.ts), under the actor's own bound as a removal is. A pause that held a role aside is
+ * told by its role line alone ("A moderator lost that role, suspended by an admin": dropNodeRoleRow, sec.role, pushed),
+ * so one pause is one line in the admin's hour. Called inside the pause's transaction: the alert book tells it once that is
+ * over, and only if the record is there (a rolled-back pause paused nobody).
  */
 function notePauseForOwners(decisionId: string, actor: string | null, heldRole: boolean): void {
+    if (heldRole) return;
     const actorRole = actor === 'owner:password' ? 'admin password' : !actor ? 'server' : isOwnerLevelActor(actor) ? 'owner' : 'admin';
     const how = { 'admin password': 'by the admin password', server: 'by the server itself', owner: 'by an owner', admin: 'by an admin' }[actorRole];
     noteSecurityEvent({
-        key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersPaused(how), actor: actor || 'SYSTEM', actorRole, quiet: heldRole,
+        key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersPaused(how), actor: actor || 'SYSTEM', actorRole,
         stillTrue: () => !!db.prepare('SELECT 1 FROM decisions WHERE id = ?').get(decisionId),
     });
 }

@@ -9,11 +9,12 @@ import { describe, expect, it } from 'vitest';
 import { LANGS, setLanguage, t } from '../../../words.js';
 import { CLIMATE_GRID, CLIMATE_RUNS } from '../climate.table.js';
 import { CROPS, cropById, type Crop } from '../crops.js';
-import { GARDEN_DOC_VERSION, emptyGardenDoc, readGardenDoc, withGardenClimate } from '../doc.js';
+import { GARDEN_DOC_VERSION, emptyGardenDoc, readGardenDoc, withGardenClimate, type GardenDoc } from '../doc.js';
 import {
     ALL_MONTHS, cropPage, cropsByName, gardenZoneFix, growsHere, guideView, harvestLine, harvestWeeks, inMonths, monthShortName, monthsMask,
     monthsText, plantingWindows, shiftMonths, sowNow, sowSoon, zoneLineText,
 } from '../guide.js';
+import { toolLineText } from '../../line.js';
 import { THINGS } from '../../things/manifest.js';
 import { GARDEN, gardenHomeLines } from '../manifest.js';
 import { GARDEN_ZONES, GARDEN_ZONE_IDS, KOPPEN_ZONES, climateLayer, decodeClimateRuns, hemisphereOf, zoneAt, zoneOfKoppen } from '../zones.js';
@@ -286,5 +287,31 @@ describe('the document and the manifest', () => {
         expect(lines[0].n).toBe(sowNow('warm', 'south', SEP).length);
         expect(lines[1].values).toEqual({ zone: 'Warm temperate', hemisphere: 'southern hemisphere' });
         expect(GARDEN.row({ v: 1, settings: {} }, 0)).toBeNull();
+    });
+
+    it('Home line in a month with nothing to sow (n=0) uses the zero sentence; n=1 and n=3 use the plural forms', () => {
+        setLanguage('en');
+        const doc: GardenDoc = { v: 1, settings: { zone: 'warm', hemisphere: 'north' } };
+
+        // Warm northern: December (month 11) has 0 crops to sow
+        const lines0 = gardenHomeLines(doc, new Date(2026, 11, 15).getTime());
+        expect(sowNow('warm', 'north', 11).length).toBe(0);
+        expect(lines0[0]).toEqual({ key: 'Nothing to sow outdoors this month.', screen: 'main' });
+        expect(lines0[0].n).toBeUndefined();
+        expect(toolLineText(lines0[0])).toBe('Nothing to sow outdoors this month.');
+
+        // Warm northern: January (month 0) has 1 crop to sow
+        const lines1 = gardenHomeLines(doc, new Date(2026, 0, 15).getTime());
+        expect(sowNow('warm', 'north', 0).length).toBe(1);
+        expect(lines1[0].n).toBe(1);
+        expect(lines1[0].key).toEqual({ one: '{n} crop to sow this month', other: '{n} crops to sow this month' });
+        expect(toolLineText(lines1[0])).toBe('1 crop to sow this month');
+
+        // Warm northern: November (month 10) has 3 crops to sow
+        const lines3 = gardenHomeLines(doc, new Date(2026, 10, 15).getTime());
+        expect(sowNow('warm', 'north', 10).length).toBe(3);
+        expect(lines3[0].n).toBe(3);
+        expect(lines3[0].key).toEqual({ one: '{n} crop to sow this month', other: '{n} crops to sow this month' });
+        expect(toolLineText(lines3[0])).toBe('3 crops to sow this month');
     });
 });

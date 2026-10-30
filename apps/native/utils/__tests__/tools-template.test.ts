@@ -1758,5 +1758,13 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and is the 
         expect(host.textContent).toContain('What to sow this month, for your climate.');
         await click(host.querySelector('button'), 'the card');
         expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'main' } }]);
+
+        // And in a month with nothing to sow outdoors (December in northern warm temperate)
+        await writeToolDoc(ME.publicKey, garden!.manifest, { v: 1, settings: { zone: 'warm', hemisphere: 'north' } }, NOW);
+        const dec = Date.parse('2026-12-15T10:00:00.000Z');
+        await act(async () => { root.render(createElement(ToolHomeBody, { tool: garden!, owner: ME.publicKey, colors: lightColors, now: dec }) as any); });
+        await settle();
+        expect(host.textContent).toContain('Nothing to sow outdoors this month.');
+        expect(host.textContent).toContain('Warm temperate · northern hemisphere');
     }, 30_000);
 });

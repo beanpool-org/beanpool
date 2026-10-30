@@ -1,10 +1,14 @@
 // A listing's search words on this node (posts.search_keywords, which posts_fts indexes beside its title and description).
 //
-// One door for every writer: a create and an edit (engine/posts.ts), the boot's backfills (state-engine.ts), a linked
-// community's listings as they are cached (federation-listings.ts). Each folds the synonym map's words and the listing's
-// tags (DESIGN-owner-seeding-tags-fable.md §4.6). Until slice T2 the create and edit paths called the engine's builder
-// without the map, so a listing made on the node held its category alone, and only a boot's backfill of empty rows ever
-// added synonyms.
+// Two writers, as before tags, each now folding the listing's tags (DESIGN-owner-seeding-tags-fable.md §4.6, slice T2):
+// - a create and an edit (engine/posts.ts), and a linked community's listing as it is cached (federation-listings.ts):
+//   the category and the tags' words (postSearchKeywords). These never passed the synonym map: an untagged listing's
+//   words are its category alone, exactly as before T2.
+// - the boot's backfill of a listing with no words (state-engine.ts backfillSearchKeywords) and the once-only pass
+//   (keywordsWithTagsOnce): the synonyms of its words too (postSearchKeywordsWithSynonyms).
+// Whether a listing made on the node should get its words' synonyms is an open question for the project (the slice T2
+// PR): with them, the apps' expansion of a search ("organic" asks "worm farm", which the node reads as "worm" or "farm")
+// finds more listings it should not, as test-search-unspaced-scripts shows.
 
 import { SYNONYM_MAP } from '@beanpool/core';
 import { generateSearchKeywords } from '@beanpool/engine';
@@ -13,7 +17,12 @@ import { generateSearchKeywords } from '@beanpool/engine';
 const synonymMap: Record<string, string[]> = { ...SYNONYM_MAP };
 delete (synonymMap as Record<string, unknown>)._meta;
 
-/** The words a listing is also found by: its category, its words' synonyms, its tags' words. */
+/** The words a listing made or edited here is also found by: its category and its tags' words. */
 export function postSearchKeywords(title: string, description: string, category: string, tags: readonly string[] = []): string {
+    return generateSearchKeywords(title, description, category, undefined, tags);
+}
+
+/** The same, with its own words' synonyms too: what the boot's backfill writes. */
+export function postSearchKeywordsWithSynonyms(title: string, description: string, category: string, tags: readonly string[] = []): string {
     return generateSearchKeywords(title, description, category, synonymMap, tags);
 }

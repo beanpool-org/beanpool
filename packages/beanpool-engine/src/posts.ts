@@ -680,7 +680,7 @@ export function generateSearchKeywords(title: string, description: string, categ
     const text = joinCompounds(`${title} ${description}`);
 
     // The map's own keys only: "constructor" or "toString" in a listing read Object.prototype's function, and iterating it
-    // threw, refusing the listing (now that the node's own create path passes the map).
+    // threw: the node's boot backfill (state-engine.ts backfillSearchKeywords) stopped at such a listing.
     const synonymsOf = (key: string): string[] | undefined =>
         Object.prototype.hasOwnProperty.call(synonymMap, key) && Array.isArray(synonymMap[key]) ? synonymMap[key] : undefined;
     const lookup = (word: string): string[] | undefined => {

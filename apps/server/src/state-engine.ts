@@ -385,7 +385,7 @@ import {
     type EventTimeOut
 } from './engine/posts.js';
 import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
-import { postSearchKeywords } from './engine/search-keywords.js';
+import { postSearchKeywords, postSearchKeywordsWithSynonyms } from './engine/search-keywords.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -533,7 +533,7 @@ function selectInChunks<T = any>(
  * e.g. title "Fresh Lemons" → keywords "fruit citrus produce food tree" (engine/search-keywords.ts)
  */
 export function generateSearchKeywords(title: string, description: string, category: string, tags: readonly string[] = []): string {
-    return postSearchKeywords(title, description, category, tags);
+    return postSearchKeywordsWithSynonyms(title, description, category, tags);
 }
 
 // ===================== TYPES =====================
@@ -1269,10 +1269,13 @@ function backfillSearchKeywords(): void {
 const KEYWORDS_WITH_TAGS_MARKER = 'migration_search_keywords_tags_v1';
 
 /**
- * Once on each server (a node_config marker): every listing's search words written again by postSearchKeywords, so each
- * holds its tags' words and its own words' synonyms (DESIGN-owner-seeding-tags-fable.md §4.6, slice T2). Until T2 a
- * listing made or edited on the node held its category alone (its create and edit called the builder without the map),
- * and the builder dropped every letter outside a-z.
+ * Once on each server (a node_config marker): every listing's search words written again as its own writer now writes them
+ * (engine/search-keywords.ts, DESIGN-owner-seeding-tags-fable.md §4.6, slice T2), so each holds its tags' words, and words
+ * the synonym map made are made by the builder that keeps every script's letters (the one before dropped every letter
+ * outside a-z, and ran the words either side of one together). A listing whose words are its category alone was made or
+ * edited here, and is written so again (postSearchKeywords: no synonyms, as before); any other was given its synonyms by
+ * a boot's backfill or by the main server it was copied from, and is written with them (postSearchKeywordsWithSynonyms).
+ * One with no words is backfillSearchKeywords's, which runs first.
  *
  * As backfillSearchKeywords does, it leaves every listing's updated_at as it was: posts_touch_updated_at is set aside
  * inside the transaction and put back as the database held it, so no listing rises up the board or travels again. posts_au
@@ -1293,7 +1296,11 @@ export function keywordsWithTagsOnce(): void {
                 const rows = page.all(after) as Array<{ rowid: number; id: string; title: string | null; description: string | null; category: string | null; tags: string | null; search_keywords: string | null }>;
                 if (rows.length === 0) break;
                 for (const p of rows) {
-                    const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general', postTagsOf(p.tags));
+                    const held = (p.search_keywords ?? '').trim();
+                    if (!held) continue;
+                    const category = p.category || 'general';
+                    const write = held === category ? postSearchKeywords : postSearchKeywordsWithSynonyms;
+                    const keywords = write(p.title || '', p.description || '', category, postTagsOf(p.tags));
                     if (keywords !== p.search_keywords) { update.run(keywords, p.id); changed++; }
                 }
                 after = rows[rows.length - 1].rowid;
@@ -1301,7 +1308,7 @@ export function keywordsWithTagsOnce(): void {
             if (touch) db.exec(touch);
             db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(KEYWORDS_WITH_TAGS_MARKER, new Date().toISOString());
         })();
-        if (changed > 0) console.log(`🔍 Search words written again for ${changed} listing(s), with their tags and synonyms.`);
+        if (changed > 0) console.log(`🔍 Search words written again for ${changed} listing(s), with their tags.`);
     } catch (e) {
         console.warn('[FTS] Could not write the listings\' search words again (the next boot tries again):', e);
     }

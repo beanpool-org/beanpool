@@ -5,7 +5,8 @@
  *   1. the builder: a tag folds its id's words, its English label, every tag above it, its aliases and its synonym keys; a
  *      tag the library does not know adds nothing; a Russian title's words survive it (a Cyrillic key in a map is found,
  *      where the ASCII strip deleted every such letter) and a comma no longer glues two words into none ("eggs,milk");
- *      a listing holding "constructor" or "toString" is made, not refused (the map's own keys only)
+ *      "constructor" or "toString" is no synonym (the map's own keys only: the boot backfill threw on one); an untagged
+ *      listing made here has its category alone, as before
  *   2. a listing made with tags carries them; one made without (an old app) carries no `tags` field, as before; an unknown
  *      id is refused in words, six tags are refused, the same id twice is one, a list that is not one is refused
  *   3. search: a Russian-titled listing tagged lemon is found by the tag's word (lemon), an alias (citrus), an ancestor
@@ -38,9 +39,10 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { startP2P } from './p2p.js';
 import { localFetch } from './keepalive-test-fetch.js';
 import { setMemberPhoto, generateSearchKeywords } from '@beanpool/engine';
+import { SYNONYM_MAP } from '@beanpool/core';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
 import { cacheRemoteListings, listingsForPeer } from './federation-listings.js';
-import { postSearchKeywords } from './engine/search-keywords.js';
+import { postSearchKeywords, postSearchKeywordsWithSynonyms } from './engine/search-keywords.js';
 import { TEST_PHOTO } from './post-test-helper.js';
 
 delete process.env.CF_RECORD_NAME;
@@ -127,12 +129,14 @@ async function main(): Promise<void> {
     assert(unknown === 'food', `a tag the library does not know adds nothing (${unknown})`);
     const cyrillic = words(attempt(() => generateSearchKeywords('Свежие яйца', 'с фермы', 'food', { 'яйца': ['eggs'] })));
     assert(cyrillic.has('eggs'), `a Russian title's words survive the builder: a Cyrillic key is found (${[...cyrillic].join(' ')})`);
-    const comma = words(attempt(() => postSearchKeywords('Eggs,milk', '', 'food')));
+    const comma = words(attempt(() => postSearchKeywordsWithSynonyms('Eggs,milk', '', 'food')));
     assert(comma.has('poultry') && comma.has('dairy'), `"eggs,milk" is two words, each with its synonyms (${[...comma].join(' ')})`);
     const glued = words(attempt(() => generateSearchKeywords('Pumpkin тыква seeds', '', 'garden', { 'pumpkin seeds': ['pepitas'] })));
     assert(!glued.has('pepitas'), 'a Russian word between two English words keeps them apart (no false "pumpkin seeds")');
-    const proto = await offer(ann, 'constructor toString valueOf');
-    assert(proto.status === 200, `a listing holding "constructor" or "toString" is made (${proto.status} ${proto.text.slice(0, 120)})`);
+    const proto = attempt(() => generateSearchKeywords('constructor toString valueOf hasOwnProperty', '', 'other', SYNONYM_MAP));
+    assert(proto === 'other', `the boot backfill's builder reads "constructor" or "toString" as no synonym, and does not throw (${proto})`);
+    const untagged = attempt(() => postSearchKeywords('Fresh lemons', 'from the tree', 'food'));
+    assert(untagged === 'food', `a listing made here without tags has its category alone, as before T2 (${untagged})`);
 
     // ── 2. the door ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. making a listing with tags ──');
@@ -220,10 +224,15 @@ async function main(): Promise<void> {
     assert(!!marker(), 'the boot ran it once and left its marker');
     const stamp = '2001-02-03T04:05:06.007Z';
     db.prepare(`UPDATE posts SET search_keywords = 'stale', updated_at = ? WHERE id = ?`).run(stamp, eggsId);
+    db.prepare(`UPDATE posts SET search_keywords = 'food' WHERE id = ?`).run(limeId);
     db.prepare(`DELETE FROM node_config WHERE key = 'migration_search_keywords_tags_v1'`).run();
+    const plainBefore = row(plainId)?.search_keywords;
     attempt(() => keywordsWithTagsOnce());
-    assert(words(row(eggsId)?.search_keywords).has('poultry') && row(eggsId)?.updated_at === stamp && !!marker(),
-        `stale words are written again with the tag's, updated_at untouched (${row(eggsId)?.updated_at})`);
+    assert(words(row(eggsId)?.search_keywords).has('poultry') && words(row(eggsId)?.search_keywords).has('farm') && row(eggsId)?.updated_at === stamp && !!marker(),
+        `words a backfill made are written again with the synonyms and the tag's, updated_at untouched (${row(eggsId)?.search_keywords}; ${row(eggsId)?.updated_at})`);
+    assert(row(limeId)?.search_keywords === postSearchKeywords('Limes from the tree', '', 'food', ['food.fruit.lime']) && words(row(limeId)?.search_keywords).has('citrus'),
+        `a listing made here gets its tags' words and no synonyms of its own words (${row(limeId)?.search_keywords})`);
+    assert(row(plainId)?.search_keywords === plainBefore && plainBefore === 'food', `an untagged listing made here is left as it was (${row(plainId)?.search_keywords})`);
     assert((await found(bea, 'q=poultry')).includes(eggsId), 'and the index finds them');
     db.prepare(`UPDATE posts SET search_keywords = 'stale' WHERE id = ?`).run(eggsId);
     attempt(() => keywordsWithTagsOnce());

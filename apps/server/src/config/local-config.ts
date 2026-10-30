@@ -437,7 +437,7 @@ export function verifyPassword(password: string, storedHash: string, storedSalt:
     try {
         const hash = scryptSync(password, storedSalt, 64);
         const expected = Buffer.from(storedHash, 'hex');
-        return timingSafeEqual(hash, expected);
+        return hash.length === expected.length && timingSafeEqual(hash, expected);
     } catch {
         return false;
     }

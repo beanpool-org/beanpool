@@ -222,3 +222,8 @@ These were reviewed and **CLOSED, not merged**: their branches had ~260-file dri
 **Vulnerability:** `GET /api/messages/:conversationId` in `apps/server/src/routes/messaging.ts` gated the non-participant authorization check behind `ENFORCE_READ_AUTH`. When `ENFORCE_READ_AUTH` was disabled or unconfigured, any caller could fetch private conversation metadata and messages by conversation ID.
 **Learning:** Private resources like direct message conversations must enforce participant authorization (`conv.participants.includes(actor)`) unconditionally, regardless of server-level public read settings (`ENFORCE_READ_AUTH`).
 **Prevention:** Check `!conv.participants.includes(ctx.state.actor)` directly without checking `ENFORCE_READ_AUTH` so non-participants are always denied access (403).
+
+## 2026-10-30 - [Sentinel] Enforce Explicit Buffer Length Checks in Timing-Safe Comparisons
+**Vulnerability:** `crypto.timingSafeEqual` in `config/local-config.ts`, `claim-code.ts`, `automation-tokens.ts`, and `pairing-relay.ts` was called without explicit prior buffer length equality checks (`a.length === b.length`), risking unhandled `TypeError` exceptions if mismatched or malformed credential buffers were provided.
+**Learning:** `crypto.timingSafeEqual` throws an unhandled `TypeError` when input buffers have unequal byte lengths, which can crash execution paths or cause uncaught internal exceptions.
+**Prevention:** Always explicitly verify `a.length === b.length` prior to calling `crypto.timingSafeEqual`.

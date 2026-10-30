@@ -118,7 +118,8 @@ export function claimKeyOf(code: string, salt: string): Buffer {
 export function claimProofMatches(claim: ClaimRecord, host: string, codeId: string, pubkey: string, proof: unknown): boolean {
     if (typeof proof !== 'string' || !PROOF_SHAPE.test(proof) || typeof claim.key !== 'string' || !PROOF_SHAPE.test(claim.key)) return false;
     const expected = crypto.createHmac('sha256', Buffer.from(claim.key, 'hex')).update(claimProofText(host, codeId, pubkey)).digest();
-    return crypto.timingSafeEqual(expected, Buffer.from(proof, 'hex'));
+    const givenProof = Buffer.from(proof, 'hex');
+    return expected.length === givenProof.length && crypto.timingSafeEqual(expected, givenProof);
 }
 
 /** The claim code still waiting to be used, if there is one. */
@@ -205,10 +206,14 @@ export function initClaimCode(): void {
         const pending = pendingClaim(config);
         if (pending) {
             const held = readClaimFile();
-            if (held && isClaimCodeShape(held) && crypto.timingSafeEqual(claimKeyOf(held, pending.salt!), Buffer.from(pending.key!, 'hex'))) {
-                console.log(`🔑 This community has no owner yet. Its one-time claim code is in ${file}.`);
-                console.log(`   Read it with: ${readCommand(file)}`);
-                return;
+            if (held && isClaimCodeShape(held)) {
+                const derivedKey = claimKeyOf(held, pending.salt!);
+                const expectedKey = Buffer.from(pending.key!, 'hex');
+                if (derivedKey.length === expectedKey.length && crypto.timingSafeEqual(derivedKey, expectedKey)) {
+                    console.log(`🔑 This community has no owner yet. Its one-time claim code is in ${file}.`);
+                    console.log(`   Read it with: ${readCommand(file)}`);
+                    return;
+                }
             }
         }
         const code = generateClaimCode();

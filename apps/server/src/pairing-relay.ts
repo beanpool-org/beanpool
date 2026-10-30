@@ -221,7 +221,9 @@ export function transferPairingPayload(
 
 /** Only the browser holding the session's binding secret. */
 function bound(session: PairingSession, secret: string | undefined): boolean {
-    return !!secret && crypto.timingSafeEqual(sha256(String(secret)), session.secretHash);
+    if (!secret) return false;
+    const givenHash = sha256(String(secret));
+    return givenHash.length === session.secretHash.length && crypto.timingSafeEqual(givenHash, session.secretHash);
 }
 
 export type ConfirmResult =
@@ -241,7 +243,9 @@ export function confirmPairingTransfer(sessionId: string, secret: string | undef
     if (session.status === 'burned') return { result: 'burned' };
     if (session.status !== 'confirming' || !session.confirmCode) return { result: 'not-confirming' };
     const typed = typeof digits === 'string' ? digits.trim() : '';
-    const right = CONFIRM_CODE.test(typed) && crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(session.confirmCode));
+    const givenBuf = Buffer.from(typed);
+    const expectedBuf = Buffer.from(session.confirmCode);
+    const right = CONFIRM_CODE.test(typed) && givenBuf.length === expectedBuf.length && crypto.timingSafeEqual(givenBuf, expectedBuf);
     if (!right) {
         session.confirmTries++;
         if (session.confirmTries >= CONFIRM_TRIES) {

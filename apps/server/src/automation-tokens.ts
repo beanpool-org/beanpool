@@ -171,7 +171,7 @@ export function verifyAutomationToken(presented: string, now = Date.now()): Auto
     const record = m ? list.find(t => t.id === m[1]) : undefined;
     const presentedHash = Buffer.from(sha256Hex(m ? m[2] : presented), 'hex');
     const storedHash = Buffer.from(record?.hash && /^[0-9a-f]{64}$/.test(record.hash) ? record.hash : NO_TOKEN_HASH, 'hex');
-    const match = crypto.timingSafeEqual(presentedHash, storedHash);
+    const match = presentedHash.length === storedHash.length && crypto.timingSafeEqual(presentedHash, storedHash);
     if (!m || !record || !match) return null;
     if (record.expiresAt && now >= record.expiresAt) return null;
     if (!isTokenScope(record.scope)) return null;

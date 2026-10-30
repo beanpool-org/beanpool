@@ -35,18 +35,33 @@ vi.mock('react-native', async () => {
     return { ...native, ScrollView };
 });
 const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
-const nav = vi.hoisted(() => ({ pushed: [] as unknown[] }));
+// `stack`: a case that needs what is LEFT in the stack sets a stack-sim.ts stack, and the router acts on it as well as recording.
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[], stack: null as null | ReturnType<typeof import('./stack-sim').createStack> }));
+// A screen drawn alone (no stack): the one route it is, focused, with no copy under it.
+const SOLO_ROUTE = vi.hoisted(() => ({ key: 'solo-route', name: 'new-listing' }));
 vi.mock('expo-router', async () => {
-    const { useEffect: effect } = await import('react');
+    const { useEffect: effect, useContext } = await import('react');
+    const { RouteCtx } = await import('./stack-sim');
+    const solo = {
+        addListener: () => () => {}, isFocused: () => true, goBack: () => { nav.pushed.push('goBack'); },
+        getState: () => ({ key: 'solo', index: 0, routes: [SOLO_ROUTE] }),
+    };
     return {
         router: {
-            push: (to: unknown) => { nav.pushed.push(to); }, navigate() {}, setParams() {}, back: () => { nav.pushed.push('back'); },
-            canGoBack: () => true, canDismiss: () => false, dismissAll() {}, replace() {},
+            push: (to: unknown) => { nav.pushed.push(to); nav.stack?.push(to); }, navigate() {}, setParams() {},
+            back: () => { nav.pushed.push('back'); nav.stack?.back(); },
+            canGoBack: () => nav.stack?.canGoBack() ?? true, canDismiss: () => nav.stack?.canDismiss() ?? false,
+            dismissAll() { nav.stack?.dismissAll(); }, replace(to: unknown) { nav.stack?.replace(to); },
         },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
-        useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
-        useLocalSearchParams: () => params.now,
+        useNavigation: () => useContext(RouteCtx)?.navigation ?? solo,
+        useLocalSearchParams: () => (useContext(RouteCtx) ? (useContext(RouteCtx)!.route.params ?? {}) : params.now),
     };
+});
+vi.mock('@react-navigation/native', async () => {
+    const { useContext } = await import('react');
+    const { RouteCtx } = await import('./stack-sim');
+    return { useRoute: () => useContext(RouteCtx)?.route ?? SOLO_ROUTE };
 });
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -148,6 +163,8 @@ import { bracketed, bypassing as bypassingIn, unfit, widthOf, SCALE } from './pr
 import { categoryEmoji } from '../../constants/categories';
 import MapScreen from '../../app/(tabs)/map';
 import NewListingScreen from '../../app/new-listing';
+import { router } from 'expo-router';
+import { createStack } from './stack-sim';
 
 const NODE = 'https://mullum.example';
 const DAY = 24 * 60 * 60 * 1000;
@@ -203,6 +220,7 @@ beforeEach(() => {
     net.answer = community();
     params.now = {};
     nav.pushed.length = 0;
+    nav.stack = null;
     alerts.said.length = 0;
     alerts.buttons = [];
     mapsKey.on = true;
@@ -549,6 +567,95 @@ describe('the listing screen (app/new-listing.tsx): the form out of the map, ope
         expect(said()[0]).toBe('Finish your profile first');
         await pressAlert('Not now');
         expect(nav.pushed).toEqual(['back']);
+    });
+});
+
+/**
+ * One listing screen, for every door. expo-router's push always adds a route, so a second tap before the first screen has
+ * covered the window pushed a second /new-listing: each opened its own chooser, and the one underneath, once its chooser
+ * closed, could not leave (it was not the screen showing), so it stayed in the stack drawing nothing and taking every tap.
+ * These run the real StackRouter (stack-sim.ts): what is asserted is what is LEFT in the stack.
+ */
+describe('a double tap on any door never stacks two listing screens', () => {
+    const Other = () => createElement('div', { 'data-testid': 'other' });
+    const SCREENS = { index: MapScreen, 'new-listing': NewListingScreen, other: Other };
+    const choosers = () => Array.from(host.querySelectorAll('[data-modal]')).filter((m) => m.textContent?.includes('Create New Post'));
+    const chooserCancel = () => host.querySelector('[data-modal] [aria-label="Cancel"]');
+    const forms = () => host.querySelectorAll('input[placeholder="What do you need/offer?"]');
+    const opened = (n: number) => nav.pushed.filter((p) => typeof p === 'object' || (typeof p === 'string' && p.startsWith('/new-listing'))).length === n;
+
+    async function mapInStack() {
+        nav.stack = createStack();
+        await renderIn('en', nav.stack.host(SCREENS));
+        expect(nav.stack.names()).toEqual(['index']);
+        return nav.stack;
+    }
+    /** `n` taps on a door in a row, before anything has been drawn between them. */
+    const tapTimes = async (n: number, door: () => unknown) => {
+        await act(async () => { for (let i = 0; i < n; i++) door(); });
+        await settle(10);
+    };
+
+    for (const [name, taps] of [['a double tap', 2], ['a triple tap', 3]] as const) {
+        it(`${name} on ADD POST opens one /new-listing and one chooser; Cancel returns to the map with nothing left`, async () => {
+            const stack = await mapInStack();
+            const add = buttonHolding('ADD POST') as HTMLElement;
+            await tapTimes(taps, () => add.click());
+            expect(opened(taps), 'every tap pushed, as the door does').toBe(true);
+            expect(stack.names()).toEqual(['index', 'new-listing']);
+            expect(choosers()).toHaveLength(1);
+            await click(chooserCancel(), 'the chooser\'s Cancel');
+            expect(stack.names()).toEqual(['index']);
+            expect(host.querySelector('[data-modal]')).toBeNull();
+        });
+    }
+
+    it('a double and a triple tap on the Market\'s + (the same link) leave one screen; the chooser\'s pick opens one form, ✕ returns', async () => {
+        const stack = await mapInStack();
+        await tapTimes(2, () => router.push({ pathname: '/new-listing', params: { newPost: 'true' } }));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(choosers()).toHaveLength(1);
+        await click(host.querySelector('[data-modal] [aria-label^="Offer:"]'), 'Offer in the one chooser');
+        expect(forms()).toHaveLength(1);
+        await click(byLabel('Close'), 'the form\'s ✕');
+        expect(stack.names()).toEqual(['index']);
+        await tapTimes(3, () => router.push({ pathname: '/new-listing', params: { newPost: 'true' } }));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(choosers()).toHaveLength(1);
+    });
+
+    it('a tool door\'s link (a string, with its type) twice or three times opens one form, and ✕ leaves nothing behind', async () => {
+        const stack = await mapInStack();
+        await tapTimes(3, () => router.push('/new-listing?newPost=offer'));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(forms()).toHaveLength(1);
+        await click(byLabel('Close'), 'the form\'s ✕');
+        expect(stack.names()).toEqual(['index']);
+        expect(forms()).toHaveLength(0);
+        await tapTimes(2, () => router.push('/new-listing?newPost=need'));
+        expect(stack.names()).toEqual(['index', 'new-listing']);
+        expect(forms()).toHaveLength(1);
+    });
+
+    it('a copy covered by another screen (a tool opened over it) takes itself out when its chooser closes: never left empty', async () => {
+        const stack = await mapInStack();
+        await tapTimes(1, () => router.push({ pathname: '/new-listing', params: { newPost: 'true' } }));
+        expect(choosers()).toHaveLength(1);
+        await tapTimes(1, () => stack.pushOther());
+        expect(stack.names()).toEqual(['index', 'new-listing', 'other']);
+        await click(chooserCancel(), 'the covered copy\'s Cancel');
+        expect(stack.names()).toEqual(['index', 'other']);
+        expect(host.querySelector('[data-modal]')).toBeNull();
+    });
+
+    it('a screen opened over a listing screen later is not a second tap: the form under it stays, with what the member typed', async () => {
+        const stack = await mapInStack();
+        await tapTimes(1, () => router.push('/new-listing?newPost=offer'));
+        await type(forms()[0], 'Lawnmower');
+        await tapTimes(1, () => stack.pushOther());
+        await tapTimes(1, () => router.push('/new-listing?newPost=need'));
+        expect(stack.names()).toEqual(['index', 'new-listing', 'other', 'new-listing']);
+        expect((forms()[0] as HTMLInputElement).value).toBe('Lawnmower');
     });
 });
 

@@ -18,6 +18,7 @@ import MapView, { Marker, Circle, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useRoute } from '@react-navigation/native';
 import { formatNumber, t, upperCase } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getMemberProfile, getReachablePeers } from '../utils/db';
@@ -237,6 +238,7 @@ export default function NewListingScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams<{ newPost?: string }>();
     const navigation = useNavigation();
+    const route = useRoute();
     /** The pin map, shown while "Drop a pin" is on. */
     const mapRef = useRef<any>(null);
     const [pinMapRegion, setPinMapRegion] = useState(PIN_MAP_START);
@@ -308,13 +310,26 @@ export default function NewListingScreen() {
     }, [showNewPost, identity?.publicKey]);
 
     /**
-     * Back to the screen that opened this one. Once only, and only while this screen is the one showing: a chooser
-     * closed on its way to the look door (NewPostTypeSheet) must not take the member back from there.
+     * Take THIS copy out of the stack, wherever it sits. `navigation.goBack()` is this screen's own: the stack removes
+     * this route and no other (a POP with this route as its source), where `router.back()` pops whichever screen is on
+     * top. Does nothing once the route is gone (the look door's dismissAll has taken it).
+     */
+    const removeThisCopy = () => {
+        if (!navigation.getState()?.routes.some((r) => r.key === route.key)) return;
+        navigation.goBack();
+    };
+
+    /**
+     * Back to the screen that opened this one. Once only. While this screen is the one showing it goes back. A chooser
+     * closed on its way to the look door (NewPostTypeSheet) must not take the member back from there, and a copy that
+     * is covered (a second tap's copy on top of it, a screen opened over it) takes itself out of the stack instead:
+     * left in, it would draw nothing and still take every tap, a transparent full-window screen over the opener.
      */
     const left = useRef(false);
     const leave = () => {
-        if (left.current || !navigation.isFocused()) return;
+        if (left.current) return;
         left.current = true;
+        if (!navigation.isFocused()) { removeThisCopy(); return; }
         if (router.canGoBack()) router.back();
         else router.replace('/(tabs)/map');
     };
@@ -637,10 +652,16 @@ export default function NewListingScreen() {
     const submitDisabled = needBlocked || posting || postLat == null || !postTitle.trim() || !postDescription.trim() || postFormPriceMissing(postCredits, nodeFeatures) || !postCategory || (photoRequired && postPhotos.length < 1);
 
     // What the link asked for, once, as the screen opens (once even where effects run twice, so nothing is asked twice).
+    // One listing screen at a time, for every door: a copy that opens straight over another (a second tap that came
+    // before the first screen covered the window; expo-router's push always adds a route) goes at once and opens
+    // nothing. The copy under it opened its chooser and stays the only one.
     const opened = useRef(false);
     useEffect(() => {
         if (opened.current) return;
         opened.current = true;
+        const routes = navigation.getState()?.routes ?? [];
+        const at = routes.findIndex((r) => r.key === route.key);
+        if (at > 0 && routes[at - 1].name === route.name) { left.current = true; removeThisCopy(); return; }
         const wanted = parseNewPostParam(params.newPost) ?? 'chooser';
         if (wanted === 'chooser') setShowNewPostTypePicker(true);
         else startCompose(wanted);

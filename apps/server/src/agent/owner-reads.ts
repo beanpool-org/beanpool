@@ -85,8 +85,11 @@ function communityArea(boundary: string): ToolResult {
     const area = placeAs(getNodeConfig().serviceRadius, 'rounded');
     const since = new Date(Date.now() - 90 * DAY_MS).toISOString();
     // This community's own public events, by their place's name on the card: an assistant reuses a hall, never finds a home.
+    // Never one its host cancelled or a moderator took down (both leave the row, active = 0 and cancelled): a place taken
+    // down for naming a home stays down here too (review 4429020426).
     const rows = db.prepare(`SELECT event_place_name AS name, lat, lng FROM posts
         WHERE type = 'event' AND origin_node IS NULL AND (audience_scope IS NULL OR audience_scope = 'public')
+        AND active = 1 AND status != 'cancelled' AND COALESCE(event_state, '') != 'cancelled'
         AND hidden_by_reports_at IS NULL AND COALESCE(event_online, 0) = 0
         AND event_place_name IS NOT NULL AND TRIM(event_place_name) != '' AND lat IS NOT NULL AND lng IS NOT NULL
         AND created_at >= ? ORDER BY created_at DESC LIMIT 500`).all(since) as Array<{ name: string; lat: number; lng: number }>;

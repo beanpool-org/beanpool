@@ -9,7 +9,7 @@
  * success: On only once the server answered that it keeps the copy. Holds at 320 dp and 1.3× text: every line wraps.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
@@ -19,6 +19,7 @@ import { useStyles } from '../app/ThemeContext';
 import { authenticateUser } from '../utils/LocalAuth';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { copiesRuleForScreen } from '../utils/copies-rule';
+import { onCommunitySwitched } from '../utils/community-switch';
 import {
     communityCopyStatus, offersCommunityCopy, removeCommunityCopy, turnOnCommunityCopy, type CommunityCopyStatus,
 } from '../utils/community-copy';
@@ -72,22 +73,38 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [justOn, setJustOn] = useState(false);
+    // Which key at which community the state above was read for. Settings stays mounted across a community switch, so a
+    // new one starts from nothing: the community left's "On", note or error never shows as the one now in use's (where
+    // Remove would ask it to delete a copy it never held), and an answer from the one left never lands after the switch.
+    const readFor = useRef<string | null>(null);
 
     const read = useCallback(async () => {
         const at = await getAnchorUrl().catch(() => null);
+        const scope = at && identity ? `${identity.publicKey} ${at}` : null;
+        if (scope !== readFor.current) {
+            readFor.current = scope;
+            setOffered(false);
+            setStatus(null);
+            setJustOn(false);
+            setError(null);
+        }
         setUrl(at);
         if (!at) return;
         const rule = await copiesRuleForScreen(at).catch(() => null);
+        if (readFor.current !== scope) return;
         const offeredHere = offersCommunityCopy(at, rule);
         setOffered(offeredHere);
         const turnedOnHere = await AsyncStorage.getItem(turnedOnKey(at)).catch(() => null);
         if (!identity || (!offeredHere && !turnedOnHere)) return;
         const now = await communityCopyStatus(at, identity);
+        if (readFor.current !== scope) return;
         setStatus(now);
         if (now && !now.kept && turnedOnHere) await AsyncStorage.removeItem(turnedOnKey(at)).catch(() => {});
     }, [identity]);
     // Asked again each time Account Protection comes into view: "Where your account can be brought back from" removes it too.
     useFocusEffect(useCallback(() => { void read(); }, [read]));
+    // And at once on a switch made while Settings shows (its Advanced switch stays on this screen).
+    useEffect(() => onCommunitySwitched(() => { void read(); }), [read]);
 
     if (!url || !identity) return null;
     const kept = status?.kept === true;

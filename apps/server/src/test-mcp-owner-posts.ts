@@ -28,6 +28,7 @@ import sharp from 'sharp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
+import { PRICING_CATEGORIES } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, runLedgerAudit, getPosts, getPostsVersion, exportSyncState } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
@@ -38,7 +39,7 @@ import { db } from './db/db.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import { imageSize } from './storage/image-metadata.js';
 import { admitAgentCreate, agentCreatesToday, AGENT_CREATES_PER_DAY } from './agent/limits.js';
-import { OWNER_POST_TOOLS, enterpriseRef, AGENT_POST_CATEGORIES } from './agent/owner-posts.js';
+import { OWNER_POST_TOOLS, enterpriseRef } from './agent/owner-posts.js';
 import type { AgentGrant } from './agent/tools.js';
 
 let BASE = '';
@@ -280,9 +281,10 @@ async function main(): Promise<void> {
         const badCategory = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, category: 'trades' } });
         const freeEnterprise = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, beans: 0 } });
         const badKind = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, kind: 'barter' } });
+        const offered = ((await client.listTools()).tools.find(t => t.name === 'create_offer')?.inputSchema as any)?.properties?.category?.enum ?? [];
         assert(badCategory.isError === true && /^category must be one of food, services/.test(errorText(badCategory))
-            && AGENT_POST_CATEGORIES.length === 17 && !AGENT_POST_CATEGORIES.includes('other'),
-            `a category no app offers → refused, naming the ones they do (${errorText(badCategory).slice(0, 60)}…)`);
+            && JSON.stringify(offered) === JSON.stringify(PRICING_CATEGORIES.map(c => c.id)) && !offered.includes('other'),
+            `a category no app offers → refused, naming the ones they do; the schema offers the Market's ${offered.length} (${errorText(badCategory).slice(0, 60)}…)`);
         assert(freeEnterprise.isError === true && /^beans must be more than 0/.test(errorText(freeEnterprise)) && badKind.isError === true && /^kind must be offer or need/.test(errorText(badKind)),
             `an enterprise's listing at 0 Beans, or a kind that is neither → refused as its form would (${errorText(freeEnterprise)} | ${errorText(badKind)})`);
         assert(engineRefusal.isError === true && /future/.test(errorText(engineRefusal)), `the engine's own rules answer, in its words (${errorText(engineRefusal)})`);

@@ -13,7 +13,6 @@ import { beansOn } from '../utils/node-profile';
 import { howItWorksSubtitle } from '../utils/beans-off';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
-import { getCanonicalAvatar } from '../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../utils/avatar-value';
 import { keepPendingProfileChange, pendingNameAccepted, pendingProfileChange } from '../utils/pending-profile-sync';
 import { buildSignedHeaders } from '../utils/crypto';
@@ -63,20 +62,17 @@ export default function ProfileSetupScreen() {
         AsyncStorage.getItem('beanpool_anchor_url').then(setAnchorUrl).catch(() => setAnchorUrl(null));
     }, []);
     const [callsign, setCallsign] = useState(joinedAs ?? identity?.callsign ?? '');
-    // Three separate things, deliberately not one `avatar` state:
+    // Two separate things, deliberately not one `avatar` state:
     //  - `pendingAvatar`  the photo picked in THIS session, and the only thing an explicit edit
     //                     may publish;
-    //  - `nodeAvatar`     what the node holds for us, read from the synced `members` row (since
+    //  - `nodeAvatar`     what this community holds for us, read from the synced `members` row (since
     //                     #725 that is the node's own `/api/avatar/<pk>?size=thumb` URL, and
-    //                     null when the node has no photo);
-    //  - `canonicalAvatar` the node-independent copy, written only by a local pick.
-    // Seeding one state from canonical made Re-run Setup PREVIEW the canonical copy as if it
-    // were current and then publish it — so after a photo change on the PWA or a paired device
-    // (where canonical is the PREVIOUS photo) finishing the wizard silently put the old picture
-    // back. Canonical is now shown, and sent, only when the node has no photo of its own.
+    //                     null when the node has no photo).
+    // The phone's copy of the last photo chosen in ANY community is neither shown nor sent here (Profile S2):
+    // it was previewed as if it were this community's and then published, so a picture chosen in one community
+    // became the picture in the next. A fresh community shows no photo until one is chosen, and the wizard asks.
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [nodeAvatar, setNodeAvatar] = useState<string | null>(null);
-    const [canonicalAvatar, setCanonicalAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -97,11 +93,9 @@ export default function ProfileSetupScreen() {
             try {
                 row = (await getMemberProfile(identity.publicKey))?.avatar_url ?? null;
             } catch { row = null; }
-            const canonical = await getCanonicalAvatar().catch(() => null);
             if (cancelled) return;
             setNodeAvatar(row && row !== 'null' && row !== 'undefined' && row.trim() !== '' ? row : null);
-            setCanonicalAvatar(canonical ?? null);
-            const haveAvatar = Boolean(row || canonical);
+            const haveAvatar = Boolean(row);
             const nameOk = (identity.callsign?.trim().length ?? 0) >= 2;
             if (joinedAs || (nameOk && !haveAvatar)) setStep('avatar');
         })();
@@ -112,11 +106,10 @@ export default function ProfileSetupScreen() {
     const stepIndex = stepOrder.indexOf(step);
     const nextStep = () => { setError(null); setStep(stepOrder[stepIndex + 1] ?? 'guide'); };
 
-    // What the wizard SHOWS: this session's pick, else the node's current photo, else — only
-    // when the node has none — the canonical copy. It is also what "do you have an avatar yet?"
-    // means for the Next button, so someone whose photo is already on the node is not forced to
-    // re-pick one to get through a step they only opened to change their name.
-    const displayAvatar = pendingAvatar ?? nodeAvatar ?? canonicalAvatar;
+    // What the wizard SHOWS: this session's pick, else this community's current photo. It is also what
+    // "do you have an avatar yet?" means for the Next button, so someone whose photo is already on the
+    // node is not forced to re-pick one to get through a step they only opened to change their name.
+    const displayAvatar = pendingAvatar ?? nodeAvatar;
 
     // Live per-node availability check while editing the name (debounced). Runs only
     // on the name step. 'unknown' (node unreachable) never blocks — the server still
@@ -176,14 +169,13 @@ export default function ProfileSetupScreen() {
                     const pending = await pendingProfileChange(url, identity.publicKey);
                     // The one shared rule, as in settings Save. `avatar` goes when the member
                     // picked one here, or when an earlier offline save parked a pick that nothing
-                    // has published yet, or — this screen being the "finish your profile" gate —
-                    // when the node holds no photo for us and the canonical copy can therefore
-                    // overwrite nothing. Omitting it is how the node is told "avatar unchanged";
+                    // has published yet, or when this community's row still holds a portable pick
+                    // that never reached it. Omitting it is how the node is told "avatar unchanged";
                     // sending what the wizard merely displayed is what put an older photo back.
                     avatarDecision = await resolveProfilePublishAvatar({
                         sessionPick: pendingAvatar,
                         parked: pending?.avatar,
-                        catchUp: { localRow: nodeAvatar, canonical: canonicalAvatar },
+                        catchUp: { localRow: nodeAvatar },
                     });
                     const publishAvatar = avatarDecision.avatar;
                     const bodyString = JSON.stringify({

@@ -36,7 +36,6 @@ import {
     abandonRekey, askRekey, beginRekey, cleanRekeyCode, endsRekey, finishRekey, isBringBackCode, openBringBack, parseRekeyLink, pollRekey,
     rekeyCommunityUrl, resumeRekey, REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
 } from '../utils/rekey-redeem';
-import { clearToRestore, RestoreStopped, saveRestoredAccount } from '../utils/restore-account';
 
 type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain' | 'broughtBack' | 'ended';
 
@@ -200,16 +199,18 @@ export default function RekeyCodeScreen() {
     const onBroughtBack = useCallback(async (s: RekeySlot, answer: Extract<RekeyAnswer, { state: 'released' }>) => {
         if (finishing.current) return;
         finishing.current = true;
+        // Loaded when a bring-back is released, as this screen loads the phone's database and saved communities.
+        const restore = await import('../utils/restore-account');
         try {
             const back = await openBringBack(s, answer, deps);
-            const cleared = await clearToRestore({
+            const cleared = await restore.clearToRestore({
                 publicKey: back.publicKey,
                 privateKey: back.privateKey,
                 callsign: answer.callsign,
                 createdAt: new Date().toISOString(),
                 ...(back.mnemonic ? { mnemonic: back.mnemonic } : {}),
             }, confirmReplace);
-            await saveRestoredAccount(cleared, s.community);
+            await restore.saveRestoredAccount(cleared, s.community);
             // The record and the key it asked with go: the account is the member's own key now.
             await abandonRekey(deps);
             const nodes = await import('../utils/nodes');
@@ -219,7 +220,7 @@ export default function RekeyCodeScreen() {
             setPhase('broughtBack');
         } catch (e) {
             finishing.current = false;
-            if (e instanceof RestoreStopped) {
+            if (e instanceof restore.RestoreStopped) {
                 // The phone's account was kept: the release stays collectable while the code's day lasts.
                 setError(t('The account on this phone was kept. Nothing changed.'));
                 setPhase('ended');

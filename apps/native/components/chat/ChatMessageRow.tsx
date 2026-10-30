@@ -41,12 +41,14 @@ interface Props {
     attachment?: React.ReactNode;
     status?: React.ReactNode;
     footer?: React.ReactNode;
+    /** The member is editing this message: its bubble shows it whole. */
+    editing?: boolean;
 }
 
 export function ChatMessageRow({
     item, isMe, styles, kind, actions, showActions, showEmojiPicker, pickerPosition,
     onPressBubble, onReply, onToggleEmojiPicker, onEdit, onDelete, onRemove, onReport, onPickEmoji, onPressUrl,
-    authorLabel, quote, attachment, status, footer,
+    authorLabel, quote, attachment, status, footer, editing,
 }: Props) {
     const actionBar = showActions ? (
         <ChatMessageActions
@@ -82,6 +84,7 @@ export function ChatMessageRow({
                     attachment={attachment}
                     status={status}
                     footer={footer}
+                    editing={editing}
                 />
                 {!isMe && actionBar}
             </View>

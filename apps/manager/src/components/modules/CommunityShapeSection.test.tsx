@@ -615,3 +615,63 @@ describe('CommunityShapeSection — Accessibility (Finding 5)', () => {
         expect(screen.getAllByText(/Who can join/i).length).toBeGreaterThan(0);
     });
 });
+
+describe("CommunityShapeSection — where members' copies go (vault rethink VR2)", () => {
+    const withRule = (rule: 'vault' | 'server' | 'none') =>
+        makeDefaultShape({ recoveryCopies: { value: rule, configured: rule, source: rule === 'vault' ? 'default' : 'owner', lock: null } });
+
+    it('closed, the row names the rule and says its honest words', async () => {
+        mockShapeApi(withRule('server'));
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-recoveryCopies')).toHaveTextContent('This server'));
+        const row = screen.getByTestId('shape-row-recoveryCopies');
+        expect(row).toHaveTextContent("Your server keeps members' copies. The people who run it can open them.");
+        expect(row).toHaveTextContent("If this server is lost, those copies are lost; members' 12 words still work.");
+    });
+
+    it('an owner chooses Nowhere: three choices, the consequence, and exactly one change saved', async () => {
+        const fetchMock = mockShapeApi(withRule('vault'));
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-recoveryCopies')).toHaveTextContent("BeanPool's key vault"));
+        fireEvent.click(screen.getByTestId('shape-expand-recoveryCopies'));
+        const group = screen.getByRole('radiogroup', { name: "Where members' copies go" });
+        expect(within(group).getAllByRole('radio')).toHaveLength(3);
+        expect(within(group).getByText("Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Nothing on your server needs the vault.")).toBeInTheDocument();
+        expect(within(group).getByText(/A copy a member made elsewhere is theirs: this community can't remove it\./)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+        fireEvent.click(within(group).getByRole('radio', { name: /Nowhere/ }));
+        expect(screen.getByTestId('shape-consequence')).toHaveTextContent(/Copies already made stay until each member removes theirs/);
+        expect(screen.getByTestId('shape-consequence')).toHaveTextContent(/A phone app from before this setting still keeps new copies at the key vault until it is updated/);
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved, and every member is told.'));
+        const post = fetchMock.mock.calls.find((c: any[]) => c[1]?.method === 'POST');
+        expect(JSON.parse(String(post![1].body)).changes).toEqual({ recoveryCopies: 'none' });
+    });
+
+    it('an admin reads it without a control', async () => {
+        mockShapeApi(withRule('none'));
+        render(<CommunityShapeSection activeNode={NODE} viewer={ADMIN_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-val-recoveryCopies')).toHaveTextContent('Nowhere'));
+        fireEvent.click(screen.getByTestId('shape-expand-recoveryCopies'));
+        expect(screen.queryByRole('radiogroup', { name: "Where members' copies go" })).toBeNull();
+    });
+
+    it('a node from before the rule draws no row', async () => {
+        mockShapeApi(makeDefaultShape());
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await screen.findByText('🧭');
+        expect(screen.queryByTestId('shape-row-recoveryCopies')).toBeNull();
+    });
+
+    it('the log names the setting and each rule', async () => {
+        const shape = withRule('none');
+        shape.log = [{
+            id: 'log-9', kept: 'community_settings_log', at: '2026-10-29T09:00:00.000Z', actor: 'o'.repeat(64), actorCallsign: 'ada',
+            actorRole: 'owner', setting: 'recoveryCopies', from: 'vault', to: 'none', note: null,
+        }];
+        mockShapeApi(shape);
+        render(<CommunityShapeSection activeNode={NODE} viewer={OWNER_KEY} />);
+        await waitFor(() => expect(screen.getByTestId('shape-audit-log')).toHaveTextContent("Where members' copies go: BeanPool's key vault → Nowhere"));
+    });
+});

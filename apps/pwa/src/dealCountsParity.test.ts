@@ -127,7 +127,7 @@ describe('Deals S3b count parity between web and phone', () => {
         expect(PWA_APP_SRC).toMatch(/tab\.id === 'marketplace'[\s\S]*?var\(--danger\)/);
     });
 
-    it('web MarketplacePage.tsx uses dealsNeedingMe for the My Deals pill', () => {
+    it('web MarketplacePage.tsx uses dealsNeedingMe for the Your deals pill', () => {
         expect(PWA_MARKET_SRC).toMatch(/dealsNeedingMe\(/);
         expect(PWA_MARKET_SRC).not.toMatch(/globalRequests\.length \+ /);
     });

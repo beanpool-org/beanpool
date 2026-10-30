@@ -201,7 +201,9 @@ test("the operator manual is a separate collection: the members' guide carries n
     const { guide, manual } = sourceGuides();
     const memberSlugs = new Set(guide.guides.map(g => g.slug));
     // Distinct slugs, so a page name never means two different pages in search results or links.
-    for (const p of manual.guides) assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
+    for (const p of manual.guides) {
+        assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
+    }
 });
 
 test('the operator manual covers what an operator needs, and the website renderer, given every page, lists and renders them all', () => {

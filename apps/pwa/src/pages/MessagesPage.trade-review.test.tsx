@@ -191,7 +191,7 @@ describe('Messages: the review prompt is about this DM\'s own trades', () => {
         await new Promise(r => setTimeout(r, 50));
         expect(screen.queryByText(/Action Needed/)).toBeNull();
     });
-    it('the unrated trade\'s release line is not among the lines loaded: the chat still offers Rate your partner, for that trade', async () => {
+    it('the unrated trade\'s release line is not among the lines loaded: the chat still offers a way to rate, for that trade', async () => {
         mockTxs = [tx('tx-a', 'post-1', true, '2026-10-13T00:00:00Z'), tx('tx-b', 'post-1', false, '2026-10-14T00:00:00Z')];
         mockConversations = [dm];
         mockMessagesByConv = { 'conv-1': [] };
@@ -199,8 +199,13 @@ describe('Messages: the review prompt is about this DM\'s own trades', () => {
         render(<MessagesPage identity={me} onNavigate={onNavigate} />);
         await screen.findByText(/Action Needed/);
         fireEvent.click(screen.getByText('Bob'));
-        const banner = await screen.findByTestId('chat-rate-banner');
-        fireEvent.click(within(banner).getByRole('button', { name: /Rate your partner/ }));
+        // The deal strip's Review card is that way (Deals S5): the pinned Rate your partner would be a second door to one form.
+        const card = await screen.findByTestId('chat-deal-tx-b');
+        await new Promise(r => setTimeout(r, 50));
+        expect(screen.queryByTestId('chat-rate-banner')).toBeNull();
+        expect(screen.queryByText('Your trade is finished. How did it go?')).toBeNull();
+        expect(screen.queryByTestId('chat-deal-tx-a')).toBeNull();
+        fireEvent.click(within(card).getByRole('button', { name: /Leave a review for Bread/ }));
         expect(onNavigate).toHaveBeenCalledWith('marketplace-review', 'tx-b');
     });
 

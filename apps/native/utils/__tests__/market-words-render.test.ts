@@ -2,7 +2,7 @@
 /**
  * The Market in the member's language (words slice S3, sweep B1): app/(tabs)/market.tsx rendered for real inside the real
  * LanguageProvider, with the components only the Market uses drawn for real too (the cards, the filter rows and their
- * tiles, the trust and distance pickers, My Deals, the poll and event cards, the activity feed, the example cards, the
+ * tiles, the trust and distance pickers, Your deals, the poll and event cards, the activity feed, the example cards, the
  * new-post chooser). React Native's host components are plain tags carrying their accessibility props, placeholders and
  * the few layout props the 320 dp checks read; the node is the net-spy stand-in for utils/db, answering a small community.
  *
@@ -191,7 +191,7 @@ const POSTS = [
         author_pubkey: 'mia-key', author_callsign: 'Mia', goingCount: 2, interestedCount: 1, created_at: iso(now - 3 * DAY),
     },
 ];
-/** My Deals: the Need held in trust, and a finished deal waiting on the member's review. */
+/** Your deals: the Need held in trust, and a finished deal waiting on the member's review. */
 const TRANSACTIONS = [
     { id: 'tx-held', postId: 'p-ladder', postTitle: 'Borrow a long ladder', status: 'pending', buyerPublicKey: ME.publicKey, sellerPublicKey: 'mia-key', sellerCallsign: 'Mia', credits: 3, createdAt: iso(now - DAY) },
     { id: 'tx-done', postId: 'p-old', postTitle: 'Bike tune-up', status: 'completed', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 8, createdAt: iso(now - 5 * DAY) },
@@ -287,7 +287,7 @@ function bypassing(): string[] {
 const bracketed = () => Array.from(host.querySelectorAll('span')).filter((s) => /^\[.*\]$/su.test(s.textContent ?? '')).length;
 
 describe('the Market in the pseudo-locale: every word on it came through t() (words S3b)', () => {
-    it('the feed in list view: the search, My Deals, the type and filter rows, the group pills, every card and heading, the poll and event cards, the welcome quest and the fresh banner', async () => {
+    it('the feed in list view: the search, Your deals, the type and filter rows, the group pills, every card and heading, the poll and event cards, the welcome quest and the fresh banner', async () => {
         await renderIn('xx');
         expect(host.textContent).toContain('Fresh duck eggs');
         expect(host.textContent).toContain('Where should the market go?');
@@ -331,7 +331,7 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         }
     });
 
-    it('the category tiles, the trust picker, the distance picker, My Deals (every tab) and the new-post chooser', async () => {
+    it('the category tiles, the trust picker, the distance picker, Your deals (every tab) and the new-post chooser', async () => {
         await renderIn('xx');
         await click(byLabel(pseudoLocalise('Filter by category')), 'the category chip');
         expect(host.textContent).toContain(pseudoLocalise('Education'));
@@ -348,16 +348,16 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
         expect(bypassing(), 'distance').toEqual([]);
         await click(byLabel(pseudoLocalise('Cancel location picker')), 'Cancel');
 
-        await click(host.querySelector(`[aria-label^="${pseudoLocalise('My Deals, {n} pending').slice(0, 6)}"]`), 'My Deals');
+        await click(host.querySelector(`[aria-label^="${pseudoLocalise('Your deals, {n} pending').slice(0, 6)}"]`), 'Your deals');
         // In Progress lists the deal held in trust (its own card, Deals S3b), History the finished deal.
         expect(byTestId('deal-card-tx-held')).not.toBeNull();
-        expect(bypassing(), 'My Deals, in progress').toEqual([]);
+        expect(bypassing(), 'Your deals, in progress').toEqual([]);
         for (const tab of ['My Posts', 'History']) {
             await click(Array.from(host.querySelectorAll('[data-modal] button')).find((b) => b.textContent === pseudoLocalise(tab)) ?? null, tab);
-            expect(bypassing(), `My Deals, ${tab}`).toEqual([]);
+            expect(bypassing(), `Your deals, ${tab}`).toEqual([]);
         }
         expect(byTestId('deal-card-tx-done')).not.toBeNull();
-        await click(host.querySelector(`[data-modal] [aria-label="${pseudoLocalise('Close')}"]`), 'close My Deals');
+        await click(host.querySelector(`[data-modal] [aria-label="${pseudoLocalise('Close')}"]`), 'close Your deals');
 
         await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes(pseudoLocalise('ADD POST'))) ?? null, 'ADD POST');
         expect(host.textContent).toContain(pseudoLocalise('Create New Post'));
@@ -396,13 +396,13 @@ describe('the Market in the pseudo-locale: every word on it came through t() (wo
     it('in English nothing is bracketed, and the words are as they were', async () => {
         await renderIn('en');
         expect(bracketed()).toBe(0);
-        expect(host.textContent).toContain('My Deals');
+        expect(host.textContent).toContain('Your deals');
         expect(host.textContent).toContain('🔒 Only Garden club can see this');
         expect(host.textContent).toContain('🫘 Welcome, Ana! One step to unlock trading');
         expect(host.textContent).toContain('1 fresh listing posted today!');
         expect(host.textContent).toContain('📊 4 total votes cast');
         expect(host.textContent).toContain('2 going · 1 interested');
-        expect(byLabel('My Deals, 1 pending')).not.toBeNull();
+        expect(byLabel('Your deals, 1 pending')).not.toBeNull();
     });
 });
 
@@ -463,13 +463,13 @@ describe('the Market at 320 dp with 1.3× text, in the pseudo-locale', () => {
         }
     });
 
-    it('My Deals in the search row is capped and shrinks its words, so the search keeps room; its words fit at the smallest', async () => {
+    it('Your deals in the search row is capped and shrinks its words, so the search keeps room; its words fit at the smallest', async () => {
         await renderIn('xx');
-        const pill = host.querySelector(`[aria-label^="${pseudoLocalise('My Deals, {n} pending').slice(0, 6)}"]`)!;
+        const pill = host.querySelector(`[aria-label^="${pseudoLocalise('Your deals, {n} pending').slice(0, 6)}"]`)!;
         const cap = Number(pill.getAttribute('data-max-width'));
         expect(cap).toBe(120);
         const label = Array.from(pill.querySelectorAll('span[data-shrinks]'))[0];
-        expect(label.textContent).toBe(pseudoLocalise('My Deals'));
+        expect(label.textContent).toBe(pseudoLocalise('Your deals'));
         expect(label.getAttribute('data-lines')).toBe('1');
         expect(widthOf(label.textContent!, 11 * SCALE) * Number(label.getAttribute('data-min-scale'))).toBeLessThanOrEqual(cap - 28);
         // The row: 16 dp gutters, two 8 dp gaps, the 38 dp view toggle; the search keeps at least a third of the width.

@@ -11,8 +11,8 @@
 import { BEANPOOL_WEBSITE_URL, t, word } from '@beanpool/core';
 import type { NodeProfile } from './node-profile';
 
-/** The website's own section on running a community's node: only where the community's node names no page of its own. */
-export const RUN_A_NODE_URL = `${BEANPOOL_WEBSITE_URL}/#run-a-node`;
+/** The website's own page on running a community's node (beanpool.org/start): only where the community's node names no page of its own. */
+export const RUN_A_NODE_URL = `${BEANPOOL_WEBSITE_URL}/start`;
 
 /**
  * Where "How to run a node" leads: the page the community's node names (`startCommunityUrl`, read by readNodeProfile),

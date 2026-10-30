@@ -1,6 +1,6 @@
 ---
 slug: my-deals
-title: My Deals
+title: Your deals
 summary: One place for every trade you are in, every post you have up, and your past trades.
 help: Every trade you are in and every post you have up. A deal waiting on you is at the top.
 related: a-deal-step-by-step, posting, your-balance, when-a-deal-goes-wrong, the-top-bar
@@ -8,9 +8,9 @@ related: a-deal-step-by-step, posting, your-balance, when-a-deal-goes-wrong, the
 
 ## Opening it
 
-Tap **My Deals** at the top of the Market tab. A red number on it counts the deals waiting on you.
+Tap **Your deals** at the top of the Market tab. A red number on it counts the deals waiting on you.
 
-On the global community there are no deals, so **My Deals** shows three example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you, one with the Beans held safely, and one done. Their buttons say why deals live in a local community, and change nothing. See "Beans and the global community".
+On the global community there are no deals, so **Your deals** shows three example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you, one with the Beans held safely, and one done. Their buttons say why deals live in a local community, and change nothing. See "Beans and the global community".
 
 ## Three tabs
 

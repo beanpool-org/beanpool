@@ -17,7 +17,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
-import { signInCopiesAt } from './vault-config';
+import { signInCopiesAt, type SignInCopies } from './vault-config';
 import { communitySwitched } from './community-switch';
 
 export interface JoinDeps {
@@ -125,6 +125,8 @@ export interface JoinedNudge {
     later: string;
     /** The answer that goes on to protect this community too: only where each community keeps its own copy. */
     protect?: string;
+    /** Which nudge it is, for the words layer (utils/joined-nudge-words.ts): where a copy made here goes. */
+    kind: SignInCopies;
 }
 
 /**
@@ -135,20 +137,34 @@ export interface JoinedNudge {
  *   §3.6's "protect this community too"), exactly as before the vault.
  * - A build with one: a linked sign-in's copy is kept by BeanPool's key vault, one for every community (custody K1),
  *   so there is nothing to add here, and no community is ever asked to keep one: one answer, Next.
+ *
+ * And the new community's rule for where members' copies go (vault rethink VR2, utils/copies-rule.ts), as `copies`
+ * (utils/vault-config.ts signInCopiesAt with its rule): `community` (it keeps them itself, in any build) is the first
+ * nudge; `none` says it keeps none and the words are the way back there, with Next; absent, this build's place.
  */
-export function joinedNudge(name: string): JoinedNudge {
+export function joinedNudge(name: string, copies: SignInCopies = signInCopiesAt()): JoinedNudge {
     const came = 'Your key and your 12 words came with you, and so does your name. Your posts, chats and trades stay in each community.\n\n';
-    if (signInCopiesAt() === 'community') {
+    if (copies === 'community') {
         return {
             title: `You're in ${name}`,
             body: came + `A sign-in that protects your account is kept by each community, so protect your account in ${name} too.`,
             later: 'Later',
             protect: 'Protect it',
+            kind: 'community',
+        };
+    }
+    if (copies === 'none') {
+        return {
+            title: `You're in ${name}`,
+            body: came + `${name} keeps no copies of members' accounts, so your 12 words are your way back there. A copy you made before, in another community, is still yours.`,
+            later: 'Next',
+            kind: 'none',
         };
     }
     return {
         title: `You're in ${name}`,
         body: came + 'A sign-in you linked to get back into your account works here too: BeanPool keeps one copy for all your communities.',
         later: 'Next',
+        kind: 'vault',
     };
 }

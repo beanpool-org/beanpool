@@ -243,6 +243,35 @@ export type HomeChatCard =
     | { gone: HomeChatGone };
 
 /**
+ * What the Decide card shows (CARD-FRAME §4, "My votes"). `counts`, the default and today's card: the few soonest-closing
+ * open Decisions, the first open poll, and the polls line. `open`: more of the open Decisions (up to
+ * {@link HOME_DECIDE_ROWS}.open), the poll and the polls line as in `counts`. `mine`: only the open Decisions the member
+ * voted in or proposed, nothing of polls.
+ */
+export const HOME_DECIDE_SHOWS = ['counts', 'open', 'mine'] as const;
+export type HomeDecideShow = (typeof HOME_DECIDE_SHOWS)[number];
+export type HomeDecideSettings = { show: HomeDecideShow };
+/** How many Decision rows the node sends for each choice, and the most an app draws. */
+export const HOME_DECIDE_ROWS: Readonly<Record<HomeDecideShow, number>> = { counts: 3, open: 5, mine: 5 };
+export const HOME_DECIDE_ROWS_MAX = Math.max(...Object.values(HOME_DECIDE_ROWS));
+
+/**
+ * The Decide card's choices as the settings sheet offers them on both apps (one text, so the phone and the web never
+ * drift): the chip and a line under the chosen one saying what it shows. word() keys: shown through t().
+ */
+export const HOME_DECIDE_CHOICES: ReadonlyArray<{ show: HomeDecideShow; label: WordKey; note: WordKey }> = [
+    { show: 'counts', label: word('Summary'), note: word('The Decisions closing soonest, and the first poll.') },
+    { show: 'open', label: word('All open'), note: word('Up to five open Decisions, and the first poll.') },
+    { show: 'mine', label: word('My votes'), note: word('Open Decisions you voted in or proposed.') },
+];
+
+/** The Decide card's settings, tolerant: anything but `open` or `mine` is `counts` (today's card, the default). */
+export function readDecideSettings(raw: unknown): HomeDecideSettings {
+    const show = isPlainObject(raw) ? raw.show : undefined;
+    return { show: show === 'open' || show === 'mine' ? show : 'counts' };
+}
+
+/**
  * Whether the reader can invite here: invites are on, and where only admins invite the node has said they are an owner
  * or admin (apps/native utils/home-cards.ts `invitesForReader`, the same rule). A role not heard yet counts as no.
  */
@@ -285,7 +314,10 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
         id: 'search', name: word('A saved search'), line: word('Listings that match words you choose, near you.'), group: 'around',
         multiple: { max: 5 }, asks: 'node', onNode: everywhere, readSettings: readSearchSettings,
     },
-    { id: 'decide', name: word('Decide'), line: word('Open Decisions and polls.'), group: 'you', asks: 'node', onNode: (a) => notGlobal(a) && a.features.decisions !== false },
+    {
+        id: 'decide', name: word('Decide'), line: word('Open Decisions and polls.'), group: 'you', asks: 'node',
+        onNode: (a) => notGlobal(a) && a.features.decisions !== false, readSettings: readDecideSettings,
+    },
     { id: 'groups', name: word('Your groups'), line: word("What's new in your groups."), group: 'you', asks: 'node', onNode: everywhere },
     // A chat the member picked, its last lines opened on the device (DESIGN-home-chosen-chat-fable.md §1): on every node,
     // since every node has chats. Asked only once a chat is picked; the node answers only a chat the member is in now.

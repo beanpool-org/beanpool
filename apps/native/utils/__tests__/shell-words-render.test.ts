@@ -60,6 +60,8 @@ vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => nav.pushed.push(to), replace: (to: unknown) => nav.pushed.push(to), back: () => {}, canGoBack: () => true, canDismiss: () => false, dismissAll: () => {} },
     useLocalSearchParams: () => nav.params,
     usePathname: () => nav.path,
+    // The header's own name and picture (utils/use-own-profile.ts) read on focus: none here (../db answers no row).
+    useFocusEffect: () => {},
     ErrorBoundary: () => null,
 }));
 vi.mock('@expo/vector-icons', async () => {

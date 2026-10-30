@@ -12,7 +12,11 @@
  *   lists the ticket keys, global-join.ts `doorTicketKeys`), and once the node has linked it, the copy goes to the vault
  *   (`depositDoorCopy`). No ticket the door takes: the door's own nonce, linked without a copy.
  * - a build without one: the door's own nonce, and the copy rides in the link (`recovery: { shares }`).
- * If the copy can't be made or kept, the link still stands: never a gate, either way round.
+ * If the copy can't be made or kept, the link still stands: never a gate, either way round. Where the door's community
+ * keeps no copies (its rule `none`, vault rethink VR2), none is made, and the answer says it was the rule, not a failure
+ * (`noCopies`): by the node's own word where a copy went with the link (`recovery.code` `no_copies_here`), else by the
+ * rule as this phone kept it, or asked once now where the kept one keeps copies. The one-way-back card opens the sheet
+ * long after that was kept, and the owners may have set `none` since.
  *
  * The backstop is the door's (global-join.ts `submitJoin`): a 401 to a link that carried a ticket opens the provider's
  * sheet once more, with the door's own nonce, and links without a copy.
@@ -24,14 +28,18 @@
 import { readNonceResponse, signInWithProvider, SsoSignInError } from './sso-signin';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from './sso-providers';
 import { signedPost } from './node-post';
-import { extractSub } from './sso-sheet-connect';
+import { extractSub, NO_COPIES_HERE } from './sso-sheet-connect';
 import { enrolmentFromJoin, sealSsoShares, type KeeperEnrolmentResult } from './keeper-enrolment';
 import { signInCopiesAt } from './vault-config';
-import { depositDoorCopy, doorTicketKeys, doorVaultTicket, providerSignIn, retryAfterSeconds, tryAgainIn, JOIN_TIMEOUT_MS, type DoorSignIn } from './global-join';
+import { copiesRuleNow } from './copies-rule';
+import { depositDoorCopy, doorCopiesAt, doorTicketKeys, doorVaultTicket, providerSignIn, retryAfterSeconds, tryAgainIn, JOIN_TIMEOUT_MS, type DoorSignIn } from './global-join';
 import type { BeanPoolIdentity } from './identity';
 
 export const LINK_NONCE_PATH = '/api/join/link/sso-nonce';
 export const LINK_PATH = '/api/join/link';
+
+/** Where a copy made at the door goes, as linkSignIn decides it: for the sheet's words before a sign-in is chosen. */
+export { doorCopiesAt };
 
 /** Why a sign-in wasn't added. */
 export type LinkRefusal =
@@ -39,8 +47,11 @@ export type LinkRefusal =
     | 'door_key_missing' | 'rate_limited' | 'sign_in_again' | 'sign_in_unavailable' | 'unsupported' | 'try_again' | 'unreachable';
 
 export type LinkAnswer =
-    /** Added: this sign-in is a second way back, and the new-account limits are the usual ones from now. */
-    | { kind: 'linked'; provider: SsoProvider; enrolment: KeeperEnrolmentResult | null }
+    /**
+     * Added: this sign-in is a second way back, and the new-account limits are the usual ones from now. `noCopies`: the
+     * door's community keeps no copies (its rule, vault rethink VR2), so none was made, by design rather than by a failure.
+     */
+    | { kind: 'linked'; provider: SsoProvider; enrolment: KeeperEnrolmentResult | null; noCopies?: true }
     | { kind: 'refused'; reason: LinkRefusal; message: string };
 
 /** What the member reads when a sign-in isn't added. `{provider}` is the sign-in's name. */
@@ -164,9 +175,10 @@ export async function linkSignIn(o: LinkSignInOptions): Promise<LinkAnswer> {
     const asked = await askForLink(url, identity, provider);
     if (asked.kind === 'answer') return asked.answer;
 
-    // A build without a vault: the door's nonce, and the copy rides in the link, as at the door.
+    // A build without a vault, or a door whose community keeps copies itself or none (its rule, vault rethink VR2): the
+    // door's nonce, and a copy, where kept, rides in the link, as at the door.
     let signin: DoorSignIn;
-    if (signInCopiesAt() === 'community') {
+    if (await doorCopiesAt(url) !== 'vault') {
         const done = await signInWithProvider(provider, asked.nonce);
         signin = { provider, idToken: done.idToken, nonce: done.nonce, sub: '', email: done.email };
         try {
@@ -203,7 +215,8 @@ export async function linkSignIn(o: LinkSignInOptions): Promise<LinkAnswer> {
 async function sendLink(url: string, identity: BeanPoolIdentity, signin: DoorSignIn): Promise<{ answer: LinkAnswer; status: number | null }> {
     let recovery: { shares: unknown[] } | null = null;
     let wordsSealed = false;
-    if (signInCopiesAt() === 'community') {
+    const place = await doorCopiesAt(url);
+    if (place === 'community') {
         try {
             const sealed = await sealSsoShares(identity, signin.provider, signin.sub);
             recovery = { shares: sealed.shares };
@@ -231,19 +244,42 @@ async function sendLink(url: string, identity: BeanPoolIdentity, signin: DoorSig
     console.log(`[LINK] ${signin.provider}: the door answered ${res.status} (${answer.kind === 'linked' ? 'linked' : answer.reason})`);
     if (answer.kind !== 'linked') return { answer, status: res.status };
     if (recovery) {
-        return { answer: { ...answer, enrolment: enrolmentFromJoin((answerBody as { recovery?: unknown }).recovery, signin.provider, wordsSealed) }, status: res.status };
+        const kept = (answerBody as { recovery?: unknown } | null)?.recovery;
+        const enrolment = enrolmentFromJoin(kept, signin.provider, wordsSealed);
+        // Kept none because the community keeps none: its rule, set since this phone kept it. Asked once, so the screens
+        // find the community's fresh answer when they read where a copy goes again (as the connect does after the same
+        // refusal, sso-sheet-connect.ts keepsNoCopiesNow).
+        if (!!kept && typeof kept === 'object' && (kept as { code?: unknown }).code === NO_COPIES_HERE) {
+            await copiesRuleNow(url);
+            return { answer: { ...answer, enrolment, noCopies: true }, status: res.status };
+        }
+        return { answer: { ...answer, enrolment }, status: res.status };
     }
     if (signin.vaultTicket) return { answer: { ...answer, enrolment: await depositDoorCopy(identity, signin) }, status: res.status };
-    return { answer, status: res.status };
+    // No copy went with the link. Where the community keeps none, that is its rule, not a failure: as this phone kept it,
+    // else asked once now, since the kept answer may be from before the owners set `none`.
+    const noCopies = place === 'none' || await copiesRuleNow(url) === 'none';
+    return { answer: noCopies ? { ...answer, noCopies: true } : answer, status: res.status };
 }
 
-/** What Safety Backup and Settings say once a sign-in was added. */
-export function linkedNotice(answer: Extract<LinkAnswer, { kind: 'linked' }>): string {
+/** Whether a linked sign-in's copy is at the key vault: where the deposit said, else this build's place. */
+export function linkedAtVault(answer: Extract<LinkAnswer, { kind: 'linked' }>): boolean {
+    return answer.enrolment?.keptAt ? answer.enrolment.keptAt === 'vault' : signInCopiesAt() === 'vault';
+}
+
+/**
+ * What Safety Backup and Settings say once a sign-in was added. `community`: the name of the community whose door it was,
+ * where that isn't the global community (a door anyone can join, joined with 12 words: components/OneWayBackCard.tsx has
+ * the sheet say it); absent, the global community.
+ */
+export function linkedNotice(answer: Extract<LinkAnswer, { kind: 'linked' }>, community?: string): string {
     const name = SSO_PROVIDER_NAMES[answer.provider] ?? 'Your sign-in';
     const copy = answer.enrolment
-        ? (signInCopiesAt() === 'vault'
+        ? (linkedAtVault(answer)
             ? ` If you lose this phone, sign in with ${name} to get back in.`
-            : ` If you lose this phone, sign in with ${name} to get back into the global community.`)
-        : ' It couldn\'t keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.';
+            : ` If you lose this phone, sign in with ${name} to get back into ${community ?? 'the global community'}.`)
+        : answer.noCopies
+            ? ` ${community ?? 'The global community'} keeps no copies of members' accounts, so your 12 words are still your way back.`
+            : ' It couldn\'t keep a copy of your account right now, so for getting back in, your 12 words are still the way: Account Protection in Settings can link it again.';
     return `Your ${name} sign-in is added: your account now has the usual new-account limits.${copy}`;
 }

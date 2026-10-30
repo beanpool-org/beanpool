@@ -493,7 +493,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites' | '/find-community'
-    | '/(tabs)/chats?filter=requests'
+    | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
@@ -520,7 +520,10 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
 export function noticeRoute(kind: PushNoticeKind | null, details: unknown): NoticeRoute {
     const d = asObject(details) ?? {};
     if (d.screen === 'requests') return '/(tabs)/chats?filter=requests';
-    if (d.screen === 'post' && typeof d.postId === 'string' && NODE_ID.test(d.postId)) return `/post/${d.postId}`;
+    // A deal's alert names the deal too, so a recurring listing's author lands on that one (app/post/[id].tsx reads txId).
+    if (d.screen === 'post' && typeof d.postId === 'string' && NODE_ID.test(d.postId)) {
+        return typeof d.txId === 'string' && NODE_ID.test(d.txId) ? `/post/${d.postId}?txId=${d.txId}` : `/post/${d.postId}`;
+    }
     if (d.screen === 'chat' && typeof d.conversationId === 'string' && NODE_ID.test(d.conversationId)) return `/chat/${d.conversationId}`;
     if (d.screen === 'enterprise' && typeof d.publicKey === 'string' && ENTERPRISE_KEY.test(d.publicKey)) return `/treasury-manage?publicKey=${d.publicKey}`;
     // A group's vote opening: the group itself, its info sheet open on its Decisions block; never Talk (slice S3).
@@ -528,6 +531,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // An invitation to a group: its invite landing, opened as an invitation (utils/your-groups.ts inviteLandingHref), with
     // Join; never the group's chat, which they are not in yet.
     if (d.screen === 'invite' && typeof d.groupId === 'string' && NODE_ID.test(d.groupId)) return `/group/${d.groupId}?invited=1`;
+    // The community's vote on removing a member, to its voters and to the member it is about (removal by vote, Amendment A):
+    // Commons, Decide, where the case, who brought it and the member's reply sit side by side.
+    if (d.screen === 'decide') return '/(tabs)/projects?section=decide';
     if (d.screen === 'settings') return '/(tabs)/settings';
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;

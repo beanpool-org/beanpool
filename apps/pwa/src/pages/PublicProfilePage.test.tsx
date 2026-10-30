@@ -395,3 +395,23 @@ describe('PublicProfilePage: Message and Add friend/Friend toggle at the top of 
         expect(screen.queryByRole('button', { name: /\+ Add friend/i })).toBeNull();
     });
 });
+
+// Profile S1 (scratch/fable-design/DESIGN-per-community-profile-fable.md §1 "Web"): the web is one community per browser,
+// and My Profile reads that community's own row from its node each time it opens, never a copy this browser keeps.
+describe("PublicProfilePage: My Profile is this community's row, read from its node", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it("the name and photo the node holds for this key, never the browser's saved name", async () => {
+        const me = { ...mockIdentity, callsign: 'Browser Name' };
+        vi.mocked(getMemberProfile).mockResolvedValueOnce({ ...mockProfile, publicKey: me.publicKey, callsign: 'Alice of Mullum', avatar: '/api/avatar/my-user-pubkey?size=thumb&v=2' } as any);
+        render(<PublicProfilePage identity={me} pubkey={me.publicKey} onBack={vi.fn()} onMessage={vi.fn()} onNavigatePost={vi.fn()} />);
+
+        await waitFor(() => expect(screen.getByText('Alice of Mullum')).toBeInTheDocument());
+        expect(screen.getByText('My Profile')).toBeInTheDocument();
+        expect(getMemberProfile).toHaveBeenCalledWith(me.publicKey, me.publicKey);
+        expect(screen.getByRole('img', { name: 'avatar' })).toHaveAttribute('src', '/api/avatar/my-user-pubkey?size=thumb&v=2');
+        expect(screen.queryByText('Browser Name')).toBeNull();
+    });
+});

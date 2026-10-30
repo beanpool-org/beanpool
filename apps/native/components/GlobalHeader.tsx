@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, usePathname } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { withJitter } from '../utils/jitter';
-import { getMemberProfile } from '../utils/db';
+import { useOwnProfile } from '../utils/use-own-profile';
 import { MemberAvatar } from './MemberAvatar';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { useIdentity } from '../app/IdentityContext';
@@ -122,7 +122,9 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     }));
 
     const { identity } = useIdentity();
-    const [myAvatar, setMyAvatar] = useState<string | null>(null);
+    // The member's own name and picture in the community the phone is on now (utils/use-own-profile.ts): read again after
+    // a switch, on profile_updated and on focus, and never another community's while the new one's is on its way.
+    const own = useOwnProfile();
     const [softUpdateVersion, setSoftUpdateVersion] = useState<string | null>(null);
     // The installed build is below the node's declared floor — a banner you cannot dismiss,
     // because the app genuinely will not behave against this node until it is updated.
@@ -333,19 +335,6 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
     }, []);
 
     useEffect(() => {
-        if (!identity?.publicKey) return;
-        // Assign whatever the profile says, including null. Guarding on truthiness meant
-        // clearing your avatar left the old image in the header until an app restart.
-        const load = () => getMemberProfile(identity.publicKey)
-            .then(p => setMyAvatar(p?.avatar_url ?? null))
-            .catch(() => {});
-        load();
-        // Without this the pill kept the old picture until the header happened to remount.
-        const sub = DeviceEventEmitter.addListener('profile_updated', load);
-        return () => sub.remove();
-    }, [identity?.publicKey]);
-
-    useEffect(() => {
         if (!identity?.publicKey) { setIsGuestOnActive(true); return; }
         (async () => {
             const active = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -491,11 +480,11 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                         style={styles.iconBtn}
                         onPress={() => {
                             if (identity?.publicKey) {
-                                router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } });
+                                router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: own.callsign || identity.callsign } });
                             }
                         }}
                     >
-                        <MemberAvatar avatarUrl={myAvatar} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || '?'} size={AVATAR_SIZE} />
+                        <MemberAvatar avatarUrl={own.avatarUrl} updatedAt={own.updatedAt} pubkey={identity?.publicKey || ''} callsign={own.callsign || identity?.callsign || '?'} size={AVATAR_SIZE} />
                     </TouchableOpacity>
                 </View>
             </View>

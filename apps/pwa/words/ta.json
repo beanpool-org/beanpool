@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -461,8 +461,6 @@
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "சரியான இலக்கங்களுக்குப் பிறகே உங்கள் கணக்கு இங்கே திறக்கும். மூன்று தவறான முயற்சிகளுக்குப் பிறகு எதுவும் அனுப்பப்படாது.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "உங்கள் தொலைபேசியிலிருந்து இன்னும் எதுவும் வரவில்லை. இந்தக் குறியீடு {host}-இலிருந்து வந்தது. உங்கள் தொலைபேசி இது தான் பயன்படுத்தாத சர்வரிலிருந்து வந்தது என்று சொன்னால், உங்கள் சொந்த சமூகத்தின் முகவரியில் BeanPool-ஐத் திறக்கவும், அல்லது முதலில் உங்கள் தொலைபேசியில் {host}-இல் சேர்ந்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும். உங்கள் தொலைபேசி எண்களைக் காட்டவில்லை என்றால், அதில் உள்ள BeanPool செயலியைப் புதுப்பித்து, பிறகு மீண்டும் ஸ்கேன் செய்யவும்.",
   "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "ஒரு விசைப்பலகையின் கிளிப்போர்டு வரலாறு அல்லது உங்கள் மற்ற சாதனங்களுடன் பகிரப்படும் கிளிப்போர்டு, BeanPool-ஆல் அழிக்க முடியாத ஒரு நகலை வைத்திருக்கலாம்.",
-  "My Deals": "எனது ஒப்பந்தங்கள்",
-  "Close My Deals": "எனது ஒப்பந்தங்களை மூடு",
   "In Progress": "செயலில் உள்ளது",
   "My Posts": "எனது பதிவுகள்",
   "History": "வரலாறு",
@@ -1096,7 +1094,6 @@
   "Posted by": "பதிவிட்டவர்",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "இன்னும் மதிப்பீடுகள் இல்லை",
-  "Transferring {n} B to {name}": "{name}-க்கு {n} பயறு மாற்றப்படுகிறது",
   "Failed to complete transaction": "பரிவர்த்தனையை முடிப்பதில் தோல்வி",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "நீங்கள் பெறுநர். ஒப்புக்கொண்டபடி விதிமுறைகளை நிறைவேற்றுங்கள், செலுத்துபவர் உங்கள் கிரெடிட்டுகளை விடுவிப்பார் (1.5% பரிவர்த்தனை கட்டணம் {owned} கழித்து நிகரத் தொகையைப் பெறுவீர்கள்).",
   "Cancel this transaction and return the post to the market?": "இந்தப் பரிவர்த்தனையை ரத்துசெய்து பதிவை மீண்டும் சந்தைக்குத் திருப்பவா?",
@@ -1164,7 +1161,6 @@
   "Failed to save": "சேமிப்பதில் தோல்வி",
   "Failed to delete post as convenor": "ஒருங்கிணைப்பாளராகப் பதிவை நீக்குவதில் தோல்வி",
   "Loading Location Services...": "இருப்பிடச் சேவைகள் ஏற்றப்படுகின்றன...",
-  "🤝 My Deals": "🤝 என் ஒப்பந்தங்கள்",
   "Switch to List View": "பட்டியல் பார்வைக்கு மாறு",
   "Switch to Compact View": "சிறிய பார்வைக்கு மாறு",
   "Switch to Card View": "அட்டை பார்வைக்கு மாறு",
@@ -3620,5 +3616,6 @@
   "Got an idea that needs Beans? Start a project.": "பயறுகள் தேவைப்படும் யோசனை உள்ளதா? ஒரு திட்டத்தைத் தொடங்குங்கள்.",
   "Something that keeps going and trades? Start an enterprise.": "தொடர்ந்து இயங்கி வர்த்தகம் செய்கிறதா? ஒரு கூட்டு முயற்சியைத் தொடங்குங்கள்.",
   "Start one with +: a chat group, a project or an enterprise.": "+ மூலம் ஒன்றைத் தொடங்குங்கள்: அரட்டைக் குழு, ஒரு திட்டம் அல்லது ஒரு கூட்டு முயற்சி.",
-  "No projects to back yet": "ஆதரிக்க இன்னும் திட்டங்கள் இல்லை"
+  "No projects to back yet": "ஆதரிக்க இன்னும் திட்டங்கள் இல்லை",
+  "🤝 Your deals": "🤝 உங்கள் ஒப்பந்தங்கள்"
 }

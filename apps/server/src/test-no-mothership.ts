@@ -21,6 +21,8 @@
  * THE WALK (§2.4), each step a check of its own, and after each the calls any process tried during it:
  *   1. genesis and claim: each owner claims their node with its claim code and names the community
  *   2. an invite join (Ann, Bo), each phone registering its push token as the app does
+ *  2b. Olive sets A to keep members' copies itself (vault rethink VR2: "This server"), and Ann links a Google sign-in
+ *      there: A keeps the copy, and nothing past this machine is asked (A is given this suite's Google key at its start)
  *   3. a listing, a deal to completion, a rating each way
  *   4. a DM and a group line
  *   5. a knock from node B's member to node A, its answer, and the join it lets in
@@ -66,7 +68,15 @@ const READY_LINE = 'BeanPool Node is live';
 
 if (process.argv.includes('--child')) {
     installOutsideCallTrap({ file: process.env.OUTSIDE_CALLS_FILE });
-    void import(ENTRY);
+    void (async () => {
+        // Step 2b's sign-in: this suite's own Google key, put where a node keeps the provider's keys once it has fetched
+        // them, so the node checks the sign-in with nothing asked of Google either. The node's own code does the rest.
+        if (process.env.NO_MOTHERSHIP_GOOGLE_JWK) {
+            const sso = await import('./sso.js');
+            sso._resetJwksCacheForTests('google', { keys: [JSON.parse(process.env.NO_MOTHERSHIP_GOOGLE_JWK)], expiresAt: Date.now() + 24 * 3600_000 });
+        }
+        await import(ENTRY);
+    })();
 } else if (process.argv[2] === '--beanpool') {
     installOutsideCallTrap({ file: process.env.OUTSIDE_CALLS_FILE });
     // The command reads its arguments as it loads.
@@ -322,6 +332,28 @@ const ok = (a: Answer) => a.status >= 200 && a.status < 300;
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 
 /**
+ * Step 2b's Google: a test key whose public half A is given at its start (the child's NO_MOTHERSHIP_GOOGLE_JWK), and a
+ * token signed with it for BeanPool's Google client id (the audience a node takes when its .env names none).
+ */
+const GOOGLE_KID = 'no-mothership-google';
+let googleKeys: crypto.KeyPairKeyObjectResult | null = null;
+/** Made the first time the suite asks (never in the nodes' own processes, which load this file too). */
+function googleKey(): crypto.KeyPairKeyObjectResult {
+    googleKeys ??= crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    return googleKeys;
+}
+function googleJwk(): Record<string, unknown> {
+    return { ...googleKey().publicKey.export({ format: 'jwk' }), kid: GOOGLE_KID, alg: 'RS256', use: 'sig' };
+}
+function googleToken(sub: string, nonce: string): string {
+    const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const now = Math.floor(Date.now() / 1000);
+    const h = b64({ alg: 'RS256', kid: GOOGLE_KID, typ: 'JWT' });
+    const p = b64({ iss: 'https://accounts.google.com', aud: '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com', sub, email_verified: true, iat: now, exp: now + 3600, nonce });
+    return `${h}.${p}.${crypto.sign('RSA-SHA256', Buffer.from(`${h}.${p}`), googleKey().privateKey).toString('base64url')}`;
+}
+
+/**
  * A new server claimed from a phone (routes/node-claim.ts), as the app does it: the code read from the server's folder, the
  * proof and the signature sent, never the code.
  */
@@ -403,8 +435,9 @@ async function main(): Promise<void> {
         while (Date.now() <= lastOwn) await new Promise((r) => setTimeout(r, 1));
         countFrom = Date.now();
 
-        // The three nodes. S boots on B's genesis, as setup-backup.mjs and `beanpool pair` set a standby up.
-        const [A, B] = await Promise.all([startNode(root, 'A'), startNode(root, 'B')]);
+        // The three nodes. S boots on B's genesis, as setup-backup.mjs and `beanpool pair` set a standby up. A holds the
+        // suite's Google key (step 2b).
+        const [A, B] = await Promise.all([startNode(root, 'A', { NO_MOTHERSHIP_GOOGLE_JWK: JSON.stringify(googleJwk()) }), startNode(root, 'B')]);
         nodes.push(A, B);
         need(await A.up() && await B.up(), `A and B boot as a self-hoster's node boots (${((Date.now() - started) / 1000).toFixed(1)} s)`);
         fs.mkdirSync(path.join(root, 'S'), { recursive: true });
@@ -461,6 +494,30 @@ async function main(): Promise<void> {
                 assert(ok(token), `${who.name}'s phone registers its push token (${brief(token)})`);
                 assert(ok(await who.post('/api/profile/update', { avatar: TINY_PNG })), `${who.name} sets a profile photo`);
             }
+        });
+
+        // ── 2b. A community that keeps members' copies itself (vault rethink VR2, config/recovery-copies.ts `server`) ──
+        // Its member links a sign-in there and the copy is kept on A: the nonce and the deposit go to A alone, and no host
+        // past this machine is asked, BeanPool's key vault least of all.
+        await step('2b. a `server` community\'s member connects a sign-in, every outbound host blackholed', async () => {
+            const set = await olive.admin('/api/local/admin/community-shape', { changes: { recoveryCopies: 'server' } }, oliveAdmin);
+            need(ok(set) && set.body?.shape?.settings?.recoveryCopies?.value === 'server', `Olive sets where members' copies go: this server (${brief(set)})`);
+            const info = await ann.get('/api/community/info');
+            assert(info.body?.recoveryCopies === 'server', `A's info says recoveryCopies: server (${JSON.stringify(info.body?.recoveryCopies)})`);
+            const before = allCalls().length;
+            const nonce = await ann.post('/api/recovery/sso-nonce', {});
+            need(ok(nonce) && typeof nonce.body?.nonce === 'string', `Ann's phone asks A for a sign-in nonce (${brief(nonce)})`);
+            const sub = '110169484474386270201';
+            const sealed = await core.sealSeedToSso(new Uint8Array(Buffer.from(ann.seedHex, 'hex')), 'google', sub);
+            const deposit = await ann.post('/api/recovery/shares/sso', {
+                provider: 'google', idToken: googleToken(sub, nonce.body.nonce), nonce: nonce.body.nonce,
+                shares: [{ holderType: 'sso', holderRef: 'google', shareIndex: 1, ...sealed }],
+            });
+            assert(ok(deposit) && JSON.stringify(deposit.body?.enrolledSso) === '["google"]', `A keeps Ann's Google copy (${brief(deposit)})`);
+            const status = await ann.post('/api/recovery/shares/status', {});
+            assert(JSON.stringify(status.body?.enrolledSso) === '["google"]', `…and lists it as hers (${brief(status)})`);
+            const during = allCalls().slice(before);
+            assert(during.length === 0, `nothing past this machine was asked: no provider, no vault, nothing of ours (${describeOutsideCalls(during).join('; ') || 'none'})`);
         });
 
         // ── 3. A listing, a deal, a rating ──

@@ -17,6 +17,7 @@ import { recordRequestSigning } from './nodes';
 import { trackInfoRead } from './request-signing-version';
 
 import { GLOBAL_NODE_URL } from './global-node-url';
+import { readRecoveryCopiesRule, type RecoveryCopiesRule } from './vault-config';
 import { featureModeFor, normaliseLang, word, type FeatureMode, type Lang, type ShowcaseFeature, type WordKey } from '@beanpool/core';
 
 /** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
@@ -89,6 +90,14 @@ export interface NodeFeatures {
      */
     openMembership?: boolean;
     /**
+     * A first message from someone new waits as a request until accepted (design §4).
+     */
+    dmRequests?: boolean;
+    /**
+     * The community's known floor for confirmed members (design §4.2, S5).
+     */
+    knownFloor?: number;
+    /**
      * Members may share a listing or an event outside the community (front doors S6, utils/peek.ts): a link that opens that
      * one post, without names or faces, for seven days. The phone offers "Share outside the community" and Settings'
      * Shared outside only then. A node that doesn't say (turned off, the worldwide one, a node from before it) offers
@@ -100,10 +109,10 @@ export interface NodeFeatures {
 export type NodeDoor = 'open' | 'members' | 'admins';
 const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
-const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings' | 'knownFloor'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'shareOutside',
+    'privatePreview', 'showcase', 'membersOnDemand', 'onlineEvents', 'openMembership', 'dmRequests', 'shareOutside',
 ];
 
 export interface NodeProfile {
@@ -126,6 +135,12 @@ export interface NodeProfile {
      * publishedAddresses), each a bare host in lower case. Absent from a node that doesn't say (one older than them).
      */
     addresses?: string[];
+    /**
+     * Where members' copies go here (`recoveryCopies` in its info; vault rethink VR2, utils/vault-config.ts): set from every
+     * answer, `vault` for a node from before the rule. Absent from a copy an app from before the rule kept: never heard
+     * here, which is not the same as the default (utils/copies-rule.ts).
+     */
+    recoveryCopies?: RecoveryCopiesRule;
     /**
      * Where the community lives now (`primaryAddress` in its info), only when it is one of `addresses`. When it isn't the
      * host this phone uses, the phone offers to follow it, after checking it is the same community (utils/address-follow.ts).
@@ -178,6 +193,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
     const b = body as {
         profile?: unknown; features?: unknown; startCommunityUrl?: unknown; language?: unknown; addresses?: unknown; primaryAddress?: unknown;
+        recoveryCopies?: unknown;
     };
     const features: NodeFeatures = {};
     if (b.features && typeof b.features === 'object') {
@@ -185,6 +201,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         for (const key of FEATURE_KEYS) {
             if (typeof f[key] === 'boolean') features[key] = f[key] as boolean;
         }
+        if (typeof f.knownFloor === 'number') features.knownFloor = f.knownFloor;
         if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
         const n = f.nearbyListings as { radiusKm?: unknown; max?: unknown } | undefined;
         if (n && typeof n === 'object' && typeof n.radiusKm === 'number' && n.radiusKm > 0 && typeof n.max === 'number' && n.max > 0) {
@@ -197,6 +214,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString(),
         ...(startCommunityUrl ? { startCommunityUrl } : {}),
         ...(language ? { language } : {}),
+        recoveryCopies: readRecoveryCopiesRule(b.recoveryCopies),
         ...ownAddresses(b.addresses, b.primaryAddress),
     };
 }
@@ -229,7 +247,23 @@ export function nodeProfileIsFresh(profile: NodeProfile | null | undefined, nowM
 export async function getCachedNodeProfile(url: string | null | undefined): Promise<NodeProfile | null> {
     if (!url) return null;
     const cached = (await readCache())[cacheKey(url)];
-    return cached ? readNodeProfile(cached, new Date(cached.checkedAt || 0)) : null;
+    if (!cached) return null;
+    const profile = readNodeProfile(cached, new Date(cached.checkedAt || 0));
+    // A copy an app from before the rule kept never heard it: unknown here, not the default a node's silence means.
+    if (profile && !('recoveryCopies' in cached)) delete profile.recoveryCopies;
+    return profile;
+}
+
+const storedListeners = new Set<(url: string) => void>();
+
+/**
+ * Told each time a community's answer is kept on this phone, with its address as the cache keys it (lower case, no
+ * trailing slash). For a screen that reads only the kept copy (Home: one request for the whole screen) to see a fresh
+ * answer another screen asked for, as the tab strip does at each start. Returns the unsubscribe.
+ */
+export function onNodeProfileStored(listener: (url: string) => void): () => void {
+    storedListeners.add(listener);
+    return () => { storedListeners.delete(listener); };
 }
 
 async function remember(url: string, profile: NodeProfile): Promise<void> {
@@ -239,6 +273,10 @@ async function remember(url: string, profile: NodeProfile): Promise<void> {
         await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(all));
     } catch {
         // A cache that could not be written is asked again next time; nothing depends on it.
+        return;
+    }
+    for (const listener of storedListeners) {
+        try { listener(cacheKey(url)); } catch { /* a listener's own trouble is its own */ }
     }
 }
 
@@ -391,6 +429,8 @@ export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?
         if (key === 'showcase') continue;
         if (typeof reader[key] === 'boolean') out[key] = reader[key];
     }
+    if (typeof reader.knownFloor === 'number') out.knownFloor = reader.knownFloor;
+    if (reader.door) out.door = reader.door;
     return out;
 }
 

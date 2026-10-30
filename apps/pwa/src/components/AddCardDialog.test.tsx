@@ -138,3 +138,47 @@ describe('the sun and moon settings (CARD-FRAME §4, slice F5)', () => {
         expect(screen.getByRole('button', { name: 'Your community' })).toHaveAttribute('aria-pressed', 'true');
     });
 });
+
+describe('the Decide settings (My votes)', () => {
+    it('asks what it shows, Summary first; the line under the chosen one says what it is; Add to Home sends it', () => {
+        const onSubmit = vi.fn();
+        render(<CardSettingsDialog type="decide" name="Decide" mode="add" onSubmit={onSubmit} onClose={vi.fn()} />);
+        const dialog = screen.getByRole('dialog', { name: 'Decide' });
+        const show = within(dialog).getByTestId('home-settings-show');
+        expect(within(show).getByText('Show')).toBeInTheDocument();
+        expect(within(show).getAllByRole('button').map(b => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Summary', 'true'], ['All open', 'false'], ['My votes', 'false']]);
+        expect(within(dialog).queryByTestId('home-settings-q')).toBeNull();
+        expect(within(dialog).getByTestId('home-settings-show-note')).toHaveTextContent('The Decisions closing soonest, and the first poll.');
+        // Each chip and the button are 44 px targets at least, and nothing says locked, earned or tiered.
+        for (const b of within(dialog).getAllByRole('button')) expect(b.className).toMatch(/min-h-\[44px\]/);
+        expect(dialog.textContent).not.toMatch(/lock|earn|tier|Ʀ/i);
+        fireEvent.click(within(show).getByRole('button', { name: 'My votes' }));
+        expect(within(dialog).getByTestId('home-settings-show-note')).toHaveTextContent('Open Decisions you voted in or proposed.');
+        fireEvent.click(within(dialog).getByTestId('home-settings-submit'));
+        expect(onSubmit).toHaveBeenCalledWith({ show: 'mine' });
+    });
+
+    it('Settings… opens on the kept choice and Save sends the new one; an odd kept value reads as Summary', () => {
+        const onSubmit = vi.fn();
+        const { unmount } = render(<CardSettingsDialog type="decide" name="Decide" mode="save" initial={{ show: 'open' }} onSubmit={onSubmit} onClose={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'All open' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByTestId('home-settings-submit')).toHaveTextContent('Save');
+        fireEvent.click(screen.getByRole('button', { name: 'Summary' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(onSubmit).toHaveBeenCalledWith({ show: 'counts' });
+        unmount();
+        render(<CardSettingsDialog type="decide" name="Decide" mode="save" initial={{ show: 'watching' }} onSubmit={vi.fn()} onClose={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Summary' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it("the picker's Add on Decide opens the settings first, since Decide has one", () => {
+        const onAdd = vi.fn();
+        const { groups, full } = pickerGroups(LOCAL, null, 'admin');
+        render(<AddCardDialog groups={groups} full={full} onAdd={onAdd} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Add Decide to Home' }));
+        expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByRole('dialog', { name: 'Decide' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Add to Home' }));
+        expect(onAdd).toHaveBeenCalledWith('decide', { show: 'counts' });
+    });
+});

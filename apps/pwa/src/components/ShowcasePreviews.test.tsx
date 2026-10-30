@@ -202,7 +202,7 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         expect(sampleCommonsBalance()).toBe(SAMPLE_COMMUNITY.pool);
     });
 
-    it('My Deals: the real modal in preview with In Progress / My Posts / History tabs; requested shows Action Required, held Held in trust, sold +30; every button opens the sheet', async () => {
+    it('Your deals: the real modal in preview with In Progress / My Posts / History tabs; requested shows Action Required, held Held in trust, sold +30; every button opens the sheet', async () => {
         const onNearYou = vi.fn();
         const onGuide = vi.fn();
         const { unmount } = render(<MyDealsModal visible identity={MEMBER} preview onClose={() => {}} onNearYou={onNearYou} onGuide={onGuide} />);
@@ -342,7 +342,7 @@ describe('the Ledger in preview is the member\'s real screen, drawn from Example
 describe('the marker never looks locked', () => {
     it('no lock, no greying, no reduced opacity, no tier colour, and Beans never Ʀ', () => {
         const { container } = render(<><CommonsPreview /><MyDealsModal visible identity={MEMBER} preview onClose={() => {}} /></>);
-        // All of it, on each of My Deals' three tabs; and each marker on its own. The one exception, by name: the real
+        // All of it, on each of Your deals' three tabs; and each marker on its own. The one exception, by name: the real
         // project card's own lifecycle chip, amber on every community's list. Any other amber or red anywhere, inside the
         // real cards too, still fails.
         for (const tab of [/^In Progress/, /^My Posts/, /^History/]) {

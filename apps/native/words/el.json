@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -832,11 +832,10 @@
   "Search": "Αναζήτηση",
   "Search marketplace...": "Αναζήτηση στην αγορά...",
   "Search marketplace": "Αναζήτηση στην αγορά",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "Οι συμφωνίες μου, {n} σε εκκρεμότητα",
-    "other": "Οι συμφωνίες μου, {n} σε εκκρεμότητα"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "Οι συμφωνίες σας, {n} σε εκκρεμότητα",
+    "other": "Οι συμφωνίες σας, {n} σε εκκρεμότητα"
   },
-  "My Deals": "Οι συμφωνίες μου",
   "Opens your active and pending deals sheet": "Ανοίγει τις ενεργές και εκκρεμείς συμφωνίες σας",
   "Grid view": "Προβολή πλέγματος",
   "Compact view": "Συμπαγής προβολή",
@@ -1349,7 +1348,6 @@
   "Groups\u0004talk pane": "Ομάδες",
   "People\u0004talk pane": "Άτομα",
   "🔓 Release Credits": "🔓 Αποδέσμευση πιστώσεων",
-  "📦 Fulfill Order": "📦 Εκπλήρωση παραγγελίας",
   "⭐ Leave Review": "⭐ Υποβολή αξιολόγησης",
   "⚡ Action Required": "⚡ Απαιτείται ενέργεια",
   "Transaction": "Συναλλαγή",
@@ -1364,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Χρειάζεται αξιολόγηση ({n})",
     "other": "Χρειάζονται αξιολογήσεις ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Εκπλήρωση παραγγελίας ({n})",
-    "other": "Εκπλήρωση παραγγελιών ({n})"
   },
   "New\u0004conversation": "Νέο",
   "Action Required": "Απαιτείται ενέργεια",
@@ -3413,7 +3407,7 @@
   "TRUST SCORE": "ΒΑΘΜΟΛΟΓΙΑ ΕΜΠΙΣΤΟΣΥΝΗΣ",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Οι αξιολογήσεις σας επηρεάζουν άμεσα τη **Βαθμολογία εμπιστοσύνης** σας, η οποία είναι ορατή στο δημόσιο προφίλ σας. Ένα υψηλό σκορ διευκολύνει την εύρεση συνεργατών!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Οι επανειλημμένες κακές αξιολογήσεις μειώνουν το κύρος σας. Ανεπίλυτες διαφορές που παραμένουν σε καταπίστευμα πάνω από 7 ημέρες επιλύονται από διαχειριστές μέσω δημόσιων, υπογεγραμμένων αποφάσεων.",
-  "My Deals & Trust Hold": "Οι συμφωνίες μου & Κράτηση καταπιστεύματος",
+  "Your deals & Trust Hold": "Οι συμφωνίες σας & Κράτηση καταπιστεύματος",
   "🎟️ Network Invites": "🎟️ Προσκλήσεις δικτύου",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Κάθε κοινότητα BeanPool λειτουργεί μόνο με πρόσκληση: ένα μέλος σας επιτρέπει να μπείτε. Για ασφαλή ανάπτυξη, βασιζόμαστε σε ένα σύστημα **Αμοιβαίας εγγύησης**.",
   "WHO CAN INVITE": "ΠΟΙΟΣ ΜΠΟΡΕΙ ΝΑ ΠΡΟΣΚΑΛΕΣΕΙ",
@@ -6032,7 +6026,6 @@
   "Nothing in it yet": "Τίποτα μέσα ακόμα",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "Δεν υπάρχει τίποτα μέσα ακόμα. Βάλτε μια Προσφορά από την οθόνη επεξεργασίας της ή προσθέστε εδώ τις ενεργές Προσφορές σας.",
   "On the Market": "Στην Αγορά",
-  "Open my deals": "Άνοιγμα των συμφωνιών μου",
   "Open my shop": "Άνοιγμα του καταστήματός μου",
   "Open on Instagram": "Άνοιγμα στο Instagram",
   "Open your shop": "Ανοίξτε το κατάστημά σας",

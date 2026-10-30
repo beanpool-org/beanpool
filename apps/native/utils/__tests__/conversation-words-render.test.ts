@@ -491,3 +491,58 @@ describe('message request on the phone (phone-web-parity)', () => {
         expect(alerts.said).toContain(SERVER_ERROR);
     });
 });
+
+// ── Deals S7: a request on the member's own listing is a card in the chat, as on the web (#2607 deciding pass) ──────────
+describe("a request waiting for the member's answer in the chat's deal strip", () => {
+    /** Kofi asks to help with a Need: on a Need the one who asks is the seller; the Need's author is the buyer and answers. */
+    const request = (over: Record<string, unknown> = {}) => ({
+        txId: 'tx-ask', postId: 'p-fence', postTitle: 'Paint the fence', status: 'requested', credits: 12, iRated: false,
+        buyerPubkey: ME.publicKey, sellerPubkey: 'kofi-key', iAmBuyer: true,
+        postAuthorPublicKey: ME.publicKey, postType: 'need', postRepeatable: 0, postLendable: 0, ...over,
+    });
+    const only = (...deals: unknown[]) => {
+        net.answer = node({ getDealsBetween: deals, getConversation: { ...DM_CONVERSATION, postId: null, postTitle: null, pendingTxId: null, pendingAmount: null, txBuyerPubkey: null } });
+    };
+    const labels = () => Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label') ?? '');
+
+    it('the author of the Need sees "Waiting on you: answer", nothing held, and no buttons of its own', async () => {
+        only(request());
+        await renderIn('en');
+        expect(host.textContent).toContain('Paint the fence');
+        expect(host.textContent).toContain('Waiting on you: answer');
+        expect(host.textContent).not.toContain('in escrow');
+        expect(byLabel('Cancel deal')).toBeNull();
+        expect(labels().filter((l) => /^(Release|Leave a review)/.test(l))).toEqual([]);
+    });
+
+    it("the same card in the member's language", async () => {
+        only(request());
+        await renderIn('xx');
+        expect(host.textContent).toContain(pseudoLocalise('Waiting on you: answer'));
+    });
+
+    it("the lender of a thing sees the borrower's request, which an Offer's author answers", async () => {
+        only(request({ postType: 'offer', postLendable: 1, buyerPubkey: 'kofi-key', sellerPubkey: ME.publicKey, iAmBuyer: false, postAuthorPublicKey: ME.publicKey }));
+        await renderIn('en');
+        expect(host.textContent).toContain('Waiting on you: answer');
+    });
+
+    it('the one who asked sees no card for their own request, nor a declined one, nor a third person\'s listing', async () => {
+        // I am the helper (seller) on Kofi's Need: waiting on him.
+        only(request({ buyerPubkey: 'kofi-key', sellerPubkey: ME.publicKey, iAmBuyer: false, postAuthorPublicKey: 'kofi-key' }));
+        await renderIn('en');
+        expect(host.textContent).not.toContain('Paint the fence');
+        expect(host.textContent).not.toContain('Waiting on you: answer');
+        act(() => root.unmount());
+        root = createRoot(host);
+        only(request({ status: 'rejected' }));
+        await renderIn('en');
+        expect(host.textContent).not.toContain('Waiting on you: answer');
+        act(() => root.unmount());
+        root = createRoot(host);
+        // Kofi asked on someone else's Need: not mine to answer.
+        only(request({ postAuthorPublicKey: 'zoe-key' }));
+        await renderIn('en');
+        expect(host.textContent).not.toContain('Waiting on you: answer');
+    });
+});

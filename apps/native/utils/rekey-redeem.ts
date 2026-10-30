@@ -25,6 +25,7 @@
  * (utils/__tests__/rekey-redeem.test.ts).
  */
 
+import { communityCopyFromRelease, openReleaseOnDevice, openSeedWithCopyKey, type SealedShare } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { looksLikeNodeAddress, normalizeNodeUrl, plainOriginOf, isPlainNodeAddress } from './node-url';
 
@@ -34,20 +35,35 @@ export const REKEY_POLL_MS = 3000;
 /** A code's life (server engine/member-wizards.ts REKEY_CODE_TTL_MS): a record older than this can no longer be bound. */
 export const REKEY_ASK_LIFE_MS = 24 * 60 * 60 * 1000;
 
-/** A code as the admin's screen shows it: `RK-` and two groups of four hex digits. */
-const CODE = /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/;
+/**
+ * A code as the admin's screen shows it: `RK-` (a re-key: a NEW key) or `BB-` (a bring-back: the SAME key, from the copy
+ * the member keeps with their community; vault rethink VR3), and two groups of four hex digits.
+ */
+const CODE = /^(RK|BB)-[0-9A-F]{4}-[0-9A-F]{4}$/;
 
-/** The code as the admin's screen spells it, whatever case, spaces or missing dashes the member typed. */
+/**
+ * The code as the admin's screen spells it, whatever case, spaces or missing dashes the member typed. Eight hex digits
+ * alone are a re-key code, as before bring-backs: `BB` is two hex digits too, so only ten characters starting `RK` or
+ * `BB` name their prefix.
+ */
 export function cleanRekeyCode(raw: unknown): string {
     if (typeof raw !== 'string') return '';
     const s = raw.trim().toUpperCase().replace(/\s+/g, '');
-    const hex = s.replace(/^RK-?/, '').replace(/-/g, '');
-    if (/^[0-9A-F]{8}$/.test(hex)) return `RK-${hex.slice(0, 4)}-${hex.slice(4)}`;
+    const bare = s.replace(/-/g, '');
+    const named = /^(RK|BB)[0-9A-F]{8}$/.test(bare);
+    const prefix = named ? bare.slice(0, 2) : 'RK';
+    const hex = named ? bare.slice(2) : bare;
+    if (/^[0-9A-F]{8}$/.test(hex)) return `${prefix}-${hex.slice(0, 4)}-${hex.slice(4)}`;
     return s;
 }
 
 export function isRekeyCode(raw: unknown): boolean {
     return CODE.test(cleanRekeyCode(raw));
+}
+
+/** A bring-back code (`BB-`): the same key comes back, nothing moves (vault rethink VR3). */
+export function isBringBackCode(raw: unknown): boolean {
+    return cleanRekeyCode(raw).startsWith('BB-') && isRekeyCode(raw);
 }
 
 /**
@@ -111,6 +127,11 @@ export interface RekeySlotStore {
 export type RekeyAnswer =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
+    /**
+     * A bring-back the admin confirmed with this phone's number: the member's community copy and its key, sealed to the key
+     * this phone asked with ({@link openBringBack}). Nothing was bound.
+     */
+    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare }
     | { state: 'declined' }
     | { state: 'gone' }
     /** The node refused the ask, in its own words (a dead code, a phone with an account here, too many tries). */
@@ -182,7 +203,7 @@ export async function beginRekey(community: string, rawCode: string, deps: Rekey
         const open = held;
         const where = (() => { try { return new URL(open.community).host; } catch { return open.community; } })();
         const answer = await pollRekey(open, deps);
-        if (answer.state === 'bound') {
+        if (answer.state === 'bound' || answer.state === 'released') {
             // The admin typed the number (after Not now, or while the phone was away): the account is on this key now.
             if (!stored || stored.publicKey === open.publicKey) return open;
             throw new RekeyHeldError(`Your re-key at ${where} went through, but this phone holds another account now, and a phone holds only one. Forget that re-key to go on: your account at ${where} then needs a new code from an admin there.`, where, true);
@@ -225,6 +246,10 @@ function readAnswer(status: number, body: any): RekeyAnswer {
     if (status === 200 && body && typeof body.state === 'string') {
         if (body.state === 'waiting' && typeof body.match === 'string') return { state: 'waiting', match: body.match, expiresAt: String(body.expiresAt ?? '') };
         if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), linkSignInAgain: body.linkSignInAgain === true };
+        if (body.state === 'released' && typeof body.memberKey === 'string' && /^[0-9a-f]{64}$/.test(body.memberKey)
+            && body.release && typeof body.release === 'object') {
+            return { state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare };
+        }
         if (body.state === 'declined') return { state: 'declined' };
         if (body.state === 'gone') return { state: 'gone' };
     }
@@ -298,6 +323,41 @@ export async function finishRekey(slot: RekeySlot, answer: { callsign: string },
     if (!stored || stored.publicKey !== slot.publicKey) throw new Error(REKEY_TEXT.changedAccount);
     await deps.slot.clear();
     return { identity: stored, newWords: false };
+}
+
+/** The member's account out of a bring-back's release: checked, not yet saved (restore-account.ts saves it). */
+export interface BroughtBack {
+    publicKey: string;
+    /** The raw seed, hex, as the phone keeps a key (crypto.ts seedToKeypair). */
+    privateKey: string;
+    /** Only when the copy carried them and they make this key. */
+    mnemonic?: string[];
+}
+
+/** The sentence when a release does not open to the account it names: nothing is saved. */
+export const BRING_BACK_NOT_OPENED = 'What your community sent didn’t open to your account, so nothing was saved. Ask the admin to try again.';
+
+const toHex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+/**
+ * Open a bring-back's release (vault rethink VR3): the box with the key this phone asked with, then the member's
+ * community copy with the key that came beside it. The copy is bound to the member's key and opens only as that account
+ * (@beanpool/core openSeedWithCopyKey checks the seed makes it), so a server that hands out another account's copy is
+ * refused here, before anything is saved. Throws an Error with {@link BRING_BACK_NOT_OPENED} for anything that doesn't
+ * open, {@link REKEY_TEXT}.changedAccount when the asking key is gone.
+ */
+export async function openBringBack(slot: RekeySlot, answer: Extract<RekeyAnswer, { state: 'released' }>, deps: RekeyDeps): Promise<BroughtBack> {
+    const key = await keyOf(slot, deps);
+    if (!key) throw new Error(REKEY_TEXT.changedAccount);
+    let opened: ReturnType<typeof openSeedWithCopyKey>;
+    try {
+        const released = openReleaseOnDevice(answer.release, key.privateKey, { collectionId: slot.code, holderType: 'community' });
+        const copy = communityCopyFromRelease(released);
+        opened = openSeedWithCopyKey(copy.copy, copy.copyKey, answer.memberKey);
+    } catch {
+        throw new Error(BRING_BACK_NOT_OPENED);
+    }
+    return { publicKey: answer.memberKey, privateKey: toHex(opened.seed), ...(opened.words ? { mnemonic: opened.words } : {}) };
 }
 
 /** Declined, gone or a dead code: the record goes, and with it a key this flow made (it was never the phone's identity). */

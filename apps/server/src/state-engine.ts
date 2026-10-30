@@ -30,7 +30,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, setProjectCancelLedgerHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -74,8 +74,8 @@ import { truncateWalAfterDelete } from './db/wal-truncate.js';
 import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
-import { returnStrandedPledges } from './engine/stranded-pledges.js';
-import { returnUnfundedPledges, noticeEndDateMoved } from './engine/unfunded-pledges.js';
+import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledges.js';
+import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -786,6 +786,14 @@ export function initStateEngine(): void {
 
     // A project's cancel (db.ts mayCancelProject) is a node admin's too, as its wind-up is: same inversion, same reason.
     setNodeAdminCheckHook(isAdminPubkey);
+    // And its refunds: a closed account's share of its pledges goes to the Commons, as the return of an unfunded project's
+    // pledges sends it (engine/unfunded-pledges.ts closedPledgeToCommons), all of its moves in one conserving transaction.
+    // Same inversion, same reason.
+    setProjectCancelLedgerHook({
+        conservingTransaction: <T>(fn: () => T): T => conservingTransaction(fn),
+        isClosedAccount,
+        closedPledgeToCommons: (escrow, projectId, amount) => closedPledgeToCommons(unfundedPledgeHooks, escrow, projectId, amount),
+    });
 
     // Onboarding funnel retention. Once at startup rather than behind the read, because a
     // DELETE on the read path both takes a write lock and can destroy what the caller

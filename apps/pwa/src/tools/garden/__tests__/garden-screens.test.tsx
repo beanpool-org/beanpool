@@ -6,24 +6,29 @@
  * Home's Your shop and tools open that page) and Home's card, which Add a card offers on every node.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GARDEN, HOME_CARD_TYPES, TOOLS, toolHomeCardType } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../../pages/ToolsPage';
 import { TOOL_APPS } from '../../index';
 import { ToolHomeCard } from '../../home-card';
 import { readToolRecord, resetToolStoreForTest, writeToolRecord } from '../../store';
+import { PLACE_WAIT_MS } from '../../builder';
+import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../../../lib/home-cache';
 import { memoryIndexedDB } from '../../../lib/memory-indexeddb';
 import { resetAccountEpochForTest } from '../../../lib/account-epoch';
 import { backToEnglish, bypassing, showIn } from '../../../words-xx.test-support';
 
-// The community's server's Home answer, as getHome reads it: only the Your community card is asked for.
-const home = vi.hoisted(() => ({ answer: null as null | Record<string, unknown>, asked: [] as unknown[] }));
+// The community's server's Home answer, as getHome reads it: only the Your community card is asked for. `hang`: a
+// request the network never answers (it settles only when let go).
+const home = vi.hoisted(() => ({ answer: null as null | Record<string, unknown>, asked: [] as unknown[], hang: false, signals: [] as (AbortSignal | undefined)[] }));
 vi.mock('../../../lib/api', async (importOriginal) => {
     const real = await importOriginal<typeof import('../../../lib/api')>();
     return {
         ...real,
-        getHome: async (params: unknown) => {
+        getHome: async (params: unknown, _etag?: unknown, signal?: AbortSignal) => {
             home.asked.push(params);
+            home.signals.push(signal);
+            if (home.hang) return new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new Error('let go'))));
             if (!home.answer) throw new Error('offline');
             return { notModified: false, answer: home.answer, etag: null };
         },
@@ -43,8 +48,11 @@ beforeEach(() => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     resetToolStoreForTest();
     resetAccountEpochForTest();
+    resetHomeCacheForTest();
     home.answer = null;
     home.asked.length = 0;
+    home.hang = false;
+    home.signals.length = 0;
 });
 afterEach(() => {
     cleanup();
@@ -91,6 +99,40 @@ describe('Your garden on the web: the guide', () => {
         fireEvent.click(await screen.findByTestId('tool-door-already'));
         expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
         expect(screen.getByTestId('garden-choose')).toBeTruthy();
+    });
+
+    it("reads the Home answer this browser kept first, so nothing is asked; the server only when that holds no place", async () => {
+        const keep = (a: ReturnType<typeof answer>) => writeCachedHome(homeCacheKey(OWNER), {
+            answer: a as never, etag: null, layout: null, layoutUnsaved: false, savedAt: NOW,
+        });
+        await keep(answer({ lat: -28.55, lng: 153.5 })); // Mullumbimby, from the last Home this browser showed
+        home.answer = answer(null, { lat: 51.5, lng: -0.1 }); // the server would say London
+        const line = await openGuide();
+        expect(line.textContent).toContain('Warm temperate · southern hemisphere');
+        expect(screen.getByTestId('garden-zone-source').textContent).toContain("From your community's place.");
+        expect(home.asked).toEqual([]);
+        cleanup();
+        await keep(answer(null)); // a kept Home with no place in it
+        const again = await openGuide();
+        expect(again.textContent).toContain('Mild temperate · northern hemisphere');
+        expect(home.asked).toEqual([{ cards: ['community'] }]);
+    });
+
+    it("a server that never answers doesn't hold the guide: Choose your climate comes at the wait's end, the request let go", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            home.hang = true;
+            draw({ id: 'garden', screen: 'main', key: null });
+            fireEvent.click(await screen.findByTestId('tool-door-already'));
+            expect(await screen.findByTestId('garden-finding')).toBeTruthy();
+            await act(async () => { await vi.advanceTimersByTimeAsync(PLACE_WAIT_MS); });
+            expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
+            expect(screen.getByTestId('garden-choose')).toBeTruthy();
+            expect(home.signals.length).toBeGreaterThan(0);
+            expect(home.signals.every((sig) => sig?.aborted === true)).toBe(true);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("Change keeps the member's own choice in this browser, which beats the place; Use my place again clears it", async () => {
@@ -150,7 +192,7 @@ describe('Your garden on the web: the guide', () => {
         await openGuide();
         fireEvent.click(screen.getByTestId('garden-all-cassava'));
         expect((await screen.findByTestId('garden-crop-name')).textContent).toContain('Cassava');
-        expect(screen.getByTestId('garden-crop-sow').textContent).toBe('May – Jul');
+        expect((await screen.findByTestId('garden-crop-sow')).textContent).toBe('May – Jul');
         expect(screen.getByTestId('garden-crop-note').textContent).toBe('In the tropics the rains decide more than the month does.');
     });
 

@@ -13,6 +13,8 @@ import {
 import {
     getHome, getMarketplacePosts, getMyMarketplaceTransactions, pauseMarketplacePost, request, resumeMarketplacePost, type MarketplacePost,
 } from '../lib/api';
+import { homeCacheKey, readCachedHome } from '../lib/home-cache';
+import type { HomeAnswer } from '../lib/home-cards';
 import { MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { chooseImageFile, keepChosen, toolPhotoToken } from './photos';
 import { keepToolDoc, readToolPhoto, readToolRecord, removeToolPhoto, removeToolRecord } from './store';
@@ -293,19 +295,32 @@ const newPhotoRef = () => (typeof crypto !== 'undefined' && typeof crypto.random
     ? crypto.randomUUID()
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
+/** How long `place` waits for a place: past it, none (a tool offers its own way on, as the guide's Choose your climate). */
+export const PLACE_WAIT_MS = 8_000;
+
+const placeInAnswer = (answer: HomeAnswer | null | undefined) => toolPlaceOf({ community: answer?.cards?.community?.place, area: answer?.me?.area });
+
 /**
  * `place`: a place the community's server already tells this member (core toolPlaceOf): the community's own place and
- * the member's rough area, from the Home answer's Your community card (GET /api/home, as Home reads it; nothing is sent
- * with it). The browser's own position is never asked for. Null for none, or when the server can't be reached.
+ * the member's rough area, from its Home answer's Your community card. First the answer this browser kept for this
+ * member and community (lib/home-cache.ts, as the phone reads the one it kept): with a place in it, nothing is sent.
+ * Only without one there is the server asked (GET /api/home, as Home reads it; nothing is sent with it).
+ * The browser's own position is never asked for. Null for none, when the server can't be reached, or at
+ * {@link PLACE_WAIT_MS}, when a request still out is let go: a read that never comes back never holds a screen.
  */
-export async function webPlace(): Promise<ToolPlace | null> {
-    try {
-        const read = await getHome({ cards: ['community'] });
-        if (read.notModified) return null;
-        return toolPlaceOf({ community: read.answer.cards.community?.place, area: read.answer.me?.area });
-    } catch {
-        return null;
-    }
+export function webPlace(owner: string): Promise<ToolPlace | null> {
+    const letGo = new AbortController();
+    const known = async () => {
+        const kept = placeInAnswer((await readCachedHome(homeCacheKey(owner)).catch(() => null))?.answer);
+        if (kept) return kept;
+        const read = await getHome({ cards: ['community'] }, null, letGo.signal);
+        return read.notModified ? null : placeInAnswer(read.answer);
+    };
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => { letGo.abort(); resolve(null); }, PLACE_WAIT_MS);
+        const done = (p: ToolPlace | null) => { clearTimeout(timer); resolve(p); };
+        known().then(done, () => done(null));
+    });
 }
 
 function webGrants(ctx: WebHostContext, tool: string): Partial<ToolHostGrants> {
@@ -323,7 +338,7 @@ function webGrants(ctx: WebHostContext, tool: string): Partial<ToolHostGrants> {
             });
         },
         needDoor: (draft: ToolNeedDraft) => ctx.openComposer(composerDraft('need', draft)),
-        place: () => webPlace(),
+        place: () => webPlace(owner),
         photos: {
             pick: () => photo(false),
             remove: async (ref: string) => { await removeToolPhoto(owner, tool, ref); },

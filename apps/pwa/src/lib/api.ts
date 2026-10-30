@@ -2979,8 +2979,9 @@ export type HomeRead = { notModified: false; answer: HomeAnswer; etag: string | 
  * rather than leaning on the browser's cache, which keeps nothing in a private window, in some in-app browsers, or over a
  * certificate the browser was told to accept; and only to the node that served this page: another origin's preflight
  * refuses the header and doesn't let the page read the tag, so there the browser revalidates on its own, if it can.
+ * `signal` lets a reader that stops waiting (a tool's `place`) let the request go.
  */
-export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null): Promise<HomeRead> {
+export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null, signal?: AbortSignal): Promise<HomeRead> {
     const q = new URLSearchParams();
     if (params.cards) q.set('cards', params.cards.join(','));
     // This app opens an enterprise's own screen and a chat group's (HomePage needsLine, { to: 'enterprise' | 'group', id }), so
@@ -3008,7 +3009,7 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     }
     const conditional = !!etag && sameOrigin;
     if (conditional) headers['If-None-Match'] = etag!;
-    const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache' });
+    const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache', ...(signal ? { signal } : {}) });
     if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
     if (!res.ok) throw await refusalError(res);
     return { notModified: false, answer: await res.json() as HomeAnswer, etag: sameOrigin ? res.headers.get('ETag') : null };

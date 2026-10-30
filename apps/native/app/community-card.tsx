@@ -76,8 +76,9 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  * Nothing is read but the community's public card; nothing is sent until the member taps Send.
  */
 export default function CommunityCardScreen() {
-    const params = useLocalSearchParams<{ node?: string }>();
-    const origin = communityOrigin(params.node);
+    const params = useLocalSearchParams<{ node?: string | string[] }>();
+    const nodeParam = typeof params.node === 'string' ? params.node : Array.isArray(params.node) ? params.node[0] : undefined;
+    const origin = communityOrigin(nodeParam);
     const { identity } = useIdentity();
     const insets = useSafeAreaInsets();
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({

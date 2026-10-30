@@ -50,9 +50,11 @@ interface Props {
     onOpenPost?: (postId: string) => void;
     /** Open a member's profile from a row. Same rule as `onOpenPost` when omitted. */
     onOpenProfile?: (pubkey: string, callsign?: string) => void;
+    /** The signed-in member, so a rating or trade row opens the OTHER member's profile, never the viewer's own. */
+    viewerPubkey?: string | null;
 }
 
-export function ActivityWaterfall({ onCreatePostPress, onOpenPost, onOpenProfile }: Props) {
+export function ActivityWaterfall({ onCreatePostPress, onOpenPost, onOpenProfile, viewerPubkey }: Props) {
     const { theme, colors } = useTheme();
     const isDark = theme === 'dark';
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
@@ -265,7 +267,7 @@ export function ActivityWaterfall({ onCreatePostPress, onOpenPost, onOpenProfile
                         }
                     }
 
-                    const rowTarget = activityTarget(item);
+                    const rowTarget = activityTarget(item, viewerPubkey);
                     const canOpen = rowTarget !== null
                         && ((rowTarget.kind === 'post' && !!onOpenPost) || (rowTarget.kind === 'profile' && !!onOpenProfile));
                     const cardStyle = [

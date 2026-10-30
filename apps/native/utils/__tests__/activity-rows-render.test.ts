@@ -113,6 +113,13 @@ describe('the phone\'s Community Pulse rows open what they are about', () => {
         expect(onOpenProfile).toHaveBeenCalledWith('pk-tia', 'Tia');
     });
 
+    it('a rating the viewer received opens the rater, named as the rater', async () => {
+        feed.items = [items.rated];
+        await show({ onOpenPost, onOpenProfile, viewerPubkey: 'pk-tia' });
+        await click(rowNamed(/Rae rated Tia/));
+        expect(onOpenProfile).toHaveBeenCalledWith('pk-rae', 'Rae');
+    });
+
     it('a row with no target is not a button', async () => {
         feed.items = [items.postedNoId];
         await show();

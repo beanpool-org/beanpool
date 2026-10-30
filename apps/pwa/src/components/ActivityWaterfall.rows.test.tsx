@@ -90,6 +90,14 @@ describe('ActivityWaterfall full list rows', () => {
         expect(onOpenProfile).toHaveBeenCalledWith('pk-tia');
     });
 
+    it('a rating the viewer received opens the rater, not the viewer\'s own profile', async () => {
+        mockFeed = [items.rated];
+        await renderFull({ viewerPubkey: 'pk-tia' });
+        fireEvent.click(await screen.findByRole('button', { name: /Rae rated Tia/ }));
+        expect(onOpenProfile).toHaveBeenCalledWith('pk-rae');
+        expect(onOpenProfile).not.toHaveBeenCalledWith('pk-tia');
+    });
+
     it('a row with no target is not a button', async () => {
         mockFeed = [items.postedNoId, items.dispute];
         const container = await renderFull();

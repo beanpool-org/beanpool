@@ -24,6 +24,18 @@ describe('activityTarget — where a Community Pulse row opens', () => {
             expect(activityTarget({ eventType })).toBeNull();
         }
     });
+    it('a trade or rating with no listing opens the OTHER member, whichever party the viewer is', () => {
+        for (const eventType of ['trade_completed', 'rating_given']) {
+            // Viewer is the actor: the other member is the target.
+            expect(activityTarget({ eventType, actorPubkey: 'me', targetPubkey: 'them' }, 'me')).toEqual({ kind: 'profile', pubkey: 'them' });
+            // Viewer is the one who was rated / the buyer: the other member is the actor, never the viewer.
+            expect(activityTarget({ eventType, actorPubkey: 'them', targetPubkey: 'me' }, 'me')).toEqual({ kind: 'profile', pubkey: 'them' });
+            // Nothing but the viewer's own key to open: stays plain text.
+            expect(activityTarget({ eventType, targetPubkey: 'me' }, 'me')).toBeNull();
+            // A listing still wins for either party.
+            expect(activityTarget({ eventType, actorPubkey: 'them', targetPubkey: 'me', metadata: { postId: 'p' } }, 'me')).toEqual({ kind: 'post', postId: 'p' });
+        }
+    });
     it('a resolved dispute and an unknown event open nothing', () => {
         expect(activityTarget({ eventType: 'dispute_resolved', actorPubkey: 'admin' })).toBeNull();
         expect(activityTarget({ eventType: 'something_new', actorPubkey: 'a' })).toBeNull();

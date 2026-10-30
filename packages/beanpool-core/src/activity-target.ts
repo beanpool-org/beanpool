@@ -20,7 +20,7 @@ export interface ActivityTargetItem {
     metadata?: Record<string, any>;
 }
 
-export function activityTarget(item: ActivityTargetItem): ActivityTarget {
+export function activityTarget(item: ActivityTargetItem, viewerPubkey?: string | null): ActivityTarget {
     const raw = item.metadata?.postId;
     const postId = raw === undefined || raw === null || raw === '' ? '' : String(raw);
 
@@ -33,8 +33,13 @@ export function activityTarget(item: ActivityTargetItem): ActivityTarget {
             return postId ? { kind: 'post', postId } : null;
         case 'trade_completed':
         case 'rating_given':
-            // The related listing when the item carries one, otherwise the other member's profile.
+            // The related listing when the item carries one, otherwise the other member's profile: the
+            // server sends these rows only to the two parties, so one of them is the viewer and the
+            // profile opened is the other (never the viewer's own).
             if (postId) return { kind: 'post', postId };
+            if (viewerPubkey && item.targetPubkey === viewerPubkey) {
+                return item.actorPubkey && item.actorPubkey !== viewerPubkey ? { kind: 'profile', pubkey: item.actorPubkey } : null;
+            }
             if (item.targetPubkey) return { kind: 'profile', pubkey: item.targetPubkey };
             return item.actorPubkey ? { kind: 'profile', pubkey: item.actorPubkey } : null;
         case 'dispute_resolved':

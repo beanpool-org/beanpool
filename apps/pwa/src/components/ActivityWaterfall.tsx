@@ -23,6 +23,8 @@ interface Props {
     onOpenPost?: (postId: string) => void;
     /** Open a member's profile from a Live Pulse chip. Same rule as `onOpenPost` when omitted. */
     onOpenProfile?: (pubkey: string) => void;
+    /** The signed-in member, so a rating or trade row opens the OTHER member's profile, never the viewer's own. */
+    viewerPubkey?: string | null;
 }
 
 function formatRelativeTime(isoDate: string): string {
@@ -135,11 +137,13 @@ function PulseChip({
     item,
     onOpenPost,
     onOpenProfile,
+    viewerPubkey,
     prefersReducedMotion,
 }: {
     item: ActivityFeedItem;
     onOpenPost?: (postId: string) => void;
     onOpenProfile?: (pubkey: string) => void;
+    viewerPubkey?: string | null;
     prefersReducedMotion: boolean;
 }) {
     const viewportRef = useRef<HTMLSpanElement | null>(null);
@@ -147,7 +151,7 @@ function PulseChip({
 
     const { short, full } = pulseText(item);
     const timeStr = formatRelativeTime(item.createdAt);
-    const target = activityTarget(item);
+    const target = activityTarget(item, viewerPubkey);
 
     const reveal = () => {
         if (prefersReducedMotion) return;
@@ -216,7 +220,7 @@ function PulseChip({
     );
 }
 
-export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenPost, onOpenProfile }: Props) {
+export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenPost, onOpenProfile, viewerPubkey }: Props) {
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
     const [loading, setLoading] = useState(true);
     // Read here, not inside PulseChip: the early returns below sit between the two, and a hook may not
@@ -431,7 +435,7 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                             }
                         }
 
-                        const rowTarget = activityTarget(item);
+                        const rowTarget = activityTarget(item, viewerPubkey);
                         const canOpen = rowTarget !== null
                             && ((rowTarget.kind === 'post' && !!onOpenPost) || (rowTarget.kind === 'profile' && !!onOpenProfile));
                         const rowShell = 'flex items-center gap-3 p-3 min-h-[44px] w-full rounded-2xl bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors';
@@ -494,6 +498,7 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                             item={item}
                             onOpenPost={onOpenPost}
                             onOpenProfile={onOpenProfile}
+                            viewerPubkey={viewerPubkey}
                             prefersReducedMotion={prefersReducedMotion}
                         />
                     ))}

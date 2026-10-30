@@ -3620,5 +3620,42 @@
   "{amount} 🫘 held in trust": "এসক্রোতে {amount} 🫘",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "নোড থেকে অ্যাকাউন্ট মুছতে ব্যর্থ হয়েছে। সক্রিয় এসক্রো চুক্তিগুলো প্রথমে নিষ্পত্তি করতে হতে পারে।",
   "{amount} · held in trust": "{amount} · এসক্রোতে রয়েছে",
-  "Cancel Initiative & Refund Backers": "উদ্যোগ বাতিল করুন এবং সমর্থকদের অর্থ ফেরত দিন"
+  "Cancel Initiative & Refund Backers": "উদ্যোগ বাতিল করুন এবং সমর্থকদের অর্থ ফেরত দিন",
+  "Please give a name of at least 2 characters.": "অনুগ্রহ করে কমপক্ষে ২ অক্ষরের একটি নাম দিন।",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "অনুগ্রহ করে আপনার নাম {n} অক্ষরের মধ্যে রাখুন।",
+    "other": "অনুগ্রহ করে আপনার নাম {n} অক্ষরের মধ্যে রাখুন।"
+  },
+  "Please say a few words about yourself.": "অনুগ্রহ করে নিজের সম্পর্কে কিছু কথা বলুন।",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "অনুগ্রহ করে আপনার বার্তা {n} অক্ষরের মধ্যে রাখুন।",
+    "other": "অনুগ্রহ করে আপনার বার্তা {n} অক্ষরের মধ্যে রাখুন।"
+  },
+  "You are already a member of this community.": "আপনি ইতিমধ্যে এই কমিউনিটির সদস্য।",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "মানুষজন এই কমিউনিটিতে যোগ দিতে অনুরোধ করছেন। 'আমন্ত্রণ' এমন একটি আমন্ত্রণ তৈরি করে যা কেবল তাঁদের কি-ই ব্যবহার করতে পারে এবং তাঁদের অ্যাপ এটি নিজে থেকেই খুঁজে নেয়। 'এখন নয়' তাঁদের কেবল জানায় যে \"এখনও কোনো উত্তর নেই\"।",
+  "Couldn't reach your community. Check your connection and try again.": "আপনার কমিউনিটিতে পৌঁছানো যায়নি। আপনার সংযোগ পরীক্ষা করুন এবং আবার চেষ্টা করুন।",
+  "Asked today": "আজ অনুরোধ করেছেন",
+  "Asked yesterday": "গতকাল অনুরোধ করেছেন",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "{n} দিন আগে অনুরোধ করেছেন",
+    "other": "{n} দিন আগে অনুরোধ করেছেন"
+  },
+  "from {node}": "{node} থেকে",
+  "You invited {name}. Their app will find the invite by itself.": "আপনি {name}-কে আমন্ত্রণ জানিয়েছেন। তাঁদের অ্যাপ নিজে থেকেই আমন্ত্রণটি খুঁজে নেবে।",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 যোগ দিতে চান ({n})",
+    "other": "🚪 যোগ দিতে চান ({n})"
+  },
+  "Inviting {name}...": "{name}-কে আমন্ত্রণ জানানো হচ্ছে...",
+  "Invite {name}": "{name}-কে আমন্ত্রণ জানান",
+  "Declining {name}...": "{name}-কে প্রত্যাখ্যান করা হচ্ছে...",
+  "Not now, {name}": "এখন নয়, {name}",
+  "Invite\u0004button: let them in": "আমন্ত্রণ জানান",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ আমন্ত্রণ ({n})",
+    "other": "🎟️ আমন্ত্রণ ({n})"
+  },
+  "Ask to join {name}": "{name}-এ যোগ দেওয়ার অনুরোধ জানান",
+  "A few words about yourself": "নিজের সম্পর্কে কিছু কথা",
+  "Where you live, what you'd like to share or learn": "আপনি কোথায় থাকেন, কী শেয়ার করতে বা শিখতে চান"
 }

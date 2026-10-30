@@ -13,7 +13,7 @@ import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
+import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, request, type CommunityInfo, type MarketplaceTransaction, type Group, type AppStoreVersions } from './lib/api';
 import { GroupDetailModal } from './components/GroupDetailModal';
 import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
@@ -29,7 +29,8 @@ import { visitorsSeeListings, takeKeptLinkedPost, takeAskParam, takeKeptAskedCom
 import { setAccountHint } from './lib/community-card';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
-import { readsOwn, useFeatureMode } from './lib/features';
+import { readsOwn, useCommunityInfo, useFeatureMode } from './lib/features';
+import { onlyAdminsInvite, readInviteRole, mayInviteHere, takesKnocks, type InviteRole } from './lib/node-invites';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
 import { webAppBehindServer } from './lib/app-version';
@@ -175,6 +176,22 @@ export function App() {
     const beansMode = useFeatureMode('beans');
     const enterprisesMode = useFeatureMode('enterprises');
     const invitesMode = useFeatureMode('invites');
+    // Whether this member may answer requests to join (front doors S2): the node takes knocks and the member may invite.
+    const nodeInfo = useCommunityInfo();
+    const doorAdmins = onlyAdminsInvite(nodeInfo);
+    const [inviteRole, setInviteRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        if (!doorAdmins || !identity) return;
+        let alive = true;
+        request<{ role?: unknown }>('GET', '/api/node-admin/me')
+            .then((body) => { if (alive) setInviteRole(readInviteRole(body?.role)); })
+            .catch((e) => {
+                const status = (e as { status?: unknown } | null)?.status;
+                if (alive && typeof status === 'number' && status < 500) setInviteRole(null);
+            });
+        return () => { alive = false; };
+    }, [doorAdmins, identity?.publicKey]);
+    const canSeeKnocks = invitesMode !== 'preview' && takesKnocks(nodeInfo) && mayInviteHere(nodeInfo, inviteRole);
     const [projectsInitialStart, setProjectsInitialStart] = useState(false);
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
@@ -1179,6 +1196,7 @@ export function App() {
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     preview={invitesMode === 'preview'}
+                                    canSeeKnocks={canSeeKnocks}
                                     onNearYou={() => setActiveTab('home')}
                                     onGuide={(slug) => navigateToTab('guide', slug)}
                                 />

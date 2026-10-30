@@ -3496,5 +3496,37 @@
   "{amount} 🫘 held in trust": "{amount} 🫘 托管中",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "未能从节点中清除账户。可能需要先处理正在进行的托管交易。",
   "{amount} · held in trust": "{amount} · 托管中",
-  "Cancel Initiative & Refund Backers": "取消倡议并退还支持者款项"
+  "Cancel Initiative & Refund Backers": "取消倡议并退还支持者款项",
+  "Please give a name of at least 2 characters.": "请输入至少包含 2 个字符的姓名。",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "other": "请将你的姓名控制在 {n} 个字符以内。"
+  },
+  "Please say a few words about yourself.": "请简单介绍一下你自己。",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "other": "请将你的留言控制在 {n} 个字符以内。"
+  },
+  "You are already a member of this community.": "你已经是该社区的成员。",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "申请加入此社区的人员。“邀请”会生成只有其密钥能使用的邀请，其应用会自动找到。“暂不”只会告知对方“暂无回复”。",
+  "Couldn't reach your community. Check your connection and try again.": "无法连接到你的社区。请检查网络连接后重试。",
+  "Asked today": "今天申请",
+  "Asked yesterday": "昨天申请",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "other": "{n} 天前申请"
+  },
+  "from {node}": "来自 {node}",
+  "You invited {name}. Their app will find the invite by itself.": "你已邀请 {name}。对方的应用会自动找到该邀请。",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "other": "🚪 想加入 ({n})"
+  },
+  "Inviting {name}...": "正在邀请 {name}...",
+  "Invite {name}": "邀请 {name}",
+  "Declining {name}...": "正在拒绝 {name}...",
+  "Not now, {name}": "暂不，{name}",
+  "Invite\u0004button: let them in": "邀请",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "other": "🎟️ 邀请 ({n})"
+  },
+  "Ask to join {name}": "申请加入 {name}",
+  "A few words about yourself": "个人简介",
+  "Where you live, what you'd like to share or learn": "你居住在哪里、想要分享或学习什么"
 }

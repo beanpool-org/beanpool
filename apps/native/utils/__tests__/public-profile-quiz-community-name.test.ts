@@ -30,6 +30,10 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', null, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
+        DeviceEventEmitter: {
+            addListener: vi.fn(() => ({ remove: vi.fn() })),
+            emit: vi.fn(),
+        },
     };
 });
 

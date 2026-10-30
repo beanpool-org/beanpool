@@ -335,7 +335,7 @@ const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string
     { what: 'stop the wind-up', view: 'windingUp', label: 'Stop Wind-Up' },
     { what: 'finalise the wind-up', view: 'windingUp', label: 'Finalise Wind-Up' },
     { what: 'propose a new leader while the leader is quiet', view: 'quietProject', label: 'Propose Active Collaborator as Leader' },
-    { what: 'cancel an initiative and refund its backers', view: 'leadProject', label: 'Cancel initiative and refund escrow' },
+    { what: 'cancel an initiative and refund its backers', view: 'leadProject', label: 'Cancel initiative and refund backers' },
     { what: 'vote yes on a new leader', view: 'quietProjectVote', label: 'Yes, make Zoe leader' },
     { what: 'vote no on a new leader', view: 'quietProjectVote', label: 'No, do not make Zoe leader' },
 ];
@@ -411,14 +411,14 @@ for (const dark of [false, true]) {
             expect(byId('manage-screen')).not.toBeNull();
             // Drawn: what this collaborator can do there is.
             expect(byLabel('Propose Active Collaborator as Leader')).not.toBeNull();
-            expect(byLabel('Cancel initiative and refund escrow')).toBeNull();
+            expect(byLabel('Cancel initiative and refund backers')).toBeNull();
             net.answer = community({ getTreasuryDetail: VIEWS.leadProject() });
             await render('console');
-            expect(byLabel('Cancel initiative and refund escrow')).not.toBeNull();
+            expect(byLabel('Cancel initiative and refund backers')).not.toBeNull();
         });
 
         it("a project's cancel is drawn from the node's word alone, for whoever it names (Marty's answers CF-Q1, CF-Q2)", async () => {
-            const cancel = () => byLabel('Cancel initiative and refund escrow');
+            const cancel = () => byLabel('Cancel initiative and refund backers');
             // Its leader, whom the node no longer lets cancel it (operator access switched off): none.
             net.answer = community({ getTreasuryDetail: leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120, mayCancel: false }) });
             await render('console');

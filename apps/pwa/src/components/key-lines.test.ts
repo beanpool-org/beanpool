@@ -218,7 +218,7 @@ describe('key-lines.ts', () => {
         const purged = await purgeHere({ kind: 'last', here: window.location.origin });
         expect(purged.ok).toBe(false);
         const reason = purged.ok ? '' : purged.reason;
-        expect(reason).toBe('Failed to purge account from node. Active escrow deals may need to be resolved first.');
+        expect(reason).toBe('Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.');
         const said = webDeleteFailedLine(reason);
         expect(keyLineWords(said)).toBe(said);
         setLanguage('xx');

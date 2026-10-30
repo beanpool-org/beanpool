@@ -532,3 +532,30 @@ describe('PeopleSafetySection → Owners & admins tab', () => {
         expect(screen.getByTestId('roles-admin-moderators-only')).toBeInTheDocument();
     });
 });
+
+describe('NodeRolesPanel: a second owner is the first owner\'s way back (vault rethink VR8)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('one owner: the banner says why a second owner matters', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, bobAdmin]);
+        await renderPanel();
+        const banner = await screen.findByTestId('second-owner-banner');
+        expect(banner.textContent).toContain('Add a second owner');
+        expect(banner.textContent).toContain("Your key also unlocks this community's backups. Keep your words, and make a second owner, so one can bring the other back.");
+    });
+
+    it('two owners: no banner', async () => {
+        fetchRoles.mockResolvedValue([aliceOwner, { ...bobAdmin, role: 'owner' as const }]);
+        await renderPanel();
+        expect(screen.queryByTestId('second-owner-banner')).toBeNull();
+    });
+
+    it('no owner: only the no-owner banner', async () => {
+        fetchRoles.mockResolvedValue([bobAdmin]);
+        await renderPanel();
+        expect(await screen.findByTestId('no-owner-banner')).toBeInTheDocument();
+        expect(screen.queryByTestId('second-owner-banner')).toBeNull();
+    });
+});

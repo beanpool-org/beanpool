@@ -27,7 +27,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, runLedgerAudit, getPostsVersion, exportSyncState } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, runLedgerAudit, getPosts, getPostsVersion, exportSyncState } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
@@ -96,6 +96,12 @@ async function jpeg(width: number, height: number, quality = 80): Promise<string
     const buf = await sharp({ create: { width, height, channels: 3, background: { r: 180, g: 120, b: 60 } } })
         .composite([{ input: Buffer.from(`<svg width="${width}" height="${height}"><circle cx="${width / 2}" cy="${height / 2}" r="${Math.min(width, height) / 3}" fill="#2a6"/></svg>`) }])
         .jpeg({ quality }).toBuffer();
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+}
+
+/** A JPEG of noise, which does not compress: a body of a known size. */
+async function noisyJpeg(width: number, height: number): Promise<string> {
+    const buf = await sharp(crypto.randomBytes(width * height * 3), { raw: { width, height, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
     return `data:image/jpeg;base64,${buf.toString('base64')}`;
 }
 
@@ -195,8 +201,8 @@ async function main(): Promise<void> {
         const copied = (payload?.posts ?? []).find((p: any) => p.id === o?.postId);
         assert(copied?.createdVia === `assistant:${grantId}` && (payload?.posts ?? []).filter((p: any) => p.createdVia).length === 1,
             `the standby copy's payload carries created_via for it, and for no other post (${copied?.createdVia})`);
-        const listed = await call('GET', `/api/marketplace/posts?ids=${encodeURIComponent(o?.postId)}`, {});
-        assert(!/created_?via|assistant:/i.test(listed.text), `the listings an app reads never carry it (${listed.status})`);
+        const asRead = JSON.stringify(getPosts({ id: o?.postId, viewerPubkey: owner.pub }));
+        assert(asRead.includes('Quincefield') && !/created_?via|assistant:/i.test(asRead), 'the listings an app reads never carry it');
 
         const need = await client.callTool({ name: 'create_need', arguments: { title: 'Someone to mend a fence', category: 'trades', photos: [small] } });
         const n = structured(need);
@@ -273,7 +279,7 @@ async function main(): Promise<void> {
         const adminCall = await c2.callTool({ name: 'create_offer', arguments: { title: 'As an admin', category: 'food', photos: [small] } });
         assert(!adminTools.some(t => t.startsWith('create_') || t === 'my_enterprises') && adminCall.isError === true && /no tool "create_offer"/.test(errorText(adminCall)),
             `its maker now an admin, the assistant has no create tool, and calling one is refused (${adminTools.length} tools; ${errorText(adminCall)})`);
-        const bigBody = JSON.stringify(rpc('tools/call', 9, { name: 'create_offer', arguments: { title: 'Big', photos: [await jpeg(1200, 900, 100)] } }));
+        const bigBody = JSON.stringify(rpc('tools/call', 9, { name: 'create_offer', arguments: { title: 'Big', photos: [await noisyJpeg(320, 240)] } }));
         assert(bigBody.length > 64 * 1024, `(a create with one photo is over 64 KiB: ${bigBody.length} bytes)`);
         const adminBig = await call('POST', '/mcp', { raw: bigBody, headers: { ...bearer(made2.body.token), ...MCP_HEADERS } });
         const anonBig = await call('POST', '/mcp', { raw: bigBody, headers: MCP_HEADERS });

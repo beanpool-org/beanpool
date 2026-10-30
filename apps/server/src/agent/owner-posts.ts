@@ -96,6 +96,8 @@ type Photos = { ok: true; photos: string[] } | { ok: false; error: string };
 
 const DATA_URL = /^data:image\/(jpeg|jpg|webp);base64,([A-Za-z0-9+/=\s]+)$/i;
 const BASE64 = /^[A-Za-z0-9+/=\s]+$/;
+/** `data:image/jpeg;base64,`, as long as WebP's. */
+const DATA_PREFIX_CHARS = 'data:image/jpeg;base64,'.length;
 
 /** One photo made what the apps send, or why not. */
 async function storablePhoto(value: unknown, n: number): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
@@ -106,7 +108,8 @@ async function storablePhoto(value: unknown, n: number): Promise<{ ok: true; val
     const m = DATA_URL.exec(trimmed);
     if (!m && (/^data:/i.test(trimmed) || !BASE64.test(trimmed))) return formatError;
     const b64 = m ? m[2] : trimmed;
-    if (b64.length > MAX_PHOTO_BASE64_CHARS) {
+    // Held to the cap as the data URL it would be stored as (state-engine.ts validatePostPhotos measures the whole value).
+    if (DATA_PREFIX_CHARS + b64.length > MAX_PHOTO_BASE64_CHARS) {
         return { ok: false, error: `${which} is too large: each may be at most ${MAX_PHOTO_BASE64_CHARS.toLocaleString('en')} base64 characters. Resize it to ${PHOTO_MAX_SIDE} pixels on its longest side and send it again.` };
     }
     const bytes = Buffer.from(b64, 'base64');
@@ -354,7 +357,8 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
             additionalProperties: false,
         },
         outputSchema: POST_OUT,
-        run: (grant, args) => createListing(grant, { kind: 'offer', args, enterpriseRequired: false }),
+        // As the owner only: an enterprise's Offer is create_enterprise_listing's.
+        run: (grant, args) => createListing(grant, { kind: 'offer', args: { ...args, as_enterprise: undefined, shop_id: undefined }, enterpriseRequired: false }),
     },
     {
         name: 'create_need',
@@ -370,7 +374,8 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
             additionalProperties: false,
         },
         outputSchema: POST_OUT,
-        run: (grant, args) => createListing(grant, { kind: 'need', args, enterpriseRequired: false }),
+        // As the owner only: an enterprise's Need is create_enterprise_listing's.
+        run: (grant, args) => createListing(grant, { kind: 'need', args: { ...args, as_enterprise: undefined, shop_id: undefined }, enterpriseRequired: false }),
     },
     {
         name: 'create_event',

@@ -291,6 +291,9 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
 /** How long the first read waits to learn whether this node reads by area, before it reads as before. */
 const NEAR_WAIT_MS = 1500;
 
+/** The least time between two reads of the fill for the same filters (the phone's minute, market.tsx). */
+const FILL_REREAD_MS = 60_000;
+
 /**
  * The Save-search button's words: core's word() key, shown here through t(), so the words a member sees are in the same
  * language as the button's screen-reader name (saveSearchLabel), and a voice-control member can say what they see.
@@ -1283,16 +1286,31 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const fillFilter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
     const fillKey = JSON.stringify(fillFilter);
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: MarketplacePost[] | null } | null>(null);
-    // Bumped by each successful read of the nearby listings, so the fill is read again with it.
+    // Bumped by each successful read of the nearby listings, so the fill is read again with it (not more often than
+    // FILL_REREAD_MS, below).
     const [fillStamp, setFillStamp] = useState(0);
+    // The fill's latest read: its filters, when it came back (0 until it has, and left 0 if it failed, so the next stamp
+    // tries again), and whether it is still out.
+    const fillReadRef = useRef<{ key: string; at: number; out: boolean } | null>(null);
     useEffect(() => {
         if (!fillWanted) return;
-        let live = true;
+        // The nearby list is read on the 300 s poll and on every sync tick the node pushes, so a stamp is not a reason to
+        // ask again on its own: a minute per filter, as the phone does (market.tsx), and never while a read for these
+        // filters is out. A read already out is not cancelled by the next stamp either: with sync ticks quicker than the
+        // read, each one threw its answer away and asked again, and a member with nothing near sat on "Loading...".
+        // While a later read is out the earlier answer stays on screen.
+        const last = fillReadRef.current;
+        if (last && last.key === fillKey && (last.out || Date.now() - last.at < FILL_REREAD_MS)) return;
+        const read = { key: fillKey, at: 0, out: true };
+        fillReadRef.current = read;
         // One page (the node's own 50), so the fill never holds more than core's FILL_MAX.
         getMarketplacePosts({ ...fillFilter, limit: FILL_MAX })
-            .then(rows => { if (live) setElsewhere({ key: fillKey, posts: rows }); })
-            .catch(() => { if (live) setElsewhere({ key: fillKey, posts: null }); });
-        return () => { live = false; };
+            .then(rows => { read.at = Date.now(); return rows; }, () => null)
+            .then(rows => {
+                read.out = false;
+                // Dropped only if the member has since moved to other filters, whose read has replaced this one.
+                if (fillReadRef.current === read) setElsewhere({ key: read.key, posts: rows });
+            });
     }, [fillWanted, fillKey, fillStamp]);
 
     const inputStyle: React.CSSProperties = {

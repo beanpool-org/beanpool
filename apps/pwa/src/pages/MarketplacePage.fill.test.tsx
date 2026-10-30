@@ -1,12 +1,13 @@
 // The web Market on a node that reads by area, when little is near the member (Damo via Marty, 30 Oct: "Nearby, then
 // fill"): fewer than FILL_BELOW listings shown near them, and the newest from elsewhere come beneath, from the read
 // "Show everywhere" already makes, without a tap and without repeating one. From 8 near, nothing changes.
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FILL_BELOW, FILL_MAX } from '@beanpool/core';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import { onSyncActivity } from '../lib/sync';
 import { loadRadiusSettings } from '../lib/geo';
 import { CLIENT_POST_TYPES } from '../lib/events';
 
@@ -232,5 +233,105 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
         fireEvent.click(screen.getByRole('button', { name: 'Events' }));
         await waitFor(() => expect(screen.queryByTestId('market-fill')).toBeNull());
         expect(fillReads()).toHaveLength(before);
+    });
+    // The nearby list is read again on the 300 s poll and on every sync tick the node pushes (one per 2 s at most), and the
+    // fill is read again with it. The phone holds that read to one a minute per filter; so does the web.
+    describe('the fill is read again with the nearby list, not on every read of it', () => {
+        let clock = 0;
+        let sync: (() => unknown) | null = null;
+        /** A sync tick the node pushed, 5 s after the last one (past the page's own 2 s coalescing). */
+        const tick = async (seconds = 5) => {
+            clock += seconds * 1000;
+            const before = nearReads().length;
+            await act(async () => { sync?.(); });
+            await waitFor(() => expect(nearReads().length).toBeGreaterThan(before));
+            // The mocks answer in microtasks: one task later the refresh has finished and bumped the fill.
+            await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        };
+
+        beforeEach(() => {
+            clock = Date.parse('2026-10-30T10:00:00Z');
+            vi.spyOn(Date, 'now').mockImplementation(() => clock);
+            sync = null;
+            vi.mocked(onSyncActivity).mockImplementation(cb => { sync = cb as () => unknown; return () => {}; });
+        });
+
+        it('sync ticks inside a minute do not read the fill again; the first one after a minute does', async () => {
+            vi.mocked(api.getMarketplacePosts).mockImplementation(node(nearOf(2), farOf(3)));
+            render(<MarketplacePage identity={identity} />);
+            await screen.findByTestId('market-fill');
+            expect(fillReads()).toHaveLength(1);
+
+            await tick(); await tick(); await tick();
+            expect(nearReads().length).toBeGreaterThanOrEqual(4);
+            expect(fillReads()).toHaveLength(1);
+            expect(screen.getByTestId('market-fill')).toBeInTheDocument();
+
+            // 65 s after the fill came back.
+            await tick(50);
+            await waitFor(() => expect(fillReads()).toHaveLength(2));
+            // And the minute starts again from that read.
+            await tick(); await tick();
+            expect(fillReads()).toHaveLength(2);
+        });
+
+        it('a read that is out is not thrown away by the ticks that follow: one read, and its answer lands', async () => {
+            let answer: (rows: unknown[]) => void = () => {};
+            const slow = new Promise<unknown[]>(resolve => { answer = resolve; });
+            vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) =>
+                (f?.author || f?.online ? [] : f?.lat != null ? nearOf(2) : await slow) as any);
+            render(<MarketplacePage identity={identity} />);
+            await waitFor(() => expect(fillReads()).toHaveLength(1));
+            // Sync ticks faster than the read answers: each used to bump the fill and restart it.
+            await tick(); await tick(); await tick();
+            expect(fillReads()).toHaveLength(1);
+            expect(screen.queryByTestId('market-fill')).toBeNull();
+
+            await act(async () => { answer(farOf(2)); });
+            const fill = await screen.findByTestId('market-fill');
+            expect(within(fill).getByText('Far 0')).toBeInTheDocument();
+            expect(fillReads()).toHaveLength(1);
+        });
+
+        it('a read for filters the member has left does not land over the one they moved to', async () => {
+            const answers: Array<{ filter: Parameters<typeof api.getMarketplacePosts>[0]; answer: (rows: unknown[]) => void }> = [];
+            vi.mocked(api.getMarketplacePosts).mockImplementation((f) =>
+                (f?.author || f?.online ? Promise.resolve([]) : f?.lat != null ? Promise.resolve(nearOf(2)) : new Promise(resolve => { answers.push({ filter: f, answer: resolve as any }); })) as any);
+            render(<MarketplacePage identity={identity} />);
+            await waitFor(() => expect(answers).toHaveLength(1));
+            // The member moves to Offers while the first read is still out: a read of its own starts.
+            fireEvent.click(screen.getByRole('button', { name: /Offers/ }));
+            await waitFor(() => expect(answers).toHaveLength(2));
+            expect(answers[1].filter).toMatchObject({ type: 'offer' });
+
+            // The first one (all types) comes back last of the two answers, with a listing only it has.
+            await act(async () => { answers[1].answer([listing('far-offer', 'Far offer', { lat: 48.8, lng: 2.3 })]); });
+            const fill = await screen.findByTestId('market-fill');
+            expect(within(fill).getByText('Far offer')).toBeInTheDocument();
+            await act(async () => { answers[0].answer([listing('far-old', 'Far for the old filter', { lat: 48.8, lng: 2.3 })]); });
+            expect(screen.queryByText('Far for the old filter')).toBeNull();
+            expect(within(screen.getByTestId('market-fill')).getByText('Far offer')).toBeInTheDocument();
+            expect(answers).toHaveLength(2);
+        });
+
+        it('a read that failed is tried again by the next read of the nearby list, not a minute later', async () => {
+            let fails = true;
+            vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => {
+                if (f?.author || f?.online) return [] as any;
+                if (f?.lat != null) return nearOf(2) as any;
+                if (fails) throw new Error('offline');
+                return farOf(2) as any;
+            });
+            render(<MarketplacePage identity={identity} />);
+            await waitFor(() => expect(fillReads()).toHaveLength(1));
+            await screen.findByText('Near 1');
+            expect(screen.queryByTestId('market-fill')).toBeNull();
+
+            fails = false;
+            await tick();
+            const fill = await screen.findByTestId('market-fill');
+            expect(within(fill).getByText('Far 0')).toBeInTheDocument();
+            expect(fillReads()).toHaveLength(2);
+        });
     });
 });

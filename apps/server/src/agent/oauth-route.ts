@@ -168,7 +168,9 @@ export function consentWords(clientName: string, sendsTo: string, community: str
         lines: [
             `Everything it reads goes to ${sendsTo}. If you did not just add ${community} as a connector in your assistant, close this page.`,
             'It will read: the server\'s health, backups and totals; the reports waiting for moderators; the join requests; what needs an admin now.',
-            'It can take a backup (owners only) and SUGGEST actions, which change nothing until you approve them on your phone.',
+            // An owner's assistant acts without approval in two ways (agent/owner-posts.ts, take_backup): said before it is approved.
+            'If you are an owner, it can also take a backup and post Offers, Needs and events for you (as you, or as an enterprise you keep), at once, with no approval. '
+                + 'Anything else it can only SUGGEST, and a suggestion changes nothing until you approve it on your phone.',
             'It can never read messages, balances, keys, addresses, photos or logs, or change settings, roles, keys or money.',
             `To connect it, scan this code with the BeanPool app on your phone (Manage → Manage this community from a computer), check that the phone names ${sendsTo}, and type the two digits it shows.`,
         ],

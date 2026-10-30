@@ -341,7 +341,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-0.5 break-words">
                     Your own AI assistant (Claude, ChatGPT, Cursor) can read this server&rsquo;s health, backups, totals, reports and join
-                    requests{isOwner ? ', and take a backup' : ''}. It never sees messages, balances, keys, photos, addresses or logs, never
+                    requests{isOwner ? ', take a backup, and post Offers, Needs and events for you at once, with no approval' : ''}. It never sees messages, balances, keys, photos, addresses or logs, never
                     learns who reported, and changes no setting, role or member. Everything it reads goes to the company that runs it.
                 </p>
             </div>
@@ -431,7 +431,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <li>Ask it: &ldquo;what needs me?&rdquo;</li>
                             </ol>
                             <p className="text-[11px] text-amber-300 m-0 break-words">
-                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads.
+                                Copy the token now: it is not shown again. Keep it like a password: whoever holds it reads what your assistant reads, and can post as you.
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2">
                                 <button

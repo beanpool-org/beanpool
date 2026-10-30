@@ -81,6 +81,8 @@ describe('ConnectedAssistantsPanel', () => {
         const { unmount } = render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
         expect(await screen.findByText('Connected assistants')).toBeInTheDocument();
         await waitFor(() => expect(screen.getByText('None connected.')).toBeInTheDocument());
+        // An admin's assistant neither takes a backup nor posts, so an admin is told neither (MCP-OWNER-POSTS).
+        expect(screen.getByTestId('connected-assistants-card')).not.toHaveTextContent(/take a backup|post Offers/);
         unmount();
         calls.length = 0;
         const view = render(<ConnectedAssistantsPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'm'.repeat(64), role: 'moderator' }} />);
@@ -93,10 +95,14 @@ describe('ConnectedAssistantsPanel', () => {
         Object.assign(navigator, { clipboard: { writeText } });
         const calls = fakeNode({ grants: [] });
         const { container } = render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        // Before an owner connects one, the card says it can post as them at once, with no approval (MCP-OWNER-POSTS).
+        expect(await screen.findByTestId('connected-assistants-card')).toHaveTextContent(
+            'take a backup, and post Offers, Needs and events for you at once, with no approval.');
         fireEvent.change(await screen.findByLabelText('Assistant’s name'), { target: { value: 'Claude on my laptop' } });
         fireEvent.change(screen.getByLabelText('For how long'), { target: { value: '7' } });
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByTestId('agent-token-value')).toHaveTextContent(NEW_TOKEN);
+        expect(screen.getByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads, and can post as you.');
         expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Claude on my laptop', days: 7 });
         expect(countIn(container.innerHTML, NEW_TOKEN)).toBe(1);
         expect(countIn(container.innerHTML, 'c'.repeat(64))).toBe(1);

@@ -17,14 +17,14 @@ Under Appliance & Data, then Access & Security, **Connected assistants** shows f
 
 - Copy the address: your server's address with /mcp at the end.
 - In Claude or ChatGPT: Settings, Connectors, **Add custom connector**, and paste it.
-- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), and what it will read. Scan the code on that page with the BeanPool app (**Settings**, then **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
+- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), what it will read, and what an owner's assistant does without asking (a backup, and posts). Scan the code on that page with the BeanPool app (**Settings**, then **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
 - Ask it: "what needs me?"
 
 No key or token is shown, and none is stored anywhere you can lose it. The assistant gets a pass that lasts an hour and renews itself; if it isn't used for 30 days, approve it again. It acts as you, with your role: if you stop being an owner or admin, it stops too. Each member can have at most 5 connected this way. Only an owner or an admin can approve one; a moderator's or a member's phone is refused. The phone must be a BeanPool app that can show which assistant is asking: an older one is told to update.
 
 ## A page asking you to approve an assistant you didn't add
 
-Anyone can make an assistant and give it any name, including "Claude". So the page and the phone never show the name alone: they show the address its answers go to beside it. If someone sends you a link or a code and asks you to approve "your assistant", or the address isn't the assistant you just added (claude.ai, chatgpt.com), press **No** on the phone and close the page. Whoever you approve reads what your assistant would read. If you approved one by mistake, disconnect it (below).
+Anyone can make an assistant and give it any name, including "Claude". So the page and the phone never show the name alone: they show the address its answers go to beside it. If someone sends you a link or a code and asks you to approve "your assistant", or the address isn't the assistant you just added (claude.ai, chatgpt.com), press **No** on the phone and close the page. Whoever you approve reads what your assistant would read and, if you are an owner, can post in your name at once. If you approved one by mistake, disconnect it (below).
 
 ## A token for a desktop agent (owners)
 
@@ -32,7 +32,7 @@ Under Appliance & Data, then Access & Security, **Connected assistants**:
 
 - Sign in with your own owner key: Manage in the app, or **Sign in with your phone** on a computer. An assistant acts for a member, so the admin password can't connect one.
 - Give it a name that says which assistant it is (for example "Claude on my laptop"), pick for how long (7, 30 or 90 days), and press **Connect**.
-- Settings shows the address (your server's address with /mcp at the end) and the assistant's token, **once**. Copy the token now: it is never shown again, and Settings keeps no copy. Keep it like a password: whoever holds it reads what your assistant reads.
+- Settings shows the address (your server's address with /mcp at the end) and the assistant's token, **once**. Copy the token now: it is never shown again, and Settings keeps no copy. Keep it like a password: whoever holds it reads what your assistant reads and can post as you.
 - In Claude Code, **Copy command** gives one line that does both. In Claude Desktop, Cursor and other assistants, add a custom connector with the address, and send the token as the header Authorization, written as Bearer, a space, then the token.
 - Ask it: "what needs me?"
 

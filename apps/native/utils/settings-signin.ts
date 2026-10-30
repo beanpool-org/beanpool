@@ -155,7 +155,7 @@ export function agentLines(a: AgentAsking): string[] {
     return [
         a.name ? `Assistant: “${a.name}” (the name it gave itself)` : 'Assistant: no name given',
         `Sends what it reads to: ${a.sendsTo}`,
-        'It reads health, backups, totals, reports and join requests as you, and can only suggest changes for you to approve.',
+        'It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.',
     ];
 }
 

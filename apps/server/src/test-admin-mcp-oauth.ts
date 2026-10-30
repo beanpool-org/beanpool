@@ -263,6 +263,9 @@ async function main(): Promise<void> {
         assert(!!page && page.status === 200 && page.id.length === 64 && page.html.includes('assistant.example')
             && /calling itself “Claude”, at assistant\.example/.test(page.html) && /Everything it reads goes to assistant\.example/.test(page.html),
         'the consent page names the assistant only beside the host its answers go to, and says everything it reads goes there');
+        assert(!!page && /If you are an owner, it can also take a backup and post Offers, Needs and events for you \(as you, or as an enterprise you keep\), at once, with no approval\./.test(page.html)
+            && /Anything else it can only SUGGEST/.test(page.html) && !/It can take a backup \(owners only\) and SUGGEST actions/.test(page.html),
+            "the consent page says, before anyone approves, that an owner's assistant takes a backup and posts at once with no approval (MCP-OWNER-POSTS)");
         assert(!!page && /script-src 'nonce-/.test(String((await fetch(claude.authUrl!.toString(), { redirect: 'manual' })).headers.get('content-security-policy'))),
             'the consent page carries its own nonce CSP');
         assert(e2e.approve.status === 200 && /^\d{2}$/.test(String(e2e.approve.body?.confirmCode)) && e2e.approve.body?.role === 'admin',

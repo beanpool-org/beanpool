@@ -21,6 +21,7 @@
  *     release (account.restored); no code, key or copy in any payload or kept detail.
  *  F. Declined, expired, wrong-number and pasted-key cases; a removed member is refused; a standby writes none.
  *  G. A re-key and deleting the account remove the copy (with a tombstone).
+ *  H. A carried seal key (a take-over): copies locked with the key it replaced are locked again with the live one.
  *
  * Run (from apps/server): SERVER_SUITES_ONLY="test-bring-back" TEST_ALL_JOBS=2 node ../../scripts/run-server-suites.mjs
  */
@@ -51,7 +52,7 @@ import { cleanRekeyCode, resetRekeyWrongCodesForTests } from './engine/rekey-red
 import { setNodeRole } from './config/node-role.js';
 import { setRecoveryCopies, NO_COPIES_HERE } from './config/recovery-copies.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
-import { ensureRecoverySealKey, recoverySealKeyPath } from './services/recovery-seal-key.js';
+import { ensureRecoverySealKey, installCarriedRecoverySealKey, recoverySealKeyPath, rewrapCommunityCopiesFromRetiredKeys } from './services/recovery-seal-key.js';
 import { BRING_BACK_NO_COPY, BRING_BACK_OWN_KEY, BRING_BACK_GONE, BRING_BACK_NEEDS_NUMBER } from './engine/bring-back.js';
 
 const HOST = 'mullum.test';
@@ -400,6 +401,22 @@ async function runTests() {
         purgeMemberSelf(del.pubKeyHex);
         assert(!copyRow(del.pubKeyHex) && tombstoned(del.pubKeyHex), 'deleting the account removes the copy, with a tombstone');
         void ownerSession;
+    }
+
+    // ── H ──
+    section('H. A take-over brings the community\'s seal key: copies locked with the key it replaced are locked again with it');
+    {
+        const ivy = join('IvyMember');
+        await turnOn(ivy);
+        const before = copyRow(ivy.pubKeyHex)!.copy_ct;
+        // As a take-over or a sealed-backup restore installs the key it carries: the one here is kept as a retired key.
+        installCarriedRecoverySealKey(crypto.randomBytes(32).toString('base64'));
+        const relocked = rewrapCommunityCopiesFromRetiredKeys();
+        assert(relocked >= 1 && copyRow(ivy.pubKeyHex)!.copy_ct !== before, `the copy is locked again with the live key (${relocked} relocked)`);
+        assert(rewrapCommunityCopiesFromRetiredKeys() === 0, 'a second run locks nothing');
+        const { phone, code, bind } = await bringBack(adminSession, ivy);
+        const got = await poll(phone, code);
+        assert(bind.status === 200 && got.json.state === 'released', `and it is still brought back (got ${bind.status}, ${got.json.state})`);
     }
 
     console.log(`\n${passed}/${run} checks passed`);

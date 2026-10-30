@@ -107,11 +107,11 @@ describe('MarketplacePage on global with previews AND members on demand (where #
     });
     afterEach(() => { vi.unstubAllGlobals(); });
 
-    it('the row face and no directory read; My Deals draws the sample deals; no press sends a sample id', async () => {
+    it('the row face and no directory read; Your deals draws the sample deals; no press sends a sample id', async () => {
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
         await waitFor(() => expect(faces()).toContain(ROW_FACE));
-        fireEvent.click(screen.getByRole('button', { name: /My Deals/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Your deals/ }));
         const deals = await screen.findByTestId('deals-preview');
         fireEvent.click(within(deals).getByRole('button', { name: /Approve and release/ }));
         const sheet = await screen.findByTestId('local-community-sheet');

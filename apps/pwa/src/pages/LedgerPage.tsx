@@ -814,7 +814,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </p>
                         </button>
 
-                        {/* What is held in trust opens the deals that hold it: the Market's My Deals, on In Progress. */}
+                        {/* What is held in trust opens the deals that hold it: the Market's Your deals, on In Progress. */}
                         {inTrust > 0 && onNavigate && (
                             <button
                                 type="button"

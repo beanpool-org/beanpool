@@ -34,6 +34,7 @@ import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { reportKind, t, requestAfterOwnLine, requestAfterRead } from '@beanpool/core';
+import { dealAction } from './deal-rows';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -924,7 +925,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
  */
 /**
  * `includeEvents`: events are opt-in here as they are on the server's list route. Only screens that know how
- * to draw an event ask for them; the map tab, the deals badge and My Deals read this cache too and would
+ * to draw an event ask for them; the map tab, the deals badge and Your deals read this cache too and would
  * otherwise show an event as a trade listing (the native map layer is its own, later slice).
  *
  * Audience: with no `audienceScope` or `targetGroupId` this reads public listings only, for the map (#823).
@@ -1480,10 +1481,12 @@ export async function getConversations(myPubkey: string) {
  */
 export async function getActionableDeals(myPubkey: string): Promise<any[]> {
     const database = await getDb();
+    // The listing joins in for who answers a request (its author) and what kind it is: core's dealStep needs both.
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.buyer_pubkey as buyerPubkey,
                mt.seller_pubkey as sellerPubkey, mt.credits as credits, mt.status as status,
-               mt.post_title as postTitle,
+               mt.post_title as postTitle, mt.created_at as createdAt,
+               p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                (SELECT c.id FROM conversations c
                   WHERE c.type = 'dm' AND c.post_id IS NULL
                     AND EXISTS(SELECT 1 FROM conversation_participants cpa WHERE cpa.conversation_id = c.id AND cpa.public_key = mt.buyer_pubkey)
@@ -1494,18 +1497,16 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
                (SELECT memb.callsign FROM members memb WHERE memb.public_key = (CASE WHEN mt.buyer_pubkey = ? THEN mt.seller_pubkey ELSE mt.buyer_pubkey END)) as peerCallsign,
                (SELECT memb.avatar_url FROM members memb WHERE memb.public_key = (CASE WHEN mt.buyer_pubkey = ? THEN mt.seller_pubkey ELSE mt.buyer_pubkey END)) as peerAvatar
         FROM marketplace_transactions mt
+        LEFT JOIN posts p ON p.id = mt.post_id
         WHERE (mt.buyer_pubkey = ? OR mt.seller_pubkey = ?)
-          AND mt.status IN ('pending', 'completed')
+          AND mt.status IN ('requested', 'pending', 'completed')
         ORDER BY mt.created_at DESC
     `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
 
     return rows.map(r => {
         const iAmBuyer = r.buyerPubkey === myPubkey;
-        let action: 'release' | 'fulfill' | 'review' | null = null;
-        if (r.status === 'pending' && iAmBuyer) action = 'release';
-        else if (r.status === 'pending' && !iAmBuyer) action = 'fulfill';
-        else if (r.status === 'completed' && !r.iRated) action = 'review';
-        return { ...r, iAmBuyer, action };
+        // Whose step it is is core's rule, the web list's too (a deal waiting on the other side is no item here).
+        return { ...r, iAmBuyer, action: dealAction(r, myPubkey) };
     }).filter(d => d.action && d.conversationId);
 }
 
@@ -1517,9 +1518,11 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.credits as credits,
-               mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey,
+               mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
+               p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = ?) as iRated
         FROM marketplace_transactions mt
+        LEFT JOIN posts p ON p.id = mt.post_id
         WHERE (mt.buyer_pubkey = ? AND mt.seller_pubkey = ?)
            OR (mt.buyer_pubkey = ? AND mt.seller_pubkey = ?)
         ORDER BY mt.created_at DESC

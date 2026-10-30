@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-22",
@@ -833,11 +833,10 @@
   "Search": "جستجو",
   "Search marketplace...": "جستجو در بازار...",
   "Search marketplace": "جستجو در بازار",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "معاملات من، {n} در انتظار",
-    "other": "معاملات من، {n} در انتظار"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "معاملات شما، {n} در انتظار",
+    "other": "معاملات شما، {n} در انتظار"
   },
-  "My Deals": "معاملات من",
   "Opens your active and pending deals sheet": "برگه معاملات فعال و در انتظار شما را باز می‌کند",
   "Grid view": "نمای شبکه‌ای",
   "Compact view": "نمای فشرده",
@@ -1350,7 +1349,6 @@
   "Groups\u0004talk pane": "گروه‌ها",
   "People\u0004talk pane": "افراد",
   "🔓 Release Credits": "🔓 آزادسازی اعتبار",
-  "📦 Fulfill Order": "📦 انجام سفارش",
   "⭐ Leave Review": "⭐ ثبت نظر",
   "⚡ Action Required": "⚡ اقدام لازم",
   "Transaction": "معامله",
@@ -1365,10 +1363,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "نیاز به ثبت نظر ({n})",
     "other": "نیاز به ثبت نظر ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "انجام سفارش ({n})",
-    "other": "انجام سفارش ({n})"
   },
   "New\u0004conversation": "جدید",
   "Action Required": "اقدام لازم",
@@ -3415,7 +3409,7 @@
   "TRUST SCORE": "امتیاز اعتماد",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "نظرات شما مستقیماً بر **امتیاز اعتماد** شما که در پروفایل عمومی‌تان دیده می‌شود اثر می‌گذارد. کسب امتیاز بالا پیدا کردن شریک معامله را آسان‌تر می‌کند!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "نظرات منفی مکرر جایگاه شما را نزد شرکا کاهش می‌دهد. اختلافات حل‌نشده امانت پس از ۷ روز توسط مدیران با احکام امضاشده و عمومی داوری می‌شوند.",
-  "My Deals & Trust Hold": "معاملات من و امانت",
+  "Your deals & Trust Hold": "معاملات شما و امانت",
   "🎟️ Network Invites": "🎟️ دعوت‌های شبکه",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "هر جامعه‌ای در BeanPool تنها با دعوت است: یک عضو ورود شما را مجاز می‌کند. برای رشد امن جامعه، ما به سیستم **ضمانت همتایان** متکی هستیم.",
   "WHO CAN INVITE": "چه کسی می‌تواند دعوت کند",
@@ -6032,7 +6026,6 @@
   "Nothing in it yet": "هنوز چیزی در آن نیست",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "هنوز چیزی در آن نیست. یک پیشنهاد را از صفحهٔ ویرایشش در آن بگذارید، یا پیشنهادهای فعال‌تان را اینجا اضافه کنید.",
   "On the Market": "در بازار",
-  "Open my deals": "باز کردن معامله‌های من",
   "Open my shop": "باز کردن فروشگاه من",
   "Open on Instagram": "باز کردن در اینستاگرام",
   "Open your shop": "فروشگاه خود را باز کنید",

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -832,11 +832,10 @@
   "Search": "Maghanap",
   "Search marketplace...": "Maghanap sa merkado...",
   "Search marketplace": "Maghanap sa merkado",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "Aking mga Deal, {n} ang nakabinbin",
-    "other": "Aking mga Deal, {n} ang nakabinbin"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "Mga kasunduan mo, {n} ang nakabinbin",
+    "other": "Mga kasunduan mo, {n} ang nakabinbin"
   },
-  "My Deals": "Aking mga Deal",
   "Opens your active and pending deals sheet": "Binubuksan ang iyong aktibo at nakabinbing mga deal",
   "Grid view": "Grid view",
   "Compact view": "Compact view",
@@ -1349,7 +1348,6 @@
   "Groups\u0004talk pane": "Mga Grupo",
   "People\u0004talk pane": "Mga Tao",
   "🔓 Release Credits": "🔓 I-release ang Kredito",
-  "📦 Fulfill Order": "📦 Tuparin ang Order",
   "⭐ Leave Review": "⭐ Mag-iwan ng Review",
   "⚡ Action Required": "⚡ Kinakailangang Aksyon",
   "Transaction": "Transaksyon",
@@ -1364,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Kailangan ang Review ({n})",
     "other": "Kailangan ang Review ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Tuparin ang Order ({n})",
-    "other": "Tuparin ang Order ({n})"
   },
   "New\u0004conversation": "Bago",
   "Action Required": "Kinakailangang Aksyon",
@@ -3413,7 +3407,7 @@
   "TRUST SCORE": "TRUST SCORE",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Direktang nakakaapekto ang iyong mga pagsusuri sa iyong **Trust Score**, na nakikita sa pampubliko mong profile. Ang pagbuo ng mataas na trust score ay nagpapadali sa paghahanap ng mga kapareha sa kalakalan!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Ang paulit-ulit na masasamang pagsusuri ay nagpapababa ng iyong katayuan sa mga kapareha sa kalakalan. Ang mga hindi nalutas na pagtatalo na nakatengga sa escrow nang mahigit 7 araw ay ina-arbitrate ng mga tagapangasiwa sa pamamagitan ng pampubliko at pirmadong resolusyon (pag-release, pagbalik, o paghati).",
-  "My Deals & Trust Hold": "Aking mga Deal at Trust Hold",
+  "Your deals & Trust Hold": "Mga kasunduan mo at Trust Hold",
   "🎟️ Network Invites": "🎟️ Mga Imbitasyon sa Network",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Ang bawat komunidad sa BeanPool ay para lamang sa mga inimbitahan: isang miyembro ang nagpapasok sa iyo. Upang ligtas na mapalago ang komunidad, umaasa kami sa sistema ng **Peer Vouching**.",
   "WHO CAN INVITE": "SINO ANG MAAARING MAG-IMBITA",
@@ -6032,7 +6026,6 @@
   "Nothing in it yet": "Wala pang laman",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "Wala pang laman. Maglagay ng Alok mula sa edit screen nito, o idagdag dito ang mga live mong Alok.",
   "On the Market": "Nasa Merkado",
-  "Open my deals": "Buksan ang mga transaksyon ko",
   "Open my shop": "Buksan ang tindahan ko",
   "Open on Instagram": "Buksan sa Instagram",
   "Open your shop": "Buksan ang tindahan mo",

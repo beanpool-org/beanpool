@@ -315,7 +315,7 @@ export default function ChatsScreen() {
             list = list.filter(c => c.peerPubkey && friendPubkeys.has(c.peerPubkey));
         }
 
-        // Action Required is now per-DEAL (release / fulfill / review), derived from
+        // Action Required is now per-DEAL (release / answer / review), derived from
         // marketplace_transactions — not from per-thread fields, since a thread is per-person
         // now and may hold several deals. Hidden while searching.
         const actionRequired = searchQuery.trim() !== '' ? [] : deals;
@@ -333,19 +333,21 @@ export default function ChatsScreen() {
         let regular = list.map(c => {
             const conversationDeals = dealsByConvId.get(c.id) || [];
             let releaseCount = 0;
-            let fulfillCount = 0;
+            let answerCount = 0;
             let reviewCount = 0;
             for (const d of conversationDeals) {
                 if (d.action === 'release') releaseCount++;
-                else if (d.action === 'fulfill') fulfillCount++;
+                else if (d.action === 'answer') answerCount++;
                 else if (d.action === 'review') reviewCount++;
             }
             return {
                 ...c,
-                actionableCount: conversationDeals.length,
+                // The deals whose next step is mine, counted as core's dealsNeedingMe counts them (the web's chip too): Beans
+                // of mine to release, a request on my listing to answer. A review is asked of nobody and is told apart.
+                actionableCount: releaseCount + answerCount,
                 conversationDeals,
                 releaseCount,
-                fulfillCount,
+                answerCount,
                 reviewCount
             };
         });
@@ -472,7 +474,7 @@ export default function ChatsScreen() {
 
     const getActionLabel = (deal: any) => {
         if (deal.action === 'release') return t('🔓 Release Credits');
-        if (deal.action === 'fulfill') return t('📦 Fulfill Order');
+        if (deal.action === 'answer') return t('Waiting on you: answer');
         if (deal.action === 'review') return t('⭐ Leave Review');
         return t('⚡ Action Required');
     };
@@ -511,28 +513,23 @@ export default function ChatsScreen() {
     );
 
     const renderItem = ({ item }: { item: any }) => {
-        const needsAction = item.actionableCount > 0;
-        
+        const needsAction = item.actionableCount > 0 || item.reviewCount > 0;
+
         let actionText = '';
         let actionIcon: any = 'alert-circle-outline';
+        // English writes one form for both; a language with more forms has them. The count is the deals whose step is mine
+        // (the web's chip, word for word): all Beans to release says so, anything with a request to answer says Action Required.
         if (item.actionableCount > 0) {
-            // English writes one form for both; a language with more forms has them.
-            if (item.releaseCount > 0 && item.reviewCount > 0) {
-                actionText = tn(item.actionableCount, 'Action Required ({n})', 'Action Required ({n})');
-                actionIcon = 'lightning-bolt';
-            } else if (item.releaseCount > 0) {
-                actionText = tn(item.releaseCount, 'Release Credits ({n})', 'Release Credits ({n})');
+            if (item.answerCount === 0) {
+                actionText = tn(item.actionableCount, 'Release Credits ({n})', 'Release Credits ({n})');
                 actionIcon = 'lock-open-outline';
-            } else if (item.reviewCount > 0) {
-                actionText = tn(item.reviewCount, 'Review Needed ({n})', 'Review Needed ({n})');
-                actionIcon = 'star-outline';
-            } else if (item.fulfillCount > 0) {
-                actionText = tn(item.fulfillCount, 'Fulfill Order ({n})', 'Fulfill Order ({n})');
-                actionIcon = 'package-variant-closed';
             } else {
                 actionText = tn(item.actionableCount, 'Action Required ({n})', 'Action Required ({n})');
                 actionIcon = 'lightning-bolt';
             }
+        } else if (item.reviewCount > 0) {
+            actionText = tn(item.reviewCount, 'Review Needed ({n})', 'Review Needed ({n})');
+            actionIcon = 'star-outline';
         }
         
         return (
@@ -546,7 +543,8 @@ export default function ChatsScreen() {
                         router.push({ pathname: `/chat/${item.id}`, params: { event: '1' } });
                         return;
                     }
-                    const firstActionable = item.conversationDeals?.[0];
+                    // The chip's deals first (a step of mine); a review only when nothing else is waiting on the member.
+                    const firstActionable = item.conversationDeals?.find((d: any) => d.action !== 'review') ?? item.conversationDeals?.[0];
                     if (firstActionable) {
                         if (firstActionable.action === 'review') {
                             router.push({ pathname: `/chat/${item.id}`, params: { triggerReview: 'true', txId: firstActionable.txId } });

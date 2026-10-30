@@ -3,7 +3,8 @@ import { askPhotoSource } from '../../utils/post-photo';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine } from '@beanpool/core';
+import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine } from '@beanpool/core';
+import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -1002,10 +1003,13 @@ function ChatScreen({ id }: { id: string }) {
 
     // ---- Consolidated thread: per-deal action handlers (loadDeals lives above the focus effect) ----
 
-    // Pinned-strip deals: live escrow, or a completed deal still awaiting my review.
+    // Pinned-strip deals: live escrow, a completed deal still awaiting my review, or a request on my listing waiting for my
+    // answer (core's dealStep `to-answer`: the web's strip carries it too, and Talk's Action Required counts it, so the chat
+    // it opens must show it). My own request, a declined one and a stranger's are not here.
+    const myKey = identity?.publicKey;
     const activeDeals = React.useMemo(
-        () => deals.filter(d => d.status === 'pending' || (d.status === 'completed' && !d.iRated)),
-        [deals]
+        () => deals.filter(d => d.status === 'pending' || (d.status === 'completed' && !d.iRated) || (!!myKey && isRequestToAnswer(d, myKey))),
+        [deals, myKey]
     );
 
     // Filter out the deal from the top strip if it is currently displayed in the richer bottom Inline Action Bar
@@ -1486,12 +1490,18 @@ function ChatScreen({ id }: { id: string }) {
                                 key={d.txId}
                                 accessibilityRole="button"
                                 style={styles.dealCard}
-                                onPress={() => d.postId && router.push(`/post/${d.postId}`)}
+                                onPress={() => d.postId && router.push({ pathname: '/post/[id]', params: { id: d.postId, txId: d.txId } })}
                             >
                                 <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle || t('Deal')}</Text>
-                                <Text style={styles.dealCardMeta} numberOfLines={1}>
-                                    <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · in escrow')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
-                                </Text>
+                                {d.status === 'requested' ? (
+                                    // Nothing is held yet, so never "in escrow": whose step it is, in core's words. Approve and Deny
+                                    // live on the listing, which the card opens at this deal.
+                                    <Text style={styles.dealCardMeta} numberOfLines={1}>{dealStateWords(dealStep(localDealRow(d, identity!.publicKey), identity!.publicKey), null)}</Text>
+                                ) : (
+                                    <Text style={styles.dealCardMeta} numberOfLines={1}>
+                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · in escrow')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
+                                    </Text>
+                                )}
                                 <View style={styles.dealCardActions}>
                                     {d.status === 'pending' && d.iAmBuyer && (
                                         <>

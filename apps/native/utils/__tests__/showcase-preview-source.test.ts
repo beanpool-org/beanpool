@@ -87,7 +87,7 @@ describe('the preview sources', () => {
         expect(ledger).toMatch(/\{beansMode !== undefined && !preview && <RepaymentCard \/>\}/);
     });
 
-    it("My Deals in preview is the member's own sheet: the sample loads before any node call, and no press reaches a review or a listing", () => {
+    it("Your deals in preview is the member's own sheet: the sample loads before any node call, and no press reaches a review or a listing", () => {
         const deals = read('components/MyDealsSheet.tsx');
         expect(deals).not.toMatch(/DealsPreview|SAMPLE_COMMUNITY/);
         const load = deals.slice(deals.indexOf('const loadData = async () => {'));

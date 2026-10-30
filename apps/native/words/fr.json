@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-22",
@@ -832,11 +832,10 @@
   "Search": "Rechercher",
   "Search marketplace...": "Rechercher sur le marché...",
   "Search marketplace": "Rechercher sur le marché",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "Mes accords, {n} en attente",
-    "other": "Mes accords, {n} en attente"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "Vos accords, {n} en attente",
+    "other": "Vos accords, {n} en attente"
   },
-  "My Deals": "Mes accords",
   "Opens your active and pending deals sheet": "Ouvre le volet de vos accords actifs et en attente",
   "Grid view": "Vue en grille",
   "Compact view": "Vue compacte",
@@ -1349,7 +1348,6 @@
   "Groups\u0004talk pane": "Groupes",
   "People\u0004talk pane": "Membres",
   "🔓 Release Credits": "🔓 Débloquer les crédits",
-  "📦 Fulfill Order": "📦 Traiter la commande",
   "⭐ Leave Review": "⭐ Laisser un avis",
   "⚡ Action Required": "⚡ Action requise",
   "Transaction": "Transaction",
@@ -1364,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Avis requis ({n})",
     "other": "Avis requis ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Traiter la commande ({n})",
-    "other": "Traiter les commandes ({n})"
   },
   "New\u0004conversation": "Nouvelle",
   "Action Required": "Action requise",
@@ -3297,7 +3291,7 @@
   "TRUST SCORE": "INDICE DE CONFIANCE",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Vos avis influencent directement votre **Indice de confiance**, visible sur votre profil public. Un indice élevé vous aide à trouver plus facilement des partenaires d'échange !",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Des avis négatifs répétés réduisent votre réputation auprès de vos partenaires. Les litiges sous séquestre non résolus après 7 jours sont arbitrés par les administrateurs via des décisions publiques et signées (paiement, remboursement ou partage).",
-  "My Deals & Trust Hold": "Mes accords et retenue en fiducie",
+  "Your deals & Trust Hold": "Vos accords et retenue en fiducie",
   "🎟️ Network Invites": "🎟️ Invitations au réseau",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Chaque communauté BeanPool fonctionne sur invitation : un membre vous ouvre l'accès. Pour grandir en toute sécurité, nous nous appuyons sur le **Parrainage entre pairs**.",
   "WHO CAN INVITE": "QUI PEUT INVITER",
@@ -6032,7 +6026,7 @@
   "Nothing in it yet": "Rien dedans pour l'instant",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "Rien dedans pour l'instant. Mettez une Offre depuis son écran de modification, ou ajoutez ici vos Offres en cours.",
   "On the Market": "Sur le Marché",
-  "Open my deals": "Ouvrir mes accords",
+  "Open your deals": "Ouvrir vos accords",
   "Open my shop": "Ouvrir ma boutique",
   "Open on Instagram": "Ouvrir sur Instagram",
   "Open your shop": "Ouvrir votre boutique",

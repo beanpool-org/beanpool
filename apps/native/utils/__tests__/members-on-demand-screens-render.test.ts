@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Never a dead end, screen by screen (DESIGN-global-members-by-area §2.4, #1792, slice M2): People → Community, New
- * message, the chats list, My Deals and the public profile rendered for real at the floor's window (320 × 569 dp, text at
+ * message, the chats list, Your deals and the public profile rendered for real at the floor's window (320 × 569 dp, text at
  * 1.3×), in the real light and dark palettes, online and offline, on a community that says `membersOnDemand`.
  *
  * The phone's own utils/db runs on its real schema in an in-memory SQLite (as pillar-sync-members-on-demand.test.ts), so
@@ -819,7 +819,7 @@ for (const scheme of ['light', 'dark'] as const) {
             });
         });
 
-        describe('My Deals', () => {
+        describe('Your deals', () => {
             async function holdDeal(partner: string) {
                 await (await db.getDb()).runAsync(
                     "INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, post_title) VALUES ('tx-1', 'post-1', ?, ?, 12, 'completed', ?, ?, 'Sourdough loaf')",

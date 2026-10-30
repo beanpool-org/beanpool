@@ -4,13 +4,13 @@
  * `showcase` switch), with a signed-in member, in headless Chromium at 320 px with 1.3x text, light and dark.
  *
  *   1. a member of a global node (showcase on): the Ledger in preview (strip expanded and collapsed, the sheet, the Start
- *      a community screen), the Commons and My Deals in preview, a listing's In return line and its "Request · Beans held
+ *      a community screen), the Commons and Your deals in preview, a listing's In return line and its "Request · Beans held
  *      safely" action, Invites' line, a profile's line, the composer's price line; every marker never looks locked;
  *   2. the NET SPY over all of that: no POST, PUT, PATCH or DELETE at all, nothing carrying a `sample-` id, no host but
  *      this machine (map tiles aside, aborted), and the reader's own features read from /api/community/me; and on the
  *      Commons, Invites, the profile (with the app shell's load) and a listing, no read of the reader's own data at
  *      all (OWN_READS: their balance, ledger, deals, Decisions and voice credits, the pool, treasuries, invites); and
- *      the same on the Ledger, the Market tab's load with My Deals, and the Map with the composer (review of #2035, N1);
+ *      the same on the Ledger, the Market tab's load with Your deals, and the Map with the composer (review of #2035, N1);
  *   2b. the node's info held back 6 s and the Ledger tapped at once (a slow link): nothing of the member's is read
  *      before the info answers, and no live balance is drawn meanwhile (review of #2035, N2); on a local node the
  *      Ledger then reads the balance and ledger, as before;
@@ -229,10 +229,10 @@ async function markersNeverLocked(page, where) {
     check(bad.length === 0, `${where}: no marker looks locked, greyed or dimmed${bad.length ? ` (${bad.join('; ')})` : ''}`);
 }
 
-/** Every control the showcase draws (previews, markers, the sheet, the Start screen, My Deals' preview) is 44 x 44 px or more. */
+/** Every control the showcase draws (previews, markers, the sheet, the Start screen, Your deals' preview) is 44 x 44 px or more. */
 async function targetsAtLeast44(page, where) {
     const small = await page.evaluate(() => {
-        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="My Deals"], [role="dialog"][aria-labelledby="my-deals-title"]';
+        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="Your deals"], [role="dialog"][aria-labelledby="my-deals-title"]';
         return Array.from(document.querySelectorAll('button, a[href], [role="button"], input, select, textarea'))
             .filter((el) => el instanceof Element && (el.matches(ours) || el.closest(ours)) && el.getClientRects().length > 0)
             .map((el) => ({ el, r: el.getBoundingClientRect() }))
@@ -432,31 +432,31 @@ async function globalMember(browser, root, dark) {
         await wait(1_000);
         readsNothingOwn(net, tDecide, node.origin, 'Decide');
 
-        // The Market: My Deals in preview; a listing's In return and its deal action.
+        // The Market: Your deals in preview; a listing's In return and its deal action.
         const tMarket = Date.now();
         await tab(page, 'Market');
-        await page.getByRole('button', { name: /My Deals/ }).first().click();
+        await page.getByRole('button', { name: /Your deals/ }).first().click();
         await page.getByTestId('deals-preview').waitFor({ timeout: 10_000 });
-        check(await page.getByTestId('local-community-strip').isVisible() && await page.getByTestId('sample-header').isVisible(), 'My Deals: strip + EXAMPLE present');
-        check(await page.getByTestId('sample-deal-sample-deal-shelves').isVisible() && await page.getByTestId('sample-deal-sample-deal-bike').isVisible(), 'My Deals: In Progress sample deals present');
-        await noSideScroll(page, 'My Deals preview');
-        await targetsAtLeast44(page, 'My Deals preview');
+        check(await page.getByTestId('local-community-strip').isVisible() && await page.getByTestId('sample-header').isVisible(), 'Your deals: strip + EXAMPLE present');
+        check(await page.getByTestId('sample-deal-sample-deal-shelves').isVisible() && await page.getByTestId('sample-deal-sample-deal-bike').isVisible(), 'Your deals: In Progress sample deals present');
+        await noSideScroll(page, 'Your deals preview');
+        await targetsAtLeast44(page, 'Your deals preview');
         await shot(page, `deals-${scheme}`);
         await page.getByTestId('sample-deal-sample-deal-shelves').getByTestId('local-community-action').click();
         await page.getByTestId('local-community-sheet').waitFor();
-        await closeSheet(page, 'My Deals');
+        await closeSheet(page, 'Your deals');
         await page.getByTestId('sample-deal-sample-deal-bike').getByTestId('local-community-action').click();
         await page.getByTestId('local-community-sheet').waitFor();
-        await closeSheet(page, 'My Deals, a card\'s marker');
+        await closeSheet(page, 'Your deals, a card\'s marker');
         await page.getByRole('button', { name: /History/ }).click();
         await page.getByTestId('sample-deal-sample-deal-mending').waitFor({ timeout: 5_000 });
-        check(await page.getByTestId('sample-deal-sample-deal-mending').isVisible(), 'My Deals: History sample deal present');
+        check(await page.getByTestId('sample-deal-sample-deal-mending').isVisible(), 'Your deals: History sample deal present');
         await page.getByTestId('sample-deal-sample-deal-mending').getByTestId('local-community-action').click();
         await page.getByTestId('local-community-sheet').waitFor();
-        await closeSheet(page, 'My Deals, History');
-        await page.getByRole('button', { name: /Close My Deals/ }).first().click();
+        await closeSheet(page, 'Your deals, History');
+        await page.getByRole('button', { name: /Close Your deals/ }).first().click();
         await wait(1_000);
-        readsNothingOwn(net, tMarket, node.origin, 'the Market tab\'s load and My Deals');
+        readsNothingOwn(net, tMarket, node.origin, 'the Market tab\'s load and Your deals');
         const tListing = Date.now();
         await page.getByText('Sourdough loaves').first().click();
         await page.getByTestId('listing-in-return').waitFor({ timeout: 10_000 });

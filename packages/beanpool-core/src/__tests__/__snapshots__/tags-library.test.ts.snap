@@ -103,7 +103,7 @@ exports[`suggestTags > suggests sensible tags for thirty real-looking listings 1
     "goods.kitchen.jars",
   ],
   "Ride to the airport on Friday": [
-    "transport.rides.rides",
+    "transport.rides",
     "housing.homes.rooms",
   ],
   "Solid timber kitchen chairs (4)": [

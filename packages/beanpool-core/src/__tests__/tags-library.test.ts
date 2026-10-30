@@ -49,6 +49,17 @@ describe('the tag library', () => {
         }
     });
 
+    it('no tag has its parent’s label: one thing is one tag, never a group and an item of the same name', () => {
+        const same = TAG_LIBRARY.filter((tag) => {
+            const parent = tagParent(tag.id);
+            return parent !== null && tagEnglish(tagById(parent)!).toLowerCase() === tagEnglish(tag).toLowerCase();
+        });
+        expect(same.map((tag) => tag.id)).toEqual([]);
+        const index = buildTagIndex(wordsFor('en'));
+        expect(index.byName('Rides')).toEqual(['transport.rides']);
+        expect(index.byName('bike')).toEqual(['transport.bikes']);
+    });
+
     it('its English words are plain: letters, digits and spaces', () => {
         for (const tag of TAG_LIBRARY) {
             for (const w of [...(tag.words ?? []), ...(tag.aliases ?? [])]) expect(w, tag.id).toMatch(/^[a-z0-9][a-z0-9 ]*$/i);

@@ -9,7 +9,8 @@
 // library can be read and re-run while T2 and T3 move the node and the apps onto the library.
 //
 // The tree below is hand-curated: the 17 tops are the Market's categories; each group lists the synonym keys placed in it
-// (`a=b` puts the two keys on one tag, labelled by the first; `^key` puts a key on the group itself) and the new tags it
+// (`a=b` puts the two keys on one tag, labelled by the first; `^key` puts a key on the group itself, as for a group named by
+// its key: "Rides" is one tag, never a group and an item of the same name) and the new tags it
 // gains (`+Label`). Every tag gets:
 //   words    the words for it AND everything under it (a group's "fruit"); kept only where every key under it had them,
 //            so no key searches for more than it did;
@@ -90,9 +91,9 @@ const TREE = [
         ['space', 'Space and storage', [], 'storage shed garage studio office +Workshop bench'],
     ]],
     ['transport', 'Transport & Rides', ['transport'], [
-        ['rides', 'Rides', ['ride'], 'ride=lift carpool +Airport ride'],
+        ['rides', 'Rides', ['ride'], '^ride ^lift carpool +Airport ride'],
         ['delivery', 'Delivery and moving', [], 'delivery courier moving removalist towing freight'],
-        ['bikes', 'Bikes', ['cycling'], 'bike=bicycle +Cargo bike +Bike servicing'],
+        ['bikes', 'Bikes', ['cycling'], '^bike ^bicycle +Cargo bike +Bike servicing'],
         ['vehicles', 'Trailers and floats', [], 'trailer +Horse float'],
     ]],
     ['education', 'Education & Lessons', ['education'], [
@@ -115,7 +116,7 @@ const TREE = [
     ['care', 'Care & Family', ['care'], [
         ['children', 'Children', ['kids', 'children'], 'babysitting childcare=nanny +Prams +Baby gear +Baby clothes'],
         ['support', 'Elders and disability', ['support'], '"aged care" "disability support" companionship respite'],
-        ['home', 'Home help', [], '"home help" "meal prep" "house sitting"'],
+        ['home', 'Home help', [], '^"home help" "meal prep" "house sitting"'],
     ]],
     ['animals', 'Animals & Pets', [], [
         ['pets', 'Pets', ['pet'], 'dog=puppy cat=kitten rabbit "guinea pig" bird "fish tank"'],
@@ -127,13 +128,13 @@ const TREE = [
     ]],
     ['tech', 'Tech & Digital', ['tech'], [
         ['devices', 'Devices', ['device'], 'computer laptop phone tablet printer'],
-        ['internet', 'Internet', ['internet'], 'wifi internet +Mesh network'],
+        ['internet', 'Internet', ['internet'], '^internet wifi +Mesh network'],
         ['repair', 'Tech repair', ['repair'], '"IT support" "data recovery" "phone repair" "computer repair" +Screen replacement'],
         ['digital', 'Digital and web', ['digital'], 'website "web design" programming "3D printing"'],
     ]],
     ['energy', 'Energy & Firewood', ['energy'], [
         ['firewood', 'Firewood and fuel', ['fuel'], 'firewood biochar +Kindling'],
-        ['solar', 'Solar', ['solar'], 'solar "solar panel" inverter battery +Off-grid power'],
+        ['solar', 'Solar', ['solar'], '^solar "solar panel" inverter battery +Off-grid power'],
         ['power', 'Power and heat', ['power'], 'generator "EV charging" LED "hot water" insulation'],
     ]],
     ['mindset', 'Mindset & Wisdom', [], [
@@ -150,7 +151,7 @@ const TREE = [
 const LABELS = {
     beans: 'Green beans', egg: 'Eggs', nuts: 'Nuts', math: 'Maths', native: 'Native plants', phone: 'Phones', bird: 'Pet birds',
     palm: 'Palms', feed: 'Animal feed', free: 'Free', 'painting art': 'Painting (art)', seedlings: 'Seedlings', cleaner: 'Cleaners', painter: 'Painters', tutor: 'Tutors', worms: 'Worms',
-    peas: 'Peas', ride: 'Rides', bike: 'Bikes', dog: 'Dogs', cat: 'Cats', herb: 'Herbs', spice: 'Spices', meat: 'Meat', pots: 'Pots and pans',
+    peas: 'Peas', dog: 'Dogs', cat: 'Cats', herb: 'Herbs', spice: 'Spices', meat: 'Meat', pots: 'Pots and pans',
     pan: 'Frying pans', toys: 'Toys', books: 'Books', clothes: 'Clothes', shoes: 'Shoes', boots: 'Boots', LED: 'LED lights', DJ: 'DJ',
     'IT support': 'IT support', 'EV charging': 'EV charging', '3D printing': '3D printing', 'fish tank': 'Fish tanks', tax: 'Tax help',
     printing: 'Printing', reading: 'Reading', writing: 'Writing', language: 'Languages', lessons: 'Lessons', event: 'Events',
@@ -170,7 +171,7 @@ const LABELS = {
     couch: 'Couches', crockery: 'Crockery', curtains: 'Curtains', sofa: 'Sofas', vet: 'Vet care',
 };
 
-const words = (s) => s.match(/"[^"]+"|\S+/g) ?? [];
+const words = (s) => s.match(/\^?"[^"]+"|\S+/g) ?? [];
 const unq = (s) => s.replace(/^"|"$/g, '');
 const slug = (s) => s.toLowerCase().replace(/\(.*?\)/g, '').replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -267,6 +268,11 @@ const ids = fixed.map((t) => t.id);
 const dup = ids.filter((id, i) => ids.indexOf(id) !== i);
 if (dup.length) problems.push(`duplicate ids: ${dup.join(', ')}`);
 for (const id of ids) if (!/^[a-z][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*){0,2}$/.test(id)) problems.push(`bad id ${id}`);
+const labelOf = new Map(fixed.map((t) => [t.id, t.label.toLowerCase()]));
+for (const t of fixed) {
+    const parent = t.id.includes('.') ? t.id.slice(0, t.id.lastIndexOf('.')) : null;
+    if (parent && labelOf.get(parent) === t.label.toLowerCase()) problems.push(`${t.id} has its group's label "${t.label}": put the key on the group (^key)`);
+}
 
 if (splitPairs.length) console.log(`split (would not search the same as one tag): ${splitPairs.join(', ')}`);
 if (problems.length) {

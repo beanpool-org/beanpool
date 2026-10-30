@@ -1943,6 +1943,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN prior_status TEXT`).run(); } catch { }
     // Wrong numbers typed on a code's phones (engine/rekey-redeem.ts bindRekeyByMatch): the third stops the code.
     try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN wrong_matches INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
+    // A re-key or a bring-back (engine/bring-back.ts): every code made before it was a re-key.
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN kind TEXT NOT NULL DEFAULT 'rekey'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_keeper_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }

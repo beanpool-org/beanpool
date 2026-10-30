@@ -104,6 +104,7 @@ import {
     type OffboardOptions,
 } from '../engine/member-wizards.js';
 import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
+import { issueBringBackCode } from '../engine/bring-back.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getOffboxHealth } from '../services/offbox-backups.js';
@@ -2776,8 +2777,17 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
     if (!(await rekeyProof(ctx, String(pubkey).trim().toLowerCase(), body.code ?? ctx.get('x-fresh-proof')))) return;
 
+    // `kind: 'bring_back'` (vault rethink VR3, engine/bring-back.ts): the member's SAME key back from their community copy,
+    // beside Re-key's new key. Asked the same proof as a re-key (rekeyProof): an owner for an owner or admin.
+    const kind = body.kind === undefined || body.kind === null ? 'rekey' : body.kind;
+    if (kind !== 'rekey' && kind !== 'bring_back') {
+        ctx.status = 400;
+        ctx.body = { error: "kind must be 'rekey' or 'bring_back'" };
+        return;
+    }
+
     try {
-        const result = issueRekeyCode(pubkey, effectiveActor);
+        const result = kind === 'bring_back' ? issueBringBackCode(pubkey, effectiveActor) : issueRekeyCode(pubkey, effectiveActor);
         ctx.body = {
             success: true,
             ...result,
@@ -2785,7 +2795,7 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
         };
     } catch (e: any) {
         ctx.status = e?.status || (e?.message?.includes('not found') ? 404 : 400);
-        ctx.body = { error: e?.message || 'Failed to issue re-enrolment code' };
+        ctx.body = { error: e?.message || 'Failed to issue re-enrolment code', ...(e?.code ? { code: e.code } : {}) };
     }
 });
 

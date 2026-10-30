@@ -53,6 +53,7 @@ import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
 import { deleteAllShares, moveKeeperCopiesToNewKey } from './recovery-shares.js';
+import { communityCopyStatus, deleteCommunityCopy } from './community-copy.js';
 import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
 import { moveBlocks } from './member-blocks.js';
@@ -74,6 +75,8 @@ export interface RekeyRequestRow {
     completed_at: string | null;
     /** The member's status before the code suspended them (cancelRekeyCode); null on a code made before it was kept. */
     prior_status?: string | null;
+    /** 'rekey' (a new key), or 'bring_back' (engine/bring-back.ts: the same key, from the member's community copy). */
+    kind?: 'rekey' | 'bring_back';
 }
 
 export interface RekeyAuditLogRow {
@@ -247,7 +250,7 @@ export function issueRekeyCode(
         const stillHeld = getInvalidatedKeyInfo(cleanOld)?.reason === 'rekey_pending';
         const earlier = stillHeld
             ? (db.prepare(`
-                SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+                SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired') AND kind = 'rekey'
                 ORDER BY created_at DESC, id DESC LIMIT 1
             `).get(cleanOld) as { prior_status: string | null } | undefined)
             : undefined;
@@ -363,6 +366,9 @@ export function completeRekey(
     if (req.status !== 'pending') {
         throw new Error(`Re-enrolment code is no longer active (status: ${req.status})`);
     }
+    // A bring-back code gives the member's own key back (engine/bring-back.ts) and never moves the account to another: it
+    // is confirmed only by the number on the phone it is released to (bindRekeyByMatch), never by a pasted key.
+    if (req.kind === 'bring_back') throw refusal(409, 'A bring-back is confirmed by the number on their new phone, never by a pasted key.');
     // A phone the admins said is not the member's (declineRekeyProposal) is never bound with this code, by its number or
     // by a pasted key: a stale card on a second dashboard or a second admin can't undo a decline, and the declined phone
     // has already let its key go (#1783 review N1).
@@ -431,6 +437,9 @@ export function completeRekey(
         // DESIGN-rekey-redeem-fable.md §4, Marty's pick 2, 2026-10-11). Nothing is opened, so no seal key is needed.
         // The copies they keep for someone else are that person's, and only renamed to the new key.
         signInCopiesRemoved = deleteAllShares(cleanOld);
+        // (p1) The member's community copy (engine/community-copy.ts) holds the replaced seed too: it goes, with a tombstone,
+        // and the member turns the path on again from the new phone. Counted with the sign-in copies, so the phone is told.
+        signInCopiesRemoved += deleteCommunityCopy(cleanOld);
         moveKeeperCopiesToNewKey(cleanOld, cleanNew);
         // (p2) Requests to join (G6): a knock the member made before they joined, and the knocks they answered. Left on
         // the invalidated key, the old knock would be back on the members' list and an approval would let that key in
@@ -541,11 +550,25 @@ export function suspendedOnlyByRekeyCode(publicKey: string): boolean {
     if (member?.status !== 'suspended') return false;
     if (!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(cleanPub)) return false;
     const req = db.prepare(`
-        SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+        SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired') AND kind = 'rekey'
         ORDER BY created_at DESC, id DESC LIMIT 1
     `).get(cleanPub) as { prior_status: string | null } | undefined;
     if (!req) return false;
     return req.prior_status === null ? !reportMaySuspend(cleanPub) : req.prior_status !== 'suspended';
+}
+
+/** cancelRekeyCode for a bring-back code: it suspended nobody and held no key, so only the code stops. */
+function cancelBringBackCode(req: RekeyRequestRow, cleanOld: string, cleanOperator: string):
+    { cancelled: true; oldPubkey: string; callsign: string; status: string } {
+    const member = getMember(cleanOld);
+    if (!member) throw refusal(404, 'Member not found');
+    assertMayRekey(cleanOld, cleanOperator);
+    const live = req.status === 'pending' && new Date(req.expires_at).getTime() >= Date.now();
+    if (!live || db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(req.id).changes !== 1) {
+        throw refusal(409, 'There is no bring-back code waiting for this member to cancel.');
+    }
+    logger.info('AUTH', `[BringBack] Code for ${member.callsign} (${shortKey(cleanOld)}) cancelled by ${shortKey(cleanOperator)}`);
+    return { cancelled: true, oldPubkey: cleanOld, callsign: member.callsign, status: member.status || 'active' };
 }
 
 /** A refusal with the HTTP status its route answers. */
@@ -579,6 +602,8 @@ export function cancelRekeyCode(
     const req = db.prepare(`
         SELECT * FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1
     `).get(cleanOld) as RekeyRequestRow | undefined;
+    // A bring-back code (engine/bring-back.ts) held nothing: cancelling one only stops it, while it waits.
+    if (req?.kind === 'bring_back') return cancelBringBackCode(req, cleanOld, cleanOperator);
     // Asked before the member: a used code moved the member’s row to the new key.
     if (req?.status === 'completed') {
         throw refusal(409, 'This code was already used: the member has moved to their new key, so it can’t be cancelled.');
@@ -687,13 +712,17 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
     /** Wrong numbers typed on the pending code so far (bindRekeyByMatch stops it at REKEY_MATCH_TRIES); beside the code only. */
     wrongNumbers: number;
     history: RekeyAuditLogView[];
+    /** Whether the member keeps a community copy here (engine/community-copy.ts): Bring back is offered only then. */
+    communityCopy: { kept: boolean; since: string | null };
+    /** This server's bring-backs of the member, newest first: who and when (bring_back_log). Never the code or the copy. */
+    bringBacks: { operatorPubkey: string; releasedAt: string }[];
 } {
     const cleanPub = publicKey.trim().toLowerCase();
     const isInvalidated = isKeyInvalidated(cleanPub);
     const invalidatedInfo = getInvalidatedKeyInfo(cleanPub);
 
     const pending = (db.prepare(`
-        SELECT id, code, old_pubkey, new_pubkey, operator_pubkey, status, created_at, expires_at, completed_at
+        SELECT id, code, old_pubkey, new_pubkey, operator_pubkey, status, created_at, expires_at, completed_at, kind
         FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1
     `).get(cleanPub) as RekeyRequestRow | undefined) || null;
 
@@ -725,6 +754,10 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
         FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC
     `).all(cleanPub, cleanPub) as RekeyAuditLogView[]) || [];
 
+    const bringBacks = (db.prepare('SELECT operator_pubkey, released_at FROM bring_back_log WHERE member_pubkey = ? ORDER BY id DESC LIMIT 20')
+        .all(cleanPub) as { operator_pubkey: string; released_at: string }[])
+        .map((r) => ({ operatorPubkey: r.operator_pubkey, releasedAt: r.released_at }));
+
     return {
         isInvalidated,
         invalidatedInfo,
@@ -732,6 +765,8 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
         proposals,
         wrongNumbers,
         history,
+        communityCopy: communityCopyStatus(cleanPub),
+        bringBacks,
     };
 }
 

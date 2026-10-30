@@ -31,6 +31,7 @@ import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
 import { assertMayRekey, completeRekey, type RekeyRequestRow } from './member-wizards.js';
+import { bringBackRelease, confirmBringBack, type BringBackReleased } from './bring-back.js';
 import { word } from '@beanpool/core';
 
 /** The one sentence for a code that is unknown, used, expired or cancelled. */
@@ -67,11 +68,18 @@ export class RekeyRedeemRefusal extends Error {
 export type RekeyAsk =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
-    | { state: 'declined' };
+    | BringBackReleased
+    | { state: 'declined' }
+    | { state: 'gone' };
 
+/**
+ * `released`: a bring-back code (engine/bring-back.ts) the admin confirmed with this phone's number. The member's community
+ * copy and its key, sealed to the asking key; nothing was bound.
+ */
 export type RekeyRedeemStatus =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
+    | BringBackReleased
     | { state: 'declined' }
     | { state: 'gone' };
 
@@ -83,9 +91,12 @@ interface WrongBucket { startedAt: number; count: number; logged: boolean }
 const byAddress = new Map<string, WrongBucket>();
 const byPrefix = new Map<string, WrongBucket>();
 
-/** The bucket a code counts in: "RK-AB12" of "RK-AB12-CD34" (16 bits); a malformed code counts per address only. */
+/**
+ * The bucket a code counts in: "RK-AB12" of "RK-AB12-CD34" (16 bits), or "BB-AB12" of a bring-back's (engine/bring-back.ts);
+ * a malformed code counts per address only.
+ */
 export function rekeyCodePrefix(code: string): string | null {
-    return /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code) ? code.slice(0, 7) : null;
+    return /^(RK|BB)-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code) ? code.slice(0, 7) : null;
 }
 
 function countIn(map: Map<string, WrongBucket>, key: string, now: number): number {
@@ -176,9 +187,11 @@ export function proposeRekey(rawCode: unknown, newKey: string, address: string, 
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
 
-    // A lost answer: the code was completed with this very key, which is the member now. Needs that key, so it is no
-    // guess, and no wrong-code bucket holds it back.
-    if (req?.status === 'completed' && req.new_pubkey === newKey) return boundAnswer(newKey);
+    // A lost answer: the code was completed with this very key, which is the member now (or, for a bring-back, the phone
+    // the release is sealed to). Needs that key, so it is no guess, and no wrong-code bucket holds it back.
+    if (req?.status === 'completed' && req.new_pubkey === newKey) {
+        return req.kind === 'bring_back' ? bringBackRelease(req, newKey, now) : boundAnswer(newKey);
+    }
 
     if (countIn(byAddress, address, now) >= REKEY_WRONG_CODES.perAddress) {
         throw new RekeyRedeemRefusal(429, 'too_many_wrong_codes', REKEY_TOO_MANY_WRONG);
@@ -235,7 +248,10 @@ export function rekeyRedeemStatus(rawCode: unknown, key: string, now = Date.now(
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
     if (!req) return { state: 'gone' };
-    if (req.status === 'completed') return req.new_pubkey === key ? boundAnswer(key) : { state: 'gone' };
+    if (req.status === 'completed') {
+        if (req.new_pubkey !== key) return { state: 'gone' };
+        return req.kind === 'bring_back' ? bringBackRelease(req, key, now) : boundAnswer(key);
+    }
     const mine = proposalOf(code, key);
     if (!mine) return { state: 'gone' };
     if (mine.declined_at) return { state: 'declined' };
@@ -275,7 +291,7 @@ export function declineRekeyProposal(oldPublicKey: string, newPublicKey: string,
  * completeRekey's errors.
  */
 export function bindRekeyByMatch(oldPublicKey: string, rawCode: unknown, rawMatch: unknown, operator: string, now = Date.now()):
-    ReturnType<typeof completeRekey> {
+    ReturnType<typeof completeRekey> | ReturnType<typeof confirmBringBack> {
     assertPlainTablesWritable();
     const cleanOld = (oldPublicKey || '').trim().toLowerCase();
     const cleanOperator = (operator || '').trim().toLowerCase() || 'owner:password';
@@ -289,6 +305,8 @@ export function bindRekeyByMatch(oldPublicKey: string, rawCode: unknown, rawMatc
     if (!/^\d{2}$/.test(match)) throw new RekeyRedeemRefusal(400, 'match_required', word('Type the two digits on their phone.'));
 
     const found = db.prepare('SELECT new_pubkey FROM rekey_proposals WHERE code = ? AND match = ? AND declined_at IS NULL').get(code, match) as { new_pubkey: string } | undefined;
+    // A bring-back binds nothing: the code is done for that phone, whose own poll collects the release (engine/bring-back.ts).
+    if (found && req.kind === 'bring_back') return confirmBringBack(req, found.new_pubkey, cleanOperator, now);
     if (found) return completeRekey(cleanOld, found.new_pubkey, code, cleanOperator);
 
     const tries = db.transaction((): number => {

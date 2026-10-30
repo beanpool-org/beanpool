@@ -56,6 +56,15 @@ import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } 
 import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
 import { keepsNoCopies, NO_COPIES_HERE, NO_COPIES_HERE_MESSAGE } from '../config/recovery-copies.js';
 import {
+    CommunityCopyRefusal,
+    communityCopiesOffered,
+    communityCopyStatus,
+    deleteCommunityCopy,
+    parseCommunityCopy,
+    putCommunityCopy,
+} from '../engine/community-copy.js';
+import { assertPlainTablesWritable, StandbyLedgerError } from '../config/node-role.js';
+import {
     issueNonce,
     signInCredentialFrom,
     SsoProviderUnavailableError,
@@ -544,6 +553,70 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
      * The owner's full keeper list needs a signed read that does not depend on that flag, and is
      * deferred with the rest of the keeper status UI rather than half-built here.
      */
+    // ── "Your community's admins can bring you back" (vault rethink VR3, engine/community-copy.ts) ─────────────────────────
+    // The member's own copy, sealed by their app under a random key, and that key: kept here under the recovery seal, for
+    // an admin's Bring back (engine/bring-back.ts). Every route is signed by the member's own key and answers for it alone.
+
+    /** A refusal of the community copy's routes, in the shape the apps read: the sentence and a short code. */
+    const copyRefused = (ctx: any, e: unknown): boolean => {
+        if (recoverySealFailure(ctx, e)) return true;
+        if (e instanceof CommunityCopyRefusal) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
+            return true;
+        }
+        if (e instanceof StandbyLedgerError) {
+            ctx.status = 503;
+            ctx.body = { error: e.message, code: 'standby' };
+            return true;
+        }
+        return false;
+    };
+
+    /**
+     * Turn it on (or make the copy again): `{ copy, copyKey }`. Only where the community keeps copies itself and anyone
+     * can't walk in (communityCopiesOffered); refused with nothing stored when this server can't lock it. `since` is when.
+     */
+    router.post('/api/recovery/community-copy', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+        if (keepsNoCopies()) return noCopiesHere(ctx);
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
+        try {
+            const { since } = putCommunityCopy(owner, parseCommunityCopy((ctx as any).requestBody));
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.status = 200;
+            ctx.body = { kept: true, since };
+        } catch (e) {
+            if (copyRefused(ctx, e)) return;
+            throw e;
+        }
+    });
+
+    /** Whether this server keeps the member's community copy, since when, and whether the community offers it now. */
+    router.post('/api/recovery/community-copy/status', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.status = 200;
+        ctx.body = { ...communityCopyStatus(owner), offered: communityCopiesOffered() };
+    });
+
+    /** Turn it off: the copy and its key are deleted here (a standby drops them by the tombstone). Under every rule. */
+    router.delete('/api/recovery/community-copy', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+        try {
+            assertPlainTablesWritable();
+            const removed = deleteCommunityCopy(owner);
+            ctx.status = 200;
+            ctx.body = { removed, kept: false };
+        } catch (e) {
+            if (copyRefused(ctx, e)) return;
+            throw e;
+        }
+    });
+
     router.post('/api/recovery/shares/status', async (ctx) => {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);

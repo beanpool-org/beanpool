@@ -421,7 +421,7 @@ export const TABLES: Record<string, TableEntry> = {
     // Every invite already sent, and who used which.
     invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
     // A replacement phone's code an operator issued.
-    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches'),
+    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches kind'),
     // The phones that asked for a code, and the digits each shows (engine/rekey-redeem.ts): a promoted standby shows the admin
     // the same phones, so the one they bind is the one they saw.
     rekey_proposals: plain('code new_pubkey match proposed_at declined_at updated_at'),
@@ -429,6 +429,9 @@ export const TABLES: Record<string, TableEntry> = {
     // each row names its owner (owner_pubkey), and a member's own delete deletes theirs by it, with tombstones, on the
     // server that made them and on one that took over.
     recovery_releases: plain('id collection_id share_id holder_type share_index payload payload_iv payload_tag ephemeral_pubkey kdf_params released_by released_at updated_at owner_pubkey'),
+    // Members' community copies (engine/community-copy.ts), wrapped under the recovery seal: a promoted standby, given the
+    // community's seal key by the take-over, brings the same members back.
+    community_copies: plain('owner_pubkey copy_ct copy_iv copy_tag kdf_params created_at updated_at'),
     // Which enterprise is the link with each linked community, so a promoted server makes no second one (federation-link.ts).
     federation_links: plain('peer_id treasury_pubkey commission_ceiling created_at updated_at'),
     // Which treasury was made as the link for which peer (federation-link.ts): the one thing that lets a lost link row find
@@ -532,6 +535,7 @@ export const TABLES: Record<string, TableEntry> = {
     owner_words_checks: { kind: 'local', reason: 'shown, never deciding' },
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
     rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
+    bring_back_log: { kind: 'local', reason: "this server's audit trail of the bring-backs it released" },
     writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
     money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
     keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },

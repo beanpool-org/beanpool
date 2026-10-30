@@ -506,6 +506,11 @@ export function createPost(
          * with no Offer) and before anything is stored, so a limit never answers for a post that may not be made at all.
          */
         beforeWrite?: () => void;
+        /**
+         * What made it, when that was not the author's own app: `assistant:<grant id>` for an owner's AI assistant
+         * (agent/owner-posts.ts). Kept in `posts.created_via` for moderators and the audit; never on a card.
+         */
+        createdVia?: string;
     },
 ): MarketplacePost | null {
     const now = Date.now();
@@ -771,8 +776,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -790,7 +795,8 @@ export function createPost(
             eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink,
             eventHostLetsIn,
             series.repeat, series.until, series.skips,
-            lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value, shopId
+            lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value, shopId,
+            typeof options?.createdVia === 'string' && options.createdVia ? options.createdVia.slice(0, 80) : null
         );
 
         if (photoColumns.length > 0) {

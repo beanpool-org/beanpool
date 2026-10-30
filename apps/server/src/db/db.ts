@@ -1663,6 +1663,9 @@ export function initSchema() {
     // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
     // existing row: nothing is featured until its author or a keeper says so.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
+    // What made a post when that was not its author's own app (schema.sql posts.created_via): 'assistant:<grant id>' for an
+    // owner's AI assistant. NULL on every existing row: none was made that way.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN created_via TEXT`).run(); } catch { }
     // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.

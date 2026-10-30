@@ -254,7 +254,7 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
             ) : hasPost ? (
                 <div className="space-y-1">
                     <p className="text-xs font-bold uppercase tracking-wider text-nature-500 m-0">
-                        Post{report.postAuthorCallsign ? ` by ${report.postAuthorCallsign}` : ''}{report.postRemoved ? ' · already down' : ''}
+                        Post{report.postAuthorCallsign ? ` by ${report.postAuthorCallsign}` : ''}{report.postMadeByAssistant ? ' · made by an assistant' : ''}{report.postRemoved ? ' · already down' : ''}
                     </p>
                     <p className="text-base font-bold text-white m-0">{report.postTitle || 'Untitled post'}</p>
                     {report.postDescription && <p className="text-sm text-nature-200 m-0 whitespace-pre-line">{report.postDescription}</p>}

@@ -117,7 +117,7 @@ export type IssueResult =
  * Make a token. `createdBy` is the issuing owner's key (only a key session makes one). The plain token is in the answer only;
  * the stored record has its hash.
  */
-export function issueAutomationToken(input: { name: unknown; scope: unknown; expiresAt?: unknown; createdBy: string }, now = Date.now()): IssueResult {
+export function issueAutomationToken(input: { name: unknown; scope: unknown; expiresAt?: unknown; createdBy: string; canPost?: unknown }, now = Date.now()): IssueResult {
     const name = typeof input.name === 'string' ? input.name.trim() : '';
     if (!name) return { ok: false, error: 'Give the token a name, so you know later what uses it' };
     if (name.length > TOKEN_NAME_MAX) return { ok: false, error: `A token's name is at most ${TOKEN_NAME_MAX} characters` };
@@ -141,6 +141,8 @@ export function issueAutomationToken(input: { name: unknown; scope: unknown; exp
     const record: AutomationTokenRecord = {
         id, name, scope: input.scope, createdBy: input.createdBy, createdAt: now, expiresAt,
         lastUsedAt: null, lastUsedRoute: null, hash: sha256Hex(secret),
+        // An agent token's "May post for me" (agent/owner-posts.ts): ticked, never assumed.
+        ...(input.scope === 'agent' ? { canPost: input.canPost === true } : {}),
     };
     updateLocalConfig({ automationTokens: [...list, record] });
     return { ok: true, token: `${TOKEN_PREFIX}${id}_${secret}`, record: viewOf(record) };

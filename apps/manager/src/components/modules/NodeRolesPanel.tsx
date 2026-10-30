@@ -206,6 +206,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
     };
 
     const noOwner = roles !== null && !roles.some((r) => r.role === 'owner');
+    // One owner: the community's backups open with that one key (sealed-keys), and only an owner brings an owner back
+    // (vault rethink VR3, design §4.3 "Owners"), so a second owner is the first owner's way back (VR8, design §6 door 7).
+    const oneOwner = roles !== null && roles.filter((r) => r.role === 'owner').length === 1;
     // With no owner yet the node lets any signed-in admin make the first one, so the form is offered to everyone.
     const showAdd = roles !== null && (canManageModerators || noOwner);
 
@@ -332,6 +335,15 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                         {notice.kind === 'error' ? <>Not done. The node said: <strong>{notice.text}</strong></> : notice.text}
                     </span>
                     <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss" className="min-w-[48px] min-h-[48px] -m-3 font-bold">✕</button>
+                </div>
+            )}
+
+            {oneOwner && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/40 space-y-1" data-testid="second-owner-banner">
+                    <p className="text-sm font-bold text-amber-200 m-0">Add a second owner</p>
+                    <p className="text-xs text-nature-200 m-0 leading-relaxed" style={{ overflowWrap: 'anywhere' }}>
+                        Your key also unlocks this community&apos;s backups. Keep your words, and make a second owner, so one can bring the other back.
+                    </p>
                 </div>
             )}
 

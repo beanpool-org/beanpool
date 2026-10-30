@@ -175,6 +175,10 @@ Each owner's line also says whether **their phone opened the current lock**. Whe
 
 Like the words, this is what the owner's phone reported; the server cannot check it. It gates nothing.
 
+### An owner's way back is the community's
+
+Because an owner's key opens the backups and the take-over keys, an owner who keeps their 12 words, and a community with a second owner, can always open them. **Who can unlock this community** says so, and points each owner to their ways back in the app (**Settings**, **Account Protection**, **Where your account can be brought back from**). With one owner, **Owners & admins** shows **Add a second owner**: only an owner can bring an owner back. Nothing of your server, your recovery code or your keys is kept in BeanPool's key vault.
+
 ## Backups that are not locked
 
 Backups downloaded before this update, and every backup from a server with no recovery code, are **.tar.gz** files and are not locked (a snapshot downloaded before this update was a .db file). Those from before this update hold the settings, including the scrambled admin password and the two-factor secret; a backup made now leaves them out, but still holds the whole database. Make a recovery code first. Then find the unlocked ones and delete them: Downloads, other computers, Time Machine, cloud drives, email. Deleting a file does not always wipe it from an SSD. Treat anything that was in one as possibly seen by someone else: change the admin password and set up two-factor sign-in again when you can.

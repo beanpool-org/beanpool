@@ -2312,6 +2312,13 @@ export default function WelcomeScreen() {
                         {linked && (
                             <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNoticeWords(linked, otherDoorName)}</Text>
                         )}
+                        {/* The owner's own way back is also their community's (vault rethink VR8, design §6 door 7): the key a
+                            claim makes unlocks the community's sealed backups, and only an owner can bring an owner back. */}
+                        {joinFlow === 'claim' && (
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} testID="owner-backup-line">
+                                {t("Your key also unlocks this community's backups. Keep your words, and make a second owner, so one can bring the other back.")}
+                            </Text>
+                        )}
                         {/* The sign-in the member joined with used to protect another account: said here too, as the
                             protection sheet says it (PR #1336 review finding 9). */}
                         {enrolment?.replaced && enrolment.enrolledSso?.[0] && (

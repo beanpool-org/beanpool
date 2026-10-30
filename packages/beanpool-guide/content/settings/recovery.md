@@ -159,6 +159,18 @@ Restoring a different account replaces the one on this phone, whether you restor
 
 Make sure you have the 12 words for the account you are replacing. If this phone has them, that screen shows them when you tap **Show** (the account's name) **12 words** and pass your phone's lock screen check. If this phone has no 12 words for that account (Settings says so), without a linked sign-in account you cannot get it back.
 
+## Your community's admins
+
+Where your community keeps copies itself (its owners chose **This server**), you can let its admins bring your account back, with no Google or Apple account, no paper and nothing to remember. It is not offered in the global community, where nobody meets anyone.
+
+- Turn it on in **Settings**, **Account Protection**, **Your community's admins**: tap **Turn on** and pass your phone's lock screen check. In the web app it is in **Settings**, under your ways back. The row then says **On** and since when.
+- Your app locks a copy of your key, and your 12 words when the app has them, and your community's server keeps it. The people who run that server can open it; nobody else can, not BeanPool. Nothing goes to BeanPool's key vault.
+- To get back in on a new phone, go and see an admin in person. They make a **bring-back code** (it starts BB-), and you scan or type it as a re-key code: **Already a Member? Restore Account**, then **An admin gave me a re-key code**. Your phone shows two digits; the admin types them. Your account comes back at once: **the same key**, your Beans, your name, your chats and every community you are in, with your 12 words when the copy has them. Nothing is moved, and your other phones keep working. If the new phone already has another account, the app asks **Replace this phone's account?** first.
+- When an admin makes a code for you, your phones are told ("An admin is bringing your account back on a new phone…"), and again when it goes through. If that wasn't you, tell an owner at once.
+- Only an owner can bring back an owner or an admin.
+- **Remove** turns it off: your community's server deletes the copy. A re-key to a new key, or deleting your account, removes it too.
+- If your community later stops keeping copies, the row says so, and your copy there still works until you remove it.
+
 ## Lost your phone and your 12 words
 
 Without your 12 words and without a linked sign-in account, an admin of your community can move your account to a new phone, with your Beans, your name and your history. Go and see them in person: they check it's you first.

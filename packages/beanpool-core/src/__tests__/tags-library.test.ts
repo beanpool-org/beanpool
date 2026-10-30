@@ -138,6 +138,18 @@ describe('the label index', () => {
         expect(ru.byName('яйца')).toEqual(['food.eggs']);
     });
 
+    it('folds ligatures and stroked letters: French Œufs is found by oeufs, Vietnamese Đồ gỗ by do go', () => {
+        const fr = buildTagIndex(wordsFor('fr', [{ [`Eggs${CONTEXT_SEPARATOR}tag`]: 'Œufs' }]));
+        expect(fr.byName('oeufs')).toEqual(['food.eggs']);
+        expect(fr.byName('OEUFS')).toEqual(['food.eggs']);
+        expect(fr.search('oeu')).toEqual(['food.eggs']);
+        expect(suggestTags('Oeufs frais', '', { index: fr })).toEqual(['food.eggs']);
+
+        const vi = buildTagIndex(wordsFor('vi', [{ [`Furniture${CONTEXT_SEPARATOR}tag`]: 'Đồ gỗ' }]));
+        expect(vi.byName('do go')).toEqual(['goods.furniture']);
+        expect(vi.byName('đo go')).toEqual(['goods.furniture']);
+    });
+
     it('the device’s index is built again after every setLanguage, even when the first top’s label stays the same', () => {
         try {
             setLanguage('fr', []);

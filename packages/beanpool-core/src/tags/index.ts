@@ -75,13 +75,24 @@ export function tagSearchWords(id: string): string[] {
     return [...out];
 }
 
-/** A label, title or typed word as the index holds it: its words, lower case, without accents (limón, limon). */
+const LETTER_FOLDS: Record<string, string> = {
+    'œ': 'oe', 'Œ': 'oe',
+    'æ': 'ae', 'Æ': 'ae',
+    'ø': 'o', 'Ø': 'o',
+    'đ': 'd', 'Đ': 'd',
+    'ł': 'l', 'Ł': 'l',
+    'ß': 'ss',
+    'ı': 'i',
+};
+const FOLD_LETTERS = /[œæøđłßıŒÆØĐŁ]/g;
+
+/** A label, title or typed word as the index holds it: its words, lower case, without accents (limón, limon; œ, oe; đ, d). */
 export function tagText(text: string): string {
     let out = plainWords(text).join(' ');
-    // A guarded normalize, as member-guide.ts: old Android engines may lack it. Only the Latin combining marks go, so the
-    // matras of Hindi, Tamil, Bengali stay with their letters.
-    try { out = out.normalize('NFKD').replace(/[̀-ͯ]/g, '').normalize('NFC'); } catch { /* keep accents */ }
-    return out;
+    // A guarded normalize, as member-guide.ts: old Android engines may lack it. The combining marks U+0300–U+036F go (this
+    // merges й/и in Cyrillic, accepted), while the matras of Hindi, Tamil, Bengali stay with their letters.
+    try { out = out.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').normalize('NFC'); } catch { /* keep accents */ }
+    return out.replace(FOLD_LETTERS, (c) => LETTER_FOLDS[c] ?? c);
 }
 
 /** The forms a text is keyed and found by: tagText, and tagText with each compound joined as a search looks it up ("wi-fi" →

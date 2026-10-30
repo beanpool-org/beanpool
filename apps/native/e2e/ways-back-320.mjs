@@ -72,15 +72,35 @@ const STUBS = {
     // The build's vault: on or off by the page's query, as the three EXPO_PUBLIC_BEANPOOL_VAULT_* values make it.
     'vault-config': `
         export const hasVault = () => !!globalThis.__vault;
-        export const signInCopiesAt = () => (globalThis.__vault ? 'vault' : 'community');
+        export const signInCopiesAt = (rule) => (rule === 'none' ? 'none' : rule === 'server' ? 'community' : globalThis.__vault ? 'vault' : 'community');
         export const vaultConfig = () => null;
         export const readVaultConfig = () => null;
     `,
+    // The move card's surroundings (components/VaultMoveCard.tsx, VR2's reverse): the account, the theme's colours, its
+    // focus as a mount, the community, the offer the page asks for, the 12 words, and no sheet. Only it imports these.
+    'expo-router': `
+        import React from 'react';
+        export const useFocusEffect = (cb) => React.useEffect(cb, []);
+        export const router = { push() {}, replace() {}, back() {} };
+    `,
+    'IdentityContext': `export const useIdentity = () => ({ identity: { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'Sam' } });`,
+    'ThemeContext': `export const useStyles = (make) => make({ colors: globalThis.__colors, theme: globalThis.__scheme });`,
+    'node-post': `export const anchorUrl = async () => 'https://mullumbimby.beanpool.org';`,
+    'vault-move': `
+        export const vaultMoveOffer = async () => globalThis.__offer ?? null;
+        export const finishMove = async () => 'removed';
+        export const moveLater = async () => {};
+        export const removeInstead = async () => true;
+    `,
+    'identity': `export const hasMnemonic = () => globalThis.__hasWords !== false;`,
+    'SsoEnrolSheet': `export const SsoEnrolSheet = () => null;`,
 };
+const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet']);
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
-    return path.basename(spec) === 'vault-config' ? 'vault-config' : null;
+    const name = path.basename(spec);
+    return STUB_BASENAMES.has(name) ? name : null;
 };
 
 const entry = path.join(work, 'entry.tsx');
@@ -95,11 +115,22 @@ import { protectionFrom } from ${JSON.stringify(path.join(NATIVE, 'utils/protect
 import { NO_WORDS_VIEW_LINE } from ${JSON.stringify(path.join(NATIVE, 'utils/no-words-copy'))};
 import { WaysBackList } from ${JSON.stringify(path.join(NATIVE, 'components/WaysBackList'))};
 import { onboardingColors } from ${JSON.stringify(path.join(NATIVE, 'utils/onboarding-colors'))};
+import { VaultMoveCard } from ${JSON.stringify(path.join(NATIVE, 'components/VaultMoveCard'))};
+import { CopiesRuleCardView } from ${JSON.stringify(path.join(NATIVE, 'components/CopiesRuleCardView'))};
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
 const colors = scheme === 'dark' ? darkColors : lightColors;
 globalThis.__vault = q.get('vault') !== 'off';
+globalThis.__colors = colors;
+globalThis.__scheme = scheme;
+globalThis.__hasWords = q.get('words') !== 'none';
+// Where a copy made here goes, by the community's rule (vault rethink VR2): none, community, or the build's place.
+const copiesAt = q.get('copies') || undefined;
+// The move card's offer (VR2's reverse, or the forward move as before).
+globalThis.__offer = q.get('offer') === 'keep-here'
+    ? { kind: 'keep-here', provider: 'google', communityUrl: 'https://mullumbimby.beanpool.org' }
+    : q.get('offer') === 'move' ? { kind: 'move', provider: 'google', communityUrl: 'https://mullumbimby.beanpool.org' } : null;
 const covered = (sso) => protectionFrom({ enrolled: sso.map(() => 'sso'), generation: 1, skipped: [], available: sso.length, enrolledSso: sso, threshold: 1, isSingleBlob: true });
 const hasWords = q.get('words') !== 'none';
 const protection = q.get('signin') === 'google' ? covered(['google']) : protectionFrom(null);
@@ -178,6 +209,7 @@ const WaysPage = () => {
                         result={state === 'result' ? RESULT : []}
                         colors={oc}
                         onWrittenDown={noop} onShowWords={noop} onRemove={noop} onRemoveEverything={noop} onLinkSignIn={noop}
+                        noCopiesHere={q.get('here') === 'none'}
                     />
                 </View>
             </View>
@@ -188,10 +220,22 @@ const WaysPage = () => {
 const Page = () => {
     const place = q.get('place');
     if (place === 'ways') return <WaysPage />;
+    // Settings' menu, where the move card sits (VR2's reverse, "Keep your Google recovery with your community").
+    if (place === 'movecard') return (
+        <View style={{ backgroundColor: colors.surface.page, padding: 16 }}>
+            <VaultMoveCard />
+        </View>
+    );
+    // Home, where the "rule changed" card sits above the other cards (16dp page, as Home's list).
+    if (place === 'rulecard') return (
+        <View style={{ backgroundColor: colors.surface.page, padding: 16 }}>
+            <CopiesRuleCardView to={q.get('to') || 'community'} community="Mullumbimby" canMove={q.get('move') === 'yes'} colors={colors} onMove={noop} onSee={noop} onOk={noop} />
+        </View>
+    );
     if (place === 'backup') return (
         <View style={{ backgroundColor: colors.surface.page, padding: 24 }}>
             <View style={{ backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default }}>
-                <KeeperProtectionPanel protection={protection} hasWords={hasWords} onProtectSso={noop} />
+                <KeeperProtectionPanel protection={protection} hasWords={hasWords} copiesAt={copiesAt} communityName="Mullumbimby" onProtectSso={noop} />
             </View>
         </View>
     );
@@ -201,7 +245,7 @@ const Page = () => {
                 <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading, marginBottom: 16 }}>{t('🛡️ Account Protection')}</Text>
                 <Text style={{ fontSize: 14, color: colors.text.secondary, marginBottom: 16, lineHeight: 20 }}>{t('This is how you get back into your account if you lose your phone.')}</Text>
                 <WordsRow />
-                <KeeperProtectionPanel colors={colors} protection={protection} hasWords={hasWords} waysBack onProtectSso={noop} onDisconnectSso={noop} />
+                <KeeperProtectionPanel colors={colors} protection={protection} hasWords={hasWords} waysBack copiesAt={copiesAt} communityName="Mullumbimby" onProtectSso={noop} onDisconnectSso={noop} />
             </View>
         </View>
     );
@@ -354,6 +398,29 @@ try {
             await open(`place=ways&${query}&scheme=${scheme}`);
             await page.getByText('Where your account can be brought back from').first().waitFor();
             if (query.includes('novault') && await page.getByText(/key vault|Iceland/).count()) problems.push(`${scheme} · ${label}: the vault named in a build without one`);
+            await measure(`${scheme} · ${label}`);
+        }
+
+        // Where members' copies go, by the community's rule (vault rethink VR2, design §5.3): the panel at Safety Backup
+        // and Account Protection under "nowhere" and "this server", the move card's reverse in Settings, Home's card for
+        // each change, and the ways back screen at a community that keeps none. Under "nowhere" no sign-in is offered.
+        const RULE_CASES = [
+            ['place=backup&copies=none', 'Safety Backup, a community that keeps no copies', /This community keeps no copies of members' accounts/],
+            ['place=backup&copies=none&words=none', 'Safety Backup, a community that keeps no copies, no 12 words on the phone', /This phone has no 12 words: if you lose it/],
+            ['place=protection&copies=none', 'Account Protection, a community that keeps no copies', /This community keeps no copies of members' accounts/],
+            ['place=backup&copies=community', 'Safety Backup, a community that keeps copies itself', /Sign-In Recovery Providers/],
+            ['place=protection&copies=community&signin=google', 'Account Protection, a community that keeps copies itself, Google kept there', /You're covered on Mullumbimby/],
+            ['place=movecard&offer=keep-here', 'Settings, the move card, keep your Google copy with your community', /Keep your Google recovery with your community/],
+            ['place=rulecard&to=community&move=yes', 'Home, the rule changed, the community keeps copies itself, Move mine', /Mullumbimby keeps members' copies itself now/],
+            ['place=rulecard&to=none', 'Home, the rule changed, the community keeps no copies', /Mullumbimby keeps no copies now/],
+            ['place=rulecard&to=vault', "Home, the rule changed, the community uses BeanPool's key vault", /uses BeanPool's key vault now/],
+            ['place=ways&state=full&here=none', 'Ways back, at a community that keeps no copies', /This community keeps no copies of members' accounts/],
+        ];
+        for (const [query, label, shows] of RULE_CASES) {
+            await open(`${query}&scheme=${scheme}`);
+            await page.getByText(shows).first().waitFor();
+            if (query.includes('copies=none') && await page.getByText(/Protect with|Connect again/).count()) problems.push(`${scheme} · ${label}: a sign-in is offered`);
+            if (query.includes('here=none') && await page.getByText('Link a sign-in').count()) problems.push(`${scheme} · ${label}: Link a sign-in is offered`);
             await measure(`${scheme} · ${label}`);
         }
     }

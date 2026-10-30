@@ -99,7 +99,7 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser.": word("The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser."),
     "The community's answer didn't confirm the delete. Try again.": word("The community's answer didn't confirm the delete. Try again."),
     'This web app now talks to a different community. Open Delete account again.': word('This web app now talks to a different community. Open Delete account again.'),
-    'Failed to purge account from node. Active escrow deals may need to be resolved first.': word('Failed to purge account from node. Active escrow deals may need to be resolved first.'),
+    'Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.': word('Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.'),
     // lib/words-clipboard.ts: under Copy All Words.
     'If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.': word('If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.'),
 };
@@ -239,6 +239,10 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
     {
         pattern: new RegExp(`^${PROVIDER} is added, and your new-account limits are now the usual ones\\. Its copy of your account couldn't be saved, so your 12 words are still your only way back\\.$`),
         words: (m) => t("{provider} is added, and your new-account limits are now the usual ones. Its copy of your account couldn't be saved, so your 12 words are still your only way back.", { provider: m[1] }),
+    },
+    {
+        pattern: new RegExp(`^${PROVIDER} is added, and your new-account limits are now the usual ones\\. This community keeps no copies of members' accounts, so your 12 words are still your way back\\.$`),
+        words: (m) => t("{provider} is added, and your new-account limits are now the usual ones. This community keeps no copies of members' accounts, so your 12 words are still your way back.", { provider: m[1] }),
     },
     // lib/delete-here.ts webKeepsKeyLine: the page's own community keeps the key, by its address and the one deleted at.
     {

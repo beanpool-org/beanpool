@@ -157,6 +157,11 @@ interface Props {
     onLobby?: () => void;
     /** The node takes a join with 12 words alone, beside the sign-in (its `features.wordsDoor`). */
     wordsDoor?: boolean;
+    /**
+     * This community keeps no copies of members' accounts (its rule `none`, vault rethink VR2; WelcomePage's info read):
+     * the sign-in only lets the member in, so the door promises no locked copy and no way back, as Safety Backup then says.
+     */
+    keepsNoCopies?: boolean;
     /** Solves the door work. A Web Worker on this origin (lib/door-work.ts); swappable in tests. */
     solveWork?: DoorWorkSolver;
 }
@@ -338,7 +343,7 @@ export function WordsWorkLine({ work }: { work: WordsWorkState }) {
 
 export function WebJoin({
     onJoined, onRestore, restored = null, settleOnly = false, onSettled, onExisting, reload, navigate, origin, authReturn, start, onLobby,
-    wordsDoor = false, solveWork,
+    wordsDoor = false, keepsNoCopies = false, solveWork,
 }: Props) {
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
     const [showWords, setShowWords] = useState(false);
@@ -1454,11 +1459,15 @@ export function WebJoin({
                                 </button>
                             ))
                         )}
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, margin: 0 }}>
-                            {t('Also a way back if you lose this device.')}
-                        </p>
+                        {!keepsNoCopies && (
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, margin: 0 }}>
+                                {t('Also a way back if you lose this device.')}
+                            </p>
+                        )}
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
-                            {t("We keep only a scrambled reference to your sign-in, never your email or name from there. It also locks a copy of your account, so the sign-in can bring it back. The people who run this community's server can open that copy.")}
+                            {keepsNoCopies
+                                ? t("We keep only a scrambled reference to your sign-in, never your email or name from there. This community keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back.")
+                                : t("We keep only a scrambled reference to your sign-in, never your email or name from there. It also locks a copy of your account, so the sign-in can bring it back. The people who run this community's server can open that copy.")}
                         </p>
                     </section>
                     <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
@@ -1494,7 +1503,9 @@ export function WebJoin({
                         </>
                     )}
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
-                        {t("Why a sign-in? It stops one person making many accounts. We keep only a scrambled reference to it, never your email or name from there. It also locks a copy of your account, so this sign-in can bring it back. The people who run this community's server can open that copy.")}
+                        {keepsNoCopies
+                            ? t("Why a sign-in? It stops one person making many accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back.")
+                            : t("Why a sign-in? It stops one person making many accounts. We keep only a scrambled reference to it, never your email or name from there. It also locks a copy of your account, so this sign-in can bring it back. The people who run this community's server can open that copy.")}
                     </p>
                     <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
                         {t('← Change name')}

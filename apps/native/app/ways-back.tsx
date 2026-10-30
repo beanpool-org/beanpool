@@ -29,6 +29,8 @@ import { RecoveryAlertBanner } from '../components/RecoveryAlertBanner';
 import { WAYS_BACK_LINES, WaysBackList } from '../components/WaysBackList';
 import { hasMnemonic } from '../utils/identity';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
+import { anchorUrl } from '../utils/node-post';
+import { copiesAtFor } from '../utils/copies-rule';
 import {
     beforeRemoving, listWaysBack, noteWordsWrittenDown, removeCommunityCopyFrom, removeEverything, removeVaultCopy, sameCommunity,
     wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
@@ -78,6 +80,8 @@ export default function WaysBackScreen() {
     const [writtenDown, setWrittenDown] = useState(false);
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState<string[]>([]);
+    /** The community the phone is on keeps no copies (its rule, vault rethink VR2): nothing is offered here. */
+    const [noCopiesHere, setNoCopiesHere] = useState(false);
     const hasWords = hasMnemonic(identity);
     // Each read has a turn: an answer that arrives after a newer read began (or the screen left) is dropped.
     const turn = useRef(0);
@@ -85,10 +89,13 @@ export default function WaysBackScreen() {
     const load = useCallback(async () => {
         if (!identity?.privateKey) return;
         const mine = ++turn.current;
-        const [found, said] = await Promise.all([listWaysBack(identity), wordsWrittenDown(identity.publicKey)]);
+        const [found, said, here] = await Promise.all([
+            listWaysBack(identity), wordsWrittenDown(identity.publicKey), anchorUrl().then(copiesAtFor).catch(() => null),
+        ]);
         if (mine !== turn.current) return;
         setWays(found);
         setWrittenDown(said);
+        setNoCopiesHere(here === 'none');
     }, [identity]);
 
     useFocusEffect(useCallback(() => {
@@ -215,6 +222,7 @@ export default function WaysBackScreen() {
                         onRemove={onRemove}
                         onRemoveEverything={onRemoveEverything}
                         onLinkSignIn={showWords}
+                        noCopiesHere={noCopiesHere}
                     />
                 </View>
             </ScrollView>

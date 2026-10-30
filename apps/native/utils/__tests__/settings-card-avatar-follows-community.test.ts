@@ -41,9 +41,13 @@ describe("the Settings card's picture follows the community the phone is on", ()
         expect(assignAt).toBeLessThan(branchAt);
     });
 
-    it("what it assigns is this community's row photo, else the phone-wide copy, else nothing — never the value held before", () => {
+    it("what it assigns is this community's row photo, else nothing — never the phone-wide copy, never the value held before", () => {
         const body = loader();
-        expect(body).toMatch(/if \(!edited\.avatar\) setAvatar\(cleaned \|\| canonical\?\.avatar \|\| null\);/);
+        // Profile S2: this read `setAvatar(cleaned || canonical?.avatar || null)`, so a photo (or preset) chosen in another
+        // community showed as the card's picture in a community that holds none for you.
+        expect(body).toMatch(/if \(!edited\.avatar\) setAvatar\(cleaned\);/);
+        expect(body).not.toContain('canonical?.avatar');
+        expect(body).not.toContain('canonical.avatar');
         // `cleaned` reads the row if there is one (the literal strings 'null' and 'undefined' a bad sync once stored are no photo).
         expect(body).toMatch(/const cleaned = \(profile\?\.avatar_url && profile\.avatar_url !== 'null' && profile\.avatar_url !== 'undefined' && profile\.avatar_url\.trim\(\) !== ''\) \? profile\.avatar_url : null;/);
     });

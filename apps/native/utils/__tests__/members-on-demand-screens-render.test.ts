@@ -1081,3 +1081,47 @@ for (const scheme of ['light', 'dark'] as const) {
         });
     });
 }
+
+// Profile S2 (DESIGN-per-community-profile-fable.md §3-4): My Profile's name is this community's own row, whatever name
+// the door passed (the header and the Ledger hand it one) and whatever the phone-wide name says (identity.callsign, which
+// is only the join form's suggestion and can be the name chosen in another community).
+describe('My Profile shows the community\'s own name, never the phone-wide one', () => {
+    const PHONE_WIDE = 'Chosen in another community';
+    const shownName = () => host.querySelector('[data-avatar]')?.getAttribute('data-avatar');
+    const ownRow = (callsign: string | null) => async () => {
+        const database = await db.getDb();
+        if (callsign === null) await database.runAsync('DELETE FROM members WHERE public_key = ?', [OWN]);
+        else await database.runAsync('UPDATE members SET callsign = ? WHERE public_key = ?', [callsign, OWN]);
+    };
+
+    beforeEach(() => {
+        community.membersOnDemand = false;
+        who.value.identity.callsign = PHONE_WIDE;
+    });
+    afterEach(() => { who.value.identity.callsign = 'Me'; });
+
+    it('the row\'s name is the title when the name the door passed and the phone-wide name both differ', async () => {
+        await ownRow('Marty of Mullum')();
+        nav.params = { publicKey: OWN, callsign: PHONE_WIDE };
+        await render(createElement(PublicProfileScreen));
+        expect(shownName()).toBe('Marty of Mullum');
+        expect(text()).toContain('Marty of Mullum');
+        expect(text()).not.toContain(PHONE_WIDE);
+    });
+
+    it('a community that holds no row for you yet: the key\'s first 8 characters, never the phone-wide name or the door\'s', async () => {
+        await ownRow(null)();
+        nav.params = { publicKey: OWN, callsign: PHONE_WIDE };
+        await render(createElement(PublicProfileScreen));
+        expect(shownName()).toBe(OWN.slice(0, 8));
+        expect(text()).toContain(OWN.slice(0, 8));
+        expect(text()).not.toContain(PHONE_WIDE);
+    });
+
+    it('another member\'s profile still opens on the name the door passed', async () => {
+        nav.params = { publicKey: ROSA, callsign: 'Rosa from the list' };
+        node.online = false;
+        await render(createElement(PublicProfileScreen));
+        expect(shownName()).toBe('Rosa from the list');
+    });
+});

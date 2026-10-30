@@ -1790,8 +1790,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                  {/* Action buttons */}
 
-                 {/* The deal a door named, when it is over by now: what became of it, above the listing as it stands for the reader. */}
-                 {pinnedOver && (
+                 {/* The deal a door named, when it is over by now: what became of it, above the listing as it stands for the reader.
+                     Not once the reader has taken the listing up again (a deal of their own held or asked for: no take-up left,
+                     and not its own people): that deal's box is the page, as on the phone. */}
+                 {pinnedOver && (deals.own || deals.canTakeUp) && (
                      <p data-testid="pinned-deal-over" className="mt-4 text-sm font-semibold text-center text-nature-600 dark:text-nature-400">{pinnedOver}</p>
                  )}
 

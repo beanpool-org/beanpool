@@ -48,6 +48,7 @@ import { COPY_CLEARS_LINE } from '../words-clipboard';
 import { KIT_FAILED_LINE, KIT_PRINT_LABEL, KIT_SAVE_LABEL, KIT_SAVE_WARNING } from '../recovery-kit';
 import { COMMUNITY_RESTORE_NOT_OFFERED, RELEASED_COPY_NOT_OPENED } from '../sso-recovery';
 import { VAULT_MESSAGES } from '../vault';
+import { CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 import { REDEEM_NO_ANSWER } from '../db';
 import { KEEPER_LABELS } from '../protection-state';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../sso-providers';
@@ -120,6 +121,7 @@ describe('the lower layers\' whole sentences', () => {
             DOOR_WORK_MESSAGES.solverUnavailable, RELEASED_COPY_NOT_OPENED, COMMUNITY_RESTORE_NOT_OFFERED,
             NO_WORDS_WAY_BACK, SSO_WORDS_NOTE, NO_SCREEN_LOCK_LINE, COPY_CLEARS_LINE,
             KIT_PRINT_LABEL, KIT_SAVE_LABEL, KIT_SAVE_WARNING, KIT_FAILED_LINE, ...Object.values(KEEPER_LABELS),
+            ...Object.values(CONNECT_RULE_MESSAGES),
         ];
         for (const english of constants) {
             expect(WELCOME_FIXED_LINES, english).toContain(english);
@@ -214,6 +216,23 @@ describe('the sentences with a name, a number or a time in them', () => {
             for (const enrolment of [null, { enrolled: [], generation: 1, skipped: [], available: 1 } as KeeperEnrolmentResult]) {
                 const answer = { kind: 'linked' as const, provider, enrolment };
                 heldTo(linkedNotice(answer), () => linkedNoticeWords(answer), [SSO_PROVIDER_NAMES[provider]]);
+            }
+            // Where the deposit said the copy was kept (VR2), and a door whose community keeps none.
+            for (const keptAt of ['vault', 'community'] as const) {
+                const answer = { kind: 'linked' as const, provider, enrolment: { enrolled: [], generation: null, skipped: [], available: 1, keptAt } as KeeperEnrolmentResult };
+                heldTo(linkedNotice(answer), () => linkedNoticeWords(answer), [SSO_PROVIDER_NAMES[provider]]);
+            }
+            const none = { kind: 'linked' as const, provider, enrolment: null, noCopies: true as const };
+            heldTo(linkedNotice(none), () => linkedNoticeWords(none), [SSO_PROVIDER_NAMES[provider]]);
+            // In by another community's open door (slice S2): that community's name wherever linkedNotice says one.
+            const community = 'Riverbend Open';
+            for (const answer of [
+                { kind: 'linked' as const, provider, enrolment: null },
+                { kind: 'linked' as const, provider, enrolment: { enrolled: [], generation: null, skipped: [], available: 1, keptAt: 'vault' } as KeeperEnrolmentResult },
+                { kind: 'linked' as const, provider, enrolment: { enrolled: [], generation: null, skipped: [], available: 1, keptAt: 'community' } as KeeperEnrolmentResult },
+                none,
+            ]) {
+                heldTo(linkedNotice(answer, community), () => linkedNoticeWords(answer, community), [SSO_PROVIDER_NAMES[provider], community]);
             }
         }
     });

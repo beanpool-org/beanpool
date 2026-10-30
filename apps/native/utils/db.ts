@@ -7273,7 +7273,7 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     // Profile S2-W: bio and contact belong to this community alone; no fallback to phone-wide canonical across communities.
     const bio = profile?.bio ?? '';
     const contactValue = profile?.contact_value ?? null;
-    const contactVisibility = profile?.contact_visibility ?? 'community';
+    const contactVisibility = profile?.contact_visibility ?? undefined;
     const archetypeRaw = profile?.archetype ?? canonical?.archetype ?? null;
 
     // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this
@@ -7312,7 +7312,7 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     if (callsign !== undefined) payloadObj.callsign = callsign;
     if (avatar) payloadObj.avatar = avatar;
     if (bio) payloadObj.bio = bio;
-    if (contactValue) payloadObj.contact = { value: contactValue, visibility: contactVisibility };
+    if (contactValue) payloadObj.contact = { value: contactValue, visibility: contactVisibility ?? 'community' };
     if (publicArchetype) payloadObj.archetype = publicArchetype;
     const bodyString = JSON.stringify(payloadObj);
     const headers = await buildSignedHeaders('POST', `${anchorUrl}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);

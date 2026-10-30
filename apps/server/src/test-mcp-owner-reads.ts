@@ -10,7 +10,8 @@
  *      Its titles only with include_text, fenced. q finds by word.
  *   3. community_area: the community's centre to two decimals (never the manager's exact pin), the radius, and this
  *      community's own public events' place names, each at its pin rounded to 3 decimals, fenced; never a member's area or the
- *      exact pin of a member's listing, never a group's event's place.
+ *      exact pin of a member's listing, never a group's event's place, nor the place of an event its host cancelled or a
+ *      moderator took down (review 4429020426).
  *   4. A token not ticked "May post for me" lists none of these tools and is refused one (an admin's: test-admin-mcp.ts).
  *
  * Run: SERVER_SUITES_ONLY=test-mcp-owner-reads TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
@@ -29,7 +30,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 import { PRICING_CATEGORIES } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, createPost, updateNodeConfig } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createPost, updateNodeConfig, removePost, adminDeletePost } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -132,8 +133,8 @@ async function main(): Promise<void> {
     try {
         resetAdminAuthTarpit();
         const seeder = await connect(await makeToken(owner.pub, true));
-        // Events, made as the apps make them (through create_event): a public one in person (its place on its card), and one
-        // moved to a group (not this community's public board).
+        // Events, made as the apps make them (through create_event): a public one in person (its place on its card), one
+        // moved to a group (not this community's public board), one its host cancelled and one a moderator took down.
         const soon = new Date(Date.now() + 5 * DAY).toISOString();
         const event = async (title: string, placeName: string, lat: number, lng: number): Promise<string> => {
             const r = await seeder.callTool({ name: 'create_event', arguments: {
@@ -144,7 +145,12 @@ async function main(): Promise<void> {
         const swap = await event('Seed swap', 'The old bowls club', -28.554321, 153.500456);
         const choirEvent = await event('Choir practice', '14 Hidden Lane', -28.6, 153.6);
         db.prepare("UPDATE posts SET audience_scope = 'group', target_group_id = 'g-choir' WHERE id = ?").run(choirEvent);
-        assert(!swap.startsWith('not made') && !choirEvent.startsWith('not made'), `two events made (${swap}; ${choirEvent})`);
+        const cancelledEvent = await event('Working bee', 'The scout hall', -28.556, 153.502);
+        const takenDown = await event('Garage sale', '9 Private Street', -28.557, 153.503);
+        assert(!swap.startsWith('not made') && !choirEvent.startsWith('not made') && !cancelledEvent.startsWith('not made') && !takenDown.startsWith('not made'),
+            `four events made (${swap}; ${choirEvent}; ${cancelledEvent}; ${takenDown})`);
+        assert(removePost(cancelledEvent, owner.pub) && adminDeletePost(takenDown),
+            'one cancelled by its host, one taken down by a moderator');
         const names = (await seeder.listTools()).tools.map(t => t.name);
         assert(READ_TOOLS.every(n => names.includes(n)), `a ticked owner's assistant lists ${READ_TOOLS.join(', ')} (${names.length} tools)`);
         const FORBIDDEN = [owner.pub, mia.pub, ned.pub, bakery, admin.pub];
@@ -191,6 +197,8 @@ async function main(): Promise<void> {
         const places = (area?.eventPlaces ?? []) as any[];
         assert(places.length === 1 && /The old bowls club/.test(places[0].name?.text ?? '') && places[0].name?.untrusted === true && places[0].lat === -28.554 && places[0].lng === 153.5,
             `this community's public event's place name, fenced, its pin rounded to 3 decimals (${JSON.stringify(places.map(p => [p.lat, p.lng]))})`);
+        assert(!/The scout hall/.test(areaJson) && !/Private Street/.test(areaJson),
+            "never the place of an event its host cancelled or a moderator took down");
         assert(!/Hidden Lane/.test(areaJson) && !areaJson.includes('-28.612') && !areaJson.includes('153.456') && !areaJson.includes('-28.567891') && !areaJson.includes('-28.551234'),
             "never a group event's place, a member's area, a member's listing's pin, or the exact community pin");
         sweep('community_area', area);

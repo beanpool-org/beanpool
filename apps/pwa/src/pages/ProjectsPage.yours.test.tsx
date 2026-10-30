@@ -73,7 +73,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
         vi.mocked(getGroups).mockResolvedValue([]);
         vi.mocked(getYourGroups).mockResolvedValue({ items: [] });
         vi.mocked(getCommunityMe).mockResolvedValue({ tier: 'member', features: null } as any);
-        vi.mocked(resolveAvatarUrl).mockImplementation((url) => url);
+        vi.mocked(resolveAvatarUrl).mockImplementation((url) => url ?? null);
     });
 
     afterEach(() => {
@@ -730,7 +730,7 @@ describe('ProjectsPage - Commons S4 Yours first, chips parity, INVITED (Fable 5.
     });
 
     it('falls back to emoji badge when resolveAvatarUrl returns null for an avatar string', async () => {
-        vi.mocked(resolveAvatarUrl).mockImplementation((url) => url === 'javascript:alert(1)' ? null : url);
+        vi.mocked(resolveAvatarUrl).mockImplementation((url) => url === 'javascript:alert(1)' ? null : (url ?? null));
         vi.mocked(getYourGroups).mockResolvedValueOnce({
             items: [
                 {

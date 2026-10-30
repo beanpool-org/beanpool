@@ -6,8 +6,8 @@
  *   1. An owner's assistant makes each kind: the row (its author, `created_via = 'assistant:<grant id>'`), its photo stored at
  *      most 800 px whatever size it was sent, the search index finds it, the listings' version moves (the phones' sync mark),
  *      the standby copy's payload carries created_via, the AGENT log names the post, and the answer carries no key.
- *   2. Refusals in words, none counted against the day: no photo, a PNG, a photo over the per-photo cap, an enterprise the owner
- *      does not keep (or a made-up ref), the 51st post in a UTC day. Every field the phone's and the web's composer require for
+ *   2. Refusals in words, none counted against the day: no photo, a PNG, a photo over the per-photo cap, a JPEG cut off halfway
+ *      (its header still whole), an enterprise the owner does not keep (or a made-up ref), the 51st post in a UTC day. Every field the phone's and the web's composer require for
  *      each kind (Marty, 30 Oct: "all the mandatory fields should be mandatory even if seeding through MCP") is in the tool's
  *      input schema and, left out or empty, refused by the server in words that name it; a price only where Beans are on.
  *   3. An admin's assistant has none of the tools (and is refused if it calls one); its maker no longer an owner or admin → 401;
@@ -273,6 +273,12 @@ async function main(): Promise<void> {
         const huge = `data:image/jpeg;base64,${'A'.repeat(600_001)}`;
         const tooBig = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, photos: [huge] } });
         assert(tooBig.isError === true && /too large/.test(errorText(tooBig)), `a photo over the per-photo cap → refused (${errorText(tooBig)})`);
+        // Cut off halfway, its header still reads 640 × 480: the server can't read the rest, so it is refused, never stored as sent.
+        const smallBytes = Buffer.from(small.slice(small.indexOf(',') + 1), 'base64');
+        const halfPhoto = `data:image/jpeg;base64,${smallBytes.subarray(0, smallBytes.length >> 1).toString('base64')}`;
+        const cutShort = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, photos: [halfPhoto] } });
+        assert(cutShort.isError === true && /^Photo 1 could not be read/.test(errorText(cutShort)),
+            `a JPEG cut off halfway (its header still ${JSON.stringify(imageSize(Buffer.from(halfPhoto.slice(23), 'base64')))}) → refused, never stored as sent (${errorText(cutShort)})`);
         const otherRef = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, as_enterprise: enterpriseRef(notOurs), category: 'tools' } });
         const madeUp = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, as_enterprise: 'ffffffffffffffff' } });
         assert(otherRef.isError === true && /not an enterprise you keep/.test(errorText(otherRef)) && madeUp.isError === true && /not an enterprise you keep/.test(errorText(madeUp)),

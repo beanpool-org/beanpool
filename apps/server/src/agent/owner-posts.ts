@@ -20,8 +20,8 @@
  *   the route's own validator (engine/post-fields.ts assertPostFields, in createPost) like any post's.
  * - Photos are required: 1–4, each a base64 JPEG or WebP of at most the per-photo cap (state-engine.ts
  *   MAX_PHOTO_BASE64_CHARS), made here what the apps send (at most 800 px, no metadata: storage/photo-thumbnails.ts
- *   resizeToStoredPhoto), then held to the routes' photo rule. No composer offers a preset tile instead of a photo, so
- *   neither does this.
+ *   resizeToStoredPhoto), then held to the routes' photo rule. One the node can't read (cut off after a whole header) is
+ *   refused, never stored as sent. No composer offers a preset tile instead of a photo, so neither does this.
  * - 50 posts per grant per UTC day (limits.ts AGENT_CREATES_PER_DAY); one the engine refuses is not counted.
  * - The row records `created_via = 'assistant:<grant id>'` (schema.sql posts.created_via); the AGENT line of every create
  *   names the post id (mcp-route.ts). Revoking the grant or turning the switch off stops the next call at the door; posts
@@ -41,7 +41,7 @@ import { assertMayPostToday, enterprisePostLimit } from '../engine/writer-bounds
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { photoRefusalText, routePhotosRefusal, sniffRasterImageType } from '../engine/avatar.js';
 import { imageSize } from '../storage/image-metadata.js';
-import { PHOTO_MAX_SIDE, resizeToStoredPhoto } from '../storage/photo-thumbnails.js';
+import { loadSharp, PHOTO_MAX_SIDE, resizeToStoredPhoto } from '../storage/photo-thumbnails.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { memberErrorText } from '../routes/member-error-text.js';
@@ -182,6 +182,8 @@ async function storablePhoto(value: unknown, n: number): Promise<{ ok: true; val
     const resized = await resizeToStoredPhoto(bytes, kind === 'image/jpeg' ? 'jpeg' : 'webp');
     let out: Buffer;
     if (resized) out = resized;
+    // sharp loaded and could not read it: a photo cut off or broken after a whole header, never stored as sent.
+    else if (await loadSharp()) return { ok: false, error: `${which} could not be read: send the whole image again.` };
     // No resizer on this host (sharp would not load): a photo already the apps' size is stored as they send it, its
     // metadata stripped at the store as every upload's is (storage/image-columns.ts storeUploadedPhotoColumns).
     else if (Math.max(size.width, size.height) <= PHOTO_MAX_SIDE) out = bytes;

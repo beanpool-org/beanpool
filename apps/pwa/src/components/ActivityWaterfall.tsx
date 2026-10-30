@@ -9,7 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getActivityFeedApi, type ActivityFeedItem } from '../lib/api';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
-import { formatNumber, t, tn } from '@beanpool/core';
+import { formatNumber, t, tn, activityTarget } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 interface Props {
@@ -40,11 +40,6 @@ function formatRelativeTime(isoDate: string): string {
 function beansAmount(v: unknown): string {
     return typeof v === 'number' ? formatNumber(v) : String(v);
 }
-
-type PulseTarget =
-    | { kind: 'post'; postId: string }
-    | { kind: 'profile'; pubkey: string }
-    | null;
 
 /** The emoji that heads a Live Pulse chip. */
 function pulseEmoji(eventType: ActivityFeedItem['eventType']): string {
@@ -103,36 +98,6 @@ function pulseText(item: ActivityFeedItem): { short: string; full: string } {
     }
 }
 
-/**
- * Where a chip goes when it is opened. Every event type is mapped; one with nothing sensible to open
- * returns null and stays plain text rather than pretending to be a control.
- *
- * Nothing here decides visibility on its own: a profile and a listing are both opened through the
- * Market's own handlers, so the node applies the rules it applies to every other card.
- */
-function pulseTarget(item: ActivityFeedItem): PulseTarget {
-    const raw = item.metadata?.postId;
-    const postId = raw === undefined || raw === null || raw === '' ? '' : String(raw);
-
-    switch (item.eventType) {
-        case 'member_joined':
-            return item.actorPubkey ? { kind: 'profile', pubkey: item.actorPubkey } : null;
-        case 'post_created':
-            // Only public posts are recorded to this feed (server engine/posts.ts), so the listing a
-            // chip names is one every member may open.
-            return postId ? { kind: 'post', postId } : null;
-        case 'trade_completed':
-        case 'rating_given':
-            // The related listing when the item carries one, otherwise the other member's profile.
-            if (postId) return { kind: 'post', postId };
-            if (item.targetPubkey) return { kind: 'profile', pubkey: item.targetPubkey };
-            return item.actorPubkey ? { kind: 'profile', pubkey: item.actorPubkey } : null;
-        case 'dispute_resolved':
-        default:
-            return null;
-    }
-}
-
 /** Slow enough to read a listing title, rather than a ticker: ~40 CSS pixels a second. */
 const PULSE_SCROLL_PX_PER_SECOND = 40;
 const PULSE_MIN_SCROLL_SECONDS = 1.5;
@@ -182,7 +147,7 @@ function PulseChip({
 
     const { short, full } = pulseText(item);
     const timeStr = formatRelativeTime(item.createdAt);
-    const target = pulseTarget(item);
+    const target = activityTarget(item);
 
     const reveal = () => {
         if (prefersReducedMotion) return;
@@ -466,24 +431,44 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                             }
                         }
 
-                        return (
-                            <div
-                                key={item.id}
-                                className="flex items-center gap-3 p-3 rounded-2xl bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
-                            >
-                                <div
+                        const rowTarget = activityTarget(item);
+                        const canOpen = rowTarget !== null
+                            && ((rowTarget.kind === 'post' && !!onOpenPost) || (rowTarget.kind === 'profile' && !!onOpenProfile));
+                        const rowShell = 'flex items-center gap-3 p-3 min-h-[44px] w-full rounded-2xl bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800 shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors';
+                        const rowBody = (
+                            <>
+                                <span
                                     className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 border ${badgeBg}`}
                                     aria-hidden="true"
                                 >
                                     {emoji}
-                                </div>
-                                <div className="flex-1 min-w-0">
+                                </span>
+                                <span className="block flex-1 min-w-0">
                                     {content}
-                                </div>
+                                </span>
                                 <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-400 flex-shrink-0">
                                     {timeStr}
                                 </span>
-                            </div>
+                            </>
+                        );
+
+                        // One real button when the row has somewhere to go (its own sentence is its name); a row
+                        // with nothing to open stays plain text rather than a dead control.
+                        if (!canOpen || rowTarget === null) {
+                            return <div key={item.id} className={rowShell}>{rowBody}</div>;
+                        }
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                className={`${rowShell} text-left cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600 dark:focus-visible:outline-emerald-400`}
+                                onClick={() => {
+                                    if (rowTarget.kind === 'post') onOpenPost?.(rowTarget.postId);
+                                    else onOpenProfile?.(rowTarget.pubkey);
+                                }}
+                            >
+                                {rowBody}
+                            </button>
                         );
                     })}
                 </div>

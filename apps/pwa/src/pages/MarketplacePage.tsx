@@ -3762,7 +3762,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             <span>+</span> {t('ADD POST')}
                                         </button>
                                     </div>
-                                    <ActivityWaterfall isFullView={true} isMember={isMember} />
+                                    <ActivityWaterfall
+                                        isFullView={true}
+                                        isMember={isMember}
+                                        onOpenPost={openPostFromActivity}
+                                        onOpenProfile={onOpenProfile}
+                                    />
                                 </div>
                             )
                         ) : (() => {

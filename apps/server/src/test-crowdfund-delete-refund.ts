@@ -494,7 +494,8 @@ check(orchardToCommons.length === 2 && orchardToCommons.every((r) => r.memo === 
 check(near(balanceOf(orchardEscrow), 0) && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(orchard),
     `the escrow is empty (${balanceOf(orchardEscrow)}) and the orchard is gone`);
 check(near(sumBalances(), before11.sum), `the node's total is unchanged (${sumBalances()} vs ${before11.sum})`);
-check(near(getBalance(ivy).balance, 0) && near(getBalance(jon).balance, before11.jon + 5), 'and the in-memory ledger agrees with the rows');
+check(near(getBalance(ivy).balance, 0) && near(getBalance(jon).balance, before11.jon + 5),
+    `and the in-memory ledger says the same: Ivy ${getBalance(ivy).balance}, Jon +${getBalance(jon).balance - before11.jon}`);
 reconcileLedgerFromDb();
 const audit11 = runLedgerAudit();
 check(audit11.ok && Math.abs(audit11.drift - before11.drift) < 0.0001, `the ledger audit holds, its drift unchanged (ok ${audit11.ok}, drift ${before11.drift} → ${audit11.drift})`);

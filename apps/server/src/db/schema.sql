@@ -348,6 +348,11 @@ CREATE TABLE IF NOT EXISTS posts (
     -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
     -- an older database by db.ts.
     created_via TEXT,
+    -- Its tags from the library in core (DESIGN-owner-seeding-tags-fable.md §4.5; @beanpool/core tags/post-tags.ts): ids
+    -- such as food.fruit.lemon, space-separated, at most 5 in 200 characters, each one the library knows when a member
+    -- sets them (engine/post-fields.ts). Their words are in search_keywords; the Market's tag filter is a LIKE on this
+    -- column (beanpool-engine posts.ts tagCondition). '' on every row without. Added to an older database by db.ts.
+    tags TEXT NOT NULL DEFAULT '',
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

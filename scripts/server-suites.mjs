@@ -107,6 +107,7 @@ export const SUITES = [
     'test-community-me',
     'test-member-area',
     'test-distance-search',
+    'test-tags-search',
     'test-distance-query-parsing',
     'test-guest-view',
     'test-private-preview',

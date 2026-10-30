@@ -1011,17 +1011,20 @@ export function GroupDetailModal({
                                 </Pressable>
                             )}
 
-                            {actionLoading ? (
-                                <ActivityIndicator size="small" color={colors.brand.primary} />
-                            ) : isMember ? (
+                            {isMember ? (
                                 <Pressable
                                     style={styles.leaveBtn}
                                     onPress={handleLeave}
+                                    disabled={actionLoading}
                                     accessibilityRole="button"
-                                    accessibilityLabel={t('Leave Group')}
-                                    accessibilityState={{ disabled: actionLoading }}
+                                    accessibilityLabel={actionLoading ? t('Leaving group...') : t('Leave Group')}
+                                    accessibilityState={{ disabled: actionLoading, busy: actionLoading }}
                                 >
-                                    <Text style={styles.leaveBtnText}>{t('Leave Group')}</Text>
+                                    {actionLoading ? (
+                                        <ActivityIndicator size="small" color={colors.brand.primary} />
+                                    ) : (
+                                        <Text style={styles.leaveBtnText}>{t('Leave Group')}</Text>
+                                    )}
                                 </Pressable>
                             ) : closed ? (
                                 <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
@@ -1039,13 +1042,20 @@ export function GroupDetailModal({
                                 <Pressable
                                     style={styles.joinBtn}
                                     onPress={handleJoin}
+                                    disabled={actionLoading}
                                     accessibilityRole="button"
-                                    accessibilityLabel={groupData.joinPolicy === 'request_to_join' ? t('Request to Join') : t('Join Group')}
-                                    accessibilityState={{ disabled: actionLoading }}
+                                    accessibilityLabel={actionLoading
+                                        ? (groupData.joinPolicy === 'request_to_join' ? t('Sending request to join...') : t('Joining group...'))
+                                        : (groupData.joinPolicy === 'request_to_join' ? t('Request to Join') : t('Join Group'))}
+                                    accessibilityState={{ disabled: actionLoading, busy: actionLoading }}
                                 >
-                                    <Text style={[styles.joinBtnText, { textAlign: 'center' }]}>
-                                        {groupData.joinPolicy === 'request_to_join' ? t('Request to Join') : t('Join Group')}
-                                    </Text>
+                                    {actionLoading ? (
+                                        <ActivityIndicator size="small" color={colors.text.inverse} />
+                                    ) : (
+                                        <Text style={[styles.joinBtnText, { textAlign: 'center' }]}>
+                                            {groupData.joinPolicy === 'request_to_join' ? t('Request to Join') : t('Join Group')}
+                                        </Text>
+                                    )}
                                 </Pressable>
                             )}
                         </View>

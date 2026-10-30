@@ -175,6 +175,8 @@ const node = vi.hoisted(() => ({
     role: null as null | 'owner' | 'admin' | 'moderator',
     /** Whether `GET /api/node-admin/me` answered at all (false: offline, a timeout, a 5xx). */
     heard: true,
+    /** While set, the node's role answer waits for it: the screen between asking and being told. */
+    hold: null as null | Promise<void>,
     ownerChecked: null as number | null,
     blocked: [] as string[],
     lastPlan: false,
@@ -210,7 +212,10 @@ vi.mock('../node-post', async (importOriginal) => {
 vi.mock('../membership-probe', () => ({ fetchMembership: async () => ({ ok: true, json: async () => ({ isMember: true }) }) }));
 vi.mock('../node-admin', () => {
     // As the real pair: askNodeRole is null when the node gave no answer, and fetchMyNodeRole makes that "no role".
-    const askNodeRole = async () => (node.heard ? { role: node.role, communityName: 'Mullum Commons' } : null);
+    const askNodeRole = async () => {
+        if (node.hold) await node.hold;
+        return node.heard ? { role: node.role, communityName: 'Mullum Commons' } : null;
+    };
     return {
         askNodeRole,
         fetchMyNodeRole: async () => (await askNodeRole()) ?? { role: null, communityName: null },
@@ -308,6 +313,7 @@ beforeEach(() => {
     node.sessions = [];
     node.role = null;
     node.heard = true;
+    node.hold = null;
     node.ownerChecked = null;
     node.blocked = [];
     node.lastPlan = false;
@@ -637,6 +643,48 @@ describe('Notification Preferences: "Requests to join" only where it changes som
         node.heard = false;
         await openPreferences();
         expect(knockSwitch()).toBeNull();
+    });
+});
+
+describe('Settings → COMMUNITY: "How this community works" for a member, and in the admin group for a role holder (review of #2584)', () => {
+    const shapeRows = () => host.querySelectorAll('[data-testid="settings-how-this-community-works"]').length;
+    const communitySection = () => Array.from(host.querySelectorAll('span')).filter((s) => s.textContent === 'COMMUNITY').length;
+    const holdTheAnswer = () => {
+        let release = () => {};
+        node.hold = new Promise<void>((resolve) => { release = resolve; });
+        return release;
+    };
+
+    it('a member with no role: the section and its one row, once the node has said so', async () => {
+        const release = holdTheAnswer();
+        await renderIn('en');
+        expect(communitySection(), 'nothing is drawn while the node has not answered').toBe(0);
+        expect(shapeRows()).toBe(0);
+        release();
+        await settle();
+        expect(communitySection()).toBe(1);
+        expect(shapeRows()).toBe(1);
+    });
+
+    it('an owner: the section is never drawn, not even before the node answers; the one row is in the admin group', async () => {
+        node.role = 'owner';
+        const release = holdTheAnswer();
+        await renderIn('en');
+        expect(communitySection(), 'while the role is still being asked').toBe(0);
+        expect(shapeRows()).toBe(0);
+        release();
+        await settle();
+        expect(communitySection()).toBe(0);
+        expect(host.textContent).toContain('COMMUNITY ADMIN');
+        expect(shapeRows(), 'one row, not the admin group\'s and the section\'s').toBe(1);
+    });
+
+    it('the node gave no answer (offline, a timeout, a 5xx): the section, since no role is known', async () => {
+        node.role = 'owner';
+        node.heard = false;
+        await renderIn('en');
+        expect(communitySection()).toBe(1);
+        expect(shapeRows()).toBe(1);
     });
 });
 

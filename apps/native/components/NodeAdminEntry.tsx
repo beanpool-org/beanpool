@@ -30,6 +30,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { fetchMyNodeRole, rememberNodeRole, canManageNode, type ManageRole } from '../utils/node-admin';
 import { useManageNode } from './useManageNode';
 import { useNodeProfile } from '../utils/use-node-profile';
+import type { NodeFeatures } from '../utils/node-profile';
 import { offersNamesList } from '../utils/names-list';
 import { issueBreakGlassCodeOnce, forgetBreakGlassCode } from '../utils/break-glass';
 import { signOutEverywhereOnce, signOutEverywhereDone } from '../utils/sign-out-everywhere';
@@ -37,8 +38,9 @@ import { turnAppLockOnForRole } from '../utils/LocalAuth';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 import { t } from '@beanpool/core';
 import {
-    appLockOnForRoleWords, computerSigninLabelWords, manageLabelWords, manageSubtitleWords, settingsLineWords, signOutEverywhereWarningWords,
+    appLockOnForRoleWords, computerSigninLabelWords, howThisCommunityWorksLabelWords, howThisCommunityWorksSubtitleWords, manageLabelWords, manageSubtitleWords, settingsLineWords, signOutEverywhereWarningWords,
 } from './settings/settings-lines';
+import { CommunityShapeSheet } from './CommunityShapeSheet';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
 interface MenuStyles {
@@ -46,15 +48,19 @@ interface MenuStyles {
     menuIconWrap: any; menuIcon: any; menuText: any; menuSub: any; menuChevron: any;
 }
 
-export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedOn }: {
+export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedOn, onRoleChange, activeFeatures }: {
     styles: MenuStyles;
     fallbackCommunityName?: string | null;
     /** Settings' App Lock switch, told when this turned App Lock on for a role holder. */
     onAppLockTurnedOn?: () => void;
+    /** Told when the role is determined or changed, so Settings knows whether to draw the Community section for non-role holders. */
+    onRoleChange?: (role: ManageRole | null) => void;
+    activeFeatures?: NodeFeatures | null;
 }) {
     const { identity } = useIdentity();
     const { colors } = useTheme();
     const [role, setRole] = useState<ManageRole | null>(null);
+    const [shapeOpen, setShapeOpen] = useState(false);
     const [communityName, setCommunityName] = useState<string | null>(null);
     // The community's address on this phone, for the owner's nudge when it is the server's number.
     const [anchor, setAnchor] = useState<string | null>(null);
@@ -74,20 +80,21 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
             let cancelled = false;
             (async () => {
                 const url = await getAnchorUrl();
-                if (!url || !identity?.privateKey) { if (!cancelled) setRole(null); return; }
+                if (!url || !identity?.privateKey) { if (!cancelled) { setRole(null); onRoleChange?.(null); } return; }
                 const mine = await fetchMyNodeRole(url, identity);
                 // A new owner/admin/moderator: the header's 🛡️ icon picks it up now rather than when its own answer
                 // expires. Only a positive: "no role" here may just mean the node was unreachable.
                 if (canManageNode(mine.role)) rememberNodeRole(url, identity.publicKey, mine);
                 if (cancelled) return;
                 setRole(mine.role);
+                onRoleChange?.(mine.role);
                 setCommunityName(mine.communityName);
                 setAnchor(url);
                 if (canManageNode(mine.role) && (await turnAppLockOnForRole()) === 'turned-on' && !cancelled) {
                     onAppLockTurnedOn?.();
                     Alert.alert(t('App Lock is on'), appLockOnForRoleWords(mine.communityName || fallbackCommunityName || t('your community')));
                 }
-            })().catch(() => { if (!cancelled) setRole(null); });
+            })().catch(() => { if (!cancelled) { setRole(null); onRoleChange?.(null); } });
             return () => { cancelled = true; };
         }, [identity, onAppLockTurnedOn, fallbackCommunityName])
     );
@@ -179,6 +186,21 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                         <Text style={{ fontSize: 14, lineHeight: 20, color: colors.text.body }}>{numberNudge(numberOnly)}</Text>
                     </View>
                 ) : null}
+                <Pressable
+                    style={[styles.menuBtn, { minHeight: 48 }]}
+                    onPress={() => setShapeOpen(true)}
+                    disabled={busy}
+                    accessibilityRole="button"
+                    accessibilityLabel={howThisCommunityWorksLabelWords()}
+                    testID="settings-how-this-community-works"
+                >
+                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🧭</Text></View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.menuText}>{howThisCommunityWorksLabelWords()}</Text>
+                        <Text style={styles.menuSub}>{howThisCommunityWorksSubtitleWords()}</Text>
+                    </View>
+                    <Text style={styles.menuChevron}>›</Text>
+                </Pressable>
                 {offersNamesList(role, profile?.profile) ? (
                     <Pressable
                         style={[styles.menuBtn, { minHeight: 48 }]}
@@ -248,6 +270,11 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
             </View>
 
             {dialog}
+            <CommunityShapeSheet
+                features={activeFeatures ?? profile?.features}
+                visible={shapeOpen}
+                onClose={() => setShapeOpen(false)}
+            />
         </>
     );
 }

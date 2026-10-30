@@ -1,0 +1,183 @@
+<!-- source-hash: 5751a0ccbe5002b8 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>コミュニティを始める — BeanPool</title>
+    <meta name="description" content="すべてのコミュニティは専用のノード（メンバー、投稿、台帳のデータを保持する小さなサーバー）上で動いています。地域の誰かがそれを運営しています。あなたの町や地域にまだないなら、あなたが立ち上げることもできます。">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.9">
+    <style>
+        /* beanpool.org/start: what running a community involves, choosing the address, and the one block that installs it */
+        .start-community .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .start-community h2[id] { scroll-margin-top: 100px; }
+        .start-community .run-node-facts, .start-community .run-node-steps { max-width: none; margin-inline: 0; }
+        .start-community .features-grid { margin: 1.5rem 0 0.5rem; }
+        .start-community .feature-card p { margin-bottom: 0; }
+        .start-community .terminal-window { margin: 1.25rem 0 1.75rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .start-community a.btn-primary, .start-community a.btn-primary:hover { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPoolアイコン" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">仕組み</a>
+                <a href="index.html#features">できること</a>
+                <a href="rules.html">ルール</a>
+                <a href="start.html" aria-current="page">コミュニティを運営する</a>
+                <a href="help.html" title="すべてのルール、ガイド、マニュアルが1か所に">ヘルプ</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTubeでチュートリアル動画を見る（@beanpool）">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Redditコミュニティに参加する（r/beanpool）">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHubで見る">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">使ってみる</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="メニューを開く"><span aria-hidden="true">☰</span> メニュー</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">使ってみる</a>
+                    <a href="index.html#how-it-works">仕組み</a>
+                    <a href="index.html#features">できること</a>
+                    <a href="rules.html">ルール</a>
+                    <a href="start.html" aria-current="page">コミュニティを運営する</a>
+                    <a href="help.html">ヘルプ</a>
+                    <a href="guide/index.html">メンバーズガイド</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTubeで動画を見る</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Redditのr/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHubのソースコード</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+        <main class="legal-content start-community">
+        <h1>コミュニティを始める</h1>
+        <p class="lede">すべてのコミュニティは専用のノード（メンバー、投稿、台帳のデータを保持する小さなサーバー）上で動いています。地域の誰かがそれを運営しています。あなたの町や地域にまだないなら、あなたが立ち上げることもできます。</p>
+
+        <h2 id="involves">コミュニティを運営するには何が必要か</h2>
+        <p>手順に従えば約30分で完了します。まず知っておくべき6つのこと：</p>
+        <ul class="run-node-facts">
+            <li><strong>費用。</strong> ソフトウェアは無料です。自宅で常時稼働できる予備のコンピューター（ミニPC、NAS、64ビットOSのRaspberry Piなど）、または月額数ドル（約6米ドル）の小さなレンタルサーバーで動作します。</li>
+            <li><strong>ホスティングの担当者。</strong> ご自身で管理します（自前のマシンまたはレンタルしたサーバー）。<a href="https://beanpool.org">beanpool.org</a>への依存は不要で、独自のWebアドレスで運用できます。</li>
+            <li><strong>担当する役割。</strong> メンバーからの通報はあなたに届きます。データフォルダーはリカバリーコードを使ってご自身でバックアップしてください。オーナーは2名体制にしてください。サーバーの常時稼働とアップデートを維持してください。</li>
+            <li><strong>閲覧できないもの。</strong> メンバー同士のダイレクトメッセージ。</li>
+            <li><strong>Dockerの事前準備。</strong> 以下のコマンドを実行する前に、マシンにDockerがインストールされている必要があります（契約直後のレンタルサーバーには通常入っていません）。</li>
+            <li><strong>スマートフォンから接続できるアドレス。</strong> スマートフォンがインターネット経由でコミュニティに接続するにはhttpsが必須です。パブリックIPアドレスがありポート80と443が開いているレンタルサーバーなら、そのIPアドレスだけで十分です。Cloudflareアカウントなしでサーバーが自動的に証明書を取得します。独自ドメインでも同様です。自宅環境や開放ポートがない場合でも、申請手続きによってサーバー自身がトンネルを実行し、.beanpool.orgで終わる無料の名前が取得できます。暗号化のないhttp://アドレスはホームネットワーク内でのみ機能します。</li>
+        </ul>
+        <div class="features-grid">
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🧰</div>
+                <h3>管理するもの</h3>
+                <p>あなたとあなたが指名した管理者がコミュニティのモデレーターとなります。通報はあなたに届きます。メンバーのデータはあなたのマシン上にあるため、バックアップを管理します。事業体のディスカッションやイベントチャットは閲覧できますが、ダイレクトメッセージは閲覧できません。あなたが最初のメンバーを招待し、その人たちが次のメンバーを招待していきます。</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">⚙️</div>
+                <h3>設定アプリ</h3>
+                <p>ノードにはブラウザで操作できる専用の設定アプリが付属しています。そこからコミュニティの名前を設定し、各自の鍵でサインインするオーナーや管理者を指名し、QR招待状を印刷し、ディスクの健全性を監視し、公開Webアドレスやトンネルを選択できます。また、スマートフォンと12個の単語の両方を失ったメンバーに対して、対面で確認したうえでワンタイムコードを発行し、新しい端末でアカウントに復帰できるよう手助けすることもできます。</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🔒</div>
+                <h3>起動直後からプライベート</h3>
+                <p>ノードが起動した瞬間から、コミュニティの出品、地図、メッセージ、残高はメンバー専用となります。特別な設定は不要です。アカウントを持たずにそのアドレスを開いた人は、グローバルコミュニティへと案内され、そこで近くにあるものを見て参加をリクエストできます。</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🌐</div>
+                <h3>近隣コミュニティとの連携</h3>
+                <p>2つのコミュニティが合意して連携することで、メンバー同士が取引できるようになります。豆がコミュニティの外に出ることはありません。相互のコミュニティ間で貸し借りの累計を記録し、双方が独自の上限を設定します。双方の運営者が有効にしない限り連携はオフのままであり、機能はまだ初期段階です。Webアプリに画面は用意されていますが、テストコミュニティ間で試行されたのみで、本番環境同士での実績はまだありません。</p>
+            </div>
+        </div>
+
+        <h2 id="address">アドレスの決定</h2>
+        <p>貼り付ける前に選択し、最後の行をそれに合わせて変更します。すでに貼り付けてしまった場合は、質問でEnterキーを押し、その後に最後の行を再実行してください（申請コードはスマートフォンからの接続を待機します）。<strong>パブリックIPアドレスとポート80および443が開いているレンタルサーバーの場合</strong>：<code>beanpool claim --ip 203.0.113.7</code>のように、<code>--ip</code>とIPアドレスを追加します。サーバーはポート80経由でLet's Encryptからそのアドレス用の証明書を取得し、スマートフォンはhttps://203.0.113.7で接続できるようになります。<strong>自宅のコンピューターまたは開放ポートがない場合</strong>：そのまま変更せず実行します。無料のサブドメイン名の先頭部分を聞かれます（yourtown.beanpool.orgにする場合は<strong>yourtown</strong>と入力、Enterでスキップ）。サーバーが自ら実行するトンネル経由で接続され、開通まで最大3分待機します。<strong>独自ドメインの場合</strong>：ドメインのAレコードをサーバーのIPアドレスに向け、ポート80と443を開放し、<code>--address https://your.domain</code>を追加します。ドメイン名ならサーバーを変更しても使い続けられますが、IPアドレスの数値は引き継げません（後から「設定」で名前を追加でき、以前のIPアドレスを使っていたメンバーもそのまま接続できます）。後で「設定」から選択する場合は<code>--no-name</code>を追加してください。暗号化のない<code>http://</code>アドレスはホームネットワークでのみ動作します。インターネット上ではスマートフォンに接続を拒否され、申請時にも警告されます。BeanPoolプロジェクトのアドレスサービスが停止していても、申請自体は問題なく機能します。</p>
+
+        <h2 id="install">インストールする</h2>
+        <p>次に、Dockerをインストールしたマシンで、このコマンドブロックを貼り付けます。composeファイルを取得し、ノードが使用するネットワークを作成し、公開イメージ（Intel/AMDまたはARM64）をダウンロードして起動し、サーバーがワンタイム申請コードを生成するのを待って（Raspberry Piでの初回起動など遅い場合は最大5分）、所有権の申請（claim）を行います。起動前に設定が必要な項目はありません。</p>
+
+        <div class="terminal-window">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <span class="terminal-dot red"></span>
+                    <span class="terminal-dot yellow"></span>
+                    <span class="terminal-dot green"></span>
+                </div>
+                <div class="terminal-title">bash — コミュニティを始める</div>
+            </div>
+            <div class="terminal-body">
+                <div class="cta-step">
+                    <span class="cta-step-label">1つのブロック：取得、ネットワーク作成、イメージ取得、起動、待機、申請</span>
+                    <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                    <button class="copy-btn" onclick="copyCode(this)" title="クリップボードにコピー">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="run-node-sub">最後の行：beanpool claim</h3>
+        <ol class="run-node-steps">
+            <li><strong>コードとQRコード。</strong> ワンタイム申請コードとQRコードが表示されます。スマートフォンのカメラでQRコードをスキャンするか、BeanPoolを開いて<strong>コミュニティを探す</strong>の下にサーバーのアドレスを入力し、<strong>申請</strong>をタップします。そのスマートフォンがオーナーになります。</li>
+            <li><strong>設定。</strong> あなたのアドレス（またはサーバーのアドレス）の末尾に<strong>/settings</strong>を付けてブラウザで開きます。セットアップウィザードに従ってコミュニティの名前を決め、2人目のオーナーを追加し、3つの設立メンバー用招待状を作成します。「ノードの識別情報」で地図上の位置を設定すると、近くの人があなたを見つけられるようになります。</li>
+        </ol>
+        <p class="run-node-note">ブロックに<strong>No claim code after 5 minutes</strong>と表示されたり、<code>beanpool claim</code>に<strong>This community has no claim code waiting</strong>と表示されたりした場合、サーバーの起動がまだ完了していません。<code>docker compose logs beanpool-node</code>で進捗状況を確認できます。ログにコミュニティにまだオーナーがおらず申請コードが発行された旨が表示されたら、最後の行を再度実行してください。詳しい手順は運営者マニュアルの<a href="guide/operators/first-time-setup.html">初回セットアップ</a>に記載されています。</p>
+
+        <h2 id="keep-running">おすすめ：Dockerの更新中もコミュニティを動かし続ける</h2>
+        <p>このステップは、運営者マニュアルの「<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/server/updates-and-health.md" target="_blank" rel="noopener">Updates and health</a>」ページにあります。 インストールを行うAIアシスタントは、このステップを必ず実行します (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">AIアシスタントでサーバーをセットアップする</a>)。</p>
+
+        <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHubで見る →
+        </a>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPoolアイコン" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>豆を使ってご近所さんと取引できる無料アプリ。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">ヘルプセンター</a>
+                    <a href="getting-started.html">スタートガイド</a>
+                    <a href="rules.html">ルール</a>
+                    <a href="post-extraction.html">脱・搾取経済</a>
+                    <a href="start.html">コミュニティを運営する</a>
+                    <a href="guide/index.html">メンバーズガイド</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">プライバシーポリシー</a>
+                    <a href="terms.html">利用規約</a>
+                    <a href="safety.html">児童の安全</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>MITライセンスに基づくオープンソース。コミュニティによって、コミュニティのために<img src="bean.png" alt="愛" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />を込めて制作。タイムゾーン境界データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

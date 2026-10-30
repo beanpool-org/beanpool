@@ -7,7 +7,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useIdentity } from '../IdentityContext';
-import { getBalance, getTransactions, getMemberProfile, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
+import { getBalance, getTransactions, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
+import { useOwnProfile } from '../../utils/use-own-profile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -157,7 +158,9 @@ export default function LedgerScreen() {
     const [heldSample, setHeldSample] = useState(false);
     const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;
     const txns = heldSample === preview ? heldTxns : NO_TXNS;
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    // Your name and picture in this community (utils/use-own-profile.ts), as the header and My Profile draw them. Never
+    // read while the mode is unknown or in preview, where the card is Example Valley's member and not yours.
+    const own = useOwnProfile(beansMode !== undefined && !preview);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
     // Where the list is and where the tab bar sits in it. Switching tab from below the tab bar (Send from Levels)
     // brings the tab bar to the top, so the other tab opens at its start; from above it, the list stays put.
@@ -425,7 +428,6 @@ export default function LedgerScreen() {
             getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);
             getTransactions(identity.publicKey).then(latest(setTxns)).catch(console.error);
             getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
-            getMemberProfile(identity.publicKey).then(latest(p => setAvatarUrl(p?.avatar_url || null))).catch(console.error);
             getEscrowTotal(identity.publicKey).then(latest(setEscrowTotal)).catch(() => {});
             getPledgeHistory(identity.publicKey).then(latest(setPledgeHistory)).catch(() => {});
         }
@@ -1091,12 +1093,12 @@ export default function LedgerScreen() {
             {/* ── Compact profile + balance bar ── */}
             <View style={styles.topBar}>
                 {/* Avatar + name + tier — left side */}
-                <Pressable style={styles.profileChunk} accessibilityRole="button" onPress={() => preview ? setSheetOpen(true) : identity?.publicKey && router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } })}>
+                <Pressable style={styles.profileChunk} accessibilityRole="button" onPress={() => preview ? setSheetOpen(true) : identity?.publicKey && router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: own.callsign || identity.callsign } })}>
                     <View style={styles.avatarRing}>
-                        <MemberAvatar avatarUrl={preview ? null : avatarUrl} pubkey={preview ? '' : identity?.publicKey || ''} callsign={preview ? SAMPLE_MEMBER : identity?.callsign || 'G'} size={48} />
+                        <MemberAvatar avatarUrl={preview ? null : own.avatarUrl} updatedAt={preview ? undefined : own.updatedAt} pubkey={preview ? '' : identity?.publicKey || ''} callsign={preview ? SAMPLE_MEMBER : own.callsign || identity?.callsign || 'G'} size={48} />
                     </View>
                     <View>
-                        <Text style={styles.profileName}>{preview ? SAMPLE_MEMBER : identity?.callsign || t('GUEST')}</Text>
+                        <Text style={styles.profileName}>{preview ? SAMPLE_MEMBER : own.callsign || identity?.callsign || t('GUEST')}</Text>
                         <View style={[styles.tierChip, { backgroundColor: tier.bg, borderColor: tier.border }]}>
                             <Text style={styles.tierChipEmoji}>{tier.emoji}</Text>
                             <Text style={[styles.tierChipText, { color: tier.color }]}>{t(TIER_WORDS[tier.name])}</Text>

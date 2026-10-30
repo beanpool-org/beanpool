@@ -27,6 +27,7 @@ vi.mock('react-native', () => {
     return {
         Platform: { OS: 'android' },
         View: el('div'), Text: el('span'), Pressable: el('button'), ActivityIndicator: () => null,
+        Modal: ({ children, visible }: any) => visible ? children : null, ScrollView: el('div'),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1 },
         Alert: { alert: vi.fn() },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),

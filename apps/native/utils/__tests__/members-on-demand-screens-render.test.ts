@@ -946,6 +946,17 @@ for (const scheme of ['light', 'dark'] as const) {
                 await fits([OWN, KOFI]);
             });
 
+            // Profile S1 (DESIGN-per-community-profile-fable.md §2): the header passed the phone-wide name, and it was shown.
+            it("the member's own profile: this community's name for them, never the name the door passed", async () => {
+                await (await db.getDb()).runAsync('UPDATE members SET callsign = ? WHERE public_key = ?', ['Marty of Mullum', OWN]);
+                nav.params = { publicKey: OWN, callsign: 'Phone Wide Name' };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(text()).toContain('Marty of Mullum');
+                expect(text()).not.toContain('Phone Wide Name');
+                expect(host.querySelector('[data-avatar]')?.getAttribute('data-avatar')).toBe('Marty of Mullum');
+            });
+
             it("the member's own profile on the worldwide community: no meeting tips", async () => {
                 nav.params = { publicKey: OWN };
                 await render(createElement(PublicProfileScreen));

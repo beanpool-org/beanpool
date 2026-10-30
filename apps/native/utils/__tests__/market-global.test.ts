@@ -219,7 +219,7 @@ describe('start a community', () => {
         expect(runANodeLabel(runANodeUrl(own))).toBe('How to run a node, on start.example.org');
         const none = readNodeProfile(GLOBAL_INFO_FOR_START)!;
         expect(runANodeUrl(none)).toBe(RUN_A_NODE_URL);
-        expect(RUN_A_NODE_URL).toBe('https://beanpool.org/#run-a-node');
+        expect(RUN_A_NODE_URL).toBe('https://beanpool.org/start');
         expect(runANodeLabel(runANodeUrl(none))).toBe(START_COMMUNITY_COPY.website);
         expect(runANodeUrl(null)).toBe(RUN_A_NODE_URL);
         // Only an address an app may open for a stranger, as the server's own rule says: https, a host, no user name.

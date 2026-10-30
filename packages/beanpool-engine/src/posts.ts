@@ -118,7 +118,8 @@ export interface MarketplacePost {
     featuredAt?: string;
     /**
      * What made it when its author's own app did not: 'assistant:<grant id>' for an owner's AI assistant (apps/server
-     * agent/owner-posts.ts). Only on the standby copy's payload (sync.ts postOfRow); the listings an app reads never carry it.
+     * agent/owner-posts.ts). On the standby copy's payload (sync.ts postOfRow), and on its author's own read (or a keeper's of
+     * the enterprise that wrote it, getPosts); never to another reader, a visitor or a broadcast (publicBroadcastPost).
      */
     createdVia?: string;
     acceptedBy?: string;
@@ -2127,6 +2128,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             continue;
         }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+        // What made it (an owner's AI assistant, apps/server agent/owner-posts.ts), on its author's own read only, or a keeper's
+        // of the enterprise that wrote it (design S2 §2.8: "via assistant" on their own listing): never to another reader.
+        if (typeof r.created_via === 'string' && r.created_via && viewer && !viewerIsVisitor && !filter?.guest
+            && (r.author_pubkey === viewer || viewerKeeps().has(r.author_pubkey))) {
+            post.createdVia = r.created_via;
+        }
         // A neighbourhood read's post that isn't the reader's to have exactly (exactPlacesFor).
         const toNeighbourhood = !filter?.coarse && !!filter?.neighbourhood && !placeIsExact(exactPlacesOf(db, filter), r);
         if (filter?.coarse) {
@@ -2401,7 +2408,8 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
  * with a vote's `post_updated`, it told every socket what the voter just chose, on an anonymous poll as on any.
  */
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
-    const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
+    // What made it is its author's own read only (getPosts): never every socket's.
+    const { reachPeers: _peers, userVotedOptionId: _ownVote, createdVia: _via, ...shared } = post;
     if (shared.type !== 'event') return shared;
     const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, myLastRsvp: _last, myLetIn: _letIn, ...rest } = shared;
     return rest;

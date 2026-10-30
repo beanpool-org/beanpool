@@ -18,6 +18,10 @@ export const AGENT_LIST_MAX = 50;
 export const AGENT_POSTS_PER_DAY_DEFAULT = 100;
 export const AGENT_POSTS_PER_DAY_MIN = 1;
 export const AGENT_POSTS_PER_DAY_MAX = 1000;
+/** Edits of its own posts one owner's assistant may make in a UTC day (design §2.8: update_post, agent/owner-posts.ts). */
+export const AGENT_EDITS_PER_DAY = 200;
+/** remove_all_i_made, once a UTC day per grant (design §2.8); the owner's own "Remove its posts" in Settings is not held to it. */
+export const AGENT_REMOVE_ALLS_PER_DAY = 1;
 
 /** Whether a value is a day's number the owners may set: a whole number from 1 to 1,000. */
 export function isAgentPostsPerDay(v: unknown): v is number {
@@ -44,6 +48,8 @@ interface Counts {
     dayCalls: number;
     dayBackups: number;
     dayCreates: number;
+    dayEdits: number;
+    dayRemoveAlls: number;
 }
 
 const counts = new Map<string, Counts>();
@@ -59,7 +65,7 @@ function countsOf(grantId: string, now: number): Counts {
     let c = counts.get(grantId);
     const day = utcDay(now);
     if (!c) {
-        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0, dayCreates: 0 };
+        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0, dayCreates: 0, dayEdits: 0, dayRemoveAlls: 0 };
         counts.set(grantId, c);
     }
     if (c.day !== day) {
@@ -67,6 +73,8 @@ function countsOf(grantId: string, now: number): Counts {
         c.dayCalls = 0;
         c.dayBackups = 0;
         c.dayCreates = 0;
+        c.dayEdits = 0;
+        c.dayRemoveAlls = 0;
     }
     if (now - c.minuteFrom >= MINUTE_MS) {
         c.minuteFrom = now;
@@ -140,6 +148,32 @@ export function admitAgentCreate(grantId: string, now = Date.now()): boolean {
 export function returnAgentCreate(grantId: string, now = Date.now()): void {
     const c = countsOf(grantId, now);
     if (c.dayCreates > 0) c.dayCreates--;
+}
+
+export function agentEditsToday(grantId: string, now = Date.now()): number {
+    return countsOf(grantId, now).dayEdits;
+}
+
+/** Whether this grant may edit another of its posts today; counts it when it may. */
+export function admitAgentEdit(grantId: string, now = Date.now()): boolean {
+    const c = countsOf(grantId, now);
+    if (c.dayEdits >= AGENT_EDITS_PER_DAY) return false;
+    c.dayEdits++;
+    return true;
+}
+
+/** An edit that was admitted but not made: not counted after all. */
+export function returnAgentEdit(grantId: string, now = Date.now()): void {
+    const c = countsOf(grantId, now);
+    if (c.dayEdits > 0) c.dayEdits--;
+}
+
+/** Whether this grant may run remove_all_i_made today; counts it when it may (a run that removes nothing still counts). */
+export function admitAgentRemoveAll(grantId: string, now = Date.now()): boolean {
+    const c = countsOf(grantId, now);
+    if (c.dayRemoveAlls >= AGENT_REMOVE_ALLS_PER_DAY) return false;
+    c.dayRemoveAlls++;
+    return true;
 }
 
 /** Calls let in today (UTC) from every assistant, revoked ones included. */

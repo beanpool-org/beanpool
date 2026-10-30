@@ -41,6 +41,7 @@ import {
     AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPostsPerDay, AGENT_LIST_MAX,
 } from './limits.js';
 import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-posts.js';
+import { OWNER_READ_TOOLS } from './owner-reads.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -630,8 +631,9 @@ AGENT_TOOLS.push({
     },
 });
 
-// An owner's assistant posts for them: Offers, Needs, events and enterprise listings (agent/owner-posts.ts).
-AGENT_TOOLS.push(...OWNER_POST_TOOLS);
+// An owner's assistant posts for them: Offers, Needs, events and enterprise listings (agent/owner-posts.ts); slice S2, what it
+// reads for seeding, and its own undo: my_posts, update_post, remove_post, remove_all_i_made (agent/owner-reads.ts).
+AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_READ_TOOLS);
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {

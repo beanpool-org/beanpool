@@ -48,13 +48,14 @@ import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, getMembersWhole, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { ChatConfirmDialog } from '../components/ChatConfirmDialog';
+import { ChatDealStrip } from '../components/ChatDealStrip';
 import { ChatMenuModal } from '../components/ChatMenuModal';
 import { isMuted, groupHeaderDetail, chatMuteFromAnswer } from '../lib/chat-mute';
 import { EventChat } from '../components/EventChat';
 import { FoldedChatText } from '../components/FoldedChatText';
 import { CreateGroupModal } from '../components/CreateGroupModal';
 import { inConversationTab, groupsUnreadCount, isGroupLikeChat, type ConversationTab } from '../lib/conversation-tabs';
-import { bundledGroupEmblem, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
+import { bundledGroupEmblem, dealStep, dealsNeedingMe, formatDate, listPhotoUrl, messageBackstopDue, MESSAGE_BACKSTOP_TICK_MS, removedRunText, t, tn, word, type WordKey } from '@beanpool/core';
 import { systemLineColours } from '../lib/systemLineColours';
 import { readsOwn, useCommunityInfo } from '../lib/features';
 
@@ -124,7 +125,8 @@ interface Props {
     identity: BeanPoolIdentity;
     openConversationId?: string | null;
     onConversationOpened?: () => void;
-    onNavigate?: (tab: string, contextId?: string) => void;
+    /** `txId`: the deal a listing opens at (the chat's deal strip, as the phone's opens the listing for a deal). */
+    onNavigate?: (tab: string, contextId?: string, txId?: string) => void;
     /** A person's profile: a request's sender, from their card or the chat's header in request mode. */
     onOpenProfile?: (pubkey: string) => void;
 }
@@ -508,6 +510,32 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
              (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
         ) || null;
     }, [activeConv, userTransactions, identity.publicKey, activePeerPubkey]);
+    // The deals with the open DM's other person that ask something of the chat, newest first: Beans held (either side's), a
+    // finished trade I haven't rated, or a request on my listing waiting for my answer (the list's Action Required counts it,
+    // so the chat it opens must show it: DESIGN-deals-fable §2.2, every surface opens the deal). The phone's pinned strip
+    // (chat/[id].tsx `activeDeals`) is the same rule less the request. The deal the buyer's Trust Hold banner above already
+    // carries is left out of it, as the phone leaves out the one its action bar shows.
+    const stripDeals = useMemo(() => {
+        if (activeConv?.type !== 'dm' || !activePeerPubkey) return [];
+        const me = identity.publicKey;
+        return userTransactions
+            .filter(tx => ((tx.buyerPublicKey === me && tx.sellerPublicKey === activePeerPubkey) || (tx.sellerPublicKey === me && tx.buyerPublicKey === activePeerPubkey))
+                && (tx.status === 'pending' || (tx.status === 'completed' && !iRated(tx, me)) || (tx.status === 'requested' && dealStep(tx, me).state === 'to-answer'))
+                && tx.id !== activePendingTransaction?.id)
+            .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    }, [activeConv?.type, userTransactions, identity.publicKey, activePeerPubkey, activePendingTransaction?.id]);
+    // The deals whose next step is mine (core's one rule, dealsNeedingMe), by the other person: the list's Action Required
+    // chip, counted per deal as the phone's Talk counts its own (a thread is per person and may hold several).
+    const dealsNeedingMeByPeer = useMemo(() => {
+        const me = identity.publicKey;
+        const byPeer = new Map<string, MarketplaceTransaction[]>();
+        for (const tx of dealsNeedingMe(userTransactions, me)) {
+            const peer = tx.buyerPublicKey === me ? tx.sellerPublicKey : tx.buyerPublicKey;
+            const rows = byPeer.get(peer);
+            if (rows) rows.push(tx); else byPeer.set(peer, [tx]);
+        }
+        return byPeer;
+    }, [userTransactions, identity.publicKey]);
 
     // Auto-grow the composer with the draft (up to ~4 lines), collapsing back
     // to one line when the draft is cleared on send.
@@ -2005,119 +2033,149 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     </div>
                 )}
 
-                {/* Sticky Marketplace Header */}
-                {activeConv.postId && (
-                    <div style={{
-                        background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
-                    }} onClick={() => {}}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span style={{ fontSize: '1.2rem' }}>🛍️</span>
-                            <div>
-                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>{t('View Attached Listing')}</div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>{t('Marketplace Transaction Thread')}</div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {/* The room between the chat's header and its composer (the phone's "column": dmKeyBannerMaxHeight works from the
+                    same measure). Nothing in it can make the chat taller than that, so the composer never goes under the bottom
+                    nav: the pinned block gives way first, then the thread, which keeps its floor while the room has it. (Its
+                    children are not indented one more level, to keep this change reviewable.) */}
+                <div data-testid="chat-middle" style={{ flex: '1 1 0px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                {/* The pinned block above the thread: the deal strip, the listing header, the Trust Hold banner and the pinned Rate
+                    banner. It takes what the room leaves once the thread's floor is in, and scrolls inside that (the phone's
+                    dmKeyBannerMaxHeight idea), so at 320 px and 1.3x text the thread keeps 120 px. Every card stays reachable by
+                    scrolling and by Tab. */}
+                <div data-testid="chat-pinned" style={{ flex: '0 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+                    {/* The deals with this person, both sides (the phone's pinned strip): Release / Cancel for the payer, "Awaiting
+                        release" for the payee, Review once it is done. Each card opens its listing at that deal. */}
+                    {activeConv.type === 'dm' && (
+                        <ChatDealStrip
+                            deals={stripDeals}
+                            me={identity.publicKey}
+                            peerName={getConversationTitle(activeConv)}
+                            showsBeans={beansOn}
+                            busy={actionLoading}
+                            onOpen={tx => { if (tx.postId) onNavigate?.('marketplace', tx.postId, tx.id); }}
+                            onRelease={tx => handleReleaseCredits(tx.id, tx.credits)}
+                            onCancel={tx => handleCancelCredits(tx.id)}
+                            onReview={tx => onNavigate?.('marketplace-review', tx.id)}
+                        />
+                    )}
 
-                {/* Active Trust Hold / Escrow Banner */}
-                {(() => {
-                    const pendingTx = activePendingTransaction;
-
-                    if (!pendingTx) return null;
-                    const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;
-
-                    return (
+                    {/* Sticky Marketplace Header */}
+                    {activeConv.postId && (
                         <div style={{
-                            background: isBuyer ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-                            borderBottom: `1px solid ${isBuyer ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-                            padding: '0.75rem 1rem',
-                            display: 'flex',
-                            flexWrap: 'wrap',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '0.75rem'
-                        }}>
-                            <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
-                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
-                                    {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                    {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
+                            background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
+                        }} onClick={() => {}}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <span style={{ fontSize: '1.2rem' }}>🛍️</span>
+                                <div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>{t('View Attached Listing')}</div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>{t('Marketplace Transaction Thread')}</div>
                                 </div>
                             </div>
-                            {isBuyer ? (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
-                                    <button
-                                        onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
-                                        disabled={actionLoading}
-                                        style={{
-                                            background: 'var(--bp-commit-fill)',
-                                            color: 'var(--bp-commit-on)',
-                                            border: 'none',
-                                            borderRadius: '8px',
-                                            padding: '0.4rem 0.75rem',
-                                            fontWeight: 'bold',
-                                            fontSize: '0.8rem',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        {actionLoading ? '…' : t('✅ Release Credits')}
-                                    </button>
-                                    <button
-                                        onClick={() => handleCancelCredits(pendingTx.id)}
-                                        disabled={actionLoading}
-                                        style={{
-                                            background: 'rgba(239, 68, 68, 0.15)',
-                                            color: '#ef4444',
-                                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                                            borderRadius: '8px',
-                                            padding: '0.4rem 0.6rem',
-                                            fontWeight: 'bold',
-                                            fontSize: '0.8rem',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        {t('Cancel')}
-                                    </button>
-                                </div>
-                            ) : (
-                                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('⏳ Pending')}</span>
-                            )}
                         </div>
-                    );
-                })()}
+                    )}
 
-                {/* The list's "Action Needed" always has its way to rate here: when the unrated trade's own release line
-                    isn't among the lines loaded (an older page), the same Rate your partner, pinned. */}
-                {(() => {
-                    if (activeConv?.type !== 'dm' || !activePeerPubkey || loadedDmId !== activeConv.id) return null;
-                    const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
-                    if (!unrated) return null;
-                    const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
-                        try { return tradeOfReleaseLine(userTransactions, JSON.parse(m.metadata!), m.timestamp) === unrated; } catch { return false; }
-                    })());
-                    if (lineShown) return null;
-                    return (
-                        <div data-testid="chat-rate-banner" style={{
-                            borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
-                        }}>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Your trade is finished. How did it go?')}</span>
-                            <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
-                                background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
-                                padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
+                    {/* Active Trust Hold / Escrow Banner */}
+                    {(() => {
+                        const pendingTx = activePendingTransaction;
+
+                        if (!pendingTx) return null;
+                        const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;
+
+                        return (
+                            <div style={{
+                                background: isBuyer ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                                borderBottom: `1px solid ${isBuyer ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                                padding: '0.75rem 1rem',
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '0.75rem'
                             }}>
-                                <span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span>
-                            </button>
-                        </div>
-                    );
-                })()}
+                                <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
+                                        {tn(pendingTx.credits, '🔒 Trust Hold: {n} Beans', '🔒 Trust Hold: {n} Beans')}
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        {isBuyer ? t('Release credits once you receive your items.') : t('Awaiting buyer to release credits.')}
+                                    </div>
+                                </div>
+                                {isBuyer ? (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '0.5rem', marginLeft: 'auto', maxWidth: '100%' }}>
+                                        <button
+                                            onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
+                                            disabled={actionLoading}
+                                            style={{
+                                                background: 'var(--bp-commit-fill)',
+                                                color: 'var(--bp-commit-on)',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                padding: '0.4rem 0.75rem',
+                                                fontWeight: 'bold',
+                                                fontSize: '0.8rem',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {actionLoading ? '…' : t('✅ Release Credits')}
+                                        </button>
+                                        <button
+                                            onClick={() => handleCancelCredits(pendingTx.id)}
+                                            disabled={actionLoading}
+                                            style={{
+                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                color: '#ef4444',
+                                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                borderRadius: '8px',
+                                                padding: '0.4rem 0.6rem',
+                                                fontWeight: 'bold',
+                                                fontSize: '0.8rem',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {t('Cancel')}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f59e0b' }}>{t('⏳ Pending')}</span>
+                                )}
+                            </div>
+                        );
+                    })()}
 
-                {/* Messages */}
-                <div style={{
-                    flex: 1, overflowY: 'auto', padding: '1rem',
+                    {/* The list's "Action Needed" always has its way to rate here: when the unrated trade's own release line
+                        isn't among the lines loaded (an older page), the same Rate your partner, pinned. */}
+                    {(() => {
+                        if (activeConv?.type !== 'dm' || !activePeerPubkey || loadedDmId !== activeConv.id) return null;
+                        const unrated = unratedTradeWith(userTransactions, identity.publicKey, activePeerPubkey);
+                        if (!unrated) return null;
+                        // The strip's Review card is already the way to this trade's rating form: one door, not two.
+                        if (stripDeals.some(d => d.id === unrated.id)) return null;
+                        const lineShown = shownMessages.some(m => m.systemType === 'ESCROW_RELEASED' && !!m.metadata && (() => {
+                            try { return tradeOfReleaseLine(userTransactions, JSON.parse(m.metadata!), m.timestamp) === unrated; } catch { return false; }
+                        })());
+                        if (lineShown) return null;
+                        return (
+                            <div data-testid="chat-rate-banner" style={{
+                                borderBottom: '1px solid var(--border-primary)', padding: '0.6rem 1rem',
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap',
+                            }}>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Your trade is finished. How did it go?')}</span>
+                                <button type="button" onClick={() => onNavigate?.('marketplace-review', unrated.id)} style={{
+                                    background: 'var(--bg-hover)', color: 'var(--text-primary)', border: '1px solid var(--border-primary)',
+                                    padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', minHeight: '32px',
+                                }}>
+                                    <span aria-hidden="true">⭐ </span><span>{t('Rate your partner')}</span>
+                                </button>
+                            </div>
+                        );
+                    })()}
+                </div>
+
+                {/* Messages. The pinned block above leaves it 120 px at the least, whatever the text size; in a room under 120 px
+                    (a short window) the thread is the whole room, as it was before the pinned block. */}
+                <div data-testid="chat-thread" style={{
+                    flex: 1, minHeight: 'min(120px, 100%)', overflowY: 'auto', padding: '1rem',
                     display: 'flex', flexDirection: 'column', gap: '0.3rem',
                 }}>
                     {messages.length === 0 && (
@@ -2788,6 +2846,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     })}
                     <div ref={messagesEndRef} />
                 </div>
+                </div>
 
                 {/* Edit Preview */}
                 {editingMessage && (
@@ -3393,13 +3452,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             // last line: a trade chat is one DM per pair, its post_id NULL, so that read "unrated" forever.
                             const convPeer = conv.type === 'dm' ? (conv.participants?.find(p => p !== identity.publicKey) || '') : '';
                             const needsReview = !!convPeer && !!unratedTradeWith(userTransactions, identity.publicKey, convPeer);
-                            
+                            // The deals with this person whose next step is mine (core's dealsNeedingMe): the phone's per-deal
+                            // Action Required. Beans of mine held in trust to release, or a request on my listing to answer.
+                            const dealsToAct = convPeer ? (dealsNeedingMeByPeer.get(convPeer) ?? []) : [];
+                            const dealsToActWords = dealsToAct.every(tx => dealStep(tx, identity.publicKey).state === 'to-release')
+                                ? tn(dealsToAct.length, 'Release Credits ({n})', 'Release Credits ({n})')
+                                : tn(dealsToAct.length, 'Action Required ({n})', 'Action Required ({n})');
+
                             return (
                             <div
                                 key={conv.id}
                                 onClick={() => { setActiveConv(conv); loadMembers(); }}
                                 className={`p-3 px-4 flex items-center gap-3 cursor-pointer transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30 ${
-                                    needsReview ? 'bg-amber-50/40 dark:bg-amber-950/10 border-l-4 border-amber-500 pl-3' : ''
+                                    needsReview || dealsToAct.length > 0 ? 'bg-amber-50/40 dark:bg-amber-950/10 border-l-4 border-amber-500 pl-3' : ''
                                 }`}
                             >
                                 {conv.postId ? (
@@ -3490,6 +3555,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     {needsReview && (
                                         <div style={{ fontSize: '0.75rem', color: '#d97706', fontWeight: 700, marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                             <span style={{ fontSize: '0.8rem' }}>⭐</span> {t('Action Needed: Review Partner')}
+                                        </div>
+                                    )}
+                                    {dealsToAct.length > 0 && (
+                                        <div style={{ marginTop: '0.25rem' }}>
+                                            <span data-testid="deal-action-chip" style={{
+                                                display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '2px 8px', borderRadius: '12px',
+                                                fontSize: '0.75rem', fontWeight: 700, background: 'var(--bp-chip-warn-tint)', color: 'var(--bp-chip-warn-ink)',
+                                            }}>
+                                                <span aria-hidden="true">⚡</span><span>{dealsToActWords}</span>
+                                            </span>
                                         </div>
                                     )}
                                 </div>

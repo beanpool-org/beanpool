@@ -3,9 +3,11 @@
  * screen, its shelf and Home read. The plan, reminders and the Offer door come with G1 and G2, each adding its
  * permission then.
  *
- * What leaves the device: nothing. `place` reads a place the app already has (the community's, the member's rough
- * area, or the device's last known one where location is already allowed) and the zone is worked out here from the
- * bundled map; no permission is asked and the place is sent nowhere. No 'node-copy': the document stays on the device.
+ * What leaves the device: nothing of the garden. `place` reads a place the app already has (the community's, the
+ * member's rough area, or the device's last known one where location is already allowed) and the zone is worked out
+ * here from the bundled map; no permission is asked and the place is sent nowhere. The one request: a browser that kept
+ * no Home answer with a place in it reads the member's own Home from their community's server, as Home does, sending
+ * nothing with it. No 'node-copy': the document stays on the device.
  */
 import { word, wordn } from '../../words.js';
 import type { ToolScreenProps } from '../host.js';

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 import { PIN_FONT_SCALE } from '../constants/responsive';
+import { palette } from '../constants/colors';
 
 // ── SVG Geometry ────────────────────────────────────────
 // ViewBox: 56×56 with 5px transparent buffer on all sides.
@@ -249,7 +250,7 @@ export const ClusterVisual = React.memo<{ points: number }>(({ points }) => {
       {/* Outer glow ring */}
       <View style={{ position: 'absolute', width: glow, height: glow, borderRadius: glow / 2, backgroundColor: 'rgba(59, 130, 246, 0.25)' }} />
       {/* Inner solid circle */}
-      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', borderColor: '#ffffff', borderWidth: 3 }}>
+      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: palette.blue600, justifyContent: 'center', alignItems: 'center', borderColor: '#ffffff', borderWidth: 3 }}>
         <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: labelSize }} maxFontSizeMultiplier={PIN_FONT_SCALE}>{label}</Text>
       </View>
     </View>

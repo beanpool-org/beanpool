@@ -1,0 +1,18 @@
+BeanPool
+Copyright (c) 2026 martyinspace. The code is under the MIT License (LICENSE).
+
+This product includes data from third parties, and data of our own given to the public domain:
+
+Köppen-Geiger climate map (Your garden's climate layer)
+  packages/beanpool-core/src/tools/garden/climate.table.ts
+  Beck, H. E., T. R. McVicar, N. Vergopolan, A. Berg, N. J. Lutsko, A. Dufour, Z. Zeng, X. Jiang, A. I. J. M. van Dijk
+  and D. G. Miralles. High-resolution (1 km) Köppen-Geiger maps for 1901–2099 based on constrained CMIP6 projections.
+  Scientific Data 10, 724 (2023). Data: https://doi.org/10.6084/m9.figshare.21789074
+  Licence: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+  Changes: the 1991–2020 map at 0.5° as its authors resampled it, its 30 classes merged into seven plain zones and stored
+  as runs (scripts/tools/garden-climate.mjs). The attribution is also shown on the planting guide's screens.
+
+Your garden's crop table and zone mapping
+  packages/beanpool-core/src/tools/garden/crops.ts, packages/beanpool-core/src/tools/garden/zones.ts
+  Written by the BeanPool contributors and dedicated to the public domain under CC0 1.0
+  (https://creativecommons.org/publicdomain/zero/1.0/): any community may copy them into its own guide.

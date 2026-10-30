@@ -47,7 +47,7 @@ export default function GuideScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { paddingHorizontal: 20, paddingTop: 20 },
         // 24, not 26: a one-word title in a longer language ("Notificaciones") still fits the line at 320 dp and 1.3× text.
         title: { fontSize: 24, fontWeight: '800', color: colors.text.heading, lineHeight: 30 },

@@ -103,10 +103,11 @@ export interface TagIndex {
     /** The tags named inside a word of a script written without spaces: "新鲜柠檬出售" (fresh lemons for sale) holds 柠檬. The
      *  longer name first, each letter read once ("柠檬草" is lemongrass, not lemon). Empty for a word of any other script. */
     inside(text: string): readonly string[];
-    /** The picker's search, from 2 characters: tags whose label (in this language or English) has a word starting with what
-     *  is typed, or in a script written without spaces holds it anywhere; the nearest first (the label itself, then a label
-     *  starting with it, then a later word starting with it, then inside; within each, this language's labels and the
-     *  shorter label first). Never a top: the category is its own field. */
+    /** The picker's search, from 2 characters: tags whose label (in this language or English) or old synonym word ("plumber",
+     *  "sofa") has a word starting with what is typed, or in a script written without spaces holds it anywhere; the nearest
+     *  first (the label itself, then a label starting with it, then a later word starting with it, then inside; within each,
+     *  this language's labels, then English's, then the synonym words, and the shorter first). Never a top: the category is
+     *  its own field. */
     search(text: string, limit?: number): string[];
     /** The label in this language; the English when the words have none. An unknown id gives ''. */
     label(id: string): string;
@@ -143,6 +144,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
     const labels = new Map<string, string>();
     const own: Array<[string, string]> = [];
     const english: Array<[string, string]> = [];
+    const keys: Array<[string, string]> = [];
     for (const tag of TAG_LIBRARY) {
         const en = tagEnglish(tag);
         const label = translate(tag.en) || en;
@@ -154,6 +156,7 @@ export function buildTagIndex(words?: Translate): TagIndex {
         for (const w of tag.aliases ?? []) add(aliases, w, tag.id);
         for (const form of tagForms(label)) own.push([form, tag.id]);
         if (lang !== 'en') for (const form of tagForms(en)) english.push([form, tag.id]);
+        for (const key of tag.synonymKeys ?? []) for (const form of tagForms(key)) keys.push([form, tag.id]);
     }
     // This language's names written without spaces, the longest first: what inside() looks for in a run.
     const unspaced = [...names.keys()].filter((name) => UNSPACED.test(name) && !name.includes(' ')).sort((a, b) => b.length - a.length);
@@ -180,15 +183,16 @@ export function buildTagIndex(words?: Translate): TagIndex {
         search(text, limit = 8) {
             const qs = tagForms(text);
             if (qs[0].length < 2) return [];
-            // id → its best rank: how near, then this language before English, then the shorter label.
+            // id → its best rank: how near, then this language, English, the synonym words, then the shorter. A tag found by
+            // a synonym word still shows its label.
             const ranks = new Map<string, number>();
-            [own, english].forEach((list, inEnglish) => {
-                for (const [label, id] of list) {
+            [own, english, keys].forEach((list, which) => {
+                for (const [name, id] of list) {
                     if (!id.includes('.')) continue; // a top is the listing's category, its own field
                     for (const q of qs) {
-                        const near = nearness(label, q);
+                        const near = nearness(name, q);
                         if (near < 0) continue;
-                        const rank = (near * 2 + inEnglish) * 1000 + Math.min(label.length, 999);
+                        const rank = (near * 3 + which) * 1000 + Math.min(name.length, 999);
                         if (rank < (ranks.get(id) ?? Infinity)) ranks.set(id, rank);
                     }
                 }

@@ -152,6 +152,22 @@ describe('the label index', () => {
         const notFirst = TAG_LIBRARY.filter((t) => t.id.includes('.') && index.search(tagEnglish(t))[0] !== t.id).map((t) => t.id);
         expect(notFirst).toEqual([]);
     });
+
+    it('the picker’s search finds every old synonym word’s tag, after the labels', () => {
+        const index = buildTagIndex(wordsFor('en'));
+        const keyed = TAG_LIBRARY.filter((t) => t.id.includes('.')).flatMap((t) => (t.synonymKeys ?? []).map((key) => [key, t.id] as const));
+        expect(keyed).toHaveLength(394);
+        expect(keyed.filter(([key, id]) => !index.search(key).includes(id))).toEqual([]);
+        expect(index.search('plumber')).toEqual(['services.trades.plumbing']);
+        expect(index.search('sofa')).toEqual(['goods.furniture.couches']);
+        expect(index.search('puppy')).toEqual(['animals.pets.dogs']);
+        // The synonym word itself before a later word of a label starting with it.
+        expect(index.search('lift')).toEqual(['transport.rides', 'labour.help.heavy-lifting']);
+        // In a drafted language too: the old words are English, and the chip carries the language's label.
+        const es = buildTagIndex(wordsFor('es', [{ [`Plumbing${CONTEXT_SEPARATOR}tag`]: 'Fontanería' }]));
+        expect(es.search('plumber')).toEqual(['services.trades.plumbing']);
+        expect(es.label('services.trades.plumbing')).toBe('Fontanería');
+    });
 });
 
 describe('suggestTags', () => {

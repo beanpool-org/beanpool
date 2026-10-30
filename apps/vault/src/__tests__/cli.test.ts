@@ -6,7 +6,8 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { build } from 'esbuild';
 import { x25519 } from '@noble/curves/ed25519.js';
 import { vaultB64 } from '@beanpool/core';
 import { custodianKey, type CustodianKey } from '../custodian/lib.js';
@@ -18,7 +19,7 @@ import { makeRelease, publish } from './release-kit.js';
 import { StubS3 } from './stubs.js';
 
 /**
- * The custodian tool as a custodian runs it (`src/custodian/cli.ts` through tsx): every flag and file is checked
+ * The custodian tool as a custodian runs it (compiled once per run with esbuild): every flag and file is checked
  * before anything is sent; the release and host checks come before any part goes; `none` asks for a typed yes; new
  * shares are saved before this custodian's own is confirmed; and a release is proposed, signed by two and verified.
  */
@@ -26,6 +27,24 @@ import { StubS3 } from './stubs.js';
 const VAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dir = mkdtempSync(path.join(os.tmpdir(), 'bvc-'));
 let v: VaultUnderTest | null = null;
+let compiledCli = '';
+
+beforeAll(async () => {
+    compiledCli = path.join(dir, 'vault-custodian.mjs');
+    await build({
+        absWorkingDir: VAULT_ROOT,
+        entryPoints: ['src/custodian/cli.ts'],
+        bundle: true,
+        platform: 'node',
+        format: 'esm',
+        target: 'node22',
+        outfile: compiledCli,
+        external: ['node:*'],
+        banner: {
+            js: 'import { createRequire as __vaultCreateRequire } from "node:module";\nconst require = __vaultCreateRequire(import.meta.url);',
+        },
+    });
+});
 
 afterEach(async () => {
     await v?.close();
@@ -35,7 +54,7 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 function cli(args: string[], opts: { input?: string; env?: Record<string, string> } = {}): Promise<{ code: number | null; out: string }> {
     return new Promise(resolve => {
-        const child = spawn(process.execPath, ['--import', 'tsx', 'src/custodian/cli.ts', ...args], {
+        const child = spawn(process.execPath, [compiledCli, ...args], {
             cwd: VAULT_ROOT, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, VAULT_CUSTODIAN_PASSPHRASE: '', ...opts.env },
         });
         let out = '';

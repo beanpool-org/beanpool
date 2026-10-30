@@ -220,6 +220,13 @@ async function main(): Promise<void> {
         assert(own?.createdVia === `assistant:${B.id}` && !!other && other.createdVia === undefined,
             `createdVia is on the author's own read (${own?.createdVia}) and on no other member's (${other?.createdVia})`);
 
+        // A moderator's removal of an assistant-made post is an ADMIN line too (routes/admin.ts).
+        const moderated = structured(await a.callTool({ name: 'create_offer', arguments: offer('Reported quinces') }))?.postId as string;
+        const del = await call('POST', `/api/local/admin/posts/${encodeURIComponent(moderated)}/delete`, { headers: ownerSessionHeaders(owner2.pub), body: {} });
+        const modLine = (db.prepare("SELECT metadata FROM system_logs WHERE category = 'ADMIN' AND message = 'A post an AI assistant made removed by a moderator' ORDER BY rowid DESC LIMIT 1").get() as any)?.metadata ?? '{}';
+        assert(del.status === 200 && JSON.parse(modLine).post === moderated && JSON.parse(modLine).grant === A.id,
+            `a moderator's removal of an assistant-made post writes an ADMIN line naming it and the assistant (${show(del)}; ${modLine})`);
+
         // ── 5. "Remove its posts" after revoke ───────────────────────────────────────────────────────
         await b.close().catch(() => {});
         const revoked = await call('POST', `/api/local/admin/agent/grants/${encodeURIComponent(B.id)}/revoke`, { headers: ownerSessionHeaders(owner.pub), body: {} });

@@ -110,7 +110,7 @@ describe('the label index', () => {
         expect(searchTermsFor('wi-fi')).toContain('wifi');
         expect(index.byName('Wi-Fi')).toEqual(['tech.internet.wifi']);
         expect(index.byName('wi\u2011fi')).toEqual(['tech.internet.wifi']);
-        expect(index.search('wi-fi')).toEqual(['tech.internet.wifi']);
+        expect(index.search('wi-fi')).toEqual(['tech.internet.wifi', 'tech.internet']);
         expect(index.byName('Off-grid power')).toEqual(['energy.solar.off-grid-power']);
         expect(index.byName('offgrid power')).toEqual(['energy.solar.off-grid-power']);
     });
@@ -175,7 +175,10 @@ describe('the label index', () => {
     it('the picker’s search never offers a top, and puts the label itself first, then a label starting with the word', () => {
         const index = buildTagIndex(wordsFor('en'));
         for (const q of ['hel', 'pet', 'rides', 'food', 'tools', 'transport']) expect(index.search(q).filter((id) => !id.includes('.')), q).toEqual([]);
-        expect(index.search('bed')).toEqual(['goods.furniture.beds', 'garden.beds', 'goods.bedding', 'garden.beds.raised-beds', 'garden.beds.garden-beds']);
+        expect(index.search('bed')).toEqual([
+            'goods.furniture.beds', 'garden.beds', 'goods.bedding', 'garden.beds.raised-beds', 'garden.beds.garden-beds',
+            'goods.bedding.mattresses', 'goods.furniture.wardrobes', 'goods.bedding.blankets',
+        ]);
         expect(index.search('rides')).toEqual(['transport.rides']);
         expect(index.search('lemon')).toEqual(['food.fruit.lemon', 'food.herbs.lemongrass']);
         // Every tag below a top is first for its own label (no two tags share one).
@@ -197,6 +200,19 @@ describe('the label index', () => {
         const es = buildTagIndex(wordsFor('es', [{ [`Plumbing${CONTEXT_SEPARATOR}tag`]: 'Fontanería' }]));
         expect(es.search('plumber')).toEqual(['services.trades.plumbing']);
         expect(es.label('services.trades.plumbing')).toBe('Fontanería');
+    });
+
+    it('the picker’s search finds tags by aliases (citrus, tropical, berry, root), ranked below label matches', () => {
+        const index = buildTagIndex(wordsFor('en'));
+        expect(index.search('citrus')).toEqual(expect.arrayContaining(['food.fruit.lemon', 'food.fruit.lime', 'food.fruit.orange']));
+        expect(index.search('tropical')).toEqual(expect.arrayContaining(['food.fruit.banana', 'food.fruit.mango']));
+        expect(index.search('berry')).toEqual(['food.fruit.strawberry', 'food.fruit.blueberry', 'food.fruit.raspberry', 'food.fruit.mulberry']);
+        expect(index.search('root')).toEqual(expect.arrayContaining(['food.vegetables.carrot', 'food.vegetables.potato']));
+        // A label match ranks before an alias match
+        expect(index.search('melon')[0]).toBe('food.fruit.melon');
+        expect(index.search('melon')).toContain('food.fruit.watermelon');
+        expect(index.search('bread')[0]).toBe('food.bakery.bread');
+        expect(index.search('bread')).toContain('food.bakery.sourdough');
     });
 });
 

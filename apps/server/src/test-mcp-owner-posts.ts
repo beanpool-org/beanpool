@@ -7,7 +7,9 @@
  *      most 800 px whatever size it was sent, the search index finds it, the listings' version moves (the phones' sync mark),
  *      the standby copy's payload carries created_via, the AGENT log names the post, and the answer carries no key.
  *   2. Refusals in words, none counted against the day: no photo, a PNG, a photo over the per-photo cap, an enterprise the owner
- *      does not keep (or a made-up ref), the 51st post in a UTC day.
+ *      does not keep (or a made-up ref), the 51st post in a UTC day. Every field the phone's and the web's composer require for
+ *      each kind (Marty, 30 Oct: "all the mandatory fields should be mandatory even if seeding through MCP") is in the tool's
+ *      input schema and, left out or empty, refused by the server in words that name it; a price only where Beans are on.
  *   3. An admin's assistant has none of the tools (and is refused if it calls one); its maker no longer an owner or admin → 401;
  *      a body over 64 KiB from anyone but an owner's assistant → 413; the owner switch off → 404; the grant revoked → 401.
  *   4. The ledger audit is the same after as before: posting moves no Bean.
@@ -31,11 +33,12 @@ import { initStateEngine, seedGenesisMember, runLedgerAudit, getPosts, getPostsV
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
+import { getProfileSwitches, setSwitchOverride } from './config/node-profile.js';
 import { db } from './db/db.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import { imageSize } from './storage/image-metadata.js';
 import { admitAgentCreate, agentCreatesToday, AGENT_CREATES_PER_DAY } from './agent/limits.js';
-import { OWNER_POST_TOOLS, enterpriseRef } from './agent/owner-posts.js';
+import { OWNER_POST_TOOLS, enterpriseRef, AGENT_POST_CATEGORIES } from './agent/owner-posts.js';
 import type { AgentGrant } from './agent/tools.js';
 
 let BASE = '';
@@ -87,6 +90,9 @@ async function connect(token: string): Promise<Client> {
     return client;
 }
 
+/** Whether create_offer and create_need ask a price (their schema is made each time the tools are listed). */
+const listedRequiresBeans = (tools: typeof OWNER_POST_TOOLS): boolean =>
+    ['create_offer', 'create_need'].every(n => (((tools.find(t => t.name === n)?.inputSchema as any)?.required ?? []) as string[]).includes('beans'));
 const structured = (r: any): any => r?.structuredContent ?? null;
 const errorText = (r: any): string => (r?.content as any)?.[0]?.text ?? '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
@@ -181,7 +187,8 @@ async function main(): Promise<void> {
         const small = await jpeg(640, 480);
         const versionBefore = getPostsVersion();
         const offer = await client.callTool({ name: 'create_offer', arguments: {
-            title: 'Quincefield sourdough loaves', description: 'Baked Saturday morning, collect from the hall.', category: 'food', beans: 6, photos: [big, small],
+            title: 'Quincefield sourdough loaves', description: 'Baked Saturday morning, collect from the hall.', category: 'food', beans: 6,
+            lat: -28.55, lng: 153.5, photos: [big, small],
         } });
         const o = structured(offer);
         assert(!offer.isError && typeof o?.postId === 'string' && o.kind === 'offer' && o.asEnterprise === false && o.link === `/?post=${encodeURIComponent(o.postId)}`
@@ -204,7 +211,9 @@ async function main(): Promise<void> {
         const asRead = JSON.stringify(getPosts({ id: o?.postId, viewerPubkey: owner.pub }));
         assert(asRead.includes('Quincefield') && !/created_?via|assistant:/i.test(asRead), 'the listings an app reads never carry it');
 
-        const need = await client.callTool({ name: 'create_need', arguments: { title: 'Someone to mend a fence', category: 'trades', photos: [small] } });
+        const need = await client.callTool({ name: 'create_need', arguments: {
+            title: 'Someone to mend a fence', description: 'Three panels blew down; I have the timber.', category: 'labour', beans: 10, lat: -28.56, lng: 153.51, photos: [small],
+        } });
         const n = structured(need);
         assert(!need.isError && n?.kind === 'need' && (db.prepare('SELECT author_pubkey, created_via FROM posts WHERE id = ?').get(n?.postId) as any)?.created_via === `assistant:${grantId}`,
             `create_need posts a Need as the owner (${JSON.stringify(n ?? need.content)})`);
@@ -218,6 +227,12 @@ async function main(): Promise<void> {
         const eRow = db.prepare('SELECT type, author_pubkey, created_via, event_start_at FROM posts WHERE id = ?').get(e?.postId) as any;
         assert(!event.isError && e?.kind === 'event' && eRow?.type === 'event' && eRow.author_pubkey === owner.pub && eRow.created_via === `assistant:${grantId}`
             && Date.parse(eRow.event_start_at) === Date.parse(startAt), `create_event posts an event as the owner (${JSON.stringify(e ?? event.content)})`);
+        const online = await client.callTool({ name: 'create_event', arguments: {
+            title: 'Seed-saving talk', start_at: startAt, online: true, link: 'https://meet.example.org/seeds', photos: [small],
+        } });
+        const onRow = db.prepare('SELECT event_online, lat, lng, event_place_name, created_via FROM posts WHERE id = ?').get(structured(online)?.postId) as any;
+        assert(!online.isError && onRow?.event_online === 1 && onRow.lat === null && onRow.lng === null && onRow.event_place_name === null && onRow.created_via === `assistant:${grantId}`,
+            `an event online needs no place: none is asked, none stored (${JSON.stringify(structured(online) ?? online.content)} ${JSON.stringify(onRow)})`);
 
         const mine = await client.callTool({ name: 'my_enterprises', arguments: {} });
         const kept = structured(mine)?.enterprises ?? [];
@@ -241,27 +256,88 @@ async function main(): Promise<void> {
         console.log('── 2. Refused in words, and not counted ──');
         const countBefore = agentCreatesToday(grantId);
         const postsBefore = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
-        const noPhoto = await client.callTool({ name: 'create_offer', arguments: { title: 'No photo here', category: 'food' } });
-        const emptyPhotos = await client.callTool({ name: 'create_need', arguments: { title: 'No photo either', category: 'food', photos: [] } });
-        assert(noPhoto.isError === true && /Add a photo first/.test(errorText(noPhoto)) && emptyPhotos.isError === true && /Add a photo first/.test(errorText(emptyPhotos)),
-            `no photo → refused in words (${errorText(noPhoto)})`);
+        // Every field but the one each refusal is about (2b goes through every field).
+        const offerArgs = { title: 'Plum jam', description: 'Six jars from last summer.', category: 'food', beans: 4, lat: -28.55, lng: 153.5, photos: [small] };
+        const needArgs = { title: 'A ride to the station', description: 'Tuesday, early.', category: 'transport', beans: 3, lat: -28.55, lng: 153.5, photos: [small] };
+        const eventArgs = { title: 'Working bee', start_at: startAt, place_name: 'The community garden', lat: -28.55, lng: 153.5, photos: [small] };
+        const entArgs = { kind: 'offer', as_enterprise: kept[0]?.ref, title: 'Rye loaves', category: 'food', beans: 5, photos: [small] };
+        const { photos: _noPhotos, ...offerNoPhotos } = offerArgs;
+        const noPhoto = await client.callTool({ name: 'create_offer', arguments: offerNoPhotos });
+        const emptyPhotos = await client.callTool({ name: 'create_need', arguments: { ...needArgs, photos: [] } });
+        assert(noPhoto.isError === true && /^photos is required: add 1 to 4 photos first/.test(errorText(noPhoto))
+            && emptyPhotos.isError === true && /^photos is required/.test(errorText(emptyPhotos)), `no photo → refused in words naming the field (${errorText(noPhoto)})`);
         const png = `data:image/png;base64,${(await sharp({ create: { width: 64, height: 64, channels: 3, background: '#fff' } }).png().toBuffer()).toString('base64')}`;
-        const asPng = await client.callTool({ name: 'create_offer', arguments: { title: 'A PNG', category: 'food', photos: [png] } });
+        const asPng = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, photos: [png] } });
         assert(asPng.isError === true && /JPEG or WebP/.test(errorText(asPng)), `a PNG → refused: JPEG or WebP (${errorText(asPng)})`);
         const huge = `data:image/jpeg;base64,${'A'.repeat(600_001)}`;
-        const tooBig = await client.callTool({ name: 'create_offer', arguments: { title: 'Too big', category: 'food', photos: [huge] } });
+        const tooBig = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, photos: [huge] } });
         assert(tooBig.isError === true && /too large/.test(errorText(tooBig)), `a photo over the per-photo cap → refused (${errorText(tooBig)})`);
-        const otherRef = await client.callTool({ name: 'create_enterprise_listing', arguments: { kind: 'offer', as_enterprise: enterpriseRef(notOurs), title: 'Not ours', category: 'tools', photos: [small] } });
-        const madeUp = await client.callTool({ name: 'create_event', arguments: { title: 'As nobody', start_at: startAt, lat: -28.55, lng: 153.5, as_enterprise: 'ffffffffffffffff', photos: [small] } });
+        const otherRef = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, as_enterprise: enterpriseRef(notOurs), category: 'tools' } });
+        const madeUp = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, as_enterprise: 'ffffffffffffffff' } });
         assert(otherRef.isError === true && /not an enterprise you keep/.test(errorText(otherRef)) && madeUp.isError === true && /not an enterprise you keep/.test(errorText(madeUp)),
             `an enterprise the owner does not keep, or a made-up ref → refused (${errorText(otherRef)})`);
-        const engineRefusal = await client.callTool({ name: 'create_event', arguments: { title: 'In the past', start_at: new Date(Date.now() - DAY).toISOString(), lat: -28.55, lng: 153.5, photos: [small] } });
+        const engineRefusal = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, start_at: new Date(Date.now() - DAY).toISOString() } });
+        const badCategory = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, category: 'trades' } });
+        const freeEnterprise = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, beans: 0 } });
+        const badKind = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, kind: 'barter' } });
+        assert(badCategory.isError === true && /^category must be one of food, services/.test(errorText(badCategory))
+            && AGENT_POST_CATEGORIES.length === 17 && !AGENT_POST_CATEGORIES.includes('other'),
+            `a category no app offers → refused, naming the ones they do (${errorText(badCategory).slice(0, 60)}…)`);
+        assert(freeEnterprise.isError === true && /^beans must be more than 0/.test(errorText(freeEnterprise)) && badKind.isError === true && /^kind must be offer or need/.test(errorText(badKind)),
+            `an enterprise's listing at 0 Beans, or a kind that is neither → refused as its form would (${errorText(freeEnterprise)} | ${errorText(badKind)})`);
         assert(engineRefusal.isError === true && /future/.test(errorText(engineRefusal)), `the engine's own rules answer, in its words (${errorText(engineRefusal)})`);
         const postsAfter = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
         assert(agentCreatesToday(grantId) === countBefore && postsAfter === postsBefore, `no refused call made a post or counted against the day (${countBefore} → ${agentCreatesToday(grantId)})`);
 
+        // ── 2b. Every field the apps require ────────────────────────────────────────────────────────
+        console.log('── 2b. Every field both apps\' composers require, left out or empty, is refused in words naming it ──');
+        const sorted = (a: readonly string[]) => [...a].sort().join(',');
+        const emptyOf = (v: unknown): unknown => Array.isArray(v) ? [] : typeof v === 'number' ? '' : '   ';
+        const KINDS: Array<{ tool: string; args: Record<string, unknown>; required: string[]; schema?: string[] }> = [
+            { tool: 'create_offer', args: offerArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'] },
+            { tool: 'create_need', args: needArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'] },
+            // In person, its place too: JSON Schema's `required` cannot say "unless online", so the schema lists the three it always needs.
+            { tool: 'create_event', args: eventArgs, required: ['title', 'start_at', 'photos', 'place_name', 'lat', 'lng'], schema: ['title', 'start_at', 'photos'] },
+            { tool: 'create_enterprise_listing', args: entArgs, required: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'] },
+        ];
+        const postsBefore2b = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
+        const kindGrants: string[] = [];
+        for (const k of KINDS) {
+            // A token of its own for each kind: two calls a field stay inside the door's 60 a minute.
+            const t = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: `Olive's ${k.tool} check` } });
+            kindGrants.push(t.body?.grant?.id);
+            const kc = await connect(t.body?.token);
+            const listed = (await kc.listTools()).tools.find(x => x.name === k.tool);
+            const schemaRequired = ((listed?.inputSchema as any)?.required ?? []) as string[];
+            assert(t.status === 201 && sorted(schemaRequired) === sorted(k.schema ?? k.required),
+                `${k.tool}'s input schema requires ${(k.schema ?? k.required).join(', ')} (${schemaRequired.join(', ')})`);
+            const wrong: string[] = [];
+            for (const field of k.required) {
+                const leftOut: Record<string, unknown> = { ...k.args };
+                delete leftOut[field];
+                for (const [how, args] of [['left out', leftOut], ['empty', { ...k.args, [field]: emptyOf(k.args[field]) }]] as const) {
+                    const r = await kc.callTool({ name: k.tool, arguments: args });
+                    if (!(r.isError === true && errorText(r).startsWith(`${field} is required: `))) wrong.push(`${field} ${how} → ${errorText(r).slice(0, 80) || 'made a post'}`);
+                }
+            }
+            assert(wrong.length === 0, `${k.tool}: each of ${k.required.join(', ')}, left out and then empty, is refused naming it${wrong.length ? ` (${wrong.join('; ')})` : ''}`);
+            await kc.close().catch(() => {});
+        }
+        assert((db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c === postsBefore2b && kindGrants.every(g => !!g && agentCreatesToday(g) === 0),
+            'none of them made a post or counted against a day');
+        // Where the node has no Beans neither app asks a price, and nor does create_offer.
+        setSwitchOverride('beans', false);
+        const beansOff = getProfileSwitches().beans === false;
+        const offRequired = ((await client.listTools()).tools.find(x => x.name === 'create_offer')?.inputSchema as any)?.required ?? [];
+        const { beans: _beans, ...offerNoPrice } = offerArgs;
+        const noPrice = await client.callTool({ name: 'create_offer', arguments: { ...offerNoPrice, photos: [] } });
+        setSwitchOverride('beans', true);
+        assert(beansOff && !offRequired.includes('beans') && offRequired.includes('title') && /^photos is required/.test(errorText(noPrice))
+            && getProfileSwitches().beans === true && listedRequiresBeans(OWNER_POST_TOOLS),
+            `with Beans off, create_offer asks no price (schema: ${offRequired.join(', ')}; ${errorText(noPrice).slice(0, 40)}), and asks one again when they are on`);
+
         while (agentCreatesToday(grantId) < AGENT_CREATES_PER_DAY) admitAgentCreate(grantId);
-        const fiftyFirst = await client.callTool({ name: 'create_offer', arguments: { title: 'One too many', category: 'food', photos: [small] } });
+        const fiftyFirst = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'One too many' } });
         assert(fiftyFirst.isError === true && new RegExp(`${AGENT_CREATES_PER_DAY} posts today`).test(errorText(fiftyFirst))
             && (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c === postsAfter, `the ${AGENT_CREATES_PER_DAY + 1}st post in a day → refused, nothing made (${errorText(fiftyFirst)})`);
 

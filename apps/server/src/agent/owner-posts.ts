@@ -14,6 +14,10 @@
  *   so the mute, probation and daily-post limits, the engine's validation (text limits, categories, place, reach, an event's
  *   times and pin), the search index, the sync marks and the standby copy behave as for a post from the phone. A server
  *   another took over (services/identity-epoch.ts) refuses, as its /api/ routes do.
+ * - Every field the phone's and the web's composer require for that kind is required here too (Marty, 30 Oct: "all the
+ *   mandatory fields should be mandatory even if seeding through MCP"): by the tool's input schema and again by the server,
+ *   from one list per kind (REQUIRED), each one missing or empty refused in words that name it. Then the values go through
+ *   the route's own validator (engine/post-fields.ts assertPostFields, in createPost) like any post's.
  * - Photos are required: 1–4, each a base64 JPEG or WebP of at most the per-photo cap (state-engine.ts
  *   MAX_PHOTO_BASE64_CHARS), made here what the apps send (at most 800 px, no metadata: storage/photo-thumbnails.ts
  *   resizeToStoredPhoto), then held to the routes' photo rule. No composer offers a preset tile instead of a photo, so
@@ -26,14 +30,15 @@
  *   its welcome), and the day's count: no key, no token, nothing about another member.
  */
 import crypto from 'node:crypto';
+import { PRICING_CATEGORIES } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS } from '../state-engine.js';
 import { createEventFromBody } from '../routes/event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { assertMayAddPhotos, assertMayPost } from '../engine/probation.js';
 import { assertMayPostToday, enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { newListingCategory } from '../engine/shops.js';
 import { photoRefusalText, routePhotosRefusal, sniffRasterImageType } from '../engine/avatar.js';
 import { imageSize } from '../storage/image-metadata.js';
 import { PHOTO_MAX_SIDE, resizeToStoredPhoto } from '../storage/photo-thumbnails.js';
@@ -60,6 +65,60 @@ export function createdViaOf(grant: AgentGrant): string {
 /** An enterprise as the assistant names it: from its key, never the key (the tool table returns none). */
 export function enterpriseRef(enterpriseKey: string): string {
     return crypto.createHash('sha256').update(`beanpool-agent-enterprise:${enterpriseKey}`).digest('hex').slice(0, 16);
+}
+
+/** The Market's categories, the ones both apps' composers pick from (@beanpool/core PRICING_CATEGORIES). */
+export const AGENT_POST_CATEGORIES: readonly string[] = PRICING_CATEGORIES.map((c) => c.id);
+
+/**
+ * The fields each kind's composer will not post without, by the tools' own names. Each list is the tool's input schema
+ * `required` and the server's re-check (missingField), so the two cannot drift:
+ * - an Offer or a Need as the owner, the map's form (phone (tabs)/map.tsx handleSubmit; web MapPage handleCreatePost and
+ *   lib/offer-need-submit.ts): a title, a description, a category, a place on the map and a photo, and a price where the
+ *   node has Beans (neither app asks one where it has none: phone utils/market-global.ts postFormPriceInvalid);
+ * - an event (phone utils/events.ts buildEventDraft; web MapPage handleCreateEvent): a title, its start and a photo; in
+ *   person also its pin and the place's name (the phone asks for both), online neither. The description and the end are
+ *   asked by neither app;
+ * - an enterprise's Offer or Need (phone treasury-post.tsx; web TreasuryDetailPage handleCreatePost): Offer or Need, the
+ *   enterprise, a title, a category, a price of more than 0 Beans and a photo. Neither app asks a place or a description.
+ */
+export const REQUIRED = {
+    listing: ['title', 'description', 'category', 'lat', 'lng', 'photos'],
+    /** A listing's price, required where the node has Beans (listingRequired). */
+    listingPrice: ['beans'],
+    event: ['title', 'start_at', 'photos'],
+    /** An event in person: a JSON Schema `required` cannot say "unless online", so the schema says it in words. */
+    eventInPerson: ['place_name', 'lat', 'lng'],
+    enterpriseListing: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'],
+} as const;
+
+/** What create_offer and create_need require on this node now: a price only where it has Beans. */
+export function listingRequired(): string[] {
+    return getProfileSwitches().beans ? [...REQUIRED.listing, ...REQUIRED.listingPrice] : [...REQUIRED.listing];
+}
+
+const isText = (v: unknown): boolean => typeof v === 'string' && v.trim().length > 0;
+const isNumber = (v: unknown): boolean => num(v) !== undefined;
+
+/** Each required field: whether a value is there at all, and the words that ask for it. */
+const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> = {
+    title: { there: isText, asks: 'what it is, in a few words' },
+    description: { there: isText, asks: 'the details a member reads' },
+    category: { there: isText, asks: `one of ${AGENT_POST_CATEGORIES.join(', ')}` },
+    beans: { there: isNumber, asks: 'the price in Beans' },
+    lat: { there: isNumber, asks: 'the latitude of the place on the map' },
+    lng: { there: isNumber, asks: 'the longitude of the place on the map' },
+    photos: { there: (v) => Array.isArray(v) && v.length > 0, asks: `add 1 to ${AGENT_POST_PHOTOS_MAX} photos first (base64 JPEG or WebP)` },
+    start_at: { there: isText, asks: 'when it starts, in ISO 8601 with its offset' },
+    place_name: { there: isText, asks: 'the name of the place, e.g. "The old bowls club" (or online: true)' },
+    kind: { there: isText, asks: 'offer or need' },
+    as_enterprise: { there: isText, asks: 'the enterprise, by its ref from my_enterprises' },
+};
+
+/** The first required field left out or empty, refused in words that name it; null when every one is there. */
+export function missingField(args: Record<string, unknown>, required: readonly string[]): string | null {
+    const field = required.find((k) => !FIELDS[k].there(args[k]));
+    return field ? `${field} is required: ${FIELDS[field].asks}.` : null;
 }
 
 const BLOCKED = new Set(['disabled', 'suspended', 'pruned']);
@@ -182,20 +241,30 @@ function answer(grant: AgentGrant, kind: 'offer' | 'need' | 'event', postId: str
 interface ListingArgs {
     kind: 'offer' | 'need';
     args: Record<string, unknown>;
-    enterpriseRequired: boolean;
+    /** As an enterprise the owner keeps (create_enterprise_listing), not as the owner. */
+    enterprise: boolean;
 }
 
 /** An Offer or a Need, as the owner (POST /api/marketplace/posts) or as an enterprise they keep (/api/treasury/:t/{offer,need}). */
-async function createListing(grant: AgentGrant, { kind, args, enterpriseRequired }: ListingArgs): Promise<ToolResult> {
+async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnterprise }: ListingArgs): Promise<ToolResult> {
     const refused = gate(grant);
     if (refused) return { ok: false, error: refused };
-    const who = authorFor(grant, args.as_enterprise, enterpriseRequired);
+    const missing = missingField(args, asEnterprise ? REQUIRED.enterpriseListing : listingRequired());
+    if (missing) return { ok: false, error: missing };
+    if (asEnterprise && args.kind !== 'offer' && args.kind !== 'need') return { ok: false, error: 'kind must be offer or need.' };
+    const who = authorFor(grant, args.as_enterprise, asEnterprise);
     if (!who.ok) return who;
-    const title = str(args.title, 2000);
-    if (!title || !title.trim()) return { ok: false, error: 'A title is required.' };
+    // Trimmed as both apps send them; held to the route's own limits by createPost (engine/post-fields.ts), never cut here.
+    const title = (args.title as string).trim();
+    const description = typeof args.description === 'string' ? args.description.trim() : '';
+    const category = (args.category as string).trim();
+    if (!AGENT_POST_CATEGORIES.includes(category)) {
+        return { ok: false, error: `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.` };
+    }
+    const credits = num(args.beans) ?? 0;
+    // Both apps' enterprise forms ask a price of more than 0 (treasury-post.tsx, TreasuryDetailPage); a member's own may be 0.
+    if (who.enterprise && credits <= 0) return { ok: false, error: "beans must be more than 0: an enterprise's listing has a price, as its form asks." };
     const shopId = str(args.shop_id, 200);
-    const category = str(args.category, 200) || newListingCategory(shopId) || (who.enterprise ? undefined : 'other');
-    if (!category) return { ok: false, error: 'A category is required for an enterprise listing.' };
     const photos = await photosFrom(args.photos);
     if (!photos.ok) return photos;
     // Counted before the post is made, so two calls at once cannot both take the last one; given back when it is not made.
@@ -204,7 +273,6 @@ async function createListing(grant: AgentGrant, { kind, args, enterpriseRequired
     }
     const owner = grant.member;
     const lat = num(args.lat), lng = num(args.lng);
-    const credits = num(args.beans) ?? 0;
     const priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
     try {
         let post;
@@ -216,16 +284,16 @@ async function createListing(grant: AgentGrant, { kind, args, enterpriseRequired
             const limit = enterprisePostLimit(enterprise, owner);
             // An Offer is repeatable unless it says not; a Need only when it says so (the enterprise routes' defaults).
             const repeatable = kind === 'offer' ? args.repeatable !== false : args.repeatable === true;
-            post = createPost(kind, category, title, str(args.description, 20_000) ?? '', credits, priceType, enterprise, lat, lng,
+            post = createPost(kind, category, title, description, credits, priceType, enterprise, lat, lng,
                 photos.photos, repeatable, undefined, undefined,
                 { createdBy: owner, beforeWrite: limit.beforeWrite, shopId, createdVia: createdViaOf(grant) });
             if (post) limit.stored(post.id);
         } else {
             assertNotMuted(owner);
             assertMayPost(owner, Math.min(photos.photos.length, 5));
-            post = createPost(kind, category, title, str(args.description, 20_000) ?? '', credits, priceType, owner, lat, lng,
+            post = createPost(kind, category, title, description, credits, priceType, owner, lat, lng,
                 photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
-                { beforeWrite: () => assertMayPostToday(owner), shopId, createdVia: createdViaOf(grant) });
+                { beforeWrite: () => assertMayPostToday(owner), createdVia: createdViaOf(grant) });
             if (post) syncPulseMarketplaceGate();
         }
         if (!post) {
@@ -243,19 +311,20 @@ async function createListing(grant: AgentGrant, { kind, args, enterpriseRequired
 async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Promise<ToolResult> {
     const refused = gate(grant);
     if (refused) return { ok: false, error: refused };
+    const missing = missingField(args, args.online === true ? REQUIRED.event : [...REQUIRED.event, ...REQUIRED.eventInPerson]);
+    if (missing) return { ok: false, error: missing };
     const who = authorFor(grant, args.as_enterprise, false);
     if (!who.ok) return who;
-    const title = str(args.title, 2000);
-    if (!title || !title.trim()) return { ok: false, error: 'A title is required.' };
     const photos = await photosFrom(args.photos);
     if (!photos.ok) return photos;
     if (!admitAgentCreate(grant.id)) {
         return { ok: false, error: `This assistant has made ${AGENT_CREATES_PER_DAY} posts today, the most a day allows: try again tomorrow (UTC).` };
     }
     const owner = grant.member;
-    // The body the apps send (routes/event-post.ts reads it): instants, the zone, the place or the link.
+    // The body the apps send (routes/event-post.ts reads it): instants, the zone, the place or the link; the text trimmed as
+    // both apps trim it.
     const body = {
-        title, description: str(args.description, 20_000) ?? '', photos: photos.photos,
+        title: (args.title as string).trim(), description: typeof args.description === 'string' ? args.description.trim() : '', photos: photos.photos,
         lat: num(args.lat), lng: num(args.lng),
         eventStartAt: str(args.start_at, 64), eventEndAt: str(args.end_at, 64), eventTz: str(args.timezone, 64),
         eventPlaceName: str(args.place_name, 500), eventOnline: args.online === true, eventLink: str(args.link, 2000),
@@ -298,14 +367,23 @@ const PHOTOS_SCHEMA = {
 const LISTING_PROPS = {
     title: { type: 'string', description: 'what it is, in a few words' },
     description: { type: 'string', description: 'the details a member reads' },
-    category: { type: 'string', description: 'the Market category (other when left out)' },
-    beans: { type: 'number', minimum: 0, description: 'the price in Beans (0 when left out)' },
+    category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: 'the Market category, as the apps offer them' },
+    beans: { type: 'number', minimum: 0, description: 'the price in Beans (0 is free); required where this community has Beans, none where it has not' },
     price_type: { type: 'string', enum: ['fixed', 'hourly'], description: 'fixed (default) or hourly' },
     repeatable: { type: 'boolean', description: 'stays up after each trade' },
-    lat: { type: 'number', description: 'latitude of the place; left out, the author\'s own area' },
-    lng: { type: 'number', description: 'longitude of the place; left out, the author\'s own area' },
+    lat: { type: 'number', description: 'latitude of the place on the map' },
+    lng: { type: 'number', description: 'longitude of the place on the map' },
     photos: PHOTOS_SCHEMA,
 };
+/** create_offer's and create_need's input, made when the tools are listed: a price is required only where Beans are on. */
+function ownerListingSchema(): Record<string, unknown> {
+    return {
+        type: 'object',
+        properties: { ...LISTING_PROPS, cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' } },
+        required: listingRequired(),
+        additionalProperties: false,
+    };
+}
 const POST_OUT = {
     type: 'object',
     properties: {
@@ -350,15 +428,11 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
         write: true,
-        inputSchema: {
-            type: 'object',
-            properties: { ...LISTING_PROPS, cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' } },
-            required: ['title', 'photos'],
-            additionalProperties: false,
-        },
+        // Read each time the tools are listed (agent/mcp-route.ts): whether a price is required follows the Beans switch.
+        get inputSchema() { return ownerListingSchema(); },
         outputSchema: POST_OUT,
         // As the owner only: an enterprise's Offer is create_enterprise_listing's.
-        run: (grant, args) => createListing(grant, { kind: 'offer', args: { ...args, as_enterprise: undefined, shop_id: undefined }, enterpriseRequired: false }),
+        run: (grant, args) => createListing(grant, { kind: 'offer', args: { ...args, as_enterprise: undefined, shop_id: undefined }, enterprise: false }),
     },
     {
         name: 'create_need',
@@ -367,15 +441,10 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         never: "anything but the new post's id and its link, or another member's data",
         ownerOnly: true,
         write: true,
-        inputSchema: {
-            type: 'object',
-            properties: { ...LISTING_PROPS, cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' } },
-            required: ['title', 'photos'],
-            additionalProperties: false,
-        },
+        get inputSchema() { return ownerListingSchema(); },
         outputSchema: POST_OUT,
         // As the owner only: an enterprise's Need is create_enterprise_listing's.
-        run: (grant, args) => createListing(grant, { kind: 'need', args: { ...args, as_enterprise: undefined, shop_id: undefined }, enterpriseRequired: false }),
+        run: (grant, args) => createListing(grant, { kind: 'need', args: { ...args, as_enterprise: undefined, shop_id: undefined }, enterprise: false }),
     },
     {
         name: 'create_event',
@@ -393,15 +462,16 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
                 start_at: { type: 'string', description: 'when it starts: ISO 8601 with its offset, e.g. 2026-11-07T10:00:00+11:00' },
                 end_at: { type: 'string', description: 'when it ends (ISO 8601); left out, the server\'s default length' },
                 timezone: { type: 'string', description: 'the IANA zone it is in, e.g. Australia/Melbourne' },
-                place_name: { type: 'string', description: 'the place, in words' },
-                lat: { type: 'number', description: 'latitude of the place (required in person)' },
-                lng: { type: 'number', description: 'longitude of the place (required in person)' },
+                place_name: { type: 'string', description: 'the name of the place: required in person (the default), none online' },
+                lat: { type: 'number', description: 'latitude of the place on the map: required in person, none online' },
+                lng: { type: 'number', description: 'longitude of the place on the map: required in person, none online' },
                 online: { type: 'boolean', description: 'online instead of in person: no place, a link' },
                 link: { type: 'string', description: 'the join link of an online event' },
                 as_enterprise: { type: 'string', description: 'host as an enterprise: its ref from my_enterprises' },
                 photos: PHOTOS_SCHEMA,
             },
-            required: ['title', 'start_at', 'photos'],
+            // In person (online not true) place_name, lat and lng are required too (REQUIRED.eventInPerson), in their words.
+            required: [...REQUIRED.event],
             additionalProperties: false,
         },
         outputSchema: POST_OUT,
@@ -421,15 +491,15 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
                 kind: { type: 'string', enum: ['offer', 'need'], description: 'offer or need' },
                 as_enterprise: { type: 'string', description: 'the enterprise: its ref from my_enterprises' },
                 ...LISTING_PROPS,
+                beans: { type: 'number', exclusiveMinimum: 0, description: 'the price in Beans, more than 0' },
+                lat: { type: 'number', description: "latitude of the place; left out, the enterprise's own area" },
+                lng: { type: 'number', description: "longitude of the place; left out, the enterprise's own area" },
                 shop_id: { type: 'string', description: "the enterprise's own shop to put an Offer in (optional)" },
             },
-            required: ['kind', 'as_enterprise', 'title', 'category', 'photos'],
+            required: [...REQUIRED.enterpriseListing],
             additionalProperties: false,
         },
         outputSchema: POST_OUT,
-        run: (grant, args) => {
-            if (args.kind !== 'offer' && args.kind !== 'need') return { ok: false, error: 'kind must be offer or need.' };
-            return createListing(grant, { kind: args.kind, args, enterpriseRequired: true });
-        },
+        run: (grant, args) => createListing(grant, { kind: args.kind === 'need' ? 'need' : 'offer', args, enterprise: true }),
     },
 ];

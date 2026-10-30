@@ -49,7 +49,7 @@ On the phone, if nothing matches, tap **Clear All Filters**. In the web app an e
 
 On the phone, when you have scrolled down and a search or filter is on, a small chip at the top shows what it is. Tap the chip to change it. Tap **✕** on it to clear the search and every filter.
 
-The button next to **My Deals** changes how the list looks: a list, a grid, or compact.
+The button next to **Your deals** changes how the list looks: a list, a grid, or compact.
 
 ## What a post shows
 
@@ -58,6 +58,7 @@ The button next to **My Deals** changes how the list looks: a list, a grid, or c
 - the price in beans, with **/Hr** if it is priced by the hour;
 - **RECURRING** if it stays open after each deal;
 - **CASH TOO** if the person also needs some cash, for fuel or materials;
+- **🤝 IN TRUST** if you have a deal on it with beans held, or **✋ ASKED** if you have asked for it, or someone has asked for yours. Only the two people in the deal see this: nobody else is told who traded;
 - a lock and a group name if only that group can see it;
 - who posted it, with their trust badge and stars. A member who has not traded yet shows 🔑 on their author line.
 
@@ -69,6 +70,8 @@ Tap a post to open it. There is no separate VIEW button; tapping anywhere on the
 - Tap their name to see their profile, reviews and trust.
 - **Report Post** if it is a scam, offensive, misleading, or puts a child at risk (**Child safety**).
 - **Block User** to hide their posts and chats on your phone. It also tells your admins. See "Blocking someone".
+- Your deal on it, if you have one: what is held, whose step it is, and the buttons for it, in place of **Accept Offer** or **Offer to Fulfill**. On your own post, every deal under way on it. See "A deal, step by step".
+- **Taken up by someone else for now.** if someone else has taken it up and it is not one that stays open.
 
 In the web app the buttons on a post are **💬 Message** and **🚩 Report**. Block someone from their profile.
 

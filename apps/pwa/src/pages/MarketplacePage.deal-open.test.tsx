@@ -3,7 +3,7 @@
  * scratch/fable-design/DESIGN-deals-fable.md S2). The member takes up a recurring Offer, or offers to help with a recurring
  * Need, while their deal on it is under way (made in another tab or on their phone, so this page did not know): the page
  * says so in its own words, closes the confirmation, refreshes the member's deals, and opens the listing at the deal the node
- * named, as My Deals' View deal does (postId + txId). Any other refusal is as it was.
+ * named, as Your deals' View deal does (postId + txId). Any other refusal is as it was.
  *
  * The listing's own words only: the cards, sheets and modals it draws are stubbed, as in MarketplacePage.words.test.tsx.
  */

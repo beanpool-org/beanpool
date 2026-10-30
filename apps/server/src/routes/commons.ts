@@ -15,11 +15,13 @@ import {
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
     checkProposalStanding, isNodeMember,
     payToCommons, noticeProjectEndDateMoved,
+    submitReport, findPendingReport, updatePendingReportReason, isReportRateLimited,
 } from '../state-engine.js';
 import { projectEndDate } from '../engine/unfunded-pledges.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
-import { decisionsOn, madeWithoutVote } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, replyToRemovalCase, removalCaseReport } from '../decisions-engine.js';
+import { noteNewReport } from '../services/alerts.js';
 import {
     getCrowdfundProjects, getCrowdfundProject,
     createCrowdfundProject, updateCrowdfundProject,
@@ -300,6 +302,81 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
         return;
     }
     ctx.body = { success: true, creditsUsed: result.creditsUsed };
+});
+
+// The member a vote on removing them is about replies to its case (removal by vote, Amendment A point 2): their own
+// words, shown beside the case to everyone who reads the vote. The verified signer only, a paused member included
+// (decisions-engine replyToRemovalCase). Answers the Decision as the signer reads it.
+router.post('/api/commons/decisions/:id/reply', async (ctx) => {
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    const { reply } = (ctx as any).requestBody || {};
+    const result = replyToRemovalCase(ctx.params.id, actor, reply);
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = result.code === FEATURE_OFF ? { error: result.error, code: result.code, feature: 'decisions' } : { error: result.error };
+        return;
+    }
+    const decision = getDecision(ctx.params.id);
+    ctx.body = { success: true, decision: decision ? decisionForReader(decision, actor) : null };
+});
+
+// The member a vote on removing them is about reports its case as a false accusation (removal by vote, Amendment A point
+// 4): a report about whoever brought it, in Reports with every other report (decisions-engine removalCaseReport). The
+// verified signer only. The answer names nobody: an admin who paused is named on the card, never by key.
+router.post('/api/commons/decisions/:id/report', async (ctx) => {
+    const actor = (ctx.state as any)?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: word('A signed request is required') };
+        return;
+    }
+    const { words } = (ctx as any).requestBody || {};
+    const about = removalCaseReport(ctx.params.id, actor, words);
+    if (!about.success) {
+        ctx.status = about.status;
+        ctx.body = { error: about.error };
+        return;
+    }
+    const pending = findPendingReport(actor, about.target);
+    // This case on file already, as the reports route answers a repeat.
+    if (pending && pending.reason.includes(about.ref)) {
+        ctx.body = { success: true, duplicate: true };
+        return;
+    }
+    // A report about whoever brought the case was waiting already, about something else: the member reported the admin,
+    // and the admin paused them (the retaliation Amendment A point 4 is for). The queue keeps one report a member has
+    // pending about one person, so this case goes on that report, and the owners and admins are told as of a new one. Not
+    // a duplicate: something new is on file. The report keeps its own words first, as its kind is read from how they
+    // start (core report-kind.ts), cut short if need be so the case fits in the 500 characters the queue keeps.
+    if (pending) {
+        const room = Math.max(0, 500 - about.reason.length - 2);
+        const updated = updatePendingReportReason(pending.id, `${pending.reason.slice(0, room)}\n\n${about.reason}`);
+        if (updated) {
+            // Told by what is new on it, the case, not by the report it joined (a child-safety one would raise that again).
+            noteNewReport(about.reason, actor).catch((e) => console.warn(`[Alerts] A report could not be told: ${e instanceof Error ? e.message : String(e)}`));
+            ctx.body = { success: true };
+            return;
+        }
+    }
+    if (isReportRateLimited(actor)) {
+        ctx.status = 429;
+        // The reports route's own answer, as it words it: an app matches on these words (apps/pwa lib/web-join.ts), so they stay English.
+        ctx.body = { error: 'rate_limited', message: 'You have sent a lot of reports recently. Please try again in an hour.' };
+        return;
+    }
+    if (!submitReport(actor, about.target, about.reason)) {
+        ctx.status = 400;
+        ctx.body = { error: word('This report could not be made.') };
+        return;
+    }
+    // The owners and admins hear of it (by kind and count, never who or what), not awaited, as the reports route tells them.
+    noteNewReport(about.reason, actor).catch((e) => console.warn(`[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
+    ctx.body = { success: true };
 });
 
 // Decisions close and execute on the periodic tickDecisions() in state-engine.ts, every 60 seconds. There is

@@ -617,6 +617,14 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         expect(noticeRoute('community.notice', { screen: 'nowhere' })).toBe('/(tabs)');
     });
 
+    it("a deal's alert lands on the deal: its txId rides with the post when it is in the node's own shape (deals S4)", () => {
+        expect(noticeRoute('trade.update', { screen: 'post', postId: POST_ID, txId: CHAT_ID })).toBe(`/post/${POST_ID}?txId=${CHAT_ID}`);
+        // Anything else in its place is dropped, never carried into the route: the post alone, as before.
+        for (const bad of [...FORGED, 42, null, ['a'], { a: 1 }]) {
+            expect(noticeRoute('trade.update', { screen: 'post', postId: POST_ID, txId: bad })).toBe(`/post/${POST_ID}`);
+        }
+    });
+
     it('a request to join lands on People → Invites, where it is listed with Invite and Not now, whatever the answer says (front doors S1)', () => {
         for (const d of [null, { screen: 'people' }, { screen: 'nowhere' }, ...FORGED.map((x) => ({ screen: x }))]) {
             expect(noticeRoute('community.knock', d)).toBe('/(tabs)/people?view=invites');
@@ -630,6 +638,13 @@ describe('no string from a push, nor a forged target from an answer, reaches the
             expect(noticeRoute('decision.open', { screen: 'enterprise', publicKey: bad })).toBe('/(tabs)');
         }
         expect(noticeRoute('decision.open', null)).toBe('/(tabs)');
+    });
+
+    it('a removal vote, to its voters and to the member it is about, and their reply taken down, land on Commons, Decide; without it, on Home (removal by vote, Amendment A)', () => {
+        for (const kind of ['decision.removal', 'account.removal-vote', 'account.reply-taken-down'] as const) {
+            expect(noticeRoute(kind, { screen: 'decide' })).toBe('/(tabs)/projects?section=decide');
+            for (const d of [null, { screen: 'nowhere' }, ...FORGED.map((x) => ({ screen: x }))]) expect(noticeRoute(kind, d)).toBe('/(tabs)');
+        }
     });
 
     it("a group's vote opening lands on the group it names (its chat, the info sheet open), its id in the node's own shape; never Talk (slice S3)", () => {

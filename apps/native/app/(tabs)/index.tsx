@@ -19,6 +19,7 @@ import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { KeyMovedCard } from '../../components/KeyMovedCard';
 import { AddressFollowCard } from '../../components/AddressFollowCard';
+import { CopiesRuleCard } from '../../components/CopiesRuleCard';
 import { NotificationPermissionCard } from '../../components/NotificationPermissionCard';
 import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
 import { NewPollModal } from '../../components/NewPollModal';
@@ -31,6 +32,7 @@ import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
+import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import { LookAroundCard } from '../../components/LookAroundCard';
 import { lookingAroundHere } from '../../utils/look-around';
@@ -54,7 +56,7 @@ import {
     writePhoneOnlySent, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
 import { readGlobalHome } from '../../utils/community-directory';
-import { rememberedKnocks, knockStillAnswerable, type RememberedKnock } from '../../utils/knock';
+import { rememberedKnocks, knockStillAnswerable, withVisitCancelled, type RememberedKnock } from '../../utils/knock';
 import { getCachedNodeProfile, hiddenTabsFor } from '../../utils/node-profile';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
@@ -181,6 +183,7 @@ export default function HomeScreen() {
     const [safetyUp, setSafetyUp] = useState(false);
     const [local, setLocal] = useState<LocalNeeds | null>(null);
     const [menuFor, setMenuFor] = useState<HomeCardInstance | null>(null);
+    const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
@@ -252,6 +255,18 @@ export default function HomeScreen() {
     const shown: HomeLayout | null = shownLayout(stored?.answer, layout, { tourOver });
     layoutRef.current = shown;
     const focused = useRef(false);
+    // The requests whose Cancel worked during this visit to Home (the tab in front). The phone's memory has them cancelled, so
+    // every read of the knocks leaves them out; they are put back into the list until Home loses focus, so the card keeps its
+    // "You cancelled your request…" line and Find its pin for the visit (LG-L1-W).
+    const visitCancelled = useRef<RememberedKnock[]>([]);
+    const dropKnocks = useCallback((gone: readonly RememberedKnock[]) => {
+        if (gone.length) setKnocks(was => was.filter(k => !gone.some(g => g.url === k.url && g.sentAt === k.sentAt)));
+    }, []);
+    const onKnockCancelled = useCallback((k: RememberedKnock) => {
+        // A Cancel that finished after Home lost focus has no visit left to keep its line for.
+        if (focused.current) visitCancelled.current = [...visitCancelled.current, k];
+        else dropKnocks([k]);
+    }, [dropKnocks]);
     const scrollRef = useRef<ScrollView>(null);
     const cardY = useRef(new Map<string, number>());
     const menuRefs = useRef(new Map<string, React.RefObject<View | null>>());
@@ -456,6 +471,7 @@ export default function HomeScreen() {
             setUrl(u);
             setRole(undefined);
             setPlace(null);
+            visitCancelled.current = [];
             setKnocks([]);
             setStored(copy);
             setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine, copy!.answer.layoutV1, phoneOver.current).layout : null);
@@ -539,8 +555,9 @@ export default function HomeScreen() {
             }
             // The knocks this phone sent, on the global node (where a member asks a local community to let them in).
             if (member && read.stored.answer.profile === 'global') {
-                void rememberedKnocks(id.publicKey).catch(() => [] as RememberedKnock[]).then(list => {
+                void rememberedKnocks(id.publicKey).catch(() => [] as RememberedKnock[]).then(remembered => {
                     if (!stillOnPhone(whose) || identityRef.current?.publicKey !== id.publicKey) return;
+                    const list = withVisitCancelled(remembered, visitCancelled.current);
                     knocksRef.current = list;
                     setKnocks(list);
                     // This read asked before the knocks were known: a request that waits pins Find, and a list without it
@@ -575,8 +592,16 @@ export default function HomeScreen() {
         focused.current = true;
         void refreshRef.current('focus');
         const poll = setInterval(() => { if (AppState.currentState === 'active') void refreshRef.current('poll'); }, HOME_SAFETY_POLL_MS);
-        return () => { focused.current = false; clearInterval(poll); setTuneOpen(false); };
-    }, []));
+        return () => {
+            focused.current = false;
+            clearInterval(poll);
+            setTuneOpen(false);
+            // Home lost focus: the visit's cancelled requests (and their lines) go; the next visit reads the phone's memory.
+            const gone = visitCancelled.current;
+            visitCancelled.current = [];
+            dropKnocks(gone);
+        };
+    }, [dropKnocks]));
 
     // The app coming back while Home is in front, and the doorbells that matter to Home (one read after a burst): its
     // member's own group invitations among them, which Needs you lists.
@@ -607,6 +632,7 @@ export default function HomeScreen() {
         setFewer(false);
         setRole(undefined);
         setPlace(null);
+        visitCancelled.current = [];
         setKnocks([]);
         tipsRef.current = null;
         setTips(null);
@@ -944,7 +970,7 @@ export default function HomeScreen() {
                 // The directory's rows are other people's publications: each is checked before it is drawn.
                 const home = readGlobalHome(c.find);
                 return home ? frame(
-                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} onKnocksChange={setKnocks} />,
+                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} onKnocksChange={setKnocks} onCancelled={onKnockCancelled} />,
                 ) : null;
             }
             case 'steps': {
@@ -1023,12 +1049,15 @@ export default function HomeScreen() {
                 const sky = skyOf(answer, inst, place, now);
                 return sky ? frame(<SkyBody sky={sky} colors={colors} />) : null;
             }
+            // `features` only for a reader with an account here: the shape line is the members' card (design §4.1), and a visitor is told none of it.
             case 'community': return frame(
                 <CommunityBody
                     card={c.community}
                     profile={profile}
                     invitesOn={invitesOn}
+                    features={tailor ? answer?.features : undefined}
                     colors={colors}
+                    onOpenShape={() => setShapeSheetOpen(true)}
                     onAdd={tailor ? () => setAddOpen(true) : undefined}
                     onEdit={tailor ? () => setEditOpen(true) : undefined}
                 />,
@@ -1122,6 +1151,8 @@ export default function HomeScreen() {
                     {lookingAround && <LookAroundCard colors={colors} />}
                     <KeyMovedCard colors={colors} />
                     <AddressFollowCard colors={colors} />
+                    {/* The community changed where members' copies go since this account last saw it (vault rethink VR2). */}
+                    {!lookingAround && <CopiesRuleCard colors={colors} />}
                     <NotificationPermissionCard colors={colors} />
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
@@ -1242,6 +1273,11 @@ export default function HomeScreen() {
                 />
                 <NewPollModal visible={pollModal} onClose={() => setPollModal(false)} onSuccess={() => void refresh('again')} />
                 <NewEventModal visible={eventModal} onClose={() => setEventModal(false)} onSuccess={() => void refresh('again')} />
+                <CommunityShapeSheet
+                    features={answer?.features}
+                    visible={shapeSheetOpen}
+                    onClose={() => setShapeSheetOpen(false)}
+                />
                 {manage.dialog}
             </View>
         </FabBandContext.Provider>

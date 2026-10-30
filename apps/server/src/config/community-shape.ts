@@ -6,7 +6,7 @@
  * (`lock`). The owners' page "How this community works" and, later, the members' card read it.
  *
  * A view over today's stores, never a store of its own: the profile switches and the operator's overrides
- * (config/node-profile.ts), the community's node_config rows (the door, the known floor) and the `node_config` object's
+ * (config/node-profile.ts), the community's node_config rows (the door, the known floor, where members' copies go) and the `node_config` object's
  * directory switches (config/community-settings.ts), and this server's env. Each value comes from the reader the node's own
  * gates use (getProfileSwitches, getNodeFeatures, doorFor, the engine's known-floor readers, directoryHeldBack), so the
  * shape can't say one thing while the node does another (test-community-shape-read.ts holds it to the gates for every
@@ -69,6 +69,7 @@ import {
 } from './node-profile.js';
 import { isPrivatePreview, PRIVATE_PREVIEW_ENV } from './private-preview.js';
 import { DOOR_KEY, doorFor, doorFromRow, isCommunityDoor, type CommunityDoor } from './door.js';
+import { RECOVERY_COPIES_KEY, isRecoveryCopies, recoveryCopiesFromRow, type RecoveryCopies } from './recovery-copies.js';
 import { keptCommunitySettings, parseCommunitySettings } from './community-settings.js';
 import {
     directoryHeldBack, directoryUnlistedByEnv, HELD_BACK_NAME_MESSAGE, HELD_BACK_PROBATION_MESSAGE, HELD_BACK_UNLISTED_MESSAGE,
@@ -141,6 +142,8 @@ export interface ShapeSettings {
     probation: ShapeSetting<boolean>;
     autoHide: ShapeSetting<boolean>;
     autoMute: ShapeSetting<boolean>;
+    /** Where members' copies go (config/recovery-copies.ts, vault rethink VR2): the key vault, this server, or nowhere. */
+    recoveryCopies: ShapeSetting<RecoveryCopies>;
     connections: ShapeSetting<boolean>;
 }
 
@@ -282,6 +285,7 @@ interface CommunityRows {
     confirmation: string | null;
     knownFloor: string | null;
     creditCap: string | null;
+    recoveryCopies: string | null;
     directory: Directory;
 }
 
@@ -302,6 +306,7 @@ function ownRows(): CommunityRows {
         confirmation: row(CONFIRMATION_DIAL_KEY),
         knownFloor: row(KNOWN_FLOOR_KEY),
         creditCap: row(CREDIT_CAP_KEY),
+        recoveryCopies: row(RECOVERY_COPIES_KEY),
         directory: Object.fromEntries(DIRECTORY_FIELDS.map((f) => [f, n[f]])) as Directory,
     };
 }
@@ -328,6 +333,7 @@ function standbyRows(): { rows: CommunityRows; copiedAt: string | null } {
             confirmation: copied(CONFIRMATION_DIAL_KEY, own.confirmation),
             knownFloor: copied(KNOWN_FLOOR_KEY, own.knownFloor),
             creditCap: copied(CREDIT_CAP_KEY, own.creditCap),
+            recoveryCopies: copied(RECOVERY_COPIES_KEY, own.recoveryCopies),
             directory,
         },
         copiedAt: kept.copiedAt ?? null,
@@ -482,6 +488,12 @@ export function readShape(): Shape {
         probation: plain('probation'),
         autoHide: plain('autoHideReports'),
         autoMute: plain('autoMute'),
+        recoveryCopies: {
+            value: recoveryCopiesFromRow(rows.recoveryCopies),
+            configured: recoveryCopiesFromRow(rows.recoveryCopies),
+            source: isRecoveryCopies(rows.recoveryCopies) ? 'owner' : 'default',
+            lock: null,
+        },
         connections: {
             value: ENABLE_PEER_CONNECTORS, configured: ENABLE_PEER_CONNECTORS, source: 'server',
             lock: lock('server_env', LOCK_WORDS.onTheServer('ENABLE_PEER_CONNECTORS')),

@@ -194,7 +194,7 @@ describe('HeaderControls needs-you alert icons', () => {
         const dealBtn = await screen.findByRole('button', { name: 'A deal is waiting for you' });
         expect(dealBtn).toBeInTheDocument();
         fireEvent.click(dealBtn);
-        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-123');
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'post-123', 'tx-456');
 
         // 2. Vote
         const voteBtn = screen.getByRole('button', { name: 'Vote closes tomorrow' });
@@ -684,7 +684,7 @@ describe('NeedsYouIcons: the count chip and the refresh away from Home', () => {
         render(<NeedsYouIcons identityPubkey={ME.publicKey} activeTab="messages" onNavigate={onNavigate} />);
 
         fireEvent.click(await screen.findByTestId('header-needs-deal'));
-        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'p1');
+        expect(onNavigate).toHaveBeenCalledWith('marketplace', 'p1', 't1');
         expect(freshHomeForHeader(ME.publicKey)).toBeNull();
 
         recordHomeAnswer(makeHomeAnswer([DEAL, VOTE, MESSAGE]) as any, ME.publicKey);

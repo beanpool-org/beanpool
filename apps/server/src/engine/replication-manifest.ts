@@ -238,7 +238,7 @@ export const TABLES: Record<string, TableEntry> = {
     // (routes/treasury.ts, db.ts pledgeToProject).
     projects: {
         kind: 'replicated', payload: 'projects', watermark: 'updated_at',
-        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status migrated_at enterprise_pubkey created_at updated_at'),
+        columns: cols('id creator_pubkey title description photos goal_amount current_amount deadline_at status migrated_at enterprise_pubkey created_at updated_at keeper_left_at'),
     },
     ratings: {
         kind: 'replicated-except', payload: 'ratings', watermark: 'created_at',
@@ -398,7 +398,7 @@ export const TABLES: Record<string, TableEntry> = {
     deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
-    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id'),
+    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason'),
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
     decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
@@ -730,6 +730,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
     startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     directory_promise: { kind: 'community-settings', reason: "the listing promise's two ticked lines and the closing day (engine/directory-promise.ts)" },
+    recovery_copies: { kind: 'community-settings', reason: "where members' copies go: BeanPool's key vault, this server, or nowhere (config/recovery-copies.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

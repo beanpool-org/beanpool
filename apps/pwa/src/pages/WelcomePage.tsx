@@ -343,6 +343,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // Where this account goes on a phone (DESIGN-global-entry-fable.md §D): the community the app lists by name, or
     // this one by its address. Said at Safety Backup, so nobody taps "I'm new" there and makes a second account.
     const [appsGlobal, setAppsGlobal] = useState(() => isAppsGlobal(initialInfo, webAppHost()));
+    // This community keeps no copies of members' accounts (its rule `none`, vault rethink VR2): the door's sign-in only lets
+    // the member in (WebJoin), and a sign-in added at Safety Backup only lifts the new-account limits; each is offered in
+    // those words.
+    const [keepsNoCopies, setKeepsNoCopies] = useState(() => initialInfo?.recoveryCopies === 'none');
     const [showAreaStep, setShowAreaStep] = useState(false);
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
@@ -351,7 +355,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setBeansOff(info?.features?.beans === false); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); setAppsGlobal(isAppsGlobal(info, webAppHost())); } })
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setBeansOff(info?.features?.beans === false); setWordsDoor(info?.features?.wordsDoor === true); setPrivatePreview(privatePreviewOn(info)); setNearbyLimits(nearbyListingsOn(info) ? info.features!.nearbyListings! : null); setAppsGlobal(isAppsGlobal(info, webAppHost())); setKeepsNoCopies(info?.recoveryCopies === 'none'); } })
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -2046,13 +2050,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             {addSignInAfterTour && joinedByWords && !signInRecovery && pendingIdentity && (
                                 <section data-testid="tour-add-sign-in" aria-labelledby="tour-add-sign-in-title" style={{ marginTop: '1rem', textAlign: 'left' }}>
                                     <h4 id="tour-add-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-                                        {t('Add a sign-in as a second way back')}
+                                        {keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
                                     </h4>
                                     <AddSignIn
                                         identity={pendingIdentity}
-                                        label={t('Add a sign-in as a second way back')}
+                                        label={keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
                                         autoStart
                                         onLeaving={() => finishOnboarding({ leaving: true })}
+                                        keepsNoCopies={keepsNoCopies}
                                     />
                                 </section>
                             )}
@@ -2238,7 +2243,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         }}
                                         className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                     >
-                                        {t('Add a sign-in as a second way back')}
+                                        {keepsNoCopies ? t('Add a sign-in') : t('Add a sign-in as a second way back')}
                                     </button>
                                     <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">
                                         {t("You'll choose it after a quick look at how things work here.")}
@@ -2634,6 +2639,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onExisting={onComplete}
                                 onJoined={handleJoined}
                                 wordsDoor={wordsDoor}
+                                keepsNoCopies={keepsNoCopies}
                                 onRestore={(how, provider) => {
                                     setError(null);
                                     setRestoredForDoor(null);

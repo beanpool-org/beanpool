@@ -13,9 +13,10 @@
  * compares it) and the sign-ins' brand names.
  *
  * Components welcome shares with screens not yet swept are stand-ins here (their sweeps are the screens they share):
- * WordsDoor's door choices and progress, LinkSignInSheet, AvatarPickerSheet, RecoveryWordsEntry, SavedNodePicker (its
- * stand-in draws the label, action and hint welcome hands it, so those are checked), MemberAvatar and the sign-in
- * buttons' logos (the buttons draw the title welcome hands them).
+ * WordsDoor's progress and Safety Backup note, LinkSignInSheet, AvatarPickerSheet, RecoveryWordsEntry, SavedNodePicker
+ * (its stand-in draws the label, action and hint welcome hands it, so those are checked), MemberAvatar and the sign-in
+ * buttons' logos (the buttons draw the title welcome hands them). The door's two ways in (WordsDoor's DoorChoices, swept
+ * with the key components) are drawn for real, so what they say by the door's rule is read as the member reads it.
  *
  * Then 320 dp at 1.3×: on every step, no word of a button's words is wider than the card's line, in the pseudo-locale's
  * longer words. And a language picked while Safety Backup is open redraws it from the real French catalog.
@@ -177,7 +178,17 @@ const door = vi.hoisted(() => ({
     answer: null as any,
     signIn: null as any,
     cachedFeatures: null as any,
+    /** The community's rule for copies as this phone kept it just now (fresh), or null when it never heard one. */
+    cachedRule: null as null | string,
+    /** Where a case gives each community its own rule: by the address asked, over `cachedRule`. */
+    rulesAt: {} as Record<string, string>,
+    /** Each address whose kept answer was read, in order. */
+    profilesAsked: [] as string[],
 }));
+/** The add-a-sign-in sheet as welcome last drew it (a stand-in: components/LinkSignInSheet is swept with the key components). */
+const linkSheet = vi.hoisted(() => ({ props: null as null | Record<string, any> }));
+/** The sign-in sheet's connect, when a case answers it (utils/sso-sheet-connect.ts); otherwise the real one. */
+const sheetConnect = vi.hoisted(() => ({ answer: null as null | ((options: Record<string, unknown>) => Promise<unknown>) }));
 const vaultState = vi.hoisted(() => ({ waiting: null as any, check: null as any, candidates: [] as any[] }));
 
 vi.mock('../identity', async (importOriginal) => {
@@ -257,7 +268,21 @@ vi.mock('../restore-account', async (importOriginal) => {
 });
 vi.mock('../node-profile', async (importOriginal) => {
     const real = await importOriginal<typeof import('../node-profile')>();
-    return { ...real, checkGlobalDoor: async () => door.check, getCachedNodeProfile: async () => (door.cachedFeatures ? { features: door.cachedFeatures } : null) };
+    return {
+        ...real,
+        checkGlobalDoor: async () => door.check,
+        getCachedNodeProfile: async (url?: string | null) => {
+            if (url) door.profilesAsked.push(url);
+            const rule = (url ? door.rulesAt[url] : undefined) ?? door.cachedRule;
+            return rule
+                ? { features: door.cachedFeatures ?? {}, recoveryCopies: rule, checkedAt: new Date().toISOString() }
+                : door.cachedFeatures ? { features: door.cachedFeatures } : null;
+        },
+    };
+});
+vi.mock('../sso-sheet-connect', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../sso-sheet-connect')>();
+    return { ...real, connectAndDeposit: (options: any) => (sheetConnect.answer ? sheetConnect.answer(options) : real.connectAndDeposit(options)) };
 });
 vi.mock('../global-door-offer', async (importOriginal) => {
     const real = await importOriginal<typeof import('../global-door-offer')>();
@@ -299,17 +324,16 @@ vi.mock('../sso-recovery', async (importOriginal) => {
 });
 vi.mock('../bundled-avatars', () => ({ BUNDLED_AVATARS: [], resolveBundledAvatar: () => 1 }));
 
-// Shared with screens not swept yet: stand-ins (see the note above).
+// Shared with screens not swept yet: stand-ins (see the note above). The two ways in (DoorChoices) are the real ones.
 vi.mock('../../components/WordsDoor', async (importOriginal) => {
     const real = await importOriginal<typeof import('../../components/WordsDoor')>();
     return {
         ...real,
-        DoorChoices: () => createElement('span', { 'data-later-sweep': 'DoorChoices' }),
         DoorWorkProgress: () => null,
         WordsBackupNote: () => createElement('span', { 'data-later-sweep': 'WordsBackupNote' }),
     };
 });
-vi.mock('../../components/LinkSignInSheet', () => ({ LinkSignInSheet: () => null }));
+vi.mock('../../components/LinkSignInSheet', () => ({ LinkSignInSheet: (props: Record<string, any>) => { linkSheet.props = props; return null; } }));
 vi.mock('../../components/AvatarPickerSheet', () => ({ AvatarPickerSheet: () => null }));
 vi.mock('../../components/RecoveryWordsEntry', async () => {
     const { useEffect: effect } = await import('react');
@@ -337,13 +361,15 @@ import { LanguageSwitch } from '../../components/LanguagePicker';
 import WelcomeScreen from '../../app/welcome';
 import { noVault, useVault } from './fake-vault';
 import { DOOR_MESSAGES } from '../global-join';
+import { DOOR_CHOICE_TEXT, WORDS_BACKUP_TEXT } from '../../components/WordsDoor';
+import { CONNECT_RULE_MESSAGES } from '../sso-sheet-connect';
 import { restoreAtDoorHref } from '../open-door';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const catalog = (lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, `${lang}.json`), 'utf8'));
 
 /** Written by members or communities, or never translated: shown as written in every language. */
-const AS_WRITTEN = ['Sally', 'Kim', 'Ana', 'Mullum', 'mullum.beanpool.org', 'global.beanpool.org', 'WIPE', 'Google', 'Apple', 'Facebook', ...WORDS, ...OUT_WORDS];
+const AS_WRITTEN = ['Sally', 'Kim', 'Ana', 'Mullum', 'mullum.beanpool.org', 'global.beanpool.org', 'Riverbend Open', 'open.riverbend.example', 'WIPE', 'Google', 'Apple', 'Facebook', ...WORDS, ...OUT_WORDS];
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
@@ -356,7 +382,10 @@ beforeEach(() => {
     lock.none = true;
     phone.stored = null; phone.pending = null; phone.enrolment = null; phone.outgoing = null; phone.redeemFails = null;
     phone.invite = { valid: true, inviterCallsign: 'Ana', communityName: 'Mullum' };
-    door.check = { ok: true, profile: { features: {} } }; door.answer = null; door.signIn = null; door.cachedFeatures = null;
+    door.check = { ok: true, profile: { features: {} } }; door.answer = null; door.signIn = null; door.cachedFeatures = null; door.cachedRule = null;
+    door.rulesAt = {}; door.profilesAsked.length = 0;
+    linkSheet.props = null;
+    sheetConnect.answer = null;
     vaultState.waiting = null; vaultState.check = null; vaultState.candidates = [];
     noVault();
     setLanguage('en');
@@ -574,6 +603,157 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         expect(host!.textContent).not.toContain(pseudoLocalise('🪙 The Mutual Credit Ledger'));
         check('How it Works, no Beans');
     });
+
+    // Vault rethink VR2: Safety Backup read the community's rule as the key vault, and its owners set `none` since. The
+    // connect links nothing (and keeps the fresh answer, as copies-rule.ts copiesRuleNow does); the sheet offers no Try
+    // again, which could only say so again, and closing it has the step read the rule again: no sign-in is offered.
+    it('Safety Backup, the rule moved to none since the step read it: no Try again, and closing the sheet puts the sign-ins away', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        door.cachedRule = 'vault';
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        let shownAt: unknown;
+        sheetConnect.answer = async (options) => {
+            shownAt = options.shownAt;
+            door.cachedRule = 'none';
+            return { enrolled: [], generation: null, skipped: [], available: 0, error: CONNECT_RULE_MESSAGES.none };
+        };
+        await mount('xx');
+        expect(all('[data-sso]').length, 'a sign-in is offered where the key vault keeps the copy').toBeGreaterThan(0);
+        await press('Protect with Google', 'xx');
+        expect(shownAt).toBe('vault');
+        expect(host!.textContent).toContain(pseudoLocalise(CONNECT_RULE_MESSAGES.none));
+        expect(all('[data-modal] button').map((b) => b.textContent)).not.toContain(pseudoLocalise('Try again'));
+        check('Safety Backup, the sheet, the rule moved to none');
+        await press('Cancel', 'xx');
+        expect(host!.querySelector('[data-modal]')).toBeNull();
+        expect(host!.querySelector('[data-testid="no-copies-row"]'), 'the step says the community keeps none').toBeTruthy();
+        expect(all('[data-sso]'), 'and offers no sign-in').toEqual([]);
+        check('Safety Backup, the community keeps none now');
+    });
+
+    // In by 12 words at the global community's door, Safety Backup's one button is a sign-in: a second way back only where
+    // the community keeps a copy for it. Under `none` it says only what it adds, as the web's button does and as the sheet
+    // it opens (LinkSignInSheet) then says; in the member's language whatever the rule.
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`Safety Backup for a member in by 12 words, the global community's rule ${rule}: the button calls a sign-in a way back only where a copy is kept`, async () => {
+            useVault();
+            store.map.set('beanpool_anchor_url', 'https://global.beanpool.org');
+            door.cachedRule = rule;
+            phone.stored = SALLY;
+            phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, joinDoor: 'words' };
+            await mount('xx');
+            const [said, notSaid] = rule === 'none' ? ['Add a sign-in', WORDS_BACKUP_TEXT.addSignIn] : [WORDS_BACKUP_TEXT.addSignIn, 'Add a sign-in'];
+            const buttons = all('button').map((b) => b.textContent);
+            expect(buttons).toContain(pseudoLocalise(said));
+            expect(buttons).not.toContain(pseudoLocalise(notSaid));
+            check(`Safety Backup, in by 12 words, ${rule}`);
+        });
+    }
+
+    // The step read a rule that keeps copies, and the owners set `none` since: the link is made without a copy and says it
+    // was the rule (utils/join-link.ts `noCopies`), having kept the community's fresh answer. The step reads the rule again,
+    // so the panel under the notice says the community keeps none and offers no sign-in, as the notice does.
+    it('Safety Backup, in by 12 words: the step read the key vault, the link says the community keeps none since, and the step reads it again', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', 'https://global.beanpool.org');
+        door.cachedRule = 'vault';
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: 'https://global.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, joinDoor: 'words' };
+        await mount('xx');
+        await press(WORDS_BACKUP_TEXT.addSignIn, 'xx');
+        expect(linkSheet.props?.visible, 'the sheet is open').toBe(true);
+        door.cachedRule = 'none';
+        await act(async () => { linkSheet.props!.onLinked({ kind: 'linked', provider: 'google', enrolment: null, noCopies: true }); });
+        await settle();
+        const notice = (english: string) => pseudoLocalise(english).replace('{name}', 'Google');
+        expect(host!.textContent).toContain(notice("Your {name} sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back."));
+        expect(host!.querySelector('[data-testid="no-copies-row"]'), 'the step says the community keeps none').toBeTruthy();
+        expect(all('[data-sso]'), 'and offers no sign-in').toEqual([]);
+        check('Safety Backup, in by 12 words, linked where the community keeps none since');
+    });
+
+    // How it Works' Getting Back In card offers a sign-in for later only where the community keeps a copy for it, by the
+    // rule Safety Backup read; and by the rule read again as the guide opens, where an onboarding resumed there.
+    const SIGN_IN_LATER = '🤝 On the phone app you can also link a sign-in account (Apple, Google, etc.) under Settings so your community node can help you back onto a new device.';
+    it('How it Works after Safety Backup, at a community that keeps no copies: Getting Back In offers no sign-in', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        door.cachedRule = 'none';
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        await mount('xx');
+        expect(host!.querySelector('[data-testid="no-copies-row"]'), 'Safety Backup says the community keeps none').toBeTruthy();
+        await press('Next →', 'xx');
+        expect(host!.textContent).toContain(pseudoLocalise('🔑 Getting Back In'));
+        expect(host!.textContent, 'no copy is kept, so no sign-in is offered for later').not.toContain(pseudoLocalise(SIGN_IN_LATER));
+        check('How it Works after Safety Backup, none');
+    });
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`How it Works, resumed at a community whose rule is ${rule}: Getting Back In offers a sign-in only where a copy is kept`, async () => {
+            useVault();
+            store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+            door.cachedRule = rule;
+            phone.stored = SALLY;
+            phone.pending = { step: 'onboardingGuide', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+            await mount('xx');
+            expect(host!.textContent).toContain(pseudoLocalise('🔑 Getting Back In'));
+            if (rule === 'none') expect(host!.textContent, 'no copy is kept, so no sign-in is offered for later').not.toContain(pseudoLocalise(SIGN_IN_LATER));
+            else expect(host!.textContent, 'a kept copy is a way back').toContain(pseudoLocalise(SIGN_IN_LATER));
+            check(`How it Works, resumed, ${rule}`);
+        });
+    }
+});
+
+/**
+ * In by another community's open door (slice S2, utils/open-door-key.ts finishOpenDoorJoin): the phone's anchor is that
+ * community's address, the wizard's record names it, and Safety Backup's copies follow THAT community's rule (VR2), never
+ * the global community's: each case gives the two communities opposite rules. The add-a-sign-in sheet a 12-words member
+ * opens there links at that community and names it, as does the notice once linked, never "the global community".
+ */
+describe("Safety Backup after another community's open door (S2), in the pseudo-locale", () => {
+    const DOOR = 'https://open.riverbend.example';
+    const GLOBAL = 'https://global.beanpool.org';
+    const doorRecord = { step: 'seedBackup', flow: 'global', inviteCode: '', anchorUrl: DOOR, callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey, communityName: 'Riverbend Open' };
+    for (const [doorRule, globalRule] of [['none', 'vault'], ['vault', 'none']] as const) {
+        it(`its rule ${doorRule} decides, never the global community's ${globalRule}`, async () => {
+            useVault();
+            store.map.set('beanpool_anchor_url', DOOR);
+            door.rulesAt = { [DOOR]: doorRule, [GLOBAL]: globalRule };
+            phone.stored = SALLY;
+            phone.pending = doorRecord;
+            await mount('xx');
+            expect(door.profilesAsked, "the rule asked is the door community's").toContain(DOOR);
+            if (doorRule === 'none') {
+                expect(host!.querySelector('[data-testid="no-copies-row"]'), 'that community keeps none').toBeTruthy();
+                expect(all('[data-sso]'), 'so no sign-in is offered').toEqual([]);
+            } else {
+                expect(host!.querySelector('[data-testid="no-copies-row"]'), "never the global community's none").toBeNull();
+                expect(all('[data-sso]').length, 'a sign-in is offered where the key vault keeps the copy').toBeGreaterThan(0);
+            }
+            check(`Safety Backup after another community's door, its rule ${doorRule}`);
+        });
+    }
+
+    it('a member in by 12 words there: the add-a-sign-in sheet links at that community and names it, and so does the notice', async () => {
+        useVault();
+        store.map.set('beanpool_anchor_url', DOOR);
+        door.rulesAt = { [DOOR]: 'none', [GLOBAL]: 'vault' };
+        phone.stored = SALLY;
+        phone.pending = { ...doorRecord, joinDoor: 'words' };
+        await mount('xx');
+        await press('Add a sign-in', 'xx');
+        expect(linkSheet.props?.visible, 'the sheet is open').toBe(true);
+        expect(linkSheet.props?.url, "it links at the door's community").toBe(DOOR);
+        expect(linkSheet.props?.community, 'and names it').toBe('Riverbend Open');
+        await act(async () => { linkSheet.props!.onLinked({ kind: 'linked', provider: 'google', enrolment: null, noCopies: true }); });
+        await settle();
+        const notice = (english: string) => pseudoLocalise(english).replace('{name}', 'Google').replace('{community}', 'Riverbend Open');
+        expect(host!.textContent).toContain(notice("Your {name} sign-in is added: your account now has the usual new-account limits. {community} keeps no copies of members' accounts, so your 12 words are still your way back."));
+        expect(host!.textContent, 'never the global community').not.toContain(notice("Your {name} sign-in is added: your account now has the usual new-account limits. The global community keeps no copies of members' accounts, so your 12 words are still your way back."));
+        check("Safety Backup after another community's door, in by 12 words, linked");
+    });
 });
 
 describe("the global community's door in the pseudo-locale", () => {
@@ -606,13 +786,57 @@ describe("the global community's door in the pseudo-locale", () => {
         check('the door, already joined');
     });
 
-    it('a door with the 12-words way: the two ways side by side (WordsDoor is a stand-in), and the sign-in again', async () => {
+    it('a door with the 12-words way: the two ways side by side, drawn for real', async () => {
         door.check = { ok: true, profile: { features: { wordsDoor: true } } };
         await mount('xx');
         await explore('xx');
-        expect(host!.querySelector('[data-later-sweep="DoorChoices"]')).toBeTruthy();
+        expect(host!.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.words));
+        expect(host!.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInHeading));
         check('the door, two ways');
     });
+
+    // Who keeps a copy for the sign-in follows the global community's rule (vault rethink VR2), as the join does, in a
+    // build with the key vault: above the sign-in alone, and beside the sign-in buttons where the door has both ways in.
+    // There the line above the note calls the sign-in a way back only where a copy is kept: never under `none`.
+    const NO_COPIES = "{name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.";
+    const KEEPER_LINES = {
+        vault: {
+            alone: 'To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy of your account for it, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.',
+            beside: 'BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.',
+        },
+        server: {
+            alone: 'To keep out fake accounts, sign in once with an account you already have. That sign-in also becomes a way back into your account if you lose this phone: the global community keeps a locked copy of your account for it, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.',
+            beside: 'The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.',
+        },
+        none: { alone: `To keep out fake accounts, sign in once with an account you already have. ${NO_COPIES}`, beside: NO_COPIES },
+    } as const;
+    const said = (english: string) => pseudoLocalise(english).replace('{name}', pseudoLocalise('The global community'));
+    for (const rule of ['vault', 'server', 'none'] as const) {
+        it(`a global community whose rule is ${rule}: the sign-in's sentence says who keeps a copy, alone and beside both ways in`, async () => {
+            useVault();
+            door.check = { ok: true, profile: { features: {}, recoveryCopies: rule } };
+            await mount('xx');
+            await explore('xx');
+            expect(host!.textContent).toContain(said(KEEPER_LINES[rule].alone));
+            for (const other of (['vault', 'server', 'none'] as const).filter((r) => r !== rule)) {
+                expect(host!.textContent, `not ${other}'s words`).not.toContain(said(KEEPER_LINES[other].alone));
+            }
+            check(`the door, the sign-in alone, ${rule}`);
+            act(() => root?.unmount());
+            host?.remove();
+            door.check = { ok: true, profile: { features: { wordsDoor: true }, recoveryCopies: rule } };
+            await mount('xx');
+            await explore('xx');
+            const lines = all('span').map((s) => s.textContent);
+            expect(lines, 'the note beside the sign-in buttons').toContain(said(KEEPER_LINES[rule].beside));
+            for (const other of (['vault', 'server', 'none'] as const).filter((r) => r !== rule)) {
+                expect(lines, `not ${other}'s note`).not.toContain(said(KEEPER_LINES[other].beside));
+            }
+            if (rule === 'none') expect(host!.textContent, 'no copy, so no way back').not.toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInLine));
+            else expect(lines, 'a kept copy is a way back').toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInLine));
+            check(`the door, two ways, ${rule}`);
+        });
+    }
 });
 
 describe('restoring an account in the pseudo-locale', () => {

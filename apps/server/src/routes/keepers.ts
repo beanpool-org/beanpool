@@ -54,6 +54,7 @@ import {
 } from '../engine/recovery-shares.js';
 import { depositSsoKeeperGeneration, KeeperDepositError, type SsoKeeperResult } from '../engine/keeper-deposit.js';
 import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
+import { keepsNoCopies, NO_COPIES_HERE, NO_COPIES_HERE_MESSAGE } from '../config/recovery-copies.js';
 import {
     issueNonce,
     signInCredentialFrom,
@@ -265,6 +266,15 @@ export function recoverySealFailure(ctx: any, e: unknown): boolean {
     return true;
 }
 
+/**
+ * This community keeps no copies (config/recovery-copies.ts `none`): 409, nothing stored and no nonce issued, with the
+ * sentence an app shows. Only where a copy would be made; a member's status, delete and restore work under every rule.
+ */
+function noCopiesHere(ctx: any): void {
+    ctx.status = 409;
+    ctx.body = { error: NO_COPIES_HERE_MESSAGE, code: NO_COPIES_HERE };
+}
+
 export function createKeeperRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { rateLimit } = deps;
@@ -281,6 +291,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/sso-nonce', async (ctx) => {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
+        // Refused before a nonce is issued, so the provider's sheet never opens for a copy this community won't keep.
+        if (keepsNoCopies()) return noCopiesHere(ctx);
         // Rate-limited even though it is signed: issuing is cheap but unbounded issuing grows the
         // in-memory nonce map, and the sweep that bounds it is throttled to once a minute.
         if (!rateLimit(ctx, 'sign-in-recovery')) return;
@@ -348,6 +360,8 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/shares/sso', async (ctx) => {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
+        // A nonce issued before the rule changed still finds nothing to keep it: refused before the sign-in is checked.
+        if (keepsNoCopies()) return noCopiesHere(ctx);
         // Rate-limited because this reaches the provider's JWKS and runs an scrypt on success.
         if (!rateLimit(ctx, 'sign-in-recovery')) return;
 

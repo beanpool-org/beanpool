@@ -78,8 +78,9 @@ function githubReleaseIds(): { ids: number[]; unchecked: number } {
     const copies = db.prepare(`SELECT owner_pubkey, holder_type, encrypted_share, share_iv, share_tag, kdf_params
                                FROM recovery_shares WHERE holder_type = 'sso' AND holder_ref = ?`).all(GITHUB) as Record<string, string | null>[];
     if (copies.length === 0) return { ids: [], unchecked: 0 };
+    // A release whose copy is already gone (engine/recovery-release.ts forgetOldReleasedCopies) holds nothing to compare.
     const releases = db.prepare(`SELECT id, collection_id, share_id, holder_type, payload, payload_iv, payload_tag, kdf_params
-                                 FROM recovery_releases WHERE holder_type = 'sso'`).all() as Record<string, string | number | null>[];
+                                 FROM recovery_releases WHERE holder_type = 'sso' AND payload != ''`).all() as Record<string, string | number | null>[];
     if (releases.length === 0) return { ids: [], unchecked: 0 };
     const held = new Set<string>();
     let unchecked = 0;

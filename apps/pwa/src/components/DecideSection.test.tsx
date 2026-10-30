@@ -2,11 +2,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { DecideSection } from './DecideSection';
-import { castDecisionVote } from '../lib/api';
+import { castDecisionVote, replyToRemovalCase, reportRemovalCase } from '../lib/api';
 
-// Only castDecisionVote: the card looks up no separate credits figure; the node checks the cost.
+// The card looks up no separate credits figure (the node checks the cost); a removal vote's member replies to its case
+// and reports it as false (removal by vote, Amendment A).
 vi.mock('../lib/api', () => ({
     castDecisionVote: vi.fn(async () => ({ success: true, creditsUsed: 9 })),
+    replyToRemovalCase: vi.fn(async () => ({ success: true })),
+    reportRemovalCase: vi.fn(async () => ({ success: true })),
 }));
 
 const decisionCard = (id: string, franchise: '1m1v' | 'quadratic_trade', myVote: any): any => ({
@@ -238,6 +241,165 @@ describe('DecideSection voting answers', () => {
         const line = screen.getByTestId('removal-debt-write-off-line').textContent ?? '';
         expect(line).toContain("only the members who can vote in this see Eve's balance");
         expect(line).not.toContain('−0');
+    });
+});
+
+// Removal by vote, Amendment A: a fair vote on removing a member. The member is heard (their reply beside the case), who
+// brought it is named, a case shown false is hidden with a public reason, and the member can report it as false.
+describe('DecideSection: a fair vote on removing a member', () => {
+    const pauseCard = (over: Record<string, any> = {}): any => ({
+        ...decisionCard('pv', '1m1v', null),
+        authorPubkey: 'SYSTEM',
+        effect: 'remove_member',
+        title: 'Remove Dave?',
+        description: 'An admin paused Dave on 2026-10-22. Reason given: Took deposits for repairs and never came back',
+        subject: 'dave-key',
+        params: { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, commonsPool: 240 },
+        proposer: { kind: 'admin', name: 'Ada' },
+        ...over,
+    });
+    const renderAs = (me: string, decisions: any[], activeView: 'open' | 'history' = 'open', onRefresh = async () => {}) => render(
+        <DecideSection
+            decisions={decisions}
+            identity={{ publicKey: me, privateKey: 'k', callsign: 'Me', createdAt: '2026-09-17T00:00:00.000Z' }}
+            commonsBalance={0}
+            onRefresh={onRefresh}
+            onOpenPropose={() => {}}
+            canPropose={true}
+            hasOpenDecision={false}
+            activeView={activeView}
+            onChangeView={() => {}}
+        />
+    );
+    beforeEach(() => {
+        vi.mocked(replyToRemovalCase).mockClear();
+        vi.mocked(reportRemovalCase).mockClear();
+    });
+
+    it('names who brought it: the admin who paused, an owner with the password, a member\'s own older proposal', () => {
+        const first = renderAs('viewer', [pauseCard()]);
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('Ada, an admin, paused Dave on 22 Oct 2026.');
+        first.unmount();
+
+        const second = renderAs('viewer', [pauseCard({ proposer: { kind: 'password', name: null } })]);
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain("An owner paused Dave on 22 Oct 2026, signed in with the server's password.");
+        second.unmount();
+
+        // A node from before sends no proposer: the card says what it always said.
+        const third = renderAs('viewer', [pauseCard({ proposer: undefined })]);
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('An admin paused Dave on 22 Oct 2026.');
+        third.unmount();
+
+        const proposed = { ...pauseCard({ authorPubkey: 'tia-key', proposer: { kind: 'member', name: 'Tia' } }), params: { memberName: 'Finn' } };
+        const fourth = renderAs('viewer', [proposed]);
+        expect(screen.getByTestId('removal-proposed-by').textContent).toBe('Proposed by Tia.');
+        fourth.unmount();
+
+        // Another Decision names nobody.
+        renderAs('viewer', [decisionCard('g', '1m1v', null)]);
+        expect(screen.queryByTestId('removal-proposed-by')).toBeNull();
+    });
+
+    it('shows the member\'s reply beside the case to everyone; the member writes it, and changes it, while the vote is open', async () => {
+        const first = renderAs('viewer', [pauseCard({ subjectReply: 'I refunded every deposit. Ask Wu.' })]);
+        const shown = screen.getByTestId('removal-reply');
+        expect(shown.textContent).toContain("Dave's reply");
+        expect(shown.textContent).toContain('I refunded every deposit. Ask Wu.');
+        // A voter can't write it.
+        expect(screen.queryByTestId('removal-reply-form')).toBeNull();
+        expect(screen.queryByText('Change your reply')).toBeNull();
+        first.unmount();
+
+        // The member, with no reply yet: the form is there, and sends their words.
+        const refresh = vi.fn(async () => {});
+        const second = renderAs('dave-key', [pauseCard()], 'open', refresh);
+        const form = screen.getByTestId('removal-reply-form');
+        expect(form.textContent).toContain('Reply to this case');
+        expect(form.textContent).toContain('Everyone who reads this vote sees your reply beside the case.');
+        const send = screen.getByRole('button', { name: 'Send reply' });
+        expect(send).toBeDisabled();
+        fireEvent.change(screen.getByLabelText('Reply to this case'), { target: { value: '  Every repair was done.  ' } });
+        fireEvent.click(send);
+        await waitFor(() => expect(replyToRemovalCase).toHaveBeenCalledWith('pv', 'Every repair was done.'));
+        await waitFor(() => expect(refresh).toHaveBeenCalled());
+        second.unmount();
+
+        // With a reply sent: theirs, headed "Your reply", and Change your reply opens it again to change.
+        const third = renderAs('dave-key', [pauseCard({ subjectReply: 'Every repair was done.' })]);
+        expect(screen.getByTestId('removal-reply').textContent).toContain('Your reply');
+        fireEvent.click(screen.getByRole('button', { name: 'Change your reply' }));
+        expect((screen.getByLabelText('Change your reply') as HTMLTextAreaElement).value).toBe('Every repair was done.');
+        third.unmount();
+
+        // Closed: the reply stands, and nobody can change it.
+        renderAs('dave-key', [pauseCard({ status: 'failed', subjectReply: 'Every repair was done.' })], 'history');
+        expect(screen.getByTestId('removal-reply').textContent).toContain('Every repair was done.');
+        expect(screen.queryByText('Change your reply')).toBeNull();
+        expect(screen.queryByTestId('removal-reply-form')).toBeNull();
+    });
+
+    it('a case an admin hid shows their reason in its place, open and in the history; who brought it and the reply stay', () => {
+        const hidden = pauseCard({
+            description: 'An admin hid the case for this vote, as one shown to be false. Their reason: Wu confirmed every repair',
+            caseHiddenAt: '2026-10-25T10:00:00.000Z', caseHiddenReason: 'Wu confirmed every repair', subjectReply: 'Every repair was done.',
+        });
+        const first = renderAs('viewer', [hidden]);
+        expect(screen.getByTestId('removal-case-hidden').textContent).toBe(
+            'An admin hid the case for this vote, as one shown to be false. Their reason: Wu confirmed every repair');
+        // The node's own sentence, for older apps, is not shown as well: in English it is this one, once.
+        expect(screen.getAllByText(hidden.description)).toHaveLength(1);
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('Ada, an admin, paused Dave');
+        expect(screen.getByTestId('removal-reply').textContent).toContain('Every repair was done.');
+        first.unmount();
+
+        renderAs('viewer', [{ ...hidden, status: 'failed' }], 'history');
+        expect(screen.getByTestId('removal-case-hidden').textContent).toContain('Their reason: Wu confirmed every repair');
+    });
+
+    it("a reply an admin took down: their reason in its place, open and in the history; the member can't write another", () => {
+        const takenDown = pauseCard({ subjectReply: null, replyHiddenAt: '2026-10-25T10:00:00.000Z', replyHiddenReason: "It gave a neighbour's address" });
+        const first = renderAs('viewer', [takenDown]);
+        expect(screen.getByTestId('removal-reply-taken-down').textContent).toBe("An admin took down Dave's reply. Their reason: It gave a neighbour's address");
+        expect(screen.queryByTestId('removal-reply')).toBeNull();
+        first.unmount();
+
+        // To the member: their reply, with no form, no Reply or Change button; reporting the case stays.
+        const second = renderAs('dave-key', [takenDown]);
+        expect(screen.getByTestId('removal-reply-taken-down').textContent).toBe("An admin took down your reply. Their reason: It gave a neighbour's address");
+        expect(screen.queryByTestId('removal-reply-form')).toBeNull();
+        expect(screen.queryByText('Reply to this case')).toBeNull();
+        expect(screen.queryByText('Change your reply')).toBeNull();
+        expect(screen.getByTestId('removal-case-report')).toBeTruthy();
+        second.unmount();
+
+        renderAs('viewer', [{ ...takenDown, status: 'failed' }], 'history');
+        expect(screen.getByTestId('removal-reply-taken-down').textContent).toBe("An admin took down Dave's reply. Their reason: It gave a neighbour's address");
+    });
+
+    it('the member reports the case as false, after saying yes; not offered on a password\'s case, nor to anyone else', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const first = renderAs('dave-key', [pauseCard()]);
+        fireEvent.click(screen.getByTestId('removal-case-report'));
+        expect(confirmSpy).toHaveBeenCalledWith('Report this case as a false accusation? The admins and owners see your report, and who brought the case.');
+        await waitFor(() => expect(reportRemovalCase).toHaveBeenCalledWith('pv'));
+        expect((await screen.findByTestId('removal-case-reported')).textContent).toBe('Reported. The admins and owners will look at it.');
+        first.unmount();
+
+        // Said no: nothing is sent.
+        confirmSpy.mockReturnValue(false);
+        vi.mocked(reportRemovalCase).mockClear();
+        const second = renderAs('dave-key', [pauseCard()]);
+        fireEvent.click(screen.getByTestId('removal-case-report'));
+        expect(reportRemovalCase).not.toHaveBeenCalled();
+        second.unmount();
+        confirmSpy.mockRestore();
+
+        const third = renderAs('dave-key', [pauseCard({ proposer: { kind: 'password', name: null } })]);
+        expect(screen.queryByTestId('removal-case-report')).toBeNull();
+        third.unmount();
+
+        renderAs('viewer', [pauseCard()]);
+        expect(screen.queryByTestId('removal-case-report')).toBeNull();
     });
 });
 

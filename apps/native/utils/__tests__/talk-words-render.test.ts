@@ -780,3 +780,40 @@ describe('Talk opened on Requests (review 4395541801)', () => {
         expect(host.textContent).toContain(MEMBER_WRITES_A_TABLE_SENTENCE);
     });
 });
+
+// ── Deals S7: the chip counts the deals whose step is the member's, as the web's does (#2607 deciding pass, Decision 2) ──
+describe("Talk's per-person chip counts the deals that need the member (core's dealsNeedingMe)", () => {
+    const deal = (txId: string, conversationId: string, action: string) => ({ txId, conversationId, action, postTitle: `Deal ${txId}`, peerPubkey: 'x', peerCallsign: 'X', credits: 5 });
+    /** The row of one conversation: the chat's button holding its person's name. */
+    const rowOf = (name: string) => Array.from(host.querySelectorAll('button')).find((b) => b.getAttribute('role') !== 'radio' && b.textContent?.includes(name)) ?? null;
+
+    it('Beans to release say so; a request to answer makes it Action Required; a review alone is told apart; a deal waiting on the other side adds nothing', async () => {
+        net.answer = community({
+            getActionableDeals: [
+                // Kofi: one release.
+                deal('t1', 'c-kofi', 'release'),
+                // Mia: two releases and a request to answer, and a review beside them (not counted).
+                deal('t2', 'c-mia', 'release'), deal('t3', 'c-mia', 'release'), deal('t4', 'c-mia', 'answer'), deal('t5', 'c-mia', 'review'),
+                // Zoe: a review only.
+                deal('t6', 'c-zoe', 'review'),
+            ],
+        });
+        await renderIn('en');
+        const kofi = rowOf('Kofi')!.textContent!;
+        const mia = rowOf('Mia')!.textContent!;
+        const zoe = rowOf('Zoe')!.textContent!;
+        expect(kofi).toContain('Release Credits (1)');
+        expect(mia).toContain('Action Required (3)');
+        expect(mia).not.toContain('Review Needed');
+        expect(zoe).toContain('Review Needed (1)');
+        // Ivo has none: his preview, not a chip.
+        expect(rowOf('Ivo')!.textContent).not.toMatch(/Release Credits|Action Required|Review Needed/);
+    });
+
+    it('a request to answer is a card in the Action Required section, in core\'s words', async () => {
+        net.answer = community({ getActionableDeals: [deal('t4', 'c-mia', 'answer')] });
+        await renderIn('en');
+        expect(host.textContent).toContain('Waiting on you: answer');
+        expect(host.textContent).not.toContain('Fulfill Order');
+    });
+});

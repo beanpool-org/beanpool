@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, events, polls and consent top-up 23 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, events, polls and consent top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -452,8 +452,7 @@
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Akunmu terbuka di sini hanya setelah digit yang benar dimasukkan. Tiga kali salah dan tidak ada yang dikirim.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Belum ada yang datang dari ponselmu. Kode ini berasal dari {host}. Jika ponselmu mengatakan kode ini dari server yang tidak digunakannya, buka BeanPool di alamat komunitasmu sendiri, atau gabung dulu ke {host} di ponselmu, lalu pindai lagi. Jika ponselmu tidak menampilkan angka, perbarui aplikasi BeanPool di ponsel itu, lalu pindai lagi.",
   "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Riwayat papan klip keyboard atau papan klip yang dibagikan dengan perangkat Anda yang lain dapat menyimpan salinan yang tidak bisa dihapus oleh BeanPool.",
-  "My Deals": "Kesepakatan Saya",
-  "Close My Deals": "Tutup Kesepakatan Saya",
+  "Close Your deals": "Tutup Kesepakatan Anda",
   "In Progress": "Sedang Berjalan",
   "My Posts": "Postingan Saya",
   "History": "Riwayat",
@@ -913,7 +912,6 @@
   "No ratings yet": "Belum ada rating",
   "Finalize Transaction": "Selesaikan Transaksi",
   "e.g. {amount}": "mis. {amount}",
-  "Transferring {n} B to {name}": "Mentransfer {n} B ke {name}",
   "Failed to complete transaction": "Gagal menyelesaikan transaksi",
   "Processing...": "Memproses...",
   "Release Credits": "Lepaskan Kredit",
@@ -1026,7 +1024,6 @@
   "🗑️ Delete Group Post (Convenor)": "🗑️ Hapus Postingan Grup (Koordinator)",
   "Loading Location Services...": "Memuat Layanan Lokasi...",
   "Search marketplace...": "Cari di pasar...",
-  "🤝 My Deals": "🤝 Transaksi Saya",
   "Switch to List View": "Beralih ke Tampilan Daftar",
   "Switch to Compact View": "Beralih ke Tampilan Ringkas",
   "Switch to Card View": "Beralih ke Tampilan Kartu",
@@ -3496,5 +3493,6 @@
   "Got an idea that needs Beans? Start a project.": "Punya ide yang butuh kacang? Mulai proyek.",
   "Something that keeps going and trades? Start an enterprise.": "Sesuatu yang terus berjalan dan bertransaksi? Mulai sebuah usaha.",
   "Start one with +: a chat group, a project or an enterprise.": "Mulai satu dengan +: grup obrolan, proyek, atau usaha.",
-  "No projects to back yet": "Belum ada proyek untuk didukung"
+  "No projects to back yet": "Belum ada proyek untuk didukung",
+  "🤝 Your deals": "🤝 Kesepakatan Anda"
 }

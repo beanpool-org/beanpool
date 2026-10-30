@@ -13,7 +13,10 @@
  * control is at least 44 px.
  */
 import { useRef, useState, type ReactNode } from 'react';
-import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, t, word, type HomeSearchKind, type SkySettings, type WordKey } from '@beanpool/core';
+import {
+    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, t, word,
+    type HomeDecideShow, type HomeSearchKind, type SkySettings, type WordKey,
+} from '@beanpool/core';
 import { type PickerGroup, type PickerRow } from '../lib/home-layout';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { useDialogFocus } from './dialog-focus';
@@ -162,8 +165,9 @@ function Chips<T>({ legend, testId, options, value, onPick }: {
 }
 
 /**
- * A card's settings (CARD-FRAME §4). Sun and moon asks one thing: whose place, the community's or the member's own. The
- * saved search asks its words, then Offers or Needs or both, a category, and a distance. The distance chips show only where the node has a point to measure from (the member's area,
+ * A card's settings (CARD-FRAME §4). Sun and moon asks one thing: whose place, the community's or the member's own. Decide
+ * asks one too: what it shows (a summary, every open Decision, or only the votes that are the member's), with a line under
+ * the chosen one (core HOME_DECIDE_CHOICES, the same words as the phone's). The saved search asks its words, then Offers or Needs or both, a category, and a distance. The distance chips show only where the node has a point to measure from (the member's area,
  * or the place this browser shared); without one the node ignores the distance, so the sheet doesn't offer it, and a
  * distance already kept stays as it was.
  */
@@ -176,7 +180,24 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
     const [category, setCategory] = useState<string>(start.category ?? '');
     const [km, setKm] = useState<number | null>(start.km ?? null);
     const [place, setPlace] = useState<SkySettings['place']>(() => readSkySettings(initial).place);
+    const [show, setShow] = useState<HomeDecideShow>(() => readDecideSettings(initial).show);
     const words = q.trim();
+    if (type === 'decide') {
+        return (
+            <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>
+                <form onSubmit={(e) => { e.preventDefault(); onSubmit({ show }); }}>
+                    <Chips legend={t('Show')} testId="home-settings-show" value={show} onPick={setShow}
+                        options={HOME_DECIDE_CHOICES.map((c) => ({ value: c.show, label: t(c.label) }))} />
+                    <p data-testid="home-settings-show-note" className="m-0 mt-2 text-xs text-nature-700 dark:text-nature-200">
+                        {t(HOME_DECIDE_CHOICES.find((c) => c.show === show)!.note)}
+                    </p>
+                    <button type="submit" data-testid="home-settings-submit" className={`mt-4 w-full ${primary}`}>
+                        {mode === 'add' ? t('Add to Home') : t('Save')}
+                    </button>
+                </form>
+            </Shell>
+        );
+    }
     if (type === 'sky') {
         return (
             <Shell id="home-settings-title" testId="home-settings-dialog" title={name} onClose={onClose} dialog={dialog}>

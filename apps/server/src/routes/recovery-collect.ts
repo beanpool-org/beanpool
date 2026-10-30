@@ -49,7 +49,7 @@ import {
     openCollection,
     collectionState,
     collectionProgress,
-    listReleases,
+    releasedShareIds,
     releasesForLiveSession,
     releaseHubFragment,
     releaseSsoFragmentForIdentity,
@@ -363,7 +363,9 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
                 // The nonce was issued to the ephemeral key, so it must be spent against it.
                 collection.requesterEphemeralPubkey,
             );
-            const alreadyReleased = new Set(listReleases(collection.id).map(r => r.shareId));
+            // As stored, never opened: the release below checks the session is live, so a device whose session is long
+            // gone is told that, not that this server can't open the copy (it was emptied after 30 days).
+            const alreadyReleased = releasedShareIds(collection.id);
             const released = await releaseSsoFragmentForIdentity(collection.id, identity.provider, identity.sub);
             // Once per fragment released: a retry of a request that already released it tells nobody twice.
             if (!alreadyReleased.has(released.shareId)) notifySeedReleased(collection, identity.provider);

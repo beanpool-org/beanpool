@@ -54,6 +54,7 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
 import { ProfileSetup } from './components/ProfileSetup';
+import { MemberAvatar } from './components/MemberAvatar';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
@@ -231,6 +232,8 @@ export function App() {
     const helpWords = helpSheetFor(helpGuide ? inShownLanguage(helpGuide) : null, webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
+    // The deal a door named with its listing (Home, the header's needs-you icons): the listing opens at that deal (deals S4).
+    const [openMarketTxId, setOpenMarketTxId] = useState<string | null>(null);
     // Whether the Market says so when that post can't be opened: yes for a member's own tap (navigateToTab), no for a link
     // the app arrived on (a shared /?post=, the lobby's kept listing), which lands quietly on the Market as before.
     const [openMarketPostSaysWhy, setOpenMarketPostSaysWhy] = useState(false);
@@ -347,9 +350,8 @@ export function App() {
     // null as a member, as before.
     const [isGuest, setIsGuest] = useState<boolean | null>(null);
     // The sidebar's profile button shows the member's picture: asked once the node takes the key as a member (a guest
-    // has no profile here), again after each save. A picture that fails to load gives the initials back.
+    // has no profile here), again after each save. With none, and one that fails to load: the ready-made one its key picks.
     const ownAvatar = useOwnAvatar(isGuest === false && identity ? identity.publicKey : null);
-    const [brokenAvatar, setBrokenAvatar] = useState<string | null>(null);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
     // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
@@ -393,7 +395,7 @@ export function App() {
             .catch(() => { setCommunityHealth(prev => ({ ...prev, online: false })); setShowCommunityStatus(true); });
     };
 
-    function navigateToTab(tab: string, contextId?: string) {
+    function navigateToTab(tab: string, contextId?: string, txId?: string) {
         if (tab === 'profile-setup') {
             setShowProfileSetup(true);
             return;
@@ -500,7 +502,7 @@ export function App() {
         }
         setActiveTab(tab as Tab);
         if (tab === 'messages' && contextId) setOpenConversationId(contextId);
-        if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); }
+        if (tab === 'marketplace' && contextId) { setOpenMarketPostSaysWhy(true); setOpenMarketPostId(contextId); setOpenMarketTxId(txId ?? null); }
         if (tab === 'projects' && contextId === 'start') setProjectsInitialStart(true);
     }
 
@@ -678,7 +680,7 @@ export function App() {
         if (!identity) return;
         const currentPubkey = identity.publicKey;
         try {
-            // Deals in preview (the global node): My Deals is Example Valley's, and the member's own are never asked.
+            // Deals in preview (the global node): Your deals is Example Valley's, and the member's own are never asked.
             if (!(await readsOwn('escrow'))) return;
             const txs = await getMyMarketplaceTransactions(currentPubkey);
             if (identityPubkeyRef.current !== currentPubkey) return;
@@ -707,7 +709,7 @@ export function App() {
                     // and since MarketplacePage stopped polling transactions itself and now reads them
                     // from here, one unrelated endpoint erroring starved the whole marketplace view.
                     // The member's own deals only where deals are not in preview (lib/features readsOwn): on the
-                    // global node My Deals is Example Valley's, and null here leaves the counts as they are.
+                    // global node Your deals is Example Valley's, and null here leaves the counts as they are.
                     const [convResult, txResult] = await Promise.allSettled([
                         getConversations(identity.publicKey),
                         readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : null)),
@@ -971,7 +973,7 @@ export function App() {
                         isGuest={isGuest}
                         identityPubkey={identity?.publicKey}
                         activeTab={activeTab}
-                        onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                        onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                         settingsSeen={settingsSeen}
                         setShowSettings={setSettingsFromCog}
                     />
@@ -981,14 +983,10 @@ export function App() {
                             onClick={() => setOpenProfilePubkey(identity.publicKey)}
                             className="w-full flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 hover:border-nature-400 dark:hover:border-nature-600 transition-colors cursor-pointer text-left"
                         >
-                            {/* The member's own picture, at the size it is kept; the initials while it loads, where there is
-                                none, and where it fails to load. */}
-                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-xs text-nature-800 dark:text-nature-200 shrink-0 overflow-hidden">
-                                {ownAvatar && ownAvatar !== brokenAvatar ? (
-                                    <img src={ownAvatar} alt={t('Your Photo')} className="w-full h-full object-cover" onError={() => setBrokenAvatar(ownAvatar)} />
-                                ) : (
-                                    identity.callsign ? identity.callsign.substring(0, 2).toUpperCase() : 'ME'
-                                )}
+                            {/* The member's own picture, at the size it is kept; while it loads, where there is none and where
+                                it fails to load, the ready-made picture the key picks (MemberAvatar), never bare initials. */}
+                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 shrink-0 overflow-hidden">
+                                <MemberAvatar avatarUrl={ownAvatar} pubkey={identity.publicKey} callsign={identity.callsign} size={32} alt={t('Your Photo')} />
                             </div>
                             <div className="flex flex-col truncate">
                                 <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || t('Anonymous')}</span>
@@ -1043,7 +1041,7 @@ export function App() {
                     settingsSeen={settingsSeen}
                     setShowSettings={setSettingsFromCog}
                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
-                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                 />
 
                 {/* Main Scrollable Canvas */}
@@ -1141,7 +1139,7 @@ export function App() {
                                     onSaveSearchTaken={clearSaveSearch}
                                     addCardType={addHomeCard}
                                     onAddCardTaken={clearAddHomeCard}
-                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
                                     askedCommunity={askedCommunity}
                                     onAskedCommunitySeen={clearAskedCommunity}
@@ -1152,7 +1150,8 @@ export function App() {
                                     identity={identity}
                                     marketClickCount={marketClickCount}
                                     openPostId={openMarketPostId}
-                                    onPostOpened={() => setOpenMarketPostId(null)}
+                                    openTxId={openMarketTxId}
+                                    onPostOpened={() => { setOpenMarketPostId(null); setOpenMarketTxId(null); }}
                                     sayWhenPostUnopened={openMarketPostSaysWhy}
                                     openReviewTxId={openMarketReviewTxId}
                                     onReviewOpened={() => setOpenMarketReviewTxId(null)}
@@ -1172,7 +1171,7 @@ export function App() {
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                 />
                             )}
-                            {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
+                            {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId, txId) => navigateToTab(tab, ctxId, txId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
                             {activeTab === 'people' && (
                                 <PeoplePage
                                     identity={identity}
@@ -1185,7 +1184,7 @@ export function App() {
                                 />
                             )}
                             {activeTab === 'ledger' && (
-                                <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} preview={beansMode === 'preview'}
+                                <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} preview={beansMode === 'preview'} deals={myTransactions}
                                     onNearYou={() => setActiveTab('home')} onGuide={(slug) => navigateToTab('guide', slug)} />
                             )}
                             {activeTab === 'projects' && (

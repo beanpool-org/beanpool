@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -461,8 +461,7 @@
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "ശരിയായ അക്കങ്ങൾ നൽകിയാൽ മാത്രമേ നിങ്ങളുടെ അക്കൗണ്ട് ഇവിടെ തുറക്കൂ. മൂന്ന് തവണ തെറ്റിയാൽ ഒന്നും അയക്കില്ല.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "നിങ്ങളുടെ ഫോണിൽ നിന്ന് ഇതുവരെ ഒന്നും വന്നിട്ടില്ല. ഈ കോഡ് {host}ൽ നിന്നുള്ളതാണ്. ഫോൺ ഉപയോഗിക്കാത്ത സെർവറിൽ നിന്നുള്ളതാണെന്ന് ഫോൺ പറയുന്നുണ്ടെങ്കിൽ, നിങ്ങളുടെ സ്വന്തം കമ്മ്യൂണിറ്റിയുടെ വിലാസത്തിൽ BeanPool തുറക്കുക, അല്ലെങ്കിൽ ആദ്യം ഫോണിൽ {host}ൽ ചേരുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക. ഫോണിൽ അക്കങ്ങളൊന്നും കാണിക്കുന്നില്ലെങ്കിൽ, അതിലെ BeanPool ആപ്പ് അപ്ഡേറ്റ് ചെയ്യുക, തുടർന്ന് വീണ്ടും സ്കാൻ ചെയ്യുക.",
   "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "ഒരു കീബോർഡിന്റെ ക്ലിപ്പ്ബോർഡ് ചരിത്രമോ നിങ്ങളുടെ മറ്റ് ഉപകരണങ്ങളുമായി പങ്കിടുന്ന ക്ലിപ്പ്ബോർഡോ BeanPool-ന് മായ്ക്കാൻ കഴിയാത്ത ഒരു പകർപ്പ് സൂക്ഷിച്ചേക്കാം.",
-  "My Deals": "എന്റെ ഇടപാടുകൾ",
-  "Close My Deals": "എന്റെ ഇടപാടുകൾ അടയ്ക്കുക",
+  "Close Your deals": "നിങ്ങളുടെ ഇടപാടുകൾ അടയ്ക്കുക",
   "In Progress": "നടന്നുകൊണ്ടിരിക്കുന്നു",
   "My Posts": "എന്റെ പോസ്റ്റുകൾ",
   "History": "ചരിത്രം",
@@ -1096,7 +1095,6 @@
   "Posted by": "പോസ്റ്റ് ചെയ്തത്",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "റേറ്റിംഗുകളൊന്നുമില്ല ഇതുവരെ",
-  "Transferring {n} B to {name}": "{name}-ലേക്ക് {n} പയർ കൈമാറുന്നു",
   "Failed to complete transaction": "ഇടപാട് പൂർത്തിയാക്കുന്നതിൽ പരാജയപ്പെട്ടു",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "നിങ്ങളാണ് പണം സ്വീകരിക്കുന്നയാൾ. സമ്മതിച്ചതുപോലെ നിബന്ധനകൾ കൃത്യമായി പാലിക്കുക, പണം നൽകുന്നയാൾ നിങ്ങളുടെ ക്രെഡിറ്റുകൾ റിലീസ് ചെയ്യും (1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചുള്ള തുക നിങ്ങൾക്ക് ലഭിക്കും).",
   "Cancel this transaction and return the post to the market?": "ഈ ഇടപാട് റദ്ദാക്കി പോസ്റ്റ് വിപണിയിലേക്ക് തിരികെ നൽകണോ?",
@@ -1164,7 +1162,6 @@
   "Failed to save": "സംരക്ഷിക്കുന്നതിൽ പരാജയപ്പെട്ടു",
   "Failed to delete post as convenor": "കൺവീനർ എന്ന നിലയിൽ പോസ്റ്റ് ഇല്ലാതാക്കുന്നതിൽ പരാജയപ്പെട്ടു",
   "Loading Location Services...": "ലൊക്കേഷൻ സേവനങ്ങൾ ലോഡ് ചെയ്യുന്നു...",
-  "🤝 My Deals": "🤝 എന്റെ ഡീലുകൾ",
   "Switch to List View": "ലിസ്റ്റ് കാഴ്‌ചയിലേക്ക് മാറ്റുക",
   "Switch to Compact View": "കോംപാക്റ്റ് കാഴ്‌ചയിലേക്ക് മാറ്റുക",
   "Switch to Card View": "കാർഡ് കാഴ്‌ചയിലേക്ക് മാറ്റുക",
@@ -3620,5 +3617,6 @@
   "Got an idea that needs Beans? Start a project.": "പയർ ആവശ്യമുള്ള ഒരു ആശയമുണ്ടോ? ഒരു പ്രോജക്റ്റ് ആരംഭിക്കുക.",
   "Something that keeps going and trades? Start an enterprise.": "തുടർന്നും പ്രവർത്തിക്കുകയും ഇടപാടുകൾ നടത്തുകയും ചെയ്യുന്ന ഒന്നാണോ? ഒരു സംരംഭം ആരംഭിക്കുക.",
   "Start one with +: a chat group, a project or an enterprise.": "+ ഉപയോഗിച്ച് ഒരെണ്ണം ആരംഭിക്കുക: ഒരു ചാറ്റ് ഗ്രൂപ്പ്, ഒരു പ്രോജക്റ്റ് അല്ലെങ്കിൽ ഒരു സംരംഭം.",
-  "No projects to back yet": "പിന്തുണയ്ക്കാൻ ഇതുവരെ പ്രോജക്റ്റുകളൊന്നുമില്ല"
+  "No projects to back yet": "പിന്തുണയ്ക്കാൻ ഇതുവരെ പ്രോജക്റ്റുകളൊന്നുമില്ല",
+  "🤝 Your deals": "🤝 നിങ്ങളുടെ ഇടപാടുകൾ"
 }

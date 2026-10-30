@@ -11,7 +11,7 @@ A community can have some features switched off: Beans, deals that hold Beans un
 
 One switch, **showcase**, says what the apps do with a feature that is off:
 
-- **On:** the apps show it, filled from **Example Valley**, a made-up community built into the apps, under one marker: **🏘️ Local community**. The Ledger shows an example member, Commons an example enterprise and Decision, and the Market's My Deals two example deals.
+- **On:** the apps show it, filled from **Example Valley**, a made-up community built into the apps, under one marker: **🏘️ Local community**. The Ledger shows an example member, Commons an example enterprise and Decision, and the Market's Your deals two example deals.
 - **Off:** a feature that is off is hidden, as before. On the phone, with Beans off, the Ledger tab goes; the Commons tab stays if Decisions are on, and goes if Decisions are off too.
 
 With showcase on, every button that would move Beans, make a deal, vote, pledge or invite opens one sheet, **Why this lives in a local community**. It says why in a line, then offers **Start a community** and, where it can, **Communities near you** and **How it works**.
@@ -49,7 +49,7 @@ A value other than true or false is ignored, and the log says so once.
 
 ## Where Start a community leads
 
-The sheet's **Start a community** leads to a page on how to run a community. With nothing set, that is https://beanpool.org/#run-a-node. Your community doesn't need it: you can name your own page instead.
+The sheet's **Start a community** leads to a page on how to run a community. With nothing set, that is https://beanpool.org/start. Your community doesn't need it: you can name your own page instead.
 
 - An owner sets it with POST /api/local/admin/start-community-url and a url, or null for the default. It must start https://, have no user name or password in it, and be at most 300 characters.
 - Or set the row startCommunityUrl in node_config, the same way as above. A value that isn't such an address is ignored, and the default is used.

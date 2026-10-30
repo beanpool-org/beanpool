@@ -2,7 +2,7 @@
 slug: reporting
 title: Reporting a problem
 summary: Tell your community's moderators about a post, an event, a Pulse post, a project, an enterprise or a message in a group's chat.
-related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
+related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse, how-your-community-works
 ---
 
 ## What you can report
@@ -41,6 +41,10 @@ The owners and admins are told when any report comes in: only its kind and how m
 
 If one of your own posts is removed by the moderators, you get an alert saying so, and why if they gave a reason. It does not say who reported it.
 
+## A false accusation in a vote about you
+
+If your community is voting on removing you and the case against you is false, open **Commons**, then **Decide**, and tap **Report this case as false** on the vote. The report goes to the owners and admins like any other, and names whoever brought the case. You can also reply to the case on the vote itself, where everyone reads it beside the case. If the case is shown to be false, an admin can hide it, with a reason everyone can read in its place. See "Rules and how decisions work".
+
 Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report.
 
 ## On global.beanpool.org
@@ -57,6 +61,6 @@ The global community at global.beanpool.org is open to anyone, with 12 secret wo
 - **There are no community votes there.** When an admin suspends someone, the suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner.
 - **Polls there are informal.** Each one says "An informal poll; it decides nothing". Anyone can join, with 12 words or a sign-in, so one person with several accounts could tip the count.
 
-None of this happens in your own local community: there, every report waits for the moderators.
+None of this happens in your own local community unless its owners turn it on: by default, every report there waits for the moderators. See "How this community works" to check which rules yours has.
 
 If someone is in danger, contact your local emergency services first.

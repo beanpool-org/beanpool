@@ -19,6 +19,7 @@ import {
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
+import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
@@ -199,7 +200,7 @@ export default function CommunityCardScreen() {
             const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const joined = await joinAnotherCommunity({ targetUrl: origin, code: invite, identity, returnUrl, knownName: c.name });
             await forgetKnock(identity.publicKey, origin);
-            const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);
+            const nudge = joinedNudgeWords(joinedNudge(joined.name, await copiesAtFor(joined.url)), joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
                 // Only where each community keeps its own sign-in copy (a build without a key vault).

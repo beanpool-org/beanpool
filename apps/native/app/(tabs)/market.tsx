@@ -59,7 +59,7 @@ import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
+import { listingChips, listingChipWords, readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -136,7 +136,7 @@ export default function MarketScreen() {
     const modeOf = (f: 'beans' | 'escrow' | 'decisions') => (reader.known ? showcaseMode(f, reader.node, reader.reader) : undefined);
     // Where the node previews Decisions, a poll says what a local community's Decision does (design §1 row 7).
     const decisionsPreview = modeOf('decisions') === 'preview';
-    // Deals are escrow: off where escrow is off, unless the node previews them; then My Deals is the member's own sheet
+    // Deals are escrow: off where escrow is off, unless the node previews them; then Your deals is the member's own sheet
     // fed Example Valley (design §1 row 3, §4).
     const escrowMode = modeOf('escrow');
     const dealsPreview = escrowMode === 'preview';
@@ -196,7 +196,7 @@ export default function MarketScreen() {
         searchInput: { flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: 14, color: colors.text.body, fontWeight: '500', includeFontPadding: false, textAlignVertical: 'center' },
         iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
         dealsIconBtn: {
-            // Capped, so My Deals in a longer language never squeezes the search field to nothing: its words shrink instead.
+            // Capped, so Your deals in a longer language never squeezes the search field to nothing: its words shrink instead.
             paddingHorizontal: 14, height: 38, borderRadius: 19, maxWidth: 120,
             backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
             borderWidth: 1,
@@ -677,6 +677,9 @@ export default function MarketScreen() {
 
     // In preview the pill counts none of the reader's own deals, even one read before the switch that lands after it.
     const pendingCount = usePendingDealsCount(dealsPreview ? null : identity, myTransactions);
+    // A card's chip on a listing the reader has a deal of their own on (deals S4, DESIGN-deals-fable §3.3): from the deals
+    // the phone already holds, and only the reader's own, so a card never tells anyone else who traded.
+    const dealChips = React.useMemo(() => (dealsPreview ? new Map() : listingChips(myTransactions, identity?.publicKey || '')), [dealsPreview, myTransactions, identity?.publicKey]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1075,7 +1078,7 @@ export default function MarketScreen() {
     // and group pills. Everything else above the listings is the list's own header and scrolls with it.
     const controls = (
         <View style={{ paddingBottom: 2 }}>
-            {/* Top row: Search + My Deals + View Toggle. The field is 40dp to look at, inside a 48dp target
+            {/* Top row: Search + Your deals + View Toggle. The field is 40dp to look at, inside a 48dp target
                 that focuses it; its text is capped at 1.3x so the placeholder is never cut top and bottom. */}
             <View style={[styles.searchRow, { paddingHorizontal: 16 }]}>
                 <Pressable
@@ -1105,12 +1108,12 @@ export default function MarketScreen() {
                     onPress={() => setShowDealsSheet(true)}
                     style={styles.dealsIconBtn}
                     accessibilityRole="button"
-                    accessibilityLabel={pendingCount > 0 ? tn(pendingCount, 'My Deals, {n} pending', 'My Deals, {n} pending') : t('My Deals')}
+                    accessibilityLabel={pendingCount > 0 ? tn(pendingCount, 'Your deals, {n} pending', 'Your deals, {n} pending') : t('Your deals')}
                     accessibilityHint={t('Opens your active and pending deals sheet')}
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
                     {/* Capped (dealsIconBtn maxWidth): a longer name in another language shrinks to fit, never squeezing the search. */}
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('My Deals')}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('Your deals')}</Text>
                     {pendingCount > 0 && (
                         <View style={styles.dealsIconBadge}>
                             <Text style={{ color: colors.text.inverse, fontSize: 8, fontWeight: '900' }}>{pendingCount}</Text>
@@ -1517,6 +1520,7 @@ export default function MarketScreen() {
         // Elder is a tier, and a tier is Beans: no Elder look where the community shows none (as the tier chip below).
         const elderCard = !isPulse && showsBeans && isElder(item.author_energy_cycled);
         const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
+        const dealChip = isPulse ? undefined : dealChips.get(item.id);
         const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
         const groupName = item.target_group_name || item.targetGroupName || t('Group');
         const groupScopeBadgeText = isGroupScope ? t('🔒 Only {group} can see this', { group: groupName }) : null;
@@ -1590,6 +1594,13 @@ export default function MarketScreen() {
                             }
                             return null;
                         })()}
+                        {dealChip && (
+                            <View testID="card-deal-chip" style={[styles.gridBadge, dealChip === 'in-trust'
+                                ? { backgroundColor: colors.feedback.success.solid, borderColor: colors.feedback.success.solid }
+                                : { backgroundColor: colors.feedback.warning.solid, borderColor: colors.feedback.warning.solid }]}>
+                                <Text style={[styles.gridPriceText, { color: dealChip === 'in-trust' ? colors.text.onBrand : colors.text.onGold, fontWeight: '900' }]}>{listingChipWords(dealChip)}</Text>
+                            </View>
+                        )}
                         {!isPulse && showsBeans && (
                             <View style={[styles.gridBadge, styles.gridPriceEnd]}>
                                 <CurrencyDisplay
@@ -1737,6 +1748,11 @@ export default function MarketScreen() {
                                 {isOwn && (
                                     <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
                                         <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>{t('👤 YOU')}</Text>
+                                    </View>
+                                )}
+                                {dealChip && (
+                                    <View testID="card-deal-chip" style={{ backgroundColor: dealChip === 'in-trust' ? colors.feedback.success.bg : colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: dealChip === 'in-trust' ? colors.feedback.success.border : colors.feedback.warning.border }}>
+                                        <Text style={{ fontSize: 10, fontWeight: '700', color: dealChip === 'in-trust' ? colors.feedback.success.fg : colors.feedback.warning.fg }}>{listingChipWords(dealChip)}</Text>
                                     </View>
                                 )}
                                 <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>

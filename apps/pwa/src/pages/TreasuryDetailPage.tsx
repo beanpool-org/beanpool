@@ -1154,6 +1154,23 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const faceOpen = !['completed', 'disabled', 'suspended', 'pruned'].includes(detail?.status);
     const hasBanner = !!shopPhotoOf(detail?.shop);
     const showAddBanner = !elsewhere && !isEffectivePreview && !project && isKeeperOfThis && !hasBanner && !bannerDismissed && faceOpen;
+    // A project's cancel, drawn for whoever the node says may cancel it (apps/server db.ts mayCancelProject, its `mayCancel`):
+    // a node admin, its leader, its only collaborator when nobody leads it, or its maker when nobody else ever helped run it.
+    // Never from the keepers list, which can't say who is an admin or that a collaborator left. Inside the operator controls
+    // for a collaborator; on its own for an admin who keeps none of it, who has none.
+    const cancelBlock = !isEffectivePreview && detail?.mayCancel === true && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' ? (
+        <div className="pt-4 border-t border-emerald-500/20">
+            <button
+                type="button"
+                onClick={handleCancelInitiative}
+                disabled={cancelling}
+                className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            >
+                <span aria-hidden="true">🛑</span>
+                {cancelling ? t('Cancelling & Refunding Backers…') : t('Cancel Initiative & Refund Escrow')}
+            </button>
+        </div>
+    ) : null;
 
     // An action's words, drawn where `feedbackAt` puts them.
     const feedbackAlert = actionFeedback && (
@@ -1839,22 +1856,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             </div>
                                         )}
 
-                                        {/* Its leader's alone, as the node takes it (apps/server db.ts leadsProject): to any other collaborator it was a door the node refused. */}
-                                        {!isEffectivePreview && iAmLead && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
-                                            <div className="pt-4 border-t border-emerald-500/20">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleCancelInitiative}
-                                                    disabled={cancelling}
-                                                    className="w-full py-2.5 px-4 rounded-xl border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                                                >
-                                                    <span aria-hidden="true">🛑</span>
-                                                    {cancelling ? t('Cancelling & Refunding Backers…') : t('Cancel Initiative & Refund Escrow')}
-                                                </button>
-                                            </div>
-                                        )}
+                                        {cancelBlock}
                                     </div>
                                 )}
+                                {!isKeeperOfThis && cancelBlock}
 
                                 {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
                                 {!isEffectivePreview && isKeeperOfThis && (

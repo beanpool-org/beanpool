@@ -1,0 +1,183 @@
+<!-- source-hash: 5751a0ccbe5002b8 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>建立一个社区 — BeanPool</title>
+    <meta name="description" content="每个社区都运行在自己的节点上：一台保存该社区成员、帖子与账本的小型服务器。由本地居民负责运行。如果你的城镇或山谷还没有节点，那个人可以是你。">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.9">
+    <style>
+        /* beanpool.org/start: what running a community involves, choosing the address, and the one block that installs it */
+        .start-community .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .start-community h2[id] { scroll-margin-top: 100px; }
+        .start-community .run-node-facts, .start-community .run-node-steps { max-width: none; margin-inline: 0; }
+        .start-community .features-grid { margin: 1.5rem 0 0.5rem; }
+        .start-community .feature-card p { margin-bottom: 0; }
+        .start-community .terminal-window { margin: 1.25rem 0 1.75rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .start-community a.btn-primary, .start-community a.btn-primary:hover { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool 图标" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">运作方式</a>
+                <a href="index.html#features">你能做什么</a>
+                <a href="rules.html">规则</a>
+                <a href="start.html" aria-current="page">运营社区</a>
+                <a href="help.html" title="所有规则、指南与手册的一站式中心">帮助</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="在 YouTube (@beanpool) 上观看视频教程">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="加入 Reddit 社区 (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="在 GitHub 上查看">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">新手入门</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="打开菜单"><span aria-hidden="true">☰</span> 菜单</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">新手入门</a>
+                    <a href="index.html#how-it-works">运作方式</a>
+                    <a href="index.html#features">你能做什么</a>
+                    <a href="rules.html">规则</a>
+                    <a href="start.html" aria-current="page">运营社区</a>
+                    <a href="help.html">帮助</a>
+                    <a href="guide/index.html">成员指南</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 视频</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit 上的 r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub 源代码</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+        <main class="legal-content start-community">
+        <h1>建立一个社区</h1>
+        <p class="lede">每个社区都运行在自己的节点上：一台保存该社区成员、帖子与账本的小型服务器。由本地居民负责运行。如果你的城镇或山谷还没有节点，那个人可以是你。</p>
+
+        <h2 id="involves">运营一个社区要做什么</h2>
+        <p>按照指南操作大约需要半小时。请先了解以下六件事：</p>
+        <ul class="run-node-facts">
+            <li><strong>费用成本。</strong>软件是免费的。它可以运行在家里保持开机的闲置电脑上（迷你主机、NAS 或安装了 64 位系统的树莓派），也可以运行在每月花费数美元（约 6 美元）的小型租用服务器上。</li>
+            <li><strong>由谁托管。</strong>由你自行托管，在你自己的机器或你租用的服务器上。它从不需要依赖 <a href="https://beanpool.org">beanpool.org</a>：你自己的网络地址即可正常使用。</li>
+            <li><strong>你的职责承担。</strong>成员的举报会发送给你。数据文件夹由你使用恢复代码进行备份。请保持两位所有者。保持服务器开机运行并及时更新。</li>
+            <li><strong>你绝不会看到的内容。</strong>你成员之间的私信。</li>
+            <li><strong>先准备 Docker。</strong>在执行下方命令块之前，机器上需要安装 Docker；全新租用的服务器通常未安装。</li>
+            <li><strong>手机可访问的地址。</strong>手机在互联网上只能通过 https 连接社区。在拥有公网 IP 地址且开放了 80 和 443 端口的租用服务器上，直接使用该 IP 地址就足够了：你的服务器无需 Cloudflare 账户即可自行获取对应证书，使用你自己的域名也是如此。在家里或没有开放端口的情况下，认领过程会通过服务器自身运行的隧道为你提供一个以 .beanpool.org 结尾的免费域名。普通的 http:// 地址仅在家庭局域网内有效。</li>
+        </ul>
+        <div class="features-grid">
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🧰</div>
+                <h3>你的职责</h3>
+                <p>你和你任命的管理员是你社区的管理审核员：举报会直接发给你。成员的数据存放在你的机器上，因此由你负责备份。你可以查看企业讨论与活动聊天；你无法查看私信。你邀请第一批成员，再由他们邀请其他人。</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">⚙️</div>
+                <h3>设置应用</h3>
+                <p>你的节点随附在浏览器中运行的设置应用。你可以通过它为社区命名、任命使用自身密钥登录的所有者和管理员、打印二维码邀请函、监控磁盘健康状况、选择公开网络地址或隧道，并在成员同时遗失手机和 12 个助记词时，通过当面确认的一次性验证码帮助他们在一部新手机上找回自己的账户。</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🔒</div>
+                <h3>从首次启动起便保持私密</h3>
+                <p>从节点启动的那一刻起，社区的刊登信息、地图、消息与余额仅对其成员开放；无需进行任何额外设置。没有账户的人打开其地址会被引导至全球社区，在那里他们可以看到附近的内容并申请加入。</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🌐</div>
+                <h3>与邻近社区建立互联</h3>
+                <p>两个社区可以通过协商建立互联，以便彼此的成员相互交易。豆子绝不会流出本社区：双方社区保持一份彼此欠款的流水账，并且各自设定信用限额。除非双方运维人员都开启互联，否则默认处于关闭状态，目前该功能仍处于早期阶段：它已开发完成，在网页端有对应界面，但仅在我们的两个测试社区之间进行过试验，尚未在实际运行的社区之间使用。</p>
+            </div>
+        </div>
+
+        <h2 id="address">你的地址</h2>
+        <p>在粘贴前确定好，并修改最后一行命令以保持一致。如果你已经粘贴了，在提示问题处按回车键，然后重新运行最后一行：认领码会等待手机扫码。<strong>租用服务器</strong>（具有公网 IP 地址且开放 80 和 443 端口）：添加 <code>--ip</code> 及其 IP 地址，例如 <code>beanpool claim --ip 203.0.113.7</code>。你的服务器会通过 80 端口从 Let's Encrypt 为该地址获取专属证书，手机可通过 https://203.0.113.7 访问。<strong>家用电脑或未开放端口</strong>：保持原样即可。它会询问免费域名的前缀（例如输入 <strong>yourtown</strong> 即可获得 yourtown.beanpool.org；按回车跳过），通过服务器自行运行的隧道进行访问，最多等待三分钟即可上线。<strong>自有域名</strong>：将其 A 记录指向服务器的 IP 地址，开放 80 和 443 端口，并添加 <code>--address https://your.domain</code>。域名在更换服务器后仍能沿用，而 IP 地址不行：你稍后也可以在“设置”中添加域名，使用 IP 地址的成员不受影响。如需稍后在“设置”中选择，请添加 <code>--no-name</code>。普通的 <code>http://</code> 地址仅在家庭网络中有效：手机在互联网上会拒绝连接，认领过程也会给出警告。即使 BeanPool 项目的地址服务暂时不可用，认领操作依然可以正常工作。</p>
+
+        <h2 id="install">安装</h2>
+        <p>然后，在安装了 Docker 的机器上，粘贴这整段命令。它会获取 compose 文件、创建节点使用的网络、拉取已发布的镜像（Intel/AMD 或 ARM64）、启动节点、等待服务器生成其一次性认领码（树莓派等设备首次启动较慢时最多需 5 分钟），并完成认领。启动前无需进行任何配置。</p>
+
+        <div class="terminal-window">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <span class="terminal-dot red"></span>
+                    <span class="terminal-dot yellow"></span>
+                    <span class="terminal-dot green"></span>
+                </div>
+                <div class="terminal-title">bash — 建立社区</div>
+            </div>
+            <div class="terminal-body">
+                <div class="cta-step">
+                    <span class="cta-step-label">一段命令：获取、建网、拉取、启动、等待、认领</span>
+                    <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                    <button class="copy-btn" onclick="copyCode(this)" title="复制到剪贴板">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="run-node-sub">最后一行命令：beanpool claim</h3>
+        <ol class="run-node-steps">
+            <li><strong>认领码与二维码。</strong>它会显示一个一次性认领码和一个二维码。使用手机相机扫描二维码，或者打开 BeanPool，在<strong>寻找你的社区</strong>下输入服务器地址并点击<strong>认领</strong>。该手机即成为所有者。</li>
+            <li><strong>设置。</strong>在浏览器中打开你的地址（或服务器自身地址）加上 <strong>/settings</strong>。设置向导会引导你为社区命名、添加第二位所有者，并生成三个创办邀请。在“节点身份”下设置你在地图上的位置，以便附近的人能找到你。</li>
+        </ol>
+        <p class="run-node-note">如果命令块提示 <strong>No claim code after 5 minutes</strong>，或者 <code>beanpool claim</code> 提示 <strong>This community has no claim code waiting</strong>，说明服务器尚未完成启动：<code>docker compose logs beanpool-node</code> 会显示当前进度。一旦日志显示该社区尚无所有者并已生成认领码，请重新运行最后一行命令。完整步骤可参见运维手册中的<a href="guide/operators/first-time-setup.html">首次设置</a>。</p>
+
+        <h2 id="keep-running">推荐：Docker 更新时让社区继续运行</h2>
+        <p>这一步在运维手册的“<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/server/updates-and-health.md" target="_blank" rel="noopener">Updates and health</a>”页面里。 负责安装的 AI 助手总会执行这一步 (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">用 AI 助手设置你的服务器</a>)。</p>
+
+        <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            在 GitHub 上查看 →
+        </a>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool 图标" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>一款使用豆子与邻居进行互助交易的免费应用。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">帮助中心</a>
+                    <a href="getting-started.html">新手入门</a>
+                    <a href="rules.html">规则</a>
+                    <a href="post-extraction.html">后剥削经济</a>
+                    <a href="start.html">运营社区</a>
+                    <a href="guide/index.html">成员指南</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">隐私政策</a>
+                    <a href="terms.html">服务条款</a>
+                    <a href="safety.html">儿童安全</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>基于 MIT 许可证开源。由社区以<img src="bean.png" alt="爱心" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />打造，服务于社区。时区边界数据 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 贡献者</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

@@ -140,7 +140,7 @@ function RefusalBox({
                     data-testid={`${testId}-deals`}
                     className="min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-sm font-bold text-nature-900 dark:text-white cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand"
                 >
-                    {t('Open my deals')}
+                    {t('Open your deals')}
                 </button>
             ) : null}
         </div>

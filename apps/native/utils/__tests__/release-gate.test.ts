@@ -183,12 +183,17 @@ describe('a build with a vault: the vault, whatever community the phone is on', 
         expect(result).toMatchObject({ enrolledSso: ['google'] });
         expect(paths(VAULT)).toEqual(['POST /v1/ticket', 'POST /v1/copies']);
         for (const s of to(COMMUNITY)) expect([...keysIn(s.body)].filter(k => ['idToken', 'shares', 'nonce'].includes(k))).toEqual([]);
+        // All it is asked is its rule for members' copies (vault rethink VR2), which a community from before the rule
+        // doesn't say: the default, the vault.
+        expect(paths(COMMUNITY)).toEqual(['GET /api/community/info']);
         expect(community.copies.size).toBe(0);
     });
 
     it('Disconnect goes to the vault', async () => {
         useVault();
         await connect();
+        // What the connect asked the community (its rule, vault rethink VR2) is the connect's: Disconnect's own requests from here.
+        net.sent.length = 0;
         expect(await disconnectSsoKeeper('google', member)).toEqual({ success: true, enrolledSso: [] });
         expect(paths(VAULT)).toContain('POST /v1/copies/delete');
         expect(to(COMMUNITY)).toEqual([]);

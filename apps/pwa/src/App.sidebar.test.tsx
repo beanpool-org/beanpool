@@ -6,7 +6,8 @@
  *    drawn at 100, under them. The cog only opened Settings, so it opened under the page already there and nothing
  *    seemed to happen; a tab worked because a tab closes that page first.
  * 2. "Avatar didn't seem to populate into the small icon in the bottom left": the sidebar's profile button drew the
- *    name's first two letters and never the member's picture.
+ *    name's first two letters and never the member's picture. With no picture it now draws the ready-made one the key
+ *    picks, never bare initials (Profile S1, DESIGN-per-community-profile-fable.md §3 "No picture yet").
  *
  * The whole App, with the pages stood in for and the node's reads mocked at lib/api. jsdom applies no stylesheet, so the
  * sidebar is in the document at any width: these tests drive it as a wide screen would.
@@ -16,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { App } from './App';
 import { getMemberProfile } from './lib/api';
+import { resolveAvatarUrl } from './lib/avatar';
 
 if (typeof window !== 'undefined') {
     window.matchMedia = window.matchMedia || vi.fn().mockImplementation(() => ({
@@ -306,15 +308,23 @@ describe('the sidebar\'s profile button shows the member\'s own picture', () => 
     beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); standing.isMember = true; });
 
     const profile = (avatar: string | null) => ({ publicKey: 'my-user-pubkey', avatar, bio: '', contact: null });
+    /** The ready-made picture the key picks (@beanpool/core avatarPresetForPubkey), as every other face on the web. */
+    const PRESET = resolveAvatarUrl(null, 'my-user-pubkey')!;
+    /** The preset, and never the name's first letters in its place. */
+    const showsPreset = () => {
+        expect(within(profileButton()).getByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', PRESET);
+        expect(within(profileButton()).queryByText('AL')).toBeNull();
+        expect(within(profileButton()).queryByText('ME')).toBeNull();
+    };
 
-    it('the initials while it loads, then the picture, and the new one once the profile is saved', async () => {
+    it('the preset while it loads, then the picture, and the new one once the profile is saved', async () => {
         let answer!: (p: ReturnType<typeof profile>) => void;
         vi.mocked(getMemberProfile).mockImplementationOnce(() => new Promise((r) => { answer = r; }));
         await landed();
 
         await waitFor(() => expect(getMemberProfile).toHaveBeenCalledWith('my-user-pubkey', 'my-user-pubkey'));
-        expect(within(profileButton()).getByText('AL')).toBeInTheDocument();
-        expect(within(profileButton()).queryByRole('img')).toBeNull();
+        expect(PRESET).toMatch(/^\/avatars\/avatar_[a-z_]+\.webp$/);
+        showsPreset();
 
         await act(async () => { answer(profile('bundled://sun')); });
         // The stored picture, through lib/avatar's safe forms (a bundled one is the app's own file).
@@ -347,29 +357,27 @@ describe('the sidebar\'s profile button shows the member\'s own picture', () => 
         expect(within(profileButton()).getByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_moon.webp');
     });
 
-    it('no picture, or one that is not a safe form: the initials', async () => {
+    it('no picture, or one that is not a safe form: the preset, never the unsafe value', async () => {
         vi.mocked(getMemberProfile).mockResolvedValue(profile('javascript:alert(1)'));
         await landed();
         await waitFor(() => expect(getMemberProfile).toHaveBeenCalled());
         await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
-        expect(within(profileButton()).queryByRole('img')).toBeNull();
-        expect(within(profileButton()).getByText('AL')).toBeInTheDocument();
+        showsPreset();
     });
 
-    it('a picture that fails to load: the initials, not a broken image', async () => {
+    it('a picture that fails to load: the preset, not a broken image', async () => {
         vi.mocked(getMemberProfile).mockResolvedValue(profile('/avatars/gone.jpg'));
         await landed();
-        const img = await within(profileButton()).findByRole('img', { name: 'Your Photo' });
-        fireEvent.error(img);
-        await waitFor(() => expect(within(profileButton()).queryByRole('img')).toBeNull());
-        expect(within(profileButton()).getByText('AL')).toBeInTheDocument();
+        await waitFor(() => expect(within(profileButton()).getByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/gone.jpg'));
+        fireEvent.error(within(profileButton()).getByRole('img', { name: 'Your Photo' }));
+        await waitFor(() => showsPreset());
     });
 
-    it('a key the node does not take as a member: nothing is asked, the initials show', async () => {
+    it('a key the node does not take as a member: nothing is asked, the preset shows', async () => {
         standing.isMember = false;
         await landed();
         await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
         expect(getMemberProfile).not.toHaveBeenCalled();
-        expect(within(profileButton()).getByText('AL')).toBeInTheDocument();
+        showsPreset();
     });
 });

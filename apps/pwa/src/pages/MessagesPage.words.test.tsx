@@ -117,8 +117,8 @@ const BOB_LINES: ApiMessage[] = [
     line('m5', 'peer-pubkey', '', { type: 'image' }),
 ];
 
-/** What members wrote: their names, their messages, a group's name and a listing's title. */
-const OTHERS = ['Bob', 'Charlie', 'Garden crew', 'Sourdough loaf', 'Is the ladder still free?', 'Yes, come by Saturday', 'Seeds are in'];
+/** What members wrote: their names, their messages, a group's name and a listing's title ('Ladder' is the deals' on the chat's strip). */
+const OTHERS = ['Bob', 'Charlie', 'Garden crew', 'Sourdough loaf', 'Ladder', 'Is the ladder still free?', 'Yes, come by Saturday', 'Seeds are in'];
 
 let said: string[] = [];
 beforeEach(() => {

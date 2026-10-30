@@ -1,4 +1,4 @@
-<!-- source-hash: 0a1bd7282ca4eef1 -->
+<!-- source-hash: 969e40ea10897950 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,7 +22,7 @@
                 <a href="#how-it-works">Comment ça marche</a>
                 <a href="#features">Ce que vous pouvez faire</a>
                 <a href="rules.html">Les règles</a>
-                <a href="#run-a-node">Gérer une communauté</a>
+                <a href="start.html">Gérer une communauté</a>
                 <a href="help.html" title="Toutes les règles, guides et manuels au même endroit">Aide</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Regarder les tutoriels vidéo sur YouTube (@beanpool)">
@@ -45,7 +45,7 @@
                     <a href="#how-it-works">Comment ça marche</a>
                     <a href="#features">Ce que vous pouvez faire</a>
                     <a href="rules.html">Les règles</a>
-                    <a href="#run-a-node">Gérer une communauté</a>
+                    <a href="start.html">Gérer une communauté</a>
                     <a href="help.html">Aide</a>
                     <a href="guide/index.html">Guide des membres</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Vidéos sur YouTube</a>
@@ -461,7 +461,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">Aucune communauté près de chez vous pour le moment.</span>
-                    <a id="map-empty-start" href="#run-a-node">Créer une communauté</a>
+                    <a id="map-empty-start" href="start.html">Créer une communauté</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -480,6 +480,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -487,141 +489,7 @@
                 <h2>Faites fonctionner BeanPool pour votre communauté</h2>
                 <p>Chaque communauté fonctionne sur son propre serveur : une petite machine qui héberge les membres, les annonces et le registre de cette communauté. Une personne sur place s'en occupe. Si votre ville ou votre vallée n'en a pas encore, cela pourrait être vous.</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>Ce dont vous avez la charge</h3>
-                    <p>Vous et les administrateurs que vous désignez êtes les modérateurs de votre communauté : les signalements vous parviennent. Les données de vos membres résident sur votre machine, vous veillez donc à en faire des sauvegardes. Vous pouvez lire les échanges d'entreprises et les discussions d'événements ; vous ne pouvez pas lire les messages directs. Vous invitez les premiers membres, et ils invitent les suivants.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>L'application de paramètres</h3>
-                    <p>Votre serveur est doté de sa propre application de paramètres dans le navigateur. Depuis celle-ci, vous nommez votre communauté, désignez un propriétaire et des administrateurs qui se connectent avec leurs propres clés, imprimez des invitations QR, surveillez l'état du disque, choisissez une adresse web publique ou un tunnel, et aidez un membre ayant perdu à la fois son téléphone et ses 12 mots à récupérer son compte sur un nouveau téléphone, grâce à un code à usage unique que vous confirmez en personne.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>Privé dès le premier démarrage</h3>
-                    <p>Les annonces, la carte, les messages et les soldes d'une communauté sont réservés à ses membres dès le démarrage de son serveur ; il n'y a rien à activer. Toute personne ouvrant son adresse sans compte est redirigée vers la communauté globale, où elle peut voir ce qui est proposé à proximité et demander à participer.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>Liaison avec une communauté voisine</h3>
-                    <p>Deux communautés peuvent convenir d'une liaison afin que leurs membres puissent échanger entre eux. Les haricots ne quittent jamais leur communauté d'origine : chaque duo tient le décompte continu de ce qu'une communauté doit à l'autre, et chaque côté fixe sa propre limite. La liaison est désactivée tant que les deux gestionnaires ne l'ont pas activée, et cela reste récent : elle est développée, avec ses écrans dans l'application web, et n'a été testée qu'entre deux de nos propres communautés de test, jamais entre des communautés réelles.</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>Créer une communauté</h2>
-                <p>Environ une demi-heure, si vous savez suivre des instructions. Six choses à savoir au préalable :</p>
-                <ul class="run-node-facts">
-                    <li><strong>Ce que cela coûte.</strong> Le logiciel est gratuit. Il fonctionne sur un ordinateur disponible qui reste allumé à la maison (un mini PC, un NAS ou un Raspberry Pi avec un système 64 bits), ou sur un petit serveur loué pour quelques dollars par mois (environ 6 $ US).</li>
-                    <li><strong>Qui l'héberge.</strong> C'est vous, sur votre propre machine ou celle que vous louez. Il n'a jamais besoin de <a href="https://beanpool.org">beanpool.org</a> : votre propre adresse web fonctionne.</li>
-                    <li><strong>Ce que vous prenez en charge.</strong> Les signalements de vos membres vous parviennent. Le dossier de données vous revient pour la sauvegarde, avec un code de récupération. Conservez deux propriétaires. Gardez le serveur allumé et à jour.</li>
-                    <li><strong>Ce que vous ne voyez jamais.</strong> Les messages directs de vos membres.</li>
-                    <li><strong>Docker d'abord.</strong> Docker doit être installé sur la machine avant d'exécuter le bloc ci-dessous ; un serveur fraîchement loué n'en a pas.</li>
-                    <li><strong>Une adresse que les téléphones peuvent joindre.</strong> Les téléphones ne joignent une communauté sur Internet que via https. Sur un serveur loué avec une adresse IP publique et les ports 80 et 443 ouverts, cette adresse IP suffit : votre serveur obtient son propre certificat pour celle-ci, sans compte Cloudflare, et de même pour un domaine qui vous appartient. À la maison, ou sans port ouvert, la revendication vous attribue un nom gratuit se terminant par .beanpool.org, via un tunnel que votre serveur gère lui-même. Une simple adresse en http:// ne fonctionne que sur un réseau domestique.</li>
-                </ul>
-                <p>Ensuite, sur cette machine où Docker est installé, collez ce bloc unique. Il récupère le fichier compose, crée le réseau utilisé par le serveur, télécharge l'image publiée (Intel/AMD ou ARM64), la démarre, attend que le serveur ait généré son code de revendication à usage unique (jusqu'à cinq minutes, pour un premier démarrage lent sur un Raspberry Pi), et le revendique. Il n'y a rien à configurer avant le démarrage.</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — créer une communauté</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">Un seul bloc : récupération, réseau, téléchargement, démarrage, attente, revendication</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Copier dans le presse-papiers">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">La dernière ligne : beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Votre adresse.</strong> Choisissez-la avant de coller, et modifiez la dernière ligne en conséquence. Si vous avez déjà collé, appuyez sur Entrée lors des questions, puis réexécutez la dernière ligne : le code de revendication attend un téléphone. <strong>Un serveur loué</strong> avec une adresse IP publique et les ports 80 et 443 ouverts : ajoutez <code>--ip</code> et son adresse IP, comme dans <code>beanpool claim --ip 203.0.113.7</code>. Votre serveur obtient son propre certificat pour cette adresse auprès de Let's Encrypt, via le port 80, et les téléphones y accèdent sur https://203.0.113.7. <strong>Un ordinateur à la maison, ou aucun port ouvert</strong> : laissez tel quel. La commande demande le début d'un nom gratuit (tapez simplement <strong>votreville</strong> pour votreville.beanpool.org ; Entrée pour ignorer), accessible via un tunnel que votre serveur gère lui-même, et attend jusqu'à trois minutes pour qu'il soit actif. <strong>Votre propre domaine</strong> : faites pointer un enregistrement A vers l'adresse IP du serveur, ouvrez les ports 80 et 443, et ajoutez <code>--address https://votre.domaine</code>. Un nom persiste lors d'un changement de serveur ; un numéro, non : vous pouvez ajouter un nom plus tard dans les Paramètres, et les membres qui utilisent l'adresse IP continuent de fonctionner. Pour choisir plus tard dans les Paramètres, ajoutez <code>--no-name</code>. Une simple adresse en <code>http://</code> ne fonctionne que sur un réseau domestique : les téléphones la refusent sur Internet, et la revendication vous en avertit. Si le service d'adresses du projet BeanPool est indisponible, la revendication fonctionne quand même.</li>
-                    <li><strong>Le code et le QR code.</strong> Un code de revendication à usage unique et un QR code s'affichent. Scannez le QR code avec l'appareil photo de votre téléphone, ou ouvrez BeanPool, saisissez l'adresse du serveur sous <strong>Trouver votre communauté</strong> et touchez <strong>Revendiquer</strong>. Ce téléphone devient le propriétaire.</li>
-                    <li><strong>Paramètres.</strong> Ouvrez votre adresse (ou l'adresse propre du serveur) suivie de <strong>/settings</strong>. L'assistant de configuration nomme votre communauté, vous invite à ajouter un second propriétaire et génère trois invitations fondatrices. Définissez votre emplacement sur la carte sous Identité du nœud afin que les personnes à proximité puissent vous trouver.</li>
-                </ol>
-                <p class="run-node-note">Si le bloc affiche <strong>No claim code after 5 minutes</strong>, ou si <code>beanpool claim</code> indique <strong>This community has no claim code waiting</strong>, le serveur n'a pas fini de démarrer : <code>docker compose logs beanpool-node</code> vous montre où il en est. Dès que le journal indique que la communauté n'a pas encore de propriétaire et dispose d'un code de revendication, réexécutez la dernière ligne. Les étapes complètes figurent dans la <a href="guide/operators/first-time-setup.html">configuration initiale</a> du manuel de l'opérateur.</p>
-
-                <h3 class="run-node-sub">Recommandé : gardez votre communauté en marche lors des mises à jour de Docker</h3>
-                <p>Avec le live-restore de Docker activé, Docker peut redémarrer, ou recevoir une mise à jour corrective (patch), sans arrêter votre communauté. L'étape ci-dessous demande root ou <code>sudo</code> et peut être ignorée sans risque : votre communauté fonctionne sans elle, et la page « Updates and health » du manuel de l'opérateur donne les étapes pour la faire plus tard. Un assistant IA qui fait l'installation exécute toujours cette étape (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">Configurer votre serveur avec un assistant IA</a>).</p>
-
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — garder la communauté en marche</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">Facultatif : live-restore de Docker</span>
-                            <code class="cta-block"># Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
-# Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
-# lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
-if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi &lt;&lt;'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
-command -v systemctl &gt;/dev/null 2&gt;&amp;1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
-command -v python3 &gt;/dev/null 2&gt;&amp;1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
-docker info &gt;/dev/null 2&gt;&amp;1 &lt;/dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
-[ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ] &amp;&amp; { echo "Docker live-restore is already on."; exit 0; }
-python3 - &lt;&lt;'PY' || exit 1
-import json, os, stat, sys
-p = os.path.realpath("/etc/docker/daemon.json")
-st = os.stat(p) if os.path.exists(p) else None
-try:
-    d = json.loads(open(p).read().strip() or "{}") if st else {}
-    if not isinstance(d, dict):
-        raise ValueError
-except ValueError:
-    sys.exit(p + " is not a JSON object, so it is left alone. Fix or remove it, then paste this step again.")
-if d.get("live-restore") is True:
-    sys.exit(0)
-d["live-restore"] = True
-os.makedirs(os.path.dirname(p), exist_ok=True)
-tmp = p + ".new"
-fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-os.fchmod(fd, stat.S_IMODE(st.st_mode) if st else 0o644)
-if st:
-    os.fchown(fd, st.st_uid, st.st_gid)
-with os.fdopen(fd, "w") as f:
-    f.write(json.dumps(d, indent=2) + "\n")
-    f.flush()
-    os.fsync(f.fileno())
-os.replace(tmp, p)
-PY
-systemctl reload docker &lt;/dev/null || exit 1
-if [ "$(docker info --format '{{.LiveRestoreEnabled}}' &lt;/dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
-EOF</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Copier dans le presse-papiers">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    Voir sur GitHub →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">Créer une communauté&nbsp;→</a></p>
         </div>
     </section>
 
@@ -674,7 +542,7 @@ EOF</code>
                     <a href="getting-started.html">Démarrer</a>
                     <a href="rules.html">Les règles</a>
                     <a href="post-extraction.html">Post-extraction</a>
-                    <a href="#run-a-node">Gérer une communauté</a>
+                    <a href="start.html">Gérer une communauté</a>
                     <a href="guide/index.html">Guide des membres</a>
                     <a href="status.html">État des serveurs</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

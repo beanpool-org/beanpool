@@ -1,0 +1,183 @@
+<!-- source-hash: 5751a0ccbe5002b8 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magsimula ng komunidad — BeanPool</title>
+    <meta name="description" content="Bawat komunidad ay tumatakbo sa sarili nitong node: isang maliit na server na nagtataglay ng mga miyembro, mga post at talaan ng komunidad na iyon. Isang lokal na tao ang nagpapatakbo nito. Kung wala pa sa iyong bayan o lambak, maaaring ikaw iyon.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.9">
+    <style>
+        /* beanpool.org/start: what running a community involves, choosing the address, and the one block that installs it */
+        .start-community .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .start-community h2[id] { scroll-margin-top: 100px; }
+        .start-community .run-node-facts, .start-community .run-node-steps { max-width: none; margin-inline: 0; }
+        .start-community .features-grid { margin: 1.5rem 0 0.5rem; }
+        .start-community .feature-card p { margin-bottom: 0; }
+        .start-community .terminal-window { margin: 1.25rem 0 1.75rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .start-community a.btn-primary, .start-community a.btn-primary:hover { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Icon ng BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                <a href="index.html#features">Ang Magagawa Mo</a>
+                <a href="rules.html">Ang Mga Panuntunan</a>
+                <a href="start.html" aria-current="page">Magpatakbo ng Komunidad</a>
+                <a href="help.html" title="Bawat panuntunan, gabay at manwal sa iisang lugar">Tulong</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Manood ng mga Video Tutorial sa YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Sumali sa Komunidad sa Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Tingnan sa GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Magsimula</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Buksan ang menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Magsimula</a>
+                    <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                    <a href="index.html#features">Ang Magagawa Mo</a>
+                    <a href="rules.html">Ang Mga Panuntunan</a>
+                    <a href="start.html" aria-current="page">Magpatakbo ng Komunidad</a>
+                    <a href="help.html">Tulong</a>
+                    <a href="guide/index.html">Gabay ng mga miyembro</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mga Video sa YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool sa Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Source code sa GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+        <main class="legal-content start-community">
+        <h1>Magsimula ng komunidad</h1>
+        <p class="lede">Bawat komunidad ay tumatakbo sa sarili nitong node: isang maliit na server na nagtataglay ng mga miyembro, mga post at talaan ng komunidad na iyon. Isang lokal na tao ang nagpapatakbo nito. Kung wala pa sa iyong bayan o lambak, maaaring ikaw iyon.</p>
+
+        <h2 id="involves">Ano ang kasama sa pagpapatakbo ng komunidad</h2>
+        <p>Humigit-kumulang kalahating oras, kung kaya mong sumunod sa panuto. Anim na bagay na dapat munang malaman:</p>
+        <ul class="run-node-facts">
+            <li><strong>Ang gastos nito.</strong> Libre ang software. Tumatakbo ito sa isang ekstrang kompyuter na nananatiling nakabukas sa bahay (isang Mini PC, NAS, o Raspberry Pi na may 64-bit system), o sa isang maliit na inupahang server sa halagang ilang dolyar kada buwan (mga US$6).</li>
+            <li><strong>Sino ang nagho-host nito.</strong> Ikaw, sa sarili mong makina o sa inuupahan mo. Hindi nito kailanman kailangan ang <a href="https://beanpool.org">beanpool.org</a>: gumagana ang sarili mong web address.</li>
+            <li><strong>Ang iyong pananagutan.</strong> Dumarating sa iyo ang mga report mula sa iyong mga miyembro. Nasa sa iyo ang pag-backup ng folder ng data, gamit ang isang recovery code. Magpanatili ng dalawang may-ari. Panatilihing nakabukas at updated ang server.</li>
+            <li><strong>Kung ano ang hindi mo kailanman makikita.</strong> Ang mga direct message ng iyong mga miyembro.</li>
+            <li><strong>Docker muna.</strong> Kailangang may naka-install na Docker ang makina bago ang bloke sa ibaba; ang isang bagong inupahang server ay wala nito.</li>
+            <li><strong>Address na mararating ng mga telepono.</strong> Nararating lamang ng mga telepono ang isang komunidad sa internet sa pamamagitan ng https. Sa isang inupahang server na may pampublikong IP address at bukas ang port 80 at 443, sapat na ang IP address na iyon: nakakakuha ang iyong server ng sarili nitong certificate para dito, nang walang Cloudflare account, at ganoon din para sa sarili mong domain. Sa bahay, o kung walang bukas na port, ang pag-claim ay nagbibigay sa iyo ng libreng pangalan na nagtatapos sa .beanpool.org, sa pamamagitan ng tunnel na pinapatakbo mismo ng iyong server. Ang payak na http:// address ay gumagana lamang sa isang home network.</li>
+        </ul>
+        <div class="features-grid">
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🧰</div>
+                <h3>Ang iyong pinapangalagaan</h3>
+                <p>Ikaw at ang mga admin na itatalaga mo ang mga tagapangasiwa ng iyong komunidad: dumarating sa iyo ang mga report. Nakatira ang data ng iyong mga miyembro sa iyong makina, kaya pinapanatili mo itong naka-back up. Mababasa mo ang mga talakayan sa negosyo at mga chat sa event; hindi mo mababasa ang mga direct message. Iniimbitahan mo ang mga unang miyembro, at iniimbitahan nila ang iba pa.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">⚙️</div>
+                <h3>Ang app ng mga setting</h3>
+                <p>May kasamang sariling app ng mga setting sa browser ang iyong node. Mula rito pinapangalanan mo ang iyong komunidad, nagtatalaga ng may-ari at mga admin na nag-sign in gamit ang sarili nilang mga key, nagpi-print ng mga imbitasyong QR, nagbabantay sa kalusugan ng disk, pumipili ng pampublikong web address o tunnel, at tumutulong sa miyembrong nawalan ng parehong telepono at 12 salita pabalik sa sarili nilang account sa bagong telepono, gamit ang isang one-time code na kinukumpirma mo nang personal.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🔒</div>
+                <h3>Pribado mula sa unang pag-boot</h3>
+                <p>Ang mga listing, mapa, mensahe at balanse ng komunidad ay para lamang sa mga miyembro nito mula sa sandaling magsimula ang node nito; walang kailangang buksan. Ang isang magbubukas ng address nito nang walang account ay itinuturo sa pandaigdigang komunidad, kung saan makikita nila kung ano ang malapit sa kanila at humiling na sumali.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🌐</div>
+                <h3>Pag-link sa isang kalapit na komunidad</h3>
+                <p>Maaaring magkasundo ang dalawang komunidad na mag-link upang makipagkalakalan ang kanilang mga miyembro sa isa't isa. Hindi kailanman umaalis ang Munggo sa sariling bayan: ang bawat pares ay nagpapanatili ng tuloy-tuloy na talaan ng kung ano ang utang ng isang komunidad sa isa pa, at bawat panig ay nagtatakda ng sarili nitong limitasyon. Naka-off ang pag-link maliban kung buksan ito ng parehong operator, at maaga pa ito: binuo na ito, kasama ang mga screen nito sa web app, at nasubukan pa lamang sa pagitan ng dalawa sa sarili naming mga pansubukang komunidad, hindi kailanman sa pagitan ng mga live na komunidad.</p>
+            </div>
+        </div>
+
+        <h2 id="address">Ang iyong address</h2>
+        <p>Piliin ito bago ka mag-paste, at baguhin ang huling linya upang tumugma. Kung na-paste mo na, pindutin ang Enter sa mga tanong nito, pagkatapos ay patakbuhin muli ang huling linya: naghihintay ang claim code para sa isang telepono. <strong>Isang inupahang server</strong> na may pampublikong IP address at bukas ang port 80 at 443: idagdag ang <code>--ip</code> at ang IP address nito, tulad ng sa <code>beanpool claim --ip 203.0.113.7</code>. Nakakakuha ang iyong server ng sarili nitong certificate para sa address na iyon mula sa Let's Encrypt, sa port 80, at nararating ito ng mga telepono sa https://203.0.113.7. <strong>Isang kompyuter sa bahay, o walang bukas na port</strong>: iwanan ito kung ano ito. Hihingi ito ng unang bahagi ng isang libreng pangalan (i-type lamang ang <strong>yourtown</strong> para sa yourtown.beanpool.org; lalampasan ito ng Enter), na nararating sa pamamagitan ng tunnel na pinapatakbo mismo ng iyong server, at naghihintay ng hanggang tatlong minuto para maging live ito. <strong>Sarili mong domain</strong>: ituro ang isang A record para dito sa IP address ng server, buksan ang port 80 at 443, at idagdag ang <code>--address https://your.domain</code>. Nananatili ang isang pangalan sa pagpapalit ng server; ang isang numero ay hindi: maaari kang magdagdag ng pangalan sa ibang pagkakataon sa Mga Setting, at ang mga miyembro na gumagamit ng IP address ay patuloy na gagana. Upang pumili sa ibang pagkakataon sa Mga Setting, idagdag ang <code>--no-name</code>. Ang payak na <code>http://</code> address ay gumagana lamang sa isang home network: tinatanggihan ito ng mga telepono sa internet, at binabalaan ka ng pag-claim. Kung hindi gumagana ang serbisyo ng address ng proyektong BeanPool, gagana pa rin ang pag-claim.</p>
+
+        <h2 id="install">I-install ito</h2>
+        <p>Pagkatapos, sa makinang iyon na may naka-install na Docker, i-paste ang isang blokeng ito. Kinukuha nito ang compose file, ginagawa ang network na ginagamit ng node, pinu-pull ang na-publish na image (Intel/AMD o ARM64), sinisimulan ito, naghihintay hanggang magawa ng server ang one-time claim code nito (hanggang limang minuto, para sa mabagal na unang pagsisimula sa isang Raspberry Pi), at kini-claim ito. Walang kailangang i-configure bago ito magsimula.</p>
+
+        <div class="terminal-window">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <span class="terminal-dot red"></span>
+                    <span class="terminal-dot yellow"></span>
+                    <span class="terminal-dot green"></span>
+                </div>
+                <div class="terminal-title">bash — magsimula ng komunidad</div>
+            </div>
+            <div class="terminal-body">
+                <div class="cta-step">
+                    <span class="cta-step-label">Isang block: kunin, network, i-pull, simulan, maghintay, i-claim</span>
+                    <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                    <button class="copy-btn" onclick="copyCode(this)" title="Kopyahin sa clipboard">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="run-node-sub">Ang huling linya: beanpool claim</h3>
+        <ol class="run-node-steps">
+            <li><strong>Ang code at QR.</strong> Nagpapakita ito ng isang one-time claim code at isang QR code. I-scan ang QR code gamit ang camera ng iyong telepono, o buksan ang BeanPool, i-type ang address ng server sa ilalim ng <strong>Hanapin ang iyong komunidad</strong> at i-tap ang <strong>I-claim</strong>. Ang teleponong iyon ang magiging may-ari.</li>
+            <li><strong>Mga Setting.</strong> Buksan ang iyong address (o ang sariling address ng server) na sinusundan ng <strong>/settings</strong>. Pinapangalanan ng setup wizard ang iyong komunidad, hinihiling sa iyo na magdagdag ng pangalawang may-ari, at gumagawa ng tatlong pampundasyong imbitasyon. Itakda ang iyong lugar sa mapa sa ilalim ng Pagkakakilanlan ng Node upang mahanap ka ng mga tao sa malapit.</li>
+        </ol>
+        <p class="run-node-note">Kung sinabi ng block na <strong>No claim code after 5 minutes</strong>, o sinabi ng <code>beanpool claim</code> na <strong>This community has no claim code waiting</strong>, hindi pa natapos magsimula ang server: ipinapakita ng <code>docker compose logs beanpool-node</code> kung nasaan ito. Kapag sinabi ng log na wala pang may-ari ang komunidad at may claim code na, patakbuhin muli ang huling linya. Ang buong mga hakbang ay nasa <a href="guide/operators/first-time-setup.html">unang pag-set up</a> ng manwal ng operator.</p>
+
+        <h2 id="keep-running">Inirerekomenda: panatilihing tumatakbo ang iyong komunidad kapag nag-a-update ang Docker</h2>
+        <p>Ang hakbang ay nasa pahinang "<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/server/updates-and-health.md" target="_blank" rel="noopener">Updates and health</a>" ng manwal ng operator. Ang AI assistant na gumagawa ng install ay palaging ginagawa ang hakbang na ito (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">Pag-set up ng iyong server gamit ang AI assistant</a>).</p>
+
+        <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            Tingnan sa GitHub →
+        </a>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Icon ng BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Isang libreng app para sa pakikipagpalitan sa iyong mga kapitbahay, gamit ang Munggo.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Sentro ng Tulong</a>
+                    <a href="getting-started.html">Pagsisimula</a>
+                    <a href="rules.html">Ang Mga Panuntunan</a>
+                    <a href="post-extraction.html">Post-Extraction</a>
+                    <a href="start.html">Magpatakbo ng Komunidad</a>
+                    <a href="guide/index.html">Gabay ng mga miyembro</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">Patakaran sa Privacy</a>
+                    <a href="terms.html">Mga Tuntunin ng Serbisyo</a>
+                    <a href="safety.html">Kaligtasan ng Bata</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source sa ilalim ng lisensyang MIT. Ginawa nang may <img src="bean.png" alt="pagmamahal" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> ng mga komunidad, para sa mga komunidad. Mga hangganan ng time zone © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">mga contributor ng OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

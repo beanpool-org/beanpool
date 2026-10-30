@@ -891,6 +891,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 // A name the line code wrote ("A former member") in the member's language; a member's own name as it is.
                 authorLabel={showAuthorById.get(item.id) ? (chatAuthorWords(item.authorName) || (item.senderId || '').slice(0, 8)) : null}
                 quote={quote}
+                editing={editingMessage?.id === item.id}
                 status={status}
                 attachment={photoSlot}
                 footer={photoFooter}

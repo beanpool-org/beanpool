@@ -240,6 +240,10 @@ const FILLED: ReadonlyArray<{ pattern: RegExp; words: (m: RegExpMatchArray) => s
         pattern: new RegExp(`^${PROVIDER} is added, and your new-account limits are now the usual ones\\. Its copy of your account couldn't be saved, so your 12 words are still your only way back\\.$`),
         words: (m) => t("{provider} is added, and your new-account limits are now the usual ones. Its copy of your account couldn't be saved, so your 12 words are still your only way back.", { provider: m[1] }),
     },
+    {
+        pattern: new RegExp(`^${PROVIDER} is added, and your new-account limits are now the usual ones\\. This community keeps no copies of members' accounts, so your 12 words are still your way back\\.$`),
+        words: (m) => t("{provider} is added, and your new-account limits are now the usual ones. This community keeps no copies of members' accounts, so your 12 words are still your way back.", { provider: m[1] }),
+    },
     // lib/delete-here.ts webKeepsKeyLine: the page's own community keeps the key, by its address and the one deleted at.
     {
         pattern: /^(Your key and 12 words stay|Your key stays) in this browser, for (\S+), the community this web address belongs to\. After the delete at (\S+), the web app goes back to (\S+)\.(?: (\S+) couldn't be reached, so it counts as a community you are still in\.)?$/,

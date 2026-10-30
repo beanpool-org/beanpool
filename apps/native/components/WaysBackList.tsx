@@ -39,6 +39,10 @@ export const WAYS_BACK_LINES = {
     communityUnknown: word("Didn't answer, so what it keeps can't be listed here."),
     linkSignIn: word('Link a sign-in'),
     linkSignInLine: word('A sign-in you link is a way back again, in Account Protection.'),
+    // The community the phone is on keeps no copies (its rule, vault rethink VR2, design §5.3): nothing is offered, and
+    // what is listed was made elsewhere.
+    keepsNoCopies: word("This community keeps no copies of members' accounts and doesn't use BeanPool's key vault, so no sign-in can be linked here. Your 12 words are your way back here."),
+    madeElsewhere: word('Any copy listed here was made before, here or in another community: it is yours until you remove it.'),
 } as const;
 
 /** Why the vault's copies can't be listed, in the member's words. */
@@ -68,10 +72,13 @@ interface Props {
     onRemove: (copy: CopyAt) => void;
     onRemoveEverything: () => void;
     onLinkSignIn: () => void;
+    /** The community the phone is on keeps no copies (its rule, VR2): no reverse is offered, and the list says so. */
+    noCopiesHere?: boolean;
 }
 
 export function WaysBackList({
     ways, hasWords, writtenDown, busy, result, colors = lightColors, onWrittenDown, onShowWords, onRemove, onRemoveEverything, onLinkSignIn,
+    noCopiesHere = false,
 }: Props): React.JSX.Element {
     const s = stylesFor(colors);
     const removeButton = (copy: CopyAt, label: string) => (
@@ -205,11 +212,21 @@ export function WaysBackList({
                         </Pressable>
                     )}
 
-                    {/* The reverse (design §5.1): nothing is lost by having left. */}
-                    <Text style={s.small}>{t(WAYS_BACK_LINES.linkSignInLine)}</Text>
-                    <Pressable style={s.secondary} onPress={onLinkSignIn} accessibilityRole="button">
-                        <Text style={s.secondaryText}>{t(WAYS_BACK_LINES.linkSignIn)}</Text>
-                    </Pressable>
+                    {/* The reverse (design §5.1): nothing is lost by having left. Not where the community keeps no copies
+                        (design §5.3): there the words are the way back, and what is listed was made elsewhere. */}
+                    {noCopiesHere ? (
+                        <>
+                            <Text style={s.small} testID="ways-back-no-copies-here">{t(WAYS_BACK_LINES.keepsNoCopies)}</Text>
+                            <Text style={s.small}>{t(WAYS_BACK_LINES.madeElsewhere)}</Text>
+                        </>
+                    ) : (
+                        <>
+                            <Text style={s.small}>{t(WAYS_BACK_LINES.linkSignInLine)}</Text>
+                            <Pressable style={s.secondary} onPress={onLinkSignIn} accessibilityRole="button">
+                                <Text style={s.secondaryText}>{t(WAYS_BACK_LINES.linkSignIn)}</Text>
+                            </Pressable>
+                        </>
+                    )}
                 </>
             )}
         </View>

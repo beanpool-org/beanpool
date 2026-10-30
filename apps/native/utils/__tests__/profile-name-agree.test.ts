@@ -199,7 +199,11 @@ vi.mock('../../components/NodeAdminEntry', () => ({ NodeAdminEntry: () => null }
 vi.mock('../../components/OwnerWordsCard', () => ({ OwnerWordsCard: () => null }));
 vi.mock('../../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../../components/useModalKeyboardLift', () => ({ useModalKeyboardLift: () => ({ lift: 0, maxHeight: 600 }) }));
-vi.mock('../use-node-profile', () => ({ useNodeProfile: () => ({ profile: 'local', features: {} }) }));
+// useNodeProfileState is what useReaderFeatures (Settings' "How this community works" sheet) reads.
+vi.mock('../use-node-profile', () => ({
+    useNodeProfile: () => ({ profile: 'local', features: {} }),
+    useNodeProfileState: () => ({ profile: { profile: 'local', features: {} }, copyRead: true }),
+}));
 vi.mock('../node-profile', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../node-profile')>();
     return {
@@ -276,6 +280,9 @@ vi.mock('../node-admin', () => ({
 }));
 vi.mock('../vault', () => ({
     hasVault: () => false,
+    // Where a copy goes (vault-config.ts signInCopiesAt, with a community's rule since vault rethink VR2): Settings reads it
+    // as it opens. No vault here, so the community, or none where the rule says none.
+    signInCopiesAt: (rule?: string | null) => (rule === 'none' ? 'none' : 'community'),
     vaultCopyKnowledge: async () => 'known',
     vaultStatus: async () => ({ holds: [] }),
     approvedHolds: async () => [],
@@ -814,7 +821,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
 
         // The post-redeem publish, told by the node that it holds a photo, decides from this row.
         const decision = await resolveProfilePublishAvatar({
-            catchUp: { localRow: mockDb.localProfile.avatar_url, canonical: OLDER_PHOTO, nodeHasNoPhoto: false },
+            catchUp: { localRow: mockDb.localProfile.avatar_url },
         });
         expect(decision.avatar).toBeNull();
     });

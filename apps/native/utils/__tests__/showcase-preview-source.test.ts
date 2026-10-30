@@ -43,9 +43,23 @@ describe('the preview sources', () => {
         expect(ledger).toContain('const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;');
         expect(ledger).toContain('const txns = heldSample === preview ? heldTxns : NO_TXNS;');
         expect(ledger).toMatch(/const beansMode = useShowcaseModeOnceKnown\('beans'\);/);
-        for (const read of ['getBalance', 'getTransactions', 'getMemberProfile', 'getEscrowTotal', 'getPledgeHistory']) {
+        for (const read of ['getBalance', 'getTransactions', 'getEscrowTotal', 'getPledgeHistory']) {
             expect(ledger, read).toMatch(new RegExp(`${read}\\(identity\\.publicKey\\)\\.then\\(latest\\(`));
         }
+        // The member's own name and picture are the one other reader, and it is the shared hook, never a call of the Ledger's
+        // own: asked only once the mode is known and not in preview, so the sample member is never drawn over, or fed by, the
+        // reader's own row. In preview the hook reads nothing (its first line returns), and each draw of it is guarded again.
+        expect(ledger).not.toMatch(/\bgetMemberProfile\b/);
+        expect(ledger.match(/\buseOwnProfile\(/g)).toHaveLength(1);
+        expect(ledger).toContain('const own = useOwnProfile(beansMode !== undefined && !preview);');
+        expect(ledger).toContain('avatarUrl={preview ? null : own.avatarUrl} updatedAt={preview ? undefined : own.updatedAt}');
+        expect(ledger).toContain('callsign={preview ? SAMPLE_MEMBER : own.callsign || identity?.callsign || \'G\'}');
+        expect(ledger).toContain('{preview ? SAMPLE_MEMBER : own.callsign || identity?.callsign || t(\'GUEST\')}');
+        const hook = read('utils/use-own-profile.ts');
+        expect(hook).toMatch(/export function useOwnProfile\(reads = true\): OwnProfile \{/);
+        expect(hook).toMatch(/if \(!publicKey \|\| !reads\) \{ setState\(UNKNOWN_OWN_PROFILE\); return; \}/);
+        expect(hook.match(/\bgetMemberProfile\(/g)).toHaveLength(1);
+        expect(hook.indexOf('!reads')).toBeLessThan(hook.indexOf('getMemberProfile('));
         expect(ledger).not.toMatch(/SAMPLE_COMMUNITY/);
         const commons = read('app/(tabs)/projects.tsx');
         // In preview, first under the title, so the strip greets the newcomer (review of #1852, finding 5); never the footer.
@@ -73,7 +87,7 @@ describe('the preview sources', () => {
         expect(ledger).toMatch(/\{beansMode !== undefined && !preview && <RepaymentCard \/>\}/);
     });
 
-    it("My Deals in preview is the member's own sheet: the sample loads before any node call, and no press reaches a review or a listing", () => {
+    it("Your deals in preview is the member's own sheet: the sample loads before any node call, and no press reaches a review or a listing", () => {
         const deals = read('components/MyDealsSheet.tsx');
         expect(deals).not.toMatch(/DealsPreview|SAMPLE_COMMUNITY/);
         const load = deals.slice(deals.indexOf('const loadData = async () => {'));

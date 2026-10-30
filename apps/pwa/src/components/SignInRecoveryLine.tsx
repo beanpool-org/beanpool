@@ -20,6 +20,12 @@ const LINE_WORDS = {
      */
     keptHere: word("This community's server keeps the copy of your account that your sign-in opens."),
     noneHere: word("This community's server keeps no copy of your account that a sign-in opens."),
+    /**
+     * The community keeps no copies (its rule, vault rethink VR2, design §5.3): said where the line says where the copy is.
+     * One it kept from before stays the member's until they remove it (the community can't).
+     */
+    keepsNoCopies: word("This community keeps no copies of members' accounts: your 12 words are your way back here."),
+    keptFromBefore: word('This community keeps no new copies now. This one stays until you remove it.'),
 } as const;
 
 /**
@@ -69,9 +75,11 @@ interface Props {
      * under the rest. None: nothing more is drawn.
      */
     phoneLater?: string[];
+    /** The community keeps no copies (its rule `none`, /api/community/info `recoveryCopies`). */
+    keepsNoCopies?: boolean;
 }
 
-export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [] }: Props) {
+export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [], keepsNoCopies = false }: Props) {
     if (!enrolled) return null;
     const english = signInNames(enrolled);
     const names = english ? signInNamesWords(english) : null;
@@ -97,7 +105,9 @@ export function SignInRecoveryLine({ enrolled, hasWords, phoneLater = [] }: Prop
                     for an empty list: one naming only a sign-in this app no longer offers (GitHub) still has a copy. */}
                 {(names || enrolled.length === 0) && (
                     <div data-testid="signin-recovery-where" className="mt-1.5 text-xs font-normal text-nature-600 dark:text-nature-400">
-                        {names ? t(LINE_WORDS.keptHere) : t(LINE_WORDS.noneHere)}
+                        {names
+                            ? (keepsNoCopies ? twoSentences(t(LINE_WORDS.keptHere), t(LINE_WORDS.keptFromBefore)) : t(LINE_WORDS.keptHere))
+                            : keepsNoCopies ? t(LINE_WORDS.keepsNoCopies) : t(LINE_WORDS.noneHere)}
                     </div>
                 )}
                 {names && (

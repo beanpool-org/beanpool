@@ -67,12 +67,18 @@ export function neededKeys(own: string | null, referenced: Iterable<string>): Se
  * most MISSING_BATCHES_PER_CYCLE of them. `revalidate` = up to KEYS_BATCH held cards (not the ones just asked for),
  * oldest fetch first, with `since` = the oldest stamp among them: the node then answers only the cards changed after
  * it (usually none), and every card when `since` is null (a card never stamped is fetched whole).
+ *
+ * `ownFirst`: the own card leads the first batch whole, held or not (the sync asks for it once on each community it
+ * reads, and again when the node says it changed: services/pillar-sync.ts). Sorted among the rest it waited a cycle
+ * behind 300 others on a restore, and once held it came round only with the 100 fetched longest ago.
  */
-export function planMembersCycle(own: string | null, referenced: Iterable<string>, held: Iterable<HeldCard>): MembersPlan {
+export function planMembersCycle(own: string | null, referenced: Iterable<string>, held: Iterable<HeldCard>, ownFirst = false): MembersPlan {
     const needed = neededKeys(own, referenced);
     const heldCards = [...held].filter(c => isMemberKey(c.key));
     const heldKeys = new Set(heldCards.map(c => c.key));
-    const lacking = [...needed].filter(k => !heldKeys.has(k)).sort();
+    const first = ownFirst && isMemberKey(own) ? own : null;
+    const lacking = [...needed].filter(k => !heldKeys.has(k) && k !== first).sort();
+    if (first) lacking.unshift(first);
     const missing: string[][] = [];
     for (let i = 0; i < lacking.length && missing.length < MISSING_BATCHES_PER_CYCLE; i += KEYS_BATCH) {
         missing.push(lacking.slice(i, i + KEYS_BATCH));

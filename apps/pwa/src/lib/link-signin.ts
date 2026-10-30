@@ -11,7 +11,9 @@
  * sign-in (lib/join-recovery.ts), and one signed `POST /api/join/link` carries both.
  *
  * Never a gate: the account works the same with or without a sign-in, a copy that fails still leaves the sign-in added,
- * and every refusal is a sentence.
+ * and every refusal is a sentence. Where the community keeps no copies of members' accounts (its rule, vault rethink VR2),
+ * only the second job is done: the node keeps no copy (`recovery.code` `no_copies_here`), and the result says it was the
+ * rule, not a failure.
  */
 
 import {
@@ -138,8 +140,11 @@ export function leaveForLink(
 
 /** What became of a sign-in that came back for a link. */
 export type LinkResult =
-    /** Added: this sign-in brings the account back when `recoveryStored`, and the account is on the ordinary limits. */
-    | { kind: 'linked'; provider: JoinProvider; recoveryStored: boolean }
+    /**
+     * Added: this sign-in brings the account back when `recoveryStored`, and the account is on the ordinary limits.
+     * `noCopies`: no copy was kept because this community keeps none (its rule `none`), never because saving one failed.
+     */
+    | { kind: 'linked'; provider: JoinProvider; recoveryStored: boolean; noCopies?: true }
     | { kind: 'cancelled'; provider: JoinProvider }
     | { kind: 'failed'; provider: JoinProvider | null; message: string };
 
@@ -181,7 +186,9 @@ export async function finishLink(identity: BeanPoolIdentity, ret: AuthReturn, no
         return { kind: 'failed', provider, message: UNREACHABLE };
     }
     if (answer.status === 200 && answer.body.success === true) {
-        return { kind: 'linked', provider, recoveryStored: recoveryStored(answer.body.recovery) };
+        const recovery = answer.body.recovery;
+        const noCopies = !!recovery && typeof recovery === 'object' && recovery.code === 'no_copies_here';
+        return { kind: 'linked', provider, recoveryStored: recoveryStored(recovery), ...(noCopies ? { noCopies: true as const } : {}) };
     }
     return { kind: 'failed', provider, message: linkRefusalMessage(answer, provider) };
 }
@@ -190,6 +197,7 @@ export async function finishLink(identity: BeanPoolIdentity, ret: AuthReturn, no
 export function linkResultMessage(r: LinkResult): string {
     switch (r.kind) {
         case 'linked':
+            if (r.noCopies) return `${providerLabel(r.provider)} is added, and your new-account limits are now the usual ones. This community keeps no copies of members' accounts, so your 12 words are still your way back.`;
             return r.recoveryStored
                 ? `${providerLabel(r.provider)} is added. Signing in with it also brings this account back, and your new-account limits are now the usual ones.`
                 : `${providerLabel(r.provider)} is added, and your new-account limits are now the usual ones. Its copy of your account couldn't be saved, so your 12 words are still your only way back.`;

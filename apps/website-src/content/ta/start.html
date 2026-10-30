@@ -1,0 +1,183 @@
+<!-- source-hash: 5751a0ccbe5002b8 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ஒரு சமூகத்தைத் தொடங்குங்கள் — BeanPool</title>
+    <meta name="description" content="ஒவ்வொரு சமூகமும் தனது சொந்த சர்வரில் இயங்குகிறது: இது அந்தச் சமூகத்தின் உறுப்பினர்கள், பதிவுகள் மற்றும் பேரேடு ஆகியவற்றை வைத்திருக்கும் ஒரு சிறிய சர்வர் ஆகும். உள்ளூர் நபர் ஒருவர் அதை இயக்குகிறார். உங்கள் நகரத்தில் அல்லது பள்ளத்தாக்கில் இன்னும் ஒன்று இல்லையென்றால், அது நீங்களாக இருக்கலாம்.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.9">
+    <style>
+        /* beanpool.org/start: what running a community involves, choosing the address, and the one block that installs it */
+        .start-community .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .start-community h2[id] { scroll-margin-top: 100px; }
+        .start-community .run-node-facts, .start-community .run-node-steps { max-width: none; margin-inline: 0; }
+        .start-community .features-grid { margin: 1.5rem 0 0.5rem; }
+        .start-community .feature-card p { margin-bottom: 0; }
+        .start-community .terminal-window { margin: 1.25rem 0 1.75rem; }
+        /* The button keeps its own colours: .legal-content a would write its words amber on the amber fill */
+        .start-community a.btn-primary, .start-community a.btn-primary:hover { color: var(--on-accent); min-height: 48px; text-decoration: none; text-align: center; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool ஐகான்" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                <a href="index.html#features">நீங்கள் என்ன செய்ய முடியும்</a>
+                <a href="rules.html">விதிகள்</a>
+                <a href="start.html" aria-current="page">ஒரு சமூகத்தை நடத்துங்கள்</a>
+                <a href="help.html" title="ஒரே இடத்தில் அனைத்து விதிகள், வழிகாட்டிகள் மற்றும் கையேடுகள்">உதவி</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube-ல் வீடியோ பயிற்சிகளைக் காண்க (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit சமூகத்தில் இணையுங்கள் (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub-ல் காண்க">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">தொடங்குங்கள்</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="மெனுவைத் திற"><span aria-hidden="true">☰</span> மெனு</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">தொடங்குங்கள்</a>
+                    <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                    <a href="index.html#features">நீங்கள் என்ன செய்ய முடியும்</a>
+                    <a href="rules.html">விதிகள்</a>
+                    <a href="start.html" aria-current="page">ஒரு சமூகத்தை நடத்துங்கள்</a>
+                    <a href="help.html">உதவி</a>
+                    <a href="guide/index.html">உறுப்பினர்களுக்கான வழிகாட்டி</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube-ல் வீடியோக்கள்</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit-ல் r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub-ல் மூலக் குறியீடு</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+        <main class="legal-content start-community">
+        <h1>ஒரு சமூகத்தைத் தொடங்குங்கள்</h1>
+        <p class="lede">ஒவ்வொரு சமூகமும் தனது சொந்த சர்வரில் இயங்குகிறது: இது அந்தச் சமூகத்தின் உறுப்பினர்கள், பதிவுகள் மற்றும் பேரேடு ஆகியவற்றை வைத்திருக்கும் ஒரு சிறிய சர்வர் ஆகும். உள்ளூர் நபர் ஒருவர் அதை இயக்குகிறார். உங்கள் நகரத்தில் அல்லது பள்ளத்தாக்கில் இன்னும் ஒன்று இல்லையென்றால், அது நீங்களாக இருக்கலாம்.</p>
+
+        <h2 id="involves">ஒரு சமூகத்தை நடத்துவதில் என்னென்ன உள்ளன</h2>
+        <p>நீங்கள் ஒரு செய்முறையைப் பின்பற்ற முடிந்தால், சுமார் அரை மணி நேரம் ஆகும். முதலில் தெரிந்து கொள்ள வேண்டிய ஆறு விஷயங்கள்:</p>
+        <ul class="run-node-facts">
+            <li><strong>செலவு என்ன.</strong> மென்பொருள் இலவசமானது. இது வீட்டில் எப்போதும் இயங்கிக்கொண்டிருக்கும் ஒரு கூடுதல் கணினியிலோ (மினி பிசி, NAS அல்லது 64-பிட் அமைப்பு கொண்ட Raspberry Pi), அல்லது மாதத்திற்கு சில டாலர்கள் செலவாகும் ஒரு சிறிய வாடகை சர்வரிலோ (சுமார் US$6) இயங்குகிறது.</li>
+            <li><strong>யார் ஹோஸ்ட் செய்கிறார்கள்.</strong> நீங்களே, உங்கள் சொந்தக் கணினியில் அல்லது நீங்கள் வாடகைக்கு எடுத்த கணினியில் ஹோஸ்ட் செய்கிறீர்கள். அதற்கு ஒருபோதும் <a href="https://beanpool.org">beanpool.org</a> தேவையில்லை: உங்கள் சொந்த இணைய முகவரியே செயல்படும்.</li>
+            <li><strong>நீங்கள் ஏற்கும் பொறுப்பு.</strong> உங்கள் உறுப்பினர்களிடமிருந்து வரும் புகார்கள் உங்களுக்கே வரும். மீட்புக் குறியீட்டுடன் தரவுக் கோப்புறையைக் காப்புப் பிரதி எடுப்பது உங்கள் பொறுப்பு. இரண்டு உரிமையாளர்களை வைத்திருங்கள். சர்வரைத் தொடர்ந்து இயங்க வைக்கவும், புதுப்பித்த நிலையிலும் வைத்திருக்கவும்.</li>
+            <li><strong>நீங்கள் ஒருபோதும் பார்க்க முடியாதவை.</strong> உங்கள் உறுப்பினர்களின் நேரடிச் செய்திகள்.</li>
+            <li><strong>முதலில் Docker.</strong> கீழே உள்ள கட்டளைத் தொகுதிக்கு முன் கணினியில் Docker நிறுவப்பட்டிருக்க வேண்டும்; புதிதாக வாடகைக்கு எடுக்கப்பட்ட சர்வரில் அது இருக்காது.</li>
+            <li><strong>போன்கள் அணுகக்கூடிய ஒரு முகவரி.</strong> இணையத்தில் உள்ள ஒரு சமூகத்தை போன்கள் https வழியாக மட்டுமே சென்றடையும். பொது IP முகவரியுடன் 80 மற்றும் 443 ஆகிய போர்ட்கள் திறக்கப்பட்ட ஒரு வாடகை சர்வரில், அந்த IP முகவரியே போதுமானது: Cloudflare கணக்கு இல்லாமலேயே உங்கள் சர்வர் அதற்கான சொந்தச் சான்றிதழைப் பெறுகிறது, உங்கள் சொந்த டொமைனுக்கும் இது பொருந்தும். வீட்டில், அல்லது திறந்த போர்ட்கள் இல்லாத இடங்களில், உங்கள் சர்வர் தானாகவே இயக்கும் ஒரு டனல் வழியாக .beanpool.org என்று முடியும் இலவசப் பெயரை உரிமை கோரல் உங்களுக்கு வழங்குகிறது. சாதாரண http:// முகவரி வீட்டு நெட்வொர்க்கில் மட்டுமே செயல்படும்.</li>
+        </ul>
+        <div class="features-grid">
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🧰</div>
+                <h3>நீங்கள் எவற்றைக் கவனித்துக் கொள்கிறீர்கள்</h3>
+                <p>நீங்களும் நீங்கள் நியமிக்கும் நிர்வாகிகளும் உங்கள் சமூகத்தின் நடுவர்கள்: புகார்கள் உங்களுக்கு வரும். உங்கள் உறுப்பினர்களின் தரவு உங்கள் கணினியில் உள்ளது, எனவே அதை நீங்கள் காப்புப் பிரதி எடுக்க வேண்டும். நீங்கள் கூட்டு முயற்சி விவாதங்கள் மற்றும் நிகழ்வு அரட்டைகளைப் படிக்கலாம்; நேரடிச் செய்திகளைப் படிக்க முடியாது. நீங்கள் முதல் உறுப்பினர்களை அழைக்கிறீர்கள், அவர்கள் மற்றவர்களை அழைக்கிறார்கள்.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">⚙️</div>
+                <h3>அமைப்புகள் செயலி</h3>
+                <p>உங்கள் சர்வர் உலாவியில் அதற்கென சொந்த அமைப்புகள் செயலியுடன் வருகிறது. அதிலிருந்து நீங்கள் உங்கள் சமூகத்திற்குப் பெயரிடலாம், தங்களின் சொந்த சாவிகளுடன் உள்நுழையும் ஓர் உரிமையாளர் மற்றும் நிர்வாகிகளை நியமிக்கலாம், QR அழைப்புகளை அச்சிடலாம், வட்டு ஆரோக்கியத்தைக் கண்காணிக்கலாம், பொது இணைய முகவரி அல்லது டனலைத் தேர்ந்தெடுக்கலாம், மேலும் தங்கள் தொலைபேசி மற்றும் 12 சொற்கள் இரண்டையும் இழந்த ஓர் உறுப்பினர் நேரில் உறுதிசெய்யும் ஒருமுறை குறியீட்டுடன் புதிய போனில் அவர்களின் சொந்தக் கணக்கிற்குத் திரும்ப உதவலாம்.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🔒</div>
+                <h3>முதல் தொடக்கத்திலிருந்தே தனிப்பட்டது</h3>
+                <p>ஒரு சமூகத்தின் பதிவுகள், வரைபடம், செய்திகள் மற்றும் இருப்புகள் அதன் சர்வர் தொடங்கும் தருணத்திலிருந்தே அதன் உறுப்பினர்களுக்கானவை; இயக்க வேண்டியது எதுவும் இல்லை. கணக்கு இல்லாமல் அதன் முகவரியைத் திறப்பவர் உலகளாவிய சமூகத்திற்கு வழிகாட்டப்படுவார், அங்கு அவர்கள் தங்களுக்கு அருகில் என்ன இருக்கிறது என்பதைப் பார்த்து சேரக் கோரலாம்.</p>
+            </div>
+            <div class="feature-card glass-panel">
+                <div class="feature-icon">🌐</div>
+                <h3>அண்டை சமூகத்துடன் இணைத்தல்</h3>
+                <p>இரண்டு சமூகங்கள் தங்களின் உறுப்பினர்கள் தங்களுக்குள் பரிமாறிக்கொள்ளும் வகையில் இணைக்க ஒப்புக்கொள்ளலாம். பயறுகள் ஒருபோதும் தங்கள் எல்லையை விட்டு வெளியேறாது: ஒவ்வொரு ஜோடியும் ஒரு சமூகம் மற்றொன்றுக்கு எவ்வளவு கடன்பட்டுள்ளது என்பதற்கான நடப்புக் கணக்கை வைத்திருக்கிறது, மேலும் ஒவ்வொரு தரப்பும் தனக்கான சொந்த வரம்பை அமைக்கிறது. இரு இயக்குபவர்களும் அதை இயக்கும் வரை இணைப்பு முடக்கப்பட்டிருக்கும், மேலும் இது இன்னும் தொடக்க நிலையிலேயே உள்ளது: வலைச் செயலியில் அதற்கான திரைகளுடன் இது உருவாக்கப்பட்டு, எங்கள் சொந்த இரண்டு சோதனைச் சமூகங்களுக்கு இடையே மட்டுமே சோதிக்கப்பட்டது, நேரடிச் சமூகங்களுக்கு இடையே ஒருபோதும் சோதிக்கப்படவில்லை.</p>
+            </div>
+        </div>
+
+        <h2 id="address">உங்கள் முகவரி</h2>
+        <p>ஒட்டுவதற்கு முன் அதைத் தேர்வுசெய்து, பொருந்துமாறு கடைசி வரியை மாற்றவும். நீங்கள் ஏற்கனவே ஒட்டியிருந்தால், அதன் கேள்விகளுக்கு Enter ஐ அழுத்தவும், பிறகு கடைசி வரியை மீண்டும் இயக்கவும்: உரிமை கோரல் குறியீடு ஒரு போனுக்காகக் காத்திருக்கிறது. பொது IP முகவரி மற்றும் 80 மற்றும் 443 போர்ட்கள் திறக்கப்பட்ட <strong>ஒரு வாடகை சர்வர்</strong>: <code>beanpool claim --ip 203.0.113.7</code> என்பதில் உள்ளவாறு <code>--ip</code> மற்றும் அதன் IP முகவரியைச் சேர்க்கவும். உங்கள் சர்வர் போர்ட் 80 வழியாக Let's Encrypt-இலிருந்து அந்த முகவரிக்கான சொந்தச் சான்றிதழைப் பெறுகிறது, மேலும் போன்கள் அதை https://203.0.113.7-ல் அடைகின்றன. <strong>வீட்டில் உள்ள கணினி, அல்லது திறந்த போர்ட்கள் இல்லாதவை</strong>: அதை அப்படியே விட்டுவிடவும். இது ஒரு இலவசப் பெயரின் முதல் பகுதியைக் கேட்கிறது (yourtown.beanpool.org என்பதற்கு <strong>yourtown</strong> என்று மட்டும் தட்டச்சு செய்யவும்; Enter தவிர்த்துவிடும்), உங்கள் சர்வர் தானாகவே இயக்கும் ஒரு டனல் வழியாக அடையப்பட்டு, அது நேரலைக்கு வர மூன்று நிமிடங்கள் வரை காத்திருக்கிறது. <strong>உங்கள் சொந்த டொமைன்</strong>: சர்வரின் IP முகவரிக்கு அதற்கான A பதிவைக் குறிப்பிடவும், 80 மற்றும் 443 போர்ட்களைத் திறக்கவும், மேலும் <code>--address https://your.domain</code> ஐச் சேர்க்கவும். ஒரு பெயர் சர்வர் மாற்றத்தைத் தாங்கும்; ஒரு எண் தாங்காது: நீங்கள் பின்னர் அமைப்புகளில் ஒரு பெயரைச் சேர்க்கலாம், மேலும் IP முகவரியைப் பயன்படுத்தும் உறுப்பினர்கள் தொடர்ந்து பணியாற்றலாம். பின்னர் அமைப்புகளில் தேர்வுசெய்ய, <code>--no-name</code> ஐச் சேர்க்கவும். ஒரு சாதாரண <code>http://</code> முகவரி வீட்டு நெட்வொர்க்கில் மட்டுமே செயல்படும்: இணையத்தில் போன்கள் அதை மறுத்துவிடும், மேலும் உரிமை கோரல் உங்களை எச்சரிக்கிறது. BeanPool திட்டத்தின் முகவரி சேவை முடங்கியிருந்தாலும், உரிமை கோரல் தொடர்ந்து செயல்படும்.</p>
+
+        <h2 id="install">நிறுவுங்கள்</h2>
+        <p>பிறகு, Docker நிறுவப்பட்ட அந்தக் கணினியில், இந்தக் கட்டளைத் தொகுதியை ஒட்டவும். இது compose கோப்பைப் பெறுகிறது, சர்வர் பயன்படுத்தும் நெட்வொர்க்கை உருவாக்குகிறது, வெளியிடப்பட்ட படத்தை (Intel/AMD அல்லது ARM64) இழுக்கிறது, அதைத் தொடங்குகிறது, சர்வர் தனது ஒருமுறை உரிமை கோரல் குறியீட்டை உருவாக்கும் வரை காத்திருக்கிறது (Raspberry Pi-ல் மெதுவான முதல் தொடக்கத்திற்கு ஐந்து நிமிடங்கள் வரை), மேலும் அதற்கு உரிமை கோருகிறது. அது தொடங்குவதற்கு முன் உள்ளமைக்க வேண்டியது எதுவுமில்லை.</p>
+
+        <div class="terminal-window">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <span class="terminal-dot red"></span>
+                    <span class="terminal-dot yellow"></span>
+                    <span class="terminal-dot green"></span>
+                </div>
+                <div class="terminal-title">bash — ஒரு சமூகத்தைத் தொடங்குங்கள்</div>
+            </div>
+            <div class="terminal-body">
+                <div class="cta-step">
+                    <span class="cta-step-label">ஒரே தொகுதி: பெறுதல், நெட்வொர்க், இழுத்தல், தொடங்குதல், காத்திருப்பு, உரிமை கோருதல்</span>
+                    <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                    <button class="copy-btn" onclick="copyCode(this)" title="கிளிப்போர்டுக்கு நகலெடு">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="run-node-sub">கடைசி வரி: beanpool claim</h3>
+        <ol class="run-node-steps">
+            <li><strong>குறியீடும் QR-உம்.</strong> இது ஒருமுறை உரிமை கோரல் குறியீட்டையும் ஒரு QR குறியீட்டையும் காட்டுகிறது. உங்கள் போனின் கேமரா மூலம் QR குறியீட்டை ஸ்கேன் செய்யவும், அல்லது BeanPool-ஐத் திறந்து, <strong>உங்கள் சமூகத்தைக் கண்டறியவும்</strong> என்பதன் கீழ் சர்வரின் முகவரியைத் தட்டச்சு செய்து <strong>உரிமை கோருங்கள்</strong> என்பதைத் தட்டவும். அந்தப் போன் உரிமையாளராக மாறும்.</li>
+            <li><strong>அமைப்புகள்.</strong> உங்கள் முகவரியைத் (அல்லது சர்வரின் சொந்த முகவரி) தொடர்ந்து <strong>/settings</strong> என்பதைத் திறக்கவும். அமைவு வழிகாட்டி உங்கள் சமூகத்திற்குப் பெயரிடுகிறது, இரண்டாவது உரிமையாளரைச் சேர்க்கும்படி கேட்கிறது மற்றும் மூன்று தொடக்க அழைப்புகளை உருவாக்குகிறது. அருகிலுள்ளவர்கள் உங்களைக் கண்டறியும் வகையில் முனை அடையாளத்தின் (Node Identity) கீழ் வரைபடத்தில் உங்கள் இடத்தை அமைக்கவும்.</li>
+        </ol>
+        <p class="run-node-note">தொகுதியில் <strong>5 நிமிடங்களுக்குப் பிறகு உரிமை கோரல் குறியீடு இல்லை</strong> என்று கூறினால், அல்லது <code>beanpool claim</code> <strong>இந்தச் சமூகத்திற்கு உரிமை கோரல் குறியீடு எதுவும் காத்திருக்கவில்லை</strong> என்று கூறினால், சர்வர் இன்னும் தொடங்கி முடியவில்லை: <code>docker compose logs beanpool-node</code> அது எங்குள்ளது என்பதைக் காட்டுகிறது. சமூகம் இன்னும் உரிமையாளர் இல்லை மற்றும் உரிமை கோரல் குறியீட்டைக் கொண்டுள்ளது என்று பதிவு கூறியவுடன், கடைசி வரியை மீண்டும் இயக்கவும். முழுமையான படிகள் ஆபரேட்டர் கையேட்டின் <a href="guide/operators/first-time-setup.html">முதல் முறை அமைப்பில்</a> உள்ளன.</p>
+
+        <h2 id="keep-running">பரிந்துரைக்கப்படுகிறது: Docker புதுப்பிக்கப்படும்போதும் உங்கள் சமூகத்தை இயங்க வைத்திருங்கள்</h2>
+        <p>இந்தப் படி ஆபரேட்டர் கையேட்டின் "<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/server/updates-and-health.md" target="_blank" rel="noopener">Updates and health</a>" பக்கத்தில் உள்ளது. நிறுவலைச் செய்யும் AI உதவியாளர் இந்தப் படியை எப்போதும் செய்வார் (<a href="https://github.com/beanpool-org/beanpool/blob/main/packages/beanpool-guide/operators/setup/install-with-ai.md" target="_blank" rel="noopener">AI உதவியாளருடன் உங்கள் சர்வரை அமைத்தல்</a>).</p>
+
+        <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub-ல் காண்க →
+        </a>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool ஐகான்" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>உங்கள் அண்டை வீட்டாருடன் பயறுகள் மூலம் பரிமாற்றம் செய்வதற்கான ஒரு இலவச செயலி.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">உதவி மையம்</a>
+                    <a href="getting-started.html">தொடங்குதல்</a>
+                    <a href="rules.html">விதிகள்</a>
+                    <a href="post-extraction.html">சுரண்டலுக்குப் பிந்தைய பொருளாதாரம்</a>
+                    <a href="start.html">ஒரு சமூகத்தை நடத்துங்கள்</a>
+                    <a href="guide/index.html">உறுப்பினர்களுக்கான வழிகாட்டி</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">தனியுரிமைக் கொள்கை</a>
+                    <a href="terms.html">சேவை விதிமுறைகள்</a>
+                    <a href="safety.html">குழந்தைகள் பாதுகாப்பு</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT உரிமத்தின் கீழ் திறவூற்று. சமூகங்களால், சமூகங்களுக்காக <img src="bean.png" alt="அன்புடன்" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> உருவாக்கப்பட்டது. நேர மண்டல எல்லைகள் © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap பங்களிப்பாளர்கள்</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

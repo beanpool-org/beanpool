@@ -19,6 +19,7 @@ import {
     type EventThreadMessage, type EventThreadView,
 } from '../lib/api';
 import { MemberAvatar } from './MemberAvatar';
+import { FoldedChatText } from './FoldedChatText';
 import { imageFromTransfer, dragCarriesFile, NODE_READABLE_NO_PHOTOS_TEXT } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
@@ -256,7 +257,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
                                         <p dir="auto" className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
-                                            {decodeEventChatText(m.ciphertext, m.type, m.metadata)}
+                                            <FoldedChatText text={decodeEventChatText(m.ciphertext, m.type, m.metadata)} enabled={!isRemoved} display="block" />
                                         </p>
                                         {view.isHost && !isRemoved && (
                                             <button

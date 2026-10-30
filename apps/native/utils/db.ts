@@ -1812,6 +1812,8 @@ export async function getTransactions(pubkey: string) {
                CASE WHEN t.to_pubkey = ? THEN 'credit' ELSE 'debit' END as type,
                m_peer.callsign as peer_callsign,
                mt.post_title,
+               mt.id as deal_id,
+               mt.post_id as deal_post_id,
                mt.buyer_pubkey,
                mt.seller_pubkey,
                mb.callsign as buyer_callsign,
@@ -1837,14 +1839,15 @@ export async function getTransactions(pubkey: string) {
         let peerName = row.peer_pubkey.slice(0, 8).toUpperCase();
         // A hold's name as parts too: the Ledger tab writes it in the member's language from them (app/(tabs)/ledger.tsx
         // peerWords); `peer` stays the English.
-        let held: { title: string | null; counterparty: string | null; toCounterparty: boolean } | null = null;
+        // `dealId` and `postId` are the deal this hold belongs to, when this phone has it: the Ledger row opens it.
+        let held: { title: string | null; counterparty: string | null; toCounterparty: boolean; dealId?: string | null; postId?: string | null } | null = null;
         if (row.peer_pubkey.startsWith('escrow_')) {
             peerName = 'Held in Trust';
             held = { title: null, counterparty: null, toCounterparty: false };
             if (row.post_title) {
                 const isBuyer = pubkey === row.buyer_pubkey;
                 const counterparty = isBuyer ? row.seller_callsign : row.buyer_callsign;
-                held = { title: row.post_title, counterparty: counterparty || null, toCounterparty: isBuyer };
+                held = { title: row.post_title, counterparty: counterparty || null, toCounterparty: isBuyer, dealId: row.deal_id ?? null, postId: row.deal_post_id ?? null };
                 if (counterparty) {
                     peerName = `Held in Trust: ${row.post_title} (${isBuyer ? 'to' : 'from'} ${counterparty})`;
                 } else {
@@ -2773,6 +2776,25 @@ export async function treasuryComplete(treasury: string, transactionId: string, 
 export async function treasuryReject(treasury: string, transactionId: string) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/reject`, { transactionId });
 }
+/**
+ * An enterprise's open deals, held and asked, for its keeper reading one of its listings (deals S4): the node lets its
+ * keepers read them (GET /api/marketplace/transactions), while the phone's sync reads only the member's own. Each status
+ * read by itself: the node's page is the 50 newest, and a held deal behind 50 newer ones (a shop's brisk sales) would
+ * have no row and no Release. Nothing of a status whose read can't be had.
+ */
+export async function getDealsFor(publicKey: string): Promise<MarketplaceTransaction[]> {
+    const read = async (status: 'pending' | 'requested'): Promise<MarketplaceTransaction[]> => {
+        try {
+            const res = await signedGet(`/api/marketplace/transactions?publicKey=${encodeURIComponent(publicKey)}&status=${status}&limit=50`);
+            if (!res.ok) return [];
+            const rows = await res.json();
+            return Array.isArray(rows) ? rows : [];
+        } catch {
+            return [];
+        }
+    };
+    return (await Promise.all([read('pending'), read('requested')])).flat();
+}
 export async function treasurySweep(treasury: string, amount: number) {
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/sweep`, { amount });
 }
@@ -3370,6 +3392,27 @@ export interface Decision {
     adminHaltedAt: string | null;
     adminHaltReason: string | null;
     updatedAt: string;
+    /** A vote on removing a member: the member's own reply to its case, and when they wrote it (null until they do). */
+    subjectReply?: string | null;
+    subjectRepliedAt?: string | null;
+    /** A vote on removing a member whose case an admin hid as shown to be false: when, and their public reason. */
+    caseHiddenAt?: string | null;
+    caseHiddenReason?: string | null;
+    /** A vote on removing a member whose reply an admin took down: when, and their public reason (the reply itself is gone). */
+    replyHiddenAt?: string | null;
+    replyHiddenReason?: string | null;
+    /** A vote on removing a member: who brought it, by name (absent from a node from before). */
+    proposer?: RemovalProposer;
+}
+
+/**
+ * Who brought a vote on removing a member, as the node names them (removal by vote, Amendment A point 3): an admin who
+ * paused them, an owner who did with the server's password (no name), or a member who proposed it before proposing one
+ * closed. `name` is null when the node can't know it.
+ */
+export interface RemovalProposer {
+    kind: 'admin' | 'password' | 'member';
+    name: string | null;
 }
 
 export interface DecisionTally {
@@ -3467,6 +3510,22 @@ export async function castDecisionVote(decisionId: string, payload: {
     signature?: string;
 }): Promise<{ success: boolean; creditsUsed: number }> {
     return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/vote`, payload);
+}
+
+/**
+ * The member a vote on removing them is about replies to its case (removal by vote, Amendment A point 2): their words,
+ * shown beside the case to everyone who reads the vote. Signed; the node takes it from them alone, while the vote is open.
+ */
+export async function replyToRemovalCase(decisionId: string, reply: string): Promise<{ success: boolean }> {
+    return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/reply`, { reply });
+}
+
+/**
+ * The member a vote on removing them is about reports its case as a false accusation (Amendment A point 4): a report about
+ * whoever brought it, for the admins and owners. Signed; the node takes it from that member alone.
+ */
+export async function reportRemovalCase(decisionId: string): Promise<{ success: boolean; duplicate?: boolean }> {
+    return _signedRequest(`/api/commons/decisions/${encodeURIComponent(decisionId)}/report`, {});
 }
 
 export async function updatePost(id: string, updates: any) {
@@ -3582,6 +3641,10 @@ export async function deletePost(id: string) {
  * without that the event would fire on every poll and the header would re-read on every sync
  * tick for nothing. In the node's COMPLETE list a null CLEARS the row, so it is a change, and
  * the header must re-read or it would go on showing a photo the node no longer has.
+ *
+ * A new `profile_updated_at` is a change too (the upsert COALESCEs it, so only a value it names): a node from before
+ * versioned face URLs keeps one address for every photo, and the header's avatar busts its image cache with that stamp
+ * (MemberAvatar `updatedAt`). Without it a new photo there stayed the old one from the phone's disk cache for good.
  */
 async function ownProfileRowWouldChange(
     txn: any,
@@ -3590,6 +3653,7 @@ async function ownProfileRowWouldChange(
     incomingCallsign: string,
     incomingAvatar: string | null,
     avatarClears = false,
+    incomingUpdatedAt: string | null = null,
 ): Promise<boolean> {
     if (!selfPubkey || pk !== selfPubkey) return false;
     const before = await txn.getFirstAsync(
@@ -3600,6 +3664,10 @@ async function ownProfileRowWouldChange(
     if (incomingCallsign !== (before.callsign ?? '')) return true;
     if (incomingAvatar !== null && incomingAvatar !== before.avatar_url) return true;
     if (incomingAvatar === null && avatarClears && before.avatar_url !== null) return true;
+    if (incomingUpdatedAt !== null) {
+        const held = await txn.getFirstAsync('SELECT profile_updated_at FROM members WHERE public_key = ?', [pk]) as { profile_updated_at: string | null } | null;
+        if (incomingUpdatedAt !== (held?.profile_updated_at ?? null)) return true;
+    }
     return false;
 }
 
@@ -4008,7 +4076,7 @@ export async function applyDelta(delta: any, expectedDbName?: string, generation
             const ec = m.earnedCredit || m.earned_credit || 0;
             const evb = m.elderVouchedBy || m.elder_vouched_by || null;
             const arch = m.archetype || null;
-            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears)) ownRowChanged = true;
+            if (await ownProfileRowWouldChange(txn, selfPubkey, pk, cs, av, avatarNullClears, profileUpdatedAt)) ownRowChanged = true;
             await txn.runAsync(
                 `INSERT INTO members (public_key, callsign, avatar_url, joined_at, profile_updated_at, earned_credit, elder_vouched_by, archetype) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(public_key) DO UPDATE SET

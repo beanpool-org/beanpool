@@ -1,4 +1,4 @@
-<!-- source-hash: 755df1d20735daf7 -->
+<!-- source-hash: 969e40ea10897950 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,7 +22,7 @@
                 <a href="#how-it-works">Cara Kerja</a>
                 <a href="#features">Yang Dapat Anda Lakukan</a>
                 <a href="rules.html">Aturan</a>
-                <a href="#run-a-node">Jalankan Komunitas</a>
+                <a href="start.html">Jalankan Komunitas</a>
                 <a href="help.html" title="Semua aturan, panduan, dan petunjuk dalam satu tempat">Bantuan</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tonton Video Tutorial di YouTube (@beanpool)">
@@ -45,7 +45,7 @@
                     <a href="#how-it-works">How It Works</a>
                     <a href="#features">What You Can Do</a>
                     <a href="rules.html">Aturan</a>
-                    <a href="#run-a-node">Jalankan Komunitas</a>
+                    <a href="start.html">Jalankan Komunitas</a>
                     <a href="help.html">Bantuan</a>
                     <a href="guide/index.html">Panduan anggota</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Video di YouTube</a>
@@ -461,7 +461,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">Belum ada komunitas di dekat Anda.</span>
-                    <a id="map-empty-start" href="#run-a-node">Mulai komunitas</a>
+                    <a id="map-empty-start" href="start.html">Mulai komunitas</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -480,6 +480,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -487,83 +489,7 @@
                 <h2>Jalankan BeanPool untuk Komunitas Anda</h2>
                 <p>Setiap komunitas berjalan pada nodenya sendiri: server kecil yang menyimpan anggota, kiriman, dan buku kas komunitas tersebut. Dijalankan oleh warga lokal. Jika kota atau wilayah Anda belum memilikinya, Anda bisa menjadi orangnya.</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>Yang Anda kelola</h3>
-                    <p>Anda dan admin yang Anda tunjuk adalah moderator komunitas Anda: laporan masuk kepada Anda. Data anggota Anda berada di komputer Anda, jadi Anda yang menjaga cadangannya. Anda dapat membaca diskusi usaha dan obrolan acara; Anda tidak dapat membaca pesan langsung. Anda mengundang anggota pertama, dan mereka mengundang yang lain.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>Aplikasi pengaturan</h3>
-                    <p>Node Anda dilengkapi dengan aplikasi pengaturannya sendiri di peramban. Dari sana Anda memberi nama komunitas Anda, menunjuk pemilik dan admin yang masuk dengan kunci mereka sendiri, mencetak undangan QR, memantau kesehatan disk, memilih alamat web publik atau tunnel, dan membantu anggota yang kehilangan ponsel sekaligus 12 katanya kembali ke akun mereka sendiri di ponsel baru, dengan kode sekali pakai yang Anda konfirmasi langsung secara tatap muka.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>Pribadi sejak pertama kali dinyalakan</h3>
-                    <p>Daftar penawaran, peta, pesan, dan saldo komunitas hanya untuk anggotanya sejak node dinyalakan; tidak ada yang perlu diaktifkan secara manual. Seseorang yang membuka alamatnya tanpa akun akan diarahkan ke komunitas global, tempat mereka dapat melihat apa yang ada di dekat mereka dan meminta untuk bergabung.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>Menghubungkan dengan komunitas tetangga</h3>
-                    <p>Dua komunitas dapat sepakat untuk terhubung agar anggotanya dapat saling bertransaksi. Kacang tidak pernah keluar dari tempat asalnya: setiap pasangan mencatat saldo berjalan dari utang piutang antar-komunitas, dan masing-masing pihak menentukan batasnya sendiri. Hubungan ini nonaktif kecuali kedua operator menyalakannya, dan ini masih tahap awal: fitur ini sudah dibangun, dengan antarmukanya di aplikasi web, dan baru diuji coba di antara dua komunitas uji kami sendiri, belum pernah di antara komunitas yang berjalan langsung.</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>Mulai sebuah komunitas</h2>
-                <p>Sekitar setengah jam, jika Anda bisa mengikuti petunjuk. Enam hal yang perlu diketahui terlebih dahulu:</p>
-                <ul class="run-node-facts">
-                    <li><strong>Biaya yang dibutuhkan.</strong> Perangkat lunaknya gratis. Aplikasi ini berjalan pada komputer cadangan yang terus menyala di rumah (Mini PC, NAS, atau Raspberry Pi dengan sistem 64-bit), atau pada server sewaan kecil dengan biaya beberapa dolar per bulan (sekitar US$6).</li>
-                    <li><strong>Siapa yang meng-hosting.</strong> Anda sendiri, di komputer Anda sendiri atau yang Anda sewa. Tidak memerlukan <a href="https://beanpool.org">beanpool.org</a>: alamat web Anda sendiri berfungsi.</li>
-                    <li><strong>Tanggung jawab Anda.</strong> Laporan dari anggota Anda masuk kepada Anda. Folder data adalah tanggung jawab Anda untuk dicadangkan, dengan kode pemulihan. Pertahankan dua pemilik. Biarkan server terus menyala dan diperbarui.</li>
-                    <li><strong>Yang tidak pernah Anda lihat.</strong> Pesan langsung anggota Anda.</li>
-                    <li><strong>Docker terlebih dahulu.</strong> Komputer tersebut harus sudah terpasang Docker sebelum menjalankan blok di bawah; server yang baru disewa belum memilikinya.</li>
-                    <li><strong>Alamat yang dapat dijangkau ponsel.</strong> Ponsel hanya dapat menjangkau komunitas di internet melalui https. Pada server sewaan dengan alamat IP publik dan porta 80 serta 443 terbuka, alamat IP tersebut sudah cukup: server Anda mendapatkan sertifikatnya sendiri untuk alamat itu, tanpa akun Cloudflare, dan hal yang sama berlaku untuk domain milik Anda sendiri. Di rumah, atau tanpa porta yang terbuka, proses klaim memberi Anda nama gratis berakhiran .beanpool.org, melalui tunnel yang dijalankan sendiri oleh server Anda. Alamat http:// biasa hanya berfungsi di jaringan rumah.</li>
-                </ul>
-                <p>Kemudian, pada komputer tersebut yang telah terpasang Docker, tempel satu blok ini. Perintah ini mengambil file compose, membuat jaringan yang digunakan node, menarik citra yang diterbitkan (Intel/AMD atau ARM64), memulainya, menunggu hingga server membuat kode klaim sekali pakai (hingga lima menit, untuk booting pertama yang lambat di Raspberry Pi), dan mengklaimnya. Tidak ada yang perlu dikonfigurasi sebelum dimulai.</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — mulai komunitas</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">Satu blok: unduh, jaringan, tarik, mulai, tunggu, klaim</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Salin ke papan klip">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">Baris terakhir: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Alamat Anda.</strong> Pilih sebelum Anda menempelkan perintah, dan ubah baris terakhir agar sesuai. Jika Anda sudah menempelkannya, tekan Enter pada pertanyaannya, lalu jalankan baris terakhir lagi: kode klaim menunggu ponsel. <strong>Server sewaan</strong> dengan alamat IP publik dan porta 80 serta 443 terbuka: tambahkan <code>--ip</code> dan alamat IP-nya, seperti pada <code>beanpool claim --ip 203.0.113.7</code>. Server Anda mendapatkan sertifikatnya sendiri untuk alamat tersebut dari Let's Encrypt, melalui porta 80, dan ponsel menjangkaunya di https://203.0.113.7. <strong>Komputer di rumah, atau tanpa porta yang terbuka</strong>: biarkan apa adanya. Perintah ini akan meminta bagian pertama dari nama gratis (cukup ketik <strong>namakota</strong> untuk namakota.beanpool.org; Enter untuk melewati), yang dijangkau melalui tunnel yang dijalankan sendiri oleh server Anda, dan menunggu hingga tiga menit untuk aktif. <strong>Domain milik Anda sendiri</strong>: arahkan data DNS record A ke alamat IP server, buka porta 80 dan 443, serta tambahkan <code>--address https://domain.anda</code>. Sebuah nama tetap bertahan saat berganti server; sebuah angka tidak: Anda dapat menambahkan nama nanti di Pengaturan, dan anggota yang menggunakan alamat IP tetap dapat terhubung. Untuk memilih nanti di Pengaturan, tambahkan <code>--no-name</code>. Alamat <code>http://</code> biasa hanya berfungsi di jaringan rumah: ponsel menolaknya di internet, dan proses klaim akan memperingatkan Anda. Jika layanan alamat proyek BeanPool sedang tidak aktif, klaim tetap berfungsi.</li>
-                    <li><strong>Kode dan QR.</strong> Perintah ini menampilkan kode klaim sekali pakai dan kode QR. Pindai kode QR dengan kamera ponsel Anda, atau buka BeanPool, ketik alamat server di bawah <strong>Temukan komunitas Anda</strong> dan ketuk <strong>Klaim</strong>. Ponsel tersebut menjadi pemilik.</li>
-                    <li><strong>Pengaturan.</strong> Buka alamat Anda (atau alamat server itu sendiri) diikuti dengan <strong>/settings</strong>. Panduan penyiapan memberi nama komunitas Anda, meminta Anda menambahkan pemilik kedua, dan membuat tiga undangan awal. Tentukan tempat Anda di peta di bawah Identitas Node agar orang-orang di sekitar dapat menemukan Anda.</li>
-                </ol>
-                <p class="run-node-note">Jika blok perintah menyatakan <strong>No claim code after 5 minutes</strong>, atau <code>beanpool claim</code> menyatakan <strong>This community has no claim code waiting</strong>, server belum selesai memulai: <code>docker compose logs beanpool-node</code> menunjukkan statusnya. Setelah log menyatakan komunitas belum memiliki pemilik dan memiliki kode klaim, jalankan baris terakhir lagi. Langkah-langkah selengkapnya ada di <a href="guide/operators/first-time-setup.html">penyiapan pertama kali</a> pada panduan operator.</p>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    Lihat di GitHub →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">Mulai sebuah komunitas&nbsp;→</a></p>
         </div>
     </section>
 
@@ -616,7 +542,7 @@ docker compose exec beanpool-node beanpool claim</code>
                     <a href="getting-started.html">Memulai</a>
                     <a href="rules.html">The Rules</a>
                     <a href="post-extraction.html">Pasca-Ekstraksi</a>
-                    <a href="#run-a-node">Run a Community</a>
+                    <a href="start.html">Run a Community</a>
                     <a href="guide/index.html">Panduan anggota</a>
                     <a href="status.html">Status server</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

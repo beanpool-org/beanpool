@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_TYPES, HOME_COLUMN_CHOICES, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES, HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardsToAsk,
-    checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard, readHomeLayout, readSearchSettings, removeCard, setHomeColumns,
-    translateV1, type HomeLayoutV2, type HomeNodeFacts,
+    HOME_CARD_TYPES, HOME_COLUMN_CHOICES, HOME_DECIDE_CHOICES, HOME_DECIDE_ROWS, HOME_DECIDE_ROWS_MAX, HOME_DECIDE_SHOWS, HOME_FRAME_LIMITS, HOME_FRAME_MESSAGES,
+    HOME_NEWCOMER_FIVE, HOME_STARTER_SET, addCard, cardSettings, cardsToAsk, checkHomeLayout, defaultCards, endTourLayout, homeColumns, moveCard,
+    readDecideSettings, readHomeLayout, readSearchSettings, removeCard, setHomeColumns, translateV1, type HomeLayoutV2, type HomeNodeFacts,
 } from '../home-frame.js';
 import { t } from '../words.js';
 import { toolHomeCardTypes } from '../tools/index.js';
@@ -303,6 +303,41 @@ describe('home frame §5.2 (4): the default and the words', () => {
         expect(added.ok && added.layout.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
         expect(added.ok && addCard(added.layout, 'sky', { now: NOW })).toEqual({ ok: false, refused: 'on-home' });
         expect(added.ok && cardsToAsk(added.layout)).not.toContain('sky');
+    });
+
+    it('Decide (My votes): one of a kind, asked of the node, with a tolerant `show` setting whose default is today\'s card', () => {
+        const decide = HOME_CARD_TYPES.find(t => t.id === 'decide')!;
+        expect(decide).toMatchObject({ name: 'Decide', group: 'you', asks: 'node' });
+        expect(decide.multiple).toBeUndefined();
+        expect(decide.readSettings).toBe(readDecideSettings);
+        for (const show of HOME_DECIDE_SHOWS) expect(readDecideSettings({ show })).toEqual({ show });
+        // Garbage of every kind is the default, never a refusal; a key this build doesn't know is not carried into the read.
+        for (const raw of [undefined, null, 'mine', 7, [], ['mine'], {}, { show: 'MINE' }, { show: 'watching' }, { show: 3 }, { show: null }, { shown: 'mine' }]) {
+            expect(readDecideSettings(raw), JSON.stringify(raw)).toEqual({ show: 'counts' });
+        }
+        expect(readDecideSettings({ show: 'mine', ids: ['x'] })).toEqual({ show: 'mine' });
+        // Today's card is 3 rows; the two new choices send more, and an app never draws more than the most a node sends.
+        expect(HOME_DECIDE_ROWS).toEqual({ counts: 3, open: 5, mine: 5 });
+        expect(HOME_DECIDE_ROWS_MAX).toBe(5);
+        // The sheet's choices on both apps are one list: every setting once, in order, in plain words (shown through t()).
+        expect(HOME_DECIDE_CHOICES.map(c => [c.show, t(c.label), t(c.note)])).toEqual([
+            ['counts', 'Summary', 'The Decisions closing soonest, and the first poll.'],
+            ['open', 'All open', 'Up to five open Decisions, and the first poll.'],
+            ['mine', 'My votes', 'Open Decisions you voted in or proposed.'],
+        ]);
+        expect(HOME_DECIDE_CHOICES.map(c => c.show)).toEqual([...HOME_DECIDE_SHOWS]);
+        const added = addCard(layout([one('steps')]), 'decide', { settings: { show: 'mine', extra: 1 }, now: NOW });
+        expect(added.ok && added.layout.cards[0]).toEqual({ id: 'decide', type: 'decide', settings: { show: 'mine' } });
+        expect(added.ok && cardSettings(added.layout.cards[0])).toEqual({ show: 'mine' });
+        expect(cardSettings(one('decide'))).toEqual({ show: 'counts' });
+        // Still asked of the node as an id, whatever its setting; a second Decide card is refused as before.
+        expect(added.ok && cardsToAsk(added.layout)).toContain('decide');
+        expect(added.ok && addCard(added.layout, 'decide', { now: NOW })).toEqual({ ok: false, refused: 'on-home' });
+        // A layout saved by a newer build with a setting this one doesn't know reads on (kept byte for byte, read as counts).
+        const future = { v: 2, cards: [{ id: 'decide', type: 'decide', settings: { show: 'watching', ids: ['a'] } }], dismissed: {}, updatedAt: AT };
+        const read = readHomeLayout(future)!;
+        expect(read.cards[0].settings).toEqual({ show: 'watching', ids: ['a'] });
+        expect(cardSettings(read.cards[0])).toEqual({ show: 'counts' });
     });
 
     it('your shop and tools (S4′): one of a kind, For you, on every node (a shop is no enterprise), asked of the node; no settings', () => {

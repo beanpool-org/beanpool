@@ -30,7 +30,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -154,6 +154,10 @@ import {
     announcePause,
     mayBePaused,
     suspendReasonProblem,
+    removalCoolDownRefusal,
+    REMOVAL_COOL_DOWN_CODE,
+    eraseRepliesOf,
+    announceDecisionUpdated,
     ENTERPRISE_NOT_PAUSED,
     type Decision,
     type DecisionVote,
@@ -784,6 +788,9 @@ export function initStateEngine(): void {
     // reason as above.
     setDemurrageSettleHook(settleDemurrage);
 
+    // A project's cancel (db.ts mayCancelProject) is a node admin's too, as its wind-up is: same inversion, same reason.
+    setNodeAdminCheckHook(isAdminPubkey);
+
     // Onboarding funnel retention. Once at startup rather than behind the read, because a
     // DELETE on the read path both takes a write lock and can destroy what the caller
     // asked for — a request for a year of history would have pruned to 180 days first and
@@ -1333,7 +1340,8 @@ export function runMarketplaceHygiene(): void {
             loan ? '⏳ Is it back?' : '⏳ Deal Awaiting Completion',
             loan ? loanNudgeBody(row.seller_callsign, row.post_title, Number(row.credits) > 0)
                 : `"${row.post_title || 'A deal'}" has been in escrow for over ${ESCROW_NUDGE_DAYS} days — release the Beans to the seller or cancel the deal.`,
-            { screen: 'post', postId: row.post_id },
+            // The deal itself, so a recurring listing's tap lands on this one (DESIGN-deals-fable §2.2, slice S4).
+            { screen: 'post', postId: row.post_id, txId: row.id },
             'marketplace',
             'trade.update'
         );
@@ -3914,7 +3922,11 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
     if (keeperPledge > 0) assertPledgeWritable();
     const unbound = db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .run(treasuryPubkey, memberPubkey);
-    if (unbound.changes > 0) engine.keepersChanged(db, treasuryPubkey);
+    if (unbound.changes > 0) {
+        engine.keepersChanged(db, treasuryPubkey);
+        // A project's maker no longer stands in for its cancel once a keeper has left it (db.ts mayCancelProject).
+        noteKeeperLeftProject(treasuryPubkey);
+    }
     const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
         .get(memberPubkey) as any;
     if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
@@ -6352,7 +6364,11 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
 
         const ops = db.prepare("SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?").all(enterprisePubkey) as any[];
         db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(enterprisePubkey);
-        if (ops.length > 0) engine.keepersChanged(db, enterprisePubkey);
+        if (ops.length > 0) {
+            engine.keepersChanged(db, enterprisePubkey);
+            // Its keepers released: a wound-up project's maker cancels nothing (db.ts mayCancelProject).
+            noteKeeperLeftProject(enterprisePubkey);
+        }
 
         for (const op of ops) {
             const remaining = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE member_pubkey = ?").get(op.member_pubkey) as any;
@@ -7605,6 +7621,19 @@ export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
     return !!reportSuspensionTakesRole(reportId);
 }
 
+/**
+ * Why actioning this report with suspendUser can't pause its member for `actor` (the cool-down, decisions-engine.ts
+ * removalCoolDownRefusal), or null: asked by the route before any fresh proof, as actionReport asks it again. Only for a
+ * member the action would pause (not a closed account, an enterprise, or one already paused or held).
+ */
+export function reportPauseCoolDown(reportId: string, actor: string | null | undefined): string | null {
+    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+    const subject = report ? reportSubjectOf(report) : null;
+    const member = subject && !isClosedAccountKey(subject) ? getMember(subject) : undefined;
+    return member && !member.isTreasury && mayBePaused(member) ? removalCoolDownRefusal(member.publicKey, actor) : null;
+}
+
 /** The owner's or admin's role actioning this report with suspendUser would take away, or null (reportSuspensionTakesPrivilegedRole). */
 export function reportSuspensionTakesRole(reportId: string): 'owner' | 'admin' | null {
     const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
@@ -7686,6 +7715,15 @@ export function actionReport(
         if (reasonProblem) {
             const err: any = new Error(reasonProblem);
             err.status = 400;
+            throw err;
+        }
+        // Whoever brought a vote on removing them that ended without removing them waits out the cool-down (removal by vote,
+        // Amendment A point 5), as adminEmergencySuspend refuses it: 403, before any write. Only for a pause this would make.
+        const coolDown = toPause && mayBePaused(toPause) ? removalCoolDownRefusal(toPause.publicKey, opts?.actor) : null;
+        if (coolDown) {
+            const err: any = new Error(coolDown);
+            err.status = 403;
+            err.code = REMOVAL_COOL_DOWN_CODE;
             throw err;
         }
         const wasOpen = report.status === 'pending' || report.status == null;
@@ -8791,7 +8829,8 @@ export function adminPruneUser(publicKey: string, actor: string, door: PruneDoor
  *    it deleted by its owner.
  * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused). Every
  *    post but a poll, whatever its status, then loses its title, description, photos and place (engine/post-scrub.ts).
- *    Every line it wrote in a chat becomes a tombstone, and the photos it sent go (engine/message-tombstone.ts).
+ *    Every line it wrote in a chat becomes a tombstone, and the photos it sent go (engine/message-tombstone.ts). So does
+ *    its reply to the case on each vote on removing it, open or closed (decisions-engine.ts eraseRepliesOf).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
@@ -8853,6 +8892,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
     // The enterprises they leave (step 7), announced once the transaction has committed.
     const leftEnterprises: { enterprise: string; promoted: string | null }[] = [];
+    // The votes whose reply to the case went with them (step 4), announced then too.
+    const repliesErased: string[] = [];
     // Atomically settle balance, anonymize profile, cancel listings, and purge personal records
     conservingTransaction(() => {
         // 3. Settle balance with Commons Pool. A removal settled it already, so a closed account's is 0 and nothing moves.
@@ -8921,6 +8962,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
         // Not in a try either, for the same reason.
         blankMessagesOf(publicKey);
+        // And their reply to the case on each vote on removing them, open or closed, which every member reads beside it
+        // (decisions-engine.ts eraseRepliesOf). Not in a try either.
+        repliesErased.push(...eraseRepliesOf(publicKey, now));
 
         // 6. Purge private device tokens, communication links, and recovery metadata. The plain tables' rows (design G4)
         // with a tombstone each, so a standby drops them too.
@@ -9033,6 +9077,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
 
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
+    // Each vote that lost their reply, as members read it now.
+    for (const id of repliesErased) announceDecisionUpdated(id);
     // What adminRevokeTreasuryOperator announces for a keeper it unbinds: the keeper promoted to lead, and the enterprise.
     for (const { enterprise, promoted } of leftEnterprises) {
         clearEnterpriseFloorCache(enterprise);

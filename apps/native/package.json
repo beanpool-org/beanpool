@@ -90,6 +90,7 @@
     "@types/react": "~19.2.14",
     "jsdom": "^30.0.1",
     "typescript": "~5.9.2",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.5",
+    "yoga-layout": "3.2.1"
   }
 }

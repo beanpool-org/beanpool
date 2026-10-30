@@ -47,7 +47,7 @@
                 <a href="#how-it-works">仕組み</a>
                 <a href="#features">できること</a>
                 <a href="rules.html">ルール</a>
-                <a href="#run-a-node">コミュニティを運営する</a>
+                <a href="start.html">コミュニティを運営する</a>
                 <a href="help.html" title="すべてのルール、ガイド、マニュアルが1か所に">ヘルプ</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTubeでチュートリアル動画を見る（@beanpool）">
@@ -130,7 +130,7 @@
                     <a href="#how-it-works">仕組み</a>
                     <a href="#features">できること</a>
                     <a href="rules.html">ルール</a>
-                    <a href="#run-a-node">コミュニティを運営する</a>
+                    <a href="start.html">コミュニティを運営する</a>
                     <a href="help.html">ヘルプ</a>
                     <a href="../guide/index.html">メンバーズガイド</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTubeで動画を見る</a>
@@ -546,7 +546,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">近くにまだコミュニティがありません。</span>
-                    <a id="map-empty-start" href="#run-a-node">コミュニティを始める</a>
+                    <a id="map-empty-start" href="start.html">コミュニティを始める</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -565,6 +565,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -572,83 +574,7 @@
                 <h2>あなたのコミュニティでBeanPoolを運営する</h2>
                 <p>すべてのコミュニティは専用のノード（メンバー、投稿、台帳のデータを保持する小さなサーバー）上で動いています。地域の誰かがそれを運営しています。あなたの町や地域にまだないなら、あなたが立ち上げることもできます。</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>管理するもの</h3>
-                    <p>あなたとあなたが指名した管理者がコミュニティのモデレーターとなります。通報はあなたに届きます。メンバーのデータはあなたのマシン上にあるため、バックアップを管理します。事業体のディスカッションやイベントチャットは閲覧できますが、ダイレクトメッセージは閲覧できません。あなたが最初のメンバーを招待し、その人たちが次のメンバーを招待していきます。</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>設定アプリ</h3>
-                    <p>ノードにはブラウザで操作できる専用の設定アプリが付属しています。そこからコミュニティの名前を設定し、各自の鍵でサインインするオーナーや管理者を指名し、QR招待状を印刷し、ディスクの健全性を監視し、公開Webアドレスやトンネルを選択できます。また、スマートフォンと12個の単語の両方を失ったメンバーに対して、対面で確認したうえでワンタイムコードを発行し、新しい端末でアカウントに復帰できるよう手助けすることもできます。</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>起動直後からプライベート</h3>
-                    <p>ノードが起動した瞬間から、コミュニティの出品、地図、メッセージ、残高はメンバー専用となります。特別な設定は不要です。アカウントを持たずにそのアドレスを開いた人は、グローバルコミュニティへと案内され、そこで近くにあるものを見て参加をリクエストできます。</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>近隣コミュニティとの連携</h3>
-                    <p>2つのコミュニティが合意して連携することで、メンバー同士が取引できるようになります。豆がコミュニティの外に出ることはありません。相互のコミュニティ間で貸し借りの累計を記録し、双方が独自の上限を設定します。双方の運営者が有効にしない限り連携はオフのままであり、機能はまだ初期段階です。Webアプリに画面は用意されていますが、テストコミュニティ間で試行されたのみで、本番環境同士での実績はまだありません。</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>コミュニティを始める</h2>
-                <p>手順に従えば約30分で完了します。まず知っておくべき6つのこと：</p>
-                <ul class="run-node-facts">
-                    <li><strong>費用。</strong> ソフトウェアは無料です。自宅で常時稼働できる予備のコンピューター（ミニPC、NAS、64ビットOSのRaspberry Piなど）、または月額数ドル（約6米ドル）の小さなレンタルサーバーで動作します。</li>
-                    <li><strong>ホスティングの担当者。</strong> ご自身で管理します（自前のマシンまたはレンタルしたサーバー）。<a href="https://beanpool.org">beanpool.org</a>への依存は不要で、独自のWebアドレスで運用できます。</li>
-                    <li><strong>担当する役割。</strong> メンバーからの通報はあなたに届きます。データフォルダーはリカバリーコードを使ってご自身でバックアップしてください。オーナーは2名体制にしてください。サーバーの常時稼働とアップデートを維持してください。</li>
-                    <li><strong>閲覧できないもの。</strong> メンバー同士のダイレクトメッセージ。</li>
-                    <li><strong>Dockerの事前準備。</strong> 以下のコマンドを実行する前に、マシンにDockerがインストールされている必要があります（契約直後のレンタルサーバーには通常入っていません）。</li>
-                    <li><strong>スマートフォンから接続できるアドレス。</strong> スマートフォンがインターネット経由でコミュニティに接続するにはhttpsが必須です。パブリックIPアドレスがありポート80と443が開いているレンタルサーバーなら、そのIPアドレスだけで十分です。Cloudflareアカウントなしでサーバーが自動的に証明書を取得します。独自ドメインでも同様です。自宅環境や開放ポートがない場合でも、申請手続きによってサーバー自身がトンネルを実行し、.beanpool.orgで終わる無料の名前が取得できます。暗号化のないhttp://アドレスはホームネットワーク内でのみ機能します。</li>
-                </ul>
-                <p>次に、Dockerをインストールしたマシンで、このコマンドブロックを貼り付けます。composeファイルを取得し、ノードが使用するネットワークを作成し、公開イメージ（Intel/AMDまたはARM64）をダウンロードして起動し、サーバーがワンタイム申請コードを生成するのを待って（Raspberry Piでの初回起動など遅い場合は最大5分）、所有権の申請（claim）を行います。起動前に設定が必要な項目はありません。</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — コミュニティを始める</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">1つのブロック：取得、ネットワーク作成、イメージ取得、起動、待機、申請</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="クリップボードにコピー">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">最後の行：beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>アドレスの決定。</strong> 貼り付ける前に選択し、最後の行をそれに合わせて変更します。すでに貼り付けてしまった場合は、質問でEnterキーを押し、その後に最後の行を再実行してください（申請コードはスマートフォンからの接続を待機します）。<strong>パブリックIPアドレスとポート80および443が開いているレンタルサーバーの場合</strong>：<code>beanpool claim --ip 203.0.113.7</code>のように、<code>--ip</code>とIPアドレスを追加します。サーバーはポート80経由でLet's Encryptからそのアドレス用の証明書を取得し、スマートフォンはhttps://203.0.113.7で接続できるようになります。<strong>自宅のコンピューターまたは開放ポートがない場合</strong>：そのまま変更せず実行します。無料のサブドメイン名の先頭部分を聞かれます（yourtown.beanpool.orgにする場合は<strong>yourtown</strong>と入力、Enterでスキップ）。サーバーが自ら実行するトンネル経由で接続され、開通まで最大3分待機します。<strong>独自ドメインの場合</strong>：ドメインのAレコードをサーバーのIPアドレスに向け、ポート80と443を開放し、<code>--address https://your.domain</code>を追加します。ドメイン名ならサーバーを変更しても使い続けられますが、IPアドレスの数値は引き継げません（後から「設定」で名前を追加でき、以前のIPアドレスを使っていたメンバーもそのまま接続できます）。後で「設定」から選択する場合は<code>--no-name</code>を追加してください。暗号化のない<code>http://</code>アドレスはホームネットワークでのみ動作します。インターネット上ではスマートフォンに接続を拒否され、申請時にも警告されます。BeanPoolプロジェクトのアドレスサービスが停止していても、申請自体は問題なく機能します。</li>
-                    <li><strong>コードとQRコード。</strong> ワンタイム申請コードとQRコードが表示されます。スマートフォンのカメラでQRコードをスキャンするか、BeanPoolを開いて<strong>コミュニティを探す</strong>の下にサーバーのアドレスを入力し、<strong>申請</strong>をタップします。そのスマートフォンがオーナーになります。</li>
-                    <li><strong>設定。</strong> あなたのアドレス（またはサーバーのアドレス）の末尾に<strong>/settings</strong>を付けてブラウザで開きます。セットアップウィザードに従ってコミュニティの名前を決め、2人目のオーナーを追加し、3つの設立メンバー用招待状を作成します。「ノードの識別情報」で地図上の位置を設定すると、近くの人があなたを見つけられるようになります。</li>
-                </ol>
-                <p class="run-node-note">ブロックに<strong>No claim code after 5 minutes</strong>と表示されたり、<code>beanpool claim</code>に<strong>This community has no claim code waiting</strong>と表示されたりした場合、サーバーの起動がまだ完了していません。<code>docker compose logs beanpool-node</code>で進捗状況を確認できます。ログにコミュニティにまだオーナーがおらず申請コードが発行された旨が表示されたら、最後の行を再度実行してください。詳しい手順は運営者マニュアルの<a href="../guide/operators/first-time-setup.html">初回セットアップ</a>に記載されています。</p>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    GitHubで見る →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">コミュニティを始める&nbsp;→</a></p>
         </div>
     </section>
 
@@ -701,7 +627,7 @@ docker compose exec beanpool-node beanpool claim</code>
                     <a href="getting-started.html">スタートガイド</a>
                     <a href="rules.html">ルール</a>
                     <a href="post-extraction.html">脱・搾取経済</a>
-                    <a href="#run-a-node">コミュニティを運営する</a>
+                    <a href="start.html">コミュニティを運営する</a>
                     <a href="../guide/index.html">メンバーズガイド</a>
                     <a href="status.html">サーバーステータス</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

@@ -3,8 +3,10 @@ import crypto from 'node:crypto';
 import { db, createCrowdfundProject, pledgeToProject, deleteCrowdfundProject, updateCrowdfundProject, getCrowdfundProject } from './db/db.js';
 import {
     initStateEngine, reconcileLedgerFromDb, getBalance, payFromCommons, adminAssignTreasuryOperator, replaceLeadByVote, runLedgerAudit,
-    adminSetOperator, adminSetUserStatus, stepDownAsKeeper,
+    adminSetOperator, adminSetUserStatus, stepDownAsKeeper, adminRevokeTreasuryOperator, proposeLeadSuccession,
 } from './state-engine.js';
+import { createScopedDecision, PROJECT_LEADER_STAYS } from './decisions-engine.js';
+import { grantNodeRole } from './engine/node-roles.js';
 
 console.log('Running #139 crowdfund project deletion refund regression test...');
 initStateEngine();
@@ -181,13 +183,14 @@ check(after.ok && Math.abs(after.drift - before.drift) < 0.0001, `the ledger aud
 const again = refusal(() => deleteCrowdfundProject(gate, kim));
 check(again !== null && near(balanceOf(ann), before.ann + 13) && outRows().length === gatePledges.length, `a second cancel pays nobody again (${again ?? 'it ran again'})`);
 
-// ── 9. Only a lead who may act cancels it: not the keeper left when nobody leads it, nor a stopped lead (review of #2554) ──
+// ── 9. Only a keeper who may act cancels it: not the keeper left switched off when nobody leads it, nor one of two keepers
+// with no lead, nor a stopped lead (review of #2554; its ONLY keeper who may act now can, CF-Q1, part 10) ──
 // The cancel is the project's wind-up (docs/the-commons.md: its lead keeper starts one) and can't be undone. Its edit's rule
 // falls back to the first keeper when no keeper leads it. That happens when the lead left and no keeper was active with
 // operator access to take over (promoteOrPauseAfterLeadLeft paused it), so the fallback named a keeper the engine had just
 // passed over. And a keeper whose account is suspended, or whose operator access an admin switched off, acts for no
 // enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up already ask.
-console.log('\n── Only a lead who may act cancels it ──');
+console.log('\n── Only a keeper who may act cancels it ──');
 const lia = makeMember('lia');
 const ola = makeMember('ola');
 const max = makeMember('max');
@@ -224,16 +227,38 @@ const liaCancel = refusal(() => deleteCrowdfundProject(bench, lia));
 check(liaCancel !== null && /Unauthorized/.test(liaCancel), `Lia, who made it and stepped down, can't cancel it (${liaCancel ?? 'it was cancelled'})`);
 check(benchUntouched(), 'and nothing moves');
 
-// An admin switches Ola's access back on. Ola is still a keeper who doesn't lead it, and a keeper doesn't wind it up.
+// Pat joins it as a second keeper while nobody leads it. Then an admin switches Ola's access back on: Ola is a keeper who
+// doesn't lead it, one of two, and one of two keepers doesn't wind it up. (Its ONLY keeper may, once they may act: Marty's
+// answer CF-Q1, 29 Oct 2026, part 10.)
+const pat = makeMember('pat');
+adminAssignTreasuryOperator(bench, pat);
 adminSetOperator(ola, true);
 const olaOnCancel = refusal(() => deleteCrowdfundProject(bench, ola));
-check(olaOnCancel !== null && /Unauthorized/.test(olaOnCancel), `Ola, with operator access back on but not its lead, can't cancel it (${olaOnCancel ?? 'it was cancelled'})`);
+check(olaOnCancel !== null && /Unauthorized/.test(olaOnCancel), `Ola, with operator access back on but not its lead, one of its two keepers, can't cancel it (${olaOnCancel ?? 'it was cancelled'})`);
+check(benchUntouched(), 'and nothing moves');
+const patCancel = refusal(() => deleteCrowdfundProject(bench, pat));
+check(patCancel !== null && /Unauthorized/.test(patCancel), `nor can Pat, its other keeper (${patCancel ?? 'it was cancelled'})`);
 check(benchUntouched(), 'and nothing moves');
 
-// The keepers vote Ola its lead: now Ola cancels it, and Ann gets the 4 back.
-replaceLeadByVote(bench, ola);
-const olaLeadCancel = refusal(() => deleteCrowdfundProject(bench, ola));
-check(olaLeadCancel === null, `Ola, voted its lead, cancels it (${olaLeadCancel ?? 'cancelled'})`);
+// Nor can they name a lead who would: a keepers' vote for a lead (replace_lead) is refused for a project, and succession
+// replaces only a lead it has. With two keepers and no lead, a node admin alone may cancel it (an admin's cancel of a project nobody leads: part
+// 10a). (Review of #2599: this part made Ola lead with a direct replaceLeadByVote, past both refusals, a lead the product
+// can't make.)
+const leadVote = refusal(() => createScopedDecision({
+    scopeKind: 'enterprise', scopeId: bench, authorPubkey: pat, title: 'Ola leads the bench', description: 'Ola should lead the bench now',
+    effect: 'replace_lead', subject: ola,
+}, () => {}));
+check(leadVote === PROJECT_LEADER_STAYS, `a keepers' vote to make Ola its lead is refused (${leadVote ?? 'it opened'})`);
+const succession = refusal(() => proposeLeadSuccession(bench, pat, ola));
+check(succession !== null && /No lead keeper/.test(succession), `and so is succession, with no lead to replace (${succession ?? 'it opened'})`);
+check(!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead'").get(bench) && benchUntouched(),
+    'nobody leads it still, and nothing moves');
+
+// Pat steps down, as a keeper who isn't the only one may: Ola is its only keeper, active with operator access on, and
+// cancels it (CF-Q1). Ann gets the 4 back.
+stepDownAsKeeper(bench, pat);
+const olaOnlyCancel = refusal(() => deleteCrowdfundProject(bench, ola));
+check(olaOnlyCancel === null, `Ola, its only keeper once Pat steps down, cancels it (${olaOnlyCancel ?? 'cancelled'})`);
 check(near(balanceOf(ann), before9.ann + 4) && near(balanceOf(benchEscrow), 0) && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(bench),
     `Ann gets back the 4 (${balanceOf(ann) - before9.ann}), the escrow is empty, the bench is gone`);
 
@@ -261,6 +286,163 @@ check(near(sumBalances(), before9.sum), `the node's total is unchanged (${sumBal
 reconcileLedgerFromDb();
 const after9 = runLedgerAudit();
 check(after9.ok && Math.abs(after9.drift - before9.drift) < 0.0001, `the ledger audit holds, its drift unchanged (ok ${after9.ok}, drift ${before9.drift} → ${after9.drift})`);
+
+// ── 10. Who else may cancel it: a node admin, its only keeper when nobody leads it, its maker only if it never had a keeper ──
+// Marty's answers, board, 29 Oct 2026 (from the review of #2554). CF-Q1 "Yes, admin or sole keeper": a project with keepers
+// and no lead is cancelled by a node admin or its only keeper, the people wind-up allows (isLeadOrSoleKeeperOrAdmin); before,
+// nobody could. CF-Q2 "No, removal ends it": a maker an admin removed as its last keeper may not
+// cancel it; before, its maker stood in whenever it had no keepers at all. A project that never had a keeper keeps its
+// maker's cancel. Each cancel pays every pledge it holds back once and leaves the node's total and the audit's drift as they were.
+console.log('\n── Who else may cancel it ──');
+const ada = makeMember('ada'); // a node admin
+const abe = makeMember('abe'); // a node admin whose account is suspended
+const mo = makeMember('mo'); // a moderator
+grantNodeRole(ada, 'admin', 'owner:password');
+grantNodeRole(abe, 'admin', 'owner:password');
+grantNodeRole(mo, 'moderator', 'owner:password');
+adminSetUserStatus(abe, 'disabled');
+for (const pk of [ann, ben]) payFromCommons(pk, 100, 'More Beans to pledge', { allowDeficit: true });
+
+/** A project its maker makes, with a pledge in from Ann and one from Ben. */
+function pledged(maker: string, title: string, a: number, b: number) {
+    const id = 'proj_' + crypto.randomUUID();
+    createCrowdfundProject(id, maker, title, `${title}, for the valley`, [], 100, null);
+    const ids = ['pledge_' + crypto.randomUUID(), 'pledge_' + crypto.randomUUID()];
+    pledgeToProject(ids[0], id, ann, a, `For ${title}`);
+    pledgeToProject(ids[1], id, ben, b, `For ${title}`);
+    return { id, escrow: `escrow_${id}`, held: a + b, a, b, ids };
+}
+type Pledged = ReturnType<typeof pledged>;
+const keepersOf = (id: string) => db.prepare('SELECT member_pubkey, role FROM treasury_operators WHERE treasury_pubkey = ? ORDER BY rowid')
+    .all(id) as { member_pubkey: string; role: string }[];
+// The column came with this rule: on a server without it, each read says so and is counted, rather than ending the suite.
+const leftAt = (id: string): string | null => {
+    try {
+        return (db.prepare('SELECT keeper_left_at FROM projects WHERE id = ?').get(id) as { keeper_left_at: string | null } | undefined)?.keeper_left_at ?? null;
+    } catch {
+        return 'no keeper_left_at column';
+    }
+};
+function refusedAndUntouched(p: Pledged, who: string, label: string): void {
+    reconcileLedgerFromDb();
+    const was = { ann: balanceOf(ann), ben: balanceOf(ben), sum: sumBalances() };
+    const why = refusal(() => deleteCrowdfundProject(p.id, who));
+    check(why !== null && /Unauthorized/.test(why), `${label} can't cancel it (${why ?? 'it was cancelled'})`);
+    check(near(balanceOf(p.escrow), p.held) && near(balanceOf(ann), was.ann) && near(balanceOf(ben), was.ben) && near(sumBalances(), was.sum)
+        && !db.prepare('SELECT 1 FROM transactions WHERE from_pubkey = ?').get(p.escrow) && !!db.prepare('SELECT 1 FROM projects WHERE id = ?').get(p.id),
+        `and nothing moves: the escrow still holds ${p.held} (${balanceOf(p.escrow)}), nobody refunded, the project still there`);
+}
+function cancelsAndRefundsOnce(p: Pledged, who: string, label: string): void {
+    reconcileLedgerFromDb();
+    const was = { ann: balanceOf(ann), ben: balanceOf(ben), who: balanceOf(who), sum: sumBalances(), drift: runLedgerAudit().drift };
+    const why = refusal(() => deleteCrowdfundProject(p.id, who));
+    check(why === null, `${label} cancels it (${why ?? 'cancelled'})`);
+    const out = db.prepare('SELECT id, to_pubkey, amount FROM transactions WHERE from_pubkey = ? ORDER BY rowid')
+        .all(p.escrow) as { id: string; to_pubkey: string; amount: number }[];
+    check(near(balanceOf(ann), was.ann + p.a) && near(balanceOf(ben), was.ben + p.b) && near(balanceOf(who), was.who),
+        `Ann gets back her ${p.a} and Ben his ${p.b} (${balanceOf(ann) - was.ann}, ${balanceOf(ben) - was.ben}); the canceller's own balance doesn't move`);
+    check(out.length === 2 && out.some((r) => r.id === `refund_${p.ids[0]}` && r.to_pubkey === ann && near(r.amount, p.a))
+        && out.some((r) => r.id === `refund_${p.ids[1]}` && r.to_pubkey === ben && near(r.amount, p.b)),
+        `one refund row per pledge, each to its backer for its amount (${out.length} rows)`);
+    check(near(balanceOf(p.escrow), 0) && !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(p.id) && getCrowdfundProject(p.id) === undefined,
+        `the escrow is empty (${balanceOf(p.escrow)}) and the project is gone`);
+    check(near(sumBalances(), was.sum), `the node's total is unchanged (${sumBalances()} vs ${was.sum})`);
+    reconcileLedgerFromDb();
+    const audit = runLedgerAudit();
+    check(audit.ok && Math.abs(audit.drift - was.drift) < 0.0001, `the ledger audit holds, its drift unchanged (ok ${audit.ok}, drift ${was.drift} → ${audit.drift})`);
+    const again = refusal(() => deleteCrowdfundProject(p.id, who));
+    check(again !== null && near(balanceOf(ann), was.ann + p.a) && near(balanceOf(ben), was.ben + p.b),
+        `a second cancel pays nobody again (${again ?? 'it ran again'})`);
+}
+
+// 10a. No lead, one keeper with operator access off: a node admin cancels it. Wes made and led the well, Kai keeps it with
+// Wes; an admin switches Kai's access off, and Wes steps down: nobody could take the lead, so it pauses with none.
+const wes = makeMember('wes');
+const kai = makeMember('kai');
+const well = pledged(wes, 'Village Well', 7, 2);
+adminAssignTreasuryOperator(well.id, kai);
+adminSetOperator(kai, false);
+stepDownAsKeeper(well.id, wes);
+check(keepersOf(well.id).length === 1 && !keepersOf(well.id).some((k) => k.role === 'lead'),
+    `the well has one keeper, Kai, and no lead (${JSON.stringify(keepersOf(well.id).map((k) => k.role))})`);
+refusedAndUntouched(well, kai, 'Kai, its only keeper with operator access switched off,');
+refusedAndUntouched(well, wes, 'Wes, who made it and stepped down,');
+refusedAndUntouched(well, mo, 'Mo, a moderator of the node,');
+refusedAndUntouched(well, abe, 'Abe, an admin of the node whose account is suspended,');
+refusedAndUntouched(well, cal, 'Cal, a stranger to it,');
+cancelsAndRefundsOnce(well, ada, 'Ada, an admin of the node,');
+
+// 10b. No lead, its only keeper who may act cancels it. Kip made and led the kiln, Sol keeps it with Kip and has operator
+// access switched off as Kip steps down, so it pauses with no lead. Sol, its only keeper: refused while switched off, and
+// while Sol's account is suspended; with both back, Sol cancels it.
+const kip = makeMember('kip');
+const sol = makeMember('sol');
+const kiln = pledged(kip, 'Pottery Kiln', 5, 4);
+adminAssignTreasuryOperator(kiln.id, sol);
+adminSetOperator(sol, false);
+stepDownAsKeeper(kiln.id, kip);
+check(keepersOf(kiln.id).length === 1 && keepersOf(kiln.id)[0].member_pubkey === sol && keepersOf(kiln.id)[0].role === 'keeper',
+    `the kiln has one keeper, Sol, who doesn't lead it (${JSON.stringify(keepersOf(kiln.id).map((k) => k.role))})`);
+refusedAndUntouched(kiln, sol, 'Sol, its only keeper with operator access switched off,');
+adminSetOperator(sol, true);
+adminSetUserStatus(sol, 'disabled');
+refusedAndUntouched(kiln, sol, 'Sol, its only keeper with the account suspended,');
+adminSetUserStatus(sol, 'active');
+refusedAndUntouched(kiln, kip, 'Kip, who made it and stepped down,');
+refusedAndUntouched(kiln, mo, 'Mo, a moderator,');
+cancelsAndRefundsOnce(kiln, sol, 'Sol, its only keeper, active with operator access on,');
+
+// 10c. Its maker removed by an admin as its last keeper: removal ends it. Mae makes the mill and is its only keeper; an
+// admin removes her. It has no keepers, as a project that never had one has none, but a keeper left it.
+const mae = makeMember('mae');
+const mill = pledged(mae, 'Flour Mill', 6, 3);
+check(leftAt(mill.id) === null, `no keeper has left the mill yet (${leftAt(mill.id)})`);
+adminRevokeTreasuryOperator(mill.id, mae);
+check(keepersOf(mill.id).length === 0 && leftAt(mill.id) !== null,
+    `the mill has no keepers, and its row says when one left (${keepersOf(mill.id).length}, ${leftAt(mill.id)})`);
+refusedAndUntouched(mill, mae, 'Mae, who made it and whom an admin removed as its last keeper,');
+refusedAndUntouched(mill, mo, 'Mo, a moderator,');
+cancelsAndRefundsOnce(mill, ada, 'Ada, an admin, who may cancel it still,');
+
+// 10d. Its maker who stepped down, its last keeper then removed by an admin: no keepers now, but it had them. Dee makes and
+// leads the dock, Eli keeps it with her; Dee steps down and Eli takes the lead; an admin removes Eli.
+const dee = makeMember('dee');
+const eli = makeMember('eli');
+const dock = pledged(dee, 'Boat Dock', 4, 1);
+adminAssignTreasuryOperator(dock.id, eli);
+stepDownAsKeeper(dock.id, dee);
+check(keepersOf(dock.id).length === 1 && keepersOf(dock.id)[0].member_pubkey === eli && keepersOf(dock.id)[0].role === 'lead',
+    'Eli leads the dock once Dee steps down');
+adminRevokeTreasuryOperator(dock.id, eli);
+check(keepersOf(dock.id).length === 0, `the dock has no keepers (${keepersOf(dock.id).length})`);
+refusedAndUntouched(dock, dee, 'Dee, who made it and stepped down,');
+refusedAndUntouched(dock, eli, 'Eli, whom an admin removed as its lead,');
+cancelsAndRefundsOnce(dock, ada, 'Ada, an admin,');
+
+// 10e. A project no keeper was ever bound to keeps its maker's cancel. Every way of making a project binds its maker as its
+// lead, so this is a projects row from before that (one the projects migration bound nobody to): Bo's barn with its binding
+// taken out underneath, by no engine path, so nothing says a keeper left. Bo cancels it, and only while Bo may act.
+const bo = makeMember('bo');
+const barn = pledged(bo, 'Hay Barn', 3, 3);
+db.prepare('DELETE FROM treasury_operators WHERE treasury_pubkey = ?').run(barn.id);
+check(keepersOf(barn.id).length === 0 && leftAt(barn.id) === null,
+    `the barn has no keepers and none ever left it (${keepersOf(barn.id).length}, ${leftAt(barn.id)})`);
+refusedAndUntouched(barn, cal, 'Cal, a stranger to it,');
+refusedAndUntouched(barn, mo, 'Mo, a moderator,');
+adminSetUserStatus(bo, 'disabled');
+refusedAndUntouched(barn, bo, 'Bo, who made it, with the account suspended,');
+adminSetUserStatus(bo, 'active');
+cancelsAndRefundsOnce(barn, bo, 'Bo, who made it, a project no keeper was ever bound to,');
+
+// 10f. A project with a lead who may act: a node admin may cancel it too, as wind-up allows (isLeadOrSoleKeeperOrAdmin); its
+// other keeper may not. Fay makes and leads the fence, Gus keeps it with her.
+const fay = makeMember('fay');
+const gus = makeMember('gus');
+const fence = pledged(fay, 'Paddock Fence', 2, 2);
+adminAssignTreasuryOperator(fence.id, gus);
+refusedAndUntouched(fence, gus, "Gus, a keeper who doesn't lead it,");
+refusedAndUntouched(fence, mo, 'Mo, a moderator,');
+cancelsAndRefundsOnce(fence, ada, 'Ada, an admin, over a lead who may act,');
 
 console.log(`\n${run - failed}/${run} checks passed`);
 

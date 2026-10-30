@@ -1096,7 +1096,6 @@
   "Posted by": "پوسٹ کنندہ",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "ابھی تک کوئی درجہ بندی نہیں",
-  "Transferring {n} B to {name}": "{name} کو {n} پھلیاں منتقل کی جا رہی ہیں",
   "Failed to complete transaction": "لین دین مکمل کرنے میں ناکام",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "آپ وصول کنندہ ہیں۔ شرائط کو بالکل اسی طرح پورا کریں جیسا کہ اتفاق ہوا تھا، اور ادائیگی کنندہ آپ کے کریڈٹ جاری کر دے گا (آپ 1.5% فیس {owned} منہا کر کے خالص رقم وصول کریں گے)۔",
   "Cancel this transaction and return the post to the market?": "اس لین دین کو منسوخ کر کے پوسٹ کو مارکیٹ میں واپس لائیں؟",

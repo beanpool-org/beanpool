@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, DeviceEventEmitter } from 'react-native';
-import { requestSync, applyLivePostChange } from '../../services/pillar-sync';
+import { requestSync, applyLivePostChange, ownCardChanged } from '../../services/pillar-sync';
 import { WebSocketSyncClient } from '../../services/ws-client';
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -34,6 +34,7 @@ vi.mock('react-native', () => ({
 vi.mock('../../services/pillar-sync', () => ({
     requestSync: vi.fn(),
     applyLivePostChange: vi.fn().mockResolvedValue(true),
+    ownCardChanged: vi.fn(),
 }));
 
 const ME = 'e'.repeat(64);
@@ -235,6 +236,29 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
             expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('ws_activity', { type });
             expect(requestSync).toHaveBeenCalled();
         });
+
+    // Profile S1: a photo or name changed on the web or a paired phone reaches this phone's header. The sync reads the own
+    // card first where members are read by key (pillar-sync ownCardChanged), only when the node says it changed.
+    it('a profile_updated naming this member, or no one, asks for the own card first; one naming another member does not', async () => {
+        const { loadIdentity } = await import('../identity');
+        vi.mocked(loadIdentity).mockResolvedValueOnce({ publicKey: ME, privateKey: 'aa', callsign: 'Me' } as any);
+        const socket = await startAndConnect();
+        vi.mocked(ownCardChanged).mockClear();
+        vi.mocked(requestSync).mockClear();
+
+        socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: 'f'.repeat(64) }) });
+        expect(ownCardChanged).not.toHaveBeenCalled();
+        expect(requestSync).toHaveBeenCalledTimes(1);
+
+        socket.onmessage({ data: JSON.stringify({ type: 'profile_updated', publicKey: ME }) });
+        expect(ownCardChanged).toHaveBeenCalledTimes(1);
+        socket.onmessage({ data: JSON.stringify({ type: 'profile_updated' }) });
+        expect(ownCardChanged).toHaveBeenCalledTimes(2);
+        expect(requestSync).toHaveBeenCalledTimes(3);
+
+        socket.onmessage({ data: JSON.stringify({ type: 'member_joined', publicKey: ME }) });
+        expect(ownCardChanged).toHaveBeenCalledTimes(2);
+    });
 
     it('backgrounding the app disconnects and clears watchdog', async () => {
         const socket = await startAndConnect();

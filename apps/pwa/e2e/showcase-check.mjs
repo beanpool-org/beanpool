@@ -340,7 +340,7 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('start-community-screen').waitFor();
         await coversScreen(page, 'Ledger: the Start a community screen', 'start-community-screen');
         const runANode = await page.getByTestId('start-community-run-a-node').getAttribute('href');
-        check(runANode === 'https://beanpool.org/#run-a-node', `Start a community: How to run a node leads to the node's start link (${runANode})`);
+        check(runANode === 'https://beanpool.org/start', `Start a community: How to run a node leads to the node's start link (${runANode})`);
         await noSideScroll(page, 'Start a community');
         await targetsAtLeast44(page, 'Start a community');
         await shot(page, `start-community-${scheme}`);

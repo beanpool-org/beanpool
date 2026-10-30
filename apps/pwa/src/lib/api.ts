@@ -2232,6 +2232,27 @@ export interface Decision {
     adminHaltedAt: string | null;
     adminHaltReason: string | null;
     updatedAt: string;
+    /** A vote on removing a member: the member's own reply to its case, and when they wrote it (null until they do). */
+    subjectReply?: string | null;
+    subjectRepliedAt?: string | null;
+    /** A vote on removing a member whose case an admin hid as shown to be false: when, and their public reason. */
+    caseHiddenAt?: string | null;
+    caseHiddenReason?: string | null;
+    /** A vote on removing a member whose reply an admin took down: when, and their public reason (the reply itself is gone). */
+    replyHiddenAt?: string | null;
+    replyHiddenReason?: string | null;
+    /** A vote on removing a member: who brought it, by name (absent from a node from before). */
+    proposer?: RemovalProposer;
+}
+
+/**
+ * Who brought a vote on removing a member, as the node names them (removal by vote, Amendment A point 3): an admin who
+ * paused them, an owner who did with the server's password (no name), or a member who proposed it before proposing one
+ * closed. `name` is null when the node can't know it.
+ */
+export interface RemovalProposer {
+    kind: 'admin' | 'password' | 'member';
+    name: string | null;
 }
 
 export interface DecisionTally {
@@ -2297,6 +2318,22 @@ export async function castDecisionVote(decisionId: string, options: {
     signature?: string;
 }): Promise<{ success: boolean; creditsUsed: number }> {
     return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/vote`, options);
+}
+
+/**
+ * The member a vote on removing them is about replies to its case (removal by vote, Amendment A point 2): their words,
+ * shown beside the case to everyone who reads the vote. Signed; the node takes it from them alone, while the vote is open.
+ */
+export async function replyToRemovalCase(decisionId: string, reply: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/reply`, { reply });
+}
+
+/**
+ * The member a vote on removing them is about reports its case as a false accusation (Amendment A point 4): a report about
+ * whoever brought it, for the admins and owners. Signed; the node takes it from that member alone.
+ */
+export async function reportRemovalCase(decisionId: string): Promise<{ success: boolean; duplicate?: boolean }> {
+    return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/report`, {});
 }
 
 // ===================== COMMUNITY TREASURIES =====================

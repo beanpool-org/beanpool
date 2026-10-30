@@ -47,7 +47,7 @@
                 <a href="#how-it-works">How It Works</a>
                 <a href="#features">What You Can Do</a>
                 <a href="rules.html">The Rules</a>
-                <a href="#run-a-node">Run a Community</a>
+                <a href="start.html">Run a Community</a>
                 <a href="help.html" title="Every rule, guide and manual in one place">Help</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
@@ -130,7 +130,7 @@
                     <a href="#how-it-works">How It Works</a>
                     <a href="#features">What You Can Do</a>
                     <a href="rules.html">The Rules</a>
-                    <a href="#run-a-node">Run a Community</a>
+                    <a href="start.html">Run a Community</a>
                     <a href="help.html">Help</a>
                     <a href="guide/index.html">Members' guide</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Videos on YouTube</a>
@@ -577,7 +577,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">No community near you yet.</span>
-                    <a id="map-empty-start" href="#run-a-node">Start a community</a>
+                    <a id="map-empty-start" href="start.html">Start a community</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -596,6 +596,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -603,83 +605,7 @@
                 <h2>Run BeanPool for Your Community</h2>
                 <p>Every community runs on its own node: a small server that holds that community's members, posts and ledger. Someone local runs it. If your town or valley doesn't have one yet, it could be you.</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>What you look after</h3>
-                    <p>You and the admins you appoint are your community's moderators: reports come to you. Your members' data lives on your machine, so you keep it backed up. You can read enterprise discussions and event chats; you can't read direct messages. You invite the first members, and they invite the rest.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>The settings app</h3>
-                    <p>Your node comes with its own settings app in the browser. From it you name your community, appoint an owner and admins who sign in with their own keys, print QR invites, watch disk health, choose a public web address or a tunnel, and help a member who has lost both their phone and their 12 words back into their own account on a new phone, with a one-time code you confirm in person.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>Private from the first boot</h3>
-                    <p>A community's listings, map, messages and balances are for its members from the moment its node starts; there is nothing to switch on. Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>Linking with a neighbouring community</h3>
-                    <p>Two communities can agree to link so their members can trade with each other. Beans never leave home: each pair keeps a running tally of what one community owes the other, and each side sets its own limit. Linking is off unless both operators switch it on, and it is still early: it is built, with its screens in the web app, and has been tried only between two of our own test communities, never between live ones.</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>Start a community</h2>
-                <p>About half an hour, if you can follow a recipe. Six things to know first:</p>
-                <ul class="run-node-facts">
-                    <li><strong>What it costs.</strong> The software is free. It runs on a spare computer that stays on at home (a Mini PC, a NAS, or a Raspberry Pi with a 64-bit system), or on a small rented server for a few dollars a month (about US$6).</li>
-                    <li><strong>Who hosts it.</strong> You do, on your own machine or the one you rent. It never needs <a href="https://beanpool.org">beanpool.org</a>: your own web address works.</li>
-                    <li><strong>What you take on.</strong> Reports from your members come to you. The data folder is yours to back up, with a recovery code. Keep two owners. Keep the server on and updated.</li>
-                    <li><strong>What you never see.</strong> Your members' direct messages.</li>
-                    <li><strong>Docker first.</strong> The machine needs Docker installed before the block below; a freshly rented server has none.</li>
-                    <li><strong>An address phones can reach.</strong> Phones reach a community on the internet only over https. On a rented server with a public IP address and ports 80 and 443 open, that IP address is enough: your server gets its own certificate for it, with no Cloudflare account, and the same for a domain of your own. At home, or with no open ports, the claim gives you a free name ending in .beanpool.org, through a tunnel your server runs itself. A plain http:// address works only on a home network.</li>
-                </ul>
-                <p>Then, on that machine with Docker installed, paste this one block. It fetches the compose file, creates the network the node uses, pulls the published image (Intel/AMD or ARM64), starts it, waits until the server has made its one-time claim code (up to five minutes, for a slow first start on a Raspberry Pi), and claims it. There is nothing to configure before it starts.</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — start a community</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">One block: fetch, network, pull, start, wait, claim</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Copy to clipboard">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">The last line: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Your address.</strong> Choose it before you paste, and change the last line to match. If you already pasted, press Enter at its questions, then run the last line again: the claim code waits for a phone. <strong>A rented server</strong> with a public IP address and ports 80 and 443 open: add <code>--ip</code> and its IP address, as in <code>beanpool claim --ip 203.0.113.7</code>. Your server gets its own certificate for that address from Let's Encrypt, over port 80, and phones reach it at https://203.0.113.7. <strong>A computer at home, or no open ports</strong>: leave it as it is. It asks for the first part of a free name (type just <strong>yourtown</strong> for yourtown.beanpool.org; Enter skips), reached through a tunnel your server runs itself, and waits up to three minutes for it to go live. <strong>Your own domain</strong>: point an A record for it at the server's IP address, open ports 80 and 443, and add <code>--address https://your.domain</code>. A name survives a change of server; a number does not: you can add a name later in Settings, and members who use the IP address keep working. To choose later in Settings, add <code>--no-name</code>. A plain <code>http://</code> address works only on a home network: phones refuse it on the internet, and the claim warns you. If the BeanPool project's address service is down, the claim still works.</li>
-                    <li><strong>The code and QR.</strong> It shows a one-time claim code, a QR code and, numbered, what to do next. First, on the phone that will own the community, install BeanPool from <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> or the <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>. Then scan the QR code with your phone's camera, or open BeanPool and tap <strong>Installed BeanPool on a server? Claim it</strong>. The claim makes your BeanPool account on that phone, with no invite and nothing from the BeanPool project: type your name, tap <strong>Claim and become owner</strong>, and write down the 12 words it shows you. A phone that already has an account claims with it. That phone becomes the owner.</li>
-                    <li><strong>Settings.</strong> Open your address (or the server's own address) followed by <strong>/settings</strong>. The setup wizard names your community, asks you to add a second owner, and makes three founding invites. Set your place on the map under Node Identity so people nearby can find you.</li>
-                </ol>
-                <p class="run-node-note">If the block says <strong>No claim code after 5 minutes</strong>, or <code>beanpool claim</code> says <strong>This community has no claim code waiting</strong>, the server has not finished starting: <code>docker compose logs beanpool-node</code> shows where it is. Once the log says the community has no owner yet and has a claim code, run the last line again. The full steps are in the operator manual's <a href="guide/operators/first-time-setup.html">first-time setup</a>.</p>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    View on GitHub →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">Start a community&nbsp;→</a></p>
         </div>
     </section>
 
@@ -732,7 +658,7 @@ docker compose exec beanpool-node beanpool claim</code>
                     <a href="getting-started.html">Getting Started</a>
                     <a href="rules.html">The Rules</a>
                     <a href="post-extraction.html">Post-Extraction</a>
-                    <a href="#run-a-node">Run a Community</a>
+                    <a href="start.html">Run a Community</a>
                     <a href="guide/index.html">Members' guide</a>
                     <a href="status.html">Server status</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

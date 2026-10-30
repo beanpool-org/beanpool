@@ -117,8 +117,12 @@ export const LOCAL_COMMUNITY_LINES = Object.freeze({
     yourBeansLink: word('See an example ledger ›'),
 });
 
-/** Where Start a community leads when the node names nowhere else (node_config `startCommunityUrl`). */
-export const START_COMMUNITY_URL_DEFAULT = 'https://beanpool.org/#run-a-node';
+/**
+ * Where Start a community leads when the node names nowhere else (node_config `startCommunityUrl`): beanpool.org's own
+ * Start a community page. Releases before this one (1.2.83 and older) and socialism.org link https://beanpool.org/#run-a-node,
+ * which the home page keeps, as a teaser with a button to this page.
+ */
+export const START_COMMUNITY_URL_DEFAULT = 'https://beanpool.org/start';
 
 /**
  * What a member must have before they post, by whether the node has Beans on (its `features.beans`, server

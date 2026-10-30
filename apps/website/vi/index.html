@@ -47,7 +47,7 @@
                 <a href="#how-it-works">Cách hoạt động</a>
                 <a href="#features">Những điều bạn có thể làm</a>
                 <a href="rules.html">Quy tắc</a>
-                <a href="#run-a-node">Vận hành cộng đồng</a>
+                <a href="start.html">Vận hành cộng đồng</a>
                 <a href="help.html" title="Tất cả quy tắc, hướng dẫn và cẩm nang tại một nơi">Trợ giúp</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Xem video hướng dẫn trên YouTube (@beanpool)">
@@ -130,7 +130,7 @@
                     <a href="#how-it-works">Cách hoạt động</a>
                     <a href="#features">Những điều bạn có thể làm</a>
                     <a href="rules.html">Quy tắc</a>
-                    <a href="#run-a-node">Vận hành cộng đồng</a>
+                    <a href="start.html">Vận hành cộng đồng</a>
                     <a href="help.html">Trợ giúp</a>
                     <a href="../guide/index.html">Cẩm nang thành viên</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Video trên YouTube</a>
@@ -546,7 +546,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">Chưa có cộng đồng nào gần bạn.</span>
-                    <a id="map-empty-start" href="#run-a-node">Khởi tạo một cộng đồng</a>
+                    <a id="map-empty-start" href="start.html">Khởi tạo một cộng đồng</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -565,6 +565,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -572,83 +574,7 @@
                 <h2>Vận hành BeanPool cho cộng đồng của bạn</h2>
                 <p>Mỗi cộng đồng hoạt động trên một máy chủ riêng: một máy chủ nhỏ lưu trữ thành viên, bài đăng và sổ cái của cộng đồng đó. Một người dân địa phương sẽ vận hành máy chủ này. Nếu thị trấn hoặc thung lũng của bạn chưa có, người đó có thể chính là bạn.</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>Những việc bạn đảm trách</h3>
-                    <p>Bạn và các quản trị viên do bạn chỉ định là những người điều duyệt cộng đồng: các báo cáo sẽ gửi tới bạn. Dữ liệu thành viên nằm trên máy của bạn, vì vậy bạn cần sao lưu định kỳ. Bạn có thể đọc các thảo luận của doanh nghiệp và cuộc trò chuyện sự kiện; bạn không thể đọc tin nhắn trực tiếp. Bạn mời những thành viên đầu tiên, và họ sẽ mời những người tiếp theo.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>Ứng dụng cài đặt</h3>
-                    <p>Máy chủ của bạn đi kèm với ứng dụng cài đặt riêng trên trình duyệt. Tại đây bạn đặt tên cho cộng đồng, chỉ định chủ sở hữu và quản trị viên đăng nhập bằng khóa của chính họ, in mã QR mời, theo dõi tình trạng đĩa cứng, chọn địa chỉ web công khai hoặc đường hầm (tunnel), và hỗ trợ thành viên bị mất cả điện thoại lẫn 12 từ lấy lại quyền truy cập vào tài khoản của họ trên điện thoại mới, bằng mã dùng một lần mà bạn xác nhận trực tiếp.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>Riêng tư ngay từ lần khởi động đầu tiên</h3>
-                    <p>Tin đăng, bản đồ, tin nhắn và số dư của cộng đồng chỉ dành riêng cho các thành viên ngay từ khoảnh khắc máy chủ bắt đầu chạy; không cần phải bật bất kỳ thiết lập nào. Người mở địa chỉ máy chủ mà không có tài khoản sẽ được chuyển hướng đến cộng đồng toàn cầu, nơi họ có thể thấy những gì ở gần mình và yêu cầu tham gia.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>Liên kết với cộng đồng láng giềng</h3>
-                    <p>Hai cộng đồng có thể thỏa thuận liên kết để thành viên có thể giao dịch với nhau. Đậu không bao giờ rời khỏi cộng đồng gốc: mỗi cặp cộng đồng duy trì một bản đối soát liên tục về khoản nợ giữa hai bên, và mỗi bên tự đặt ra hạn mức của mình. Liên kết luôn tắt trừ khi người vận hành của cả hai bên cùng bật, và tính năng này vẫn đang trong giai đoạn đầu: tính năng đã được xây dựng cùng các màn hình trong ứng dụng web, và mới chỉ được thử nghiệm giữa hai cộng đồng thử nghiệm của chúng tôi chứ chưa bao giờ triển khai giữa các cộng đồng thực tế.</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>Khởi tạo một cộng đồng</h2>
-                <p>Khoảng nửa giờ nếu bạn làm theo hướng dẫn. Sáu điều cần biết trước tiên:</p>
-                <ul class="run-node-facts">
-                    <li><strong>Chi phí.</strong> Phần mềm hoàn toàn miễn phí. Phần mềm chạy trên máy tính dự phòng luôn bật ở nhà (Mini PC, NAS hoặc Raspberry Pi chạy hệ điều hành 64-bit), hoặc trên máy chủ thuê giá rẻ với vài đô la mỗi tháng (khoảng 6 USD).</li>
-                    <li><strong>Ai lưu trữ máy chủ.</strong> Chính bạn, trên máy riêng hoặc máy bạn thuê. Không bao giờ cần đến <a href="https://beanpool.org">beanpool.org</a>: địa chỉ web riêng của bạn hoàn toàn hoạt động tốt.</li>
-                    <li><strong>Trách nhiệm của bạn.</strong> Các báo cáo từ thành viên sẽ được gửi tới bạn. Bạn chịu trách nhiệm sao lưu thư mục dữ liệu bằng mã khôi phục. Duy trì hai chủ sở hữu. Luôn giữ máy chủ hoạt động và được cập nhật.</li>
-                    <li><strong>Điều bạn không bao giờ thấy.</strong> Tin nhắn trực tiếp của các thành viên.</li>
-                    <li><strong>Cần cài đặt Docker trước.</strong> Máy cần được cài sẵn Docker trước khi chạy khối lệnh bên dưới; một máy chủ mới thuê chưa có Docker.</li>
-                    <li><strong>Địa chỉ điện thoại có thể truy cập.</strong> Điện thoại chỉ kết nối tới cộng đồng trên internet qua giao thức https. Trên máy chủ thuê có địa chỉ IP công khai và mở các cổng 80, 443, chỉ cần địa chỉ IP đó là đủ: máy chủ của bạn sẽ tự nhận chứng chỉ bảo mật cho địa chỉ đó mà không cần tài khoản Cloudflare, và tương tự với tên miền riêng của bạn. Ở nhà, hoặc không mở cổng mạng, quá trình nhận quyền sở hữu sẽ cấp cho bạn một tên miền miễn phí có đuôi .beanpool.org, thông qua đường hầm do chính máy chủ của bạn tự chạy. Địa chỉ http:// thông thường chỉ hoạt động trong mạng nội bộ gia đình.</li>
-                </ul>
-                <p>Sau đó, trên máy đã cài sẵn Docker, hãy dán khối lệnh duy nhất này. Khối lệnh sẽ tải tệp compose, tạo mạng mà máy chủ sử dụng, kéo hình ảnh đã xuất bản (Intel/AMD hoặc ARM64), khởi động máy chủ, chờ cho đến khi máy chủ tạo xong mã nhận quyền dùng một lần (tối đa năm phút, cho lần khởi động đầu tiên chậm trên Raspberry Pi), và tiến hành nhận quyền sở hữu. Không có cấu hình nào cần thiết trước khi khởi động.</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — khởi tạo một cộng đồng</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">Một khối lệnh: tải về, tạo mạng, kéo hình ảnh, khởi động, chờ, nhận quyền</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Sao chép vào khay nhớ tạm">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">Dòng lệnh cuối cùng: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Địa chỉ của bạn.</strong> Hãy chọn địa chỉ trước khi dán và điều chỉnh dòng lệnh cuối cùng cho phù hợp. Nếu bạn đã dán lệnh, hãy nhấn Enter khi xuất hiện câu hỏi, sau đó chạy lại dòng lệnh cuối cùng: mã nhận quyền sẽ chờ điện thoại kết nối. <strong>Máy chủ thuê</strong> có địa chỉ IP công khai và mở các cổng 80, 443: thêm <code>--ip</code> cùng địa chỉ IP đó, ví dụ <code>beanpool claim --ip 203.0.113.7</code>. Máy chủ của bạn sẽ tự nhận chứng chỉ cho địa chỉ đó từ Let's Encrypt qua cổng 80, và điện thoại có thể truy cập tại https://203.0.113.7. <strong>Máy tính ở nhà hoặc không mở cổng mạng</strong>: hãy giữ nguyên dòng lệnh. Lệnh sẽ hỏi phần đầu của tên miền miễn phí (chỉ cần nhập <strong>yourtown</strong> cho tên miền yourtown.beanpool.org; nhấn Enter để bỏ qua), được truy cập thông qua đường hầm do chính máy chủ tự chạy, và chờ tối đa ba phút để bắt đầu hoạt động. <strong>Tên miền riêng của bạn</strong>: trỏ bản ghi A về địa chỉ IP của máy chủ, mở các cổng 80 và 443, rồi thêm <code>--address https://your.domain</code>. Tên miền vẫn được giữ nguyên khi thay đổi máy chủ, còn địa chỉ IP thì không: bạn có thể thêm tên miền sau trong Cài đặt, và các thành viên dùng địa chỉ IP vẫn tiếp tục hoạt động bình thường. Để chọn sau trong Cài đặt, thêm <code>--no-name</code>. Địa chỉ <code>http://</code> thông thường chỉ hoạt động trong mạng nội bộ gia đình: điện thoại sẽ từ chối kết nối qua internet và quá trình nhận quyền sẽ cảnh báo bạn. Nếu dịch vụ địa chỉ của dự án BeanPool ngừng hoạt động, lệnh nhận quyền vẫn hoạt động.</li>
-                    <li><strong>Mã và mã QR.</strong> Lệnh sẽ hiển thị một mã nhận quyền dùng một lần và một mã QR. Quét mã QR bằng máy ảnh điện thoại, hoặc mở BeanPool, nhập địa chỉ máy chủ trong mục <strong>Tìm cộng đồng của bạn</strong> và nhấn <strong>Nhận quyền sở hữu</strong>. Điện thoại đó sẽ trở thành chủ sở hữu.</li>
-                    <li><strong>Cài đặt.</strong> Mở địa chỉ của bạn (hoặc địa chỉ riêng của máy chủ) kèm theo <strong>/settings</strong>. Trình hướng dẫn thiết lập sẽ đặt tên cho cộng đồng của bạn, yêu cầu bạn thêm chủ sở hữu thứ hai và tạo ba lời mời sáng lập. Thiết lập vị trí của bạn trên bản đồ trong mục Nhận diện máy chủ (Node Identity) để mọi người ở gần có thể tìm thấy bạn.</li>
-                </ol>
-                <p class="run-node-note">Nếu khối lệnh thông báo <strong>No claim code after 5 minutes</strong>, hoặc <code>beanpool claim</code> thông báo <strong>This community has no claim code waiting</strong>, nghĩa là máy chủ chưa khởi động xong: lệnh <code>docker compose logs beanpool-node</code> sẽ hiển thị tiến trình. Khi nhật ký ghi nhận cộng đồng chưa có chủ sở hữu và đã có mã nhận quyền, hãy chạy lại dòng lệnh cuối cùng. Các bước đầy đủ được hướng dẫn trong phần <a href="../guide/operators/first-time-setup.html">thiết lập lần đầu</a> của cẩm nang người vận hành.</p>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    Xem trên GitHub →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">Khởi tạo một cộng đồng&nbsp;→</a></p>
         </div>
     </section>
 
@@ -701,7 +627,7 @@ docker compose exec beanpool-node beanpool claim</code>
                     <a href="getting-started.html">Bắt đầu</a>
                     <a href="rules.html">Quy tắc</a>
                     <a href="post-extraction.html">Hậu trục lợi</a>
-                    <a href="#run-a-node">Vận hành cộng đồng</a>
+                    <a href="start.html">Vận hành cộng đồng</a>
                     <a href="../guide/index.html">Cẩm nang thành viên</a>
                     <a href="status.html">Trạng thái máy chủ</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

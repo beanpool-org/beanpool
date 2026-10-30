@@ -1096,7 +1096,6 @@
   "Posted by": "Imechapishwa na",
   "{average} ({n})": "{average} ({n})",
   "No ratings yet": "Bado hakuna tathmini",
-  "Transferring {n} B to {name}": "Inahamisha maharagwe {n} kwenda kwa {name}",
   "Failed to complete transaction": "Imeshindwa kukamilisha muamala",
   "You are the Payee. Fulfill the terms exactly as agreed, and the Payer will release your credits (you will receive net amount minus 1.5% transaction fee {owned}).": "Wewe ndiye Mpokeaji. Timiza masharti kama ilivyokubaliwa, na Mlipaji atatoa mikopo yako (utapokea kiasi kamili ukiondoa ada ya muamala ya 1.5% {owned}).",
   "Cancel this transaction and return the post to the market?": "Ghairi muamala huu na urudishe chapisho sokoni?",

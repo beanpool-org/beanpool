@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ആഗോള കമ്മ്യൂണിറ്റി — BeanPool</title>
     <meta name="description" content="BeanPool-ന്റെ ആഗോള കമ്മ്യൂണിറ്റി നിങ്ങളുടെ ഫോണിലെ ആപ്പിലോ ബ്രൗസറിലോ തുറക്കുക.">
+    <meta name="apple-itunes-app" content="app-id=6761870086, app-argument=https://beanpool.org/global">
     <meta name="robots" content="noindex">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
@@ -150,9 +151,11 @@
         function byId(id) { return document.getElementById(id); }
         function swap(el, from, to) { el.classList.remove(from); el.classList.add(to); }
 
-        // S14 flips IOS_OPEN_DOOR_LIVE to true once the iOS app has the global door (App Store version >= 1.2.56).
-        // While false: browser line first, App Store second with "The iPhone app's open door comes in its next update", no redirect.
-        var IOS_OPEN_DOOR_LIVE = false;
+        // IOS_OPEN_DOOR_LIVE is true since 29 Oct 2026: App Store version 1.2.83 (approved) has the global door, and the door
+        // needs 1.2.56 or later. Live: the App Store button is first and, on arrival at beanpool.org, the page opens the App
+        // Store, and Safari's app banner (the apple-itunes-app meta tag above) offers Open when the app is installed.
+        // Set it back to false to put the browser line first again, with the iPhone note and no redirect (the else branch).
+        var IOS_OPEN_DOOR_LIVE = true;
 
         var ua = navigator.userAgent || '';
         var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);

@@ -18,7 +18,7 @@ import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'rea
 import { type BeanPoolIdentity } from '../lib/identity';
 import {
     getBalance, getTransactions, sendTransfer, request, saveHomePreferences,
-    type BalanceInfo, type TierInfo, type Transaction, type Member
+    type BalanceInfo, type TierInfo, type Transaction, type Member, type MarketplaceTransaction
 } from '../lib/api';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
@@ -51,7 +51,20 @@ interface Props extends LocalCommunityWays {
     preview?: boolean;
     /** How long to wait for the node's info read to settle before giving up and offering Try again (default 10s). */
     waitCapMs?: number;
+    /** The member's own deals, as the app already holds them (App.tsx `myTransactions`): what is held in trust, and which deal a hold is. */
+    deals?: MarketplaceTransaction[];
 }
+
+const ESCROW_ACCOUNT = 'escrow_';
+const LISTING_ID = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
+
+/** A ledger note as the member reads it: the node's "escrow" is "trust" here. */
+function noteWords(memo: string): string {
+    return memo.replace(/escrow hold/gi, 'Held in trust').replace(/escrow/gi, 'trust');
+}
+
+/** A Ledger row of this page: the shared row view, and the listing a hold's deal is on when the page can tell. */
+type LedgerRow = LedgerRowView & { dealPostId?: string | null };
 
 // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
 // `min` = the credit that earns the tier (what they did, never the known grant). Levels are merit badges, not
@@ -99,7 +112,7 @@ function valueForEarned(target: number): number {
     return Math.ceil((TRUST_CURVE_K * target) / (CREDIT_MAX_EARNED - target));
 }
 
-export function LedgerPage({ identity, onNavigate, isMember, preview = false, waitCapMs, ...ways }: Props) {
+export function LedgerPage({ identity, onNavigate, isMember, preview = false, waitCapMs, deals, ...ways }: Props) {
     const viewerIsMember = isMember !== false && identity !== null;
     const myKey = identity?.publicKey ?? '';
     // Drawn from, never stored: a preview that turns live while the page is open never shows the sample as the member's own.
@@ -179,10 +192,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
     const blockedSet = useMemo(() => new Set(getBlockedUsers()), [blocklistVersion]);
 
     function renderMemoText(memo: string) {
-        const sanitized = memo
-            .replace(/escrow hold/gi, 'Held in trust')
-            .replace(/escrow/gi, 'trust');
-            
+        const sanitized = noteWords(memo);
+
         const uuidRegex = /([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/;
         const match = sanitized.match(uuidRegex);
         if (match && onNavigate) {
@@ -414,10 +425,18 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
     const hoursEquivalent = Math.abs(balance) / 40;
 
+    // What is held in trust: the Beans of this member's deals under way as the payer, the figure the phone's Ledger shows as IN ESCROW.
+    const inTrust = sample ? 0 : (deals ?? []).reduce((sum, d) => (d.status === 'pending' && d.buyerPublicKey === myKey ? sum + d.credits : sum), 0);
+    // A hold's, release's or refund's other side is `escrow_<deal id>` (older ones `escrow_<listing id>`).
+    const dealOfAccount = (key: string): MarketplaceTransaction | undefined => {
+        const id = key.slice(ESCROW_ACCOUNT.length);
+        return (deals ?? []).find(d => d.id === id) ?? (deals ?? []).find(d => d.postId === id);
+    };
     // The Wallet's rows: the member's own, or Example Valley's in preview (who it was with, and when, under each).
-    const rows: LedgerRowView[] = sample ? sample.rows : txns.map(tx => {
+    const rows: LedgerRow[] = sample ? sample.rows : txns.map(tx => {
         const isSent = tx.from === myKey;
         const at = new Date(tx.timestamp);
+        const account = [tx.to, tx.from].find(k => typeof k === 'string' && k.startsWith(ESCROW_ACCOUNT));
         return {
             id: tx.id,
             sent: isSent,
@@ -425,6 +444,8 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
             // "1 Oct 2026, 9:00": core's date and time in the member's language, never the browser's own locale.
             when: Number.isFinite(at.getTime()) ? t('{date}, {time}', { date: formatDate(at, 'day-month-year'), time: formatDate(at, 'time') }) : '',
             amount: tx.amount,
+            // The listing this hold's deal is on: from the member's deals, else the one the note names. None: just a row.
+            dealPostId: account ? (dealOfAccount(account)?.postId ?? tx.memo?.match(LISTING_ID)?.[0] ?? null) : null,
         };
     });
 
@@ -792,6 +813,25 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                                 {t('🌱 View Solvency & Tax')}
                             </p>
                         </button>
+
+                        {/* What is held in trust opens the deals that hold it: the Market's My Deals, on In Progress. */}
+                        {inTrust > 0 && onNavigate && (
+                            <button
+                                type="button"
+                                onClick={() => onNavigate('marketplace', 'deals_active')}
+                                data-testid="ledger-in-escrow"
+                                className="flex-1 basis-[9rem] min-w-0 min-h-[44px] bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-4 sm:p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                            >
+                                <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2">{t('Held in Trust')}</p>
+                                <p className="text-2xl font-black font-mono text-amber-700 dark:text-amber-400 flex flex-wrap items-center justify-center gap-1 [overflow-wrap:anywhere]">
+                                    {formatNumber(inTrust, 1)}
+                                    <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt={t('B', undefined, 'the Beans sign')} />
+                                </p>
+                                <p className="text-nature-500 dark:text-nature-300 text-[10px] mt-1 font-semibold">
+                                    {t('Your deals in progress ›')}
+                                </p>
+                            </button>
+                        )}
                     </div>
 
                     {/* Send credits */}
@@ -984,7 +1024,39 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                         </div>
                     ) : (
                         <div className="flex flex-col gap-2.5">
-                            {rows.map(({ id, sent: isSent, note, when, amount }) => {
+                            {rows.map(({ id, sent: isSent, note, when, amount, dealPostId }) => {
+                                // A hold whose deal is known is one button to it (the listing, where the member's deal shows). Its note
+                                // loses the listing id and the "View Offer" link: a link inside a button is two doors for one tap.
+                                if (dealPostId && onNavigate) {
+                                    const heldNote = noteWords(note).replace(LISTING_ID, '').replace(/\s+/g, ' ').trim();
+                                    return (
+                                        <button
+                                            key={id}
+                                            type="button"
+                                            onClick={() => onNavigate('marketplace', dealPostId)}
+                                            data-testid="ledger-held-row"
+                                            className="w-full min-h-[44px] text-left cursor-pointer bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 flex justify-between items-center gap-2 shadow-sm transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40"
+                                        >
+                                            <span className="block min-w-0">
+                                                <span className={`block text-[14px] font-bold ${isSent ? 'text-nature-900 dark:text-white' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                                                    {isSent ? t('↑ Sent') : t('↓ Received')}
+                                                </span>
+                                                {heldNote && (
+                                                    <span className="block text-[13px] text-nature-700 dark:text-nature-400 mt-1 leading-snug">{heldNote}</span>
+                                                )}
+                                                <span className="block text-[11px] font-bold text-nature-400 mt-1.5 uppercase tracking-wide">{when}</span>
+                                                <span className="sr-only">{t('Opens the deal')}</span>
+                                            </span>
+                                            <span className="flex items-center gap-1 shrink-0">
+                                                <span style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'} flex items-center`}>
+                                                    {isSent ? '−' : '+'}{formatNumber(amount, 1)}
+                                                    <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt={t('B', undefined, 'the Beans sign')} />
+                                                </span>
+                                                <span aria-hidden="true" className="text-nature-400 text-lg leading-none">›</span>
+                                            </span>
+                                        </button>
+                                    );
+                                }
                                 return (
                                     <div key={id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 flex justify-between items-center shadow-sm transition-transform hover:-translate-y-0.5">
                                         <div>

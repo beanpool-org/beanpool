@@ -294,5 +294,20 @@ describe('dark mode: themed screens draw with the theme', () => {
         expect(light('reviewBtnText', 'color')).toBe('palette.amber700');
         expect(light('historyChipTextActive', 'color')).toBe('colors.text.inverse');
     });
+
+    // Damo, 29 Oct: Settings' Save Profile was white words on a white bar in dark (settings.tsx's primaryBtn filled with
+    // text.heading, under text.inverse). Talk's selected sort chip was the same pair: text.body is pale in dark, under
+    // text.inverse (white), 1.1:1. A text token is an ink, never a fill under the other ink.
+    it("Talk's selected sort chip reads at 4.5:1 in dark and keeps its light colours", () => {
+        const file = 'app/(tabs)/chats.tsx';
+        const src = ALL.find(s => s.file === file)!.src;
+        const block = (name: string) => src.slice(src.indexOf(`        ${name}: {`), src.indexOf('},', src.indexOf(`        ${name}: {`)));
+        const dark = (name: string, prop: string) => resolve(darkValues(file, block(name), prop)[0].value)!.hex;
+        const light = (name: string, prop: string) => /\?[^:]*:\s*([^,\n]+)/.exec(block(name).split(`${prop}: `)[1])?.[1].trim() ?? block(name).split(`${prop}: `)[1].split(',')[0].trim();
+        for (const [chip, words] of [['chipActive', 'chipTextActive'], ['tabBtnActive', 'tabBtnTextActive']] as const) {
+            expect(contrast(dark(words, 'color'), dark(chip, 'backgroundColor')), `${words} on ${chip}`).toBeGreaterThanOrEqual(4.5);
+            expect(light(words, 'color')).toBe('colors.text.inverse');
+        }
+    });
 });
 

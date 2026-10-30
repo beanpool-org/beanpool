@@ -226,16 +226,22 @@ async function main() {
     delete process.env.NODE_PROFILE;
 
     // One effective set per reader (W1, config/features-for.ts): /api/community/me and /api/home say the reader's own
-    // features, which today are the node's, exactly, on both profiles.
+    // features: the node's, exactly, on both profiles, plus `knownFloor` (a number) for a member who reads as one where
+    // Beans and the confirmation dial are on (community shape S5). No other key may differ.
+    const beyondNode = (f: Record<string, unknown> | undefined) => {
+        const { knownFloor, ...rest } = f ?? {};
+        return { rest, floorOk: knownFloor === undefined || typeof knownFloor === 'number' };
+    };
     for (const want of ['local', 'global'] as const) {
         if (want === 'global') process.env.NODE_PROFILE = 'global'; else delete process.env.NODE_PROFILE;
         const info = (await getInfo(alice)).body.features;
         const me = await getSigned('/api/community/me', alice);
         const home = await getSigned('/api/home', alice);
-        assert(me.status === 200 && JSON.stringify(me.body?.features) === JSON.stringify(info),
-            `${want}: /api/community/me's features are the node's, exactly (${me.status} ${JSON.stringify(me.body?.features)})`);
-        assert(home.status === 200 && JSON.stringify(home.body?.features) === JSON.stringify(info),
-            `${want}: /api/home's features are the node's, exactly (${home.status} ${JSON.stringify(home.body?.features)})`);
+        const meB = beyondNode(me.body?.features), homeB = beyondNode(home.body?.features);
+        assert(me.status === 200 && JSON.stringify(meB.rest) === JSON.stringify(info) && meB.floorOk,
+            `${want}: /api/community/me's features are the node's, exactly, beside a member's knownFloor (${me.status} ${JSON.stringify(me.body?.features)})`);
+        assert(home.status === 200 && JSON.stringify(homeB.rest) === JSON.stringify(info) && homeB.floorOk,
+            `${want}: /api/home's features are the node's, exactly, beside a member's knownFloor (${home.status} ${JSON.stringify(home.body?.features)})`);
         assert(want === 'global' ? info.showcase === true : !('showcase' in info),
             `${want}: showcase ${want === 'global' ? 'reported on' : 'absent, so a local node answers exactly as before'}`);
     }
@@ -243,7 +249,7 @@ async function main() {
 
     // Where Start a community leads (config/start-community.ts): beanpool.org's page unless an owner names their own.
     const start = await import('./config/start-community.js');
-    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'Start a community leads to beanpool.org/#run-a-node by default');
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/start', 'Start a community leads to beanpool.org/start by default');
     assert(start.setStartCommunityUrl('https://start.example.org/how').ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
         'a self-hoster names their own page, and /api/community/info says it');
     for (const bad of ['javascript:alert(1)', 'ftp://start.example.org', 'http://start.example.org/how', 'https://user:pw@start.example.org', 'not a url', 'https://start.example.org/a b', `https://start.example.org/${'a'.repeat(300)}`, 42, {}]) {
@@ -251,9 +257,9 @@ async function main() {
             `${JSON.stringify(bad).slice(0, 40)} is refused, and the page named stays`);
     }
     db.prepare("UPDATE node_config SET value = 'javascript:alert(1)' WHERE key = 'startCommunityUrl'").run();
-    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'a stored row that is not a web address is ignored for the default');
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/start', 'a stored row that is not a web address is ignored for the default');
     assert(start.setStartCommunityUrl(null).ok && !db.prepare("SELECT 1 FROM node_config WHERE key = 'startCommunityUrl'").get()
-        && (await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'null goes back to the default, and leaves no row');
+        && (await getInfo()).body.startCommunityUrl === 'https://beanpool.org/start', 'null goes back to the default, and leaves no row');
 
     // The global community the web app's Settings links (config/global-community.ts): BeanPool's own unless the
     // operator names another, none when switched off or named badly. Read at every request.

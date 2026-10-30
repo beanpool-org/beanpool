@@ -298,6 +298,17 @@ export async function rememberedKnocks(pubkey: string, now: number = Date.now())
 }
 
 /**
+ * The knocks Home draws: what the phone remembers, plus the requests whose Cancel worked during this Home visit. A Cancel
+ * marks the knock cancelled in the phone's memory, so every read after it leaves the knock out; its card, with the line that
+ * says what happened, and the pin the request held stay until Home loses focus (LG-L1-W). A request a newer one to the same
+ * community has replaced is not brought back.
+ */
+export function withVisitCancelled(remembered: readonly RememberedKnock[], cancelled: readonly RememberedKnock[]): RememberedKnock[] {
+    const kept = cancelled.filter(c => !remembered.some(k => k.url === c.url));
+    return kept.length ? [...remembered, ...kept].sort((a, b) => b.sentAt.localeCompare(a.sentAt)) : [...remembered];
+}
+
+/**
  * The communities this key cancelled a request to within {@link KNOCK_CANCEL_BLOCK_HOURS}: url → when. Older ones are
  * forgotten here, so the card offers "Ask to join" again.
  */

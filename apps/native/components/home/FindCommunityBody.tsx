@@ -34,7 +34,7 @@ const requestKey = (k: RememberedKnock) => `${k.url} ${k.sentAt}`;
  * With no place yet, one quiet link under them, "or type your town ›" (Marty, 14 Oct): Home's own trailing link (48dp, and
  * the "+ ADD POST" steps aside for it too), opening the find screen with its town box open.
  */
-export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colors, onKnocksChange }: {
+export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colors, onKnocksChange, onCancelled }: {
     home: GlobalHome;
     /** The knocks this phone sent for the account, newest first (utils/knock.ts `rememberedKnocks`). */
     knocks: readonly RememberedKnock[];
@@ -45,6 +45,11 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     point: Point | null;
     colors: AppColors;
     onKnocksChange?: (knocks: RememberedKnock[]) => void;
+    /**
+     * A Cancel worked on this request. Home keeps it in `knocks`, and so keeps the card, its line and the pin, until Home
+     * loses focus, however often it reads the phone's memory meanwhile (where the knock is no longer listed).
+     */
+    onCancelled?: (knock: RememberedKnock) => void;
 }) {
     const s = homeStyles(colors);
     const [statuses, setStatuses] = useState<Record<string, KnockStatusResult | null>>({});
@@ -103,9 +108,10 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                             : null;
                         setCancellingRequests(was => { const left = new Set(was); left.delete(rk); return left; });
                         if (res.ok) {
-                            // The card stays and says so (Home is not told: the list it pins by keeps this request for the
-                            // visit, so Find does not vanish under the line that says what happened).
+                            // The card stays and says so. Home is told, and keeps this request in its list for the visit, so
+                            // neither the card nor Find vanishes under the line that says what happened.
                             setCancelledRequests(was => new Set(was).add(rk));
+                            onCancelled?.(k);
                         } else {
                             if (reread) setStatuses(was => ({ ...was, [rk]: reread }));
                             setCancelErrors(was => ({ ...was, [rk]: res.message }));

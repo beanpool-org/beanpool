@@ -51,6 +51,13 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
+// Decide holds the reply sheet for a vote on removing the member (components/RemovalReplySheet.tsx), which keeps clear of the
+// keyboard with keyboard-controller: its React Native source doesn't load here, so a pass-through, as the other Commons
+// renders have.
+vi.mock('react-native-keyboard-controller', () => {
+    const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
+    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
+});
 const routes = vi.hoisted(() => ({ pushed: [] as unknown[] }));
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => routes.pushed.push(to), navigate: (to: unknown) => routes.pushed.push(to) },

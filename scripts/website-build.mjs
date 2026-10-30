@@ -60,6 +60,7 @@ export const TRANSLATED_PAGES = Object.freeze([
     'getting-started.html',
     'global.html',
     'android.html',
+    'start.html',
     'help.html',
     'post-extraction.html',
     'rules.html',
@@ -387,6 +388,7 @@ export const PAGES_WITH_MAIN_JS = Object.freeze([
     'index.html',
     'getting-started.html',
     'android.html',
+    'start.html',
     'help.html',
     'post-extraction.html',
     'rules.html',
@@ -754,13 +756,14 @@ export function checkWebsite() {
                 errors.push(`apps/website/${lang}/${page} has global.beanpool.org link without ?lang=${lang}`);
             }
 
-            // S0 amendment (d): global.html carries NO apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false
+            // S0 amendment (d), flipped by S14 (29 Oct 2026, App Store 1.2.83): global.html carries the apple-itunes-app meta tag
+            // and sets IOS_OPEN_DOOR_LIVE to true in its script (set the flag back to false only together with removing the tag)
             if (page === 'global.html') {
-                if (/<meta\s+name="apple-itunes-app"/i.test(actualHtml)) {
-                    errors.push(`apps/website/${lang}/${page} must not carry apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false`);
+                if (!/<meta\s+name="apple-itunes-app"\s+content="app-id=6761870086, app-argument=https:\/\/beanpool\.org\/global"/i.test(actualHtml)) {
+                    errors.push(`apps/website/${lang}/${page} missing apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is true`);
                 }
-                if (!/\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*false\b/.test(actualHtml)) {
-                    errors.push(`apps/website/${lang}/${page} missing IOS_OPEN_DOOR_LIVE = false in script`);
+                if (!/\bvar\s+IOS_OPEN_DOOR_LIVE\s*=\s*true\b/.test(actualHtml)) {
+                    errors.push(`apps/website/${lang}/${page} missing IOS_OPEN_DOOR_LIVE = true in script`);
                 }
             }
 

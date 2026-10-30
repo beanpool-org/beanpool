@@ -61,8 +61,8 @@
  * under 8 KB gzipped and 24 KB raw (DESIGN-home-wide-and-content-fable.md §2 "Budget").
  */
 import {
-    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
-    HOME_FRAME_LIMITS, dealsNeedingMe, openDeals as coreOpenDeals, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts,
+    PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readDecideSettings, readHomeLayout as readFrameLayout, readSearchSettings,
+    searchTermsFor, HOME_DECIDE_ROWS, HOME_FRAME_LIMITS, dealsNeedingMe, openDeals as coreOpenDeals, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts,
     type TourRecord,
 } from '@beanpool/core';
 import { ENTERPRISE_ON_BOARD_SQL, ONE_PASS_MAX_MEASURED, ON_HOLIDAY_SQL, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
@@ -91,7 +91,7 @@ import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { memberShop, shopOf } from '../engine/shops.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
-import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor, titleForMembers } from '../decisions-engine.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
@@ -139,9 +139,8 @@ const JOINED_NAMES = 4;
 /** Four Pulse items (W3, §2), chosen from the newest PULSE_POOL: a few spare for one too old or made too long by a feed. */
 const PULSE_ITEMS = 4;
 const PULSE_POOL = 8;
-/** The open deals and Decisions a card shows as rows (W3, §2). */
+/** The open deals a card shows as rows (W3, §2). The Decide card's rows are core's HOME_DECIDE_ROWS, by its `show` setting. */
 const DEAL_ITEMS = 3;
-const DECIDE_ITEMS = 3;
 /**
  * A locked group line's bytes (ciphertext, nonce and metadata together) are carried for the app to open while they are at
  * most this long; past it the line is `🔒 Message` alone (§2: three groups, at most 1.5 KB locked).
@@ -614,7 +613,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             const when = closesInWords(soonest, c.now);
             items.push({
                 kind: 'vote', count: votes.length, accent: Date.parse(soonest) - c.now <= VOTE_ACCENT_WINDOW_MS,
-                label: votes.length === 1 ? `Vote ${when}: ${clip(votes[0].title, TITLE_CHARS)}` : `${votes.length} votes to cast, the first ${when}`,
+                label: votes.length === 1 ? `Vote ${when}: ${clip(titleForMembers(votes[0]), TITLE_CHARS)}` : `${votes.length} votes to cast, the first ${when}`,
                 // Where the first one is: an enterprise's own screen for its keepers' vote, else Commons → Decide.
                 target: votes[0].scopeKind === 'enterprise' && votes[0].scopeId ? { to: 'enterprise', id: votes[0].scopeId }
                     : votes[0].scopeKind === 'group' && votes[0].scopeId ? { to: 'group', id: votes[0].scopeId } : { to: 'decide' },
@@ -949,31 +948,51 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
     return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items, more: pool.length > SEARCH_ITEMS };
 }
 
-function decideCard(c: Ctx): HomeCards['decide'] | undefined {
+/**
+ * The Decide card, by its `show` setting (the card frame's design §4, "My votes"; core readDecideSettings, tolerant, the
+ * default `counts` is the card as it always was):
+ * - `counts`: the three soonest-closing open Decisions, the first open poll and the count of polls;
+ * - `open`: the same, with up to five Decisions;
+ * - `mine`: only the open Decisions the signer voted in or proposed, soonest closing first, up to five, and nothing of polls
+ *   (they are the Market's). No body when none is the signer's, as when nothing is open.
+ * The rows are the same shape in all three (each says whether the signer has voted), so an app that doesn't know the
+ * setting draws them as it draws `counts`.
+ */
+function decideCard(c: Ctx, settings?: Record<string, unknown>): HomeCards['decide'] | undefined {
     built('decide');
+    const { show } = readDecideSettings(settings);
     // The community's Decisions only: this card opens Commons → Decide, which never lists a keepers' vote. The Needs-you
     // line carries those and lands on the enterprise (lands=enterprise).
     const open = decisionsOn()
         ? getOpenDecisions()
             .filter(d => !madeWithoutVote(d) && Date.parse(d.opensAt) <= c.now && Date.parse(d.closesAt) > c.now)
         : [];
-    const soonest = open.map(d => d.closesAt).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
+    // W3 (§2): the rows, soonest closing first, each saying whether the signer has voted (their own ballots only: a
+    // Decision is a secret ballot).
+    const ballots = open.length ? getOwnDecisionVotes(c.me!, open.map(d => d.id)) : new Map<string, unknown>();
+    const rowsOf = (list: typeof open): DecideItem[] => [...list]
+        .filter(d => !!bounded(d.id, ID_CHARS) && !!bounded(d.closesAt, ID_CHARS))
+        .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt))
+        .slice(0, HOME_DECIDE_ROWS[show])
+        .map((d): DecideItem => ({ id: d.id, title: clip(titleForMembers(d), TITLE_CHARS), closesAt: d.closesAt, voted: ballots.has(d.id) }));
+    const soonestOf = (list: typeof open) => list.map(d => d.closesAt).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
+
+    if (show === 'mine') {
+        // Voted in, or proposed by the signer (a Decision the node opened itself has the node as its author: nobody's proposal).
+        const mine = open.filter(d => ballots.has(d.id) || d.authorPubkey === c.me);
+        if (!mine.length) return undefined;
+        return { open: mine.length, soonestClosesAt: soonestOf(mine), polls: 0, pollsMore: false, items: rowsOf(mine), poll: null };
+    }
+
     const polls = getPosts({ type: 'poll', viewerPubkey: c.me!, limit: POLL_POOL + 1, neighbourhood: getProfileSwitches().openMembership || undefined })
         .filter(p => p.status === 'active' && !!p.pollClosesAt && Date.parse(p.pollClosesAt) > c.now);
     if (!open.length && !polls.length) return undefined;
-    // W3 (§2): the rows, soonest closing first, each saying whether the signer has voted (their own ballots only: a
-    // Decision is a secret ballot), and the first open poll, the soonest closing, its question as asked.
-    const mine = open.length ? getOwnDecisionVotes(c.me!, open.map(d => d.id)) : new Map<string, unknown>();
-    const items = [...open]
-        .filter(d => !!bounded(d.id, ID_CHARS) && !!bounded(d.closesAt, ID_CHARS))
-        .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt))
-        .slice(0, DECIDE_ITEMS)
-        .map((d): DecideItem => ({ id: d.id, title: clip(d.title, TITLE_CHARS), closesAt: d.closesAt, voted: mine.has(d.id) }));
+    // The first open poll, the soonest closing, its question as asked.
     const firstPoll = polls.filter(p => !!bounded(p.id, ID_CHARS) && !!bounded(p.pollClosesAt, ID_CHARS))
         .sort((a, b) => Date.parse(a.pollClosesAt!) - Date.parse(b.pollClosesAt!))[0];
     return {
-        open: open.length, soonestClosesAt: soonest, polls: Math.min(polls.length, POLL_POOL), pollsMore: polls.length > POLL_POOL,
-        items, poll: firstPoll ? { id: firstPoll.id, title: clip(firstPoll.title, TITLE_CHARS), closesAt: firstPoll.pollClosesAt! } : null,
+        open: open.length, soonestClosesAt: soonestOf(open), polls: Math.min(polls.length, POLL_POOL), pollsMore: polls.length > POLL_POOL,
+        items: rowsOf(open), poll: firstPoll ? { id: firstPoll.id, title: clip(firstPoll.title, TITLE_CHARS), closesAt: firstPoll.pollClosesAt! } : null,
     };
 }
 

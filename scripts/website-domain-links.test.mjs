@@ -96,8 +96,10 @@ test('every domain name in visible text across English pages is a hyperlink', ()
     }
 });
 
-test('global.html carries NO apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false (S14 flips both)', () => {
+test('global.html carries the apple-itunes-app meta tag now IOS_OPEN_DOOR_LIVE is true (S14 flipped both)', () => {
     const html = fs.readFileSync(path.join(SITE, 'global.html'), 'utf8');
     const metaMatch = html.match(/<meta\s+name="apple-itunes-app"\s+content="([^"]*)"/i);
-    assert.equal(metaMatch, null, 'global.html must not carry apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is false');
+    assert.ok(metaMatch, 'global.html carries the apple-itunes-app meta tag while IOS_OPEN_DOOR_LIVE is true');
+    assert.match(metaMatch[1], /\bapp-id=6761870086\b/);
+    assert.match(metaMatch[1], /\bapp-argument=https:\/\/beanpool\.org\/global\b/);
 });

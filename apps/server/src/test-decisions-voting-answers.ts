@@ -459,8 +459,9 @@ async function run() {
     assert(sameRole(trollRole, roleRow(troll)), `unresolved gives back exactly the admin role Troll held (was ${JSON.stringify(trollRole)}, now ${JSON.stringify(roleRow(troll))})`);
     const trollRole2 = roleRow(troll);
 
-    // Voted down → it lifts.
-    const downVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'Second incident, same person' } })).body.decision;
+    // Voted down → it lifts. Each new pause of Troll is another admin's: whoever brought a vote on removing him that ended
+    // without removing him waits 90 days to bring another (removal by vote, Amendment A point 5; test-removal-fairness).
+    const downVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { actor: owner, body: { reason: 'Second incident, same person' } })).body.decision;
     for (const v of voters.slice(0, 3)) castDecisionVote(downVote.id, v, false);
     castDecisionVote(downVote.id, voters[3], true);
     closeForTick(downVote.id);
@@ -470,7 +471,7 @@ async function run() {
 
     // Passed on an admin → no vote removes an owner or admin (§3.8): not carried out, and the pause still ends with its vote.
     const trollRole3 = roleRow(troll);
-    const keptVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { body: { reason: 'Third incident, same person' } })).body.decision;
+    const keptVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { actor: plainAdmin, body: { reason: 'Third incident, same person' } })).body.decision;
     for (const v of voters.slice(0, 4)) castDecisionVote(keptVote.id, v, true);
     closeForTick(keptVote.id);
     tickDecisions();

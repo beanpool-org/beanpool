@@ -40,10 +40,32 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - No vote removes an owner or admin: on one of them, the suspension ends when the vote closes, whatever it decides, and their role comes back.
 - A "Keep the suspension?" vote opened before this version runs to its end as it did.
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
-- The suspended person gets no notification. Tell them yourself.
+- The vote names who suspended them: members read your name on it, never your key. Suspended with the server's password, it says an owner did.
+- The suspended person is told at once: an alert on their phone, and a notice the web app shows when they open it. They can reply to the case on the vote itself, and everyone who reads the vote sees the reply beside it. If they delete their account, the reply goes with it, and an admin can take down a reply that harms someone (see Taking down a reply). Everyone who can vote on it gets an alert too, which never says who it is about.
+- **The cool-down:** if a vote on removing someone you suspended ends without removing them (it fails, too few vote, or it is halted or lifted before it closes), you can't suspend them again for 90 days, from their page or from a report. Settings says until when. Another admin can. A removal the community passed that an admin then halted doesn't count.
 - In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else.
 
-On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account.
+On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account. The suspended person gets no notification there: tell them yourself.
+
+## Hiding a false case
+
+When the case on a vote on removing someone is shown to be false, **Hide case** on that vote (open, in its grace period, or under **Closed votes on removing a member**) hides it. Write a reason of at least 10 characters: members read it in the case's place. Who brought the case and the member's reply stay; Settings keeps the case and who hid it. A case is hidden once and stays hidden.
+
+Any owner or admin can hide a case, except the one the vote is about. No vote removes an owner or admin, so their role comes back when the vote closes, but they still can't hide its case, just as they couldn't vote on it. Another owner or admin can. The server's password is shared, so the node can't tell who signs in with it: an owner a vote was about who uses the password to hide its case is not stopped.
+
+Hiding doesn't stop the vote. To stop it, halt it (below), which lifts the suspension.
+
+The member the vote is about can report the case as a false accusation from the vote. It arrives in Reports like any other, about whoever brought the case. If they already had a report waiting about that person, the case is added to it.
+
+## Taking down a reply
+
+Everyone who reads a vote on removing someone reads the member's reply beside the case. When a reply harms someone else, for example it gives their address or phone number or threatens them, **Take down reply** on that vote (open, in its grace period, or under **Closed votes on removing a member**) takes it down. Settings shows you the reply first. Write a reason of at least 10 characters: members read it in the reply's place.
+
+- The reply is deleted, not hidden: nobody can read it again, Settings included, and your standby drops it at its next copy. A snapshot or backup made before still holds it until it is replaced.
+- The node keeps when, which admin, and why. Members read the reason, never who.
+- The member is told: an alert on their phone, and a notice the web app shows. Neither says why or who; the vote does. They can't write another reply on that vote.
+- The vote itself carries on, and the case stays as it is. A reply is taken down once.
+- Owners and admins can take a reply down. Moderators can't.
 
 ## Removing someone
 

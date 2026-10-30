@@ -67,10 +67,14 @@ import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_L
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useOwnProfile } from '../../utils/use-own-profile';
 import { nearbyListingsOn, areaRowLine } from '../../utils/member-area';
-import { beansOn, shareOutsideOn } from '../../utils/node-profile';
+import { beansOn, effectiveFeatures, shareOutsideOn } from '../../utils/node-profile';
+import { useReaderFeatures } from '../../utils/use-reader-features';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
-import { askNodeRole } from '../../utils/node-admin';
+import { CommunityShapeSheet } from '../../components/CommunityShapeSheet';
+import { howThisCommunityWorksLabelWords, howThisCommunityWorksSubtitleWords } from '../../components/settings/settings-lines';
+import { askNodeRole, canManageNode } from '../../utils/node-admin';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
 import { ChatMemoryCard } from '../../components/ChatMemoryCard';
 import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
@@ -271,8 +275,9 @@ export default function SettingsScreen() {
             backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default,
             borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16,
         },
-        primaryBtn: { backgroundColor: colors.text.heading, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
-        primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
+        // The brand pair, never a text token as a fill: text.heading and text.inverse are both white in dark (Damo, 29 Oct).
+        primaryBtn: { backgroundColor: colors.brand.fill, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+        primaryBtnText: { color: colors.text.onBrand, fontSize: 16, fontWeight: 'bold' },
         backBtn: { marginTop: 16, alignItems: 'center', padding: 10 },
         backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
         dangerBtn: { backgroundColor: colors.feedback.danger.bg, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 16, borderWidth: 1, borderColor: colors.feedback.danger.border },
@@ -337,8 +342,15 @@ export default function SettingsScreen() {
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
     const [copiedWords, setCopiedWords] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
+    // Whether this member holds a role, as NodeAdminEntry's ask of the node answered it. 'unknown' until it answers (or the
+    // ask fails): a role holder's "How this community works" row sits in the Community admin group, so the plain COMMUNITY
+    // section is drawn only on 'none', never while the question is still open.
+    const [roleAsk, setRoleAsk] = useState<'unknown' | 'role' | 'none'>('unknown');
+    const [shapeSheetOpen, setShapeSheetOpen] = useState(false);
     // The pricing guide is estimates in Beans: not offered on a community with Beans off (the worldwide one).
     const nodeProfile = useNodeProfile();
+    const readerFeatures = useReaderFeatures();
+    const activeFeatures = effectiveFeatures(nodeProfile?.features, readerFeatures.reader ?? readerFeatures.effective);
     const showsBeans = beansOn(nodeProfile?.features);
     // Your area (design DESIGN-global-sync-by-area §3.5): only on a community that gives each member the listings near
     // their area. The line is the node's value, read each time Settings comes into view (app/your-area.tsx changes it).
@@ -648,6 +660,14 @@ export default function SettingsScreen() {
     // (unique per node, chosen at join), so the device-global identity.callsign is only
     // ever right by coincidence — display this instead and fall back while it loads.
     const [nodeCallsign, setNodeCallsign] = useState<string | null>(null);
+    // The card's picture is this community's row as last read (utils/use-own-profile.ts), as the header's is: a photo that
+    // a sync or a change made elsewhere brings follows at once, where the loader below waits for the next focus. Until that
+    // row is read, and where it holds no photo, what the loader found (DESIGN-per-community-profile-fable.md S2 takes the
+    // phone-wide copy out of that). The name is the loader's first: it reads the same row, then the community's own answer
+    // and a rename still waiting to be sent, which the row alone does not know; the row's name stands in until it has.
+    const own = useOwnProfile();
+    const cardCallsign = nodeCallsign || (own.read && own.callsign) || identity?.callsign || '';
+    const cardAvatar = (own.read && own.avatarUrl) || avatar;
     const [communityLabel, setCommunityLabel] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [bio, setBio] = useState('');
@@ -692,10 +712,13 @@ export default function SettingsScreen() {
             // switching to a node that has no profile for this key.
             showCommunityName(profile?.callsign || null);
             const edited = editedRef.current;
+            // The picture likewise: assigned on every load, the row's photo, else the phone-wide copy, else none. The card falls
+            // through to this where the hook reads no photo (no row, or a row without one), so leaving it alone where this
+            // community holds no row yet would keep the community before's photo beside the header's preset.
+            const cleaned = (profile?.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
+            if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
             {
                 if (profile) {
-                    const cleaned = (profile.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
-                    if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
                     if (!edited.bio) {
                         if (profile.bio) setBio(profile.bio);
                         else if (canonical?.bio) setBio(canonical.bio);
@@ -709,7 +732,6 @@ export default function SettingsScreen() {
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
                     else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 } else if (canonical) {
-                    if (canonical.avatar && !edited.avatar) setAvatar(canonical.avatar);
                     if (canonical.bio && !edited.bio) setBio(canonical.bio);
                     if (!edited.contact) {
                         if (canonical.contactValue) setContact(canonical.contactValue);
@@ -1823,16 +1845,17 @@ export default function SettingsScreen() {
                         96px, same ring, same tap target and labels. */}
                     <Pressable onPress={() => setMode('profile')} style={styles.avatarWrap} accessibilityRole="button" accessibilityLabel={t('Edit profile')}>
                         <MemberAvatar
-                            avatarUrl={avatar}
+                            avatarUrl={cardAvatar}
+                            updatedAt={cardAvatar === own.avatarUrl ? own.updatedAt : undefined}
                             pubkey={identity.publicKey}
-                            callsign={nodeCallsign || identity.callsign}
+                            callsign={cardCallsign}
                             size={96}
                         />
                         <View style={styles.avatarRing} />
                     </Pressable>
 
                     {/* Callsign */}
-                    <Text style={styles.callsignText}>{nodeCallsign || identity.callsign}</Text>
+                    <Text style={styles.callsignText}>{cardCallsign}</Text>
 
                     {/* Community name: names are per community */}
                     {communityLabel ? (
@@ -1879,9 +1902,30 @@ export default function SettingsScreen() {
                 {/* A sign-in copy a community still keeps, moved to BeanPool's key vault with one sign-in (utils/vault-move.ts). */}
                 <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                 {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
-                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} />
+                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} onRoleChange={(r) => setRoleAsk(canManageNode(r) ? 'role' : 'none')} activeFeatures={activeFeatures} />
                 {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
                 <OwnerWordsCard styles={styles} />
+                {roleAsk === 'none' && (
+                    <>
+                        <Text style={styles.sectionHeader}>{t("COMMUNITY")}</Text>
+                        <View style={styles.menuGroup}>
+                            <Pressable
+                                style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
+                                onPress={() => setShapeSheetOpen(true)}
+                                accessibilityRole="button"
+                                accessibilityLabel={howThisCommunityWorksLabelWords()}
+                                testID="settings-how-this-community-works"
+                            >
+                                <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🧭</Text></View>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.menuText}>{howThisCommunityWorksLabelWords()}</Text>
+                                    <Text style={styles.menuSub}>{howThisCommunityWorksSubtitleWords()}</Text>
+                                </View>
+                                <Text style={styles.menuChevron}>›</Text>
+                            </Pressable>
+                        </View>
+                    </>
+                )}
                 <Text style={styles.sectionHeader}>{t("ACCOUNT & IDENTITY")}</Text>
                 <View style={styles.menuGroup}>
                     <Pressable style={styles.menuBtn} onPress={() => router.push('/profile-setup')} accessibilityRole="button">
@@ -2541,7 +2585,7 @@ export default function SettingsScreen() {
                         accessibilityLabel={loading ? t("Saving profile...") : t("Save Profile")}
                         accessibilityState={{ disabled: loading, busy: loading }}
                     >
-                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t("Save Profile")}</Text>}
+                        {loading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Save Profile")}</Text>}
                     </Pressable>
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
                         <Text style={styles.backBtnText}>{t("Cancel")}</Text>
@@ -2787,7 +2831,7 @@ export default function SettingsScreen() {
                                         accessibilityState={{ disabled: guestVisit.visiting, busy: guestVisit.visiting }}
                                         testID="settings-global-visit"
                                     >
-                                        {guestVisit.visiting ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('🌍 Look around the global community')}</Text>}
+                                        {guestVisit.visiting ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t('🌍 Look around the global community')}</Text>}
                                     </Pressable>
                                 </>
                             )}
@@ -2823,7 +2867,7 @@ export default function SettingsScreen() {
                     />
                     
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
-                        {advancedLoading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
+                        {advancedLoading ? <ActivityIndicator color={colors.text.onBrand} /> : <Text style={styles.primaryBtnText}>{t("Add & Connect")}</Text>}
                     </Pressable>
 
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
@@ -3244,7 +3288,7 @@ export default function SettingsScreen() {
                                 style={[
                                     styles.dangerBtn, 
                                     { 
-                                        backgroundColor: colors.text.heading,
+                                        backgroundColor: colors.brand.fill,
                                         borderColor: colors.border.default,
                                         minHeight: 48,
                                         justifyContent: 'center',
@@ -3259,7 +3303,7 @@ export default function SettingsScreen() {
                                 accessibilityHint={t('Signs you out of this device')}
                                 accessibilityState={{ disabled: advancedLoading || wipeConfirm !== 'WIPE' }}
                             >
-                                <Text style={[styles.dangerBtnText, { color: theme === 'dark' ? '#000000' : '#ffffff' }]}>
+                                <Text style={[styles.dangerBtnText, { color: colors.text.onBrand }]}>
                                     {advancedLoading ? t('Signing Out...') : <><Text>🚪</Text> {t('Confirm Sign Out')}</>}
                                 </Text>
                             </Pressable>
@@ -3506,6 +3550,12 @@ export default function SettingsScreen() {
             <PricingGuideModal
                 isOpen={showPricingGuide}
                 onClose={() => setShowPricingGuide(false)}
+            />
+
+            <CommunityShapeSheet
+                features={activeFeatures}
+                visible={shapeSheetOpen}
+                onClose={() => setShapeSheetOpen(false)}
             />
         </KeyboardAwareScrollView>
     );

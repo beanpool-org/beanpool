@@ -330,7 +330,8 @@ cd "$W" || exit 1
 # Its own bare origin and clone. The clone's test-all.sh is a stub that sources the real test-all-lib.sh: a committed
 # FAIL-<suite> file fails it the way server_suites fails (an .rc and a "Server suites failed:" line in a kept log dir),
 # an UNFINISHED-<check> file leaves that check's log with no .rc (killed part-way), and its run-server-suites.mjs fails
-# SERVER_SUITES_ONLY's suites that have a FAIL-<suite> file. gh is the stub above; a PR's branch on origin is its head. TEST_ALL_RECHECK names a stub recheck: real red (exit 1) or load (exit 0).
+# SERVER_SUITES_ONLY's suites that have a FAIL-<suite> file. gh is the stub above; a PR's branch on origin is its head.
+# TEST_ALL_RECHECK names a stub recheck: real red (exit 1) or load (exit 0).
 git init -q --bare "$T/torigin.git"
 git clone -q "$T/torigin.git" "$T/train" 2>/dev/null
 cd "$T/train" || exit 1

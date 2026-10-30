@@ -245,7 +245,8 @@ echo "Train: ${PRS[*]/#/#} (logs: $LOGS)"
 BASE=""; REPO=""
 for n in "${PRS[@]}"; do
   i=${#NUM[@]}; NUM[$i]=$n; FATE[$i]=""
-  if ! info=$(pr_info "$n" 2>&1); then fate "$i" "DROPPED: could not look it up ($(echo "$info" | head -1))"; continue; fi
+  # stderr apart: a notice from gh on it must not become the line read below.
+  if ! info=$(pr_info "$n" 2>"$LOGS/gh-pr-$n.err"); then fate "$i" "DROPPED: could not look it up ($(head -1 "$LOGS/gh-pr-$n.err"))"; continue; fi
   read -r _num head base url branch cross state labels <<< "$info"
   HEAD[$i]=$head; BRANCH[$i]=$branch; CROSS[$i]=$cross
   [ -n "$BASE" ] || { BASE=$base; REPO=$(echo "$url" | sed -E 's|^https?://[^/]+/([^/]+/[^/]+)/pull/.*$|\1|'); }

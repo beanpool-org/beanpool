@@ -46,6 +46,7 @@ import { resetAgentLimits, admitAgentCall, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_P
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
 import { welcomeInstructions, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
 import { AGENT_TOOLS } from './agent/tools.js';
+import { AGENT_CREATE_BODY_MAX } from './agent/owner-posts.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -465,23 +466,28 @@ async function main(): Promise<void> {
         const snapsBeforeSpellings = listSnapshots().length;
         const agentRowsBefore = (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE category = 'AGENT' AND message LIKE 'Assistant read%'").get() as { n: number }).n;
         const reads100 = Array.from({ length: 100 }, (_, i) => rpc('tools/call', i + 1, { name: 'connection_info', arguments: {} }));
-        const oversize = rpc('tools/list', 1, { pad: 'x'.repeat(1_500_000) });
+        // AGENT is an owner's: its posts carry photos, so it may send four at the per-photo cap and 64 KiB more (agent/owner-posts.ts
+        // AGENT_CREATE_BODY_MAX, MCP-OWNER-POSTS). A body past that is refused unread, as a 1.5 MB one was before the posts.
+        const oversize = rpc('tools/list', 1, { pad: 'x'.repeat(AGENT_CREATE_BODY_MAX + 100_000) });
         for (const ct of ['APPLICATION/JSON', 'application/JSON', 'Application/Json; charset=utf-8', 'text/plain']) {
             const b = await call('POST', '/mcp', { body: reads100, headers: { ...MCP_HEADERS, ...bearer(AGENT), 'Content-Type': ct } });
             assert((b.status === 400 || b.status === 415) && b.body?.error && !Array.isArray(b.body),
                 `a batch of 100 sent as "${ct}" is refused, not answered (${show(b)})`);
             const big = await call('POST', '/mcp', { body: oversize, headers: { ...MCP_HEADERS, ...bearer(AGENT), 'Content-Type': ct } });
-            assert(big.status === 413 || big.status === 415, `a 1.5 MB body sent as "${ct}" is refused (${show(big)})`);
+            assert(big.status === 413 || big.status === 415, `a body past an owner's assistant's cap sent as "${ct}" is refused (${show(big)})`);
         }
         const agentRowsAfter = (db.prepare("SELECT COUNT(*) AS n FROM system_logs WHERE category = 'AGENT' AND message LIKE 'Assistant read%'").get() as { n: number }).n;
         assert(agentRowsAfter === agentRowsBefore && listSnapshots().length === snapsBeforeSpellings,
             `none of those ran a tool (AGENT reads ${agentRowsBefore} → ${agentRowsAfter})`);
         const bigPlain = await call('POST', '/mcp', { body: oversize, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
-        assert(bigPlain.status === 413, `a 1.5 MB body sent as application/json is 413 (${show(bigPlain)})`);
+        assert(bigPlain.status === 413, `a body past an owner's assistant's cap (${AGENT_CREATE_BODY_MAX} bytes) sent as application/json is 413 (${show(bigPlain)})`);
         const over64k = rpc('tools/list', 1, { pad: 'x'.repeat(200_000) });
         for (const p of ['/mcp', '/mcp/']) {
-            const r = await call('POST', p, { body: over64k, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
-            assert(r.status === 413, `a 200 KB body to ${p} is 413: the 64 KiB cap holds with a trailing slash too (${show(r)})`);
+            // Anyone but an owner's assistant: 64 KiB (an admin's assistant's, test-mcp-owner-posts.ts).
+            const r = await call('POST', p, { body: over64k, headers: MCP_HEADERS });
+            assert(r.status === 413, `a 200 KB body to ${p} from anyone but an owner's assistant is 413: the 64 KiB cap holds with a trailing slash too (${show(r)})`);
+            const o = await call('POST', p, { body: oversize, headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
+            assert(o.status === 413, `and a body past an owner's assistant's cap to ${p} is 413 (${show(o)})`);
         }
 
         // The admin IP allowlist covers /mcp (isAdminSurfacePath), with or without the trailing slash.

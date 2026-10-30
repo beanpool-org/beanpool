@@ -32,7 +32,7 @@ import {
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, pushServiceRefusals,
     hideBurst, undoBurst,
-    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE,
+    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseCoolDown,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
@@ -41,7 +41,10 @@ import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
-import { decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, type OwnerOnlyAdminAction } from '../decisions-engine.js';
+import {
+    decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply, removalCoolDownRefusal, REMOVAL_COOL_DOWN_CODE,
+    type OwnerOnlyAdminAction,
+} from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
@@ -1795,11 +1798,14 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     // The reason before the proof: a code is spent when it is checked, so a short reason must not cost it (#2018 NB1).
     const reasonProblem = suspendReasonProblem(reason);
     if (reasonProblem) { ctx.status = 400; ctx.body = { error: reasonProblem }; return; }
+    // The cool-down before the proof too (removal by vote, Amendment A point 5): a pause it refuses must not spend a code.
+    const coolDown = removalCoolDownRefusal(ctx.params.pubkey, actor);
+    if (coolDown) { ctx.status = 403; ctx.body = { error: coolDown, code: REMOVAL_COOL_DOWN_CODE }; return; }
     if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
     const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
     if (!result.success) {
         ctx.status = result.status || 400;
-        ctx.body = { error: result.error };
+        ctx.body = result.code ? { error: result.error, code: result.code } : { error: result.error };
         return;
     }
     logger.info('ADMIN', `Emergency-suspended ${ctx.params.pubkey.substring(0, 12)}; ratifying Decision ${result.decision!.id}`);
@@ -2088,6 +2094,13 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: reasonProblem };
             return;
         }
+        // The cool-down before the proof too (removal by vote, Amendment A point 5); actionReport refuses it again.
+        const coolDown = suspendUser ? reportPauseCoolDown(ctx.params.id, actor) : null;
+        if (coolDown) {
+            ctx.status = 403;
+            ctx.body = { success: false, error: coolDown, code: REMOVAL_COOL_DOWN_CODE };
+            return;
+        }
         if (suspendUser && !(await ownerRemovalProof(ctx, 'report-suspend', ctx.params.id))) return;
         const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
@@ -2142,7 +2155,9 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     } catch (e: any) {
         if (answerPotPaused(ctx, e)) return;
         ctx.status = e?.status || 500;
-        ctx.body = { success: false, error: e?.message || 'Failed to action report' };
+        ctx.body = e?.code === REMOVAL_COOL_DOWN_CODE
+            ? { success: false, error: e.message, code: e.code }
+            : { success: false, error: e?.message || 'Failed to action report' };
     }
 });
 
@@ -2254,6 +2269,9 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
     }
 });
 
+/** The most closed votes on removing a member the admin Decisions list carries, newest first (pastRemovals). */
+const PAST_REMOVALS_LISTED = 50;
+
 // Admin: the Decisions an admin can still act on — open votes and removals in their grace window — with
 // totals only. Like every other Decision response, never who voted how. A vote on removing a member carries their
 // balance and debt only to an admin who may vote in it (decisionForAdmin); every other admin gets balanceHidden.
@@ -2265,12 +2283,49 @@ router.post('/api/local/admin/decisions', async (ctx) => {
     // The admin's own key, from their key session only. An automation token carries its maker's key as the actor, but a
     // token is a script, not a voter (#1613's deciding review); a password session has no key at all.
     const reader = (ctx.state as any)?.isKeySession ? (ctx.state as any).actor as string | undefined : undefined;
-    ctx.body = {
-        decisions: actionable.map(d => {
-            const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
-            return { ...decisionForAdmin(d, reader), subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
-        }),
+    const shown = (d: (typeof actionable)[number]) => {
+        const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
+        return { ...decisionForAdmin(d, reader), subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
     };
+    // Votes on removing a member that have closed, newest first: an admin can still hide the case of one (removal by vote,
+    // Amendment A point 4), which is most often shown false after its vote.
+    const pastRemovals = getAllDecisions()
+        .filter(d => d.scopeKind === 'community' && d.effect === 'remove_member' && d.status !== 'open' && d.status !== 'execution_pending_grace')
+        .slice(0, PAST_REMOVALS_LISTED);
+    ctx.body = { decisions: actionable.map(shown), pastRemovals: pastRemovals.map(shown) };
+});
+
+// Admin: hide the case of a vote on removing a member, as one shown to be false, with a public reason members read in
+// its place (removal by vote, Amendment A point 4; decisions-engine adminHideCase). Kept on the Decision as a halt is.
+router.post('/api/local/admin/decisions/:id/hide-case', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const signedActor = resolveAdminActor(ctx);
+    if (!signedActor) return;
+    const { reason } = (ctx as any).requestBody || {};
+    const result = adminHideCase(ctx.params.id, signedActor, reason);
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = { error: result.error };
+        return;
+    }
+    ctx.body = { success: true };
+});
+
+// Admin: take down the member's reply to the case of a vote on removing them, with a public reason members read in its
+// place (decisions-engine adminHideReply): the words are deleted, the member is told and can't write another on that vote.
+// Kept on the Decision as a hidden case is.
+router.post('/api/local/admin/decisions/:id/hide-reply', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const signedActor = resolveAdminActor(ctx);
+    if (!signedActor) return;
+    const { reason } = (ctx as any).requestBody || {};
+    const result = adminHideReply(ctx.params.id, signedActor, reason);
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = { error: result.error };
+        return;
+    }
+    ctx.body = { success: true };
 });
 
 // Admin: halt a community decision (§3.7). The written reason is public on the Decision.

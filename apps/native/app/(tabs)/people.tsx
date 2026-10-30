@@ -38,6 +38,7 @@ import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole }
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { joinedNudgeWords } from '../../utils/joined-nudge-words';
+import { copiesAtFor } from '../../utils/copies-rule';
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
 import { communitySwitched } from '../../utils/community-switch';
@@ -82,7 +83,9 @@ export default function PeopleScreen() {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         safeArea: { flex: 1, backgroundColor: colors.surface.page },
         navRow: { flexDirection: 'row', padding: 12, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-        pill: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12, marginHorizontal: 2 },
+        // Each pill starts from its own words and shares what is left (no flex: 1, which is equal thirds): English's
+        // "🏘️ Community" is ~96 dp at 11 sp × 1.3, more than the ~94 dp a third of 320 dp gives it.
+        pill: { flexGrow: 1, flexShrink: 1, paddingVertical: 10, paddingHorizontal: 2, alignItems: 'center', borderRadius: 12, marginHorizontal: 2 },
         pillActive: { backgroundColor: colors.surface.subtle, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1, borderWidth: 1, borderColor: colors.border.default },
         pillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         pillTextActive: { color: colors.text.body, fontWeight: '800' },
@@ -658,7 +661,7 @@ export default function PeopleScreen() {
             // vault, if they choose, to protect their account here too: there sign-in recovery is kept by each
             // community (design §3.6). With a vault, a linked sign-in already covers this community.
             // In the member's language (utils/joined-nudge-words: join-another-community.ts handles the key, off the words layer).
-            const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);
+            const nudge = joinedNudgeWords(joinedNudge(joined.name, await copiesAtFor(joined.url)), joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
                 // Only where each community keeps its own sign-in copy (a build without a key vault).
@@ -844,8 +847,9 @@ export default function PeopleScreen() {
                             style={[styles.pill, isActive && styles.pillActive]}
                             onPress={() => { setView(v); router.setParams({ view: v }); }}
                         >
-                            {/* A third of the row each: a longer name in another language takes a second line and shrinks, never cut. */}
-                            <Text numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.pillText, isActive && styles.pillTextActive, { textAlign: 'center' }]}>
+                            {/* One line each: a name too long for the row in another language shrinks, all three together. It never
+                                wraps (the emoji would sit alone on the first line) and never breaks a word. */}
+                            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} style={[styles.pillText, isActive && styles.pillTextActive, { textAlign: 'center' }]}>
                                 {v === 'invites'
                                     ? (isGuest ? t('🎟️ Register') : knockCount > 0 ? tn(knockCount, '🎟️ Invites ({n})', '🎟️ Invites ({n})') : t('🎟️ Invites'))
                                     : t(PANE_WORDS[v])}

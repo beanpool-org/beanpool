@@ -308,8 +308,9 @@ describe('a door a link opened holds its signed work until the member taps (app/
     it('join-open-door: from=link holds the work; the door\'s opening starts it only when not held; either way in releases it', () => {
         const src = read('join-open-door.tsx');
         expect(src).toContain('useState(fromParam === FROM_LINK)');
-        // The door's own address: the global community's with no `node` (utils/open-door.ts doorNodeFromParam).
-        expect(src).toContain("if (!heldForTap) startWork(doorUrl, account.identity, 'words');");
+        // The door's own address: the global community's with no `node` (utils/open-door.ts doorNodeFromParam). The key is
+        // the one the door read as it opened (since S2: the phone's own, or one the door made in memory), held as `key`.
+        expect(src).toContain("if (!heldForTap) startWork(doorUrl, key.identity, 'words');");
         expect(src).toMatch(/function chooseWords\(\) \{[\s\S]{0,300}setHeldForTap\(false\);/);
         expect(src).toMatch(/async function handleSignIn\(provider: SsoProvider\) \{\s*setHeldForTap\(false\);/);
     });

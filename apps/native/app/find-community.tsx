@@ -26,6 +26,7 @@ import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
+import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords, findTownSearchWords, nearWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
@@ -62,7 +63,7 @@ export default function FindCommunityScreen() {
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
         // In capitals in the words, never a textTransform (the phone's rules, not the language's).
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { padding: 16 },
         lead: { fontSize: 15, color: colors.text.body, lineHeight: 21, marginBottom: 12 },
         sectionLabel: { fontSize: 12, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginTop: 20, marginBottom: 8, marginLeft: 4 },
@@ -306,10 +307,11 @@ export default function FindCommunityScreen() {
             const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const joined = await joinAnotherCommunity({ targetUrl: url, code: invite, identity, returnUrl, knownName: name });
             await forgetKnock(identity.publicKey, url);
-            const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);
+            // Where a copy made there goes, by the new community's rule (vault rethink VR2, utils/copies-rule.ts).
+            const nudge = joinedNudgeWords(joinedNudge(joined.name, await copiesAtFor(joined.url)), joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
-                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                // Only where each community keeps its own sign-in copy (a build without a key vault, or its rule).
                 ...(nudge.protect
                     ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
                     : []),

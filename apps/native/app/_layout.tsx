@@ -22,7 +22,7 @@ import { markNoticeShown } from '../utils/sync-notices';
 import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
-import { claimInFlight, forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
+import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
@@ -209,14 +209,15 @@ function RootLayoutNav() {
     // identity is a stranger to every node BY DESIGN — route back into the
     // wizard, never to node-mismatch (see utils/onboarding-state.ts).
     // 'claim' = that wizard is a claim whose answer is not in (onboarding-state.ts claimInFlight): the claim screen
-    // stays too, so the node can say whether the claim landed.
-    const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | 'wizard' | 'claim' | null>(null);
+    // stays too, so the node can say whether the claim landed. 'door' = a join at another community's open door that has
+    // not finished (onboarding-state.ts doorJoinOut): the door screen stays too, for the same reason.
+    const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | 'wizard' | 'claim' | 'door' | null>(null);
     useEffect(() => {
         let mounted = true;
         const refresh = () => {
             getPendingOnboarding().then((p) => {
                 if (!mounted) return;
-                setPendingOnboardingFlag(!p ? false : claimInFlight(p) ? 'claim' : 'wizard');
+                setPendingOnboardingFlag(wizardHold(p));
             });
         };
         // A claim code an older build kept at rest for an account made elsewhere (#2412): that detour is gone.
@@ -481,14 +482,11 @@ function RootLayoutNav() {
                                             } else {
                                                 Alert.alert(t('Success'), t('Node switched and invite redeemed successfully!'));
                                             }
-                                            // Land the user's canonical picture on the newly-joined node so the
-                                            // marketplace never blocks them for a "missing" profile photo they
-                                            // already set on another community. `nodeHasNoPhoto` is the node's own
-                                            // answer, taken from the redeem response: for a member re-entering a
-                                            // node this device has never synced, the empty local row would
-                                            // otherwise read as "nothing there" and put the canonical copy over
-                                            // the newer photo the node actually holds.
-                                            pushProfileToServer({ nodeHasNoPhoto: !redeemRes?.nodeHasPhoto }).catch(() => {});
+                                            // Publish the profile to the newly-joined node up front. Its photo is this
+                                            // community's own only: one picked for it that is still waiting. A picture
+                                            // chosen in another community is never sent here (Profile S2), so the
+                                            // marketplace asks for a photo in a fresh community, as it should.
+                                            pushProfileToServer().catch(() => {});
                                             requestSync().catch(console.error);
                                             // Refresh membership for the new node before routing, so a stale
                                             // 'stranger' verdict can't bounce us to the wrong-node screen.
@@ -572,9 +570,8 @@ function RootLayoutNav() {
                                                 } else {
                                                     Alert.alert(t('Success'), t('Invite redeemed! Your connection is registered.'));
                                                 }
-                                                // Publish the canonical picture to this node up front, unless the
-                                                // redeem response said the node already holds one (see above).
-                                                pushProfileToServer({ nodeHasNoPhoto: !redeemRes?.nodeHasPhoto }).catch(() => {});
+                                                // Publish the profile to this node up front, as above: no photo chosen elsewhere.
+                                                pushProfileToServer().catch(() => {});
                                                 requestSync().catch(console.error);
                                                 await recheck();
                                                 router.replace('/(tabs)');
@@ -639,12 +636,14 @@ function RootLayoutNav() {
         // welcome flow and the guardian-recovery screen. Guardian recovery runs
         // on a fresh device that holds no local identity yet — the screen mints
         // the new identity itself at the "Submit Request" step — so it must be
-        // reachable without one. So is the claim screen, whose claim makes the
-        // account. Any other route → back to welcome (utils/auth-return.ts,
-        // `setupRedirect`). Unless the phone is looking around the global
-        // community as a visitor, chosen on the first screen (slice S12,
-        // utils/look-around.ts): then its screens stay, and one that needs a
-        // key opens the door, where the key is made at Join.
+        // reachable without one. So are the claim screen, whose claim makes the
+        // account, and another community's open door, whose join makes it. Any
+        // other route → back to welcome (utils/auth-return.ts, `setupRedirect`).
+        // Unless the phone is looking around the global community as a
+        // visitor, chosen on the first screen (slice S12, utils/look-around.ts):
+        // then its screens stay, and one that needs a key opens the door, where
+        // the key is made at Join. Another community's door and a community's
+        // card stay ahead of that, looking around or not.
         if (!identity) {
             const to = setupRedirect(segments, { hasIdentity: false, pendingOnboarding: false });
             if (to) {
@@ -670,7 +669,9 @@ function RootLayoutNav() {
         // "my account is gone". Don't route at all until the flag has loaded.
         if (pendingOnboarding === null) return;
         if (pendingOnboarding) {
-            const to = setupRedirect(segments, { hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim' });
+            const to = setupRedirect(segments, {
+                hasIdentity: true, pendingOnboarding: true, claimOut: pendingOnboarding === 'claim', doorOut: pendingOnboarding === 'door',
+            });
             if (to) router.replace(to);
             return;
         }

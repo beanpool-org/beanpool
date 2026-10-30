@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, shop and tool shed top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, shop and tool shed top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S13: Not answering lately); claude-opus-5-5 (machine draft, deals S4: a listing by who you are); claude-opus-5-5 (machine draft, deals S4 fix round: a finished deal named by its alert)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -748,5 +748,22 @@
   "Working Group": "Kelompok Kerja",
   "Guild": "Serikat",
   "There are no Beans on the global community. Say in your post what you'd like in return: free, a swap, or ask.": "Tidak ada kacang di komunitas global. Cantumkan di postingan apa yang Anda inginkan sebagai imbalan: gratis, barter, atau tanya.",
-  "Your first week": "Minggu pertamamu"
+  "Your first week": "Minggu pertamamu",
+  "🤝 IN TRUST": "🤝 DALAM JAMINAN",
+  "✋ ASKED": "✋ DIMINTA",
+  "{name} · {n} Beans held · since {date}": "{name} · {n} Kacang ditahan · sejak {date}",
+  "{name} · no Beans held · since {date}": "{name} · tidak ada Kacang ditahan · sejak {date}",
+  "Deals under way: {n}": "Kesepakatan berjalan: {n}",
+  "You act for {name} here.": "Di sini Anda bertindak untuk {name}.",
+  "You're helping with this · {n} Beans held for you": "Anda membantu ini · {n} Kacang ditahan untuk Anda",
+  "You're helping with this · no Beans held": "Anda membantu ini · tidak ada Kacang ditahan",
+  "You offered to help · waiting on {name}": "Anda menawarkan bantuan · menunggu {name}",
+  "You asked to borrow it · nothing is held until {name} says yes": "Anda meminta meminjamnya · tidak ada yang ditahan sampai {name} setuju",
+  "Taken up by someone else for now.": "Sedang diambil orang lain.",
+  "You've had this before · done {date}": "Anda pernah mendapatkannya · selesai {date}",
+  "⭐ Review": "⭐ Ulasan",
+  "Transferring {n} B to {name}": "Mentransfer {n} B ke {name}",
+  "That deal is done.": "Kesepakatan itu sudah selesai.",
+  "That request was declined.": "Permintaan itu ditolak.",
+  "That deal was cancelled.": "Kesepakatan itu dibatalkan."
 }

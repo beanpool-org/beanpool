@@ -56,7 +56,7 @@ The members' guide explains each of these step by step.
 
 The software is free. A community runs on a spare computer that stays on at home (a Mini PC, a NAS, or a Raspberry Pi with a 64-bit system) or on a small rented server, about US$6 a month. You need Docker installed first; a freshly rented server has none. The published image runs on Intel/AMD and ARM64.
 
-On that machine, paste this one block. It fetches the compose file, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node).
+On that machine, paste this one block. It fetches the compose file, creates the network the compose file expects (`beanpool-shared`, declared `external`), pulls the image, starts it, waits for the one-time claim code, then claims the community with your phone. It is the same block as [beanpool.org/start](https://beanpool.org/start).
 
 **Choose your address before you paste, and change the last line to match** (the choices are just below the block). If you already pasted, press Enter at its two questions, then run the last line again: the claim code waits for a phone.
 
@@ -82,6 +82,47 @@ Phones reach a community on the internet only over https. The choices for the la
 A plain `http://` address works only on a home network, and `beanpool claim` warns you before it shows a QR code that a phone will refuse.
 
 Then open your address followed by `/settings`. The setup wizard names your community and asks you to add a second owner. Everything the server keeps is in the `data` folder next to `docker-compose.yml`, so back that folder up.
+
+**Recommended: keep your community running when Docker updates.** With Docker live-restore on, Docker can restart, or take a patch update, without stopping your community. The step below needs root or `sudo` and is safe to skip: your community runs without it, and the operator manual's Updates and health page has the steps for doing it later. An AI assistant doing the install always does this step ([Setting up your server with an AI assistant](packages/beanpool-guide/operators/setup/install-with-ai.md)).
+
+```bash
+# Docker live-restore: Docker can then restart, or take a patch update, without stopping the community.
+# Not root? This step uses sudo. A password prompt in the middle of a paste would swallow the
+# lines after it, so type  sudo -v  and your password before you paste, and this step will not ask.
+if [ "$(id -u)" = 0 ]; then sh; else sudo -n sh; fi <<'EOF' || echo "Docker live-restore is still off. Your community runs without it. If sudo wanted a password, type: sudo -v  then paste this step again."
+command -v systemctl >/dev/null 2>&1 || { echo "This machine has no systemd (no systemctl), so live-restore is skipped."; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "python3 is not installed, so live-restore is skipped."; exit 1; }
+docker info >/dev/null 2>&1 </dev/null || { echo "Docker is not installed or not running (start it with: sudo systemctl start docker), so live-restore is skipped."; exit 1; }
+[ "$(docker info --format '{{.LiveRestoreEnabled}}' </dev/null)" = true ] && { echo "Docker live-restore is already on."; exit 0; }
+python3 - <<'PY' || exit 1
+import json, os, stat, sys
+p = os.path.realpath("/etc/docker/daemon.json")
+st = os.stat(p) if os.path.exists(p) else None
+try:
+    d = json.loads(open(p).read().strip() or "{}") if st else {}
+    if not isinstance(d, dict):
+        raise ValueError
+except ValueError:
+    sys.exit(p + " is not a JSON object, so it is left alone. Fix or remove it, then paste this step again.")
+if d.get("live-restore") is True:
+    sys.exit(0)
+d["live-restore"] = True
+os.makedirs(os.path.dirname(p), exist_ok=True)
+tmp = p + ".new"
+fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+os.fchmod(fd, stat.S_IMODE(st.st_mode) if st else 0o644)
+if st:
+    os.fchown(fd, st.st_uid, st.st_gid)
+with os.fdopen(fd, "w") as f:
+    f.write(json.dumps(d, indent=2) + "\n")
+    f.flush()
+    os.fsync(f.fileno())
+os.replace(tmp, p)
+PY
+systemctl reload docker </dev/null || exit 1
+if [ "$(docker info --format '{{.LiveRestoreEnabled}}' </dev/null)" = true ]; then echo "Docker live-restore is on."; else echo "Docker live-restore did not turn on."; exit 1; fi
+EOF
+```
 
 **To update**, back up `data`, then run `docker compose pull` and `docker compose up -d` in the same folder.
 

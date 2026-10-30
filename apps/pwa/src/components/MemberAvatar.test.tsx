@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { MemberAvatar } from './MemberAvatar';
@@ -29,5 +29,21 @@ describe('MemberAvatar (web) — no bare initials (Marty addition)', () => {
 
         expect(img1).toBeTruthy();
         expect(img1).toBe(img2);
+    });
+});
+
+// Profile S1, Damo (a), 29 Oct: a picture that fails to load (a stale address after the photo changed elsewhere) was a
+// blank disc on the phone and a broken image here. The ready-made picture the key picks stands in for it.
+describe('MemberAvatar (web) — a picture that fails to load', () => {
+    it('falls back to the preset by key, never a broken image, and tries a new address afresh', () => {
+        const pubkey = 'a'.repeat(64);
+        const { rerender } = render(<MemberAvatar avatarUrl="/api/avatar/aaaa?size=thumb&k=stale" pubkey={pubkey} callsign="Ann" />);
+        const img = screen.getByRole('img');
+        expect(img).toHaveAttribute('src', '/api/avatar/aaaa?size=thumb&k=stale');
+        fireEvent.error(img);
+        expect(screen.getByRole('img').getAttribute('src')).toMatch(/^\/avatars\/avatar_[a-z_]+\.webp$/);
+
+        rerender(<MemberAvatar avatarUrl="/api/avatar/aaaa?size=thumb&k=fresh" pubkey={pubkey} callsign="Ann" />);
+        expect(screen.getByRole('img')).toHaveAttribute('src', '/api/avatar/aaaa?size=thumb&k=fresh');
     });
 });

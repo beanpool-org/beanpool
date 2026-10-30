@@ -427,6 +427,15 @@ run_website_android() {
   node --test scripts/website-android.test.mjs
 }
 run_check "website_android" run_website_android
+# beanpool.org/start, "Start a community" on its own page (Marty, 29 Oct 2026): in all 25 languages, the sections in order,
+# the home page a teaser with a button and no install code (and still id="run-a-node" for the released apps' and
+# socialism.org's link), no page linking the old anchor, the apps' address a page in the tree; drawn at 320 px with text at
+# 130 %, light and dark. Its Chromium is the one website_contrast installs, so it starts once that has finished. Seconds.
+run_website_start() {
+  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  node --test scripts/website-start.test.mjs
+}
+run_check "website_start" run_website_start
 # Every internal link on the website reaches a page in the tree (S0: no link to beanpool.org/android before its page),
 # and every domain name in an English page's words is a link. Instant.
 run_check "website_links" node --test scripts/website-links.test.mjs scripts/website-domain-links.test.mjs

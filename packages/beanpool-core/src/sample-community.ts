@@ -57,7 +57,7 @@ export interface SampleDeal {
     status: 'waiting-on-you' | 'held' | 'done';
     /**
      * The deal as a node records it (a marketplace transaction's status): `requested`, a neighbour offered to do the
-     * member's Need and the member's Approve & Commit is next (My Deals: "Action Required"); `pending`, the Beans are
+     * member's Need and the member's Approve & Commit is next (Your deals: "Action Required"); `pending`, the Beans are
      * held until the job is done ("Held in Trust"); `completed`.
      */
     state: 'requested' | 'pending' | 'completed';

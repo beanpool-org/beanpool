@@ -201,7 +201,9 @@ test("the operator manual is a separate collection: the members' guide carries n
     const { guide, manual } = sourceGuides();
     const memberSlugs = new Set(guide.guides.map(g => g.slug));
     // Distinct slugs, so a page name never means two different pages in search results or links.
-    for (const p of manual.guides) assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
+    for (const p of manual.guides) {
+        assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
+    }
 });
 
 test('the operator manual covers what an operator needs, and the website renderer, given every page, lists and renders them all', () => {
@@ -501,6 +503,21 @@ test("no page promises a community's answers line before the directory carries i
         .filter((g) => /answers within a week|answered requests lately|how promptly/i.test(words(g)))
         .map((g) => g.slug);
     assert.deepEqual(said, []);
+});
+
+test("Find your community's pin is described as decided (Lounge L1, Fable 29 Oct 2026): a waiting request or a watch, then Got it; no \"No answer came\"", () => {
+    const { guide } = sourceGuides();
+    const words = (g) => g.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n');
+    const decided = "After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again.";
+    for (const slug of ['home', 'finding-a-community']) {
+        const page = guide.guides.find((g) => g.slug === slug);
+        assert.ok(page, `${slug} is a page`);
+        assert.ok(words(page).includes(decided), `${slug} says the decided sentences`);
+    }
+    // The community's own card says the same line as the Home card now (KNOCK_MESSAGES.none); the old one is retired everywhere.
+    assert.ok(words(guide.guides.find((g) => g.slug === 'finding-a-community')).includes('**This request is no longer open. You can ask again.**'));
+    const retired = guide.guides.filter((g) => /No answer came|for as long as (you have )?an open request|is open; with neither/i.test(words(g))).map((g) => g.slug);
+    assert.deepEqual(retired, []);
 });
 
 test('the manual names no removed button, page or route (owner-delete: no wipe, no snapshot delete, no legacy page, restore from the shell)', () => {

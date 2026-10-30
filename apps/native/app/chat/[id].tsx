@@ -3,7 +3,8 @@ import { askPhotoSource } from '../../utils/post-photo';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
-import { t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine } from '@beanpool/core';
+import { dealStateWords, dealStep, t, tn, requestModeOf, requestTakesPhoto, requestAfterOwnLine } from '@beanpool/core';
+import { isRequestToAnswer, localDealRow } from '../../utils/deal-rows';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -970,19 +971,19 @@ function ChatScreen({ id }: { id: string }) {
         if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(
-            t('Cancel Escrow'),
-            t('Are you sure you want to cancel this escrow? The credits will be refunded.'),
+            t('Cancel Hold'),
+            t('Are you sure you want to cancel this hold? The Beans held in trust will be refunded.'),
             [
                 { text: t('Keep'), style: 'cancel' },
                 {
-                    text: t('Cancel Escrow'),
+                    text: t('Cancel Hold'),
                     style: 'destructive',
                     onPress: async () => {
                         setActionLoading(true);
                         try {
                             await cancelMarketplaceTransaction(pendingTx.id, identity.publicKey);
                             hapticWarning();
-                            Alert.alert(t('Cancelled'), t('Escrow has been cancelled and credits refunded.'));
+                            Alert.alert(t('Cancelled'), t('The hold has been cancelled and the Beans refunded.'));
                             syncSingleConversation(id as string).then(() => {
                                 loadConversationData();
                                 loadDeals();
@@ -990,7 +991,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel escrow.'));
+                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel the hold.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -1002,10 +1003,13 @@ function ChatScreen({ id }: { id: string }) {
 
     // ---- Consolidated thread: per-deal action handlers (loadDeals lives above the focus effect) ----
 
-    // Pinned-strip deals: live escrow, or a completed deal still awaiting my review.
+    // Pinned-strip deals: live escrow, a completed deal still awaiting my review, or a request on my listing waiting for my
+    // answer (core's dealStep `to-answer`: the web's strip carries it too, and Talk's Action Required counts it, so the chat
+    // it opens must show it). My own request, a declined one and a stranger's are not here.
+    const myKey = identity?.publicKey;
     const activeDeals = React.useMemo(
-        () => deals.filter(d => d.status === 'pending' || (d.status === 'completed' && !d.iRated)),
-        [deals]
+        () => deals.filter(d => d.status === 'pending' || (d.status === 'completed' && !d.iRated) || (!!myKey && isRequestToAnswer(d, myKey))),
+        [deals, myKey]
     );
 
     // Filter out the deal from the top strip if it is currently displayed in the richer bottom Inline Action Bar
@@ -1080,7 +1084,7 @@ function ChatScreen({ id }: { id: string }) {
     const handleCancelDeal = async (txId: string) => {
         if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
-        Alert.alert(t('Cancel Deal'), t('Cancel this deal? The escrow will be refunded.'), [
+        Alert.alert(t('Cancel Deal'), t('Cancel this deal? The Beans held in trust will be refunded.'), [
             { text: t('Keep'), style: 'cancel' },
             { text: t('Cancel Deal'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
@@ -1356,6 +1360,7 @@ function ChatScreen({ id }: { id: string }) {
                 onRemove={() => { /* a DM has no convenor: nobody removes anybody else's message here */ }}
                 onPickEmoji={handleEmojiSelect}
                 onPressUrl={openUrl}
+                editing={editingMessage?.id === item.id}
                 quote={quote}
                 attachment={item.type === 'image' ? (requestMode === 'to-me' ? (
                     // A request waiting for this member: the photo stays closed, and isn't even fetched, until they accept
@@ -1485,12 +1490,18 @@ function ChatScreen({ id }: { id: string }) {
                                 key={d.txId}
                                 accessibilityRole="button"
                                 style={styles.dealCard}
-                                onPress={() => d.postId && router.push(`/post/${d.postId}`)}
+                                onPress={() => d.postId && router.push({ pathname: '/post/[id]', params: { id: d.postId, txId: d.txId } })}
                             >
                                 <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle || t('Deal')}</Text>
-                                <Text style={styles.dealCardMeta} numberOfLines={1}>
-                                    <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · in escrow')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
-                                </Text>
+                                {d.status === 'requested' ? (
+                                    // Nothing is held yet, so never "held in trust": whose step it is, in core's words. Approve and Deny
+                                    // live on the listing, which the card opens at this deal.
+                                    <Text style={styles.dealCardMeta} numberOfLines={1}>{dealStateWords(dealStep(localDealRow(d, identity!.publicKey), identity!.publicKey), null)}</Text>
+                                ) : (
+                                    <Text style={styles.dealCardMeta} numberOfLines={1}>
+                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · held in trust')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
+                                    </Text>
+                                )}
                                 <View style={styles.dealCardActions}>
                                     {d.status === 'pending' && d.iAmBuyer && (
                                         <>

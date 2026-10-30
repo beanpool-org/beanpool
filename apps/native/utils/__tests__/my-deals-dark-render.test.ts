@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * My Deals' held and pending cards in both schemes (memory dark-mode-readable-everywhere: readable in dark, light
+ * Your deals' held and pending cards in both schemes (memory dark-mode-readable-everywhere: readable in dark, light
  * unchanged). The sheet rendered for real, the member's own deals from a stand-in node client: a deal held in trust, one
  * waiting for the member to approve (Action Required) and one waiting for the other side (Awaiting Approval). Every text
  * on each card is measured against what it is drawn on (a see-through badge laid over its card): 4.5:1 or more in dark.
@@ -114,7 +114,7 @@ const render = async (initialTab: 'pending' | 'active' | 'history' = 'pending') 
 };
 const card = (id: string) => host.querySelector(`[data-testid="deal-card-${id}"]`);
 
-describe("My Deals' held and pending cards", () => {
+describe("Your deals' held and pending cards", () => {
     it('In Progress lists DEALS (transactions) with title row and one-line states', async () => {
         theme.dark = false;
         await render('pending');

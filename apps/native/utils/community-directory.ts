@@ -53,6 +53,8 @@ export interface DirectoryCommunity {
      * the row says "Not answering lately" (notAnsweringLine; front doors S13).
      */
     lastSeenAt?: string | null;
+    /** How quickly it answers requests to join (Lounge L1, entry S1: 'week' | 'slow' | 'none' | null). */
+    answers?: 'week' | 'slow' | 'none' | null;
 }
 
 export interface PlaceWatch { id: string; lat: number; lng: number; radiusKm: number; createdAt: string }
@@ -117,6 +119,7 @@ export function readCommunity(raw: unknown): DirectoryCommunity | null {
         contactPhone: text(r.contactPhone, 60),
         distanceKm: finite(r.distanceKm) && (r.distanceKm as number) >= 0 ? (r.distanceKm as number) : null,
         lastSeenAt: typeof r.lastSeenAt === 'string' && r.lastSeenAt.length <= 64 && Number.isFinite(Date.parse(r.lastSeenAt)) ? r.lastSeenAt : null,
+        answers: r.answers === 'week' || r.answers === 'slow' || r.answers === 'none' ? r.answers : null,
     };
 }
 

@@ -128,10 +128,11 @@ export default function NewMessageScreen() {
         avatarInitial: { fontSize: 18, fontWeight: 'bold', color: colors.text.secondary },
         friendBadge: {
             position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9,
-            backgroundColor: colors.trust.star, justifyContent: 'center', alignItems: 'center',
+            backgroundColor: colors.feedback.warning.solid, justifyContent: 'center', alignItems: 'center',
             borderWidth: 2, borderColor: colors.text.inverse,
         },
-        friendBadgeText: { fontSize: 9, color: colors.text.inverse, fontWeight: '800' },
+        // The library's gold pair, charcoal on gold: the white star on trust.star was 1.67:1.
+        friendBadgeText: { fontSize: 9, color: colors.text.onGold, fontWeight: '800' },
         memberInfo: { flex: 1, justifyContent: 'center' },
         memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
         memberName: { fontSize: 15, fontWeight: '700', color: colors.text.heading, flexShrink: 1 },

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Never a dead end, screen by screen (DESIGN-global-members-by-area §2.4, #1792, slice M2): People → Community, New
- * message, the chats list, My Deals and the public profile rendered for real at the floor's window (320 × 569 dp, text at
+ * message, the chats list, Your deals and the public profile rendered for real at the floor's window (320 × 569 dp, text at
  * 1.3×), in the real light and dark palettes, online and offline, on a community that says `membersOnDemand`.
  *
  * The phone's own utils/db runs on its real schema in an in-memory SQLite (as pillar-sync-members-on-demand.test.ts), so
@@ -819,7 +819,7 @@ for (const scheme of ['light', 'dark'] as const) {
             });
         });
 
-        describe('My Deals', () => {
+        describe('Your deals', () => {
             async function holdDeal(partner: string) {
                 await (await db.getDb()).runAsync(
                     "INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, post_title) VALUES ('tx-1', 'post-1', ?, ?, 12, 'completed', ?, ?, 'Sourdough loaf')",
@@ -946,6 +946,17 @@ for (const scheme of ['light', 'dark'] as const) {
                 await fits([OWN, KOFI]);
             });
 
+            // Profile S1 (DESIGN-per-community-profile-fable.md §2): the header passed the phone-wide name, and it was shown.
+            it("the member's own profile: this community's name for them, never the name the door passed", async () => {
+                await (await db.getDb()).runAsync('UPDATE members SET callsign = ? WHERE public_key = ?', ['Marty of Mullum', OWN]);
+                nav.params = { publicKey: OWN, callsign: 'Phone Wide Name' };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(text()).toContain('Marty of Mullum');
+                expect(text()).not.toContain('Phone Wide Name');
+                expect(host.querySelector('[data-avatar]')?.getAttribute('data-avatar')).toBe('Marty of Mullum');
+            });
+
             it("the member's own profile on the worldwide community: no meeting tips", async () => {
                 nav.params = { publicKey: OWN };
                 await render(createElement(PublicProfileScreen));
@@ -1070,3 +1081,47 @@ for (const scheme of ['light', 'dark'] as const) {
         });
     });
 }
+
+// Profile S2 (DESIGN-per-community-profile-fable.md §3-4): My Profile's name is this community's own row, whatever name
+// the door passed (the header and the Ledger hand it one) and whatever the phone-wide name says (identity.callsign, which
+// is only the join form's suggestion and can be the name chosen in another community).
+describe('My Profile shows the community\'s own name, never the phone-wide one', () => {
+    const PHONE_WIDE = 'Chosen in another community';
+    const shownName = () => host.querySelector('[data-avatar]')?.getAttribute('data-avatar');
+    const ownRow = (callsign: string | null) => async () => {
+        const database = await db.getDb();
+        if (callsign === null) await database.runAsync('DELETE FROM members WHERE public_key = ?', [OWN]);
+        else await database.runAsync('UPDATE members SET callsign = ? WHERE public_key = ?', [callsign, OWN]);
+    };
+
+    beforeEach(() => {
+        community.membersOnDemand = false;
+        who.value.identity.callsign = PHONE_WIDE;
+    });
+    afterEach(() => { who.value.identity.callsign = 'Me'; });
+
+    it('the row\'s name is the title when the name the door passed and the phone-wide name both differ', async () => {
+        await ownRow('Marty of Mullum')();
+        nav.params = { publicKey: OWN, callsign: PHONE_WIDE };
+        await render(createElement(PublicProfileScreen));
+        expect(shownName()).toBe('Marty of Mullum');
+        expect(text()).toContain('Marty of Mullum');
+        expect(text()).not.toContain(PHONE_WIDE);
+    });
+
+    it('a community that holds no row for you yet: the key\'s first 8 characters, never the phone-wide name or the door\'s', async () => {
+        await ownRow(null)();
+        nav.params = { publicKey: OWN, callsign: PHONE_WIDE };
+        await render(createElement(PublicProfileScreen));
+        expect(shownName()).toBe(OWN.slice(0, 8));
+        expect(text()).toContain(OWN.slice(0, 8));
+        expect(text()).not.toContain(PHONE_WIDE);
+    });
+
+    it('another member\'s profile still opens on the name the door passed', async () => {
+        nav.params = { publicKey: ROSA, callsign: 'Rosa from the list' };
+        node.online = false;
+        await render(createElement(PublicProfileScreen));
+        expect(shownName()).toBe('Rosa from the list');
+    });
+});

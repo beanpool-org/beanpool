@@ -47,11 +47,17 @@ export interface MemoryIndexedDB {
      * undone, `error` is set, and it fires `abort`, never `error` or `complete`.
      */
     failNextCommit(error?: unknown): void;
+    /**
+     * The next readwrite transaction does not finish until the returned function is called, as a slow disk holds it: its
+     * writes are in the store at once (a read sees them), and `complete` (or `abort`, if failNextCommit is set too) comes after.
+     */
+    holdNextCommit(): () => void;
 }
 
 export function memoryIndexedDB(): MemoryIndexedDB {
     const databases = new Map<string, Map<string, Store>>();
     let failCommit: { error: unknown } | null = null;
+    let holdCommit: Promise<void> | null = null;
 
     function database(stores: Map<string, Store>) {
         return {
@@ -65,6 +71,8 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                 if (!store) throw new Error(`NotFoundError: no object store ${storeName}`);
                 const failing = mode === 'readwrite' ? failCommit : null;
                 if (failing) failCommit = null;
+                const held = mode === 'readwrite' ? holdCommit : null;
+                if (held) holdCommit = null;
                 const before = failing ? new Map(store) : null;
                 // What this transaction's own writes replaced, for abort(): the value each key held before its first write.
                 const undo = new Map<IDBValidKey, { had: boolean; value: unknown }>();
@@ -132,7 +140,7 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                     },
                 };
                 // After the caller has queued its requests (synchronously), and after their answers.
-                queueMicrotask(() => setTimeout(() => {
+                const finish = () => {
                     if (finished) return;
                     finished = true;
                     if (failing && before) {
@@ -143,7 +151,8 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                         return;
                     }
                     tx.oncomplete?.();
-                }, 0));
+                };
+                queueMicrotask(() => setTimeout(() => { if (held) void held.then(finish); else finish(); }, 0));
                 return tx;
             },
         };
@@ -183,6 +192,11 @@ export function memoryIndexedDB(): MemoryIndexedDB {
         },
         failNextCommit(error: unknown = new DOMException('The quota has been exceeded.', 'QuotaExceededError')) {
             failCommit = { error };
+        },
+        holdNextCommit() {
+            let release: () => void = () => {};
+            holdCommit = new Promise<void>((resolve) => { release = resolve; });
+            return release;
         },
     };
 }

@@ -21,6 +21,7 @@ import {
 import { accountDoorMessage } from './global-join-existing';
 import { GLOBAL_DOOR_MESSAGES, type GlobalDoorRefusal } from './node-profile';
 import { communityName } from './community-name';
+import type { SignInCopies } from './vault-config';
 
 /** The phone's fixed door sentences by their exact English: see the note above. */
 const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
@@ -40,6 +41,10 @@ const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
     'This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.': word('This sign-in already joined the global community with a different BeanPool account. To join as the account on this phone, use a different sign-in.'),
     'This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.': word('This phone has no BeanPool account now, so nothing was sent. Go back and start again from the first screen.'),
     "This phone can't finish setting up a 12-words account right now. Try again, or sign in.": word("This phone can't finish setting up a 12-words account right now. Try again, or sign in."),
+    // door-key.ts commitDoorKey and keepJoinedIdentity: since S2 a phone with no account joins at another community's door
+    // too (utils/open-door-key.ts), and a key the phone stored meanwhile is never written over.
+    'This phone holds a different BeanPool account, so the join was not sent.': word('This phone holds a different BeanPool account, so the join was not sent.'),
+    'This phone holds a different BeanPool account, so the join was not saved here.': word('This phone holds a different BeanPool account, so the join was not saved here.'),
     "You're in the global community": word("You're in the global community"),
     'Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.': word('Your key and your 12 words are the same as before, and nothing changed in your other communities: your posts, chats and trades stay in each one.'),
     [GLOBAL_DOOR_MESSAGES.unreachable]: GLOBAL_DOOR_MESSAGES.unreachable,
@@ -105,12 +110,41 @@ export function doorScreenWords(place: DoorPlace) {
 }
 
 /**
+ * What another community's door says to a phone with no account (DESIGN-account-without-global-fable.md §4, slice S2): the
+ * join makes a new BeanPool account on this phone, there (utils/open-door-key.ts). Never said at the global community's
+ * door, which with no account is the first screen's.
+ */
+export function newPhoneDoorWords(place: DoorPlace) {
+    const name = place.name;
+    return {
+        /** Under the title, above the two ways in. */
+        intro: t('Join {name} with a new BeanPool account on this phone: 12 words, or a sign-in.', { name }),
+        /** A door that takes a sign-in only. */
+        introSignIn: t('Join {name} with a new BeanPool account on this phone.', { name }),
+        /** The name step, the 12-words way: the words are new, and come after the photo (as at the first screen's door). */
+        wordsName: t('🔑 An account with 12 secret words. They come next, after your photo.'),
+        /** 409 `already_joined`: this sign-in has an account there already, made on another phone. */
+        alreadyJoined: t('This sign-in already has a BeanPool account in {name}. Restore it with your 12 words or your sign-in instead.', { name }),
+        /** In, but the phone couldn't write the wizard's next step. */
+        notSaved: t("{name} let you in, but this phone couldn't save that yet. Try again.", { name }),
+    };
+}
+
+/**
  * Who keeps a copy of the account for the door's sign-in, said beside the sign-in buttons: `choose` under the two ways in,
  * `signIn` above the buttons. The global community's door as before. At another community's door, a build without the
  * key vault sends the copy in the join and that community keeps it; a build with the vault deposits it there only where
  * the door lists the vault's ticket keys (global-join.ts doorTicketKeys), which is not known until the sign-in starts.
+ * A door whose community keeps no copies (its rule, vault rethink VR2: `none`) says so: the sign-in only joins.
  */
-export function doorKeeperWords(place: DoorPlace, copiesAt: 'vault' | 'community'): { choose: string; signIn: string } {
+export function doorKeeperWords(place: DoorPlace, copiesAt: SignInCopies): { choose: string; signIn: string } {
+    if (copiesAt === 'none') {
+        const name = place.global ? t('The global community') : place.name;
+        return {
+            choose: t("{name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.", { name }),
+            signIn: t("To keep out fake accounts, sign in once with an account you already have. {name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.", { name }),
+        };
+    }
     if (place.global) {
         return copiesAt === 'vault'
             ? {

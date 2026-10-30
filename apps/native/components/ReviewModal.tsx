@@ -107,7 +107,7 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
                         <View style={styles.starsRow}>
                             {[1, 2, 3, 4, 5].map(s => (
                                 <Pressable key={s} accessibilityRole="button" accessibilityLabel={tn(s, 'Rate {n} stars', 'Rate {n} stars')} accessibilityState={{ selected: s <= stars }} onPress={() => setStars(s)}>
-                                    <Text style={[styles.star, s <= stars ? styles.starActive : styles.starInactive]}>★</Text>
+                                    <Text style={[styles.star, s <= stars ? styles.starActive : styles.starInactive]}>{s <= stars ? '★' : '☆'}</Text>
                                 </Pressable>
                             ))}
                         </View>
@@ -160,9 +160,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     bold: { fontWeight: '800', color: colors.text.heading },
     starsRow: { flexDirection: 'row', gap: 8, marginBottom: 24 },
     star: { fontSize: 40 },
-    starActive: { color: palette.amber400 },
+    // The star gold: amber-400 in dark; a deeper gold in light (amber-400 was 1.67:1 on the white card).
+    starActive: { color: colors.trust.star },
     // Empty stars were border.default, 1.2:1 on the card. Dark takes text.muted (3.60:1) rather than text.secondary,
-    // which sits too close to the gold of a chosen star (1.52:1 against amber400).
+    // which sits too close to the gold of a chosen star (1.52:1 against amber400). In light the deeper gold is as close
+    // to text.secondary (1.49:1), so an empty star is also drawn hollow (☆): the shape tells them apart, not the colour.
     starInactive: { color: theme === 'dark' ? colors.text.muted : colors.text.secondary },
     input: { width: '100%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16, fontSize: 14, minHeight: 80, marginBottom: 24, color: colors.text.body },
     buttonRow: { flexDirection: 'row', gap: 12, width: '100%' },

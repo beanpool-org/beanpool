@@ -281,7 +281,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                 {goneNote ? <ToolNote text={t('Its Offer has gone from the Market, so it is back on your shelf. List it again to make a new one.')} testId="thing-gone-note" /> : null}
                 {state === 'taken-out' && offerStatus === 'active' ? <ToolNote text={t('Its Offer is up in the Market again.')} testId="thing-offer-live" /> : null}
                 {state === 'out' ? <ToolNote text={t('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.')} testId="thing-deal-note" /> : null}
-                {state === 'asked' ? <ToolNote text={t('Answer them in My Deals, at the top of the Market.')} testId="thing-deal-note" /> : null}
+                {state === 'asked' ? <ToolNote text={t('Answer them in Your deals, at the top of the Market.')} testId="thing-deal-note" /> : null}
                 {lending ? (
                     <div className="min-w-0">
                         <ToolInput label={t('Who has it?')} value={lending.name} onChange={(v) => setLending({ ...lending, name: v })} max={THINGS_NAME_CHARS} testId="thing-lend-name" />

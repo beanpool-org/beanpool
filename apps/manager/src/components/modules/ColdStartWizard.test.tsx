@@ -253,6 +253,22 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.getByText('Founding Invite #3')).toBeInTheDocument();
     });
 
+    it("step 5 says where members' copies go, as the node's info says, and where to change it (vault rethink VR2)", async () => {
+        stubNode({ '/api/community/info': { status: 200, body: { recoveryCopies: 'server' } } });
+        await goToStep5();
+        const line = screen.getByTestId('recovery-copies-line');
+        expect(line).toHaveTextContent("Where members' copies go: This server");
+        expect(line).toHaveTextContent("Your server keeps members' copies. The people who run it can open them.");
+        expect(line).toHaveTextContent('How this community works → Ways back');
+        // Asked once, as the wizard opened: never by a step.
+        expect(vi.mocked(global.fetch).mock.calls.filter((c: any[]) => String(c[0]).includes('/api/community/info'))).toHaveLength(1);
+    });
+
+    it("step 5 draws no copies line for a node that doesn't say its rule (one from before it)", async () => {
+        await goToStep5();
+        expect(screen.queryByTestId('recovery-copies-line')).not.toBeInTheDocument();
+    });
+
     it('step 1 on a community with no name: the box starts empty, Next waits for a typed name, and the save is that name alone (#1935 finding 1)', async () => {
         // The node's diagnostics give the stored name and callsign, null for none (never "BeanPool Community Node" or
         // "admin": saved untouched, that stand-in was published as the community's name).

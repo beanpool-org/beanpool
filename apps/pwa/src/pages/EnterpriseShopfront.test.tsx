@@ -485,7 +485,7 @@ const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string
     { what: 'stop the wind-up', view: 'windingUp', button: '🛑 Stop Wind-Up' },
     { what: 'finalise the wind-up', view: 'windingUp', button: '🏁 Finalise Wind-Up' },
     { what: 'propose a new leader while the leader is quiet', view: 'quietProject', button: 'Propose Leader' },
-    { what: 'cancel an initiative and refund its backers', view: 'leadProject', button: '🛑Cancel Initiative & Refund Escrow' },
+    { what: 'cancel an initiative and refund its backers', view: 'leadProject', button: '🛑Cancel Initiative & Refund Backers' },
     { what: 'vote yes on a new leader', view: 'quietProjectVote', label: 'Yes, make Zoe leader' },
     { what: 'vote no on a new leader', view: 'quietProjectVote', label: 'No, do not make Zoe leader' },
 ];
@@ -493,8 +493,8 @@ const VIEWS: Record<View, () => Record<string, unknown>> = {
     lead: () => leadsView(),
     paused: () => leadsView({ paused: true, pausedAt: iso(now - 5 * DAY) }),
     windingUp: () => leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpInitiatedAt: iso(now - 8 * DAY), windUpGraceEndsAt: iso(now - 3600_000) }),
-    // A project its leader reads: its cancel is theirs alone, as the node takes it (apps/server db.ts leadsProject).
-    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120 }),
+    // A project its leader reads: the node says they may cancel it (apps/server db.ts mayCancelProject, `mayCancel`).
+    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120, mayCancel: true }),
     quietProject: () => quietProject(),
     quietProjectVote: () => quietProject({ succession: { proposals: [PROPOSAL] } }),
 };
@@ -558,6 +558,37 @@ describe("the keepers' Manage tab", () => {
         await open({ detail: VIEWS.leadProject() });
         const led = await manage();
         await waitFor(() => expect(found(cancel, led)).not.toBeNull());
+    });
+
+    it("a project's cancel is drawn from the node's word alone, for whoever it names (Marty's answers CF-Q1, CF-Q2)", async () => {
+        const cancel = ACTIONS.find((a) => a.what === 'cancel an initiative and refund its backers')!;
+        const project = { lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120 };
+        // Its leader, whom the node no longer lets cancel it (operator access switched off): none.
+        await open({ detail: leadsView({ ...project, mayCancel: false }) });
+        const off = await manage();
+        await within(off).findByTestId('enterprise-decisions');
+        expect(found(cancel, off)).toBeNull();
+        cleanup();
+
+        // Its only collaborator, with nobody leading it: the node lets them, and it is drawn.
+        const alone = { keepers: [{ publicKey: ME, callsign: 'Ana', role: 'keeper', grantedAt: iso(now - 30 * DAY) }], leadInactivity: null };
+        await open({ detail: quietProject({ ...alone, isLeadOrSoleKeeperOrAdmin: true, mayCancel: true }) });
+        const only = await manage();
+        await waitFor(() => expect(found(cancel, only)).not.toBeNull());
+        cleanup();
+
+        // A node admin who keeps none of it, so has no operator controls: the node lets them, and it is drawn on its own.
+        const admin = { keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'keeper' }], leadInactivity: null, isLeadOrSoleKeeperOrAdmin: true, mayCancel: true };
+        await open({ detail: quietProject(admin), keeperOf: [] });
+        const admins = await manage();
+        await waitFor(() => expect(found(cancel, admins)).not.toBeNull());
+        expect(admins.textContent).not.toContain('Operator Controls');
+        cleanup();
+
+        // That admin when the node says no: none. Manage is drawn from the same read, so it is there to look in.
+        await open({ detail: quietProject({ ...admin, mayCancel: false }), keeperOf: [] });
+        const refused = await manage();
+        expect(found(cancel, refused)).toBeNull();
     });
 
     it("its new Offer starts in its shop's category, which the keeper can still change", async () => {

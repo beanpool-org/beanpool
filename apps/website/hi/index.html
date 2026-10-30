@@ -47,7 +47,7 @@
                 <a href="#how-it-works">यह कैसे काम करता है</a>
                 <a href="#features">आप क्या कर सकते हैं</a>
                 <a href="rules.html">नियम</a>
-                <a href="#run-a-node">समुदाय चलाएं</a>
+                <a href="start.html">समुदाय चलाएं</a>
                 <a href="help.html" title="प्रत्येक नियम, गाइड और मैनुअल एक ही जगह पर">मदद</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube पर वीडियो ट्यूटोरियल देखें (@beanpool)">
@@ -130,7 +130,7 @@
                     <a href="#how-it-works">यह कैसे काम करता है</a>
                     <a href="#features">आप क्या कर सकते हैं</a>
                     <a href="rules.html">नियम</a>
-                    <a href="#run-a-node">समुदाय चलाएं</a>
+                    <a href="start.html">समुदाय चलाएं</a>
                     <a href="help.html">मदद</a>
                     <a href="../guide/index.html">सदस्यों की मार्गदर्शिका</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube पर वीडियो</a>
@@ -546,7 +546,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">अभी आपके आस-पास कोई समुदाय नहीं है।</span>
-                    <a id="map-empty-start" href="#run-a-node">एक समुदाय शुरू करें</a>
+                    <a id="map-empty-start" href="start.html">एक समुदाय शुरू करें</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -565,6 +565,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -572,83 +574,7 @@
                 <h2>अपने समुदाय के लिए BeanPool चलाएं</h2>
                 <p>प्रत्येक समुदाय अपने स्वयं के नोड पर चलता है: एक छोटा सर्वर जो उस समुदाय के सदस्यों, पोस्ट और खाते को रखता है। कोई स्थानीय व्यक्ति इसे चलाता है। यदि आपके कस्बे या इलाके में अभी तक कोई नहीं है, तो वह आप हो सकते हैं।</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>आप क्या संभालते हैं</h3>
-                    <p>आप और आपके द्वारा नियुक्त एडमिन आपके समुदाय के मॉडरेटर हैं: रिपोर्ट आपके पास आती हैं। आपके सदस्यों का डेटा आपकी मशीन पर रहता है, इसलिए आप इसका बैकअप रखते हैं। आप उद्यम की चर्चाओं और कार्यक्रम की चैट पढ़ सकते हैं; आप सीधे संदेश नहीं पढ़ सकते। आप पहले सदस्यों को आमंत्रित करते हैं, और वे बाकियों को आमंत्रित करते हैं।</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>सेटिंग्स ऐप</h3>
-                    <p>आपका नोड ब्राउज़र में अपने स्वयं के सेटिंग्स ऐप के साथ आता है। इससे आप अपने समुदाय का नाम रखते हैं, एक मालिक और ऐसे एडमिन नियुक्त करते हैं जो अपनी चाबियों से साइन इन करते हैं, क्यूआर आमंत्रण प्रिंट करते हैं, डिस्क की स्थिति देखते हैं, एक सार्वजनिक वेब पता या टनल चुनते हैं, और ऐसे सदस्य की मदद करते हैं जिसने अपने फ़ोन और अपने 12 शब्द दोनों खो दिए हैं, एक बार के कोड के साथ जिसे आप व्यक्तिगत रूप से पुष्टि करते हैं, ताकि वह नए फ़ोन पर अपने खाते में वापस आ सके।</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>पहले बूट से ही निजी</h3>
-                    <p>समुदाय की लिस्टिंग, नक्शा, संदेश और बैलेंस नोड शुरू होने के क्षण से ही उसके सदस्यों के लिए होते हैं; कुछ भी चालू करने की आवश्यकता नहीं है। कोई व्यक्ति जो बिना खाते के इसका पता खोलता है, उसे वैश्विक समुदाय की ओर निर्देशित किया जाता है, जहाँ वे देख सकते हैं कि उनके आस-पास क्या है और शामिल होने का अनुरोध कर सकते हैं।</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>पड़ोसी समुदाय से जुड़ना</h3>
-                    <p>दो समुदाय लिंक होने के लिए सहमत हो सकते हैं ताकि उनके सदस्य एक-दूसरे के साथ व्यापार कर सकें। फलियाँ कभी अपना स्थान नहीं छोड़तीं: प्रत्येक जोड़ी इस बात का हिसाब रखती है कि एक समुदाय पर दूसरे का कितना बकाया है, और प्रत्येक पक्ष अपनी सीमा तय करता है। जब तक दोनों ऑपरेटर इसे चालू नहीं करते, लिंकिंग बंद रहती है, और यह अभी प्रारंभिक चरण में है: यह बनाया गया है, वेब ऐप में इसकी स्क्रीन हैं, और इसे केवल हमारे अपने दो परीक्षण समुदायों के बीच आज़माया गया है, कभी भी वास्तविक समुदायों के बीच नहीं।</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>एक समुदाय शुरू करें</h2>
-                <p>लगभग आधा घंटा, यदि आप निर्देशों का पालन कर सकते हैं। पहले जानने योग्य छह बातें:</p>
-                <ul class="run-node-facts">
-                    <li><strong>इसकी लागत क्या है।</strong> सॉफ्टवेयर मुफ़्त है। यह घर पर चालू रहने वाले किसी खाली कंप्यूटर (मिनी पीसी, NAS, या 64-बिट सिस्टम वाले रास्पबेरी पाई) पर, या कुछ डॉलर प्रति माह (लगभग US$6) के छोटे किराए के सर्वर पर चलता है।</li>
-                    <li><strong>इसे कौन होस्ट करता है।</strong> आप, अपनी मशीन पर या जिसे आप किराए पर लेते हैं। इसे कभी भी <a href="https://beanpool.org">beanpool.org</a> की आवश्यकता नहीं होती: आपका अपना वेब पता काम करता है।</li>
-                    <li><strong>आप क्या ज़िम्मेदारी लेते हैं।</strong> आपके सदस्यों की रिपोर्ट आपके पास आती हैं। डेटा फ़ोल्डर का बैकअप आपको रिकवरी कोड के साथ रखना होता है। दो मालिक रखें। सर्वर को चालू और अपडेट रखें।</li>
-                    <li><strong>आप क्या कभी नहीं देखते।</strong> आपके सदस्यों के सीधे संदेश।</li>
-                    <li><strong>पहले डॉकर।</strong> नीचे दिए गए ब्लॉक से पहले मशीन में डॉकर (Docker) इंस्टॉल होना आवश्यक है; नए किराए पर लिए गए सर्वर में यह नहीं होता।</li>
-                    <li><strong>एक पता जहाँ तक फ़ोन पहुँच सकें।</strong> फ़ोन इंटरनेट पर किसी समुदाय तक केवल https के ज़रिए पहुँचते हैं। सार्वजनिक आईपी पते और पोर्ट 80 और 443 खुले वाले किराए के सर्वर पर, वह आईपी पता ही काफी है: आपके सर्वर को इसके लिए अपना प्रमाणपत्र मिलता है, बिना किसी क्लाउडफ्लेयर खाते के, और आपके अपने डोमेन के लिए भी यही लागू होता है। घर पर, या बिना खुले पोर्ट के, दावा आपको .beanpool.org पर समाप्त होने वाला एक मुफ़्त नाम देता है, एक टनल के माध्यम से जिसे आपका सर्वर खुद चलाता है। एक सामान्य http:// पता केवल घरेलू नेटवर्क पर काम करता है।</li>
-                </ul>
-                <p>फिर, डॉकर इंस्टॉल वाली उस मशीन पर, यह एक ब्लॉक पेस्ट करें। यह कंपोज़ फ़ाइल प्राप्त करता है, नोड द्वारा उपयोग किए जाने वाले नेटवर्क को बनाता है, प्रकाशित छवि (Intel/AMD या ARM64) को डाउनलोड करता है, इसे शुरू करता है, जब तक कि सर्वर अपना एक बार का दावा कोड नहीं बना लेता (रास्पबेरी पाई पर धीमी पहली शुरुआत के लिए पाँच मिनट तक) तब तक प्रतीक्षा करता है, और इसका दावा करता है। शुरू होने से पहले कॉन्फ़िगर करने के लिए कुछ भी नहीं है।</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — एक समुदाय शुरू करें</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">एक ब्लॉक: डाउनलोड, नेटवर्क, पुल, शुरू, प्रतीक्षा, दावा</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="क्लिपबोर्ड पर कॉपी करें">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">अंतिम पंक्ति: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>आपका पता।</strong> पेस्ट करने से पहले इसे चुनें, और मिलान करने के लिए अंतिम पंक्ति को बदलें। यदि आपने पहले ही पेस्ट कर दिया है, तो इसके सवालों पर Enter दबाएं, फिर अंतिम पंक्ति को फिर से चलाएं: दावा कोड फ़ोन की प्रतीक्षा करता है। सार्वजनिक आईपी पते और पोर्ट 80 व 443 खुले वाले <strong>किराए के सर्वर</strong> के लिए: <code>--ip</code> और उसका आईपी पता जोड़ें, जैसे <code>beanpool claim --ip 203.0.113.7</code> में। आपके सर्वर को पोर्ट 80 पर Let's Encrypt से उस पते के लिए अपना प्रमाणपत्र मिलता है, और फ़ोन https://203.0.113.7 पर उस तक पहुँचते हैं। <strong>घर पर कंप्यूटर, या कोई खुला पोर्ट न होने पर</strong>: इसे वैसे ही छोड़ दें। यह एक मुफ़्त नाम के पहले भाग के लिए पूछता है (yourtown.beanpool.org के लिए केवल <strong>yourtown</strong> टाइप करें; Enter छोड़ने के लिए है), जिस तक आपका सर्वर स्वयं चलने वाले टनल के ज़रिए पहुँचता है, और इसके लाइव होने के लिए तीन मिनट तक प्रतीक्षा करता है। <strong>आपका अपना डोमेन</strong>: इसके लिए एक A रिकॉर्ड को सर्वर के आईपी पते पर इंगित करें, पोर्ट 80 और 443 खोलें, और <code>--address https://your.domain</code> जोड़ें। नाम सर्वर के बदलाव के बाद भी बना रहता है; संख्या नहीं: आप बाद में सेटिंग्स में नाम जोड़ सकते हैं, और आईपी पते का उपयोग करने वाले सदस्य काम करते रहेंगे। सेटिंग्स में बाद में चुनने के लिए, <code>--no-name</code> जोड़ें। एक सामान्य <code>http://</code> पता केवल घरेलू नेटवर्क पर काम करता है: फ़ोन इंटरनेट पर इसे अस्वीकार कर देते हैं, और दावा आपको चेतावनी देता है। यदि BeanPool प्रोजेक्ट की पता सेवा बंद है, तब भी दावा काम करता है।</li>
-                    <li><strong>कोड और क्यूआर।</strong> यह एक बार का दावा कोड और एक क्यूआर कोड दिखाता है। अपने फ़ोन के कैमरे से क्यूआर कोड को स्कैन करें, या BeanPool खोलें, <strong>अपना समुदाय खोजें</strong> के तहत सर्वर का पता लिखें और <strong>दावा करें</strong> पर टैप करें। वह फ़ोन मालिक बन जाता है।</li>
-                    <li><strong>सेटिंग्स।</strong> अपना पता (या सर्वर का अपना पता) उसके बाद <strong>/settings</strong> खोलें। सेटअप विज़ार्ड आपके समुदाय का नाम रखता है, आपसे दूसरा मालिक जोड़ने के लिए कहता है, और तीन संस्थापक आमंत्रण बनाता है। नोड पहचान के तहत नक्शे पर अपना स्थान निर्धारित करें ताकि आस-पास के लोग आपको ढूँढ सकें।</li>
-                </ol>
-                <p class="run-node-note">यदि ब्लॉक <strong>No claim code after 5 minutes</strong> कहता है, या <code>beanpool claim</code> <strong>This community has no claim code waiting</strong> कहता है, तो सर्वर पूरी तरह से शुरू नहीं हुआ है: <code>docker compose logs beanpool-node</code> दिखाता है कि यह कहाँ है। एक बार जब लॉग कहे कि समुदाय का अभी तक कोई मालिक नहीं है और उसके पास एक दावा कोड है, तो अंतिम पंक्ति फिर से चलाएं। पूरे चरण ऑपरेटर मैनुअल के <a href="../guide/operators/first-time-setup.html">पहली बार सेटअप</a> में हैं।</p>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    GitHub पर देखें →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">एक समुदाय शुरू करें&nbsp;→</a></p>
         </div>
     </section>
 
@@ -701,7 +627,7 @@ docker compose exec beanpool-node beanpool claim</code>
                     <a href="getting-started.html">शुरुआत करें</a>
                     <a href="rules.html">नियम</a>
                     <a href="post-extraction.html">निष्कर्षण-उपरांत</a>
-                    <a href="#run-a-node">समुदाय चलाएं</a>
+                    <a href="start.html">समुदाय चलाएं</a>
                     <a href="../guide/index.html">सदस्यों की मार्गदर्शिका</a>
                     <a href="status.html">सर्वर स्थिति</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

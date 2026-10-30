@@ -22,6 +22,12 @@ Everything lives in the **data** folder next to docker-compose.yml:
 
 The simplest complete backup: stop the server, copy the whole data folder somewhere else, start it again. Do it before every update. That copy is not locked: it is everything, in the clear, recovery-seal.key and open-join.key included, so keep it somewhere only owners can reach. Until the server has a recovery code it is also the only backup that holds the server's keys.
 
+### Members' copies in your backups
+
+The members' sign-in copies your server keeps are rows in state.db, locked with recovery-seal.key: the copies kept under **This server** (Where members' copies go, in Members and invites), any from before the key vault, and the copy a web-app member's join made. Every backup and every standby's copy holds them, and a member who removes theirs later removes it from the server, not from a backup already made. Copies at BeanPool's key vault are not on your server and in none of your backups.
+
+When a copy brings a member's account back, the server keeps a record of it: which kind of copy, when, and whose account, so a member can see an attempt happened. It keeps the locked copy it handed over for **30 days**, then empties it; the record stays. A backup made before then still holds that copy.
+
 ### When the server will not start over a broken file
 
 The server stops at start, rather than start as someone new, when one of these files is broken. It leaves the file as it is, and its log line (marked 🛑) says which file and what to do. The way back is always a backup: put the file back from a copy of the data folder, a locked backup, or (for genesis.json) a standby of this community, then start the server again. With no backup, there is a way on, and it costs something:

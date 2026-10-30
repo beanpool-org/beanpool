@@ -106,12 +106,24 @@ An admin can suspend a member at once, for example to stop harm. They must give 
 
 On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.
 
+## A fair vote on removing a member
+
+- **The member is told at once.** When the vote on removing you opens, BeanPool tells you on your phone, and the web app tells you the next time you open it.
+- **You can reply.** In **Commons**, open **Decide** and tap **Reply to this case** on the vote about you. Everyone who reads the vote sees your reply beside the case. You can change it until the vote closes, unless an admin takes it down (below).
+- **The vote names who brought the case:** the admin who suspended the member. If an owner used the server's password, it says an owner did.
+- **A false case can be hidden.** When a case is shown to be false, an admin can hide it. Members then read the admin's reason in its place. Hiding a case doesn't stop the vote: an admin stops it by halting it, which lifts the suspension.
+- **A reply that harms someone can be taken down.** If a reply gives someone's address or phone number, or threatens them, an owner or admin can take it down, with a reason. The reply is deleted, and members read the reason in its place. The member is told, and can't write another reply on that vote. The vote carries on.
+- **A false accusation can be reported.** The member the vote is about can tap **Report this case as false**. The report goes to the admins and owners, and names whoever brought the case.
+- **No second case for a while.** After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can.
+- **Everyone who can vote is told.** When the vote opens, each member who can vote on it gets an alert on their phone, if their **Direct Messages** alerts are on. The alert never says who the vote is about.
+
 ## What admins can and cannot do
 
 Your community's server has owners and admins. They look after it.
 
 - An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.
 - If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.
+- An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.
 - An admin cannot remove a member without the community's vote. Where the people who run the server have switched community votes off, the admins remove members themselves.
 - Admins can give members the right to vouch for newcomers.
 - Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.
@@ -141,6 +153,7 @@ An enterprise is run by its keepers. One of them is the lead keeper.
 - **Votes among the keepers:** in an enterprise with two or more keepers, any keeper can propose paying Beans out of the enterprise's own account (never more than it holds, never to themselves, and to a keeper only out of what it has earned, with the 1.5% trade fee), removing a keeper, or, in an enterprise but not a project, making another keeper the lead. The keepers at the time it opens vote; more than half must vote; 60% Yes to pay out or remove, more than half to choose a lead. It runs 7 days or ends sooner once the answer can't change, and is carried out by itself. Only the keepers see it. While it is open it shows how many have voted; Yes and No show once it closes. Nobody sees who voted how, but in a very small group the result and who has voted can show it. These votes never touch the Commons or anyone's standing in the community: those are community Decisions. A vote can't remove the lead (vote for a new lead instead), the only keeper, or a keeper whose pledge covers a debt. A keeper can't propose their own removal; they step down instead.
 - **If the lead leaves or is removed,** the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.
 - **Winding up:** the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. Nothing finishes a wind-up by itself: after the 7 days, the lead keeper, the only keeper or a community admin has to finish closing it, and it can't be finished while a trade is still open. When it closes, any beans left go to the Commons.
+- **Cancelling a project:** before a project reaches its goal, its leader or a community admin can cancel it, and every pledge goes back to the person who made it. If it has no leader, its only collaborator can cancel it; with two or more and no leader, only a community admin can. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it.
 
 ## Groups and convenors
 

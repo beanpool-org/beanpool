@@ -21,6 +21,7 @@ import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
+import { useOwnProfile } from '../utils/use-own-profile';
 import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
@@ -358,8 +359,9 @@ export default function PublicProfileScreen() {
         statLabelOverall: { fontSize: 9, fontWeight: '700', color: colors.text.muted, letterSpacing: 0.5 },
         statValueProvider: { fontSize: 18, fontWeight: '800', color: colors.brand.primary, marginBottom: 2, marginTop: 4 },
         statLabelProvider: { fontSize: 9, fontWeight: '700', color: colors.brand.primary, letterSpacing: 0.5 },
-        statValueReceiver: { fontSize: 18, fontWeight: '800', color: theme === 'dark' ? colors.text.heading : palette.indigo500, marginBottom: 2, marginTop: 4 },
-        statLabelReceiver: { fontSize: 9, fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.indigo500, letterSpacing: 0.5 },
+        // indigo-600 in light, as the RECEIVED SERVICE badge: indigo-500 was 3.99:1 on the indigo-50 box.
+        statValueReceiver: { fontSize: 18, fontWeight: '800', color: theme === 'dark' ? colors.text.heading : palette.indigo600, marginBottom: 2, marginTop: 4 },
+        statLabelReceiver: { fontSize: 9, fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.indigo600, letterSpacing: 0.5 },
 
         // Tabs
         tabBar: {
@@ -486,12 +488,22 @@ export default function PublicProfileScreen() {
 
     const pubKeyStr = Array.isArray(publicKey) ? publicKey[0] : publicKey;
     const isSelf = !!identity?.publicKey && identity.publicKey === pubKeyStr;
+    // Your own name and picture are this community's row (utils/use-own-profile.ts), once read: never the name the door
+    // passed, nor the phone-wide one, which can be another community's (DESIGN-per-community-profile-fable.md §2). For
+    // your own key the door's name is ignored altogether (Profile S2), so a name passed from a screen that read it
+    // before a switch, or from the phone-wide one, can never be the title.
+    const own = useOwnProfile();
+    const ownShown = isSelf && own.read;
     // On a community that says `membersOnDemand` this phone may hold no card for the member: it is fetched by key when
     // missing or a day old (utils/members-lookup.ts). Offline with none held, the profile says so, and the name is never
     // a blank (DESIGN-global-members-by-area §2.4): the name the caller passed, the card's, or the key's first 8 characters.
+    // Your own, once the row is read: the row's name, or the card's, or the key's first 8 characters where this community
+    // holds no name for you yet (nothing is drawn for a moment before the row is read, rather than another community's).
     const membersOnDemand = membersByKey(nodeProfile?.features);
-    const callsignStr = (Array.isArray(callsign) ? callsign[0] : callsign) || (isSelf ? identity?.callsign : undefined)
-        || (membersOnDemand ? profile?.callsign || pubKeyStr?.slice(0, 8) : undefined);
+    const passedName = Array.isArray(callsign) ? callsign[0] : callsign;
+    const callsignStr = isSelf
+        ? (ownShown ? own.callsign || profile?.callsign || pubKeyStr?.slice(0, 8) : undefined)
+        : passedName || (membersOnDemand ? profile?.callsign || pubKeyStr?.slice(0, 8) : undefined);
     const [cardUnreachable, setCardUnreachable] = useState(false);
 
     useEffect(() => {
@@ -499,14 +511,17 @@ export default function PublicProfileScreen() {
             getMemberProfile(identity.publicKey).then(async vp => {
                 const canonical = await getCanonicalProfile().catch(() => null);
                 if (vp) {
-                    // Backfill EVERY field from canonical, not just archetype. handleQuizComplete
-                    // rebuilds the whole profile row from viewerProfile — `avatar_url: … || null`,
+                    // Backfill the bio, contact and archetype from canonical, not just archetype.
+                    // handleQuizComplete rebuilds the whole profile row from viewerProfile —
                     // `bio: … || ''` — and updateMemberProfile mirrors that straight back into
                     // canonical storage, which merges on `!== undefined`. So '' and null both count
                     // as present and overwrite. On a node where the local row hasn't synced yet,
-                    // taking the quiz here wiped the user's canonical avatar, bio and contact
-                    // device-wide. Filling the gaps on mount is what stops that.
-                    if (!vp.avatar_url && canonical?.avatar) vp.avatar_url = canonical.avatar;
+                    // taking the quiz here wiped the user's canonical bio and contact device-wide.
+                    // Filling the gaps on mount is what stops that.
+                    // NEVER the picture (Profile S2): the quiz writes viewerProfile into THIS community's row,
+                    // so a photo or preset chosen in another community was written into it as its own. An
+                    // empty photo is safe without it: updateMemberProfile keeps the row's by COALESCE and
+                    // mirrors a null photo into canonical as "unchanged".
                     if (!vp.bio && canonical?.bio) vp.bio = canonical.bio;
                     if (!vp.contact_value && canonical?.contactValue) vp.contact_value = canonical.contactValue;
                     if (!vp.contact_visibility && canonical?.contactVisibility) vp.contact_visibility = canonical.contactVisibility;
@@ -516,7 +531,6 @@ export default function PublicProfileScreen() {
                     setViewerProfile({
                         public_key: identity.publicKey,
                         callsign: identity.callsign,
-                        avatar_url: canonical.avatar,
                         bio: canonical.bio,
                         contact_value: canonical.contactValue,
                         contact_visibility: canonical.contactVisibility,
@@ -970,7 +984,7 @@ export default function PublicProfileScreen() {
                 {/* Banner */}
                 <View style={styles.banner}>
                     <View style={styles.avatarRing}>
-                        <MemberAvatar avatarUrl={profile?.avatar_url} pubkey={pubKeyStr || ''} callsign={callsignStr || '?'} size={80} enlargeable />
+                        <MemberAvatar avatarUrl={ownShown ? own.avatarUrl : profile?.avatar_url} updatedAt={ownShown ? own.updatedAt : undefined} pubkey={pubKeyStr || ''} callsign={callsignStr || '?'} size={80} enlargeable />
                     </View>
                     <View style={styles.nameRow}>
                         <Text style={styles.callsignText} numberOfLines={1}>{callsignStr}</Text>

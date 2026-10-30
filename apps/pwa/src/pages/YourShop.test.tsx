@@ -7,7 +7,7 @@
  * 3. put an Offer in and take it out: Add my live Offers dialog & ShopToggle
  * 4. shop page for a visitor, a member and the owner (Change your shop)
  * 5. global-community visitor sees only category + count, never name, banner or owner
- * 6. close with an open deal -> refused with count and My Deals button
+ * 6. close with an open deal -> refused with count and Your deals button
  * 7. close with "End its Offers too"
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -281,7 +281,7 @@ describe('Your shop parity test suite (step 1 tests-first)', () => {
         expect(screen.queryByTestId('shopfront-banner')).not.toBeInTheDocument();
     });
 
-    it('6. close with an open deal -> refused with count and a My Deals button', async () => {
+    it('6. close with an open deal -> refused with count and a Your deals button', async () => {
         const shopData = {
             id: SHOP_ID,
             name: "Ana's Shop",

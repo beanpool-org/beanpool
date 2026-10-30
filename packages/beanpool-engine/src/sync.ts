@@ -62,6 +62,8 @@ export interface Project {
     enterprise_pubkey?: string | null;
     created_at: string;
     updated_at?: string | null;
+    /** When a keeper first left it (apps/server db.ts noteKeeperLeftProject): its maker's cancel asks it. Absent from an older server. */
+    keeper_left_at?: string | null;
 }
 
 export interface SyncAccount {
@@ -511,6 +513,8 @@ export interface SyncCommunitySettings {
         startCommunityUrl?: string | null;
         /** The listing promise's ticked lines and closing day as JSON text, or null for none (apps/server engine/directory-promise.ts). */
         directory_promise?: string | null;
+        /** Where members' copies go: `server` or `none`, or null for BeanPool's key vault, the default (apps/server config/recovery-copies.ts). */
+        recovery_copies?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

@@ -39,7 +39,7 @@ export const SHEET_ROUTES = Object.freeze({ start: '/start-community', nearYou: 
 
 /**
  * `onLeave`: what a way forward does before it routes away, for a marker drawn inside a screen that is itself a Modal
- * (My Deals): that screen closes first, so the next screen never opens under it (global previews audit, item 4).
+ * (Your deals): that screen closes first, so the next screen never opens under it (global previews audit, item 4).
  */
 export function LocalCommunitySheet({ feature, visible, onClose, onLeave }: { feature: ShowcaseFeature; visible: boolean; onClose: () => void; onLeave?: () => void }) {
     const { colors } = useTheme();

@@ -177,21 +177,25 @@ export function HomeLink({ id, text, a11y, onPress, colors, testID }: {
 export const communityLinksStyle = { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: 20 } as const;
 
 /** A card's button: wraps to a second row rather than shrinking its words (§9 "buttons flexShrink: 0"). */
-export function HomeButton({ text, a11y, onPress, colors, primary, testID }: {
+export function HomeButton({ text, a11y, onPress, colors, primary, busy, testID }: {
     text: string;
     a11y?: string;
     onPress: () => void;
     colors: AppColors;
     primary?: boolean;
+    /** Its work is under way: the press does nothing, and a screen reader hears it is busy and disabled. */
+    busy?: boolean;
     testID?: string;
 }) {
     const s = homeStyles(colors);
     return (
         <Pressable
             onPress={onPress}
-            style={({ pressed }) => [s.button, primary && s.buttonPrimary, pressed && s.pressed]}
+            disabled={busy}
+            style={({ pressed }) => [s.button, primary && s.buttonPrimary, pressed && (primary ? s.buttonPrimaryPressed : s.pressed)]}
             accessibilityRole="button"
             accessibilityLabel={a11y ?? text}
+            accessibilityState={busy ? { disabled: true, busy: true } : undefined}
             testID={testID}
         >
             <Text style={[s.buttonText, primary && s.buttonTextPrimary]}>{text}</Text>
@@ -238,6 +242,8 @@ function make(colors: AppColors) {
             borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center',
         },
         buttonPrimary: { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary },
+        // Pressed, the primary button goes a deeper green: surface.subtle under its white words was 1.15:1 in light.
+        buttonPrimaryPressed: { backgroundColor: colors.brand.fillPressed },
         buttonText: { fontSize: 14, fontWeight: '700', color: colors.text.body, textAlign: 'center' },
         buttonTextPrimary: { color: colors.text.inverse },
         thumb: { width: HOME_THUMB_DP, height: HOME_THUMB_DP, borderRadius: 10, backgroundColor: colors.surface.subtle, flexShrink: 0 },

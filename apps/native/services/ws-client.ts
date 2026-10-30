@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
 import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, socketAlive, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
-import { requestSync, applyLivePostChange } from './pillar-sync';
+import { requestSync, applyLivePostChange, ownCardChanged } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
 import { isPlainNodeAddress, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
@@ -283,6 +283,9 @@ class WebSocketSyncClient {
      */
     private ringDoorbell(data: any) {
         DeviceEventEmitter.emit('ws_activity', data);
+        // This member's own card changed on the node (a photo or name changed on the web or a paired phone; a bare
+        // doorbell names nobody): the sync reads it first where members are read by key (pillar-sync ownCardChanged).
+        if (data.type === 'profile_updated' && (!data.publicKey || data.publicKey === this.memberPubkey)) ownCardChanged();
         // new_message is chat-plane traffic — the open chat's targeted
         // sync and the unread-badge listener both react to ws_activity.
         // Running a full pillar sync per received message hammered the

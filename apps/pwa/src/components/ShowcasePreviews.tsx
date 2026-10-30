@@ -1,11 +1,11 @@
 /**
- * The preview mode of the Ledger, the Commons' enterprises and Decide, and My Deals (scratch/global-node/
+ * The preview mode of the Ledger, the Commons' enterprises and Decide, and Your deals (scratch/global-node/
  * DESIGN-global-showcase-fable.md §1 rows 3, 5, 6; §2): the member's screen drawn from Example Valley, the sample
  * community in @beanpool/core, under the 🏘️ Local community strip. The ONLY web file that imports the sample.
  *
  * - **Nothing here talks to the node.** No fetch, no write: the sample is bundled, and every action that would move
  *   Beans, vote or pledge is a marker action that opens the sheet. The explainers stay live (CommonsInfoModal).
- * - **The Ledger and My Deals are the real screens.** LedgerPage draws itself from `sampleLedger()` and MyDealsModal
+ * - **The Ledger and Your deals are the real screens.** LedgerPage draws itself from `sampleLedger()` and MyDealsModal
  *   from `sampleDeals()` in preview, as the phone does; the Commons preview is drawn here.
  * - **Obviously a sample.** The Example chip and dashed cards; nobody is named ("a neighbour").
  * - **Levels are merit badges**, never shown as locked; currency is Beans.
@@ -270,7 +270,7 @@ export function CommonsPreview({ enterprises = true, onOpenEnterprise, ...ways }
     );
 }
 
-/** "An example member" in My Deals: the key the modal compares deals against. Never a real account's key. */
+/** "An example member" in Your deals: the key the modal compares deals against. Never a real account's key. */
 export const SAMPLE_DEALS_ME = Object.freeze({ publicKey: 'sample-member-example' });
 const SAMPLE_NEIGHBOUR = 'sample-member-neighbour';
 
@@ -281,7 +281,7 @@ export interface SampleDealsResult {
 }
 
 /**
- * My Deals fed Example Valley, in the shapes MyDealsModal reads from `posts` and `transactions`
+ * Your deals fed Example Valley, in the shapes MyDealsModal reads from `posts` and `transactions`
  * (as the phone's MyDealsSheet already does: sampleDeals()):
  * - waiting on you (`requested`): the member's Need, a neighbour offered to do it, and Approve & Commit is the member's
  *   (In Progress: "Action Required");
@@ -346,7 +346,7 @@ export function sampleDeals(now: number = Date.now()): SampleDealsResult {
     return { identity: SAMPLE_DEALS_ME, posts, transactions };
 }
 
-/** My Deals' chip in preview, one per sample state: a state added to SampleDeal fails tsc here until it has its own. */
+/** Your deals' chip in preview, one per sample state: a state added to SampleDeal fails tsc here until it has its own. */
 const SAMPLE_DEAL_CHIP: Record<SampleDeal['state'], { label: () => string; tone: string }> = {
     requested: { label: () => t('Action Required'), tone: 'bg-bp-chip-warn-tint text-bp-chip-warn-ink' },
     pending: { label: () => t('Held in trust'), tone: 'bg-bp-chip-ok-tint text-bp-chip-ok-ink' },

@@ -258,7 +258,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 <Text style={[styles.rsvpText, selected && styles.rsvpTextSelected, pending === status && styles.rsvpTextBusy]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{selected ? t('{label} ✓', { label }) : label}</Text>
                 {pending === status && (
                     <View style={styles.rsvpSpinner} pointerEvents="none">
-                        <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
+                        <ActivityIndicator size="small" color={selected ? '#fff' : colors.event.ink} />
                     </View>
                 )}
             </Pressable>
@@ -292,7 +292,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
                 {badge && (
                     <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
-                        <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
+                        <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : colors.event.ink }]}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
                     </View>
                 )}
                 <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
@@ -548,7 +548,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         rsvpBtnSelected: { backgroundColor: EVENT_ACCENT },
         rsvpBtnDisabled: { opacity: 0.5 },
-        rsvpText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
+        rsvpText: { fontSize: 15, fontWeight: '700', color: colors.event.ink },
         rsvpTextSelected: { color: '#fff' },
         rsvpTextBusy: { opacity: 0 },
         rsvpSpinner: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
@@ -556,7 +556,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             minHeight: 48, justifyContent: 'center', paddingHorizontal: 12, marginBottom: 14,
             borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT, backgroundColor: colors.surface.card,
         },
-        chatBtnText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
+        chatBtnText: { fontSize: 15, fontWeight: '700', color: colors.event.ink },
         chatBtnDisabled: { borderColor: colors.border.default, backgroundColor: colors.surface.subtle, paddingVertical: 8 },
         chatBtnWaitingText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary, lineHeight: 19 },
         letInLine: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginBottom: 14 },
@@ -565,13 +565,13 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12, borderWidth: 1.5,
             borderColor: EVENT_ACCENT, marginBottom: 8, paddingHorizontal: 12,
         },
-        letAllText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
+        letAllText: { fontSize: 14, fontWeight: '700', color: colors.event.ink },
         letInBtn: {
             minHeight: 44, minWidth: 88, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1.5,
             borderColor: EVENT_ACCENT, paddingHorizontal: 10, flexShrink: 0,
         },
         letInBtnOn: { backgroundColor: EVENT_ACCENT },
-        letInText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
+        letInText: { fontSize: 14, fontWeight: '700', color: colors.event.ink },
         letInTextOn: { color: colors.text.inverse },
         placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
         place: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text.body },
@@ -583,7 +583,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             borderColor: theme === 'dark' ? '#6d28d9' : '#ddd6fe', borderWidth: 1, borderRadius: 12,
             padding: 12, marginBottom: 14,
         },
-        noteLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, color: EVENT_ACCENT, marginBottom: 4 },
+        noteLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, color: colors.event.ink, marginBottom: 4 },
         noteText: { fontSize: 15, color: colors.text.body, lineHeight: 21 },
         description: { fontSize: 15, color: colors.text.body, lineHeight: 22, marginBottom: 14 },
         hostLine: { fontSize: 14, color: colors.text.secondary, marginBottom: 14 },
@@ -597,8 +597,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpListRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border.default },
         rsvpName: { flex: 1, fontSize: 14, color: colors.text.body },
         // Gives way to a longer language's word (up to half the row) rather than pushing the name off; shrinks to fit.
-        rsvpStatus: { fontSize: 13, fontWeight: '700', color: EVENT_ACCENT, flexShrink: 1, maxWidth: '45%' },
-        hostingLine: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT, marginBottom: 14 },
+        rsvpStatus: { fontSize: 13, fontWeight: '700', color: colors.event.ink, flexShrink: 1, maxWidth: '45%' },
+        hostingLine: { fontSize: 15, fontWeight: '700', color: colors.event.ink, marginBottom: 14 },
         editBtn: {
             minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, backgroundColor: EVENT_ACCENT,
             marginTop: 4, marginBottom: 4, paddingHorizontal: 12,
@@ -606,7 +606,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         editText: { fontSize: 15, fontWeight: '800', color: '#fff' },
         editBlocked: { fontSize: 14, color: colors.text.secondary, paddingVertical: 10 },
         copyBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
-        copyText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
+        copyText: { fontSize: 15, fontWeight: '700', color: colors.event.ink },
         cancelBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
         cancelText: { fontSize: 15, fontWeight: '700', color: colors.feedback.danger.fg },
         reportBtn: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },

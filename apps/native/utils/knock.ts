@@ -29,7 +29,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { t, word } from '@beanpool/core';
+import { KNOCK_ANSWERABLE_DAYS, knockStillAnswerable, t, word } from '@beanpool/core';
 import { signedGet, signedPost } from './node-post';
 import { communityOrigin } from './community-directory';
 import { GLOBAL_NODE_URL } from './node-profile';
@@ -42,10 +42,11 @@ export const KNOCK_CANCEL_PATH = '/api/join/knock/cancel';
 /** How long after "Cancel my request" the same key may ask that community again (the node's KNOCK_RULES.cancelBlockHours). */
 export const KNOCK_CANCEL_BLOCK_HOURS = 24;
 /**
- * How long after a knock its community could still say yes: the node keeps it open 30 days (KNOCK_RULES.openDays) and
- * an invite made for it lasts 30 days, so no status read can say `approved` after that; and a day for the clocks.
+ * How long after a knock its community could still say yes (61 days), and whether a remembered knock still could: one
+ * definition, in @beanpool/core (find-community.ts), shared with the web app. Re-exported so this file's importers
+ * keep their import.
  */
-export const KNOCK_ANSWERABLE_DAYS = 61;
+export { KNOCK_ANSWERABLE_DAYS, knockStillAnswerable };
 /** The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending. */
 export const KNOCK_MESSAGE_CHARS = 280;
 export const KNOCK_CALLSIGN_CHARS = 20;
@@ -65,7 +66,7 @@ export const KNOCK_MESSAGES = {
     unreachable: word("Couldn't reach this community. Check your connection and try again."),
     unreadable: word("This community sent an answer the app couldn't read. Please try again later."),
     waiting: word('You asked to join. No answer yet: communities usually answer within a few days.'),
-    none: word('No answer came. You can ask again.'),
+    none: word('This request is no longer open. You can ask again.'),
     cancelled: word('You cancelled your request. You can ask again after 24 hours.'),
     invited: word('A member invited you. Join now to become a member.'),
 } as const;
@@ -202,9 +203,11 @@ export async function readKnockStatus(communityUrl: string | null, identity: Bea
 /**
  * "Cancel my request" on `communityUrl`. Done, the phone remembers when (`cancelledAt`), so the card says so and offers no
  * "Ask to join" until the node would take one ({@link KNOCK_CANCEL_BLOCK_HOURS}). A community that has nothing open from
- * this key (it lapsed, or a member said yes meanwhile) answers 404 in its own words, shown as they are.
+ * this key (it lapsed, or a member said yes meanwhile) answers 404 `not_found` in its own words, shown as they are; the
+ * refusal carries its `status` and `code` so a card can read the status again and say what the community now holds (a
+ * yes is one of the cases, so a card never says the request is no longer open from the 404 alone).
  */
-export async function cancelKnock(communityUrl: string | null, identity: BeanPoolIdentity, now: Date = new Date()): Promise<{ ok: true } | { ok: false; message: string }> {
+export async function cancelKnock(communityUrl: string | null, identity: BeanPoolIdentity, now: Date = new Date()): Promise<{ ok: true } | { ok: false; message: string; status?: number; code?: string | null }> {
     const origin = communityOrigin(communityUrl);
     if (!origin) return { ok: false, message: KNOCK_MESSAGES.noAddress };
     let res: Response;
@@ -214,8 +217,8 @@ export async function cancelKnock(communityUrl: string | null, identity: BeanPoo
         return { ok: false, message: KNOCK_MESSAGES.unreachable };
     }
     if (!res.ok) {
-        const { message } = await readError(res);
-        return { ok: false, message: message ?? KNOCK_MESSAGES.unreadable };
+        const { message, code } = await readError(res);
+        return { ok: false, message: message ?? KNOCK_MESSAGES.unreadable, status: res.status, code };
     }
     const knocks = await readStore(identity.publicKey);
     await writeStore(identity.publicKey, knocks.map(k => (k.url === origin ? { ...k, cancelledAt: now.toISOString() } : k)));
@@ -272,12 +275,6 @@ async function writeStore(pubkey: string, knocks: RememberedKnock[]): Promise<vo
     }
 }
 
-/** Whether a remembered knock could still be answered at `now` (sent within {@link KNOCK_ANSWERABLE_DAYS}). */
-export function knockStillAnswerable(k: { sentAt?: unknown }, now: number = Date.now()): boolean {
-    const at = typeof k.sentAt === 'string' ? Date.parse(k.sentAt) : NaN;
-    return Number.isFinite(at) && now - at < KNOCK_ANSWERABLE_DAYS * 86_400_000;
-}
-
 /**
  * The communities this key has asked and not cancelled, newest first. One too old to be answered
  * ({@link knockStillAnswerable}) is forgotten here, so nothing reads its status again.
@@ -287,6 +284,17 @@ export async function rememberedKnocks(pubkey: string, now: number = Date.now())
     const answerable = stored.filter(k => knockStillAnswerable(k, now));
     if (answerable.length !== stored.length) await writeStore(pubkey, answerable);
     return answerable.filter(k => !k.cancelledAt).sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+}
+
+/**
+ * The knocks Home draws: what the phone remembers, plus the requests whose Cancel worked during this Home visit. A Cancel
+ * marks the knock cancelled in the phone's memory, so every read after it leaves the knock out; its card, with the line that
+ * says what happened, and the pin the request held stay until Home loses focus (LG-L1-W). A request a newer one to the same
+ * community has replaced is not brought back.
+ */
+export function withVisitCancelled(remembered: readonly RememberedKnock[], cancelled: readonly RememberedKnock[]): RememberedKnock[] {
+    const kept = cancelled.filter(c => !remembered.some(k => k.url === c.url));
+    return kept.length ? [...remembered, ...kept].sort((a, b) => b.sentAt.localeCompare(a.sentAt)) : [...remembered];
 }
 
 /**

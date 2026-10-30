@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readSearchSettings, readSkySettings, t, type HomeSearchKind, type SkySettings } from '@beanpool/core';
+import {
+    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, t,
+    type HomeDecideShow, type HomeSearchKind, type SkySettings,
+} from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { SEARCH_KIND_CHIPS, SKY_PLACE_CHIPS, cardName } from '../../utils/home-cards';
 import { POST_CATEGORIES, categoryLabel } from '../../constants/categories';
@@ -12,8 +15,9 @@ import { useModalKeyboardLift } from '../useModalKeyboardLift';
 /**
  * A card's settings sheet (CARD-FRAME §1.2, §1.3): the picker opens it on Add for a type with settings (its last button
  * is Add to Home), and the card's "…" → Settings… opens it again with Save, keeping the card where it is. Sun and moon
- * asks one thing: whose place, the community's or the member's own. The saved search (CARD-FRAME §4) asks its words,
- * then Offers or Needs or both, a category, and a distance. The
+ * asks one thing: whose place, the community's or the member's own. Decide asks one too: what it shows (a summary, every open
+ * Decision, or only the votes that are the member's), with a line under the chosen one. The saved search (CARD-FRAME §4)
+ * asks its words, then Offers or Needs or both, a category, and a distance. The
  * distance chips show only where the node has a point to measure from (the member's area, or the phone's place on the
  * global community); without one the node ignores the distance, so the sheet doesn't offer it, and a kept one stays.
  *
@@ -41,9 +45,11 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     const [category, setCategory] = useState<string | null>(null);
     const [km, setKm] = useState<number | null>(null);
     const [place, setPlace] = useState<SkySettings['place']>('community');
+    const [show, setShow] = useState<HomeDecideShow>('counts');
     useEffect(() => {
         if (!visible) return;
         setPlace(readSkySettings(settings).place);
+        setShow(readDecideSettings(settings).show);
         const start = readSearchSettings(settings);
         setQ(start.q);
         setKind(start.kind);
@@ -53,9 +59,10 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     if (!type) return null;
     const name = cardName(type);
     const sky = type === 'sky';
+    const decide = type === 'decide';
     const words = q.trim();
-    const ready = sky || !!words;
-    const done = () => onDone(sky ? { place } : { q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
+    const ready = sky || decide || !!words;
+    const done = () => onDone(sky ? { place } : decide ? { show } : { q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
@@ -71,7 +78,13 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                         {sky ? (
                             <SettingChips label={t('Whose place')} id="place" colors={colors} value={place} onPick={setPlace}
                                 options={SKY_PLACE_CHIPS.map(p => ({ value: p.place, label: t(p.label) }))} />
-                        ) : (<>
+                        ) : decide ? (<>
+                            <SettingChips label={t('Show')} id="show" colors={colors} value={show} onPick={setShow}
+                                options={HOME_DECIDE_CHOICES.map(c => ({ value: c.show, label: t(c.label) }))} />
+                            <Text style={[settingsStyles.note, { color: colors.text.secondary }]} testID="card-settings-show-note">
+                                {t(HOME_DECIDE_CHOICES.find(c => c.show === show)!.note)}
+                            </Text>
+                        </>) : (<>
                             <Text style={[settingsStyles.label, { color: colors.text.body }]} nativeID="card-settings-words-label">{t('Words to look for')}</Text>
                             <TextInput
                                 value={q}
@@ -139,6 +152,7 @@ function SettingChips<T>({ label, id, colors, options, value, onPick }: {
 
 const settingsStyles = StyleSheet.create({
     label: { fontSize: 14, fontWeight: '700', marginTop: 4, marginBottom: 6 },
+    note: { fontSize: 13, marginTop: 10 },
     input: { minHeight: HOME_TARGET_DP, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontSize: 16 },
     button: { marginTop: 16, minHeight: HOME_TARGET_DP, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
     buttonText: { fontSize: 15, fontWeight: '700' },

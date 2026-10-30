@@ -23,13 +23,13 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import { getPublicKey } from '@noble/ed25519';
-import { toEd25519Pkcs8 } from '@beanpool/core';
+import { toEd25519Pkcs8, KNOCK_ANSWERABLE_DAYS as coreKnockAnswerableDays, knockStillAnswerable as coreKnockStillAnswerable } from '@beanpool/core';
 import { bytesToHex } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import {
     sendKnock, readKnockStatus, readStatus, knockCardState, knockFormProblem, knockBody, knockAvatar,
     rememberKnock, rememberedKnocks, forgetKnock, cardKnockLines, cancelKnock, cancelledKnocks, KNOCK_MESSAGES, KNOCK_FROM_NODE, KNOCK_CANCEL_BLOCK_HOURS,
-    KNOCK_ANSWERABLE_DAYS, knockStillAnswerable,
+    KNOCK_ANSWERABLE_DAYS, knockStillAnswerable, withVisitCancelled,
     type KnockStatusResult,
 } from '../knock';
 import { GLOBAL_NODE_URL } from '../node-profile';
@@ -245,6 +245,8 @@ describe('what a community’s card shows', () => {
     it('asked and now "none" (lapsed, or an invite that expired): may ask again, with no word of a decline', () => {
         expect(knockCardState(true, true, ok({ status: 'none' }))).toEqual({ kind: 'ask', note: KNOCK_MESSAGES.none });
         expect(KNOCK_MESSAGES.none.toLowerCase()).not.toContain('declin');
+        // Decided 29 Oct 2026 (PR #2573): the one sentence both the Home card and the community's own card say; "No answer came" is retired.
+        expect(KNOCK_MESSAGES.none).toBe('This request is no longer open. You can ask again.');
     });
 
     it('a refusal shows the community’s words; asking again is offered only where it could work', () => {
@@ -313,6 +315,9 @@ describe('what the phone remembers', () => {
         await rememberKnock('key-1', { url: 'https://a.example.org', name: 'Alpha' }, sent);
         await rememberKnock('key-1', { url: 'https://b.example.org', name: 'Beta' }, new Date(sent.getTime() + 10 * DAY));
         expect(KNOCK_ANSWERABLE_DAYS).toBe(61);
+        // One definition, core's: the phone's pin and the web's (which imports core's too) cannot drift apart.
+        expect(KNOCK_ANSWERABLE_DAYS).toBe(coreKnockAnswerableDays);
+        expect(knockStillAnswerable).toBe(coreKnockStillAnswerable);
         expect((await rememberedKnocks('key-1', sent.getTime() + 60 * DAY)).map(k => k.url)).toEqual(['https://b.example.org', 'https://a.example.org']);
         expect((await rememberedKnocks('key-1', sent.getTime() + 61 * DAY)).map(k => k.url)).toEqual(['https://b.example.org']);
         // Gone from the phone's memory, not only from that answer.
@@ -371,11 +376,31 @@ describe('"Cancel my request" (front doors S1)', () => {
         expect(await cancelledKnocks(me.publicKey, AT.getTime() + 3 * HOUR)).toEqual({});
     });
 
+    it('Home draws the request again for the visit it was cancelled in (LG-L1-W), unless a newer one to that community has replaced it', async () => {
+        const me = await member();
+        const byron = 'https://byron.example.org';
+        await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' }, new Date('2026-10-26T00:00:00Z'));
+        await rememberKnock(me.publicKey, { url: byron, name: 'Byron' }, new Date('2026-10-27T00:00:00Z'));
+        const [byronKnock, mullumKnock] = await rememberedKnocks(me.publicKey);
+        answer = () => ({ status: 200, body: { knock: { status: 'cancelled' } } });
+        await cancelKnock(byron, me, AT);
+        // The phone's memory no longer lists it; the visit's own list does, in its place (newest first).
+        const remembered = await rememberedKnocks(me.publicKey);
+        expect(remembered).toEqual([mullumKnock]);
+        expect(withVisitCancelled(remembered, [byronKnock])).toEqual([byronKnock, mullumKnock]);
+        expect(withVisitCancelled(remembered, [])).toEqual(remembered);
+        // The same request still listed (a read from before the cancel landed): once, not twice.
+        expect(withVisitCancelled([byronKnock, mullumKnock], [byronKnock])).toEqual([byronKnock, mullumKnock]);
+        // A newer request to that community stands in for it.
+        const again = { ...byronKnock, sentAt: '2026-10-29T00:00:00.000Z' };
+        expect(withVisitCancelled([again, mullumKnock], [byronKnock])).toEqual([again, mullumKnock]);
+    });
+
     it('refused (nothing open: it lapsed, or a member said yes meanwhile): the community’s words, and the request is kept', async () => {
         const me = await member();
         await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' });
         answer = () => ({ status: 404, body: { error: 'There’s no open request to join to cancel.', code: 'not_found' } });
-        expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: 'There’s no open request to join to cancel.' });
+        expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: 'There’s no open request to join to cancel.', status: 404, code: 'not_found' });
         expect((await rememberedKnocks(me.publicKey)).map(k => k.url)).toEqual([COMMUNITY]);
         (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
         expect(await cancelKnock(COMMUNITY, me, AT)).toEqual({ ok: false, message: KNOCK_MESSAGES.unreachable });

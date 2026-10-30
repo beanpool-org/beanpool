@@ -279,9 +279,11 @@ describe('the host', () => {
     it('given only what the manifest declared: an undeclared door is absent, and the web grants none it has not built', () => {
         expect(Object.keys(webHostFor(tool, ctx, doc)).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'owner']);
         const withDoors = webHostFor({ ...tool, permissions: ['need-door', 'place', 'event-door', 'reminders'] as const }, ctx, doc);
-        expect(Object.keys(withDoors).sort()).toEqual(['back', 'doc', 'navigate', 'needDoor', 'node', 'now', 'owner']);
+        // `place` was built with Your garden (grow-food G0); `event-door` and `reminders` grant no function here yet.
+        expect(Object.keys(withDoors).sort()).toEqual(['back', 'doc', 'navigate', 'needDoor', 'node', 'now', 'owner', 'place']);
         expect('offerDoor' in withDoors).toBe(false);
-        expect('place' in withDoors).toBe(false);
+        expect('eventDoor' in withDoors).toBe(false);
+        expect(typeof withDoors.place).toBe('function');
         // What the Tool shed asks for was built with it (T1.3).
         const shed = webHostFor({ ...tool, permissions: ['photos', 'camera', 'posts', 'deals', 'pricing-guide'] as const }, ctx, doc);
         expect(Object.keys(shed).sort()).toEqual(['back', 'camera', 'deals', 'doc', 'navigate', 'node', 'now', 'owner', 'photos', 'posts', 'pricingGuide']);
@@ -321,9 +323,9 @@ describe("the covered page's place, and Home", () => {
         expect(parseToolTarget(toolTarget('things', 'thing', 't 1'))).toEqual({ id: 'things', screen: 'thing', key: 't 1' });
     });
 
-    it("a tool's card is drawn on Home only for a tool with a card and a web half; the Tool shed's ships (T1.3)", () => {
-        expect(drawnToolCardTypes()).toEqual(['tool-things']);
-        expect([...HOME_DRAWN].filter((t) => t.startsWith('tool-'))).toEqual(['tool-things']);
+    it("a tool's card is drawn on Home only for a tool with a card and a web half; the Tool shed's ships (T1.3), and Your garden's (G0)", () => {
+        expect(drawnToolCardTypes()).toEqual(['tool-things', 'tool-garden']);
+        expect([...HOME_DRAWN].filter((t) => t.startsWith('tool-'))).toEqual(['tool-things', 'tool-garden']);
         expect(drawnToolCardTypes([tool], { notes: () => null })).toEqual(['tool-notes']);
         expect(drawnToolCardTypes([tool], {})).toEqual([]);
         expect(drawnToolCardTypes([{ ...tool, homeCard: undefined }], { notes: () => null })).toEqual([]);

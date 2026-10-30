@@ -1,6 +1,6 @@
 /**
  * The rest of the phone on a node with Beans off (the worldwide community). G8 (market-global.ts) took Beans off the
- * Market and a post's page; this covers everywhere else a Beans figure or a price was drawn: My Deals, a chat's post
+ * Market and a post's page; this covers everywhere else a Beans figure or a price was drawn: Your deals, a chat's post
  * header, the Talk sort (and a Beans sort left over from before), profiles, Settings' pricing guide, the Commons header, the create-group form, profile setup's
  * "how it works", and a group's post form. There, a Beans figure is always 0 and means nothing to a newcomer.
  *

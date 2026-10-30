@@ -47,7 +47,7 @@
                 <a href="#how-it-works">Jinsi Inavyofanya Kazi</a>
                 <a href="#features">Unachoweza Kufanya</a>
                 <a href="rules.html">Kanuni</a>
-                <a href="#run-a-node">Endesha Jamii</a>
+                <a href="start.html">Endesha Jamii</a>
                 <a href="help.html" title="Kila kanuni, mwongozo na maelekezo mahali pamoja">Msaada</a>
                 <div class="nav-social-icons">
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tazama Mafunzo ya Video kwenye YouTube (@beanpool)">
@@ -130,7 +130,7 @@
                     <a href="#how-it-works">Jinsi Inavyofanya Kazi</a>
                     <a href="#features">Unachoweza Kufanya</a>
                     <a href="rules.html">Kanuni</a>
-                    <a href="#run-a-node">Endesha Jamii</a>
+                    <a href="start.html">Endesha Jamii</a>
                     <a href="help.html">Msaada</a>
                     <a href="../guide/index.html">Mwongozo wa wanachama</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Video kwenye YouTube</a>
@@ -546,7 +546,7 @@
                 <div id="nodes-map"></div>
                 <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
                     <span id="map-empty-text">Bado hakuna jamii karibu nawe.</span>
-                    <a id="map-empty-start" href="#run-a-node">Anzisha jamii</a>
+                    <a id="map-empty-start" href="start.html">Anzisha jamii</a>
                 </div>
             </div>
             <div class="map-stats">
@@ -565,6 +565,8 @@
 
     <!-- For community organisers: running a node -->
     <section id="run-a-node">
+        <!-- The how-to is its own page, start.html (Marty, 29 Oct 2026). This section keeps the id that the released apps (1.2.83) and
+             socialism.org link to as https://beanpool.org/#run-a-node, so those links still land on the way to it. -->
         <span id="get-started"></span>
         <div class="container">
             <div class="section-header">
@@ -572,83 +574,7 @@
                 <h2>Endesha BeanPool kwa Ajili ya Jamii Yako</h2>
                 <p>Kila jamii huendeshwa kwenye nodi yake yenyewe: seva ndogo inayoshikilia wanachama, machapisho na leja ya jamii hiyo. Mtu wa eneo husika huiendesha. Ikiwa mji au bonde lako halina bado, unaweza kuwa wewe.</p>
             </div>
-            <div class="features-grid">
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🧰</div>
-                    <h3>Unachosimamia</h3>
-                    <p>Wewe na wasimamizi unaowateua ndio wasimamizi wa jamii yako: ripoti huja kwenu. Data ya wanachama wako inaishi kwenye mashine yako, kwa hivyo unaiwekea nakala rudufu. Unaweza kusoma mijadala ya biashara na gumzo za matukio; huwezi kusoma jumbe za moja kwa moja. Unawaalika wanachama wa kwanza, nao huwaalika wengine.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">⚙️</div>
-                    <h3>Programu ya mipangilio</h3>
-                    <p>Nodi yako inakuja na programu yake ya mipangilio kwenye kivinjari. Kutoka kwayo unaiita jamii yako jina, unateua mmiliki na wasimamizi wanaoingia kwa funguo zao wenyewe, unachapisha mialiko ya QR, unafuatilia afya ya diski, unachagua anwani ya wavuti ya umma au mfereji, na unamsaidia mwanachama aliyepoteza simu yake na maneno yake 12 kurejea kwenye akaunti yake kwenye simu mpya, kwa msimbo wa mara moja unaoutoa ukithibitisha ana kwa ana.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🔒</div>
-                    <h3>Faragha kuanzia mwanzo kabisa</h3>
-                    <p>Matangazo, ramani, jumbe na masalio ya jamii ni kwa ajili ya wanachama wake kuanzia wakati ambapo nodi yake inapoanza kufanya kazi; hakuna cha kuwasha. Mtu anayefungua anwani yake bila kuwa na akaunti huelekezwa kwenye jamii ya kimataifa, ambapo wanaweza kuona kile kilicho karibu nao na kuomba kujiunga.</p>
-                </div>
-                <div class="feature-card glass-panel">
-                    <div class="feature-icon">🌐</div>
-                    <h3>Kuungana na jamii jirani</h3>
-                    <p>Jamii mbili zinaweza kukubaliana kuungana ili wanachama wao waweze kufanya mabadilishano wao kwa wao. Maharagwe kamwe hayaondoki nyumbani: kila jozi huweka hesabu inayoendelea ya kile ambacho jamii moja inadaiwa na nyingine, na kila upande huweka kikomo chake chenyewe. Kuunganisha kunazimwa isipokuwa waendeshaji wote wawili wakiwasha, na bado ni hatua za awali: kumejengwa, kukiwa na skrini zake katika programu ya wavuti, na kumejaribiwa tu kati ya jamii zetu mbili za majaribio, kamwe si kati ya jamii halisi.</p>
-                </div>
-            </div>
-
-            <div class="cta-card run-node-card">
-                <h2>Anzisha jamii</h2>
-                <p>Takriban nusu saa, ikiwa unaweza kufuata maelekezo. Mambo sita ya kujua kwanza:</p>
-                <ul class="run-node-facts">
-                    <li><strong>Gharama zake.</strong> Programu ni ya bure. Inaendeshwa kwenye kompyuta ya ziada inayobaki ikiwaka nyumbani (Mini PC, NAS, au Raspberry Pi yenye mfumo wa 64-bit), au kwenye seva ndogo ya kukodi kwa dola chache kwa mwezi (takriban US$6).</li>
-                    <li><strong>Nani anayeihifadhi.</strong> Wewe mwenyewe, kwenye mashine yako mwenyewe au unayoikodi. Kamwe haihitaji <a href="https://beanpool.org">beanpool.org</a>: anwani yako ya wavuti inafanya kazi.</li>
-                    <li><strong>Majukumu yako.</strong> Ripoti kutoka kwa wanachama wako huja kwako. Folda ya data ni yako kuiwekea nakala rudufu, kwa msimbo wa kurejesha. Wekeni wamiliki wawili. Weka seva ikiwa inafanya kazi na kusasishwa.</li>
-                    <li><strong>Kile ambacho hutakiona kamwe.</strong> Jumbe za moja kwa moja za wanachama wako.</li>
-                    <li><strong>Docker kwanza.</strong> Mashine inahitaji Docker ikiwa imesakinishwa kabla ya kizuizi cha msimbo hapa chini; seva iliyokodishwa hivi karibuni haina.</li>
-                    <li><strong>Anwani inayofikiwa na simu.</strong> Simu huifikia jamii kwenye intaneti kupitia https pekee. Kwenye seva ya kukodi yenye anwani ya IP ya umma na milango 80 na 443 ikiwa wazi, anwani hiyo ya IP inatosha: seva yako inapata cheti chake yenyewe kwa ajili yake, bila akaunti ya Cloudflare, na vivyo hivyo kwa kikoa chako mwenyewe. Nyumbani, au bila milango iliyo wazi, mchakato wa kudai unakupa jina la bure linaloishia na .beanpool.org, kupitia mfereji ambao seva yako hujiendeshea yenyewe. Anwani ya kawaida ya http:// inafanya kazi kwenye mtandao wa nyumbani pekee.</li>
-                </ul>
-                <p>Kisha, kwenye mashine hiyo ikiwa na Docker iliyosakinishwa, bandika kizuizi hiki kimoja cha msimbo. Kinaleta faili ya compose, kinaunda mtandao ambao nodi inautumia, kinapakua picha iliyochapishwa (Intel/AMD au ARM64), kinaianzisha, kinasubiri hadi seva itengeneze msimbo wake wa mara moja wa kudai (hadi dakika tano, kwa mwanzo wa polepole wa kwanza kwenye Raspberry Pi), na kuikabidhi. Hakuna cha kusanidi kabla ya kuanza.</p>
-
-                <!-- macOS Style Terminal Window -->
-                <div class="terminal-window">
-                    <div class="terminal-header">
-                        <div class="terminal-dots">
-                            <span class="terminal-dot red"></span>
-                            <span class="terminal-dot yellow"></span>
-                            <span class="terminal-dot green"></span>
-                        </div>
-                        <div class="terminal-title">bash — anzisha jamii</div>
-                    </div>
-                    <div class="terminal-body">
-                        <div class="cta-step">
-                            <span class="cta-step-label">Kizuizi kimoja: leta, mtandao, pakua, anza, subiri, dai</span>
-                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
-docker network create beanpool-shared
-docker compose pull
-docker compose up -d
-echo "Waiting for the server to make its claim code (up to 5 minutes)..."
-for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
-docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
-docker compose exec beanpool-node beanpool claim</code>
-                            <button class="copy-btn" onclick="copyCode(this)" title="Nakili kwenye ubao wa kunakili">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <h3 class="run-node-sub">Mstari wa mwisho: beanpool claim</h3>
-                <ol class="run-node-steps">
-                    <li><strong>Anwani yako.</strong> Ichague kabla ya kubandika, na ubadilishe mstari wa mwisho ili ulingane. Ikiwa tayari umebandika, bonyeza Enter kwenye maswali yake, kisha uendeshe mstari wa mwisho tena: msimbo wa kudai unasubiri simu. <strong>Seva iliyokodishwa</strong> yenye anwani ya IP ya umma na milango 80 na 443 ikiwa wazi: ongeza <code>--ip</code> na anwani yake ya IP, kama vile <code>beanpool claim --ip 203.0.113.7</code>. Seva yako inapata cheti chake yenyewe cha anwani hiyo kutoka Let's Encrypt, kupitia mlango wa 80, na simu huifikia katika https://203.0.113.7. <strong>Kompyuta ya nyumbani, au bila milango iliyo wazi</strong>: iache kama ilivyo. Inaomba sehemu ya kwanza ya jina la bure (andika tu <strong>yourtown</strong> kwa ajili ya yourtown.beanpool.org; Enter inaruka), inayofikiwa kupitia mfereji ambao seva yako hujiendeshea yenyewe, na kusubiri hadi dakika tatu ili ianze kufanya kazi. <strong>Kikoa chako mwenyewe</strong>: elekeza rekodi ya A kwa ajili yake kwenye anwani ya IP ya seva, fungua milango 80 na 443, na uongeze <code>--address https://your.domain</code>. Jina hudumu hata seva ikibadilika; nambari haidumu: unaweza kuongeza jina baadaye kwenye Mipangilio, na wanachama wanaotumia anwani ya IP wanaendelea kufanya kazi. Ili kuchagua baadaye kwenye Mipangilio, ongeza <code>--no-name</code>. Anwani ya kawaida ya <code>http://</code> inafanya kazi kwenye mtandao wa nyumbani pekee: simu huikataa kwenye intaneti, na mchakato wa kudai unakuonya. Ikiwa huduma ya anwani ya mradi wa BeanPool haifanyi kazi, mchakato wa kudai bado unafanya kazi.</li>
-                    <li><strong>Msimbo na QR.</strong> Inaonyesha msimbo wa mara moja wa kudai na msimbo wa QR. Changanua msimbo wa QR kwa kamera ya simu yako, au fungua BeanPool, andika anwani ya seva chini ya <strong>Tafuta jamii yako</strong> na uguse <strong>Dai</strong>. Simu hiyo inakuwa mmiliki.</li>
-                    <li><strong>Mipangilio.</strong> Fungua anwani yako (au anwani ya seva yenyewe) ikifuatiwa na <strong>/settings</strong>. Mchawi wa usanidi huipa jamii yako jina, hukuomba uongeze mmiliki wa pili, na kuunda mialiko mitatu ya uanzilishi. Weka eneo lako kwenye ramani chini ya Utambulisho wa Nodi ili watu walio karibu waweze kukupata.</li>
-                </ol>
-                <p class="run-node-note">Ikiwa kizuizi kinasema <strong>Hakuna msimbo wa kudai baada ya dakika 5</strong>, au <code>beanpool claim</code> inasema <strong>Jamii hii haina msimbo wa kudai unaosubiri</strong>, seva haijamaliza kuanza: <code>docker compose logs beanpool-node</code> inaonyesha ilipofikia. Mara tu kumbukumbu inasema jamii haina mmiliki bado na ina msimbo wa kudai, endesha mstari wa mwisho tena. Hatua kamili ziko katika mwongozo wa mwendeshaji kwenye <a href="../guide/operators/first-time-setup.html">usanidi wa mara ya kwanza</a>.</p>
-
-                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                    Tazama kwenye GitHub →
-                </a>
-            </div>
+            <p class="run-node-start" style="text-align: center; margin-top: 1.5rem;"><a href="start.html" class="btn btn-primary">Anzisha jamii&nbsp;→</a></p>
         </div>
     </section>
 
@@ -701,7 +627,7 @@ docker compose exec beanpool-node beanpool claim</code>
                     <a href="getting-started.html">Kuanza Sasa</a>
                     <a href="rules.html">Kanuni</a>
                     <a href="post-extraction.html">Baada ya Unyonyaji</a>
-                    <a href="#run-a-node">Endesha Jamii</a>
+                    <a href="start.html">Endesha Jamii</a>
                     <a href="../guide/index.html">Mwongozo wa wanachama</a>
                     <a href="status.html">Hali ya seva</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>

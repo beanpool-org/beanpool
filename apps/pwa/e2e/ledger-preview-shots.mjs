@@ -169,10 +169,10 @@ async function markersNeverLocked(page, where) {
     check(bad.length === 0, `${where}: no marker looks locked, greyed or dimmed${bad.length ? ` (${bad.join('; ')})` : ''}`);
 }
 
-/** Every control the showcase draws (previews, markers, the sheet, the Start screen, My Deals' preview) is 44 x 44 px or more. */
+/** Every control the showcase draws (previews, markers, the sheet, the Start screen, Your deals' preview) is 44 x 44 px or more. */
 async function targetsAtLeast44(page, where) {
     const small = await page.evaluate(() => {
-        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="My Deals"]';
+        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="Your deals"]';
         return Array.from(document.querySelectorAll('button, a[href], [role="button"], input, select, textarea'))
             .filter((el) => el instanceof Element && (el.matches(ours) || el.closest(ours)) && el.getClientRects().length > 0)
             .map((el) => ({ el, r: el.getBoundingClientRect() }))

@@ -44,6 +44,7 @@ This cannot be undone, even with your 12 words.
 - Your profile becomes "Deleted Member".
 - Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as "Deleted post".
 - Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and project and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see "What stays a while" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.
+- If you replied to the case on a vote on removing you, your reply is deleted, whether the vote is still open or has closed. The vote and its case stay.
 - Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.
 - A poll you asked is closed. It keeps its question and its votes.
 - The block list your community kept for you goes too.
@@ -97,5 +98,6 @@ When a community removes a member, it keeps their profile, so that a vote can br
 
 - Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.
 - Every message you wrote reads **This message was deleted**, and the photos you sent are deleted.
+- If you replied to the case on the vote about you, your reply is deleted. The vote and its case stay.
 - After that, your community cannot vote to bring the account back. To come back, join again with a new invite. The global community takes no invites, and a sign-in it removed cannot join it again.
 - If a deal of yours is still under way, the other member or an admin must close it first.

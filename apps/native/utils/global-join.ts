@@ -87,9 +87,10 @@ import {
 import { checkVaultTicket } from '@beanpool/core';
 import { extractSub } from './sso-sheet-connect';
 import { enrolmentFromJoin, enrolmentFromVault, sealSsoShares, type KeeperEnrolmentResult } from './keeper-enrolment';
-import { depositWithVault, signInCopiesAt, vaultConfig, vaultTicket, VaultError } from './vault';
+import { depositWithVault, signInCopiesAt, vaultConfig, vaultTicket, VaultError, type SignInCopies } from './vault';
+import { knownCopiesRule } from './copies-rule';
 import {
-    adoptJoinKey, commitDoorKey, countDoorJoinOut, countDoorJoinRefused, keepJoinedIdentity, keyForThisPhone, releaseDoorKey,
+    adoptJoinKey, commitDoorKey, countDoorJoinOut, countDoorJoinRefused, keepJoinedIdentity, keyForThisPhone, openDoorAt, releaseDoorKey,
     type JoinKey, type KeyDoor,
 } from './door-key';
 import { GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from './node-profile';
@@ -444,7 +445,7 @@ export { adoptJoinKey, keepJoinedIdentity };
 
 /** This door, to the key rule every door shares (utils/door-key.ts): its record's flow, at the global community's address. */
 function globalDoor(): KeyDoor {
-    return { flow: 'global', url: GLOBAL_NODE_URL };
+    return openDoorAt(GLOBAL_NODE_URL);
 }
 
 /**
@@ -465,6 +466,15 @@ export function joinKeyForThisPhone(held: JoinKey | null = null): Promise<JoinKe
  * design §1.3), kept to the keys the build has built in. Empty when the door names none (a door from before V5, or one
  * whose operator set none) or only keys of another vault: then the phone asks the vault for nothing at this door.
  */
+/**
+ * Where a copy made at the door at `url` goes: its community's rule (vault rethink VR2), as the door check kept it
+ * (node-profile.ts checkGlobalDoor asks it fresh), else this build's place. The door itself takes a vault ticket only
+ * under `vault`, and keeps no copy under `none` (apps/server routes/open-join.ts).
+ */
+export async function doorCopiesAt(url: string): Promise<SignInCopies> {
+    return signInCopiesAt(await knownCopiesRule(url));
+}
+
 export function doorTicketKeys(doorKeys: { ticketKeys: string[] } | null): string[] {
     const pinned = vaultConfig()?.ticketKeys ?? [];
     return (doorKeys?.ticketKeys ?? []).filter(key => pinned.includes(key));
@@ -556,8 +566,9 @@ export async function signInAtDoor(
     const asked = await askTheDoor(provider, url, identity);
     if (asked.kind === 'answered') return asked;
     const { nonce: doorNonce, vault: doorKeys } = asked.nonce;
-    // A build without a vault: the door's own nonce, exactly as before the vault (the copy rides in the join).
-    if (signInCopiesAt() === 'community') {
+    // A build without a vault, or a door whose community keeps copies itself or none (its rule, vault rethink VR2, as the
+    // door check kept it): the door's own nonce, exactly as before the vault (a copy, where kept, rides in the join).
+    if (await doorCopiesAt(url) !== 'vault') {
         const signin = provider === 'apple'
             ? await signInWithApple(doorNonce)
             : provider === 'google'
@@ -612,14 +623,17 @@ function refusedByTheNode(answer: DoorAnswer): boolean {
  * A join signed by the door's own key is about to go out: count it on the phone first, so a join that lands
  * with its answer lost, or with the app stopped, is never forgotten (`joinsOut`). False when the count could
  * not be written; the join is then not sent. True when there is nothing to count (not the door's key).
+ *
+ * Counted at the door the join goes to (`url`): the global community's, or another community's open door
+ * (utils/open-door-key.ts), whose record names that address. A key one door made is never counted at another.
  */
-function countJoinOut(publicKey: string): Promise<boolean> {
-    return countDoorJoinOut(globalDoor(), publicKey);
+function countJoinOut(url: string, publicKey: string): Promise<boolean> {
+    return countDoorJoinOut(openDoorAt(url), publicKey);
 }
 
-/** The node refused a join signed by the door's own key: it no longer counts. */
-function countJoinRefused(publicKey: string): Promise<void> {
-    return countDoorJoinRefused(globalDoor(), publicKey);
+/** The node at `url` refused a join signed by its door's own key: it no longer counts. */
+function countJoinRefused(url: string, publicKey: string): Promise<void> {
+    return countDoorJoinRefused(openDoorAt(url), publicKey);
 }
 
 /**
@@ -756,7 +770,7 @@ async function sendWordsJoin(url: string, identity: BeanPoolIdentity, callsign: 
         callsign: callsign.trim().slice(0, MAX_JOIN_NAME).trim(),
         ...(work ? { work } : {}),
     };
-    if (!(await countJoinOut(identity.publicKey))) return { kind: 'try_again', message: DOOR_MESSAGES.tryAgain };
+    if (!(await countJoinOut(url, identity.publicKey))) return { kind: 'try_again', message: DOOR_MESSAGES.tryAgain };
     let res: Response | null;
     try {
         res = await withTimeout(signedPost(url, JOIN_PATH, body, identity), JOIN_TIMEOUT_MS);
@@ -767,7 +781,7 @@ async function sendWordsJoin(url: string, identity: BeanPoolIdentity, callsign: 
     const answerBody = await res.json().catch(() => ({}));
     const answer = readWordsDoorAnswer(res.status, answerBody, retryAfterSeconds(res));
     console.log(`[JOIN] words: the door answered ${res.status} (${answer.kind})`);
-    if (refusedByTheNode(answer)) await countJoinRefused(identity.publicKey);
+    if (refusedByTheNode(answer)) await countJoinRefused(url, identity.publicKey);
     return answer;
 }
 
@@ -779,7 +793,7 @@ async function sendJoin(
     // Backup offers the ordinary connect. Why it failed goes to the log; never the words or the key.
     let recovery: { shares: unknown[] } | null = null;
     let wordsSealed = false;
-    if (signInCopiesAt() === 'community') {
+    if (await doorCopiesAt(url) === 'community') {
         try {
             const sealed = await sealSsoShares(identity, signin.provider, signin.sub);
             recovery = { shares: sealed.shares };
@@ -800,7 +814,7 @@ async function sendJoin(
         ...(work ? { work } : {}),
     };
 
-    if (!(await countJoinOut(identity.publicKey))) return { answer: { kind: 'try_again', message: DOOR_MESSAGES.tryAgain }, status: null };
+    if (!(await countJoinOut(url, identity.publicKey))) return { answer: { kind: 'try_again', message: DOOR_MESSAGES.tryAgain }, status: null };
     let res: Response | null;
     try {
         res = await withTimeout(signedPost(url, JOIN_PATH, body, identity), JOIN_TIMEOUT_MS);
@@ -812,7 +826,7 @@ async function sendJoin(
     const answer = readDoorAnswer(res.status, answerBody, retryAfterSeconds(res));
     const heard = { status: res.status, code: codeOf(answerBody) };
     console.log(`[JOIN] ${signin.provider}: the door answered ${res.status} (${answer.kind})`);
-    if (refusedByTheNode(answer)) await countJoinRefused(identity.publicKey);
+    if (refusedByTheNode(answer)) await countJoinRefused(url, identity.publicKey);
     if (answer.kind === 'joined' && res.ok && recovery) {
         return {
             answer: { ...answer, enrolment: enrolmentFromJoin((answerBody as { recovery?: unknown }).recovery, signin.provider, wordsSealed) },

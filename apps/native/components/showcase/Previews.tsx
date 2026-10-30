@@ -1,5 +1,5 @@
 /**
- * Commons in preview (scratch/global-node/DESIGN-global-showcase-fable.md §1 rows 5, 6, W3; the Ledger and My Deals are the
+ * Commons in preview (scratch/global-node/DESIGN-global-showcase-fable.md §1 rows 5, 6, W3; the Ledger and Your deals are the
  * member's own screens fed the sample, app/(tabs)/ledger.tsx, components/MyDealsSheet.tsx + sample-screens.ts): the
  * strip, the Example header, and Example Valley's frozen numbers (@beanpool/core SAMPLE_COMMUNITY). The explainers are
  * the member's own (the same info modals); every action that would move Beans, vote or pledge is the marker's `action`,

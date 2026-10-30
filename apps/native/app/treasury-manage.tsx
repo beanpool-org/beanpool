@@ -538,7 +538,7 @@ export default function TreasuryManageScreen() {
         if (!treasuryKey || cancelling) return;
         Alert.alert(
             t('Cancel Initiative & Refund Backers?'),
-            t('This will close the initiative and immediately refund all escrowed pledges back to their backers.'),
+            t('This will close the initiative and immediately refund all pledges held in trust back to their backers.'),
             [
                 { text: t('Keep Initiative'), style: 'cancel' },
                 {
@@ -649,6 +649,33 @@ export default function TreasuryManageScreen() {
 
     const pendingBids: any[] = detail?.pendingBids || [];
     const activeDeals: any[] = detail?.activeDeals || [];
+
+    // A project's cancel, drawn for whoever the node says may cancel it (apps/server db.ts mayCancelProject, its `mayCancel`):
+    // a node admin, its leader, its only collaborator when nobody leads it, or its maker when nobody else ever helped run it.
+    // Never from the keepers list, which can't say who is an admin or that a collaborator left. Inside the operator controls
+    // for a collaborator; on its own for an admin who keeps none of it, who has none.
+    const cancelBlock = detail?.mayCancel === true && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' ? (
+        <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 }}>
+            <Pressable
+                style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.solid }}
+                onPress={handleCancelInitiative}
+                disabled={cancelling}
+                accessibilityRole="button"
+                accessibilityLabel={t('Cancel initiative and refund backers')}
+            >
+                {cancelling ? (
+                    <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
+                ) : (
+                    <>
+                        <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.fg} />
+                        <Text style={{ flexShrink: 1, textAlign: 'center', fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg }}>
+                            {t('Cancel Initiative & Refund Backers')}
+                        </Text>
+                    </>
+                )}
+            </Pressable>
+        </View>
+    ) : null;
 
     const body = () => {
         if (loading && !detail) return <View style={styles.centerFill}><ActivityIndicator color={colors.brand.primary} /></View>;
@@ -974,8 +1001,8 @@ export default function TreasuryManageScreen() {
                                             <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
                                                 <Sentence
                                                     text={d.action_required === 'fulfill'
-                                                        ? t('Customer: {name} · {amount} 🫘 in escrow', { amount: d.credits })
-                                                        : t('Worker: {name} · {amount} 🫘 in escrow', { amount: d.credits })}
+                                                        ? t('Customer: {name} · {amount} 🫘 held in trust', { amount: d.credits })
+                                                        : t('Worker: {name} · {amount} 🫘 held in trust', { amount: d.credits })}
                                                     parts={{ name: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || t('Member')}</Text> }}
                                                 />
                                             </Text>
@@ -1016,31 +1043,10 @@ export default function TreasuryManageScreen() {
                                     : t("Post the enterprise's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.")}
                             </Text>
 
-                            {/* Its leader's alone, as the node takes it (apps/server db.ts leadsProject): to any other collaborator it was a door the node refused. */}
-                            {iAmLead && detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
-                                <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 }}>
-                                    <Pressable
-                                        style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.solid }}
-                                        onPress={handleCancelInitiative}
-                                        disabled={cancelling}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={t('Cancel initiative and refund escrow')}
-                                    >
-                                        {cancelling ? (
-                                            <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
-                                        ) : (
-                                            <>
-                                                <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.fg} />
-                                                <Text style={{ flexShrink: 1, textAlign: 'center', fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg }}>
-                                                    {t('Cancel Initiative & Refund Escrow')}
-                                                </Text>
-                                            </>
-                                        )}
-                                    </Pressable>
-                                </View>
-                            )}
+                            {cancelBlock}
                         </View>
                     )}
+                    {!isKeeperOfThis && cancelBlock}
 
                     {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
                     {treasuryKey && (

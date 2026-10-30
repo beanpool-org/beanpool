@@ -358,6 +358,12 @@ export interface CommunityInfo {
      * a browser with no choice of its own and a language BeanPool doesn't write (lib/language.ts). Absent: English.
      */
     language?: string;
+    /**
+     * Where members' copies go (vault rethink VR2, apps/server config/recovery-copies.ts): BeanPool's key vault (the
+     * default; this browser has no vault client, so its own copy stays on this server), this server, or nowhere. Absent:
+     * a node from before the rule. Settings' sign-in line says `none` (components/SignInRecoveryLine.tsx).
+     */
+    recoveryCopies?: 'vault' | 'server' | 'none';
 }
 
 export interface Member {
@@ -615,6 +621,20 @@ export async function fetchMembershipAt(community: string, publicKey: string, si
         Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey, community));
     }
     return fetch(`${community}${path}`, { headers, cache: 'no-store', ...(signal ? { signal } : {}) });
+}
+
+/**
+ * A request signed by this browser's key to the community at `community` (an origin, any community, not only the one
+ * this web app talks to), for the key's own business there: a pending "ask to join" (lib/knock.ts). Signed for that
+ * host only. The caller keeps its own timeout and reads the Response; a POST carries `bodyString` as JSON.
+ */
+export async function signedFetchAt(
+    method: 'GET' | 'POST', community: string, path: string, bodyString: string, identity: BeanPoolIdentity,
+): Promise<Response> {
+    const signed = await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey, community);
+    return fetch(`${community}${path}`, method === 'POST'
+        ? { method, headers: { 'Content-Type': 'application/json', ...signed }, body: bodyString }
+        : { method, headers: signed, cache: 'no-cache' });
 }
 
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {
@@ -2218,6 +2238,27 @@ export interface Decision {
     adminHaltedAt: string | null;
     adminHaltReason: string | null;
     updatedAt: string;
+    /** A vote on removing a member: the member's own reply to its case, and when they wrote it (null until they do). */
+    subjectReply?: string | null;
+    subjectRepliedAt?: string | null;
+    /** A vote on removing a member whose case an admin hid as shown to be false: when, and their public reason. */
+    caseHiddenAt?: string | null;
+    caseHiddenReason?: string | null;
+    /** A vote on removing a member whose reply an admin took down: when, and their public reason (the reply itself is gone). */
+    replyHiddenAt?: string | null;
+    replyHiddenReason?: string | null;
+    /** A vote on removing a member: who brought it, by name (absent from a node from before). */
+    proposer?: RemovalProposer;
+}
+
+/**
+ * Who brought a vote on removing a member, as the node names them (removal by vote, Amendment A point 3): an admin who
+ * paused them, an owner who did with the server's password (no name), or a member who proposed it before proposing one
+ * closed. `name` is null when the node can't know it.
+ */
+export interface RemovalProposer {
+    kind: 'admin' | 'password' | 'member';
+    name: string | null;
 }
 
 export interface DecisionTally {
@@ -2283,6 +2324,22 @@ export async function castDecisionVote(decisionId: string, options: {
     signature?: string;
 }): Promise<{ success: boolean; creditsUsed: number }> {
     return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/vote`, options);
+}
+
+/**
+ * The member a vote on removing them is about replies to its case (removal by vote, Amendment A point 2): their words,
+ * shown beside the case to everyone who reads the vote. Signed; the node takes it from them alone, while the vote is open.
+ */
+export async function replyToRemovalCase(decisionId: string, reply: string): Promise<{ success: boolean }> {
+    return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/reply`, { reply });
+}
+
+/**
+ * The member a vote on removing them is about reports its case as a false accusation (Amendment A point 4): a report about
+ * whoever brought it, for the admins and owners. Signed; the node takes it from that member alone.
+ */
+export async function reportRemovalCase(decisionId: string): Promise<{ success: boolean; duplicate?: boolean }> {
+    return request('POST', `/api/commons/decisions/${encodeURIComponent(decisionId)}/report`, {});
 }
 
 // ===================== COMMUNITY TREASURIES =====================
@@ -2965,8 +3022,9 @@ export type HomeRead = { notModified: false; answer: HomeAnswer; etag: string | 
  * rather than leaning on the browser's cache, which keeps nothing in a private window, in some in-app browsers, or over a
  * certificate the browser was told to accept; and only to the node that served this page: another origin's preflight
  * refuses the header and doesn't let the page read the tag, so there the browser revalidates on its own, if it can.
+ * `signal` lets a reader that stops waiting (a tool's `place`) let the request go.
  */
-export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null): Promise<HomeRead> {
+export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null, signal?: AbortSignal): Promise<HomeRead> {
     const q = new URLSearchParams();
     if (params.cards) q.set('cards', params.cards.join(','));
     // This app opens an enterprise's own screen and a chat group's (HomePage needsLine, { to: 'enterprise' | 'group', id }), so
@@ -2994,7 +3052,7 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     }
     const conditional = !!etag && sameOrigin;
     if (conditional) headers['If-None-Match'] = etag!;
-    const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache' });
+    const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache', ...(signal ? { signal } : {}) });
     if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
     if (!res.ok) throw await refusalError(res);
     return { notModified: false, answer: await res.json() as HomeAnswer, etag: sameOrigin ? res.headers.get('ETag') : null };

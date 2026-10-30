@@ -109,8 +109,9 @@ vi.mock('../lib/api', () => ({
         return {
             ...mockTreasuryDetail,
             publicKey: pk,
-            // Its maker and only keeper, so its lead: a project's cancel is its lead's (apps/server db.ts leadsProject).
+            // Its maker and only keeper, so its lead, whom the node lets cancel it (apps/server db.ts mayCancelProject, `mayCancel`).
             keepers: [{ pubkey: 'my-user-pubkey', callsign: 'Alice', role: 'lead' }],
+            mayCancel: true,
         };
     }),
     getBalance: vi.fn(async () => mockBalance),
@@ -288,10 +289,10 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Manage' }));
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Cancel Initiative & Refund Escrow/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Cancel Initiative & Refund Backers/i })).toBeInTheDocument();
         });
 
-        const cancelBtn = screen.getByRole('button', { name: /Cancel Initiative & Refund Escrow/i });
+        const cancelBtn = screen.getByRole('button', { name: /Cancel Initiative & Refund Backers/i });
         fireEvent.click(cancelBtn);
 
         await waitFor(() => {

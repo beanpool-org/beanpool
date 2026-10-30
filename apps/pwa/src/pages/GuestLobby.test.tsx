@@ -361,7 +361,7 @@ describe('a visitor with no key on the global node', () => {
         stubNode(GLOBAL);
         await openLobby();
         await screen.findByTestId('visitor-list');
-        for (const name of [/ADD POST/, /My Deals/, /Pricing Guide/, /Beans only/, /New members/, /^Going/, /^Interested/, /Message/, /Accept/]) {
+        for (const name of [/ADD POST/, /Your deals/, /Pricing Guide/, /Beans only/, /New members/, /^Going/, /^Interested/, /Message/, /Accept/]) {
             expect(screen.queryByRole('button', { name })).toBeNull();
         }
 

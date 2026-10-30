@@ -16,6 +16,8 @@ vi.mock('react-native', () => {
         Text: el('span'),
         Pressable: el('button'),
         StyleSheet: { create: (s: any) => s },
+        // The bubble measures a long message against the window (components/chat/ChatFold.tsx).
+        useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
 

@@ -50,12 +50,14 @@ import crypto from 'node:crypto';
 import { TWO_LAYER_THRESHOLD, word, wordsFor } from '@beanpool/core';
 
 import { db } from '../db/db.js';
-import { assertPlainTablesWritable } from '../config/node-role.js';
+import { truncateWalAfterDelete } from '../db/wal-truncate.js';
+import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { getCurrentGeneration, openShareRow, type KeeperType } from './recovery-shares.js';
 import { ssoLookupHash, type SsoProvider } from '../sso.js';
 import {
     isSingleBlobSsoStored,
     openRecoveryFields,
+    releasedCopyGoneKdf,
     releaseRowAad,
     sealRecoveryFields,
 } from '../services/recovery-seal-key.js';
@@ -125,8 +127,11 @@ export const STOPPED_SESSION_KEPT_MS = SIGN_IN_WINDOW_MS;
  *
  * The two tables are not the same kind of thing, and the difference is the policy:
  *
- *   recovery_releases    a fragment actually left the node. Permanent, like `transactions` — this
- *                        is the log R1 leans on when a takeover is discovered after the fact.
+ *   recovery_releases    a fragment actually left the node. The row is permanent, like `transactions` —
+ *                        this is the log R1 leans on when a takeover is discovered after the fact. The
+ *                        copy it carries is not: 30 days after the release it is emptied (vault rethink
+ *                        VR2, forgetOldReleasedCopies), so the people who run the server can't open it
+ *                        for good, and the record of who, when and which kind stays.
  *   recovery_collections mostly nothing happened. A session with no releases is somebody opening a
  *                        screen; keeping it forever would be keeping a nonce forever, and this is
  *                        an UNAUTHENTICATED insert, so "forever" means "as many as anyone likes".
@@ -276,12 +281,58 @@ export async function sweepRecoveryCollections(
     return { deleted, batches };
 }
 
+/**
+ * How long a released copy is kept (vault rethink VR2, design §5.5; Marty's pick 6, 27 Oct). A release's row kept the
+ * copy it handed over for good ("permanent by design"), wrapped under the recovery seal, so the people who run the
+ * server could open it long after the member had disconnected that sign-in: the key vault keeps a hold 7 days and no
+ * copy of what it handed back. A collection is live 72 hours at most (COLLECTION_TTL_MS), so a copy this old is one no
+ * live session can still be handed (releasesForLiveSession).
+ */
+export const RELEASED_COPY_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Empty the copy of every release older than RELEASED_COPY_KEPT_MS: its payload, nonce and tag go, and its `kdf_params`
+ * keeps only the scheme names (services/recovery-seal-key.ts releasedCopyGoneKdf). The row stays, as the record that a
+ * release happened: its session, the kind of copy, who approved it and when, whose account. Never a release of a live
+ * session, whatever its clock says. secure_delete is on for this database (db.ts), so the old bytes are zeroed where
+ * they lay; the touch trigger stamps each row, so a standby is sent it emptied. A main server's only: on a standby the
+ * releases are its main server's rows, copied (config/node-role.ts standbyWritesNothing). In batches of SWEEP_BATCH,
+ * each its own statement. Returns how many copies went.
+ */
+export async function forgetOldReleasedCopies(now: number = Date.now()): Promise<number> {
+    if (standbyWritesNothing()) return 0;
+    const before = new Date(now - RELEASED_COPY_KEPT_MS).toISOString();
+    const pick = db.prepare(`
+        SELECT id, kdf_params FROM recovery_releases
+        WHERE released_at <= ? AND payload != ''
+          AND collection_id NOT IN (SELECT id FROM recovery_collections WHERE status = 'open' AND expires_at > ?)
+        ORDER BY id LIMIT ?
+    `);
+    const empty = db.prepare(`UPDATE recovery_releases SET payload = '', payload_iv = '', payload_tag = '', kdf_params = ? WHERE id = ?`);
+    let forgotten = 0;
+    for (;;) {
+        const rows = pick.all(before, new Date(now).toISOString(), SWEEP_BATCH) as { id: number; kdf_params: string | null }[];
+        if (rows.length === 0) break;
+        db.transaction(() => {
+            for (const r of rows) forgotten += empty.run(releasedCopyGoneKdf(r.kdf_params), r.id).changes;
+        })();
+        if (rows.length < SWEEP_BATCH) break;
+        await yieldToEventLoop();
+    }
+    // No old frame keeps the bytes in the WAL either. This runs on a live main server's timer, where a copy being served
+    // to a standby can hold the WAL (engine/open-copies.ts): emptied now, or by a try each minute for up to an hour once
+    // that reader lets go, never waiting on it with the event loop held (db/wal-truncate.ts).
+    if (forgotten > 0) truncateWalAfterDelete('released copies were emptied');
+    return forgotten;
+}
+
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 let sweeping = false;
 
 /**
  * Sweep every SWEEP_EVERY_MS, on every server whatever its role: the sessions are each server's own (engine/
- * replication-manifest.ts, `local`), so a standby that takes opens bounds its own. One sweep at a time. Unref'd.
+ * replication-manifest.ts, `local`), so a standby that takes opens bounds its own. One sweep at a time. Unref'd. The same
+ * timer empties released copies past RELEASED_COPY_KEPT_MS (forgetOldReleasedCopies), on a main server.
  */
 export function startSweepingRecoveryCollections(everyMs = SWEEP_EVERY_MS): void {
     if (sweepTimer) clearInterval(sweepTimer);
@@ -291,6 +342,9 @@ export function startSweepingRecoveryCollections(everyMs = SWEEP_EVERY_MS): void
         sweepRecoveryCollections()
             .then(({ deleted }) => { if (deleted > 0) console.log(`[Recovery] Swept ${deleted} recovery session(s) that released nothing.`); })
             .catch(e => console.warn('[Recovery] Could not sweep recovery sessions:', (e as Error)?.message || e))
+            .then(() => forgetOldReleasedCopies())
+            .then((gone) => { if (gone) console.log(`[Recovery] Emptied ${gone} released cop${gone === 1 ? 'y' : 'ies'} older than 30 days; the record of each release stays.`); })
+            .catch(e => console.warn('[Recovery] Could not empty old released copies:', (e as Error)?.message || e))
             .finally(() => { sweeping = false; });
     }, everyMs);
     sweepTimer.unref?.();
@@ -474,6 +528,14 @@ function storedReleases(collectionId: string): ReleasedFragment[] {
 }
 
 /**
+ * Which shares a session has released, from the rows as stored: nothing is opened. So it answers before the release
+ * rules have run, for a session long dead whose copies are gone (forgetOldReleasedCopies) as for a live one.
+ */
+export function releasedShareIds(collectionId: string): Set<number> {
+    return new Set(storedReleases(collectionId).map(r => r.shareId));
+}
+
+/**
  * The releases as the recovering device reads them: exactly the bytes the client deposited, unwrapped here. Throws
  * RecoverySealKeyMissing on a server without its key.
  */
@@ -489,7 +551,7 @@ export function listReleases(collectionId: string): ReleasedFragment[] {
 
 /**
  * The releases a recovering device may still be HANDED: only while its session is live (defence review FABLE-sec-sso
- * finding 4, 2026-10-01). Releases are kept forever as evidence (see pruneCollectionsFor), and the route unwraps on
+ * finding 4, 2026-10-01). Releases are kept as evidence (see pruneCollectionsFor; their copies 30 days), and the route unwraps on
  * demand, so without this a session the owner stopped, re-split out from under, or that expired kept handing its copy
  * to its key: a year later, or a second after "Stop". The hub and the sign-in already check the same thing before
  * they release. Throws RecoveryReleaseError with the reason, as they do.

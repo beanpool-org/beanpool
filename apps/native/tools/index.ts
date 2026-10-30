@@ -14,12 +14,14 @@ import {
     type AnyToolScreenProps, type HomeNodeFacts, type ToolApp, type ToolManifest, type ToolShelf, type WordKey,
 } from '@beanpool/core';
 import thingsApp from './things';
+import gardenApp from './garden';
 
 export type PhoneToolApp = ToolApp<ComponentType<AnyToolScreenProps>>;
 
 /** Every tool's phone half, by id. */
 export const TOOL_APPS: Readonly<Record<string, PhoneToolApp>> = {
     things: thingsApp,
+    garden: gardenApp,
 };
 
 // ── Read by the host (slice T0.2): nothing below names a tool ───────────────────────────────────────────────────

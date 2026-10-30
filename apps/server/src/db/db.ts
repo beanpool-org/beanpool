@@ -201,6 +201,28 @@ export function setMoneyGuardHook(fn: (() => void) | null): void {
     assertMoneyMayMove = fn;
 }
 
+// Whether a key is an owner or admin of the node who may act (state-engine.ts isAdminPubkey), for a project's cancel
+// (mayCancelProject). state-engine registers it; inverted for the same module-cycle reason. Unregistered, nobody is.
+let isNodeAdminKey: ((publicKey: string) => boolean) | null = null;
+export function setNodeAdminCheckHook(fn: ((publicKey: string) => boolean) | null): void {
+    isNodeAdminKey = fn;
+}
+
+// A project's cancel (deleteCrowdfundProject) refunds its backers but a closed account, whose share goes to the Commons as
+// the return of an unfunded project's pledges sends it: which account is closed (engine/stranded-pledges.ts
+// isClosedAccount), that move (engine/unfunded-pledges.ts closedPledgeToCommons), and the conserving transaction all of
+// the cancel's moves run in (state-engine.ts conservingTransaction). state-engine registers them; inverted for the same
+// module-cycle reason. Unregistered, a cancel that would refund anyone is refused.
+export interface ProjectCancelLedger {
+    conservingTransaction: <T>(fn: () => T) => T;
+    isClosedAccount: (publicKey: string) => boolean;
+    closedPledgeToCommons: (escrow: string, projectId: string, amount: number) => void;
+}
+let projectCancelLedger: ProjectCancelLedger | null = null;
+export function setProjectCancelLedgerHook(hooks: ProjectCancelLedger | null): void {
+    projectCancelLedger = hooks;
+}
+
 // Enable WAL mode for better concurrency and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
@@ -1223,6 +1245,36 @@ function moveShopKindsToCategories(): void {
     }
 }
 
+/**
+ * The columns a vote on removing a member carries for removal by vote's Amendment A (schema.sql `decisions`): the member's
+ * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down.
+ */
+export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
+    ['subject_reply', 'TEXT'],
+    ['subject_replied_at', 'DATETIME'],
+    ['case_hidden_at', 'DATETIME'],
+    ['case_hidden_by', 'TEXT'],
+    ['case_hidden_reason', 'TEXT'],
+    ['reply_hidden_at', 'DATETIME'],
+    ['reply_hidden_by', 'TEXT'],
+    ['reply_hidden_reason', 'TEXT'],
+];
+
+/**
+ * Adds REMOVAL_CASE_COLUMNS to a `decisions` table from before them (initSchema, every boot): each one it lacks, NULL on
+ * every row, and every row kept as it was. Returns how many it added; 0 once they are all there. An older image booted
+ * back on the table reads past them (it names its columns), and a standby's copy writes only the columns it has
+ * (engine/plain-tables.ts).
+ */
+export function addRemovalCaseColumns(targetDb: Database.Database): number {
+    const has = new Set((targetDb.prepare('PRAGMA table_info(decisions)').all() as Array<{ name: string }>).map(c => c.name));
+    const missing = REMOVAL_CASE_COLUMNS.filter(([column]) => !has.has(column));
+    targetDb.transaction(() => {
+        for (const [column, type] of missing) targetDb.exec(`ALTER TABLE decisions ADD COLUMN ${column} ${type}`);
+    })();
+    return missing.length;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -1460,6 +1512,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN migrated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN enterprise_pubkey TEXT`).run(); } catch { }
+    // When a keeper first left the project (noteKeeperLeftProject): its maker's cancel asks it (mayCancelProject).
+    try { db.prepare(`ALTER TABLE projects ADD COLUMN keeper_left_at DATETIME`).run(); } catch { }
 
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
@@ -2346,6 +2400,11 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to give decisions a scope:', err?.message || err);
     }
     try {
+        if (addRemovalCaseColumns(db) > 0) console.log("[DB] ✅ Decisions carry a member's reply, a hidden case and a hidden reply");
+    } catch (err: any) {
+        console.error("[DB] ❌ Failed to give decisions the member's reply, a hidden case and a hidden reply:", err?.message || err);
+    }
+    try {
         db.exec(`
             DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;
             CREATE TRIGGER IF NOT EXISTS posts_cleanup_on_group_delete
@@ -2976,12 +3035,12 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
 }
 
 /**
- * Whether `pubkey` leads the project: the rule its edit (updateCrowdfundProject) asks, and its cancel (mayCancelProject)
- * starts from. Its lead is getCrowdfundProject's creator_pubkey: its lead keeper (treasury_operators, role 'lead'); with no
- * lead row, its first keeper; with no keepers at all, the projects row's own creator_pubkey. That column keeps whoever made
- * it, and the lead changes after (a keepers' vote, or a lead who stepped down or closed their account and a keeper promoted
- * in their place). Asked of that column first, the maker who no longer led it could still cancel it, refunding every backer
- * and deleting it, and the new lead could not (review of #2525).
+ * Whether `pubkey` leads the project: the rule its edit (updateCrowdfundProject) asks. Its lead is getCrowdfundProject's
+ * creator_pubkey: its lead keeper (treasury_operators, role 'lead'); with no lead row, its first keeper; with no keepers at
+ * all, the projects row's own creator_pubkey. That column keeps whoever made it, and the lead changes after (a keepers'
+ * vote, or a lead who stepped down or closed their account and a keeper promoted in their place). Asked of that column
+ * first, the maker who no longer led it could still change it, and the new lead could not (review of #2525). Its cancel asks
+ * its own rule (mayCancelProject).
  */
 export function leadsProject(projectId: string, pubkey: string): boolean {
     const lead = getCrowdfundProject(projectId)?.creator_pubkey;
@@ -2989,22 +3048,46 @@ export function leadsProject(projectId: string, pubkey: string): boolean {
 }
 
 /**
- * May `pubkey` cancel the project (deleteCrowdfundProject), refunding every backer and deleting it? Its lead (leadsProject),
- * and only a lead who may act now. The cancel is its wind-up (docs/the-commons.md: its lead keeper starts one) and can't be
- * undone, so it takes neither of the edit's softer readings (review of #2554):
- * - Not the first keeper when no keeper leads it. Nobody leads it when its lead left and no keeper was active with operator
- *   access to take over (promoteOrPauseAfterLeadLeft paused it), so that keeper is one the engine just passed over. Its maker
- *   stands in only when it has no keepers at all.
- * - Not a lead whose account isn't active, or whose operator access an admin switched off: such a keeper acts for no
- *   enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up (isLeadOrSoleKeeperOrAdmin) ask.
+ * May `pubkey` cancel the project (deleteCrowdfundProject), refunding every backer and deleting it? The cancel is its
+ * wind-up (docs/the-commons.md) and can't be undone, so it asks for the people wind-up allows (isLeadOrSoleKeeperOrAdmin),
+ * and its maker only where nobody else could ever have run it (Marty, board, 29 Oct 2026, CF-Q1 and CF-Q2):
+ * - A node admin (an owner or admin of the node, isAdminPubkey, which asks that their account is active).
+ * - Its lead keeper (treasury_operators, role 'lead').
+ * - With no lead, its only keeper. Nobody leads it when its lead left and no keeper was active with operator access to take
+ *   over (promoteOrPauseAfterLeadLeft paused it). One of two or more keepers can't, and nothing names a lead after: its
+ *   keepers can't vote one (decisions-engine.ts PROJECT_LEADER_STAYS), succession replaces only a lead it has
+ *   (proposeLeadSuccession), and an admin's assign binds a keeper. So a node admin alone cancels it then. Every binding
+ *   counts, a suspended keeper's too, as isLeadOrSoleKeeperOrAdmin counts them.
+ * - Its maker, only while it has no keepers and never had one that left (projects.keeper_left_at, noteKeeperLeftProject):
+ *   a maker an admin or the community removed as its last keeper, or who stepped down, no longer may ("removal ends it").
+ *   Every way of making a project binds its maker as its lead, so that is a projects row no keeper was ever bound to.
+ * The lead, the only keeper and the maker only while they may act now: an active account with operator access on. Such a
+ * keeper acts for no enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up ask.
  */
 export function mayCancelProject(projectId: string, pubkey: string): boolean {
-    if (!leadsProject(projectId, pubkey)) return false;
-    const keeps = db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
-        .get(projectId, pubkey) as { role: string } | undefined;
-    const hasKeepers = !!db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? LIMIT 1').get(projectId);
-    if (hasKeepers && keeps?.role !== 'lead') return false;
-    return isMemberActive(pubkey) && !isOperatorSwitchedOff(pubkey);
+    if (!pubkey) return false;
+    const project = db.prepare('SELECT creator_pubkey, keeper_left_at FROM projects WHERE id = ?').get(projectId) as
+        { creator_pubkey: string | null; keeper_left_at: string | null } | undefined;
+    if (!project || namesNoProject(projectId)) return false;
+    if (isNodeAdminKey?.(pubkey) === true) return true;
+    const keepers = db.prepare('SELECT member_pubkey, role FROM treasury_operators WHERE treasury_pubkey = ?')
+        .all(projectId) as { member_pubkey: string; role: string }[];
+    const lead = keepers.find((k) => k.role === 'lead');
+    const named = lead ? lead.member_pubkey === pubkey
+        : keepers.length === 1 ? keepers[0].member_pubkey === pubkey
+        : keepers.length === 0 && !project.keeper_left_at && project.creator_pubkey === pubkey;
+    return named && isMemberActive(pubkey) && !isOperatorSwitchedOff(pubkey);
+}
+
+/**
+ * A keeper left the project: they stepped down, its lead, a node admin or the community removed them, they closed their
+ * account, or its wind-up released them. The first time stamps projects.keeper_left_at, after which its maker no longer
+ * stands in for its cancel (mayCancelProject). Nothing for an enterprise that is no project (no projects row). Runs in the
+ * caller's transaction, on a main server: a standby takes the stamp with the row.
+ */
+export function noteKeeperLeftProject(projectId: string): void {
+    db.prepare("UPDATE projects SET keeper_left_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND keeper_left_at IS NULL")
+        .run(projectId);
 }
 
 /**
@@ -3440,7 +3523,8 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     // Never a person's row (namesNoProject): a projects row under a member's key pruned that member.
     if (!project || namesNoProject(projectId)) throw new Error("Project not found");
-    // Its lead's, and only a lead who may act now (mayCancelProject): this row's creator_pubkey is whoever made it.
+    // A node admin's, its lead's, its only keeper's when nobody leads it, or its maker's when it never had a keeper
+    // (mayCancelProject): this row's creator_pubkey is whoever made it.
     if (!mayCancelProject(projectId, requesterPubkey)) throw new Error("Unauthorized to delete this project");
 
     // Guard against deleting funded/completed projects
@@ -3454,29 +3538,45 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance}). Drain or sweep funds first.`);
     }
 
+    // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that already
+    // went back a week after the project's end date (HELD_PLEDGES_SQL), which would be paid twice. But a closed account's
+    // (isClosedAccount: deleted by its owner, removed by the community, or an enterprise that wound up), which can't be paid
+    // here: its share goes to the Commons, by the very move the return of an unfunded project's pledges makes
+    // (engine/unfunded-pledges.ts, A CLOSED ACCOUNT; Marty, board, 27 Oct 2026: "To the Commons"), one row each. Until
+    // this, the cancel credited the closed account (#2599's deciding pass: Ann's 7 onto her removed account, the Commons
+    // unmoved). Decided here, before anything moves.
+    const escrowPubkey = `escrow_${projectId}`;
+    const pledges = project.status === 'ACTIVE'
+        ? db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount: number, id: string }[]
+        : [];
+    const ledger = projectCancelLedger;
+    if (pledges.length > 0 && !ledger) throw new Error('Cannot refund the backers: the ledger is not running');
+    const refunds: typeof pledges = [];
+    const toCommons = new Map<string, number>();
+    for (const pledge of pledges) {
+        if (ledger?.isClosedAccount(pledge.from_pubkey)) toCommons.set(pledge.from_pubkey, (toCommons.get(pledge.from_pubkey) ?? 0) + pledge.amount);
+        else refunds.push(pledge);
+    }
+    // That move needs Beans switched on (config/node-profile.ts), as the return's does: refused before anything moves.
+    if (toCommons.size > 0) assertMoneyMayMove?.();
+
     // #138: close every backer's demurrage window before the refunds raise their balances. This is the
     // widest of the three paths — one deleted project refunds all of its pledgers at once, so an open window
-    // on any of them becomes a retrospective tax on money they are merely getting back.
+    // on any of them becomes a retrospective tax on money they are merely getting back. Not a closed
+    // account's: nothing is paid into it.
     //
-    // Read out here and settled OUTSIDE executeDelete on purpose. Settling is independently correct and must
-    // not be undone by an unrelated failure later in the delete; and a decay credit taken in memory inside a
-    // transaction that then rolls back is the exact conservation hazard conservingTransaction exists for
-    // (state-engine.ts) — which this module cannot reach.
-    if (project.status === 'ACTIVE') {
-        const backers = db.prepare(`SELECT DISTINCT from_pubkey FROM (${HELD_PLEDGES_SQL})`)
-            .all({ escrow: `escrow_${projectId}`, project: projectId }) as { from_pubkey: string }[];
-        if (backers.length > 0) onSettleDemurrage?.(backers.map(b => b.from_pubkey));
-    }
+    // Settled OUTSIDE executeDelete on purpose. Settling is independently correct and must not be undone by
+    // an unrelated failure later in the delete.
+    if (refunds.length > 0) onSettleDemurrage?.([...new Set(refunds.map(p => p.from_pubkey))]);
 
-    const executeDelete = db.transaction(() => {
-        // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that
-        // already went back a week after the project's end date (HELD_PLEDGES_SQL), which would be paid twice.
+    const executeDelete = () => {
         if (project.status === 'ACTIVE') {
-            const escrowPubkey = `escrow_${projectId}`;
-            const pledges = db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount: number, id: string }[];
+            // A closed account's share first, while the rows and the in-memory ledger agree: the move writes the escrow's
+            // row from memory, so after the raw refunds below it would put back what they took out.
+            for (const amount of toCommons.values()) ledger!.closedPledgeToCommons(escrowPubkey, projectId, amount);
 
             let totalRefunded = 0;
-            for (const pledge of pledges) {
+            for (const pledge of refunds) {
                 // Return Beans to Backer
                 db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(pledge.amount, pledge.from_pubkey);
 
@@ -3521,9 +3621,13 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         } catch { }
         writeTombstone('projects', projectId);
         writeTombstone('members', projectId);
-    });
+    };
 
-    executeDelete();
+    // In one conserving transaction: a failure after a closed account's share went to the Commons puts the pot back in
+    // memory as well as in its row (a plain one rolled back the row and left memory holding it). One that refunds nobody
+    // needs no ledger.
+    if (ledger) ledger.conservingTransaction(executeDelete);
+    else db.transaction(executeDelete)();
     // A2-1: refunds/escrow drain above mutated balances via raw SQL — re-sync the
     // in-memory ledger so the next transfer() doesn't clobber the DB with stale values.
     onBalanceMutation?.();

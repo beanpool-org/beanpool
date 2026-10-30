@@ -1,19 +1,19 @@
 import { getMemberProfile } from './db';
-import { getCanonicalAvatar } from './canonical-profile';
 import { BeanPoolIdentity } from './identity';
 import { t } from '@beanpool/core';
 
 /**
- * Does this member have a usable avatar? Mirrors the publish path: the node's
- * copy (local SQLite `members.avatar_url`) first, then the canonical,
- * node-independent copy. Async because both are lookups.
+ * Does this member have a usable avatar IN THIS COMMUNITY? Its own row (local SQLite `members.avatar_url`, in the copy
+ * the phone has open) and nothing else: a photo chosen in another community does not count, so a fresh community asks
+ * for one (Profile S2, Marty 29 Oct: the photo of a listing is that community's). Async because it is a lookup.
  */
 export async function hasUsableAvatar(pubkey: string): Promise<boolean> {
     try {
         const p = await getMemberProfile(pubkey);
-        if (p?.avatar_url) return true;
-    } catch {}
-    return !!(await getCanonicalAvatar());
+        return !!p?.avatar_url;
+    } catch {
+        return false;
+    }
 }
 
 /** A callsign counts once it's the 2+ chars the wizard requires. */

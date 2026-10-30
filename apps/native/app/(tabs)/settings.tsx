@@ -650,11 +650,10 @@ export default function SettingsScreen() {
     const [editCallsign, setEditCallsign] = useState('');
     const [avatar, setAvatar] = useState<string | null>(null);
     // The photo the member picked in THIS session, and nothing else. `avatar` above is what the
-    // card DISPLAYS — after a sync it is the node's own `/api/avatar/…` URL, and when the node
-    // has none it is the canonical copy, which may be an OLDER photo than the one the node now
-    // holds (only a local pick writes canonical; a change made on the PWA or a paired device
-    // never reaches it). Publishing what is displayed therefore silently replaced the member's
-    // newest photo on every bio or name Save. A Save only sends `avatar` when this is set.
+    // card DISPLAYS — after a sync it is the node's own `/api/avatar/…` URL, which is no photo
+    // to publish (it points back at the node). Publishing what is displayed therefore replaced
+    // the member's photo with a link to itself, or with an older copy, on every bio or name
+    // Save. A Save only sends `avatar` when this is set.
     const [avatarPickedThisSession, setAvatarPickedThisSession] = useState<string | null>(null);
     // Callsign as held by the node we're currently anchored to. Callsigns are per-node
     // (unique per node, chosen at join), so the device-global identity.callsign is only
@@ -662,8 +661,8 @@ export default function SettingsScreen() {
     const [nodeCallsign, setNodeCallsign] = useState<string | null>(null);
     // The card's picture is this community's row as last read (utils/use-own-profile.ts), as the header's is: a photo that
     // a sync or a change made elsewhere brings follows at once, where the loader below waits for the next focus. Until that
-    // row is read, and where it holds no photo, what the loader found (DESIGN-per-community-profile-fable.md S2 takes the
-    // phone-wide copy out of that). The name is the loader's first: it reads the same row, then the community's own answer
+    // row is read, and where it holds no photo, what the loader found: this community's row, never the phone-wide copy of a
+    // photo chosen elsewhere (Profile S2). The name is the loader's first: it reads the same row, then the community's own answer
     // and a rename still waiting to be sent, which the row alone does not know; the row's name stands in until it has.
     const own = useOwnProfile();
     const cardCallsign = nodeCallsign || (own.read && own.callsign) || identity?.callsign || '';
@@ -712,11 +711,12 @@ export default function SettingsScreen() {
             // switching to a node that has no profile for this key.
             showCommunityName(profile?.callsign || null);
             const edited = editedRef.current;
-            // The picture likewise: assigned on every load, the row's photo, else the phone-wide copy, else none. The card falls
-            // through to this where the hook reads no photo (no row, or a row without one), so leaving it alone where this
-            // community holds no row yet would keep the community before's photo beside the header's preset.
+            // The picture likewise: assigned on every load, the row's photo, else none. Never the phone-wide copy of a photo
+            // chosen in another community (Profile S2). The card falls through to this where the hook reads no photo (no row,
+            // or a row without one), so leaving it alone where this community holds no row yet would keep the community
+            // before's photo beside the header's preset.
             const cleaned = (profile?.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
-            if (!edited.avatar) setAvatar(cleaned || canonical?.avatar || null);
+            if (!edited.avatar) setAvatar(cleaned);
             {
                 if (profile) {
                     if (!edited.bio) {
@@ -773,8 +773,8 @@ export default function SettingsScreen() {
                     if (remoteName !== profile?.callsign) {
                         showCommunityName(remoteName);
                         // No photo: a portable one in this row reads as an unsent offline pick to the catch-up publish
-                        // (avatar-value.ts), which would post it over a newer photo the node holds. The card already
-                        // falls back to canonical, and COALESCE keeps whatever the row had.
+                        // (avatar-value.ts), which would post it over a newer photo the node holds. COALESCE keeps
+                        // whatever the row had.
                         await updateMemberProfile(identity.publicKey, {
                             callsign: remoteName,
                             bio: profile?.bio ?? canonical?.bio,

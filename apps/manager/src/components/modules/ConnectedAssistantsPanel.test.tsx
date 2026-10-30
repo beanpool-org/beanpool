@@ -19,7 +19,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
 type Call = { url: string; method: string; body: any };
 
 /** A fake node: the list is `state.grants`; connecting pushes one; disconnecting removes it; the preview answers its tools. */
-function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[]; postsPerDay?: number }) {
+function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[]; postsPerDay?: number; perDayProof?: 'phone' | 'code' }) {
     const calls: Call[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: RequestInit) => {
         const url = String(input);
@@ -45,6 +45,14 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'a
             return new Response(JSON.stringify({ revoked: revoke[1] }), { status: 200 });
         }
         if (url.endsWith('/api/local/admin/agent/posts-per-day')) {
+            // The owner's fresh proof (server requireFreshProof): a computer's key session is sent to the phone; the
+            // password asks a current code (here 123456).
+            if (state.perDayProof === 'phone') {
+                return new Response(JSON.stringify({ error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true }), { status: 403 });
+            }
+            if (state.perDayProof === 'code' && body.code !== '123456') {
+                return new Response(JSON.stringify({ error: body.code ? 'That code is not right.' : 'A current code is needed to change how many posts an assistant may make a day', totpRequired: true }), { status: 401 });
+            }
             state.postsPerDay = body.perDay;
             return new Response(JSON.stringify({ postsPerDay: body.perDay }), { status: 200 });
         }
@@ -134,6 +142,8 @@ describe('ConnectedAssistantsPanel', () => {
         fireEvent.change(screen.getByLabelText('Assistant’s name'), { target: { value: 'Seeder' } });
         const tick = screen.getByRole('checkbox', { name: /May post for me/ });
         expect(tick).not.toBeChecked();
+        // The token form says what an assistant left unticked still does.
+        expect(screen.getByText(/Leave it off and it never posts: it still reads, takes a backup when asked, and suggests moderation steps for you to approve\./)).toBeInTheDocument();
         fireEvent.click(tick);
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads, and can post as you.');
@@ -148,7 +158,31 @@ describe('ConnectedAssistantsPanel', () => {
         fireEvent.change(screen.getByLabelText('Assistant posts a day'), { target: { value: '1000' } });
         fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(calls.find((c) => c.url.endsWith('/agent/posts-per-day'))?.body).toEqual({ perDay: 1000 }));
-        expect(await screen.findByText('Assistant posts a day: 1,000. Each owner’s assistant ticked “May post for me” may make this many posts in a day (UTC), under the member’s own limits.')).toBeInTheDocument();
+        expect(await screen.findByText('Assistant posts a day: 1,000. Each owner’s assistant ticked “May post for me” may make this many posts in a day (UTC). They don’t use up the member’s own 100 posts a day from the app, but their photos count in the member’s own photos for the day. Changing it asks for a fresh proof.')).toBeInTheDocument();
+    });
+
+    it('"Assistant posts a day" asks a fresh proof: a computer\'s key session is sent to the phone, and nothing changes', async () => {
+        const calls = fakeNode({ grants: [], perDayProof: 'phone' });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        fireEvent.change(await screen.findByLabelText('Assistant posts a day'), { target: { value: '1000' } });
+        fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
+        expect(await screen.findByTestId('agent-posts-per-day-proof-phone')).toHaveTextContent('Do this from your phone: open BeanPool, press Manage, then make this change there.');
+        expect(calls.filter((c) => c.url.endsWith('/agent/posts-per-day')).map((c) => c.body)).toEqual([{ perDay: 1000 }]);
+        expect(screen.getByTestId('agent-posts-per-day')).toHaveTextContent('Assistant posts a day: 100.');
+        expect(screen.queryByText(/^Saved:/)).toBeNull();
+    });
+
+    it('"Assistant posts a day" with the password asks a current code, and sends it with the change', async () => {
+        const calls = fakeNode({ grants: [], perDayProof: 'code' });
+        render(<ConnectedAssistantsPanel activeNode={node} />);
+        fireEvent.change(await screen.findByLabelText('Assistant posts a day'), { target: { value: '500' } });
+        fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
+        fireEvent.change(await screen.findByTestId('agent-posts-per-day-proof-input'), { target: { value: '123456' } });
+        fireEvent.click(screen.getByTestId('agent-posts-per-day-proof-confirm'));
+        expect(await screen.findByText('Saved: 500 a day, from the next post.')).toBeInTheDocument();
+        expect(calls.filter((c) => c.url.endsWith('/agent/posts-per-day')).map((c) => c.body)).toEqual([{ perDay: 500 }, { perDay: 500, code: '123456' }]);
+        expect(screen.queryByTestId('agent-posts-per-day-proof-code')).toBeNull();
+        expect(await screen.findByTestId('agent-posts-per-day')).toHaveTextContent('Assistant posts a day: 500.');
     });
 
     it('an admin sees the posts a day but cannot change it', async () => {

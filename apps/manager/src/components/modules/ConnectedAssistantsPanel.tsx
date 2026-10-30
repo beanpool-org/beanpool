@@ -4,6 +4,8 @@ import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { useInPageConfirm } from '../common/InPageConfirm';
+import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { proofField, throwIfFreshProof } from '../../lib/fresh-proof';
 
 /**
  * "Connected assistants" (admin MCP design §8, §10; slice S3; the server is apps/server agent/grants-route.ts). An owner
@@ -21,7 +23,8 @@ import { useInPageConfirm } from '../common/InPageConfirm';
  *
  * An owner's assistant posts Offers, Needs and events for them only if "May post for me" was ticked when it was connected
  * (here on the token form, or on the consent page; default off), and each row says whether it was. "Assistant posts a
- * day" is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed by an owner.
+ * day" is the owners' number (100 unless an owner sets 1 to 1,000), shown to every viewer, changed by an owner with a
+ * fresh proof each time (FreshProofBox: a code, or the phone's Manage).
  */
 
 interface AgentGrantRow {
@@ -113,6 +116,8 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     const [shownCanPost, setShownCanPost] = useState(false);
     const [perDayDraft, setPerDayDraft] = useState('');
     const [perDayMessage, setPerDayMessage] = useState('');
+    // Changing "Assistant posts a day" asks an owner's fresh proof each time (server agent/grants-route.ts).
+    const proof = useFreshProof();
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('');
     // The one-time token: component state only.
@@ -213,7 +218,8 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         }
     };
 
-    const handlePostsPerDay = async () => {
+    // `code`: the fresh proof typed in the box, when the node asked one (each change asks it: server grants-route.ts).
+    const handlePostsPerDay = async (code?: string) => {
         setPerDayMessage('');
         const n = Number(perDayDraft);
         const min = data?.postsPerDayMin ?? 1;
@@ -224,11 +230,14 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         }
         setBusy(true);
         try {
-            const { res, json } = await post(POSTS_PER_DAY, { perDay: n });
-            // The node's own words, including its "press Manage again" for a stale phone session.
+            const { res, json } = await post(POSTS_PER_DAY, { perDay: n, ...proofField(code) });
+            // The proof asked (a code, the phone, or Manage again): the box opens and says how; nothing else is said here.
+            throwIfFreshProof(res.status, json);
+            proof.close();
             setPerDayMessage(res.ok ? `Saved: ${n.toLocaleString('en')} a day, from the next post.` : `Not changed: ${json.error || `HTTP ${res.status}`}`);
             if (res.ok) setPerDayDraft('');
         } catch (e: unknown) {
+            if (proof.checkError(e, (c) => handlePostsPerDay(c), code)) return;
             setPerDayMessage(e instanceof Error ? e.message : String(e));
         } finally {
             setBusy(false);
@@ -453,7 +462,8 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                         <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-posts-per-day">
                             <p className="text-xs text-white m-0 break-words">
                                 Assistant posts a day: {data.postsPerDay.toLocaleString('en')}. Each owner&rsquo;s assistant ticked &ldquo;May post for
-                                me&rdquo; may make this many posts in a day (UTC), under the member&rsquo;s own limits.
+                                me&rdquo; may make this many posts in a day (UTC). They don&rsquo;t use up the member&rsquo;s own 100 posts a day from
+                                the app, but their photos count in the member&rsquo;s own photos for the day. Changing it asks for a fresh proof.
                             </p>
                             {isOwner ? (
                                 <div className="flex flex-col sm:flex-row gap-2 min-w-0">
@@ -482,6 +492,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                             ) : (
                                 <p className="text-[11px] text-nature-400 m-0 break-words">Only an owner changes this.</p>
                             )}
+                            <FreshProofBox proof={proof} testId="agent-posts-per-day-proof" />
                             {perDayMessage && <p className="text-[11px] text-amber-300 m-0 break-words" role="status">{perDayMessage}</p>}
                         </div>
                     )}
@@ -593,7 +604,8 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 />
                                 <span className="min-w-0">
                                     May post for me: it posts Offers, Needs and events as you (or an enterprise you keep), at once, with no
-                                    approval, up to the posts a day set here. Leave it off and it only reads.
+                                    approval, up to the posts a day set here. Leave it off and it never posts: it still reads, takes a backup when
+                                    asked, and suggests moderation steps for you to approve.
                                 </span>
                             </label>
                             <button

@@ -72,6 +72,19 @@ export function plainWords(text: string): string[] {
     return foldApostrophes(text.toLowerCase()).replace(NOT_WORD_SPACE, ' ').replace(PUNCTUATION, ' ').split(/\s+/).filter(Boolean);
 }
 
+/** The words of a text with a compound kept whole, as queryWords keeps it (wi-fi, free-range, 3.5; lower case, without the
+ *  ASCII marks around it), and every other chunk parted at its punctuation as plainWords parts it: "Lemons/limes" and
+ *  "Eggs&milk" are two words each. What suggestTags reads a title as, so a compound names a tag only whole. */
+export function compoundWords(text: string): string[] {
+    const words: string[] = [];
+    for (const chunk of text.toLowerCase().replace(NOT_WORD_SPACE, ' ').split(/\s+/)) {
+        const bare = chunk.replace(ASCII_MARKS_AROUND, '');
+        if (COMPOUND.test(bare)) words.push(foldApostrophes(bare.replace(/[‐‑]/g, '-')));
+        else words.push(...plainWords(chunk));
+    }
+    return words;
+}
+
 /** The words of a query: a compound whole and joined (wi-fi, wifi: the joined form is what the synonyms are looked up on),
  *  and an elided word on its own too (l'eau, leau, eau); every other chunk parted at its punctuation. */
 function queryWords(query: string): string[] {

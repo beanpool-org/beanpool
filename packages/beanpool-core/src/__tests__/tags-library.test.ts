@@ -134,6 +134,11 @@ describe('suggestTags', () => {
         const index = buildTagIndex(wordsFor('en'));
         expect(suggestTags('Sweet potato slips', '', { index })).toEqual(['food.vegetables.sweet-potato']);
         expect(suggestTags('Free-range eggs', '', { index })).toEqual(['food.eggs']);
+        // Only a compound is kept whole: any other mark between two words parts them, as a space does.
+        expect(suggestTags('Lemons/limes', '', { index })).toEqual(['food.fruit.lemon', 'food.fruit.lime']);
+        expect(suggestTags('Lemons/limes', '', { index })).toEqual(suggestTags('Lemons limes', '', { index }));
+        expect(suggestTags('Tomatoes,basil', '', { index })).toEqual(['food.vegetables.tomato', 'food.herbs.basil']);
+        expect(suggestTags('Eggs&milk', '', { index })).toEqual(['food.dairy.milk', 'food.eggs']);
         expect(suggestTags('Food', '', { index })).toEqual([]);
         expect(suggestTags('', '', { index })).toEqual([]);
     });

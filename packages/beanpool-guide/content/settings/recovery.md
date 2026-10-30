@@ -54,6 +54,8 @@ One linked sign-in account covers all your communities: you don't link it again 
 
 If you joined the global community with 12 words, use **Add a sign-in**, near the top of **Account Protection**, instead. It is a way back too, and it also lifts the limits on a new 12-words account. See "Your 12 words".
 
+**Also keep my list of communities in the copy**, under the sign-in buttons, is ticked unless you untick it: the copy you link next also lists your communities (their names and addresses, no more than 20), locked the same way, and a new phone restored with that sign-in offers them and keeps them.
+
 If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 
 This is not a way to log in. Your account is still your own key. The linked account only helps you get it back.
@@ -114,14 +116,14 @@ In the web app, **Settings** has **Where your account can be brought back from**
 
 For each sign-in account you link in the phone app, BeanPool's key vault keeps:
 
-- the locked copy of your key, with your 12 words if the phone had them, which only that sign-in opens;
+- the locked copy of your key, with your 12 words if the phone had them and your list of communities if you left that ticked, which only that sign-in opens;
 - two fingerprints, one of your sign-in account and one of your key, made with a secret only the running vault holds, so it can find your copy when your sign-in or your key asks;
 - the push addresses of your phones, locked with the copy, so it can tell them when someone starts getting back into your account;
 - the day the copy was made, and when it last brought your account back.
 
 While someone is getting back in with a sign-in (see "If someone else tries"), it keeps the new phone's one-time key and the times, until 7 days after that ends. When you remove a copy, it keeps a note of the removal for 30 days, with the two fingerprints and the day, so that a restore from an older backup removes the copy again.
 
-It never keeps your name, email, phone number or address, your sign-in account's id itself (only its fingerprint), which communities you are in, or a copy of what it handed back. It never writes down your IP address: to limit abuse, it counts the requests from each address in its memory, and forgets them when it restarts. The totals it signs each day count copies, restores and removals, and say nothing about anyone.
+It never keeps your name, email, phone number or address, your sign-in account's id itself (only its fingerprint), which communities you are in (except inside the locked copy, as above), or a copy of what it handed back. It never writes down your IP address: to limit abuse, it counts the requests from each address in its memory, and forgets them when it restarts. The totals it signs each day count copies, restores and removals, and say nothing about anyone.
 
 ## If you had linked GitHub
 

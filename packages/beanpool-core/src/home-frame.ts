@@ -21,6 +21,8 @@
  */
 import { PRICING_CATEGORIES } from './pricing-catalog.js';
 import { readSkySettings } from './sky.js';
+import { isTagId } from './tags/index.js';
+import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { toolHomeCardTypes } from './tools/index.js';
 import { word, type WordKey } from './words.js';
 
@@ -141,6 +143,11 @@ export interface HomeCardType {
     onNode(answer: HomeNodeFacts, role?: HomeReaderRole): boolean;
     /** The type's settings from whatever is stored: tolerant, the default for anything odd. Absent: the type has none. */
     readSettings?(raw: unknown): Record<string, unknown>;
+    /**
+     * For a type that asks the node: whether an instance with these settings (as `readSettings` reads them) has anything for
+     * the node to build. A chat card with no chat picked is drawn as "Pick a chat" and never asked. Absent: always.
+     */
+    asksWith?(settings: Record<string, unknown>): boolean;
 }
 
 /** The distances a saved search can be bounded to, in km. */
@@ -148,12 +155,17 @@ export const HOME_SEARCH_KMS = [1, 2, 5, 10, 25] as const;
 /** The longest words a saved search keeps. */
 export const HOME_SEARCH_MAX_CHARS = 40;
 export type HomeSearchKind = 'offer' | 'need' | 'any';
-export type HomeSearchSettings = { q: string; kind: HomeSearchKind; category?: string; km?: (typeof HOME_SEARCH_KMS)[number] };
+/**
+ * A saved search. `tags`: the tag ids the app resolved its words to when it was saved (DESIGN-owner-seeding-tags-fable.md
+ * §4.7), at most POST_TAGS_MAX, which the node asks with the words, so a listing tagged lemon is found from "limón".
+ */
+export type HomeSearchSettings = { q: string; kind: HomeSearchKind; category?: string; km?: (typeof HOME_SEARCH_KMS)[number]; tags?: string[] };
 
 const CATEGORY_IDS: ReadonlySet<string> = new Set(PRICING_CATEGORIES.map((c) => c.id));
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** A saved search's settings, tolerant: words cut to 40 characters, an unknown kind is `any`, an unknown category or distance is none. */
+/** A saved search's settings, tolerant: words cut to 40 characters, an unknown kind is `any`, an unknown category or distance is none,
+ *  a tag this library does not know is left out (an app newer than the node), and none past POST_TAGS_MAX is kept. */
 export function readSearchSettings(raw: unknown): HomeSearchSettings {
     const s = isPlainObject(raw) ? raw : {};
     const q = typeof s.q === 'string' ? s.q.trim().slice(0, HOME_SEARCH_MAX_CHARS) : '';
@@ -161,8 +173,85 @@ export function readSearchSettings(raw: unknown): HomeSearchSettings {
     const out: HomeSearchSettings = { q, kind };
     if (typeof s.category === 'string' && CATEGORY_IDS.has(s.category)) out.category = s.category;
     if (typeof s.km === 'number' && (HOME_SEARCH_KMS as readonly number[]).includes(s.km)) out.km = s.km as HomeSearchSettings['km'];
+    if (Array.isArray(s.tags)) {
+        const tags = [...new Set(s.tags.filter((id): id is string => typeof id === 'string' && isTagId(id)))].slice(0, POST_TAGS_MAX);
+        if (tags.length > 0) out.tags = tags;
+    }
     return out;
 }
+
+// ── A chosen chat (scratch/fable-design/DESIGN-home-chosen-chat-fable.md, slice C0) ──────────────────────────────────
+
+/** What a chat card can pin: a direct chat, a group's chat, an event's chat or an enterprise's discussion. */
+export const HOME_CHAT_KINDS = ['dm', 'group', 'event', 'enterprise'] as const;
+export type HomeChatKind = (typeof HOME_CHAT_KINDS)[number];
+/** The longest conversation id a chat card keeps, and the longest name it keeps for the chat. */
+export const HOME_CHAT_ID_CHARS = 64;
+export const HOME_CHAT_NAME_CHARS = 60;
+/** A chat picked: its id, its kind, and its name as it was when the member picked it (the card's words until the node answers). */
+export type HomeChatSettings = { conversationId: string; kind: HomeChatKind; name: string };
+
+/**
+ * A chat card's settings, tolerant: a chat is picked when the id is text of 1 to 64 characters and the kind is one of the
+ * four. Anything else is none picked (`{}`): the apps draw "Pick a chat", and {@link cardsToAsk} never asks the node for
+ * it. The name is cut to 60 characters, '' when there is none.
+ */
+export function readChatSettings(raw: unknown): HomeChatSettings | Record<string, never> {
+    const s = isPlainObject(raw) ? raw : {};
+    const id = s.conversationId;
+    if (typeof id !== 'string' || id.length === 0 || id.length > HOME_CHAT_ID_CHARS) return {};
+    if (!(HOME_CHAT_KINDS as readonly unknown[]).includes(s.kind)) return {};
+    const name = typeof s.name === 'string' ? Array.from(s.name.trim()).slice(0, HOME_CHAT_NAME_CHARS).join('') : '';
+    return { conversationId: id, kind: s.kind as HomeChatKind, name };
+}
+
+/** Whether a chat card's settings (as {@link readChatSettings} reads them) pick a chat. */
+export const homeChatPicked = (s: Record<string, unknown>): s is HomeChatSettings => typeof s.conversationId === 'string';
+
+/**
+ * One line of a pinned chat in the Home answer, oldest first, as the chat's own read serves it to this member. The node
+ * opens nothing. A line it stores readable (a system line, or `plaintext-v1`: an event's or an enterprise's chat, a group
+ * not locked, a removal's notice) comes as its words, cut. A sealed line (a direct message, a locked group line) comes as
+ * its bytes exactly as stored, for the device to open with the key it holds, only while ciphertext, nonce and metadata
+ * come to 512 characters at most; past that, `text` is `🔒 Message` and no bytes travel.
+ *
+ * In a direct chat only a line the device opens is anyone's words (core dmLineKind): a readable line there in a member's
+ * name is shown as not encrypted, a removed one as deleted, unless `metadata` marks it the community admins' message.
+ */
+export interface HomeChatLine {
+    id: string;
+    /** The author's key as stored ('SYSTEM' for the node's own line): the device says "You" for its own. */
+    author: string;
+    /** The author's name, cut; null for the node's own line. */
+    who: string | null;
+    /** When the node says it was written. */
+    at: string;
+    /** As stored: 'text', 'image', 'system', 'removed', or a newer kind. */
+    type: string;
+    /** A system line's kind, for the apps to word it as the chat does; null for any other line. */
+    systemType: string | null;
+    /** A readable line's words, cut; `🔒 Message` for a sealed line too long to carry. Absent when `sealed` is carried. */
+    text?: string;
+    /** A readable line's metadata as stored while it is 512 characters at most (who removed it, the admins' mark), else null. */
+    metadata?: string | null;
+    /** A sealed line as stored, for the device to open. */
+    sealed?: { ciphertext: string; nonce: string; metadata: string | null };
+}
+
+/**
+ * Why a pinned chat shows nothing: the member isn't in it now, or it isn't there for them ('left', also for an id they
+ * were never in); its event was hidden from them ('hidden'); a request they haven't accepted ('request'). Never a name
+ * or a line with it.
+ */
+export type HomeChatGone = 'left' | 'hidden' | 'request';
+
+/**
+ * A chat card's body in the Home answer, keyed by its instance id: the chat as the member reads it now (its kind, name,
+ * unread count, whether they muted it, and its last lines), or `gone` alone.
+ */
+export type HomeChatCard =
+    | { kind: HomeChatKind; name: string | null; unread: number; muted: boolean; lines: HomeChatLine[] }
+    | { gone: HomeChatGone };
 
 /**
  * What the Decide card shows (CARD-FRAME §4, "My votes"). `counts`, the default and today's card: the few soonest-closing
@@ -241,6 +330,12 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
         onNode: (a) => notGlobal(a) && a.features.decisions !== false, readSettings: readDecideSettings,
     },
     { id: 'groups', name: word('Your groups'), line: word("What's new in your groups."), group: 'you', asks: 'node', onNode: everywhere },
+    // A chat the member picked, its last lines opened on the device (DESIGN-home-chosen-chat-fable.md §1): on every node,
+    // since every node has chats. Asked only once a chat is picked; the node answers only a chat the member is in now.
+    {
+        id: 'chat', name: word('A chat'), line: word('The last lines of one chat you choose.'), group: 'you',
+        multiple: { max: 3 }, asks: 'node', onNode: everywhere, readSettings: readChatSettings, asksWith: homeChatPicked,
+    },
     { id: 'joined', name: word('Who joined'), line: word('People who joined this week.'), group: 'around', asks: 'node', onNode: everywhere },
     { id: 'pulse', name: word('The Pulse'), line: word('Links your neighbours shared.'), group: 'around', asks: 'node', onNode: everywhere },
     // Worked out on the device (sky.ts) from the community's place or the member's, which every node can have: never asked.
@@ -582,14 +677,18 @@ export function compareForAsk(a: Pick<HomeCardInstance, 'id' | 'type'>, b: Pick<
 /**
  * The instance ids to ask the node for (`cards=`), in catalogue order then id, so the same set is the same address
  * whatever the member's order and a repeat read can be a 304: the fixed two, every instance in the list whose type this
- * build knows and the node builds (`asks: 'node'`), and any `pinned` type (asked for whatever the list says). An unknown
- * type is never asked: this build couldn't draw its body.
+ * build knows and the node builds (`asks: 'node'`) and whose settings give it something to build (`asksWith`: a chat
+ * card with no chat picked is not), and any `pinned` type (asked for whatever the list says). An unknown type is never
+ * asked: this build couldn't draw its body.
  */
 export function cardsToAsk(layout: HomeLayoutV2 | null, pinned: readonly string[] = []): string[] {
     const cards = layout?.cards ?? defaultCards();
     const want = new Map<string, Pick<HomeCardInstance, 'id' | 'type'>>();
-    const add = (c: Pick<HomeCardInstance, 'id' | 'type'>) => {
-        if (TYPES.get(c.type)?.asks === 'node' && !want.has(c.id)) want.set(c.id, c);
+    const add = (c: Pick<HomeCardInstance, 'id' | 'type' | 'settings'>) => {
+        const t = TYPES.get(c.type);
+        if (t?.asks !== 'node' || want.has(c.id)) return;
+        if (t.asksWith && !t.asksWith(t.readSettings ? t.readSettings(c.settings) : {})) return;
+        want.set(c.id, c);
     };
     for (const id of HOME_FIXED_TYPES) add({ id, type: id });
     for (const id of pinned) add({ id, type: id });

@@ -19,12 +19,15 @@ const KNOCK_WORDS = {
     unreachable: word("Couldn't reach your community. Check your connection and try again."),
 } as const;
 
-/** Under each request: when, and where they came from, two facts side by side. */
+/**
+ * Under each request: when, and where they came from, two facts side by side. A request that named no community it came
+ * from (a phone with no community yet, or one in a local community: slice S3) came from the BeanPool app itself.
+ */
 function requestMeta(r: JoinRequest): string {
     const days = joinRequestAge(r);
     // English writes one form for both; the count is 2 or more here.
     const when = days === null ? '' : days === 0 ? t('Asked today') : days === 1 ? t('Asked yesterday') : tn(days, 'Asked {n} days ago', 'Asked {n} days ago');
-    const from = r.fromNode ? t('from {node}', { node: r.fromNode }) : '';
+    const from = r.fromNode ? t('from {node}', { node: r.fromNode }) : t('from the BeanPool app');
     return [when, from].filter(Boolean).join(' · ');
 }
 
@@ -35,8 +38,8 @@ const knockMessage = (message: string): string => (message === KNOCK_UNREACHABLE
  * "Wants to join (n)" (design §3.3): people asking to join this (local) community, for any member to answer. Hidden
  * where the community takes no requests. `onCount` tells People how many are waiting, for its Invites pill.
  */
-export function WantsToJoin({ anchorUrl, identity, onCount }: {
-    anchorUrl: string; identity: BeanPoolIdentity; onCount?: (n: number) => void;
+export function WantsToJoin({ anchorUrl, identity, onCount, canSee = true }: {
+    anchorUrl: string; identity: BeanPoolIdentity; onCount?: (n: number) => void; canSee?: boolean;
 }) {
     const { colors } = useTheme();
     const [requests, setRequests] = useState<JoinRequest[] | null>(null);
@@ -44,8 +47,10 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
     const [hidden, setHidden] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
-    const [notes, setNotes] = useState<Record<string, string>>({});
     const [done, setDone] = useState<string | null>(null);
+    // A refusal is said above the list, not under its row: the list read after it no longer has that row (answered,
+    // lapsed, joined, key replaced, gone), or no section at all (admins only), and the words must outlive it.
+    const [refusal, setRefusal] = useState<{ id: string; callsign: string; message: string } | null>(null);
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         header: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
@@ -62,11 +67,14 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
         notNow: { minHeight: 44, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
         notNowText: { color: colors.text.body, fontSize: 15, fontWeight: '700' },
         note: { fontSize: 14, color: colors.text.body, marginTop: 8, lineHeight: 20 },
+        refusal: { fontSize: 14, color: colors.text.body, marginBottom: 12, lineHeight: 20 },
+        refusalName: { fontWeight: '800' },
         error: { fontSize: 14, color: colors.feedback.warning.fg, marginBottom: 12, lineHeight: 20 },
         divider: { height: 1, backgroundColor: colors.border.default, marginVertical: 24 },
     }));
 
     const load = useCallback(async () => {
+        if (!canSee) return;
         const r = await fetchJoinRequests(anchorUrl, identity);
         if (r.ok) {
             setRequests(r.knocks);
@@ -76,11 +84,12 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
             onCount?.(r.total);
         } else if (r.kind === 'hidden') {
             setHidden(true);
+            setTotal(0);
             onCount?.(0);
         } else {
             setError(knockMessage(r.message));
         }
-    }, [anchorUrl, identity, onCount]);
+    }, [anchorUrl, identity, onCount, canSee]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -91,28 +100,43 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
             : await declineJoinRequest(anchorUrl, identity, req.id);
         setBusy(null);
         if (r.ok) {
+            const left = (requests ?? []).filter(k => k.id !== req.id).length;
             setRequests(list => (list ?? []).filter(k => k.id !== req.id));
             setTotal(prev => { const n = Math.max(0, prev - 1); onCount?.(n); return n; });
-            setNotes(n => ({ ...n, [req.id]: '' }));
+            setRefusal(null);
             setDone(verb === 'approve' ? t('You invited {name}. Their app will find the invite by itself.', { name: req.callsign }) : null);
+            // More are waiting than this page shows (it holds the first 20): read it again, so the next ones come up and
+            // the count is the node's.
+            if (Math.max(0, total - 1) > left) load();
             return;
         }
         // Another member got there first, or it lapsed: the community's words, then the list as it is now.
-        setNotes(n => ({ ...n, [req.id]: knockMessage(r.message) }));
+        setDone(null);
+        setRefusal({ id: req.id, callsign: req.callsign, message: knockMessage(r.message) });
         load();
     };
 
-    if (hidden || (requests !== null && requests.length === 0 && !error && !done)) return null;
+    if (!canSee) return null;
+    if (!refusal && (hidden || (requests !== null && requests.length === 0 && !error && !done))) return null;
 
     return (
         <View>
-            <Text style={styles.header} accessibilityRole="header">{tn(total, '🚪 Wants to join ({n})', '🚪 Wants to join ({n})')}</Text>
-            <Text style={styles.help}>{t(KNOCK_WORDS.help)}</Text>
+            {requests !== null && (
+                <>
+                    <Text style={styles.header} accessibilityRole="header">{tn(total, '🚪 Wants to join ({n})', '🚪 Wants to join ({n})')}</Text>
+                    <Text style={styles.help}>{t(KNOCK_WORDS.help)}</Text>
+                </>
+            )}
             {!!error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
             {!!done && <Text style={styles.note} accessibilityLiveRegion="polite">{done}</Text>}
-            {requests === null ? (
+            {!!refusal && (
+                <Text style={styles.refusal} accessibilityLiveRegion="polite" testID={`wants-to-join-note-${refusal.id}`}>
+                    <Text style={styles.refusalName}>{refusal.callsign}</Text>{' · '}{refusal.message}
+                </Text>
+            )}
+            {hidden ? null : requests === null && !error ? (
                 <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 12 }} />
-            ) : requests.map(req => (
+            ) : requests?.map(req => (
                 <View key={req.id} style={styles.card}>
                     <View style={styles.who}>
                         <MemberAvatar avatarUrl={req.avatar} pubkey={req.pubkey} callsign={req.callsign} size={44} />
@@ -122,7 +146,6 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
                         </View>
                     </View>
                     <Text style={styles.message}>{req.message}</Text>
-                    {!!notes[req.id] && <Text style={styles.note}>{notes[req.id]}</Text>}
                     <View style={styles.actions}>
                         <Pressable
                             style={[styles.invite, busy === req.id && { opacity: 0.6 }]}

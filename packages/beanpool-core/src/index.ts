@@ -26,6 +26,9 @@ export * from './pricing-catalog.js';
 export * from './archetypes.js';
 export * from './synonyms.js';
 export * from './search-terms.js';
+export * from './tags/index.js';
+export * from './tags/suggest.js';
+export * from './tags/post-tags.js';
 export * from './channels.js';
 export * from './groups.js';
 export * from './text-limits.js';
@@ -86,6 +89,7 @@ export * from './start-something.js';
 export * from './deal-step.js';
 export * from './enterprise-pledge.js';
 export * from './needs-you.js';
+export * from './market-fill.js';
 export * from './refresh-gate.js';
 export * from './dm-requests.js';
 export * from './community-shape-card.js';
@@ -107,3 +111,5 @@ export type {
     OpenedGroupLine, GroupWrapBinding, GroupWrapOpenBinding, GroupServedWrap, MakeGroupEpochInput, GroupEpochCheck, GroupKeyOpenCheck, GroupTopUpCheck, SealGroupLineInput,
     GroupEpochProgress, GroupLineVerifyMemo, FormerKey,
 } from './group-crypto.js';
+export { activityTarget } from './activity-target.js';
+export type { ActivityTarget, ActivityTargetItem } from './activity-target.js';

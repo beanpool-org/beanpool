@@ -107,7 +107,7 @@ import { createBackupRoutes } from './routes/backup.js';
 import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
 import { createAlertsRoutes } from './routes/alerts.js';
 import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
-import { createMcpRoutes } from './agent/mcp-route.js';
+import { createMcpRoutes, mcpBodyLimit, MCP_BODY_MAX } from './agent/mcp-route.js';
 import { createAgentGrantRoutes } from './agent/grants-route.js';
 import { createOAuthRoutes, oauthDoorOff } from './agent/oauth-route.js';
 import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
@@ -491,12 +491,14 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
 const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
 
 /**
- * The two calls an applicant's web app makes to the community it asked to join (Lounge L1): how the request fares, and
- * "Cancel my request". The web app runs on its own node, never the community's, so each is cross-origin; neither carries a
- * cookie or a credential (the signature is in the headers, and the node answers only for the signer), so any origin may make
- * them. Each is open for its own method and the signature's headers alone: nothing else under /api/join is.
+ * The three calls an applicant's web app makes to a community it asks to join: the knock itself (front doors S2), how the
+ * request fares, and "Cancel my request" (Lounge L1). The web app runs on its own node, never the community's, so each is
+ * cross-origin; none carries a cookie or a credential (the signature is in the headers, bound to this host, and the node
+ * answers only for the signer), so any origin may make them, as any app with a key already can. Each is open for its own
+ * method and the signature's headers alone: nothing else under /api/join is (the members' list and its answers stay closed).
  */
 const SIGNED_KNOCK_CORS: ReadonlyMap<string, string> = new Map([
+    ['/api/join/knock', 'POST, OPTIONS'],
     ['/api/join/knock/status', 'GET, OPTIONS'],
     ['/api/join/knock/cancel', 'POST, OPTIONS'],
 ]);
@@ -1558,7 +1560,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // CLAIM_SMALL_BODY_BYTES), whatever its length said. One it let in as possibly large is charged to its
                 // address's unverified claims once more than that has been read, never for what it only declared.
                 const claimLimit = ctx.state.gatewayBodyLimit as number | undefined;
-                const routeLimit = Math.min(routeBodyLimit(ctx.path.toLowerCase()), claimLimit ?? Infinity);
+                // /mcp reads more only for an owner's assistant, whose posts carry photos (agent/mcp-route.ts mcpBodyLimit).
+                const lowerPath = ctx.path.toLowerCase();
+                const routeLimit = Math.min(MCP_BODY_PATH.test(lowerPath) ? mcpBodyLimit(ctx) : routeBodyLimit(lowerPath), claimLimit ?? Infinity);
                 const declaredLen = Number(ctx.get('content-length'));
                 if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;
@@ -2141,11 +2145,15 @@ export async function startHttpsServer(port: number): Promise<number> {
 // their own binary endpoints); past it we abort with 413.
 const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
 
+/** /mcp, with or without its slash (agent/mcp-route.ts). */
+const MCP_BODY_PATH = /^\/mcp\/?$/;
+
 /** Routes whose legitimate bodies are much smaller than the global cap, enforced before
  *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
 const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
-    // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments.
-    [/^\/mcp\/?$/, 64 * 1024],
+    // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments. An owner's assistant, whose
+    // posts carry photos, may send more (mcpBodyLimit, asked before this table).
+    [MCP_BODY_PATH, MCP_BODY_MAX],
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],

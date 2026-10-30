@@ -114,6 +114,7 @@ export function toolManifestProblems(m: ToolManifest): string[] {
     if (!Array.isArray(m.examples) || m.examples.length < 1 || m.examples.length > TOOL_LIMITS.examples) {
         say(`it has 1 to ${TOOL_LIMITS.examples} examples for the "I'm starting out" door.`);
     }
+    if (m.doors !== undefined && typeof m.doors !== 'boolean') say('its doors, when it names them, are true or false.');
     if (m.guide !== undefined && (typeof m.guide !== 'string' || !GUIDE_SLUG.test(m.guide))) say("its guide is a members' guide page slug.");
     for (const [action, feature] of Object.entries(m.needs ?? {})) {
         if (!(SHOWCASE_FEATURES as readonly string[]).includes(feature)) say(`needs.${action} is not a node feature (${SHOWCASE_FEATURES.join(', ')}).`);

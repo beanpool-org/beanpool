@@ -127,14 +127,17 @@ export function joinRequestAge(r: Pick<JoinRequest, 'createdAt'>, now: number = 
     return Number.isFinite(at) ? Math.max(0, Math.floor((now - at) / 86_400_000)) : null;
 }
 
-/** Under each request: when, and where they came from. */
+/**
+ * Under each request: when, and where they came from: the host the app said (the global community, for a member there),
+ * or the BeanPool app itself when it named none (a phone with no community yet, or one in a local community: slice S3).
+ */
 export function joinRequestMeta(r: Pick<JoinRequest, 'createdAt' | 'fromNode'>, now: number = Date.now()): string {
     const days = joinRequestAge(r, now);
     let when = '';
     if (days !== null) {
         when = days <= 0 ? 'Asked today' : days === 1 ? 'Asked yesterday' : `Asked ${days} days ago`;
     }
-    const from = r.fromNode ? `from ${r.fromNode}` : '';
+    const from = r.fromNode ? `from ${r.fromNode}` : 'from the BeanPool app';
     return [when, from].filter(Boolean).join(' · ');
 }
 

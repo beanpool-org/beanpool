@@ -397,7 +397,8 @@ describe('the app is the model', () => {
         expect(layout).toMatch(/setupNotificationResponseHandler\(\{ recheck: \(\) => recheckRef\.current\(\) \}\)/);
         expect(layout).toMatch(/const \{ recognition, nodeUrl, recheck \} = useNodeStatus\(\);\s*(\/\/.*\s*)*const recheckRef = useRef\(recheck\);\s*recheckRef\.current = recheck;/);
         const guard = layout.slice(layout.indexOf('        if (isLoading) return;\n        const root = (segments as string[])[0];'));
-        const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding]);'));
+        // Since S3 the guard also looks again when the phone's community comes or goes (`noCommunity`, a waiting phone).
+        const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding, noCommunity]);'));
         // The model's order: no identity, the join wizard, a recovery, closed, stranger, then the member's landing.
         const order = ['if (!identity) {', 'if (pendingOnboarding) {', "if (recognition === 'recovering') {", "if (recognition === 'closed') {",
             "if (recognition === 'stranger') {", 'const landing = memberRedirect(segments as string[], identity.publicKey);'];

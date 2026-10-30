@@ -1,7 +1,7 @@
 ---
 slug: ai-assistant
 title: AI assistants
-summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, the suggestions you approve, its limits, and disconnecting it.
+summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor, or any MCP client you run yourself, such as Hermes or a local model) to your server, what it sees and never sees, the suggestions you approve, the listings an owner's assistant posts, its limits, and disconnecting it.
 related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees, install-with-ai
 ---
 
@@ -17,14 +17,14 @@ Under Appliance & Data, then Access & Security, **Connected assistants** shows f
 
 - Copy the address: your server's address with /mcp at the end.
 - In Claude or ChatGPT: Settings, Connectors, **Add custom connector**, and paste it.
-- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), and what it will read. Scan the code on that page with the BeanPool app (**Settings**, then **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
+- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), what it will read, and what an owner's assistant does without asking (a backup, and posts if you tick **May post for me** there; it is off unless you do). Scan the code on that page with the BeanPool app (**Settings**, then **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
 - Ask it: "what needs me?"
 
 No key or token is shown, and none is stored anywhere you can lose it. The assistant gets a pass that lasts an hour and renews itself; if it isn't used for 30 days, approve it again. It acts as you, with your role: if you stop being an owner or admin, it stops too. Each member can have at most 5 connected this way. Only an owner or an admin can approve one; a moderator's or a member's phone is refused. The phone must be a BeanPool app that can show which assistant is asking: an older one is told to update.
 
 ## A page asking you to approve an assistant you didn't add
 
-Anyone can make an assistant and give it any name, including "Claude". So the page and the phone never show the name alone: they show the address its answers go to beside it. If someone sends you a link or a code and asks you to approve "your assistant", or the address isn't the assistant you just added (claude.ai, chatgpt.com), press **No** on the phone and close the page. Whoever you approve reads what your assistant would read. If you approved one by mistake, disconnect it (below).
+Anyone can make an assistant and give it any name, including "Claude". So the page and the phone never show the name alone: they show the address its answers go to beside it. If someone sends you a link or a code and asks you to approve "your assistant", or the address isn't the assistant you just added (claude.ai, chatgpt.com), press **No** on the phone and close the page. Whoever you approve reads what your assistant would read and, if you are an owner and ticked **May post for me**, can post in your name at once. If you approved one by mistake, disconnect it (below).
 
 ## A token for a desktop agent (owners)
 
@@ -32,13 +32,30 @@ Under Appliance & Data, then Access & Security, **Connected assistants**:
 
 - Sign in with your own owner key: Manage in the app, or **Sign in with your phone** on a computer. An assistant acts for a member, so the admin password can't connect one.
 - Give it a name that says which assistant it is (for example "Claude on my laptop"), pick for how long (7, 30 or 90 days), and press **Connect**.
-- Settings shows the address (your server's address with /mcp at the end) and the assistant's token, **once**. Copy the token now: it is never shown again, and Settings keeps no copy. Keep it like a password: whoever holds it reads what your assistant reads.
+- Settings shows the address (your server's address with /mcp at the end) and the assistant's token, **once**. Copy the token now: it is never shown again, and Settings keeps no copy. Keep it like a password: whoever holds it reads what your assistant reads and, if you ticked **May post for me** when you made it, can post as you. Leave that tick off for an assistant that only needs to read: a token that leaks then can't post.
 - In Claude Code, **Copy command** gives one line that does both. In Claude Desktop, Cursor and other assistants, add a custom connector with the address, and send the token as the header Authorization, written as Bearer, a space, then the token.
 - Ask it: "what needs me?"
 
 Admins connect theirs from their assistant, as above: only an owner makes a token. Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting).
 
 The other owners get a message when anyone connects or disconnects an assistant, and the Alerts card shows each day's calls and how many assistants are connected. Connected counts the ones that can still call: not expired, and their member still an owner or admin.
+
+## Any MCP client, including one you run yourself
+
+The server speaks the open Model Context Protocol, so you aren't tied to Claude or ChatGPT. Any assistant that is an MCP client and can send a header works with a token from the steps above: an agent you run on your own computer (Hermes, Goose, OpenHands and others), with a model you choose, a local one included. If the model runs on your own machine, what the assistant reads goes nowhere but your machine and your server.
+
+What to tell the client (the names of the settings differ from one client to another):
+
+- **Address**: your server's address with /mcp at the end, for example https://your.community.example/mcp
+- **Transport**: Streamable HTTP. The server answers a POST with JSON; there is no session to open and no server push.
+- **Header**: Authorization, written as Bearer, a space, then the token.
+
+In the client's own config file, that is one entry in its list of MCP servers:
+
+- In a YAML file (many agents call the list mcp_servers): a name for your community, then url: your address with /mcp, transport: streamable-http, and under headers, Authorization: Bearer and the token.
+- In a JSON file (many call the list mcpServers): the same three things, url, the transport if the client asks for one, and headers with Authorization.
+
+Keep the token in the client's own secrets or config file, never in a chat with it. The server refuses a request sent from a web page on another site, so the client must run as a program, not in a browser tab. Each token may make 60 calls a minute and 2,000 a day. A client that can only sign in (no header) uses the Claude or ChatGPT steps above instead.
 
 ## What it can read
 
@@ -49,9 +66,22 @@ The other owners get a message when anyone connects or disconnects an assistant,
 - **Reports**: their id, when, status, whether it is a child-safety report, and what was reported. Open child-safety reports come first, then the rest newest first. Only when asked, the report's reason, the reported post's title and description, and the reported post's author's name or the reported member's name.
 - **Join requests**: how many wait. Only when asked, each one's name and message, and the community it says it came from.
 - **Safety settings**: yes or no only, for example whether two-factor sign-in is on, whether there are two owners, whether a recovery code is set.
-- **Its own connection**: its name, who it acts for, until when, and its calls today.
+- **Its own connection**: its name, who it acts for, until when, its calls today and, for an owner's assistant, its posts today.
 
 An owner's assistant can also **take a backup**: a snapshot on the server, or a run to the off-box destinations. At most 2 a day, never while one is running. An admin's assistant can't.
+
+## Posting for you (owners)
+
+An owner's assistant can put things in the Market for them, as they need it: ask it "post an Offer of sourdough on Saturdays, here is a photo" and it is up. There is no list to approve: the post is yours, made at once. It can only if you ticked **May post for me** when you connected it (on the token form, or on the page you approved it from); without the tick it has no posting tools. The list of connected assistants shows which ones may post, and how many posts each made today.
+
+- **What it can post**: an Offer, a Need or an event as you, and an Offer, a Need or an event as an enterprise you keep. It asks the server which enterprises those are; one you no longer keep is refused. An enterprise's Need needs a live Offer of its own first, as in the app.
+- **A photo every time**: 1 to 4, sent by the assistant as JPEG or WebP. The server makes each one 800 pixels on its longest side, as the apps do, and takes out what a camera hides in a photo (where it was taken). A post with no photo is refused, as in the app. Only post photos you may: never one of people who did not agree to it.
+- **Everything the app's form asks for**: an Offer or a Need needs its title (at most 50 characters), description, category, place and photo, and its price in Beans where your community has Beans. The place is a pin on the map, or your own area if the assistant says so: the area you set in the app, on every server. If you have set none, the server refuses and asks for a pin. An event needs its title (at most 140 characters), description, start (with its offset from UTC), time zone and photo, and in person its place's name and its pin on the map. An enterprise's Offer or Need needs its category and a price of more than 0 Beans. If the assistant leaves one out, the server refuses the post and names what is missing. A pin is rounded to about 100 metres, as the apps round it.
+- **The same rules as the app**: the same words, categories, prices and places, and the same refusals (a muted account, an event in the past). One limit is different. Posts in your own name are held to the owners' **Assistant posts a day** (below), not to the 100 a day a member can post from the app. They never use up your own 100: you can still post all of those from the app. Their photos do count in your own photos for the day (100 MB unless your server sets another number), and the assistant is told how much of that is left. An enterprise's posts count against the enterprise, as any keeper's do.
+- **It is your post**: it carries your name or the enterprise's, and you edit or delete it as any other. Members see an ordinary post. Moderators can see it was made by an assistant, and the log says which one.
+- **Disconnecting stops it at once**, and so does turning AI assistants off. The posts it made stay until you delete them.
+
+An admin's assistant can't post, and an assistant never posts as another member.
 
 ## Suggestions: you approve, it never acts
 
@@ -77,11 +107,11 @@ What members write (a report's reason, a post's title, a join message, a name) m
 
 ## What it sees: try it first
 
-**What would my assistant see?** on the card, or **What it sees** beside a connected one, shows each tool the assistant has and, when you press **Show its answer**, exactly what the server would answer it now, redacted and wrapped the same way. Nothing you look at there is counted against the assistant or changes anything. Taking a backup is not tried there. While AI assistants are turned off, an admin sees the list of tools there but no answers.
+**What would my assistant see?** on the card, or **What it sees** beside a connected one, shows each tool the assistant has and, when you press **Show its answer**, exactly what the server would answer it now, redacted and wrapped the same way. Nothing you look at there is counted against the assistant or changes anything. Taking a backup or posting is not tried there. While AI assistants are turned off, an admin sees the list of tools there but no answers.
 
 ## Limits
 
-Each assistant can make 60 calls a minute and 2,000 a day; past either the server answers "too many requests" and says when to try again. A list returns at most 50 rows. These counts are kept in memory, so a restart starts them again.
+Each assistant can make 60 calls a minute and 2,000 a day; past either the server answers "too many requests" and says when to try again. A list returns at most 50 rows. An owner's assistant can make at most **Assistant posts a day** posts in a day (UTC): 100 unless an owner sets it, from 1 to 1,000, under Connected assistants. Raise it for a day of seeding your community and put it back after; a change takes effect at the next post, and the other owners are told. Each change asks for a fresh proof, as the gateway's settings do: make it from the phone's Manage, or with the password and a current code. Settings on a computer signed in with your phone sends you to the phone. It is this server's own setting: a standby keeps its own. A post the server refuses doesn't count. The calls are counted in memory, so a restart starts them again. The posts are counted from the posts themselves too, so a restart doesn't give an assistant a new day.
 
 ## Disconnecting
 
@@ -91,7 +121,7 @@ If the server sees a used pass presented a second time, someone else may hold a 
 
 Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again. The same goes for assistants connected with a token. The switch that turns AI assistants off belongs to the server too: after a take-over they are allowed again until an owner turns them off on the new main server.
 
-An assistant also stops on its own when its days are up, or when the member it acts for stops being an owner or admin. An owner who becomes an admin keeps theirs, as an admin's assistant (no backups). If a laptop with a token on it is lost or someone may have copied the token, disconnect that assistant and connect it again.
+An assistant also stops on its own when its days are up, or when the member it acts for stops being an owner or admin. An owner who becomes an admin keeps theirs, as an admin's assistant (no backups, no posting). If a laptop with a token on it is lost or someone may have copied the token, disconnect that assistant and connect it again.
 
 ## Turning AI assistants off
 
@@ -99,4 +129,4 @@ AI assistants are allowed unless an owner turns them off: the card's **Turn AI a
 
 ## What the server logs
 
-Every call an assistant makes is logged under AGENT: which assistant, the first part of its member's key, which tool, the names of what it asked with, how many rows it got and how long it took. Never what members wrote and never a token. Refused calls are logged too, a few a minute, then counted.
+Every call an assistant makes is logged under AGENT: which assistant, the first part of its member's key, which tool, the names of what it asked with, how many rows it got and how long it took, and for a post it made, the post. Never what members wrote and never a token. Refused calls are logged too, a few a minute, then counted.

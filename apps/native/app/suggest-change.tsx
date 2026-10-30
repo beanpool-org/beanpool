@@ -31,7 +31,7 @@ export default function SuggestChangeScreen() {
         // Written in capitals in the words themselves (never textTransform: Android upper-cases by the phone's locale, not
         // the member's language, so a Turkish "i" would lose its dot). One line in English; a longer language's takes two,
         // shrinking a little, rather than being cut between Close and the spacer.
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { padding: 20 },
         infoBox: { flexDirection: 'row', backgroundColor: colors.brand.tint, padding: 14, borderRadius: 12, marginBottom: 22, borderWidth: 1, borderColor: colors.brand.primary },
         infoText: { flex: 1, fontSize: 14, color: colors.text.body, lineHeight: 20 },

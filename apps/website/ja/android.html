@@ -158,8 +158,8 @@
         <p class="callout"><strong>これは Google Play と同じアプリで、同じ鍵で署名されています。</strong> スマートフォンにすでにある BeanPool が Google Play から入れたものでもここから入れたものでも、その上にインストールでき、アカウントはそのまま残ります。</p>
 
         <h2 id="download">ダウンロード</h2>
-        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.83/BeanPool-1.2.83-305.apk"><span class="apk-label">BeanPool <span data-apk="version">1.2.83</span> をダウンロード</span></a></p>
-        <p>バージョン <span data-apk="version">1.2.83</span>、ファイルサイズ <span data-apk="mb">166</span> MB：できれば Wi-Fi を使ってください。ファイルは <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a> にある BeanPool のリリースから届きます。</p>
+        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.84/BeanPool-1.2.84-306.apk"><span class="apk-label">BeanPool <span data-apk="version">1.2.84</span> をダウンロード</span></a></p>
+        <p>バージョン <span data-apk="version">1.2.84</span>、ファイルサイズ <span data-apk="mb">160</span> MB：できれば Wi-Fi を使ってください。ファイルは <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a> にある BeanPool のリリースから届きます。</p>
 
         <h2 id="install">インストール</h2>
         <ol>
@@ -167,7 +167,7 @@
             <li>初回は、ブラウザにアプリのインストールを許可するよう Android が求めます。開いた設定で許可してから、戻ってください。</li>
             <li>インストールを確定します。BeanPool がすでにスマートフォンにある場合、Android はこれを更新と呼びます。その後 BeanPool を開いてください。</li>
         </ol>
-        <p id="not-installed">スマートフォンにあるアプリと競合するためアプリがインストールされなかったと Android に表示されたら、BeanPool のバージョンを確認してください。スマートフォンの設定の「アプリ」で BeanPool を開くと表示されます。バージョン <span data-apk="version">1.2.83</span> 以降なら、ここから入れるものはありません。そのまま使ってください。それより古いものは、テスト版など別の鍵で署名されています。その場合は、12個の単語を書き留めてから（<a href="#words">下</a>を参照）、BeanPool をアンインストールし、このファイルをインストールしてください。BeanPool を開き、<strong>すでにメンバーですか？アカウントを復元</strong>をタップし、次に<strong>12個の単語で復元</strong>をタップします。</p>
+        <p id="not-installed">スマートフォンにあるアプリと競合するためアプリがインストールされなかったと Android に表示されたら、BeanPool のバージョンを確認してください。スマートフォンの設定の「アプリ」で BeanPool を開くと表示されます。バージョン <span data-apk="version">1.2.84</span> 以降なら、ここから入れるものはありません。そのまま使ってください。それより古いものは、テスト版など別の鍵で署名されています。その場合は、12個の単語を書き留めてから（<a href="#words">下</a>を参照）、BeanPool をアンインストールし、このファイルをインストールしてください。BeanPool を開き、<strong>すでにメンバーですか？アカウントを復元</strong>をタップし、次に<strong>12個の単語で復元</strong>をタップします。</p>
 
         <h2 id="updates">アップデート</h2>
         <p>ここからダウンロードしたアプリは自動では更新されません。新しいバージョンが出ると BeanPool がお知らせします。このページに戻ってダウンロードし、今のアプリの上にインストールしてください。アカウントもアプリの中身もすべて残ります。</p>
@@ -179,12 +179,12 @@
         <p>このファイルは、Google Play の BeanPool と同じ鍵で署名されています。その証明書の SHA-256 フィンガープリントは次のとおりです：</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>Android のビルドツールがあるコンピューターで、次を実行します：</p>
-        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>
+        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.84-306.apk</span></code></p>
         <p>同じフィンガープリントが、apksigner の書き方で表示されるはずです：</p>
         <p><code class="apk-code" id="apk-digest" dir="ltr">Signer #1 certificate SHA-256 digest: 46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81</code></p>
         <p>Android は同じ鍵で署名された更新しかインストールしないため、ほかの鍵で署名されたファイルがあなたの BeanPool を置き換えることはできません。</p>
         <p>ファイルそのものの SHA-256：</p>
-        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">ef6112f14891ad653e7ad0d06cc0aa061fa5a97907c84b9055cfdd6229c06089</code></p>
+        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">76dc8a47e74fc8e0f531d678a35a5b94da5c73ec6e3325c0ce395a614fea9f72</code></p>
 
         <h2 id="other-ways">BeanPool を入手するほかの方法</h2>
         <ul>

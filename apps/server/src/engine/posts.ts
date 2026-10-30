@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, isLendablePriceType, postRulesFor, parseReachPeers, storedPostTags, type PostReach, type AudienceScope, type PushNoticeKind, word, wordsFor } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -23,7 +23,8 @@ import { getProfileSwitches, profileLimits } from '../config/node-profile.js';
 import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
-import { assertLendFields, type LendFieldsIn } from './post-fields.js';
+import { assertLendFields, assertPostTags, type LendFieldsIn } from './post-fields.js';
+import { postSearchKeywords } from './search-keywords.js';
 import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
 import {
     canonicalZone,
@@ -37,7 +38,6 @@ import {
     isVisitorKey,
     withoutPollVoters,
     validatePostPhotos,
-    generateSearchKeywords,
     hasListedOffer,
     isEventHost,
     convenorHostPaused,
@@ -498,6 +498,8 @@ export function createPost(
         replacementValue?: unknown;
         /** The shop to put it in, as sent: its author's own (engine/shops.ts assertShopForPost). */
         shopId?: unknown;
+        /** Its tags: ids from the library in core, at most 5 (post-fields.ts assertPostTags). */
+        tags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
         /**
@@ -506,6 +508,11 @@ export function createPost(
          * with no Offer) and before anything is stored, so a limit never answers for a post that may not be made at all.
          */
         beforeWrite?: () => void;
+        /**
+         * What made it, when that was not the author's own app: `assistant:<grant id>` for an owner's AI assistant
+         * (agent/owner-posts.ts). Kept in `posts.created_via` for moderators and the audit; never on a card.
+         */
+        createdVia?: string;
     },
 ): MarketplacePost | null {
     const now = Date.now();
@@ -732,7 +739,9 @@ export function createPost(
 
     const finalId = id || crypto.randomUUID();
     const createdAt = new Date(now).toISOString();
-    const searchKeywords = generateSearchKeywords(title, description, category);
+    // Held to the library here too, for a caller that comes past state-engine's createPost (post-fields.ts).
+    const tags = options?.tags === undefined ? [] : assertPostTags(options.tags);
+    const searchKeywords = postSearchKeywords(title, description, category, tags);
     const { reach, reachPeers } = normaliseReach(options?.reach, options?.reachPeers);
     // A poll has had its photos stripped above; `photos` is whatever survived validatePostPhotos. A keeper's listing for
     // their enterprise charges the keeper who sent the photos, as its edit and its logo do, never the enterprise.
@@ -771,8 +780,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value, shop_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id, created_via, tags
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -790,7 +799,9 @@ export function createPost(
             eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink,
             eventHostLetsIn,
             series.repeat, series.until, series.skips,
-            lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value, shopId
+            lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value, shopId,
+            typeof options?.createdVia === 'string' && options.createdVia ? options.createdVia.slice(0, 80) : null,
+            storedPostTags(tags)
         );
 
         if (photoColumns.length > 0) {
@@ -1491,7 +1502,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const newTitle = updates.title ?? existingPost.title;
     const newDesc = updates.description ?? existingPost.description;
     const newCat = updates.category ?? existingPost.category;
-    const newKeywords = generateSearchKeywords(newTitle, newDesc, newCat);
+    // Its tags, as the edit sets them (held to the library by state-engine's updatePost, post-fields.ts) or as they are.
+    const newTags = updates.tags !== undefined ? assertPostTags(updates.tags, existingPost.tags ?? []) : existingPost.tags ?? [];
+    if (updates.tags !== undefined) { fields.push('tags = ?'); values.push(storedPostTags(newTags)); }
+    const newKeywords = postSearchKeywords(newTitle, newDesc, newCat, newTags);
     fields.push('search_keywords = ?');
     values.push(newKeywords);
 

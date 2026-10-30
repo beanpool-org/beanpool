@@ -42,8 +42,8 @@ describe('postFormRules', () => {
         expect(postFormSubmitLabel({ ...needNoPhoto, photoRequired: on.photoRequired, credits: '5' }, LOCAL.features)).toBe('📷 Add a photo');
     });
 
-    it('map.tsx reads the rules, never the raw blocked flag or a bare photo count', () => {
-        const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/map.tsx'), 'utf-8');
+    it('the listing form (app/new-listing.tsx, out of map.tsx since MAP-FORM) reads the rules, never the raw blocked flag or a bare photo count', () => {
+        const src = fs.readFileSync(path.resolve(__dirname, '../../app/new-listing.tsx'), 'utf-8');
         expect(src).toContain('const { needBlocked, photoRequired } = postFormRules(nodeFeatures, postType, blockedFromTrading);');
         expect(src).toContain("if (photoRequired && postPhotos.length < 1) errors.add('photos');");
         expect(src).toContain('|| !postCategory || (photoRequired && postPhotos.length < 1);');

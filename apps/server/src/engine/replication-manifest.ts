@@ -211,11 +211,12 @@ export const TABLES: Record<string, TableEntry> = {
     },
     // A listing, its photos, a deal and a crowdfund project are the main server's rows verbatim, stamps included: the
     // import sets the tables' touch triggers aside while it writes them (engine/sync.ts IMPORT_KEEPS_STAMPS, G1, G1b).
-    // `search_keywords` is the main server's too; one it holds empty (a linked community's listing it cached) is filled
-    // by each server's boot backfill alike, from the same words (state-engine.ts backfillSearchKeywords).
+    // `search_keywords` is the main server's too; one it holds empty (a linked community's listing cached before tags
+    // slice T2, which now writes them as it caches) is filled by each server's boot backfill alike, from the same words
+    // (state-engine.ts backfillSearchKeywords). `tags` is the main server's verbatim (engine/sync.ts postTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -688,6 +689,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     aiAssistantsAllowed: { kind: 'per-server', reason: "the owner switch for this server's AI assistant endpoint (/mcp), beside its agent tokens" },
     agentOAuthGrants: { kind: 'per-server', reason: "AI assistants connected to this server through OAuth (refresh-token hashes); a standby's copy holds none" },
+    agentPostsPerDay: { kind: 'per-server', reason: "the owners' number of posts one of this server's assistants may make a day, beside its grants; never copied" },
     automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },

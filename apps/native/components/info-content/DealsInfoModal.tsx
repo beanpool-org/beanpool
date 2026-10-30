@@ -170,14 +170,14 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
             content: (
                 <View style={styles.tabContent}>
                     <Text style={styles.descriptionText}>
-                        {t('When a trade cannot be agreed upon, community administrators provide transparent dispute arbitration for escrows stalled over 7 days.')}
+                        {t('When a trade cannot be agreed upon, community administrators provide transparent dispute arbitration for deals held in trust and stalled over 7 days.')}
                     </Text>
 
                     <View style={styles.cardContainer}>
                         <Text style={styles.cardLabel}>{t('THREE ARBITRATION OUTCOMES')}</Text>
                         <View style={{ marginTop: 4 }}>
-                            <ListItem prefix="1.">{richWords(t('**Release to Seller:** Disburses escrowed credits to the seller (with standard community fee).'), styles.boldWhiteText)}</ListItem>
-                            <ListItem prefix="2.">{richWords(t('**Refund to Buyer:** Returns 100% of escrowed credits back to the buyer (fee-exempt).'), styles.boldWhiteText)}</ListItem>
+                            <ListItem prefix="1.">{richWords(t('**Release to Seller:** Disburses the Beans held in trust to the seller (with standard community fee).'), styles.boldWhiteText)}</ListItem>
+                            <ListItem prefix="2.">{richWords(t('**Refund to Buyer:** Returns 100% of the Beans held in trust back to the buyer (fee-exempt).'), styles.boldWhiteText)}</ListItem>
                             <ListItem prefix="3.">{richWords(t('**Split 50/50:** Returns half to the buyer and releases half to the seller.'), styles.boldWhiteText)}</ListItem>
                         </View>
                     </View>
@@ -211,7 +211,7 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
                     <View style={styles.warningBox}>
                         <Text style={styles.warningIcon}>⚠️</Text>
                         <Text style={styles.warningText}>
-                            {t('Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).')}
+                            {t('Repeated bad reviews lower your standing with trading partners. Unresolved disputes over Beans held in trust for more than 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).')}
                         </Text>
                     </View>
                 </View>

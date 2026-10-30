@@ -387,7 +387,7 @@ describe('a new local member\'s first landing (§3.2 (b) day one)', () => {
         await act(async () => { (document.querySelector('[data-testid="home-market-all"]') as HTMLElement).click(); });
         expect(nav.router.navigate).toHaveBeenCalledWith('/(tabs)/market');
         await act(async () => { (document.querySelector('[data-testid="home-step-post-offer"]') as HTMLElement).click(); });
-        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/map', params: { newPost: 'offer' } });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'offer' } });
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         expect(document.querySelector('[data-testid="edit-home-done"]')).not.toBeNull();
     });
@@ -819,9 +819,9 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-needs-deal → /(tabs)/market tab=deals',
             'home-needs-message → /(tabs)/chats view=messages&filter=unread',
             'home-needs-group → /(tabs)/chats view=groups',
-            'home-step-offer → /map newPost=offer',
+            'home-step-offer → /new-listing newPost=offer',
             'home-step-photo → /(tabs)/settings section=profile',
-            'home-step-post-offer → /map newPost=offer',
+            'home-step-post-offer → /new-listing newPost=offer',
             'home-tip-read-more → /guide/[slug] slug=posting',
             'home-deals-line → /(tabs)/market tab=deals',
             'home-enterprise-line → /treasury-detail publicKey=ent1&name=Tool Library',
@@ -881,7 +881,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-step-area → /your-area',
             'home-step-photo → /(tabs)/settings section=profile',
             'home-step-sawLedger → /(tabs)/ledger',
-            'home-step-post → /map newPost=offer',
+            'home-step-post → /new-listing newPost=offer',
             'home-step-saidHello → /(tabs)/people view=community',
             'home-step-watch → /find-community',
             'home-tip-read-more → /guide/[slug] slug=posting',
@@ -1547,7 +1547,7 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         await act(async () => { (steps.querySelector('[data-testid="home-step-sawLedger"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith('/(tabs)/ledger');
         await act(async () => { (steps.querySelector('[data-testid="home-step-post"]') as HTMLElement).click(); });
-        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/map', params: { newPost: 'offer' } });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/new-listing', params: { newPost: 'offer' } });
         await act(async () => { (steps.querySelector('[data-testid="home-step-saidHello"]') as HTMLElement).click(); });
         expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/(tabs)/people', params: { view: 'community' } });
         await act(async () => { (steps.querySelector('[data-testid="home-step-watch"]') as HTMLElement).click(); });

@@ -357,6 +357,8 @@ export default function LedgerScreen() {
         circRate: { fontSize: 13, fontWeight: '700', color: colors.feedback.success.fg, fontFamily: 'Courier' } as any,
         sendBtn: { paddingVertical: 16, borderRadius: 14, backgroundColor: colors.action.fab, alignItems: 'center', marginBottom: 12 },
         sendBtnOpen: { backgroundColor: colors.border.strong },
+        // Cancel on the open button: white was 1.34:1 on the pale grey in light; text.heading is white in dark, as before.
+        sendBtnTextOpen: { color: colors.text.heading },
         sendBtnLocked: { backgroundColor: colors.border.default, opacity: 0.7 },
         sendBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800', flexShrink: 1, textAlign: 'center' },
         sendForm: { backgroundColor: colors.surface.app, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default },
@@ -636,7 +638,11 @@ export default function LedgerScreen() {
                 <View style={styles.perksRow}>
                     {preview ? <LocalCommunityMark variant="action" feature="beans" label={t('Send Beans')} /> : <Pressable
                         accessibilityRole="button"
-                        style={[styles.perkPill, { borderColor: canSend ? palette.green200 : colors.border.default, backgroundColor: canSend ? palette.green50 : colors.surface.app }]}
+                        // Dark takes the success tint, as Invite Members beside it does: the green words were 1.84:1 on green50.
+                        style={[styles.perkPill, {
+                            borderColor: canSend ? (theme === 'dark' ? colors.feedback.success.border : palette.green200) : colors.border.default,
+                            backgroundColor: canSend ? (theme === 'dark' ? colors.feedback.success.bg : palette.green50) : colors.surface.app,
+                        }]}
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
@@ -749,8 +755,9 @@ export default function LedgerScreen() {
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 }}>
                         <Text style={[styles.pathTitle, { marginBottom: 0 }]}>{t('🚀 Reach {emoji} {tier}', { emoji: nextTier.emoji, tier: t(TIER_WORDS[nextTier.name]) })}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: palette.indigo500, flexShrink: 1 }}>{t('Trust Manual')}</Text>
-                            <MaterialCommunityIcons name="information-outline" size={14} color={palette.indigo500} />
+                            {/* The link ink: indigo-500 was 4.47:1 on the card in light, 3.90 in dark. */}
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.link, flexShrink: 1 }}>{t('Trust Manual')}</Text>
+                            <MaterialCommunityIcons name="information-outline" size={14} color={colors.text.link} />
                         </View>
                     </View>
                     <Text style={styles.pathGap}>{tn(creditsToNext, '{n} trust to go', '{n} trust to go')}</Text>
@@ -877,7 +884,7 @@ export default function LedgerScreen() {
                                 >
                                     <MaterialCommunityIcons name="lock-clock" size={14} color={colors.feedback.warning.fg} />
                                     <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{formatNumber(escrowTotal, 1)}</Text>
-                                    <Text style={styles.walletMetricLabel}>{t('IN ESCROW')}</Text>
+                                    <Text style={styles.walletMetricLabel}>{t('HELD IN TRUST')}</Text>
                                 </Pressable>
                             </>
                         )}
@@ -948,9 +955,9 @@ export default function LedgerScreen() {
                         <MaterialCommunityIcons
                             name={!canSend ? 'lock-outline' : showSend ? 'close' : 'send'}
                             size={17}
-                            color={!canSend ? colors.text.secondary : colors.text.inverse}
+                            color={!canSend ? colors.text.secondary : showSend ? colors.text.heading : colors.text.inverse}
                         />
-                        <Text style={[styles.sendBtnText, !canSend && { color: colors.text.secondary }]}>
+                        <Text style={[styles.sendBtnText, showSend && styles.sendBtnTextOpen, !canSend && { color: colors.text.secondary }]}>
                             {!canSend
                                 ? (earned <= 0 ? t('Send Beans (needs 1 completed trade)') : t('Send Beans (needs positive balance)'))
                                 : showSend ? t('Cancel') : t('Send Beans')}

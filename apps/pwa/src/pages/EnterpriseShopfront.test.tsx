@@ -485,7 +485,7 @@ const ACTIONS: Array<{ what: string; view: View; label?: string; button?: string
     { what: 'stop the wind-up', view: 'windingUp', button: '🛑 Stop Wind-Up' },
     { what: 'finalise the wind-up', view: 'windingUp', button: '🏁 Finalise Wind-Up' },
     { what: 'propose a new leader while the leader is quiet', view: 'quietProject', button: 'Propose Leader' },
-    { what: 'cancel an initiative and refund its backers', view: 'leadProject', button: '🛑Cancel Initiative & Refund Escrow' },
+    { what: 'cancel an initiative and refund its backers', view: 'leadProject', button: '🛑Cancel Initiative & Refund Backers' },
     { what: 'vote yes on a new leader', view: 'quietProjectVote', label: 'Yes, make Zoe leader' },
     { what: 'vote no on a new leader', view: 'quietProjectVote', label: 'No, do not make Zoe leader' },
 ];

@@ -12,7 +12,7 @@ Tap **Talk**, then **People**. In the web app, tap **People** in the row of tabs
 
 - **Friends:** people you have added.
 - **Community:** every member. Search by name. On the phone, sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**. On the global community it shows the members nearest your area: type at least 2 letters of a name to find anyone else.
-- **Invites:** invite someone new. See "Joining BeanPool". If you have not joined yet, this button says **Register**. When people have asked to join your community, it shows how many, and they are listed under **Wants to join**. In the web app this button is always **🎟️ Invites**, with no count and no **Wants to join** list.
+- **Invites:** invite someone new. See "Joining BeanPool". If you have not joined yet, this button says **Register**. When people have asked to join your community, it shows how many, and they are listed under **Wants to join**. In the web app this button is always **🎟️ Invites**, never **Register**. It shows how many have asked too, such as **🎟️ Invites (2)**, with the same **Wants to join** list.
 
 Tap a person to see their profile: their reviews and posts, and, on the phone in a community with Beans, their trust badge and trades. You can message them straight from their profile with **Message**, or add them as a friend with **+ Add friend**. See "Your profile".
 

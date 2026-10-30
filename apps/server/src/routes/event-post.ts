@@ -28,8 +28,9 @@ import type { EventTimeOut } from '../engine/posts.js';
  *                  enterprise). Recorded as `created_by`, exactly as the enterprise's Offer and Need are.
  * @param beforeWrite the route's own limit on new posts (W-main), which the engine runs once every refusal has passed
  * @param out       where the engine leaves `eventTimeAdjusted` when a clock the host set was adjusted (eventTimeAnswer)
+ * @param createdVia what made it when the host's own app did not (`assistant:<grant id>`, agent/owner-posts.ts)
  */
-export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void, out?: EventTimeOut) {
+export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void, out?: EventTimeOut, createdVia?: string) {
     const b = body || {};
     return createPost(
         'event', 'community', b.title, b.description || '',
@@ -57,9 +58,12 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             // The same for a shop (engine/shops.ts assertShopForPost): an event is never in one, so one sent is a 400
             // shop_offers_only, not an event quietly made in no shop.
             shopId: b.shopId,
+            // Its tags, raw: held to the library by the engine (engine/post-fields.ts assertPostTags).
+            tags: b.tags,
             createdBy,
             beforeWrite,
             out,
+            createdVia,
         }
     );
 }

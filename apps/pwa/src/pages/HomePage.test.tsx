@@ -468,6 +468,21 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
         expect(nav).toHaveBeenCalledWith('enterprise', 'ent-key');
     });
 
+    it('a requests-to-join line lands on People → Invites, where the web lists them (front doors S2), never the settings page', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
+            needs: { items: [
+                { kind: 'knock', count: 2, accent: true, label: '2 people asked to join', target: { to: 'people' } },
+            ] },
+        })));
+        const nav = vi.fn();
+        render(<HomePage identity={ME} onNavigate={nav} />);
+        const needs = await screen.findByTestId('home-card-needs');
+        expect(within(needs).getByTestId('home-needs-knock')).toHaveTextContent('2 people asked to join');
+        expect(within(needs).queryByRole('link', { name: /asked to join/ })).toBeNull();
+        fireEvent.click(within(needs).getByRole('button', { name: '2 people asked to join. Waiting on you.' }));
+        expect(nav).toHaveBeenCalledWith('people-invites');
+    });
+
     it("a group's vote line lands on the group (DESIGN-group-decisions S3), not Messages and not Commons → Decide", async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             needs: { items: [

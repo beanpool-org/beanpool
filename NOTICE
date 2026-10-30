@@ -1,0 +1,57 @@
+BeanPool
+Copyright (C) 2026 martyinspace (Marty Fitzsimons)
+
+From version 1.2.32 (30 October 2026), BeanPool is licensed under the GNU Affero General Public License,
+version 3 only (AGPL-3.0-only). The full text is in LICENSE.
+
+In short: you may use, study, change and share BeanPool. If you share a changed version, or run one that
+people use over a network, you must offer them its source code under the same licence.
+
+Earlier releases
+Releases up to and including 1.2.31 were published under the MIT License, and anyone who received them
+keeps those rights. Code contributed before the change, including by Damien Osborne and by the Jules bot,
+was contributed under the MIT License; it remains available under that licence and is included in this
+work under the AGPL. The MIT License text that applied to them:
+
+MIT License
+
+Copyright (c) 2026 martyinspace
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Name and logo
+The AGPL covers the code, not the BeanPool name or logo, which belong to Cytec Pty Ltd. A changed
+version you share must not be called BeanPool or use its logo in a way that suggests it is ours.
+
+Third-party data
+This product includes data from third parties, and data of our own given to the public domain:
+
+Köppen-Geiger climate map (Your garden's climate layer)
+  packages/beanpool-core/src/tools/garden/climate.table.ts
+  Beck, H. E., T. R. McVicar, N. Vergopolan, A. Berg, N. J. Lutsko, A. Dufour, Z. Zeng, X. Jiang, A. I. J. M. van Dijk
+  and D. G. Miralles. High-resolution (1 km) Köppen-Geiger maps for 1901–2099 based on constrained CMIP6 projections.
+  Scientific Data 10, 724 (2023). Data: https://doi.org/10.6084/m9.figshare.21789074
+  Licence: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+  Changes: the 1991–2020 map at 0.5° as its authors resampled it, its 30 classes merged into seven plain zones and stored
+  as runs (scripts/tools/garden-climate.mjs). The attribution is also shown on the planting guide's screens.
+
+Your garden's crop table and zone mapping
+  packages/beanpool-core/src/tools/garden/crops.ts, packages/beanpool-core/src/tools/garden/zones.ts
+  Written by the BeanPool contributors and dedicated to the public domain under CC0 1.0
+  (https://creativecommons.org/publicdomain/zero/1.0/): any community may copy them into its own guide.

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); gemini-3.8-flash-high (machine draft, words 22 Oct); claude-sonnet-5-5 (machine draft, words 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-31",
@@ -2193,7 +2193,6 @@
   "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser.": "Hindi sumagot ang komunidad. Maaari mong subukan muli: kung nabura nito ang iyong account pansamantala, tatapusin ng muling pagsubok ang pagbura sa browser na ito.",
   "The community's answer didn't confirm the delete. Try again.": "Hindi kinumpirma ng sagot ng komunidad ang pagtanggal. Subukang muli.",
   "This web app now talks to a different community. Open Delete account again.": "Nakikipag-usap na ngayon ang web app na ito sa ibang komunidad. Buksan muli ang Burahin ang account.",
-  "Failed to purge account from node. Active escrow deals may need to be resolved first.": "Bigo sa pag-purge ng account mula sa server. Maaaring kailanganing ayusin muna ang mga aktibong kasunduan sa escrow.",
   "If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.": "Kung mananatili ka sa screen na ito, mawawala ang kopya sa iyong clipboard pagkaraan ng isang minuto. Sa iPhone o iPad, sa Safari o sa Firefox, mawawala ito sa unang tap o pagpindot mo sa key pagkatapos ng minutong iyon. Kung aalis ka sa screen na ito o lilipat sa ibang app o tab bago iyon, mananatili ito: magkopya ng ibang bagay sa ibabaw nito.",
   "Try again in {n} minute.|Try again in {n} minutes.": {
     "one": "Subukang muli sa loob ng {n} minuto.",
@@ -2942,9 +2941,7 @@
   "Marketplace Activity": "Aktibidad sa Marketplace",
   "Push alerts on your phone for new offers & needs in your area": "Mga alerto sa iyong telepono para sa mga bagong alok at kahilingan sa iyong lugar",
   "Marketplace Activity Notifications": "Mga Notification ng Aktibidad sa Merkado",
-  "Escrow & Deals": "Escrow at Kasunduan",
   "Push alerts on your phone for trade updates & credit transfers": "Mga alerto sa iyong telepono para sa mga update sa palitan at paglilipat ng credit",
-  "Escrow & Deals Notifications": "Mga Notification ng Escrow at Kasunduan",
   "Event reminders": "Mga paalala sa kaganapan",
   "How long before an event you are going to, or interested in, starts. You can change it on any one event.": "Gaano katagal bago magsimula ang isang event na pupuntahan mo, o interesado ka. Maaari mo itong baguhin sa anumang isang event.",
   "Off\u0004event reminders": "Naka-off",
@@ -3060,7 +3057,6 @@
   "Cannot sweep more than current surplus ({amount} 🫘).": "Hindi maaaring mag-sweep nang higit sa kasalukuyang labis ({amount} 🫘).",
   "Successfully swept {amount} 🫘 to the shared Commons pool.": "Matagumpay na na-sweep ang {amount} 🫘 sa pinagsasaluhang pool ng Komun.",
   "Failed to sweep surplus to the Commons.": "Nabigong i-sweep ang labis sa Komun.",
-  "Bid approved! Escrow funds locked in trust.": "Naaprubahan ang tawad! Naka-lock ang mga pondo sa escrow sa tiwala.",
   "Failed to approve bid.": "Nabigong aprubahan ang tawad.",
   "Are you sure you want to decline this request? The member will be notified.": "Sigurado ka bang gusto mong tanggihan ang kahilingang ito? Sasabihan ang miyembro.",
   "Bid declined.": "Tinanggihan ang tawad.",
@@ -3072,7 +3068,6 @@
   "Release payment of {amount} 🫘 for \"deal\"? This action cannot be reversed.": "Ilabas ang bayad na {amount} 🫘 para sa \"kasunduan\"? Hindi na maibabalik ang aksyong ito.",
   "Payment released! Worker has been paid.": "Nailabas na ang bayad! Nabayaran na ang manggagawa.",
   "Failed to release payment.": "Nabigong ilabas ang bayad.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.": "Kanselahin ang Inisyatiba at I-refund ang mga Tagasuporta?\n\nIsasara nito ang inisyatiba at agad na ire-refund ang lahat ng naka-escrow na pangako pabalik sa kanilang mga tagasuporta.",
   "Initiative Cancelled 🌱\n\nPledges have been refunded to backers.": "Kinansela ang Inisyatiba 🌱\n\nNa-refund na ang mga pangako sa mga tagasuporta.",
   "Could not cancel initiative.": "Hindi makansela ang inisyatiba.",
   "Please enter a valid credit amount": "Mangyaring maglagay ng wastong halaga ng credit",
@@ -3162,7 +3157,6 @@
   "Approve Bid ({amount} 🫘)": "Aprubahan ang Tawad ({amount} 🫘)",
   "Declining…": "Tinanggihan…",
   "Active Deals": "Mga Aktibong Kasunduan",
-  "{amount} 🫘 in escrow": "{amount} 🫘 sa escrow",
   "Customer: {name}": "Kostumer: {name}",
   "Worker: {name}": "Manggagawa: {name}",
   "Fulfill Deal · Awaiting Customer Release": "Tuparin ang Deal · Naghihintay ng Paglabas ng Kostumer",
@@ -3232,7 +3226,6 @@
   "Stop Wind-Up": "Itigil ang Pagsasara",
   "Start Wind-Up": "Simulan ang Pagsasara",
   "Cancelling & Refunding Backers…": "Kinakansela at Nirerefund ang mga Tagasuporta…",
-  "Cancel Initiative & Refund Escrow": "Kanselahin ang Inisyatiba at Ibalik ang Escrow",
   "Asking to join as collaborators ({n})": "Humihiling na sumali bilang mga katuwang ({n})",
   "Asking to join as keepers ({n})": "Humihiling na sumali bilang mga tagapangalaga ({n})",
   "Backing pledge: {amount}": "Pangakong suporta: {amount}",
@@ -3618,5 +3611,51 @@
   "Something that keeps going and trades? Start an enterprise.": "Isang bagay na patuloy na tumatakbo at nakikipagpalitan? Magsimula ng negosyo.",
   "Start one with +: a chat group, a project or an enterprise.": "Magsimula ng isa gamit ang +: isang chat group, proyekto, o negosyo.",
   "No projects to back yet": "Wala pang proyektong masusuportahan",
-  "🤝 Your deals": "🤝 Mga kasunduan mo"
+  "🤝 Your deals": "🤝 Mga kasunduan mo",
+  "Newest from elsewhere": "Pinakabago mula sa ibang lugar",
+  "Held in Trust & Deals": "Escrow at Kasunduan",
+  "Held in Trust & Deals Notifications": "Mga Notification ng Escrow at Kasunduan",
+  "Bid approved! The Beans are held in trust.": "Naaprubahan ang tawad! Naka-lock ang mga pondo sa escrow sa tiwala.",
+  "{amount} 🫘 held in trust": "{amount} 🫘 sa escrow",
+  "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Bigo sa pag-purge ng account mula sa server. Maaaring kailanganing ayusin muna ang mga aktibong kasunduan sa escrow.",
+  "{amount} · held in trust": "{amount} · nasa escrow",
+  "Cancel Initiative & Refund Backers": "Kanselahin ang Inisyatiba at Ibalik ang Pondo sa mga Tagasuporta",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Kanselahin ang Inisyatiba at I-refund ang mga Tagasuporta?\n\nIsasara nito ang inisyatiba at agad na ire-refund ang lahat ng naka-escrow na pangako pabalik sa kanilang mga tagasuporta. Ang isang pangako mula sa isang account na naisara na mula noon (tinanggal, o isang enterprise na na-wind up) ay mapupunta sa Commons sa halip, tulad ng nangyari sa iba pang mga beans ng isang saradong account, at ang sa iba ay babalik pa rin sa kanila.",
+  "Please give a name of at least 2 characters.": "Mangyaring magbigay ng pangalan na may kahit 2 character.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Mangyaring panatilihin ang iyong pangalan sa {n} character.",
+    "other": "Mangyaring panatilihin ang iyong pangalan sa {n} na character."
+  },
+  "Please say a few words about yourself.": "Mangyaring magsabi ng ilang salita tungkol sa iyong sarili.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Mangyaring panatilihin ang iyong mensahe sa {n} character.",
+    "other": "Mangyaring panatilihin ang iyong mensahe sa {n} na character."
+  },
+  "You are already a member of this community.": "Miyembro ka na ng komunidad na ito.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Mga taong humihiling na sumali sa komunidad na ito. Ang 'Mag-imbita' ay gumagawa ng imbitasyon na tanging ang kanilang key ang makakagamit, at kusa itong mahahanap ng kanilang app. Ang 'Hindi muna' ay walang ibang sinasabi kundi \"wala pang sagot\".",
+  "Couldn't reach your community. Check your connection and try again.": "Hindi maabot ang iyong komunidad. Pakitingnan ang iyong koneksyon at subukang muli.",
+  "Asked today": "Naghiling ngayon",
+  "Asked yesterday": "Naghiling kahapon",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Naghiling {n} araw na ang nakalipas",
+    "other": "Naghiling {n} araw na ang nakalipas"
+  },
+  "from {node}": "mula sa {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Inimbita mo si {name}. Kusa itong mahahanap ng kanilang app.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Gustong sumali ({n})",
+    "other": "🚪 Gustong sumali ({n})"
+  },
+  "Inviting {name}...": "Iniimbita si {name}...",
+  "Invite {name}": "Imbitahan si {name}",
+  "Declining {name}...": "Tinanggihan si {name}...",
+  "Not now, {name}": "Hindi muna, {name}",
+  "Invite\u0004button: let them in": "Imbitahan",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Mga Imbitasyon ({n})",
+    "other": "🎟️ Mga Imbitasyon ({n})"
+  },
+  "Ask to join {name}": "Humiling na sumali sa {name}",
+  "A few words about yourself": "Ilang salita tungkol sa iyong sarili",
+  "Where you live, what you'd like to share or learn": "Kung saan ka nakatira, kung ano ang gusto mong ibahagi o matutunan"
 }

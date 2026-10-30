@@ -19,7 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../app/ThemeContext';
 import { withJitter } from '../utils/jitter';
 import { signedGet } from '../utils/db';
-import { t, tn } from '@beanpool/core';
+import { t, tn, activityTarget } from '@beanpool/core';
 import { Sentence } from './Sentence';
 
 export interface ActivityFeedItem {
@@ -46,9 +46,15 @@ function formatRelativeTime(isoDate: string): string {
 
 interface Props {
     onCreatePostPress?: () => void;
+    /** Open the listing a row names (the phone's own post screen). Omitted means rows that would open a listing stay plain text. */
+    onOpenPost?: (postId: string) => void;
+    /** Open a member's profile from a row. Same rule as `onOpenPost` when omitted. */
+    onOpenProfile?: (pubkey: string, callsign?: string) => void;
+    /** The signed-in member, so a rating or trade row opens the OTHER member's profile, never the viewer's own. */
+    viewerPubkey?: string | null;
 }
 
-export function ActivityWaterfall({ onCreatePostPress }: Props) {
+export function ActivityWaterfall({ onCreatePostPress, onOpenPost, onOpenProfile, viewerPubkey }: Props) {
     const { theme, colors } = useTheme();
     const isDark = theme === 'dark';
     const [feed, setFeed] = useState<ActivityFeedItem[]>([]);
@@ -261,19 +267,18 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                         }
                     }
 
-                    return (
-                        <View
-                            key={item.id}
-                            accessible={true}
-                            accessibilityLabel={t('{summary}, {time}', { summary: summaryText, time: timeStr })}
-                            style={[
-                                styles.card,
-                                {
-                                    backgroundColor: isDark ? '#18181b' : '#ffffff',
-                                    borderColor: colors.border.default,
-                                },
-                            ]}
-                        >
+                    const rowTarget = activityTarget(item, viewerPubkey);
+                    const canOpen = rowTarget !== null
+                        && ((rowTarget.kind === 'post' && !!onOpenPost) || (rowTarget.kind === 'profile' && !!onOpenProfile));
+                    const cardStyle = [
+                        styles.card,
+                        {
+                            backgroundColor: isDark ? '#18181b' : '#ffffff',
+                            borderColor: colors.border.default,
+                        },
+                    ];
+                    const cardBody = (
+                        <>
                             <View style={[styles.emojiBox, { backgroundColor: isDark ? '#27272a' : '#f4f4f5' }]}>
                                 <Text style={styles.cardEmoji}>{emoji}</Text>
                             </View>
@@ -283,7 +288,31 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                             <Text style={[styles.timeText, { color: colors.text.secondary }]}>
                                 {timeStr}
                             </Text>
-                        </View>
+                        </>
+                    );
+                    const rowLabel = t('{summary}, {time}', { summary: summaryText, time: timeStr });
+
+                    // One real button when the row has somewhere to go; a row with nothing to open stays plain text.
+                    if (!canOpen || rowTarget === null) {
+                        return (
+                            <View key={item.id} accessible={true} accessibilityLabel={rowLabel} style={cardStyle}>
+                                {cardBody}
+                            </View>
+                        );
+                    }
+                    return (
+                        <Pressable
+                            key={item.id}
+                            accessibilityRole="button"
+                            accessibilityLabel={rowLabel}
+                            style={({ pressed }) => [cardStyle, pressed && { opacity: 0.7 }]}
+                            onPress={() => {
+                                if (rowTarget.kind === 'post') onOpenPost?.(rowTarget.postId);
+                                else onOpenProfile?.(rowTarget.pubkey, item.targetPubkey === rowTarget.pubkey ? item.targetCallsign : item.actorCallsign);
+                            }}
+                        >
+                            {cardBody}
+                        </Pressable>
                     );
                 })}
             </View>
@@ -340,6 +369,7 @@ const styles = StyleSheet.create({
     card: {
         flexDirection: 'row',
         alignItems: 'center',
+        minHeight: 44,
         padding: 12,
         borderRadius: 16,
         borderWidth: 1,

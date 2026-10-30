@@ -23,6 +23,8 @@ import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
+import { forgetKnockKey } from '../utils/knock-key';
+import { inviteLinkToWelcome } from '../utils/waiting-to-join';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
@@ -212,6 +214,13 @@ function RootLayoutNav() {
     // stays too, so the node can say whether the claim landed. 'door' = a join at another community's open door that has
     // not finished (onboarding-state.ts doorJoinOut): the door screen stays too, for the same reason.
     const [pendingOnboarding, setPendingOnboardingFlag] = useState<false | 'wizard' | 'claim' | 'door' | null>(null);
+    // null = not yet read; true = no community in use (`beanpool_anchor_url`). With an identity and no wizard, that is an
+    // account that is a member nowhere, waiting to be let in (utils/waiting-to-join.ts, slice S3): held on welcome's
+    // waiting mode, never sent on to the tabs. Read with the record, again when the account changes and at every new
+    // screen (a join or a wipe moves the community without telling the record), and once more before the guard moves a
+    // screen for it.
+    const [noCommunity, setNoCommunity] = useState<boolean | null>(null);
+    const refreshHold = useRef<() => void>(() => {});
     useEffect(() => {
         let mounted = true;
         const refresh = () => {
@@ -219,13 +228,31 @@ function RootLayoutNav() {
                 if (!mounted) return;
                 setPendingOnboardingFlag(wizardHold(p));
             });
+            AsyncStorage.getItem('beanpool_anchor_url')
+                .then((anchor) => { if (mounted) setNoCommunity(!anchor); })
+                .catch(() => { if (mounted) setNoCommunity(false); });
         };
+        refreshHold.current = refresh;
         // A claim code an older build kept at rest for an account made elsewhere (#2412): that detour is gone.
         void forgetOldPendingClaim();
         refresh();
         const unsubscribe = subscribePendingOnboarding(refresh);
         return () => { mounted = false; unsubscribe(); };
     }, []);
+    const rootSegment = (segments as string[])[0];
+    useEffect(() => { refreshHold.current(); }, [identity?.publicKey, rootSegment]);
+    // The phone has a community and no wizard part-way: a key a knock made has joined one, so its words are an established
+    // account's from here, read behind the phone's lock (utils/knock-key.ts). Both read again here, never taken from the
+    // flags alone: a knock from a phone that was looking around global removes the look's community as its key arrives,
+    // and the flags catch up a moment later.
+    useEffect(() => {
+        if (!identity || noCommunity !== false || pendingOnboarding !== false) return;
+        let alive = true;
+        Promise.all([getPendingOnboarding(), AsyncStorage.getItem('beanpool_anchor_url')])
+            .then(([record, anchor]) => { if (alive && anchor && !record) void forgetKnockKey(); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, [identity?.publicKey, noCommunity, pendingOnboarding]);
 
     const triggerUnlock = async () => {
         const success = await unlockWithPhoneLock(t('Unlock BeanPool'));
@@ -432,7 +459,9 @@ function RootLayoutNav() {
             // Half-finished join wizard: the identity exists on-device but was
             // never registered with any node, so a fresh invite should flow into
             // the wizard like a new user's — not the member node-switch dialogs.
-            if (await getPendingOnboarding()) {
+            // So does a phone in no community (waiting to be let in, slice S3, or a wipe that kept the key): the invite step
+            // joins with its key and the wizard shows the 12 words a knock's key has never shown (utils/waiting-to-join.ts).
+            if (inviteLinkToWelcome({ record: await getPendingOnboarding(), anchorUrl: current })) {
                 routeToWelcomeWithInvite();
                 return;
             }
@@ -676,6 +705,25 @@ function RootLayoutNav() {
             return;
         }
 
+        // An account that is a member nowhere: no community in use and no wizard (utils/waiting-to-join.ts, slice S3; a knock
+        // from a phone with no account, or a wipe that kept the key). Its screens stay; every other one, the tabs among
+        // them, goes to welcome, whose waiting mode is its home. Nothing below runs for it: there is no community to ask
+        // whether it knows this key, so never the not-recognised screen, and never on to the tabs. The community is read
+        // once more before a screen is moved: a join that has just set one (Find a community, a claim, another community's
+        // door) is not sent back, and the flag catches up instead.
+        if (noCommunity === null) return;
+        if (noCommunity) {
+            const to = setupRedirect(segments, { hasIdentity: true, pendingOnboarding: false, waiting: true });
+            if (to) {
+                void AsyncStorage.getItem('beanpool_anchor_url').then((anchor) => {
+                    if (!isComponentMounted.current || guardTurn !== noKeyGuardTurn.current) return;
+                    if (anchor) { refreshHold.current(); return; }
+                    router.replace(to);
+                }).catch(() => {});
+            }
+            return;
+        }
+
         // Reset the one-shot recovery prompt whenever we're no longer in a
         // 'recovering' state, so a future genuine recovery alert can prompt again.
         if (recognition !== 'recovering') {
@@ -790,7 +838,7 @@ function RootLayoutNav() {
         if (landing) router.replace(landing);
         const notice = landing === DEFAULT_MEMBER_LANDING ? takeOpenAfterLanding(identity.publicKey, nodeUrl) : null;
         if (notice) router.push(notice);
-    }, [identity, isLoading, segments, recognition, pendingOnboarding]);
+    }, [identity, isLoading, segments, recognition, pendingOnboarding, noCommunity]);
 
     // When the phone allows notifications (e.g. Android <= 12, or a restored account on a device where permission was
     // already granted), silently register the push token for this identity without prompting: now, and on each return
@@ -960,6 +1008,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="public-profile" options={sheetOptions} />
                 <Stack.Screen name="new-message" options={{ headerShown: false, animation: 'slide_from_right' }} />
+                {/* The listing form, out of the map (MAP-FORM): its sheet over the screen that opened it, as it was over the map. */}
+                <Stack.Screen name="new-listing" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
                 <Stack.Screen name="chat/[id]" />
                 <Stack.Screen name="pulse-intake" options={sheetOptions} />
                 <Stack.Screen name="apple-probe" />

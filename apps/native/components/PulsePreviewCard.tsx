@@ -258,9 +258,10 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
             fontSize: 12,
             marginRight: 4,
         },
+        // text.secondary: muted was 3.88:1 on the translucent pill in dark, 4.36 in light.
         categoryText: {
             fontSize: 12,
-            color: colors.text.muted,
+            color: colors.text.secondary,
             fontWeight: '500',
         },
         bodyRow: {

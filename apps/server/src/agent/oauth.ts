@@ -168,9 +168,17 @@ export interface ConsentRequest {
     codeChallenge: string;
     resource: string;
     createdAt: number;
+    /** "May post for me", as the consent page's tick was when its digits were sent (setConsentCanPost). */
+    canPost?: boolean;
 }
 
 const requests = new Map<string, ConsentRequest>();
+
+/** The consent page's tick, sent with its digits: the code, and the grant it makes, carry it. */
+export function setConsentCanPost(pairingId: string, canPost: boolean): void {
+    const r = requests.get(pairingId);
+    if (r) r.canPost = canPost;
+}
 
 export function holdConsentRequest(r: ConsentRequest): void {
     const now = r.createdAt;
@@ -192,6 +200,7 @@ interface CodeRecord {
     resource: string;
     member: string;
     clientName: string;
+    canPost: boolean;
     expiresAt: number;
     /** Set once exchanged: the grant it made, revoked if the code comes again. */
     spentFor: string | null;
@@ -215,7 +224,7 @@ export function issueCode(r: ConsentRequest, member: string, now = Date.now()): 
     const code = crypto.randomBytes(32).toString('hex');
     codes.set(sha256Hex(code), {
         clientId: r.clientId, redirectUri: r.redirectUri, codeChallenge: r.codeChallenge, resource: r.resource,
-        member, clientName: r.clientName, expiresAt: now + OAUTH_CODE_TTL_MS, spentFor: null, spentAt: 0,
+        member, clientName: r.clientName, canPost: r.canPost === true, expiresAt: now + OAUTH_CODE_TTL_MS, spentFor: null, spentAt: 0,
     });
     return code;
 }
@@ -337,7 +346,7 @@ export function exchangeCode(p: { code: unknown; clientId: unknown; redirectUri:
     const { pair, refreshHash } = mintPair(id, now);
     const record: AgentOAuthGrantRecord = {
         id, clientId: rec.clientId, clientName: rec.clientName, redirectUri: rec.redirectUri, resource: rec.resource,
-        member: rec.member, createdAt: now, lastUsedAt: null, refreshIssuedAt: now, refreshHash, spentRefresh: [],
+        member: rec.member, createdAt: now, lastUsedAt: null, refreshIssuedAt: now, refreshHash, spentRefresh: [], canPost: rec.canPost,
     };
     saveGrants([...list, record]);
     pending.delete(rec.clientId);

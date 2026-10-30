@@ -11,7 +11,7 @@ related: home, finding-a-community, your-12-words, your-profile, communities, ho
 - **With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.
 - **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities. The global community shows you how they work, in an example community. See "Beans and the global community".
 
-No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can, or, in a community where only the admins invite, its admins. See "Finding a community near you".
+No invite, but a community near you? Ask it to let you in. On the phone app's first screen, tap **Know a community near you? Ask to join it**, type the community's address or scan its code, and send your request: that makes your account, with no invite and nothing from the BeanPool project. Any of its members can let you in, or, in a community where only the admins invite, its admins. You can also join the global community first and find the community there. See "Finding a community near you".
 
 Installing a community server? On the phone app, its claim makes your account: no invite, and nothing from the BeanPool project.
 
@@ -117,9 +117,9 @@ The global community has no invites: anyone joins it in the BeanPool app, with 1
 
 ## Requests to join
 
-People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**. Requests are answered in the phone app: the web app doesn't list them.
+People can ask to join your community from the global community, or from the phone app's first screen with your community's address. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**. Under each request: when they asked, and where they came from, such as **from global.beanpool.org**, or **from the BeanPool app** when they asked another way. In the web app, open **People**, then **Invites**: the requests are listed there too, with the same two buttons.
 
-When someone asks to join, owners and admins receive a notification: **Someone asked to join your community.** A line also appears on **Home** under **Needs you** (**2 people asked to join**). Tapping either opens **Invites** in the phone app. In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if a request waits 3 days with no answer, the count appears on every member's Home screen so someone can welcome them.
+When someone asks to join, owners and admins receive a notification: **Someone asked to join your community.** A line also appears on **Home** under **Needs you** (**2 people asked to join**). The notification opens **Invites** in the phone app. The line opens **Invites** in whichever app you are using. In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if a request waits 3 days with no answer, the count appears on every member's Home screen so someone can welcome them.
 
 - **Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.
 - **Not now** tells them nothing more than "no answer yet".

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The Ledger's doors to deals (deals S6, scratch/fable-design/DESIGN-deals-fable.md §2.2 and §5): app/(tabs)/ledger.tsx
- * rendered for real, its Wallet tab at 320 dp × 1.3 text. The IN ESCROW total is one button that opens Your deals on
+ * rendered for real, its Wallet tab at 320 dp × 1.3 text. The HELD IN TRUST total is one button that opens Your deals on
  * In Progress; a "Held in Trust" row whose deal the phone has is one button that opens that deal (the post, at its
  * transaction: what Your deals does for a card); a hold the phone has no deal for, and every other row, stay plain rows.
  *
@@ -183,14 +183,14 @@ const heldRows = () => Array.from(host.querySelectorAll('[data-testid="ledger-he
 const styleOf = (el: Element | null | undefined) => JSON.parse(el?.getAttribute('data-style') || '{}');
 
 describe('the Ledger opens the deals behind what is held in trust (deals S6)', () => {
-    it('the IN ESCROW total is a button, at least 44 dp tall, that opens Your deals on In Progress', async () => {
+    it('the HELD IN TRUST total is a button, at least 44 dp tall, that opens Your deals on In Progress', async () => {
         await openWallet();
         const total = byTestId('ledger-in-escrow');
         expect(total?.tagName).toBe('BUTTON');
         expect(total?.getAttribute('role')).toBe('button');
         // Its name is what it shows, and the hint says where it goes.
         expect(total?.textContent).toContain('15.0');
-        expect(total?.textContent).toContain('IN ESCROW');
+        expect(total?.textContent).toContain('HELD IN TRUST');
         expect(total?.getAttribute('data-hint')).toBe('Opens your deals in progress');
         expect(styleOf(total).minHeight).toBeGreaterThanOrEqual(44);
 

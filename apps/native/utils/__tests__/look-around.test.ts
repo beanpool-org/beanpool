@@ -20,9 +20,10 @@ function deps(over: Partial<{ anchor: string | null; guests: string[]; profile: 
 }
 
 describe('the look', () => {
-    it('is Home, the Market, the Map (and the example Ledger and Commons), a listing, the guide, the BeanPool sheet and Start a community', () => {
+    it('is Home, the Market, the Map (and the example Ledger and Commons), a listing, the guide, the BeanPool sheet, Start a community and the + chooser', () => {
+        // new-listing: the map's + opens it for a visitor too, and its chooser says Join to post (components/NewPostTypeSheet.tsx).
         for (const s of [['(tabs)'], ['(tabs)', 'index'], ['(tabs)', 'market'], ['(tabs)', 'map'], ['(tabs)', 'ledger'], ['(tabs)', 'projects'],
-            ['post', '[id]'], ['guide', '[slug]'], ['beanpool'], ['start-community']]) {
+            ['post', '[id]'], ['guide', '[slug]'], ['beanpool'], ['start-community'], ['new-listing']]) {
             expect(isLookRoute(s), s.join('/')).toBe(true);
         }
     });

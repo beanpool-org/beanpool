@@ -19,7 +19,7 @@ import * as Location from 'expo-location';
 import * as Crypto from 'expo-crypto';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { formatNumber, t, upperCase } from '@beanpool/core';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPost, getBalance, getMemberProfile, getReachablePeers } from '../utils/db';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
 import { askForPostPhoto } from '../utils/post-photo';
@@ -69,11 +69,9 @@ export default function NewListingScreen() {
         // its title. Each user caps its own height instead.
         sheet: { backgroundColor: colors.surface.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 14, paddingBottom: 16 },
         /**
-         * The New Post sheet. `95%` is of the SCREEN AREA THIS SCREEN OWNS — which starts below the brand
-         * header and the top tab row (_layout.tsx sets tabBarPosition: 'top') — not of the device.
-         *
-         * There is deliberately no top safe-area inset: GlobalHeader already consumes insets.top, and the
-         * sheet is nowhere near the status bar. Adding it here was the blank strip.
+         * The New Post sheet. `95%` is of the area its holder gives it. On the map that started below the brand
+         * header and the top tab row; on this screen (a modal over them) it is the window below the status bar:
+         * the holder takes insets.top, so the sheet keeps no top inset of its own (on the sheet it was the blank strip).
          */
         composerSheet: { maxHeight: '95%', paddingTop: 8 },
         /** The grabber. The title sits directly under it. */
@@ -236,6 +234,7 @@ export default function NewListingScreen() {
     }));
 
     const { identity } = useIdentity();
+    const insets = useSafeAreaInsets();
     const params = useLocalSearchParams<{ newPost?: string }>();
     const navigation = useNavigation();
     /** The pin map, shown while "Drop a pin" is on. */
@@ -681,7 +680,7 @@ export default function NewListingScreen() {
 
             {/* Pin drop mode instruction */}
             {pinDropMode && showNewPost && postLat == null && (
-                <View style={styles.pinDropBanner}>
+                <View style={[styles.pinDropBanner, { top: insets.top + 16 }]}>
                     <Text style={styles.pinDropBannerText}>{t('📌 Tap the map to place your pin')}</Text>
                 </View>
             )}
@@ -712,7 +711,7 @@ export default function NewListingScreen() {
             {/* New Post Full-Screen Overlay */}
             {showNewPost && !pinDropMode && (
                 <KeyboardAvoidingView
-                    style={[StyleSheet.absoluteFill, { zIndex: 500, justifyContent: 'flex-end' }]}
+                    style={[StyleSheet.absoluteFill, { zIndex: 500, justifyContent: 'flex-end', paddingTop: insets.top }]}
                     behavior="padding"
                 >
                     <View style={[styles.sheet, styles.composerSheet]}>

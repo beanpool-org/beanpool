@@ -323,7 +323,7 @@ export default function NewListingScreen() {
 
     /**
      * The pin map opens on the community, as the map tab does (its fetchNodeLocation): the node's service area and its
-     * circle. A pin already set wins, so "Drop a pin" again opens on it.
+     * circle. "Drop a pin" clears the pin first (enterPinDrop, as on the map), so there is no earlier pin to open on.
      */
     useEffect(() => {
         let cancelled = false;
@@ -635,8 +635,11 @@ export default function NewListingScreen() {
     }, nodeFeatures);
     const submitDisabled = needBlocked || posting || postLat == null || !postTitle.trim() || !postDescription.trim() || postFormPriceMissing(postCredits, nodeFeatures) || !postCategory || (photoRequired && postPhotos.length < 1);
 
-    // What the link asked for, once, as the screen opens.
+    // What the link asked for, once, as the screen opens (once even where effects run twice, so nothing is asked twice).
+    const opened = useRef(false);
     useEffect(() => {
+        if (opened.current) return;
+        opened.current = true;
         const wanted = parseNewPostParam(params.newPost) ?? 'chooser';
         if (wanted === 'chooser') setShowNewPostTypePicker(true);
         else startCompose(wanted);
@@ -654,7 +657,7 @@ export default function NewListingScreen() {
                     showsUserLocation={true}
                     showsMyLocationButton={false}
                     toolbarEnabled={false}
-                    initialRegion={postLat != null && postLng != null ? { ...pinMapRegion, latitude: postLat, longitude: postLng } : pinMapRegion}
+                    initialRegion={pinMapRegion}
                     onPress={handleMapPress}
                     onLongPress={handleMapPress}
                 >

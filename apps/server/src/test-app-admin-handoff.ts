@@ -572,7 +572,14 @@ async function main() {
         const liftFresh = await postJson(`/api/local/admin/users/${coOwner.pub}/status`, { status: 'active' }, as(fresh));
         assert(liftFresh.status === 200 && statusOf(coOwner.pub) === 'active' && roleOf(coOwner.pub) === 'owner',
             `after Manage again, lifting it works and the owner role is back (got ${liftFresh.status} ${JSON.stringify(liftFresh.body)})`);
-        const suspendAgain = await postJson(`/api/local/admin/users/${coOwner.pub}/suspend`, reason, as(fresh));
+        // Pausing them again is another owner's: whoever brought a vote on removing a member that ended without removing them
+        // (this owner's, which the lift stopped) waits 90 days to bring another (removal by vote, Amendment A point 5;
+        // test-removal-fairness). Halting that vote is still this owner's fresh session.
+        const otherOwner = keypair();
+        seedMember(otherOwner.pub, 'hoOwner9');
+        grantNodeRole(otherOwner.pub, 'owner', owner.pub);
+        const otherFresh = await exchange((await requestLink(otherOwner)).body.handshakeToken);
+        const suspendAgain = await postJson(`/api/local/admin/users/${coOwner.pub}/suspend`, reason, as(otherFresh));
         const haltFresh = await postJson(`/api/local/admin/decisions/${suspendAgain.body?.decision?.id}/halt`, reason, as(fresh));
         assert(haltFresh.status === 200 && roleOf(coOwner.pub) === 'owner', `…and so does halting the vote (got ${haltFresh.status} ${JSON.stringify(haltFresh.body)})`);
 

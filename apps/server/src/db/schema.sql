@@ -2345,6 +2345,18 @@ CREATE TABLE IF NOT EXISTS decisions (
     -- its own scope ('scope') and its roll is frozen in decision_electors.
     scope_kind           TEXT NOT NULL DEFAULT 'community' CHECK (scope_kind IN ('community', 'enterprise', 'group')),
     scope_id             TEXT,
+    -- A vote on removing a member (removal by vote, Amendment A): the member's own reply to its case (points 2), and a case
+    -- an admin hid as shown to be false, kept as a halt is (point 4); a reply an admin took down, kept the same way, its
+    -- words gone (decisions-engine.ts adminHideReply). NULL on every other Decision. db.ts adds them to a table from before
+    -- (REMOVAL_CASE_COLUMNS).
+    subject_reply        TEXT,
+    subject_replied_at   DATETIME,
+    case_hidden_at       DATETIME,
+    case_hidden_by       TEXT,
+    case_hidden_reason   TEXT,
+    reply_hidden_at      DATETIME,
+    reply_hidden_by      TEXT,
+    reply_hidden_reason  TEXT,
     CHECK ((scope_kind = 'community') = (scope_id IS NULL)),
     CHECK ((scope_kind = 'community') = (touches != 'scope'))
 );

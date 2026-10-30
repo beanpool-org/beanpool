@@ -35,6 +35,8 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 - **Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.
 - **Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.
 - To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on removing them.
+- **A false accusation**: the member a vote on removing them is about can report its case as false from the vote. The report is about whoever brought the case (the admin who suspended them), and its reason says which vote. If the case is shown to be false, **Hide case** on the vote (see Decisions and emergencies). If they already had a report waiting about that person, the case is added to it.
+- **A reply that harms someone**: the member a vote on removing them is about can reply to its case, and every member reads it. If it gives someone's address or phone number, or threatens them, **Take down reply** on the vote deletes it (see Decisions and emergencies).
 
 ## If you are a moderator
 

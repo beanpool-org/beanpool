@@ -480,6 +480,7 @@ export const SUITES = [
     'test-suspended-and-visitor-reads',
     'test-pause',
     'test-removal-doors',
+    'test-removal-fairness',
     'test-viewer-helpers',
     'test-visitors-cant-act',
     'test-doors-key-case',

@@ -91,7 +91,7 @@ import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { memberShop, shopOf } from '../engine/shops.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
-import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor } from '../decisions-engine.js';
+import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor, titleForMembers } from '../decisions-engine.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
 
 /** The catalogue (§3.1), in the default order (§3.1 "Default order"). */
@@ -613,7 +613,7 @@ function needsCard(c: Ctx): HomeCards['needs'] | undefined {
             const when = closesInWords(soonest, c.now);
             items.push({
                 kind: 'vote', count: votes.length, accent: Date.parse(soonest) - c.now <= VOTE_ACCENT_WINDOW_MS,
-                label: votes.length === 1 ? `Vote ${when}: ${clip(votes[0].title, TITLE_CHARS)}` : `${votes.length} votes to cast, the first ${when}`,
+                label: votes.length === 1 ? `Vote ${when}: ${clip(titleForMembers(votes[0]), TITLE_CHARS)}` : `${votes.length} votes to cast, the first ${when}`,
                 // Where the first one is: an enterprise's own screen for its keepers' vote, else Commons → Decide.
                 target: votes[0].scopeKind === 'enterprise' && votes[0].scopeId ? { to: 'enterprise', id: votes[0].scopeId }
                     : votes[0].scopeKind === 'group' && votes[0].scopeId ? { to: 'group', id: votes[0].scopeId } : { to: 'decide' },
@@ -974,7 +974,7 @@ function decideCard(c: Ctx, settings?: Record<string, unknown>): HomeCards['deci
         .filter(d => !!bounded(d.id, ID_CHARS) && !!bounded(d.closesAt, ID_CHARS))
         .sort((a, b) => Date.parse(a.closesAt) - Date.parse(b.closesAt))
         .slice(0, HOME_DECIDE_ROWS[show])
-        .map((d): DecideItem => ({ id: d.id, title: clip(d.title, TITLE_CHARS), closesAt: d.closesAt, voted: ballots.has(d.id) }));
+        .map((d): DecideItem => ({ id: d.id, title: clip(titleForMembers(d), TITLE_CHARS), closesAt: d.closesAt, voted: ballots.has(d.id) }));
     const soonestOf = (list: typeof open) => list.map(d => d.closesAt).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
 
     if (show === 'mine') {

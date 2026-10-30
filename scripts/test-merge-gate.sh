@@ -1,10 +1,12 @@
 #!/bin/bash
 # test-merge-gate.sh — tests the local merge gate's scripts against a throwaway repository. No GitHub, no network.
 #
-# Covers scripts/test-all-merge-check.sh, scripts/test-all-pr.sh, the green record in scripts/test-all-lib.sh
+# Covers scripts/test-all-merge-check.sh, scripts/test-all-pr.sh, scripts/test-all-train.sh (the merge train, with
+# scripts/words-merge-3way.mjs), the green record in scripts/test-all-lib.sh
 # (green_run_start / record_green_run), scripts/check-deps-installed.mjs, and the real test-all.sh's --all and what it
 # keeps when it is stopped part-way (CI's timeout, or Ctrl-C). The repository is a bare "origin" and a
-# clone of it in a temp dir; `gh` is a stub on PATH that answers `pr view` from files and logs `api` calls; the clone's
+# clone of it in a temp dir; `gh` is a stub on PATH that answers `pr view` from files, logs `api` calls (answering
+# check-runs from files) and does `pr merge` as a squash onto the bare origin's main; the clone's
 # scripts/test-all.sh is a stub that sources the REAL test-all-lib.sh, so the record it writes is the real one.
 #
 # Run: bash scripts/test-merge-gate.sh
@@ -164,18 +166,46 @@ MERGE_CHECK="$REPO_ROOT/scripts/test-all-merge-check.sh"
 PR_SCRIPT="$REPO_ROOT/scripts/test-all-pr.sh"
 GREEN="$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
 
-# gh stub: `pr view <n> ...` prints $GH_STUB_DIR/pr-<n> ("<n> <head> <base> <url>"; the url only when asked for);
-# `api ...` appends its arguments to $GH_STUB_DIR/api.
+# gh stub: `pr view <n> ...` prints $GH_STUB_DIR/pr-<n> ("<n> <head> <base> <url>"; the url only when asked for). The
+# train's query (it asks for labels) adds $GH_STUB_DIR/prx-<n> ("<branch> <from a fork> <state> <labels>"), and its head is
+# that branch on $GH_STUB_ORIGIN, as GitHub's is after a push. `api ...` appends its arguments to $GH_STUB_DIR/api, and a
+# check-runs call prints $GH_STUB_DIR/ci-<sha> (the conclusions). `pr merge <n> --match-head-commit <sha>` squashes the
+# branch onto $GH_STUB_ORIGIN's main, refused when the branch is not at <sha> or does not merge; $GH_STUB_DIR/merges
+# lists the PRs merged, in order.
 export GH_STUB_DIR="$T/gh"; mkdir -p "$GH_STUB_DIR" "$T/bin"
 cat > "$T/bin/gh" <<'STUB'
 #!/bin/bash
 if [ "$1 $2" = "pr view" ]; then
-  f="$GH_STUB_DIR/pr-${3##*/}"
+  n="${3##*/}"; f="$GH_STUB_DIR/pr-$n"
   [ -f "$f" ] || { echo "no pull requests found for $3" >&2; exit 1; }
-  case "$*" in *url*) cat "$f" ;; *) cut -d' ' -f1-3 "$f" ;; esac
+  case "$*" in
+    *labels*)
+      read -r num head base url < "$f"; read -r branch cross state labels < "$GH_STUB_DIR/prx-$n"
+      h=$(git --git-dir="$GH_STUB_ORIGIN" rev-parse -q --verify "refs/heads/$branch") && head=$h
+      [ -f "$GH_STUB_DIR/merged-$n" ] && state=MERGED
+      echo "$num $head $base $url $branch $cross $state $labels" ;;
+    *url*) cat "$f" ;;
+    *) cut -d' ' -f1-3 "$f" ;;
+  esac
   exit 0
 fi
-if [ "$1" = "api" ]; then shift; echo "$*" >> "$GH_STUB_DIR/api"; exit 0; fi
+if [ "$1 $2" = "pr merge" ]; then
+  n="$3"; want=""; prev=""
+  for a in "$@"; do [ "$prev" = "--match-head-commit" ] && want="$a"; prev="$a"; done
+  read -r branch _ < "$GH_STUB_DIR/prx-$n"
+  O="$GH_STUB_ORIGIN"; head=$(git --git-dir="$O" rev-parse "refs/heads/$branch")
+  [ "$head" = "$want" ] || { echo "GraphQL: Head branch was modified. Review and try the merge again." >&2; exit 1; }
+  main=$(git --git-dir="$O" rev-parse refs/heads/main)
+  tree=$(git --git-dir="$O" merge-tree --write-tree "$main" "$head" 2>/dev/null) || { echo "GraphQL: Pull Request is not mergeable" >&2; exit 1; }
+  c=$(git --git-dir="$O" commit-tree "$tree" -p "$main" -m "PR #$n (squash)")
+  git --git-dir="$O" update-ref refs/heads/main "$c" "$main" || exit 1
+  touch "$GH_STUB_DIR/merged-$n"; echo "$n" >> "$GH_STUB_DIR/merges"; exit 0
+fi
+if [ "$1" = "api" ]; then
+  shift; echo "$*" >> "$GH_STUB_DIR/api"
+  case "$1" in */check-runs*) sha=$(echo "$1" | sed -E 's|.*/commits/([0-9a-f]+)/check-runs.*|\1|'); cat "$GH_STUB_DIR/ci-$sha" 2>/dev/null ;; esac
+  exit 0
+fi
 echo "gh stub: unexpected: $*" >&2; exit 1
 STUB
 chmod +x "$T/bin/gh"
@@ -288,6 +318,145 @@ cd "$T/single" || exit 1
 echo "$(date +%s) $F1 $(git rev-parse "$F1^{tree}") 1" >> "$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
 git rev-parse --verify -q origin/main >/dev/null && bad "single-branch: the clone already has origin/main, so this tests nothing" || ok "single-branch: the clone has no origin/main"
 expect 1 "merge check in a --single-branch clone: main moved past the green run, so not covered" "is missing" -- bash "$MERGE_CHECK" --head "$F1"
+cd "$W" || exit 1
+
+# ── test-all-train.sh: the merge train ─────────────────────────────────────────────────────────────────────────────
+# Its own bare origin and clone. The clone's test-all.sh is a stub that sources the real test-all-lib.sh: a committed
+# FAIL-<suite> file fails it the way server_suites fails (an .rc and a "Server suites failed:" line in a kept log dir),
+# and its run-server-suites.mjs fails SERVER_SUITES_ONLY's suites that have a FAIL-<suite> file. gh is the stub above;
+# a PR's branch on origin is its head. TEST_ALL_RECHECK names a stub recheck: real red (exit 1) or load (exit 0).
+git init -q --bare "$T/torigin.git"
+git clone -q "$T/torigin.git" "$T/train" 2>/dev/null
+cd "$T/train" || exit 1
+mkdir -p scripts apps/pwa/words
+cp "$REPO_ROOT/scripts/test-all-lib.sh" scripts/
+cat > scripts/test-all.sh <<'STUB'
+#!/bin/bash
+cd "$(dirname "$0")/.." || exit 1
+. scripts/test-all-lib.sh
+[ "$1" = "--all" ] && green_run_start
+fail=$(ls FAIL-* 2>/dev/null | sed 's/^FAIL-//' | tr '\n' ' ')
+if [ -n "$fail" ]; then
+  L=$(mktemp -d); echo 0 > "$L/build.rc"; echo 1 > "$L/server_suites.rc"
+  echo "❌ Server suites failed: $fail" > "$L/server_suites.log"
+  echo "stub test-all: FAIL"; echo "Full logs of every check kept in $L"; exit 1
+fi
+echo "stub test-all: every check passed"
+[ "$1" = "--all" ] && record_green_run 7
+exit 0
+STUB
+cat > scripts/run-server-suites.mjs <<'STUB'
+import { existsSync } from 'node:fs';
+const names = (process.env.SERVER_SUITES_ONLY || '').split(/\s+/).filter(Boolean);
+const failed = names.filter((n) => existsSync(`FAIL-${n}`));
+if (failed.length) { console.log(`Server suites failed: ${failed.join(' ')}`); process.exit(1); }
+console.log(`Server suites: ${names.length}/${names.length} passed`);
+STUB
+# catalog <file> <draftedBy> <updated> <key=value…>: a word catalog, written as the repo writes them (2 spaces, newline)
+catalog() {
+  node -e 'const [f, d, u, ...kv] = process.argv.slice(1); const o = { _meta: { language: "fr", draftedBy: d, updated: u } };
+    for (const p of kv) { const i = p.indexOf("="); o[p.slice(0, i)] = p.slice(i + 1); }
+    require("fs").writeFileSync(f, JSON.stringify(o, null, 2) + "\n");' "$@"
+}
+catalog apps/pwa/words/fr.json "base" "2026-10-01" "Hello=Bonjour" "Bye=Au revoir"
+echo "line one" > notes.txt
+git add scripts apps notes.txt && git commit -q -m t0 && git push -q origin main 2>/dev/null
+export GH_STUB_ORIGIN="$T/torigin.git"
+TRAIN="$REPO_ROOT/scripts/test-all-train.sh"
+REAL_RED="$T/recheck-real.sh"; echo 'echo "recheck stub: real red"; exit 1' > "$REAL_RED"
+LOAD="$T/recheck-load.sh"; echo 'echo "recheck stub: every failure passed alone"; exit 0' > "$LOAD"
+export TEST_ALL_RECHECK="$REAL_RED"
+
+# branch <PR> <branch> [<labels>] -- <command…>: a branch from origin/main whose one commit is what <command> changes,
+# pushed and opened as PR <PR>
+branch() {
+  local n=$1 b=$2 labels=$3; shift 4
+  git fetch -q origin && git checkout -q -B "$b" origin/main && "$@" && git add -A . && git commit -q -m "$b" || return 1
+  git push -q -f origin "$b:refs/heads/$b" "$b:refs/pull/$n/head" 2>/dev/null
+  echo "$n $(git rev-parse HEAD) main https://github.com/owner/repo/pull/$n" > "$GH_STUB_DIR/pr-$n"
+  echo "$b false OPEN $labels" > "$GH_STUB_DIR/prx-$n"
+}
+add() { echo "$2" > "$1"; }
+origin_main() { git --git-dir="$T/torigin.git" rev-parse refs/heads/main; }
+on_main() { git --git-dir="$T/torigin.git" show "refs/heads/main:$1" 2>/dev/null; }
+merges() { tr '\n' ' ' < "$GH_STUB_DIR/merges" 2>/dev/null | sed 's/ $//'; }
+
+expect 2 "train: more than four PRs is refused" "a train carries at most 4 PRs" -- bash "$TRAIN" 1 2 3 4 5
+
+branch 21 t-a "" -- add a.txt a
+branch 22 t-b "" -- add b.txt b
+branch 23 t-c "" -- add c.txt c
+M0=$(origin_main)
+expect 0 "train --no-merge: three PRs tested together, nothing merged" "WOULD MERGE" -- bash "$TRAIN" 21 22 23 --no-merge
+[ "$(origin_main)" = "$M0" ] && ok "train --no-merge: ...and main has not moved" || bad "train --no-merge: main moved"
+expect 0 "train: three PRs green in one run, merged in order" "train: #21 #22 #23 merged" -- bash "$TRAIN" 21 22 23
+[ "$(merges)" = "21 22 23" ] && ok "train: ...squashed one at a time, in the order given" || bad "train: merged \"$(merges)\", not 21 22 23"
+[ "$(on_main a.txt)$(on_main b.txt)$(on_main c.txt)" = "abc" ] && ok "train: ...and main has all three" || bad "train: main lacks a PR's file"
+GOT=$(bash "$TRAIN" 21 2>&1); grep -qF "DROPPED: it is MERGED" <<<"$GOT" && ok "train: a merged PR is dropped" || { bad "train: a merged PR was not dropped"; echo "$GOT" | tail -5; }
+[ "$(git worktree list | wc -l | tr -d ' ')" = "1" ] && ok "train: its scratch worktree is removed" || { bad "train: a scratch worktree was left"; git worktree list; }
+
+: > "$GH_STUB_DIR/merges"
+branch 24 t-clash1 "" -- add notes.txt "line one, as #24 has it"
+branch 25 t-clash2 "" -- add notes.txt "line one, as #25 has it"
+expect 1 "train: a PR that conflicts with one before it is dropped, never resolved" "#25: DROPPED: it does not merge with main and the PRs before it (conflicts outside the word catalogs: notes.txt)" -- bash "$TRAIN" 24 25
+[ "$(merges)" = "24" ] && [ "$(on_main notes.txt)" = "line one, as #24 has it" ] && ok "train: ...the other is merged" || bad "train: merged \"$(merges)\", notes.txt: $(on_main notes.txt)"
+
+: > "$GH_STUB_DIR/merges"
+branch 26 t-d "" -- add d.txt d
+branch 27 t-red "" -- add FAIL-test-x red
+branch 28 t-e "" -- add e.txt e
+OUT=$(bash "$TRAIN" 26 27 28 2>&1); RC=$?
+[ $RC = 1 ] && ok "train: a red member: the train exits 1" || { bad "train: a red member: exit $RC"; echo "$OUT" | tail -15 | sed 's/^/      /'; }
+grep -qE '#27: RED: it fails test-x with main alone \(.*/alone-pr27\.log\)' <<<"$OUT" && ok "train: ...the failing suite, run alone on main + each PR, names #27, with its log" || { bad "train: #27 not named"; echo "$OUT" | tail -15 | sed 's/^/      /'; }
+LOG27=$(sed -nE 's/.*#27: RED: .*\((.*alone-pr27\.log)\).*/\1/p' <<<"$OUT" | head -1)
+grep -qF "Server suites failed: test-x" "$LOG27" 2>/dev/null && ok "train: ...and that log is the suite failing" || bad "train: the named log ($LOG27) does not show the failure"
+grep -qF "train: #26 #28 merged" <<<"$OUT" && [ "$(merges)" = "26 28" ] && ok "train: ...while the innocents #26 and #28 are merged" || bad "train: merged \"$(merges)\""
+[ -z "$(on_main FAIL-test-x)" ] && [ "$(on_main d.txt)$(on_main e.txt)" = "de" ] && ok "train: ...and main has theirs and not the culprit's" || bad "train: main's files are wrong after a red member"
+
+# Both PRs add a key after "Hello" and append a note to _meta.draftedBy: the lines clash, the keys do not. #30 then
+# conflicts with main once #29 has landed, so the train merges main into #30's branch per key and pushes that first.
+: > "$GH_STUB_DIR/merges"
+branch 29 t-cat "" -- catalog apps/pwa/words/fr.json "base; #29 note" "2026-10-30" "Hello=Bonjour" "Cat=Chat" "Bye=Au revoir"
+branch 30 t-dog "" -- catalog apps/pwa/words/fr.json "base; #30 note" "2026-10-31" "Hello=Bonjour" "Dog=Chien" "Bye=Au revoir"
+H30=$(git rev-parse t-dog)
+git merge-tree --write-tree t-cat t-dog >/dev/null 2>&1 && bad "train: the two catalogs do not conflict, so this tests nothing" || ok "train: two PRs whose catalog lines conflict"
+expect 0 "train: a conflict only in word catalogs is merged per key, and both PRs merge" "train: #29 #30 merged" -- bash "$TRAIN" 29 30
+GOTCAT=$(on_main apps/pwa/words/fr.json | node -e 'const o = JSON.parse(require("fs").readFileSync(0, "utf8")); console.log(Object.keys(o).join(","), "|", o._meta.draftedBy, "|", o._meta.updated, "|", o.Cat, o.Dog, o.Hello, o.Bye)')
+[ "$GOTCAT" = "_meta,Hello,Dog,Cat,Bye | base; #29 note; #30 note | 2026-10-31 | Chat Chien Bonjour Au revoir" ] \
+  && ok "train: ...nothing lost: every key, both draftedBy notes, the later date" || bad "train: main's catalog after the train: $GOTCAT"
+NEW30=$(git --git-dir="$T/torigin.git" rev-parse refs/heads/t-dog)
+[ "$(git --git-dir="$T/torigin.git" rev-parse "$NEW30^1")" = "$H30" ] && ok "train: ...#30's branch got main merged in on top of its head (a fast-forward push)" || bad "train: #30's branch is $NEW30, not a merge on $H30"
+node "$REPO_ROOT/scripts/words-merge-3way.mjs" --base t-dog --main t-dog --pr t-dog --verify apps/pwa/words/fr.json >/dev/null 2>&1 && ok "words-merge-3way: --verify passes an unchanged catalog" || bad "words-merge-3way: --verify failed an unchanged catalog"
+: > "$GH_STUB_DIR/merges"
+branch 37 t-bonjour1 "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Salut" "Dog=Chien" "Cat=Chat" "Bye=Au revoir"
+branch 38 t-bonjour2 "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Coucou" "Dog=Chien" "Cat=Chat" "Bye=Au revoir"
+expect 1 "train: two PRs that change the same key differently: the second is dropped, not merged" "#38: DROPPED: it does not merge with main and the PRs before it (word catalogs that cannot be merged per key: apps/pwa/words/fr.json: both sides changed \"Hello\"" -- bash "$TRAIN" 37 38
+
+: > "$GH_STUB_DIR/merges"
+branch 31 t-tier "tier-A,security" -- add f.txt f
+branch 32 t-plain "" -- add g.txt g
+branch 33 t-ledger "" -- sh -c 'mkdir -p packages/beanpool-core/src && echo x > packages/beanpool-core/src/ledger.ts'
+branch 39 t-escrow "" -- sh -c 'mkdir -p apps/server/src/db && echo "db.prepare(\`UPDATE accounts SET balance = balance + ?\`)" > apps/server/src/db/db.ts'
+OUT=$(bash "$TRAIN" 31 32 33 39 2>&1)
+grep -qF "#31: RIDES ALONE: it is labelled tier-A" <<<"$OUT" && ok "train: a tier-A PR is refused a train" || { bad "train: the tier-A PR rode"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+grep -qF "#33: RIDES ALONE: it touches ledger or money paths (packages/beanpool-core/src/ledger.ts)" <<<"$OUT" && ok "train: ...so is one touching core's ledger" || bad "train: the ledger PR rode"
+grep -qF "#39: RIDES ALONE: it changes a line that moves Beans" <<<"$OUT" && ok "train: ...and one changing a line that writes a balance" || bad "train: the balance-writing PR rode"
+[ "$(merges)" = "32" ] && ok "train: ...while the plain PR merges" || bad "train: merged \"$(merges)\", not 32"
+expect 0 "train: a tier-A PR alone is a train of one" "train: #31 merged" -- bash "$TRAIN" 31
+
+: > "$GH_STUB_DIR/merges"
+branch 34 t-cired "" -- add h.txt h
+branch 35 t-cipending "" -- add i.txt i
+echo "failure" > "$GH_STUB_DIR/ci-$(git rev-parse t-cired)"
+echo "pending" > "$GH_STUB_DIR/ci-$(git rev-parse t-cipending)"
+expect 1 "train: a red GitHub Test-All on a PR's head holds it" "#34: HELD: GitHub's \"Run BeanPool Test-All Pipeline\" is red" -- bash "$TRAIN" 34 35
+[ "$(merges)" = "35" ] && ok "train: ...a pending one does not" || bad "train: merged \"$(merges)\", not 35"
+grep -qE 'repos/owner/repo/commits/[0-9a-f]{40}/check-runs\?check_name=Run%20BeanPool%20Test-All%20Pipeline' "$GH_STUB_DIR/api" && ok "train: ...read from the head's check-runs, by the required check's name" || bad "train: no check-runs call by name: $(tail -1 "$GH_STUB_DIR/api")"
+
+: > "$GH_STUB_DIR/merges"
+branch 36 t-load "" -- add FAIL-test-load slow
+expect 0 "train: a red run the load recheck calls load is green, and merges" "load recheck: every failure passed alone" -- env TEST_ALL_RECHECK="$LOAD" bash "$TRAIN" 36
+[ "$(merges)" = "36" ] && ok "train: ...#36 merged" || bad "train: merged \"$(merges)\", not 36"
 cd "$W" || exit 1
 
 echo ""

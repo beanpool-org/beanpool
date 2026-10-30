@@ -87,7 +87,8 @@ summary() {
     esac
   done
   echo ""
-  echo "train: ${merged:+${merged# } merged}${merged:-nothing merged}$others (logs: $LOGS)"
+  [ -n "$merged" ] && merged="${merged# } merged" || merged="nothing merged"
+  echo "train: $merged$others (logs: $LOGS)"
   exit "$1"
 }
 
@@ -167,11 +168,11 @@ build() {
   done
 }
 
-install() { [ ! -f pnpm-lock.yaml ] || pnpm install --frozen-lockfile --reporter=silent; }
+install_deps() { [ ! -f pnpm-lock.yaml ] || pnpm install --frozen-lockfile --reporter=silent; }
 # prepare: install, and build the workspace's dist as test-all.sh's first stage does (the alone runs switch trees, and
 # the server suites run against core's dist).
 prepare() {
-  install || return 1
+  install_deps || return 1
   [ ! -f turbo.json ] || pnpm turbo run build
 }
 
@@ -276,7 +277,7 @@ TRAIN=($(riding))
 [ ${#TRAIN[@]} -gt 0 ] || summary 1
 TESTED=$(git rev-parse HEAD)
 echo "Testing $(short "$TESTED"): origin/$BASE $(short "$MAIN_SHA") + $(nums "${TRAIN[@]}"), in $WT"
-install || { echo "❌ pnpm install failed in the scratch worktree"; summary 1; }
+install_deps || { echo "❌ pnpm install failed in the scratch worktree"; summary 1; }
 
 bash scripts/test-all.sh --all 2>&1 | tee "$LOGS/test-all.log"
 RC=${PIPESTATUS[0]}

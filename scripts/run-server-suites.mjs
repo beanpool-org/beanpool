@@ -63,8 +63,12 @@ const JOBS = Math.max(1, Number(process.env.TEST_ALL_JOBS) || (process.env.CI ? 
 
 function buildRuns() {
     const runs = [
-        ...SUITES.map((name) => ({ id: name, name, label: '', env: {} })),
-        ...VARIANTS.map((v) => ({ id: v.tag ? `${v.name}(${v.tag})` : v.name, name: v.name, tag: v.tag, label: v.label || '', env: v.env || {} })),
+        ...SUITES.map((entry) => {
+            const name = typeof entry === 'string' ? entry : entry.name;
+            const timeoutS = typeof entry === 'string' ? undefined : entry.timeoutS;
+            return { id: name, name, label: '', env: {}, timeoutS };
+        }),
+        ...VARIANTS.map((v) => ({ id: v.tag ? `${v.name}(${v.tag})` : v.name, name: v.name, tag: v.tag, label: v.label || '', env: v.env || {}, timeoutS: v.timeoutS })),
     ];
     const problems = [];
     const seen = new Set();
@@ -190,6 +194,7 @@ function runOne(run, workDir) {
         live.set(child.pid, run);
 
         let timedOut = false;
+        const limitS = run.timeoutS ?? TIMEOUT_S;
         const timer = setTimeout(() => {
             timedOut = true;
             const tree = descendants(child.pid);
@@ -200,7 +205,7 @@ function runOne(run, workDir) {
                 signal(child.pid, [...tree, ...descendants(child.pid)], 'SIGKILL');
                 done();
             }, KILL_GRACE_MS)));
-        }, TIMEOUT_S * 1000);
+        }, limitS * 1000);
 
         const finish = (code, sig) => {
             clearTimeout(timer);
@@ -245,7 +250,8 @@ async function runAll(runs, jobs, root, results) {
             results.push(r);
             // ✘, not ✗: scripts/test-all-lib.sh counts every ✗ line as a failing assertion of the suite above it.
             const mark = r.status === 'pass' ? '✓' : '✘';
-            const why = r.status === 'timeout' ? ` TIMEOUT after ${TIMEOUT_S}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}`
+            const limitS = r.timeoutS ?? TIMEOUT_S;
+            const why = r.status === 'timeout' ? ` TIMEOUT after ${limitS}s` : r.status === 'fail' ? ` exit ${r.code ?? r.signal}`
                 : r.status === 'nocount' ? ' exit 0 with no closing count (NO-COUNT)' : '';
             console.log(`${mark} ${r.id}${why}  ${fmt(r.seconds)}  [${results.length}/${total}]`);
             if (process.env.SERVER_SUITES_KEEP_LOGS) {
@@ -335,7 +341,8 @@ async function main() {
             console.log('…');
             console.log(lines.slice(-200).join('\n'));
         }
-        const how = r.status === 'timeout' ? `killed after ${TIMEOUT_S}s` : r.status === 'nocount' ? 'exit 0 with no closing count' : `exit ${r.code ?? r.signal}`;
+        const limitS = r.timeoutS ?? TIMEOUT_S;
+        const how = r.status === 'timeout' ? `killed after ${limitS}s` : r.status === 'nocount' ? 'exit 0 with no closing count' : `exit ${r.code ?? r.signal}`;
         console.log(`── ${r.id}: ${how}, ${fmt(r.seconds)}; log ${r.log}`);
     }
     if (process.env.TEST_ALL_LOG_DIR) {

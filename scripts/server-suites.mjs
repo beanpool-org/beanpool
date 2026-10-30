@@ -23,12 +23,22 @@ export const DEFAULT_ENV = {
     BEANPOOL_SUITE_ENV_PASSWORD: '1',
 };
 
+/** A plain run with a custom per-entry timeout in seconds (default stays 300 s). */
+const withTimeout = (name, timeoutS) => ({
+    name,
+    timeoutS,
+    toString() { return this.name; },
+    [Symbol.for('nodejs.util.inspect.custom')]() { return this.name; },
+});
+
 /**
  * The plain runs: each suite once, with DEFAULT_ENV.
  *
  * ONE SUITE PER LINE. Add a new suite as its own line beside a related one rather than at the bottom: two PRs that
  * each append after the same last line conflict, while insertions at different points merge cleanly. Order does not
  * matter: the runner orders by the last recorded durations, longest first.
+ *
+ * An entry is either a suite name or withTimeout(name, timeoutS) when the suite needs longer than the default 300 s.
  */
 export const SUITES = [
     'test-schema-upgrade-fresh-shape',
@@ -77,8 +87,8 @@ export const SUITES = [
     'test-recovery-collect',
     'test-sso-copy-hardening',
     'test-sso-recovery-roundtrip',
-    'test-recovery-seal',
-    'test-recovery-seal-rollback',
+    withTimeout('test-recovery-seal', 600),
+    withTimeout('test-recovery-seal-rollback', 600),
     'test-recovery-seal-removed',
     'test-keeper-http',
     'test-open-join',
@@ -277,14 +287,14 @@ export const SUITES = [
     'test-address-retention',
     'test-standby-in-flight',
     'test-standby-devices',
-    'test-standby-refusal-keeps-copy',
+    withTimeout('test-standby-refusal-keeps-copy', 600),
     'test-tombstone-retention',
     'test-sync-copy-pages',
     'test-open-copies',
     'test-standby-paged-copies',
     'test-standby-swap-at-boot',
     'test-standby-paged-copies-pacing',
-    'test-standby-photos-by-reference',
+    withTimeout('test-standby-photos-by-reference', 600),
     'test-standby-copy-retries',
     'test-recovery-tombstones',
     'test-github-sign-in-removed',
@@ -425,7 +435,7 @@ export const SUITES = [
     'test-photo-move-resume',
     'test-avatar-keys',
     'test-etag-short-circuit',
-    'test-photo-keys-resync',
+    withTimeout('test-photo-keys-resync', 600),
     'test-faces-keys-resync',
     'test-photo-keys-audience',
     'test-photo-off-listing',
@@ -618,8 +628,8 @@ export const VARIANTS = [
     { name: 'test-ws-push-index-equivalence', tag: 'radius-20', label: 'NEARBY_LISTINGS_RADIUS_KM=20', env: { NEARBY_LISTINGS_RADIUS_KM: '20', PUSH_INDEX_COST: '0' } },
     // test-heavy-read-cap's section 1c (stalled readers with the version moved before each, the directory and a roster)
     // on its own: with it the file ran past the 300 s per run on CI (#1526).
-    { name: 'test-heavy-read-cap', tag: '1c-directory', label: 'version moves (1c), the directory', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'directory' } },
-    { name: 'test-heavy-read-cap', tag: '1c-roster', label: 'version moves (1c), a roster', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'roster' } },
+    { name: 'test-heavy-read-cap', tag: '1c-directory', label: 'version moves (1c), the directory', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'directory' }, timeoutS: 600 },
+    { name: 'test-heavy-read-cap', tag: '1c-roster', label: 'version moves (1c), a roster', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'roster' }, timeoutS: 600 },
     // Its section 1d (more readers who stop reading than the budget lets in, plain and gzip) on its own too (#1524).
     { name: 'test-heavy-read-cap', tag: '1d', label: 'readers who stop reading at the bound (1d)', env: { HEAVY_READ_CAP_ONLY: '1d' } },
     // test-restore-points' section S2b (another community's file, a child server per row) in two halves of its own: with it

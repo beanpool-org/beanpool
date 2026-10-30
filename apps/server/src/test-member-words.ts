@@ -755,18 +755,20 @@ async function testNothingMatchedIsMarked(): Promise<void> {
 }
 
 // ── 7 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-/** What the way out does over far more than a fixed one (100 ms: what it costs is near none, so a slow runner passes). */
+/** What the way out does over far more than a fixed one (100 ms CPU: what it costs is near none, so a slow runner passes). */
 const LONG_REFUSAL_MS = 100;
 
-/** The way out over one refused answer in French, as Koa runs it: the error it left, and how long it held the loop. */
-async function wayOutOver(text: string): Promise<{ error: unknown; ms: number }> {
+/** The way out over one refused answer in French, as Koa runs it: the error it left, and how long it held the loop (wall and CPU). */
+async function wayOutOver(text: string): Promise<{ error: unknown; ms: number; cpuMs: number }> {
     const ctx: any = {
         status: 400, path: '/api/recovery/collect/sso', body: { error: text },
         get: (h: string) => (h.toLowerCase() === 'x-language' ? 'fr' : ''), vary: () => {},
     };
+    const c0 = process.cpuUsage();
     const started = performance.now();
     await memberWordsOnTheWayOut()(ctx, async () => {});
-    return { error: ctx.body.error, ms: performance.now() - started };
+    const c = process.cpuUsage(c0);
+    return { error: ctx.body.error, ms: performance.now() - started, cpuMs: (c.user + c.system) / 1000 };
 }
 
 async function testLongRefusals(): Promise<void> {
@@ -801,8 +803,8 @@ async function testLongRefusals(): Promise<void> {
             useCatalogsForTests('fr', words ? { server: words, core: FR_CORE } : null);
             for (const [what, text] of LONG) {
                 const out = await wayOutOver(text);
-                assert(out.error === text && out.ms < LONG_REFUSAL_MS,
-                    `${catalog}: a refusal of ${what} comes back as it came, the way out over it in ${out.ms.toFixed(1)} ms (under ${LONG_REFUSAL_MS})`);
+                assert(out.error === text && out.cpuMs < LONG_REFUSAL_MS,
+                    `${catalog}: a refusal of ${what} comes back as it came, the way out over it in ${out.cpuMs.toFixed(1)} ms CPU (${out.ms.toFixed(1)} ms wall, under ${LONG_REFUSAL_MS} ms)`);
             }
         }
         useCatalogsForTests('fr', { server: FR, core: FR_CORE });
@@ -819,12 +821,12 @@ async function testLongRefusals(): Promise<void> {
         useCatalogsForTests('fr', { server: { ...catalogs[1][1]!, 'No.': 'Non.' }, core: FR_CORE });
         const many = 'No. '.repeat(499).trim();
         const nearLong = await wayOutOver(many);
-        assert(many.length < 2000 && nearLong.error === 'Non. '.repeat(499).trim() && nearLong.ms < LONG_REFUSAL_MS,
-            `a refusal of ${many.length} characters, a catalog sentence 499 times, comes in French in ${nearLong.ms.toFixed(1)} ms`);
+        assert(many.length < 2000 && nearLong.error === 'Non. '.repeat(499).trim() && nearLong.cpuMs < LONG_REFUSAL_MS,
+            `a refusal of ${many.length} characters, a catalog sentence 499 times, comes in French in ${nearLong.cpuMs.toFixed(1)} ms CPU (${nearLong.ms.toFixed(1)} ms wall, under ${LONG_REFUSAL_MS} ms)`);
         const unknown = echoed('a. B'.repeat(480));
         const nearUnknown = await wayOutOver(unknown);
-        assert(unknown.length < 2000 && nearUnknown.error === unknown && nearUnknown.ms < LONG_REFUSAL_MS,
-            `and one of ${unknown.length} characters, ${unknown.split('. ').length} sentences no catalog has, stays as it came in ${nearUnknown.ms.toFixed(1)} ms`);
+        assert(unknown.length < 2000 && nearUnknown.error === unknown && nearUnknown.cpuMs < LONG_REFUSAL_MS,
+            `and one of ${unknown.length} characters, ${unknown.split('. ').length} sentences no catalog has, stays as it came in ${nearUnknown.cpuMs.toFixed(1)} ms CPU (${nearUnknown.ms.toFixed(1)} ms wall, under ${LONG_REFUSAL_MS} ms)`);
     } finally {
         useCatalogsForTests('fr', null);
         await new Promise<void>(r => server.close(() => r()));

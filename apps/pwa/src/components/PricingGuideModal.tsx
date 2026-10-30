@@ -2,7 +2,7 @@
  * PricingGuideModal — Searchable, Auto-Adjusting Community Pricing Guide for PWA (#206).
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     PRICING_CATEGORIES,
     DEFAULT_PRICING_CATALOG,
@@ -84,6 +84,24 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     const [reportComment, setReportComment] = useState('');
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [reportSuccess, setReportSuccess] = useState(false);
+    const reportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Clear reporting success timer on unmount or when modal closes
+    useEffect(() => {
+        return () => {
+            if (reportTimerRef.current) {
+                clearTimeout(reportTimerRef.current);
+                reportTimerRef.current = null;
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen && reportTimerRef.current) {
+            clearTimeout(reportTimerRef.current);
+            reportTimerRef.current = null;
+        }
+    }, [isOpen]);
 
     // Keyboard (Escape) & Modal Accessibility
     useEffect(() => {
@@ -149,7 +167,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
         try {
             await submitPricingReportApi(reportingItem.id, reportType, reportComment.trim() || undefined, reporterPubkey);
             setReportSuccess(true);
-            setTimeout(() => {
+            if (reportTimerRef.current) clearTimeout(reportTimerRef.current);
+            reportTimerRef.current = setTimeout(() => {
+                reportTimerRef.current = null;
                 setReportingItem(null);
                 setReportSuccess(false);
                 setReportComment('');

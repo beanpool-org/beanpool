@@ -32,6 +32,22 @@ describe('PricingGuideModal Component', () => {
         expect(allItemsBtn.className).toContain('min-h-[44px]');
         expect(allItemsBtn.className).toContain('focus-visible:ring-2');
     });
+
+    it('clears reporting timeout on unmount', async () => {
+        const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+        const { unmount } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+        const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+        await userEvent.click(reportBtns[0]);
+
+        const submitBtn = screen.getByRole('button', { name: 'Submit' });
+        await userEvent.click(submitBtn);
+
+        expect(await screen.findByRole('heading', { name: /Feedback Submitted/i })).toBeInTheDocument();
+
+        unmount();
+        expect(clearTimeoutSpy).toHaveBeenCalled();
+        clearTimeoutSpy.mockRestore();
+    });
 });
 
 describe('PricingGuideModal price accessible text', () => {

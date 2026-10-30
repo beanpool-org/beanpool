@@ -97,6 +97,7 @@ export const palette = {
     yellow200: '#fef08a',
     yellow300: '#fde047',
     yellow500: '#eab308',
+    yellow700: '#a16207', // the star gold on white
 
     // Orange — need + action
     orange50: '#fff7ed',
@@ -215,6 +216,10 @@ export const lightColors = {
         fill: brandLight.commit.fill,       // a brand-green fill under text.onBrand
         dark: brandLight.commit.hover,      // the deeper green as a border or shadow; words use primary, fills brand.fill
         tint: palette.emerald50,
+        fillPressed: brandLight.commit.hover, // brand.fill while pressed, still under text.onBrand
+        // The brand green as words on a dark ground: a stack screen's title on its charcoal header (text.heading as the
+        // header's fill). The dark set's brand ink, 8.81:1 there; brand.primary (emerald-700) was 3.09.
+        onDark: brandDark.ink.brand,
     },
     accent: {
         primary: brandLight.ink.accent,     // sage words and icons
@@ -243,8 +248,9 @@ export const lightColors = {
         resident: { fg: palette.amber700, bg: palette.amber50, border: palette.amber200 },
         steward: { fg: palette.amber700, bg: palette.amber100, border: palette.amber300 },
         elder: { fg: palette.amber800, bg: palette.amber200, border: palette.amber500 },
-        star: palette.amber400,
-        founding: { fg: palette.green700, bg: 'rgba(34, 197, 94, 0.12)', border: 'rgba(34, 197, 94, 0.35)' },
+        // A deeper gold that stays gold: 4.92:1 on the card, 4.68 on the page (amber-400 was 1.67). Stars and words, not a fill.
+        star: palette.yellow700,
+        founding: { fg: palette.green800, bg: 'rgba(34, 197, 94, 0.12)', border: 'rgba(34, 197, 94, 0.35)' }, // fg 6.15 on bg over the page (green700 was 4.33)
     },
 
     // Status / feedback
@@ -252,8 +258,13 @@ export const lightColors = {
         danger: { fg: brandLight.ink.danger, bg: palette.red50, border: palette.red200, solid: brandLight.danger.fill, disabled: 'rgba(239, 68, 68, 0.4)' },
         warning: { fg: brandLight.ink.warning, bg: palette.amber50, border: palette.amber200, solid: brandLight.gold.fill },
         success: { fg: brandLight.ink.success, bg: palette.emerald50, border: palette.emerald200, solid: brandLight.commit.fill },
-        info: { fg: palette.blue600, bg: palette.blue50, border: palette.blue500, solid: palette.blue500 },
+        // solid is core's info fill (blue-600) under white words, 5.17:1 (blue-500 was 3.68).
+        info: { fg: palette.blue600, bg: palette.blue50, border: palette.blue500, solid: brandLight.info.fill },
     },
+
+    // The event violet as words: Going / Interested, UPDATED, You're hosting. components/EventCard.tsx's EVENT_ACCENT
+    // stays the fill and the border.
+    event: { ink: palette.violet600 },
 
     // Discrete actions
     action: {
@@ -349,6 +360,8 @@ export const darkColors = {
         fill: brandDark.commit.fill,      // emerald-700: the same deep fill as light
         dark: palette.emerald600,         // a border or shadow; never words or a fill under words
         tint: palette.emerald950,
+        fillPressed: brandDark.commit.hover,
+        onDark: brandDark.ink.brand,      // the same as primary: the stack header is the card in dark
     },
     accent: {
         primary: brandDark.ink.accent,      // light sage words and icons
@@ -382,8 +395,11 @@ export const darkColors = {
         danger: { fg: brandDark.ink.danger, bg: palette.red950, border: palette.red800, solid: brandDark.danger.fill, disabled: 'rgba(239, 68, 68, 0.3)' },
         warning: { fg: brandDark.ink.warning, bg: palette.amber950, border: palette.amber900, solid: brandDark.gold.fill },
         success: { fg: brandDark.ink.success, bg: palette.emerald950, border: palette.emerald800, solid: brandDark.commit.fill },
-        info: { fg: palette.blue400, bg: palette.indigo950, border: palette.blue600, solid: palette.blue500 },
+        info: { fg: palette.blue400, bg: palette.indigo950, border: palette.blue600, solid: brandDark.info.fill },
     },
+
+    // violet-300, 9.43:1 on the card (the fill's violet-600 was 3.05 as words).
+    event: { ink: palette.violet300 },
 
     // Discrete actions
     action: {

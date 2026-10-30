@@ -60,7 +60,7 @@ export default function ClaimCommunityScreen() {
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
         // In capitals by the language's rule (upperCase below), never a textTransform.
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, paddingVertical: 4 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5, paddingVertical: 4 },
         scroll: { padding: 16 },
         title: { fontSize: 22, fontWeight: '800', color: colors.text.heading, lineHeight: 28 },
         address: { fontSize: 15, color: colors.text.secondary, marginTop: 4, lineHeight: 21, fontFamily: 'monospace' },

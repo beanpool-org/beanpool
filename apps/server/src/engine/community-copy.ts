@@ -7,7 +7,8 @@
  * keeps both, together, under its recovery seal (services/recovery-seal-key.ts), as it keeps every copy: never in the
  * clear, and never at all when it has no seal key to lock them with. It opens them only for a bring-back an admin
  * confirmed with the member's new phone in front of them (engine/bring-back.ts), and then only to seal them to that
- * phone's throwaway key.
+ * phone's throwaway key; before that, the bring-back opens the copy and lets it go at once, when the code is made and
+ * when the number is typed, so no code is made or spent for a copy this server can't open.
  *
  * Who can open it, said plainly: this server, so the people who run it; nobody else. The words the member reads say so.
  *

@@ -22,6 +22,8 @@
  *  F. Declined, expired, wrong-number and pasted-key cases; a removed member is refused; a standby writes none.
  *  G. A re-key and deleting the account remove the copy (with a tombstone).
  *  H. A carried seal key (a take-over): copies locked with the key it replaced are locked again with the live one.
+ *  I. A copy this server can't open (its seal key gone or another): no code is made or spent, the admin is told to
+ *     re-key, and the phone's poll and lost-answer ask both answer 503.
  *
  * Run (from apps/server): SERVER_SUITES_ONLY="test-bring-back" TEST_ALL_JOBS=2 node ../../scripts/run-server-suites.mjs
  */
@@ -52,7 +54,7 @@ import { setNodeRole } from './config/node-role.js';
 import { setRecoveryCopies, NO_COPIES_HERE } from './config/recovery-copies.js';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { ensureRecoverySealKey, installCarriedRecoverySealKey, recoverySealKeyPath, rewrapCommunityCopiesFromRetiredKeys } from './services/recovery-seal-key.js';
-import { BRING_BACK_NO_COPY, BRING_BACK_OWN_KEY, BRING_BACK_GONE, BRING_BACK_NEEDS_NUMBER } from './engine/bring-back.js';
+import { BRING_BACK_NO_COPY, BRING_BACK_OWN_KEY, BRING_BACK_GONE, BRING_BACK_NEEDS_NUMBER, BRING_BACK_CANT_OPEN } from './engine/bring-back.js';
 
 const HOST = 'mullum.test';
 
@@ -442,6 +444,57 @@ async function runTests() {
         const { phone, code, bind } = await bringBack(adminSession, ivy);
         const got = await poll(phone, code);
         assert(bind.status === 200 && got.json.state === 'released', `and it is still brought back (got ${bind.status}, ${got.json.state})`);
+    }
+
+    // ── I ──
+    section('I. A copy this server can\'t open: no code made, none spent, and the admin is told to re-key');
+    {
+        const una = join('UnaMember');
+        await turnOn(una);
+        const keyFile = recoverySealKeyPath();
+        const liveKey = fs.readFileSync(keyFile);
+        const putKeyBack = () => fs.writeFileSync(keyFile, liveKey, { mode: 0o600 });
+        const bringBackCodes = () => db.prepare("SELECT COUNT(*) AS n FROM rekey_requests WHERE old_pubkey = ? AND kind = 'bring_back'").get(una.pubKeyHex) as { n: number };
+        try {
+            // The seal key gone since the turn-on (a restore that didn't carry data/recovery-seal.key): the row is still here.
+            fs.unlinkSync(keyFile);
+            const noKey = await issueBringBack(adminSession, una.pubKeyHex);
+            assert(noKey.status === 409 && noKey.json.code === 'copy_unopenable' && noKey.json.error === BRING_BACK_CANT_OPEN && bringBackCodes().n === 0,
+                `no code is made for a copy this server can't open, and the admin is told to re-key (got ${noKey.status} ${noKey.json.code})`);
+            // Another key in its place (a standby promoted without it): the same.
+            fs.writeFileSync(keyFile, crypto.randomBytes(32), { mode: 0o600 });
+            const otherKey = await issueBringBack(adminSession, una.pubKeyHex);
+            assert(otherKey.status === 409 && otherKey.json.code === 'copy_unopenable' && bringBackCodes().n === 0,
+                `...nor under a seal key that didn't lock it (got ${otherKey.status} ${otherKey.json.code})`);
+
+            // The key goes between the code and the number: the code isn't spent, and the admin is told, not "they're back".
+            putKeyBack();
+            const code = (await issueBringBack(adminSession, una.pubKeyHex)).json.code as string;
+            const phone = makeKeypair();
+            const a = await ask(phone, code);
+            fs.unlinkSync(keyFile);
+            const bind = await bindByNumber(adminSession, una.pubKeyHex, code, a.json.match);
+            const req = db.prepare('SELECT status, wrong_matches FROM rekey_requests WHERE code = ?').get(code) as { status: string; wrong_matches: number | null };
+            assert(bind.status === 409 && bind.json.error === BRING_BACK_CANT_OPEN && bind.json.broughtBack !== true && req.status === 'pending' && !req.wrong_matches,
+                `the number typed is refused with the reason, the code still waits and no wrong number is counted (got ${bind.status}, code ${req.status})`);
+            assert(!db.prepare('SELECT 1 FROM bring_back_log WHERE member_pubkey = ?').get(una.pubKeyHex) && (await poll(phone, code)).json.state === 'waiting',
+                '...nothing is logged as brought back, and the phone still waits');
+            putKeyBack();
+            const again = await bindByNumber(adminSession, una.pubKeyHex, code, a.json.match);
+            assert(again.status === 200 && again.json.broughtBack === true, `with its key back, the same number brings them back (got ${again.status})`);
+
+            // The key goes after the number: the phone's poll and its lost-answer ask both say "not now", never a refusal.
+            fs.unlinkSync(keyFile);
+            const pollNoKey = await poll(phone, code);
+            const askNoKey = await ask(phone, code);
+            assert(pollNoKey.status === 503 && askNoKey.status === 503 && askNoKey.json.code === 'recovery_seal_key_missing',
+                `the poll and the ask again both answer 503, so the phone asks again (got ${pollNoKey.status}, ${askNoKey.status})`);
+            putKeyBack();
+            const got = await poll(phone, code);
+            assert(got.json.state === 'released', `...and collects the release once the key is back (got ${got.json.state})`);
+        } finally {
+            putKeyBack();
+        }
     }
 
     console.log(`\n${passed}/${run} checks passed`);

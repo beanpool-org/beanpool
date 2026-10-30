@@ -1554,6 +1554,13 @@ router.post('/api/member/re-enroll', async (ctx) => {
             ctx.body = { error: e.message, code: e.code };
             return;
         }
+        // A bring-back's lost answer is its release again, opened from the recovery seal (engine/bring-back.ts): a server
+        // that can't open it answers as the status route below does, and the phone asks again; never a refusal it shows.
+        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) {
+            ctx.status = 503;
+            ctx.body = { error: e.message, code: (e as any).code };
+            return;
+        }
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, word('Failed to ask for the re-key')) };
     }

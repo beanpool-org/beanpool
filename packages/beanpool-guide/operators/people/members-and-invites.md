@@ -208,7 +208,7 @@ If they already moved to a new key, the window opens on **Already moved to** tha
 - The same brakes as Re-Key: a number no waiting phone shows is a wrong try, three stop the code, **Not theirs** turns a phone away, and a pasted key never completes a bring-back.
 - Only an owner can bring back an owner or an admin. You can't bring back your own account. While a re-key code holds their key, cancel it first.
 - This server keeps a record of each bring-back: whose account, which admin, when, and the start of the new phone's key. Never the code and never the copy.
-- The copy and the key that opens it are kept together under this server's recovery seal, so whoever runs this server can open them. A server without its recovery-seal key keeps none. A standby holds them locked; a take-over brings them back with the seal key. A re-key to a new key removes the member's copy (it holds the old key), and so does deleting the account.
+- The copy and the key that opens it are kept together under this server's recovery seal, so whoever runs this server can open them. A server without its recovery-seal key keeps none. A server that has lost that key, or has another one (restored from a backup that didn't carry it), can't open the copies it holds: **Make a bring-back code** and **Bring them back** say so and use nothing up, and Re-Key gives the member a new key instead. A standby holds them locked; a take-over brings them back with the seal key. A re-key to a new key removes the member's copy (it holds the old key), and so does deleting the account.
 
 ## Things to know
 

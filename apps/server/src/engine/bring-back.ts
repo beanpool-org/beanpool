@@ -28,6 +28,7 @@ import { logger, sanitizeMessage } from '../logger.js';
 import { getMember, dispatchPushNotification } from '../state-engine.js';
 import { communityCopyForRelease, sealReleaseToDevice, type SealedShare } from '@beanpool/core';
 import { hasCommunityCopy, openCommunityCopy } from './community-copy.js';
+import { RecoverySealKeyMissing, RecoverySealUnopenable } from '../services/recovery-seal-key.js';
 import { REKEY_CODE_TTL_MS, assertMayRekey, assertNotMisspeltRow, getInvalidatedKeyInfo, type RekeyRequestRow } from './member-wizards.js';
 
 /** The holder type a release is bound to (the AAD of sealReleaseToDevice), beside the code it was released on. */
@@ -43,12 +44,29 @@ export const BRING_BACK_REKEY_WAITING = 'This member has a re-key code waiting, 
 export const BRING_BACK_NEEDS_NUMBER = 'A bring-back is confirmed by the number on their new phone, never by a pasted key.';
 /** The account or its copy went between the code and the number. */
 export const BRING_BACK_GONE = 'This member’s account or their copy here is gone, so there is nothing to bring back. Re-key gives them a new key instead.';
+/** This server holds the member's copy and can't open it, so it has nothing to release. */
+export const BRING_BACK_CANT_OPEN = 'This server can’t open their copy: its recovery-seal key is missing, or isn’t the one the copy was locked with. Re-key gives them a new key instead.';
 
 function refusal(status: number, message: string, code?: string): Error {
     const err: any = new Error(message);
     err.status = status;
     if (code) err.code = code;
     return err;
+}
+
+/**
+ * The member's copy, opened here and let go at once, before a code is handed out and again before one is spent. A
+ * server whose seal key is gone or another one (restored from a backup without data/recovery-seal.key, a standby promoted
+ * without it) still has the row; without this the admin was told the member was back, the code was used, and the
+ * phone's poll met the seal only then (its 503 reads as "not reachable", so the phone waited out the code's day).
+ */
+function assertCopyOpens(member: string): void {
+    try {
+        openCommunityCopy(member);
+    } catch (e) {
+        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) throw refusal(409, BRING_BACK_CANT_OPEN, 'copy_unopenable');
+        throw e;
+    }
 }
 
 const shortKey = (key: string): string => /^[0-9a-f]{64}$/i.test(key) ? `${key.slice(0, 10)}…` : key;
@@ -65,10 +83,11 @@ export function isBringBackCode(code: string | null | undefined): boolean {
 
 /**
  * The admin's Bring back (POST …/rekey/issue-code with `{ kind: 'bring_back' }`): a code for the member's new phone.
- * Refused for a member with no community copy here, a removed or deleted account, the operator's own account, while a
- * re-key code holds the member's key, to an admin for an owner or admin (assertMayRekey), and for a row a door stored
- * under another spelling (assertNotMisspeltRow, as Re-key's code asks). An earlier bring-back code of the member's
- * stops. Writes the log line (never the code) and pushes the member's phones.
+ * Refused for a member with no community copy here, a copy this server can't open (assertCopyOpens), a removed or
+ * deleted account, the operator's own account, while a re-key code holds the member's key, to an admin for an owner or
+ * admin (assertMayRekey), and for a row a door stored under another spelling (assertNotMisspeltRow, as Re-key's code
+ * asks). An earlier bring-back code of the member's stops. Writes the log line (never the code) and pushes the member's
+ * phones.
  */
 export function issueBringBackCode(memberPublicKey: string, operatorPubkey: string, now = Date.now()):
     { code: string; oldPubkey: string; callsign: string; expiresAt: string; kind: 'bring_back' } {
@@ -84,6 +103,7 @@ export function issueBringBackCode(memberPublicKey: string, operatorPubkey: stri
     if (operator === member) throw refusal(409, BRING_BACK_OWN_KEY, 'own_key');
     if (getInvalidatedKeyInfo(member)) throw refusal(409, BRING_BACK_REKEY_WAITING, 'rekey_waiting');
     if (!hasCommunityCopy(member)) throw refusal(409, BRING_BACK_NO_COPY, 'no_copy');
+    assertCopyOpens(member);
 
     const at = new Date(now).toISOString();
     const expiresAt = new Date(now + REKEY_CODE_TTL_MS).toISOString();
@@ -119,7 +139,8 @@ export function issueBringBackCode(memberPublicKey: string, operatorPubkey: stri
 /**
  * The admin typed the number on the member's new phone (engine/rekey-redeem.ts bindRekeyByMatch found the waiting
  * phone): the code is done for that phone's throwaway key, which may now collect the release (bringBackRelease). Binds
- * nothing and moves nothing. Writes the log row and tells the member's phones.
+ * nothing and moves nothing. Writes the log row and tells the member's phones. Refused, with the code still waiting,
+ * when the account or its copy is gone or this server can't open the copy (assertCopyOpens).
  */
 export function confirmBringBack(req: RekeyRequestRow, throwawayKey: string, operatorPubkey: string, now = Date.now()):
     { success: true; broughtBack: true; oldPubkey: string; callsign: string } {
@@ -128,6 +149,8 @@ export function confirmBringBack(req: RekeyRequestRow, throwawayKey: string, ope
     const operator = (operatorPubkey || '').trim().toLowerCase() || 'owner:password';
     const row = getMember(member);
     if (!row || row.status === 'pruned' || !hasCommunityCopy(member)) throw refusal(409, BRING_BACK_GONE, 'account_gone');
+    // Before the code is spent: refused here, it still waits, and no wrong number is counted.
+    assertCopyOpens(member);
     const at = new Date(now).toISOString();
     db.transaction(() => {
         const done = db.prepare("UPDATE rekey_requests SET status = 'completed', new_pubkey = ?, completed_at = ? WHERE id = ? AND status = 'pending'")

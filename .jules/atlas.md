@@ -269,3 +269,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `updateEnterpriseLocation` and `clearEnterpriseLocation` in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage in `node-client.test.ts`.
 **Learning:** Testing enterprise location helpers verified `POST` and `DELETE` requests to `/api/local/admin/treasury/:pubkey/location` with coordinate payloads, admin credentials/2FA session headers, and error handling for failed requests.
 **Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.
+
+## 2026-10-28 - [manager tests] RecoveryCopiesLine component unit tests
+**Gap:** `RecoveryCopiesLine` component and `useRecoveryCopies` hook in `apps/manager/src/components/modules/RecoveryCopiesLine.tsx` were untested.
+**Learning:** Testing `useRecoveryCopies` requires using `resolveNodeApiUrl(nodeUrl, '/api/community/info')` when matching mocked `globalThis.fetch` calls.
+**Action:** Continue identifying remaining untested module components in `apps/manager/src/components/modules/`.

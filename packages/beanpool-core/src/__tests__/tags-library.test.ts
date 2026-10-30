@@ -184,4 +184,24 @@ describe('suggestTags', () => {
         expect(suggestTags('Limones del jardín', '', { index: es })).toEqual([]);
         expect(suggestTags('Limón fresco', '', { index: es })).toEqual(['food.fruit.lemon']);
     });
+
+    it('suggests from the names inside a title written without spaces (Chinese, Japanese)', () => {
+        const zh = buildTagIndex(wordsFor('zh-Hans', [{
+            [`Lemon${CONTEXT_SEPARATOR}tag`]: '柠檬',
+            [`Eggs${CONTEXT_SEPARATOR}tag`]: '鸡蛋',
+            [`Lemongrass${CONTEXT_SEPARATOR}tag`]: '柠檬草',
+        }]));
+        expect(suggestTags('新鲜柠檬出售', '', { index: zh })).toEqual(['food.fruit.lemon']);
+        expect(suggestTags('出售柠檬', '', { index: zh })).toEqual(['food.fruit.lemon']);
+        expect(suggestTags('鸡蛋、柠檬', '', { index: zh })).toEqual(['food.fruit.lemon', 'food.eggs']);
+        expect(suggestTags('鸡蛋，柠檬', '', { index: zh })).toEqual(['food.fruit.lemon', 'food.eggs']);
+        // The longer name first: lemongrass is not lemon.
+        expect(suggestTags('新鲜柠檬草出售', '', { index: zh })).toEqual(['food.herbs.lemongrass']);
+        expect(zh.search('檬草')).toEqual(['food.herbs.lemongrass']);
+        expect(zh.search('柠檬')).toEqual(['food.fruit.lemon', 'food.herbs.lemongrass']);
+        const ja = buildTagIndex(wordsFor('ja', [{ [`Lemon${CONTEXT_SEPARATOR}tag`]: 'レモン' }]));
+        expect(suggestTags('新鮮なレモンを売ります', '', { index: ja })).toEqual(['food.fruit.lemon']);
+        // A spaced script is never read inside a word: "lemonade" is not looked through for "lemon".
+        expect(buildTagIndex(wordsFor('en')).inside('lemonade')).toEqual([]);
+    });
 });

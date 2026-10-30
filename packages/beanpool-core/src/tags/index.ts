@@ -9,6 +9,13 @@ import { TAG_LIBRARY, type TagDef } from './library.js';
 
 export { TAG_LIBRARY, type TagDef } from './library.js';
 
+/**
+ * Letters of the scripts written without spaces between words: Thai, Lao, Myanmar, Khmer, the kana, and the Han characters
+ * (with the supplementary planes' as surrogate pairs), the engine's UNSPACED_SCRIPT (posts.ts). A title in them is one run of
+ * words, so the index looks for its names inside the run.
+ */
+const UNSPACED = /[\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f]|[\ud840-\ud87f][\udc00-\udfff]/;
+
 /** At most three levels: `top.group.item`, lowercase ASCII; the top is a Market category. */
 export const TAG_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*){0,2}$/;
 
@@ -93,9 +100,13 @@ export interface TagIndex {
     byName(text: string): readonly string[];
     /** The tags an English broader word is on: a tag's words (for it and everything under it) or its aliases. */
     byAlias(text: string): readonly string[];
+    /** The tags named inside a word of a script written without spaces: "新鲜柠檬出售" (fresh lemons for sale) holds 柠檬. The
+     *  longer name first, each letter read once ("柠檬草" is lemongrass, not lemon). Empty for a word of any other script. */
+    inside(text: string): readonly string[];
     /** The picker's search, from 2 characters: tags whose label (in this language or English) has a word starting with what
-     *  is typed, the nearest first (the label itself, then a label starting with it, then a later word starting with it;
-     *  within each, this language's labels and the shorter label first). Never a top: the category is its own field. */
+     *  is typed, or in a script written without spaces holds it anywhere; the nearest first (the label itself, then a label
+     *  starting with it, then a later word starting with it, then inside; within each, this language's labels and the
+     *  shorter label first). Never a top: the category is its own field. */
     search(text: string, limit?: number): string[];
     /** The label in this language; the English when the words have none. An unknown id gives ''. */
     label(id: string): string;
@@ -144,12 +155,28 @@ export function buildTagIndex(words?: Translate): TagIndex {
         for (const form of tagForms(label)) own.push([form, tag.id]);
         if (lang !== 'en') for (const form of tagForms(en)) english.push([form, tag.id]);
     }
-    // How near a label is to what is typed: the label itself 0, the label's start 1, a later word's start 2; none -1.
-    const nearness = (label: string, q: string) => (label === q ? 0 : label.startsWith(q) ? 1 : label.includes(` ${q}`) ? 2 : -1);
+    // This language's names written without spaces, the longest first: what inside() looks for in a run.
+    const unspaced = [...names.keys()].filter((name) => UNSPACED.test(name) && !name.includes(' ')).sort((a, b) => b.length - a.length);
+    // How near a label is to what is typed: the label itself 0, the label's start 1, a later word's start 2, anywhere in a
+    // label of a script written without spaces 3; none -1.
+    const nearness = (label: string, q: string) => (label === q ? 0 : label.startsWith(q) ? 1 : label.includes(` ${q}`) ? 2
+        : UNSPACED.test(q) && label.includes(q) ? 3 : -1);
     return {
         lang,
         byName: (text) => find(names, text),
         byAlias: (text) => find(aliases, text),
+        inside(text) {
+            let run = tagText(text);
+            if (!UNSPACED.test(run)) return [];
+            const out: string[] = [];
+            for (const name of unspaced) {
+                for (let at = run.indexOf(name); at >= 0; at = run.indexOf(name, at + name.length)) {
+                    for (const id of names.get(name) ?? []) if (!out.includes(id)) out.push(id);
+                    run = `${run.slice(0, at)}${' '.repeat(name.length)}${run.slice(at + name.length)}`;
+                }
+            }
+            return out;
+        },
         search(text, limit = 8) {
             const qs = tagForms(text);
             if (qs[0].length < 2) return [];

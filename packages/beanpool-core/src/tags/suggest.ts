@@ -30,7 +30,8 @@ function singulars(word: string): string[] {
 /**
  * Up to `limit` tag ids for a title and description, best first. A tag is named by a label or an old synonym word (three,
  * two, then one word at a time, the longer name first: "sweet potato" is not "potato"; a compound only whole: "free-range"
- * is not "free", while any other mark parts words: "lemons/limes" is lemon and lime). An English broader word in the title ("screen", "citrus") adds the few tags it is on inside
+ * is not "free", while any other mark parts words: "lemons/limes" is lemon and lime; in a script written without spaces,
+ * the names inside the run: "新鲜柠檬出售" is lemon). An English broader word in the title ("screen", "citrus") adds the few tags it is on inside
  * the listing's category (at most two), never a family ("food") and never from elsewhere ("hire" on a chainsaw is not
  * a party). Title words count three times a description's. When a tag and one under it are both found, the one under it
  * is kept. Tops are never suggested: the category is its own field.
@@ -64,9 +65,14 @@ export function suggestTags(title: string, description = '', options: SuggestTag
                 if (ids.length) {
                     bump(ids, weight * (1 + (n - 1) / 2));
                     for (let j = i; j < i + n; j++) used[j] = true;
-                } else if (n === 1 && broaderToo && options.category) {
-                    const broader = lookup([words[i]], index.byAlias).filter((id) => id.startsWith(`${options.category}.`));
-                    if (broader.length <= 2) bump(broader, weight / 2);
+                } else if (n === 1) {
+                    // A word of a script written without spaces is a run of words ("新鲜柠檬出售"): the names inside it count.
+                    const inside = index.inside(words[i]);
+                    if (inside.length) bump(inside, weight);
+                    else if (broaderToo && options.category) {
+                        const broader = lookup([words[i]], index.byAlias).filter((id) => id.startsWith(`${options.category}.`));
+                        if (broader.length <= 2) bump(broader, weight / 2);
+                    }
                 }
             }
         }

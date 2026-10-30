@@ -66,6 +66,12 @@ const ASCII_MARKS_AROUND = /^[!-/:-@[-`{-~]+|[!-/:-@[-`{-~]+$/g;
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
 const NOT_WORD_SPACE = /[\u0000-\u001f\u007f-\u009f\u00a0\u3000]/g;
 
+/** The words of a text in lower case, parted at every punctuation mark as a search parts them (letters of every script
+ *  kept): what the tag library's label index and suggestTags read a label, a title or a typed word as. */
+export function plainWords(text: string): string[] {
+    return foldApostrophes(text.toLowerCase()).replace(NOT_WORD_SPACE, ' ').replace(PUNCTUATION, ' ').split(/\s+/).filter(Boolean);
+}
+
 /** The words of a query: a compound whole and joined (wi-fi, wifi: the joined form is what the synonyms are looked up on),
  *  and an elided word on its own too (l'eau, leau, eau); every other chunk parted at its punctuation. */
 function queryWords(query: string): string[] {

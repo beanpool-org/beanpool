@@ -1,0 +1,127 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`suggestTags > suggests sensible tags for thirty real-looking listings 1`] = `
+{
+  "Babysitting evenings": [
+    "care.children.babysitting",
+    "health.first-aid",
+  ],
+  "Cargo bike to borrow": [
+    "transport.bikes.cargo-bike",
+  ],
+  "Chainsaw for hire": [
+    "tools.power.chainsaw",
+  ],
+  "Compost and worm castings": [
+    "garden.soil.compost",
+    "garden.soil.worm-farm",
+  ],
+  "Dog walking and pet sitting": [
+    "animals.care.pet-sitting",
+    "animals.care.dog-walking",
+  ],
+  "Electrician: power points and lights": [
+    "services.trades.electrical",
+  ],
+  "Extension ladder to lend": [
+    "tools.ladders",
+  ],
+  "Firewood splitting help": [
+    "labour.help.firewood-splitting",
+  ],
+  "Free-range eggs, dozen": [
+    "food.eggs",
+  ],
+  "Fruit trees: grafted avocado and fig": [
+    "garden.trees.fruit-trees",
+    "food.fruit.avocado",
+    "food.fruit.fig",
+    "goods.kitchen.pots-and-pans",
+  ],
+  "Guest room for travellers": [
+    "housing.homes.guest-room",
+  ],
+  "Guitar lessons for beginners": [
+    "education.lessons.lessons",
+    "arts.music.guitar",
+  ],
+  "Handmade pottery mugs": [
+    "arts.crafts.pottery",
+    "goods.kitchen.mugs",
+    "arts.crafts.ceramics",
+  ],
+  "Homemade kimchi": [
+    "food.preserves.kimchi",
+    "food.vegetables.cabbage",
+    "food.vegetables.garlic",
+    "food.vegetables.chilli",
+    "goods.kitchen.jars",
+  ],
+  "House cleaning, weekly": [
+    "labour.cleaning.cleaning",
+    "labour.cleaning.cleaners",
+  ],
+  "Kids clothes bundle 2-3 years": [
+    "goods.clothing.clothes",
+    "care.children",
+    "goods.clothing.shoes",
+  ],
+  "Lawn mowing and edge trimming": [
+    "labour.garden-help.mowing",
+    "garden.landscape.lawn",
+    "labour.garden-help.pruning",
+    "tools.garden.mowers",
+  ],
+  "Laying hens, point of lay": [
+    "animals.poultry.laying-hens",
+  ],
+  "Lemons from the backyard tree": [
+    "food.fruit.lemon",
+  ],
+  "Mango season! Kensington Pride": [
+    "food.fruit.mango",
+  ],
+  "Massage, 1 hour": [
+    "health.bodywork.massage",
+  ],
+  "Maths tutoring, high school": [
+    "education.lessons.tutoring",
+    "education.lessons.maths",
+  ],
+  "Phone screen repair": [
+    "tech.devices.phones",
+    "tech.devices.tablets",
+    "tech.repair.it-support",
+    "tech.repair.data-recovery",
+    "tech.repair.phone-repair",
+  ],
+  "Plumber available for small jobs": [
+    "services.trades.plumbing",
+  ],
+  "Raw honey 500g jars": [
+    "food.honey",
+    "goods.kitchen.jars",
+  ],
+  "Ride to the airport on Friday": [
+    "transport.rides.rides",
+    "housing.homes.rooms",
+  ],
+  "Solid timber kitchen chairs (4)": [
+    "goods.furniture.chairs",
+    "goods.materials.timber",
+    "goods.kitchen",
+    "garden.landscape.sand",
+  ],
+  "Sourdough loaves every Saturday": [
+    "food.bakery.sourdough",
+  ],
+  "Sweet potatoes and cassava": [
+    "food.vegetables.sweet-potato",
+    "food.vegetables.cassava",
+  ],
+  "Tomato seedlings, heirloom": [
+    "garden.seedlings.seedlings",
+    "food.vegetables.tomato",
+  ],
+}
+`;

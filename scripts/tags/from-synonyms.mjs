@@ -9,7 +9,8 @@
 // library can be read and re-run while T2 and T3 move the node and the apps onto the library.
 //
 // The tree below is hand-curated: the 17 tops are the Market's categories; each group lists the synonym keys placed in it
-// (`a=b` puts the two keys on one tag, labelled by the first) and the new tags it gains (`+Label`). Every tag gets:
+// (`a=b` puts the two keys on one tag, labelled by the first; `^key` puts a key on the group itself) and the new tags it
+// gains (`+Label`). Every tag gets:
 //   words    the words for it AND everything under it (a group's "fruit"); kept only where every key under it had them,
 //            so no key searches for more than it did;
 //   aliases  more words for it alone (lemon's "citrus", "tree");
@@ -39,8 +40,8 @@ const TREE = [
         ['preserves', 'Preserves and ferments', [], 'jam chutney pickles sauerkraut kimchi sauce'],
         ['drinks', 'Drinks', ['drink'], 'kombucha kefir juice tea coffee'],
         ['nuts-oils', 'Nuts and oils', [], 'nuts macadamia almond walnut pecan olive "olive oil" "coconut oil" +Peanuts'],
-        ['herbs', 'Herbs and spices', ['herb'], 'herb spice basil rosemary thyme mint parsley coriander oregano lemongrass'],
-        ['meat', 'Meat', ['meat', 'protein'], 'meat beef lamb pork sausage'],
+        ['herbs', 'Herbs and spices', ['herb'], '^herb spice basil rosemary thyme mint parsley coriander oregano lemongrass'],
+        ['meat', 'Meat', ['meat', 'protein'], '^meat beef lamb pork sausage'],
         ['seafood', 'Fish and seafood', ['seafood', 'protein'], 'fish prawns crab oyster'],
         ['meals', 'Meals and snacks', [], 'catering +Cooked meals +Soup +Dumplings'],
     ]],
@@ -74,7 +75,7 @@ const TREE = [
         ['ladders', 'Ladders', [], 'ladder'],
     ]],
     ['goods', 'Goods & Materials', [], [
-        ['furniture', 'Furniture', ['furniture'], 'furniture table chair desk bookshelf wardrobe couch=sofa bed'],
+        ['furniture', 'Furniture', ['furniture'], '^furniture table chair desk bookshelf wardrobe couch=sofa bed'],
         ['bedding', 'Bedding and linen', [], 'mattress blanket towel'],
         ['home', 'Home and decor', ['home', 'decor'], 'lamp rug curtains +Baskets'],
         ['kitchen', 'Kitchenware', ['kitchen'], 'pots pan crockery +Jars +Mugs'],
@@ -102,7 +103,7 @@ const TREE = [
     ['arts', 'Arts & Crafts', [], [
         ['art', 'Art and design', ['art'], '"painting art" drawing illustration photography videography "graphic design"'],
         ['crafts', 'Crafts', ['craft'], 'pottery ceramics woodwork weaving knitting crochet jewellery candle soap'],
-        ['music', 'Music', ['music'], 'music guitar piano drums ukulele singing band DJ'],
+        ['music', 'Music', ['music'], '^music guitar piano drums ukulele singing band DJ'],
     ]],
     ['health', 'Health & Wellness', [], [
         ['bodywork', 'Massage and bodywork', ['therapy'], 'massage acupuncture chiropractic physiotherapy reiki'],
@@ -139,7 +140,7 @@ const TREE = [
         ['ideas', 'Ideas and wisdom', [], '+Philosophy +Essays +Mutual aid +Community mindset'],
     ]],
     ['general', 'General & Community', ['general'], [
-        ['events', 'Events', ['event'], 'event party "market stall" +Market day'],
+        ['events', 'Events', ['event'], '^event party "market stall" +Market day'],
         ['hire', 'Event hire', ['hire'], '+Marquee +Sound hire +Trestle tables +Projector +Venue space'],
         ['sharing', 'Sharing', [], 'barter=swap free donation volunteer'],
     ]],
@@ -181,7 +182,8 @@ function parseSpec(spec) {
     const keysPart = at < 0 ? spec : spec.slice(0, at);
     const newPart = at < 0 ? '' : spec.slice(at);
     return {
-        keyGroups: words(keysPart).map((w) => unq(w).split('=')),
+        groupKeys: words(keysPart).filter((w) => w.startsWith('^')).map((w) => unq(w.slice(1))),
+        keyGroups: words(keysPart).filter((w) => !w.startsWith('^')).map((w) => unq(w).split('=')),
         newLabels: newPart.split(/(?:^|\s)\+/).map((l) => l.trim()).filter(Boolean),
     };
 }
@@ -198,12 +200,12 @@ const splitPairs = [];
 
 for (const [top, topLabel, topCandidates, groups] of TREE) {
     const specs = groups.map(([, , , spec]) => parseSpec(spec));
-    const topWords = common(specs.flatMap((p) => p.keyGroups.flat()), topCandidates);
+    const topWords = common(specs.flatMap((p) => [...p.groupKeys, ...p.keyGroups.flat()]), topCandidates);
     tags.push({ id: top, label: topLabel, category: true, words: topWords });
     groups.forEach(([gslug, glabel, gCandidates], gi) => {
-        const { keyGroups, newLabels } = specs[gi];
+        const { groupKeys, keyGroups, newLabels } = specs[gi];
         const gid = `${top}.${gslug}`;
-        const gKeys = keyGroups.flat();
+        const gKeys = [...groupKeys, ...keyGroups.flat()];
         const gWords = common(gKeys, gCandidates).filter((w) => !topWords.includes(w));
         const carry = [...topWords, ...gWords];
         const group = { id: gid, label: glabel, words: gWords };
@@ -228,6 +230,7 @@ for (const [top, topLabel, topCandidates, groups] of TREE) {
             if (!place(gKeys, group)) problems.push(`${gid}: ${gKeys[0]} cannot be a second-level tag`);
             return;
         }
+        if (groupKeys.length && !place(groupKeys, group)) problems.push(`${gid}: ${groupKeys.join(' ')} cannot be on the group`);
         const tryPlace = (ks) => {
             const label = LABELS[ks[0]] || cap(ks[0]);
             let id = `${gid}.${slug(label)}`;

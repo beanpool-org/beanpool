@@ -21,6 +21,7 @@ import {
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { knockAddressFrom, knockFromNode, knockScanTarget } from '../utils/knock-address';
+import { handScannedInvite, scannedInviteGoesToRoot } from '../utils/scanned-invite';
 import type { JoinKey } from '../utils/door-key';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
@@ -286,19 +287,27 @@ export default function FindCommunityScreen() {
         else setWatchNote(findLineWords(r.message));
     };
 
-    // ── Scan a code (S3): a community's QR (its address, its card, its door) fills the address box; an invite's goes to
-    // the first screen's invite step, as it is. The camera loads, and is asked for, only at the tap. ──────────────────
+    // ── Scan a code (S3): a community's QR (its address, its card, its door) fills the address box. An invite's goes as
+    // that invite opened as a link goes: for a phone in a community, the root layout's "Switch Nodes?" (utils/scanned-invite.ts),
+    // since the root guard takes a member off welcome; with no account, or waiting to be let in, the first screen's invite
+    // step, as it is. The camera loads, and is asked for, only at the tap. ────────────────────────────────────────────
     const [Scanner, setScanner] = useState<null | typeof import('../components/ScanCodeModal').default>(null);
     const openScanner = async () => {
         const m = await import('../components/ScanCodeModal');
         setScanner(() => m.default);
+    };
+    const goWithInvite = async (raw: string) => {
+        // Read at the scan, not from `inCommunity`: a member's invite is never sent to welcome before that read is back.
+        const anchorUrl = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
+        if (scannedInviteGoesToRoot({ hasIdentity: !!identity, anchorUrl })) handScannedInvite(raw);
+        else router.push({ pathname: '/welcome', params: { invite: raw } });
     };
     const onScanned = (data: string): boolean => {
         const target = knockScanTarget(data);
         if (!target) return false;
         setScanner(null);
         if (target.kind === 'invite') {
-            router.push({ pathname: '/welcome', params: { invite: target.raw } });
+            void goWithInvite(target.raw);
             return true;
         }
         setQuery(target.origin.replace(/^https:\/\//, ''));

@@ -164,7 +164,7 @@ async function render() {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(PublicProfileScreen as any)); });
+    await act(async () => { root!.render(createElement(PublicProfileScreen as any) as unknown as Parameters<Root['render']>[0]); });
     await settle();
 }
 

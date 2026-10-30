@@ -171,7 +171,8 @@ GREEN="$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
 # that branch on $GH_STUB_ORIGIN, as GitHub's is after a push. `api ...` appends its arguments to $GH_STUB_DIR/api, and a
 # check-runs call prints $GH_STUB_DIR/ci-<sha> (the conclusions). `pr merge <n> --match-head-commit <sha>` squashes the
 # branch onto $GH_STUB_ORIGIN's main, refused when the branch is not at <sha> or does not merge; $GH_STUB_DIR/merges
-# lists the PRs merged, in order.
+# lists the PRs merged, in order. A file $GH_STUB_DIR/sneak makes the next merge land a commit of its own on main first
+# (another merge landing in the same moment), and is removed.
 export GH_STUB_DIR="$T/gh"; mkdir -p "$GH_STUB_DIR" "$T/bin"
 cat > "$T/bin/gh" <<'STUB'
 #!/bin/bash
@@ -196,6 +197,11 @@ if [ "$1 $2" = "pr merge" ]; then
   O="$GH_STUB_ORIGIN"; head=$(git --git-dir="$O" rev-parse "refs/heads/$branch")
   [ "$head" = "$want" ] || { echo "GraphQL: Head branch was modified. Review and try the merge again." >&2; exit 1; }
   main=$(git --git-dir="$O" rev-parse refs/heads/main)
+  if [ -f "$GH_STUB_DIR/sneak" ]; then
+    rm -f "$GH_STUB_DIR/sneak"; blob=$(echo sneak | git --git-dir="$O" hash-object -w --stdin)
+    t=$( (git --git-dir="$O" ls-tree "$main"; printf '100644 blob %s\tsneak.txt\n' "$blob") | git --git-dir="$O" mktree)
+    s=$(git --git-dir="$O" commit-tree "$t" -p "$main" -m "another merge"); git --git-dir="$O" update-ref refs/heads/main "$s" "$main" && main=$s
+  fi
   tree=$(git --git-dir="$O" merge-tree --write-tree "$main" "$head" 2>/dev/null) || { echo "GraphQL: Pull Request is not mergeable" >&2; exit 1; }
   c=$(git --git-dir="$O" commit-tree "$tree" -p "$main" -m "PR #$n (squash)")
   git --git-dir="$O" update-ref refs/heads/main "$c" "$main" || exit 1
@@ -323,8 +329,8 @@ cd "$W" || exit 1
 # ── test-all-train.sh: the merge train ─────────────────────────────────────────────────────────────────────────────
 # Its own bare origin and clone. The clone's test-all.sh is a stub that sources the real test-all-lib.sh: a committed
 # FAIL-<suite> file fails it the way server_suites fails (an .rc and a "Server suites failed:" line in a kept log dir),
-# and its run-server-suites.mjs fails SERVER_SUITES_ONLY's suites that have a FAIL-<suite> file. gh is the stub above;
-# a PR's branch on origin is its head. TEST_ALL_RECHECK names a stub recheck: real red (exit 1) or load (exit 0).
+# an UNFINISHED-<check> file leaves that check's log with no .rc (killed part-way), and its run-server-suites.mjs fails
+# SERVER_SUITES_ONLY's suites that have a FAIL-<suite> file. gh is the stub above; a PR's branch on origin is its head. TEST_ALL_RECHECK names a stub recheck: real red (exit 1) or load (exit 0).
 git init -q --bare "$T/torigin.git"
 git clone -q "$T/torigin.git" "$T/train" 2>/dev/null
 cd "$T/train" || exit 1
@@ -338,6 +344,7 @@ cd "$(dirname "$0")/.." || exit 1
 fail=$(ls FAIL-* 2>/dev/null | sed 's/^FAIL-//' | tr '\n' ' ')
 if [ -n "$fail" ]; then
   L=$(mktemp -d); echo 0 > "$L/build.rc"; echo 1 > "$L/server_suites.rc"
+  for u in $(ls UNFINISHED-* 2>/dev/null | sed 's/^UNFINISHED-//'); do echo "started" > "$L/$u.log"; done
   echo "❌ Server suites failed: $fail" > "$L/server_suites.log"
   echo "stub test-all: FAIL"; echo "Full logs of every check kept in $L"; exit 1
 fi
@@ -457,6 +464,33 @@ grep -qE 'repos/owner/repo/commits/[0-9a-f]{40}/check-runs\?check_name=Run%20Bea
 branch 36 t-load "" -- add FAIL-test-load slow
 expect 0 "train: a red run the load recheck calls load is green, and merges" "load recheck: every failure passed alone" -- env TEST_ALL_RECHECK="$LOAD" bash "$TRAIN" 36
 [ "$(merges)" = "36" ] && ok "train: ...#36 merged" || bad "train: merged \"$(merges)\", not 36"
+
+# Another merge lands on main between two of the train's: main is no longer the tree the train tested, so it stops there.
+: > "$GH_STUB_DIR/merges"
+branch 40 t-s1 "" -- add s1.txt s1
+branch 41 t-s2 "" -- add s2.txt s2
+touch "$GH_STUB_DIR/sneak"
+expect 3 "train: main moves under it after one merge: it stops (exit 3) and says so" "is not the tested tree" -- bash "$TRAIN" 40 41
+[ "$(merges)" = "40" ] && [ -z "$(on_main s2.txt)" ] && ok "train: ...and merges nothing after that" || bad "train: merged \"$(merges)\" after main moved"
+
+# A check that never finished (a log, no .rc) cannot be run alone: nothing merges, though a suite named the culprit.
+: > "$GH_STUB_DIR/merges"
+branch 42 t-u1 "" -- add u1.txt u1
+branch 43 t-u2 "" -- sh -c 'echo red > FAIL-test-u; echo x > UNFINISHED-pwa_wide_pages'
+expect 1 "train: a check left unfinished: nothing merges" "red in pwa_wide_pages, which the train cannot run alone" -- bash "$TRAIN" 42 43
+[ -z "$(merges)" ] && ok "train: ...not even the innocent" || bad "train: merged \"$(merges)\" with a check unfinished"
+
+# The parts a red run failed, read from test-all's logs as the recheck reads them: an unfinished check is a stage; a vitest
+# package runs whole when it has an unhandled error, lists fewer failed files than it counts, or is not vitest at all.
+P="$T/parts"; mkdir -p "$P"
+echo 0 > "$P/build.rc"; echo 1 > "$P/test.rc"; echo started > "$P/pwa_wide_pages.log"; echo x > "$P/recheck-vitest.log"
+printf '%s\n' 'a:test:  ❯ src/a.test.ts (3 tests | 1 failed) 20ms' 'a:test:  Test Files  1 failed | 9 passed (10)' \
+  'b:test:  ❯ src/b.test.ts (2 tests | 1 failed) 20ms' 'b:test:  Test Files  2 failed | 1 passed (3)' \
+  'c:test:  ❯ src/c.test.ts (2 tests | 1 failed) 20ms' 'c:test:  Test Files  1 failed (1)' 'c:test: ⎯⎯ Unhandled Errors ⎯⎯' \
+  '  Failed:    a#test, b#test, c#test, guide#test' > "$P/test.log"
+GOTP=$(bash -c 'eval "$(sed -n "/^failing_parts() {/,/^}/p" "$1")"; failing_parts "$2"' _ "$TRAIN" "$P" | tr '\n' ';')
+[ "$GOTP" = "stage pwa_wide_pages;vitest a src/a.test.ts;package b;package c;package guide;" ] \
+  && ok "train: a red run's parts: an unfinished check, one vitest file, and three packages run whole" || bad "train: parts read as: $GOTP"
 cd "$W" || exit 1
 
 echo ""

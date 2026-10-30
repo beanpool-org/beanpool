@@ -270,6 +270,19 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         expect(pending?.refusedCallsign).toBe('Rosa Parked');
     });
 
+    it('when the 409 is not callsign_taken, the name is not marked as refused', async () => {
+        community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
+        await keepPendingProfileChange(NODE, KEY, { callsign: 'Rosa Parked' });
+        status = 409;
+        responseBody = { error: 'concurrent_mutation', message: 'Conflict, please retry.' };
+        await render();
+        await pickPhoto();
+        await click('Next →');
+        await click('Done');
+        const pending = await pendingProfileChange(NODE, KEY);
+        expect(pending?.refusedCallsign).toBeUndefined();
+    });
+
     it('offline with no name given: only the pick is kept for the retry, the name is not invented into it', async () => {
         community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
         status = 0;

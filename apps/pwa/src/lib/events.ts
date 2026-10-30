@@ -10,7 +10,7 @@
 
 import {
     deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, formatDate, localClockMs, repeatCaption, repeatChoiceKeyOf, repeatPatternFor,
-    t, tn, type EventWhenParts, type RepeatChoiceKey, type RepeatPattern,
+    t, tn, type EventWhenParts, type RepeatChoiceKey, type RepeatPattern, postTagsOf,
 } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
@@ -260,6 +260,7 @@ export function isoToLocalInput(iso: string | null | undefined): string {
 export interface EventEditForm {
     title: string;
     description: string;
+    tags?: string[];
     start: string;
     end: string;
     placeName: string;
@@ -287,6 +288,7 @@ export function eventEditForm(post: MarketplacePost): EventEditForm {
     return {
         title: post.title || '',
         description: post.description || '',
+        tags: postTagsOf(post.tags),
         start: clocks ? post.eventStartLocal! : isoToLocalInput(post.eventStartAt),
         end: clocks && post.eventEndLocal ? post.eventEndLocal : isoToLocalInput(post.eventEndAt),
         placeName: post.eventPlaceName || '',
@@ -307,6 +309,7 @@ export function eventEditForm(post: MarketplacePost): EventEditForm {
 export interface EventEditPayload {
     title?: string;
     description?: string;
+    tags?: string[];
     eventStartAt?: string;
     eventEndAt?: string;
     eventPlaceName?: string;
@@ -366,6 +369,11 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
     if (after.photos.length !== before.photos.length || after.photos.some((p, i) => p !== before.photos[i])) out.photos = after.photos;
     // Silent like the note: who reads the note is the host's to change.
     if (after.hostLetsIn !== before.hostLetsIn) out.eventHostLetsIn = after.hostLetsIn;
+    if (after.tags !== undefined) {
+        const beforeTags = (before.tags || []).join(' ');
+        const afterTags = (after.tags || []).join(' ');
+        if (beforeTags !== afterTags) out.tags = after.tags;
+    }
     Object.assign(out, eventRepeatEdit(before, after));
     return out;
 }

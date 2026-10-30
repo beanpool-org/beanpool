@@ -163,7 +163,8 @@ export const SUITES = [
     'test-csrf-protection',
     'test-totp-admin-2fa',
     'test-2fa-covers-admin-routes',
-    'test-2fa-reenrol-needs-code',
+    // 3m07s-3m21s on five CI runs of 30 Oct 2026 (41101712630 to 41105808588), against the 300 s default.
+    withTimeout('test-2fa-reenrol-needs-code', 600),
     'test-2fa-session-credential-bound',
     'test-breakglass-and-backup-codes',
     'test-break-glass-code',

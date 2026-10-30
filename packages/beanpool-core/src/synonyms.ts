@@ -1,2429 +1,406 @@
 /**
- * BeanPool Marketplace Taxonomy & Synonym Map
+ * BeanPool Marketplace synonym map: maps specific items to broader search terms so searches for "lemon" also match
+ * "fruit", "citrus", "produce", etc.
  *
- * Maps specific items to broader search terms so searches for "lemon"
- * also match "fruit", "citrus", "produce", etc.
+ * GENERATED from the tag library (src/tags/library.ts) by scripts/tags/to-synonyms.mjs: never edit it by hand. Change
+ * the library and run the script. It goes once the node and the apps read the library directly (tags slices T2, T3).
  */
 
 export const SYNONYM_MAP: Record<string, string[]> = {
-  "lemon": [
-    "fruit",
-    "citrus",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "lime": [
-    "fruit",
-    "citrus",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "orange": [
-    "fruit",
-    "citrus",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "mandarin": [
-    "fruit",
-    "citrus",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "grapefruit": [
-    "fruit",
-    "citrus",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "banana": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical"
-  ],
-  "apple": [
-    "fruit",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "pear": [
-    "fruit",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "mango": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical",
-    "tree"
-  ],
-  "avocado": [
-    "fruit",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "passionfruit": [
-    "fruit",
-    "produce",
-    "food",
-    "vine",
-    "tropical"
-  ],
-  "fig": [
-    "fruit",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "guava": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical",
-    "tree"
-  ],
-  "pawpaw": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical",
-    "tree"
-  ],
-  "papaya": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical",
-    "tree"
-  ],
-  "watermelon": [
-    "fruit",
-    "produce",
-    "food",
-    "melon"
-  ],
-  "rockmelon": [
-    "fruit",
-    "produce",
-    "food",
-    "melon"
-  ],
-  "strawberry": [
-    "fruit",
-    "produce",
-    "food",
-    "berry"
-  ],
-  "blueberry": [
-    "fruit",
-    "produce",
-    "food",
-    "berry"
-  ],
-  "raspberry": [
-    "fruit",
-    "produce",
-    "food",
-    "berry"
-  ],
-  "mulberry": [
-    "fruit",
-    "produce",
-    "food",
-    "berry",
-    "tree"
-  ],
-  "grape": [
-    "fruit",
-    "produce",
-    "food",
-    "vine",
-    "wine"
-  ],
-  "persimmon": [
-    "fruit",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "pomegranate": [
-    "fruit",
-    "produce",
-    "food",
-    "tree"
-  ],
-  "jackfruit": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical",
-    "tree"
-  ],
-  "dragonfruit": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical"
-  ],
-  "coconut": [
-    "fruit",
-    "produce",
-    "food",
-    "tropical",
-    "tree"
-  ],
-  "plum": [
-    "fruit",
-    "produce",
-    "food",
-    "tree",
-    "stone fruit"
-  ],
-  "peach": [
-    "fruit",
-    "produce",
-    "food",
-    "tree",
-    "stone fruit"
-  ],
-  "nectarine": [
-    "fruit",
-    "produce",
-    "food",
-    "tree",
-    "stone fruit"
-  ],
-  "apricot": [
-    "fruit",
-    "produce",
-    "food",
-    "tree",
-    "stone fruit"
-  ],
-  "cherry": [
-    "fruit",
-    "produce",
-    "food",
-    "tree",
-    "stone fruit"
-  ],
-  "tomato": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "carrot": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "root"
-  ],
-  "potato": [
-    "vegetable",
-    "produce",
-    "food",
-    "root"
-  ],
-  "sweet potato": [
-    "vegetable",
-    "produce",
-    "food",
-    "root"
-  ],
-  "pumpkin": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "squash"
-  ],
-  "zucchini": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "squash"
-  ],
-  "cucumber": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "lettuce": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "salad",
-    "greens"
-  ],
-  "spinach": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "greens"
-  ],
-  "kale": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "greens"
-  ],
-  "silverbeet": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "greens"
-  ],
-  "chard": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "greens"
-  ],
-  "broccoli": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "cauliflower": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "cabbage": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "beetroot": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "root"
-  ],
-  "onion": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "root"
-  ],
-  "garlic": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "herb"
-  ],
-  "ginger": [
-    "vegetable",
-    "produce",
-    "food",
-    "spice",
-    "root"
-  ],
-  "turmeric": [
-    "vegetable",
-    "produce",
-    "food",
-    "spice",
-    "root"
-  ],
-  "chilli": [
-    "vegetable",
-    "produce",
-    "food",
-    "spice",
-    "garden"
-  ],
-  "capsicum": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "pepper"
-  ],
-  "corn": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "grain"
-  ],
-  "beans": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "legume"
-  ],
-  "peas": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "legume"
-  ],
-  "eggplant": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "asparagus": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "celery": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "leek": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "radish": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "root"
-  ],
-  "turnip": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "root"
-  ],
-  "parsnip": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden",
-    "root"
-  ],
-  "spring onion": [
-    "vegetable",
-    "produce",
-    "food",
-    "garden"
-  ],
-  "mushroom": [
-    "vegetable",
-    "produce",
-    "food",
-    "fungi",
-    "forage"
-  ],
-  "egg": [
-    "food",
-    "produce",
-    "poultry",
-    "farm",
-    "chicken"
-  ],
-  "honey": [
-    "food",
-    "sweetener",
-    "bees",
-    "farm",
-    "raw"
-  ],
-  "milk": [
-    "food",
-    "dairy",
-    "farm",
-    "drink"
-  ],
-  "cheese": [
-    "food",
-    "dairy",
-    "farm",
-    "fermented"
-  ],
-  "butter": [
-    "food",
-    "dairy",
-    "farm"
-  ],
-  "yoghurt": [
-    "food",
-    "dairy",
-    "farm",
-    "fermented",
-    "probiotic"
-  ],
-  "cream": [
-    "food",
-    "dairy",
-    "farm"
-  ],
-  "sourdough": [
-    "bread",
-    "baking",
-    "food",
-    "fermented"
-  ],
-  "bread": [
-    "food",
-    "baking",
-    "grain"
-  ],
-  "pasta": [
-    "food",
-    "grain",
-    "cooking"
-  ],
-  "flour": [
-    "food",
-    "baking",
-    "grain"
-  ],
-  "rice": [
-    "food",
-    "grain",
-    "cooking"
-  ],
-  "oats": [
-    "food",
-    "grain",
-    "breakfast"
-  ],
-  "granola": [
-    "food",
-    "grain",
-    "breakfast"
-  ],
-  "jam": [
-    "food",
-    "preserve",
-    "fruit",
-    "spread"
-  ],
-  "chutney": [
-    "food",
-    "preserve",
-    "condiment"
-  ],
-  "pickles": [
-    "food",
-    "preserve",
-    "fermented",
-    "vegetable"
-  ],
-  "sauerkraut": [
-    "food",
-    "preserve",
-    "fermented",
-    "probiotic"
-  ],
-  "kimchi": [
-    "food",
-    "preserve",
-    "fermented",
-    "probiotic"
-  ],
-  "kombucha": [
-    "drink",
-    "fermented",
-    "probiotic",
-    "food",
-    "tea"
-  ],
-  "kefir": [
-    "drink",
-    "fermented",
-    "probiotic",
-    "food",
-    "dairy"
-  ],
-  "juice": [
-    "drink",
-    "food",
-    "fruit"
-  ],
-  "tea": [
-    "drink",
-    "food",
-    "herb"
-  ],
-  "coffee": [
-    "drink",
-    "food",
-    "bean"
-  ],
-  "nuts": [
-    "food",
-    "snack",
-    "produce"
-  ],
-  "macadamia": [
-    "food",
-    "nut",
-    "produce",
-    "tree"
-  ],
-  "almond": [
-    "food",
-    "nut",
-    "produce",
-    "tree"
-  ],
-  "walnut": [
-    "food",
-    "nut",
-    "produce",
-    "tree"
-  ],
-  "pecan": [
-    "food",
-    "nut",
-    "produce",
-    "tree"
-  ],
-  "olive": [
-    "food",
-    "produce",
-    "oil",
-    "tree"
-  ],
-  "olive oil": [
-    "food",
-    "oil",
-    "cooking",
-    "produce"
-  ],
-  "coconut oil": [
-    "food",
-    "oil",
-    "cooking"
-  ],
-  "sauce": [
-    "food",
-    "condiment",
-    "cooking"
-  ],
-  "spice": [
-    "food",
-    "cooking",
-    "herb"
-  ],
-  "herb": [
-    "food",
-    "cooking",
-    "garden",
-    "plant"
-  ],
-  "basil": [
-    "herb",
-    "food",
-    "garden",
-    "plant"
-  ],
-  "rosemary": [
-    "herb",
-    "food",
-    "garden",
-    "plant"
-  ],
-  "thyme": [
-    "herb",
-    "food",
-    "garden",
-    "plant"
-  ],
-  "mint": [
-    "herb",
-    "food",
-    "garden",
-    "plant",
-    "tea"
-  ],
-  "parsley": [
-    "herb",
-    "food",
-    "garden",
-    "plant"
-  ],
-  "coriander": [
-    "herb",
-    "food",
-    "garden",
-    "plant"
-  ],
-  "oregano": [
-    "herb",
-    "food",
-    "garden",
-    "plant"
-  ],
-  "lemongrass": [
-    "herb",
-    "food",
-    "garden",
-    "plant",
-    "tea"
-  ],
-  "meat": [
-    "food",
-    "protein",
-    "farm"
-  ],
-  "beef": [
-    "food",
-    "meat",
-    "protein",
-    "farm",
-    "cattle"
-  ],
-  "lamb": [
-    "food",
-    "meat",
-    "protein",
-    "farm"
-  ],
-  "pork": [
-    "food",
-    "meat",
-    "protein",
-    "farm"
-  ],
-  "chicken": [
-    "poultry",
-    "animal",
-    "farm",
-    "egg",
-    "bird"
-  ],
-  "sausage": [
-    "food",
-    "meat",
-    "protein"
-  ],
-  "fish": [
-    "food",
-    "seafood",
-    "protein"
-  ],
-  "prawns": [
-    "food",
-    "seafood",
-    "protein"
-  ],
-  "crab": [
-    "food",
-    "seafood",
-    "protein"
-  ],
-  "oyster": [
-    "food",
-    "seafood",
-    "protein"
-  ],
-  "plumber": [
-    "plumbing",
-    "trades",
-    "repair",
-    "water",
-    "pipe"
-  ],
-  "plumbing": [
-    "plumber",
-    "trades",
-    "repair",
-    "water",
-    "pipe"
-  ],
-  "electrician": [
-    "electrical",
-    "trades",
-    "repair",
-    "wiring",
-    "power"
-  ],
-  "electrical": [
-    "electrician",
-    "trades",
-    "repair",
-    "wiring",
-    "power"
-  ],
-  "carpenter": [
-    "carpentry",
-    "trades",
-    "woodwork",
-    "building"
-  ],
-  "carpentry": [
-    "carpenter",
-    "trades",
-    "woodwork",
-    "building"
-  ],
-  "painting": [
-    "painter",
-    "trades",
-    "house",
-    "interior",
-    "decorator"
-  ],
-  "painter": [
-    "painting",
-    "trades",
-    "house",
-    "decorator"
-  ],
-  "tiling": [
-    "tiler",
-    "trades",
-    "bathroom",
-    "floor"
-  ],
-  "roofing": [
-    "roofer",
-    "trades",
-    "repair",
-    "house"
-  ],
-  "welding": [
-    "welder",
-    "trades",
-    "metal",
-    "fabrication"
-  ],
-  "fencing": [
-    "fence",
-    "trades",
-    "boundary",
-    "property"
-  ],
-  "concreting": [
-    "concrete",
-    "trades",
-    "building",
-    "slab"
-  ],
-  "plastering": [
-    "plaster",
-    "trades",
-    "wall",
-    "building"
-  ],
-  "bricklaying": [
-    "bricklayer",
-    "trades",
-    "building",
-    "masonry"
-  ],
-  "locksmith": [
-    "lock",
-    "key",
-    "security",
-    "trades"
-  ],
-  "glazier": [
-    "glass",
-    "window",
-    "trades",
-    "repair"
-  ],
-  "handyman": [
-    "repair",
-    "maintenance",
-    "fix",
-    "odd jobs"
-  ],
-  "cleaner": [
-    "cleaning",
-    "house",
-    "domestic"
-  ],
-  "cleaning": [
-    "cleaner",
-    "house",
-    "domestic",
-    "tidy"
-  ],
-  "ironing": [
-    "laundry",
-    "clothes",
-    "domestic"
-  ],
-  "laundry": [
-    "washing",
-    "clothes",
-    "domestic"
-  ],
-  "sewing": [
-    "mending",
-    "clothes",
-    "tailor",
-    "fabric",
-    "textile"
-  ],
-  "tailor": [
-    "sewing",
-    "alteration",
-    "clothes",
-    "fabric"
-  ],
-  "mechanic": [
-    "car",
-    "vehicle",
-    "repair",
-    "auto",
-    "engine"
-  ],
-  "car service": [
-    "mechanic",
-    "vehicle",
-    "auto",
-    "maintenance"
-  ],
-  "smash repair": [
-    "panel beater",
-    "car",
-    "vehicle",
-    "auto",
-    "body"
-  ],
-  "detailing": [
-    "car",
-    "vehicle",
-    "wash",
-    "polish",
-    "clean"
-  ],
-  "mowing": [
-    "lawn",
-    "garden",
-    "yard",
-    "landscaping",
-    "grass"
-  ],
-  "landscaping": [
-    "garden",
-    "yard",
-    "design",
-    "plants",
-    "outdoor"
-  ],
-  "tree removal": [
-    "arborist",
-    "tree",
-    "chainsaw",
-    "stump"
-  ],
-  "arborist": [
-    "tree",
-    "pruning",
-    "removal",
-    "chainsaw"
-  ],
-  "pruning": [
-    "tree",
-    "garden",
-    "hedge",
-    "trimming"
-  ],
-  "weeding": [
-    "garden",
-    "yard",
-    "maintenance"
-  ],
-  "mulching": [
-    "garden",
-    "soil",
-    "compost",
-    "landscape"
-  ],
-  "spraying": [
-    "pest",
-    "weed",
-    "garden",
-    "spray"
-  ],
-  "irrigation": [
-    "water",
-    "garden",
-    "drip",
-    "sprinkler"
-  ],
-  "bobcat": [
-    "earthworks",
-    "excavation",
-    "digging",
-    "grading"
-  ],
-  "excavation": [
-    "digging",
-    "earthworks",
-    "bobcat",
-    "trenching"
-  ],
-  "demolition": [
-    "removal",
-    "knock down",
-    "building"
-  ],
-  "hammer": [
-    "tool",
-    "hand tool",
-    "building",
-    "nail"
-  ],
-  "drill": [
-    "tool",
-    "power tool",
-    "building"
-  ],
-  "saw": [
-    "tool",
-    "cutting",
-    "wood",
-    "power tool"
-  ],
-  "chainsaw": [
-    "tool",
-    "cutting",
-    "wood",
-    "tree",
-    "power tool"
-  ],
-  "mower": [
-    "tool",
-    "lawn",
-    "garden",
-    "grass",
-    "machine"
-  ],
-  "whipper snipper": [
-    "tool",
-    "garden",
-    "trimmer",
-    "grass"
-  ],
-  "hedge trimmer": [
-    "tool",
-    "garden",
-    "hedge",
-    "cutting"
-  ],
-  "blower": [
-    "tool",
-    "garden",
-    "leaf",
-    "clean up"
-  ],
-  "pressure washer": [
-    "tool",
-    "cleaning",
-    "water",
-    "machine"
-  ],
-  "ladder": [
-    "tool",
-    "climbing",
-    "height",
-    "access"
-  ],
-  "wheelbarrow": [
-    "tool",
-    "garden",
-    "carrying",
-    "transport"
-  ],
-  "shovel": [
-    "tool",
-    "digging",
-    "garden",
-    "hand tool"
-  ],
-  "rake": [
-    "tool",
-    "garden",
-    "hand tool",
-    "leaf"
-  ],
-  "hoe": [
-    "tool",
-    "garden",
-    "hand tool",
-    "weeding"
-  ],
-  "secateurs": [
-    "tool",
-    "garden",
-    "pruning",
-    "cutting"
-  ],
-  "loppers": [
-    "tool",
-    "garden",
-    "pruning",
-    "cutting",
-    "branch"
-  ],
-  "spanner": [
-    "tool",
-    "wrench",
-    "mechanical",
-    "hand tool"
-  ],
-  "screwdriver": [
-    "tool",
-    "hand tool",
-    "fixing"
-  ],
-  "pliers": [
-    "tool",
-    "hand tool",
-    "grip"
-  ],
-  "sander": [
-    "tool",
-    "power tool",
-    "wood",
-    "finishing"
-  ],
-  "grinder": [
-    "tool",
-    "power tool",
-    "metal",
-    "cutting"
-  ],
-  "welder": [
-    "tool",
-    "metal",
-    "fabrication",
-    "joining"
-  ],
-  "compressor": [
-    "tool",
-    "air",
-    "power",
-    "machine"
-  ],
-  "generator": [
-    "energy",
-    "power",
-    "backup",
-    "fuel",
-    "electricity"
-  ],
-  "trailer": [
-    "transport",
-    "hauling",
-    "carrying",
-    "towing"
-  ],
-  "furniture": [
-    "goods",
-    "home",
-    "household",
-    "decor"
-  ],
-  "table": [
-    "furniture",
-    "dining",
-    "home",
-    "wood"
-  ],
-  "chair": [
-    "furniture",
-    "seating",
-    "home"
-  ],
-  "desk": [
-    "furniture",
-    "office",
-    "work"
-  ],
-  "bookshelf": [
-    "furniture",
-    "storage",
-    "books",
-    "shelf"
-  ],
-  "wardrobe": [
-    "furniture",
-    "storage",
-    "clothes",
-    "bedroom"
-  ],
-  "couch": [
-    "furniture",
-    "seating",
-    "lounge",
-    "sofa"
-  ],
-  "sofa": [
-    "furniture",
-    "seating",
-    "lounge",
-    "couch"
-  ],
-  "bed": [
-    "furniture",
-    "bedroom",
-    "mattress",
-    "sleeping"
-  ],
-  "mattress": [
-    "bed",
-    "bedroom",
-    "sleeping"
-  ],
-  "lamp": [
-    "lighting",
-    "home",
-    "decor"
-  ],
-  "rug": [
-    "floor",
-    "home",
-    "decor",
-    "carpet"
-  ],
-  "curtains": [
-    "window",
-    "home",
-    "decor",
-    "fabric"
-  ],
-  "pots": [
-    "cooking",
-    "kitchen",
-    "garden",
-    "container"
-  ],
-  "pan": [
-    "cooking",
-    "kitchen"
-  ],
-  "crockery": [
-    "kitchen",
-    "plates",
-    "cups",
-    "dining"
-  ],
-  "clothes": [
-    "clothing",
-    "fashion",
-    "textile",
-    "wear"
-  ],
-  "shoes": [
-    "footwear",
-    "clothing",
-    "fashion"
-  ],
-  "boots": [
-    "footwear",
-    "clothing",
-    "work",
-    "outdoor"
-  ],
-  "jacket": [
-    "clothing",
-    "outerwear",
-    "warm"
-  ],
-  "blanket": [
-    "bedding",
-    "warm",
-    "textile"
-  ],
-  "towel": [
-    "bathroom",
-    "textile",
-    "linen"
-  ],
-  "books": [
-    "reading",
-    "education",
-    "literature"
-  ],
-  "toys": [
-    "children",
-    "kids",
-    "play",
-    "games"
-  ],
-  "bicycle": [
-    "bike",
-    "cycling",
-    "transport",
-    "exercise"
-  ],
-  "bike": [
-    "bicycle",
-    "cycling",
-    "transport",
-    "exercise"
-  ],
-  "surfboard": [
-    "surf",
-    "ocean",
-    "sport",
-    "water"
-  ],
-  "kayak": [
-    "paddle",
-    "water",
-    "boat",
-    "sport"
-  ],
-  "camping": [
-    "outdoor",
-    "tent",
-    "hiking",
-    "adventure"
-  ],
-  "tent": [
-    "camping",
-    "outdoor",
-    "shelter"
-  ],
-  "backpack": [
-    "bag",
-    "hiking",
-    "travel",
-    "carry"
-  ],
-  "fishing": [
-    "rod",
-    "reel",
-    "sport",
-    "ocean",
-    "river"
-  ],
-  "seedling": [
-    "plant",
-    "garden",
-    "nursery",
-    "growing"
-  ],
-  "seedlings": [
-    "plant",
-    "garden",
-    "nursery",
-    "growing"
-  ],
-  "seeds": [
-    "plant",
-    "garden",
-    "growing",
-    "propagation"
-  ],
-  "compost": [
-    "soil",
-    "garden",
-    "organic",
-    "fertiliser",
-    "mulch"
-  ],
-  "manure": [
-    "fertiliser",
-    "soil",
-    "garden",
-    "organic",
-    "farm"
-  ],
-  "mulch": [
-    "garden",
-    "soil",
-    "compost",
-    "landscape"
-  ],
-  "potting mix": [
-    "soil",
-    "garden",
-    "pot",
-    "growing"
-  ],
-  "worm farm": [
-    "compost",
-    "worm",
-    "organic",
-    "garden",
-    "fertiliser"
-  ],
-  "worms": [
-    "compost",
-    "worm farm",
-    "organic",
-    "garden"
-  ],
-  "cuttings": [
-    "plant",
-    "propagation",
-    "garden",
-    "growing"
-  ],
-  "bulbs": [
-    "plant",
-    "flower",
-    "garden",
-    "growing"
-  ],
-  "flower": [
-    "plant",
-    "garden",
-    "bouquet",
-    "bloom"
-  ],
-  "rose": [
-    "flower",
-    "plant",
-    "garden",
-    "bloom"
-  ],
-  "orchid": [
-    "flower",
-    "plant",
-    "indoor"
-  ],
-  "fern": [
-    "plant",
-    "garden",
-    "indoor",
-    "shade"
-  ],
-  "succulent": [
-    "plant",
-    "garden",
-    "indoor",
-    "drought tolerant"
-  ],
-  "cactus": [
-    "plant",
-    "succulent",
-    "indoor",
-    "drought tolerant"
-  ],
-  "palm": [
-    "plant",
-    "tree",
-    "tropical",
-    "garden"
-  ],
-  "bamboo": [
-    "plant",
-    "garden",
-    "screen",
-    "privacy"
-  ],
-  "native": [
-    "plant",
-    "garden",
-    "australian",
-    "indigenous"
-  ],
-  "fruit tree": [
-    "tree",
-    "fruit",
-    "garden",
-    "orchard"
-  ],
-  "vegetable garden": [
-    "garden",
-    "food",
-    "growing",
-    "produce"
-  ],
-  "raised bed": [
-    "garden",
-    "growing",
-    "vegetable",
-    "planter"
-  ],
-  "greenhouse": [
-    "garden",
-    "growing",
-    "shelter",
-    "propagation"
-  ],
-  "trellis": [
-    "garden",
-    "support",
-    "vine",
-    "climbing"
-  ],
-  "garden bed": [
-    "garden",
-    "growing",
-    "soil",
-    "planting"
-  ],
-  "lawn": [
-    "grass",
-    "garden",
-    "turf",
-    "yard"
-  ],
-  "turf": [
-    "grass",
-    "lawn",
-    "garden",
-    "yard"
-  ],
-  "topsoil": [
-    "soil",
-    "garden",
-    "fill",
-    "dirt"
-  ],
-  "gravel": [
-    "landscape",
-    "driveway",
-    "path",
-    "drainage"
-  ],
-  "sand": [
-    "landscape",
-    "building",
-    "fill"
-  ],
-  "pavers": [
-    "landscape",
-    "path",
-    "patio",
-    "stone"
-  ],
-  "timber": [
-    "wood",
-    "building",
-    "lumber",
-    "fence"
-  ],
-  "firewood": [
-    "energy",
-    "heating",
-    "wood",
-    "fire",
-    "fuel"
-  ],
-  "room": [
-    "housing",
-    "accommodation",
-    "rental",
-    "lodging"
-  ],
-  "rental": [
-    "housing",
-    "room",
-    "lease",
-    "accommodation"
-  ],
-  "share house": [
-    "housing",
-    "room",
-    "rental",
-    "housemate"
-  ],
-  "granny flat": [
-    "housing",
-    "accommodation",
-    "rental",
-    "unit"
-  ],
-  "cabin": [
-    "housing",
-    "accommodation",
-    "retreat",
-    "cottage"
-  ],
-  "cottage": [
-    "housing",
-    "accommodation",
-    "rental",
-    "cabin"
-  ],
-  "caravan": [
-    "housing",
-    "mobile",
-    "camping",
-    "travel"
-  ],
-  "campsite": [
-    "camping",
-    "outdoor",
-    "accommodation",
-    "tent"
-  ],
-  "storage": [
-    "shed",
-    "space",
-    "warehouse",
-    "garage"
-  ],
-  "shed": [
-    "storage",
-    "workshop",
-    "building",
-    "garage"
-  ],
-  "garage": [
-    "storage",
-    "car",
-    "workshop",
-    "parking"
-  ],
-  "studio": [
-    "space",
-    "art",
-    "workshop",
-    "room"
-  ],
-  "office": [
-    "workspace",
-    "desk",
-    "coworking",
-    "room"
-  ],
-  "lift": [
-    "transport",
-    "ride",
-    "car",
-    "travel"
-  ],
-  "ride": [
-    "transport",
-    "lift",
-    "car",
-    "travel"
-  ],
-  "carpool": [
-    "transport",
-    "ride",
-    "sharing",
-    "commute"
-  ],
-  "delivery": [
-    "transport",
-    "courier",
-    "pickup",
-    "drop off"
-  ],
-  "courier": [
-    "delivery",
-    "transport",
-    "parcel",
-    "pickup"
-  ],
-  "moving": [
-    "transport",
-    "removalist",
-    "furniture",
-    "relocation"
-  ],
-  "removalist": [
-    "moving",
-    "transport",
-    "furniture",
-    "relocation"
-  ],
-  "towing": [
-    "transport",
-    "car",
-    "trailer",
-    "vehicle"
-  ],
-  "freight": [
-    "transport",
-    "shipping",
-    "cargo",
-    "heavy"
-  ],
-  "tutoring": [
-    "education",
-    "teaching",
-    "lessons",
-    "learning"
-  ],
-  "tutor": [
-    "tutoring",
-    "teaching",
-    "lessons",
-    "learning"
-  ],
-  "lessons": [
-    "education",
-    "teaching",
-    "class",
-    "learning"
-  ],
-  "workshop": [
-    "education",
-    "class",
-    "hands on",
-    "skill"
-  ],
-  "course": [
-    "education",
-    "class",
-    "learning",
-    "training"
-  ],
-  "language": [
-    "education",
-    "lessons",
-    "speaking",
-    "translation"
-  ],
-  "math": [
-    "education",
-    "tutoring",
-    "academic",
-    "numbers"
-  ],
-  "science": [
-    "education",
-    "tutoring",
-    "academic"
-  ],
-  "reading": [
-    "education",
-    "literacy",
-    "books",
-    "learning"
-  ],
-  "writing": [
-    "education",
-    "literacy",
-    "creative",
-    "skill"
-  ],
-  "mentoring": [
-    "education",
-    "guidance",
-    "coaching",
-    "support"
-  ],
-  "coaching": [
-    "mentoring",
-    "training",
-    "guidance",
-    "sport"
-  ],
-  "painting art": [
-    "art",
-    "canvas",
-    "creative",
-    "visual"
-  ],
-  "drawing": [
-    "art",
-    "sketch",
-    "creative",
-    "visual"
-  ],
-  "pottery": [
-    "art",
-    "ceramics",
-    "clay",
-    "creative",
-    "craft"
-  ],
-  "ceramics": [
-    "art",
-    "pottery",
-    "clay",
-    "creative"
-  ],
-  "woodwork": [
-    "craft",
-    "carpentry",
-    "creative",
-    "wood"
-  ],
-  "weaving": [
-    "craft",
-    "textile",
-    "fiber",
-    "creative"
-  ],
-  "knitting": [
-    "craft",
-    "textile",
-    "wool",
-    "creative"
-  ],
-  "crochet": [
-    "craft",
-    "textile",
-    "yarn",
-    "creative"
-  ],
-  "jewellery": [
-    "craft",
-    "accessory",
-    "handmade",
-    "creative"
-  ],
-  "candle": [
-    "craft",
-    "handmade",
-    "wax",
-    "gift"
-  ],
-  "soap": [
-    "craft",
-    "handmade",
-    "bath",
-    "natural"
-  ],
-  "photography": [
-    "art",
-    "photo",
-    "camera",
-    "creative",
-    "portrait"
-  ],
-  "videography": [
-    "video",
-    "film",
-    "camera",
-    "creative",
-    "editing"
-  ],
-  "graphic design": [
-    "art",
-    "design",
-    "digital",
-    "creative",
-    "logo"
-  ],
-  "illustration": [
-    "art",
-    "drawing",
-    "digital",
-    "creative"
-  ],
-  "music": [
-    "instrument",
-    "lessons",
-    "performance",
-    "entertainment"
-  ],
-  "guitar": [
-    "music",
-    "instrument",
-    "lessons",
-    "string"
-  ],
-  "piano": [
-    "music",
-    "instrument",
-    "lessons",
-    "keyboard"
-  ],
-  "drums": [
-    "music",
-    "instrument",
-    "percussion"
-  ],
-  "ukulele": [
-    "music",
-    "instrument",
-    "string"
-  ],
-  "singing": [
-    "music",
-    "voice",
-    "lessons",
-    "performance"
-  ],
-  "band": [
-    "music",
-    "performance",
-    "entertainment",
-    "live"
-  ],
-  "DJ": [
-    "music",
-    "entertainment",
-    "party",
-    "event"
-  ],
-  "massage": [
-    "bodywork",
-    "wellness",
-    "therapy",
-    "healing",
-    "relaxation"
-  ],
-  "acupuncture": [
-    "health",
-    "traditional",
-    "therapy",
-    "healing",
-    "chinese medicine"
-  ],
-  "naturopath": [
-    "health",
-    "natural",
-    "therapy",
-    "wellness",
-    "holistic"
-  ],
-  "herbalist": [
-    "health",
-    "natural",
-    "herbs",
-    "wellness",
-    "remedy"
-  ],
-  "yoga": [
-    "exercise",
-    "wellness",
-    "fitness",
-    "flexibility",
-    "mindfulness"
-  ],
-  "pilates": [
-    "exercise",
-    "wellness",
-    "fitness",
-    "core",
-    "strength"
-  ],
-  "meditation": [
-    "mindfulness",
-    "wellness",
-    "mental health",
-    "relaxation"
-  ],
-  "reiki": [
-    "energy",
-    "healing",
-    "wellness",
-    "therapy",
-    "spiritual"
-  ],
-  "physiotherapy": [
-    "health",
-    "rehabilitation",
-    "exercise",
-    "injury",
-    "recovery"
-  ],
-  "chiropractic": [
-    "health",
-    "spine",
-    "adjustment",
-    "therapy"
-  ],
-  "counselling": [
-    "health",
-    "mental health",
-    "therapy",
-    "support",
-    "talk"
-  ],
-  "nutrition": [
-    "health",
-    "diet",
-    "food",
-    "wellness",
-    "advice"
-  ],
-  "fitness": [
-    "exercise",
-    "gym",
-    "training",
-    "health",
-    "sport"
-  ],
-  "personal training": [
-    "fitness",
-    "exercise",
-    "gym",
-    "coaching"
-  ],
-  "swimming": [
-    "sport",
-    "exercise",
-    "water",
-    "pool",
-    "lessons"
-  ],
-  "martial arts": [
-    "sport",
-    "fitness",
-    "self defence",
-    "training"
-  ],
-  "first aid": [
-    "health",
-    "safety",
-    "emergency",
-    "training",
-    "course"
-  ],
-  "essential oils": [
-    "health",
-    "natural",
-    "aromatherapy",
-    "wellness"
-  ],
-  "herbal tea": [
-    "health",
-    "tea",
-    "natural",
-    "herb",
-    "drink"
-  ],
-  "babysitting": [
-    "childcare",
-    "care",
-    "kids",
-    "sitting",
-    "children"
-  ],
-  "childcare": [
-    "babysitting",
-    "care",
-    "kids",
-    "children",
-    "nanny"
-  ],
-  "nanny": [
-    "childcare",
-    "care",
-    "kids",
-    "children",
-    "babysitting"
-  ],
-  "aged care": [
-    "elderly",
-    "care",
-    "support",
-    "senior",
-    "home help"
-  ],
-  "disability support": [
-    "care",
-    "support",
-    "ndis",
-    "assistance"
-  ],
-  "pet sitting": [
-    "care",
-    "animals",
-    "dog",
-    "cat",
-    "minding"
-  ],
-  "dog walking": [
-    "care",
-    "animals",
-    "dog",
-    "exercise",
-    "pet"
-  ],
-  "house sitting": [
-    "care",
-    "property",
-    "minding",
-    "security"
-  ],
-  "companionship": [
-    "care",
-    "social",
-    "support",
-    "visit",
-    "elderly"
-  ],
-  "meal prep": [
-    "care",
-    "cooking",
-    "food",
-    "meals",
-    "support"
-  ],
-  "home help": [
-    "care",
-    "cleaning",
-    "domestic",
-    "support",
-    "elderly"
-  ],
-  "respite": [
-    "care",
-    "break",
-    "support",
-    "carer",
-    "relief"
-  ],
-  "dog": [
-    "animal",
-    "pet",
-    "puppy",
-    "canine"
-  ],
-  "puppy": [
-    "dog",
-    "animal",
-    "pet",
-    "canine"
-  ],
-  "cat": [
-    "animal",
-    "pet",
-    "kitten",
-    "feline"
-  ],
-  "kitten": [
-    "cat",
-    "animal",
-    "pet",
-    "feline"
-  ],
-  "duck": [
-    "poultry",
-    "animal",
-    "farm",
-    "bird",
-    "water"
-  ],
-  "goat": [
-    "animal",
-    "farm",
-    "livestock",
-    "milk"
-  ],
-  "sheep": [
-    "animal",
-    "farm",
-    "livestock",
-    "wool"
-  ],
-  "cow": [
-    "animal",
-    "farm",
-    "livestock",
-    "cattle",
-    "dairy"
-  ],
-  "horse": [
-    "animal",
-    "equine",
-    "riding",
-    "livestock"
-  ],
-  "rabbit": [
-    "animal",
-    "pet",
-    "bunny"
-  ],
-  "guinea pig": [
-    "animal",
-    "pet",
-    "small animal"
-  ],
-  "bird": [
-    "animal",
-    "pet",
-    "aviary",
-    "parrot"
-  ],
-  "fish tank": [
-    "aquarium",
-    "fish",
-    "pet",
-    "tank"
-  ],
-  "beehive": [
-    "bees",
-    "honey",
-    "pollination",
-    "farm"
-  ],
-  "hay": [
-    "animal",
-    "feed",
-    "farm",
-    "horse",
-    "livestock"
-  ],
-  "feed": [
-    "animal",
-    "food",
-    "farm",
-    "grain"
-  ],
-  "vet": [
-    "animal",
-    "health",
-    "veterinary",
-    "pet"
-  ],
-  "farrier": [
-    "horse",
-    "hooves",
-    "equine",
-    "blacksmith"
-  ],
-  "grooming": [
-    "pet",
-    "animal",
-    "dog",
-    "wash",
-    "trim"
-  ],
-  "computer": [
-    "tech",
-    "laptop",
-    "desktop",
-    "PC"
-  ],
-  "laptop": [
-    "tech",
-    "computer",
-    "portable",
-    "PC"
-  ],
-  "phone": [
-    "tech",
-    "mobile",
-    "smartphone",
-    "device"
-  ],
-  "tablet": [
-    "tech",
-    "iPad",
-    "device",
-    "screen"
-  ],
-  "printer": [
-    "tech",
-    "office",
-    "printing",
-    "device"
-  ],
-  "wifi": [
-    "tech",
-    "internet",
-    "network",
-    "connectivity"
-  ],
-  "internet": [
-    "tech",
-    "wifi",
-    "network",
-    "broadband"
-  ],
-  "website": [
-    "tech",
-    "web",
-    "design",
-    "online",
-    "digital"
-  ],
-  "web design": [
-    "tech",
-    "website",
-    "digital",
-    "creative"
-  ],
-  "IT support": [
-    "tech",
-    "computer",
-    "repair",
-    "help",
-    "troubleshooting"
-  ],
-  "data recovery": [
-    "tech",
-    "computer",
-    "hard drive",
-    "repair"
-  ],
-  "phone repair": [
-    "tech",
-    "mobile",
-    "screen",
-    "fix"
-  ],
-  "computer repair": [
-    "tech",
-    "laptop",
-    "fix",
-    "troubleshooting"
-  ],
-  "programming": [
-    "tech",
-    "coding",
-    "software",
-    "developer"
-  ],
-  "3D printing": [
-    "tech",
-    "maker",
-    "prototype",
-    "fabrication"
-  ],
-  "solar": [
-    "energy",
-    "power",
-    "renewable",
-    "panel",
-    "electricity"
-  ],
-  "solar panel": [
-    "energy",
-    "solar",
-    "power",
-    "renewable",
-    "electricity"
-  ],
-  "battery": [
-    "energy",
-    "storage",
-    "power",
-    "backup"
-  ],
-  "inverter": [
-    "energy",
-    "solar",
-    "power",
-    "electrical"
-  ],
-  "biochar": [
-    "energy",
-    "soil",
-    "carbon",
-    "charcoal",
-    "garden"
-  ],
-  "hot water": [
-    "energy",
-    "plumbing",
-    "heating",
-    "solar"
-  ],
-  "insulation": [
-    "energy",
-    "efficiency",
-    "building",
-    "thermal"
-  ],
-  "LED": [
-    "energy",
-    "lighting",
-    "efficient",
-    "bulb"
-  ],
-  "EV charging": [
-    "energy",
-    "electric vehicle",
-    "charging",
-    "power"
-  ],
-  "market stall": [
-    "general",
-    "selling",
-    "booth",
-    "event"
-  ],
-  "event": [
-    "general",
-    "community",
-    "gathering",
-    "party"
-  ],
-  "party": [
-    "event",
-    "celebration",
-    "entertainment",
-    "hire"
-  ],
-  "catering": [
-    "food",
-    "event",
-    "cooking",
-    "service"
-  ],
-  "barter": [
-    "exchange",
-    "trade",
-    "swap"
-  ],
-  "swap": [
-    "exchange",
-    "trade",
-    "barter"
-  ],
-  "free": [
-    "giveaway",
-    "donation",
-    "surplus"
-  ],
-  "donation": [
-    "free",
-    "giveaway",
-    "charity"
-  ],
-  "volunteer": [
-    "help",
-    "community",
-    "free",
-    "service"
-  ],
-  "printing": [
-    "paper",
-    "document",
-    "office",
-    "service"
-  ],
-  "translation": [
-    "language",
-    "interpreting",
-    "service"
-  ],
-  "bookkeeping": [
-    "accounting",
-    "finance",
-    "business",
-    "service"
-  ],
-  "tax": [
-    "accounting",
-    "finance",
-    "business",
-    "return"
-  ]
+    "lemon": ["food", "fruit", "produce", "citrus", "tree"],
+    "lime": ["food", "fruit", "produce", "citrus", "tree"],
+    "orange": ["food", "fruit", "produce", "citrus", "tree"],
+    "mandarin": ["food", "fruit", "produce", "citrus", "tree"],
+    "grapefruit": ["food", "fruit", "produce", "citrus", "tree"],
+    "banana": ["food", "fruit", "produce", "tropical"],
+    "apple": ["food", "fruit", "produce", "tree"],
+    "pear": ["food", "fruit", "produce", "tree"],
+    "mango": ["food", "fruit", "produce", "tropical", "tree"],
+    "avocado": ["food", "fruit", "produce", "tree"],
+    "passionfruit": ["food", "fruit", "produce", "vine", "tropical"],
+    "fig": ["food", "fruit", "produce", "tree"],
+    "guava": ["food", "fruit", "produce", "tropical", "tree"],
+    "papaya": ["food", "fruit", "produce", "tropical", "tree"],
+    "pawpaw": ["food", "fruit", "produce", "tropical", "tree"],
+    "watermelon": ["food", "fruit", "produce", "melon"],
+    "rockmelon": ["food", "fruit", "produce", "melon"],
+    "strawberry": ["food", "fruit", "produce", "berry"],
+    "blueberry": ["food", "fruit", "produce", "berry"],
+    "raspberry": ["food", "fruit", "produce", "berry"],
+    "mulberry": ["food", "fruit", "produce", "berry", "tree"],
+    "grape": ["food", "fruit", "produce", "vine", "wine"],
+    "persimmon": ["food", "fruit", "produce", "tree"],
+    "pomegranate": ["food", "fruit", "produce", "tree"],
+    "jackfruit": ["food", "fruit", "produce", "tropical", "tree"],
+    "dragonfruit": ["food", "fruit", "produce", "tropical"],
+    "coconut": ["food", "fruit", "produce", "tropical", "tree"],
+    "plum": ["food", "fruit", "produce", "tree", "stone fruit"],
+    "peach": ["food", "fruit", "produce", "tree", "stone fruit"],
+    "nectarine": ["food", "fruit", "produce", "tree", "stone fruit"],
+    "apricot": ["food", "fruit", "produce", "tree", "stone fruit"],
+    "cherry": ["food", "fruit", "produce", "tree", "stone fruit"],
+    "tomato": ["food", "vegetable", "produce", "garden"],
+    "carrot": ["food", "vegetable", "produce", "garden", "root"],
+    "potato": ["food", "vegetable", "produce", "root"],
+    "sweet potato": ["food", "vegetable", "produce", "root"],
+    "pumpkin": ["food", "vegetable", "produce", "garden", "squash"],
+    "zucchini": ["food", "vegetable", "produce", "garden", "squash"],
+    "cucumber": ["food", "vegetable", "produce", "garden"],
+    "lettuce": ["food", "vegetable", "produce", "garden", "salad", "greens"],
+    "spinach": ["food", "vegetable", "produce", "garden", "greens"],
+    "kale": ["food", "vegetable", "produce", "garden", "greens"],
+    "silverbeet": ["food", "vegetable", "produce", "garden", "greens"],
+    "chard": ["food", "vegetable", "produce", "garden", "greens"],
+    "broccoli": ["food", "vegetable", "produce", "garden"],
+    "cauliflower": ["food", "vegetable", "produce", "garden"],
+    "cabbage": ["food", "vegetable", "produce", "garden"],
+    "beetroot": ["food", "vegetable", "produce", "garden", "root"],
+    "onion": ["food", "vegetable", "produce", "garden", "root"],
+    "garlic": ["food", "vegetable", "produce", "garden", "herb"],
+    "chilli": ["food", "vegetable", "produce", "spice", "garden"],
+    "capsicum": ["food", "vegetable", "produce", "garden", "pepper"],
+    "corn": ["food", "vegetable", "produce", "garden", "grain"],
+    "beans": ["food", "vegetable", "produce", "garden", "legume"],
+    "peas": ["food", "vegetable", "produce", "garden", "legume"],
+    "eggplant": ["food", "vegetable", "produce", "garden"],
+    "asparagus": ["food", "vegetable", "produce", "garden"],
+    "celery": ["food", "vegetable", "produce", "garden"],
+    "leek": ["food", "vegetable", "produce", "garden"],
+    "radish": ["food", "vegetable", "produce", "garden", "root"],
+    "turnip": ["food", "vegetable", "produce", "garden", "root"],
+    "parsnip": ["food", "vegetable", "produce", "garden", "root"],
+    "spring onion": ["food", "vegetable", "produce", "garden"],
+    "ginger": ["food", "vegetable", "produce", "spice", "root"],
+    "turmeric": ["food", "vegetable", "produce", "spice", "root"],
+    "mushroom": ["food", "vegetable", "produce", "fungi", "forage"],
+    "egg": ["food", "produce", "poultry", "farm", "chicken"],
+    "honey": ["food", "sweetener", "bees", "farm", "raw"],
+    "milk": ["food", "dairy", "farm", "drink"],
+    "cheese": ["food", "dairy", "farm", "fermented"],
+    "butter": ["food", "dairy", "farm"],
+    "yoghurt": ["food", "dairy", "farm", "fermented", "probiotic"],
+    "cream": ["food", "dairy", "farm"],
+    "bread": ["food", "baking", "grain"],
+    "sourdough": ["food", "baking", "bread", "fermented"],
+    "flour": ["food", "baking", "grain"],
+    "pasta": ["food", "grain", "cooking"],
+    "rice": ["food", "grain", "cooking"],
+    "oats": ["food", "grain", "breakfast"],
+    "granola": ["food", "grain", "breakfast"],
+    "jam": ["food", "preserve", "fruit", "spread"],
+    "chutney": ["food", "preserve", "condiment"],
+    "pickles": ["food", "preserve", "fermented", "vegetable"],
+    "sauerkraut": ["food", "preserve", "fermented", "probiotic"],
+    "kimchi": ["food", "preserve", "fermented", "probiotic"],
+    "sauce": ["food", "condiment", "cooking"],
+    "kombucha": ["food", "drink", "fermented", "probiotic", "tea"],
+    "kefir": ["food", "drink", "fermented", "probiotic", "dairy"],
+    "juice": ["food", "drink", "fruit"],
+    "tea": ["food", "drink", "herb"],
+    "coffee": ["food", "drink", "bean"],
+    "nuts": ["food", "snack", "produce"],
+    "macadamia": ["food", "nut", "produce", "tree"],
+    "almond": ["food", "nut", "produce", "tree"],
+    "walnut": ["food", "nut", "produce", "tree"],
+    "pecan": ["food", "nut", "produce", "tree"],
+    "olive": ["food", "produce", "oil", "tree"],
+    "olive oil": ["food", "oil", "cooking", "produce"],
+    "coconut oil": ["food", "oil", "cooking"],
+    "herb": ["food", "cooking", "garden", "plant"],
+    "spice": ["food", "herb", "cooking"],
+    "basil": ["food", "herb", "garden", "plant"],
+    "rosemary": ["food", "herb", "garden", "plant"],
+    "thyme": ["food", "herb", "garden", "plant"],
+    "mint": ["food", "herb", "garden", "plant", "tea"],
+    "parsley": ["food", "herb", "garden", "plant"],
+    "coriander": ["food", "herb", "garden", "plant"],
+    "oregano": ["food", "herb", "garden", "plant"],
+    "lemongrass": ["food", "herb", "garden", "plant", "tea"],
+    "meat": ["food", "protein", "farm"],
+    "beef": ["food", "meat", "protein", "farm", "cattle"],
+    "lamb": ["food", "meat", "protein", "farm"],
+    "pork": ["food", "meat", "protein", "farm"],
+    "sausage": ["food", "meat", "protein"],
+    "fish": ["food", "seafood", "protein"],
+    "prawns": ["food", "seafood", "protein"],
+    "crab": ["food", "seafood", "protein"],
+    "oyster": ["food", "seafood", "protein"],
+    "catering": ["food", "event", "cooking", "service"],
+    "seedlings": ["growing", "plant", "garden", "nursery"],
+    "seedling": ["growing", "plant", "garden", "nursery"],
+    "seeds": ["growing", "plant", "garden", "propagation"],
+    "cuttings": ["growing", "plant", "propagation", "garden"],
+    "bulbs": ["growing", "plant", "flower", "garden"],
+    "flower": ["plant", "garden", "bouquet", "bloom"],
+    "rose": ["plant", "flower", "garden", "bloom"],
+    "orchid": ["plant", "flower", "indoor"],
+    "fern": ["plant", "garden", "indoor", "shade"],
+    "succulent": ["plant", "garden", "indoor", "drought tolerant"],
+    "cactus": ["plant", "succulent", "indoor", "drought tolerant"],
+    "palm": ["plant", "tree", "tropical", "garden"],
+    "bamboo": ["plant", "garden", "screen", "privacy"],
+    "native": ["plant", "garden", "australian", "indigenous"],
+    "fruit tree": ["tree", "fruit", "garden", "orchard"],
+    "compost": ["soil", "garden", "organic", "fertiliser", "mulch"],
+    "manure": ["fertiliser", "soil", "garden", "organic", "farm"],
+    "mulch": ["garden", "soil", "compost", "landscape"],
+    "potting mix": ["soil", "garden", "pot", "growing"],
+    "worm farm": ["compost", "worm", "organic", "garden", "fertiliser"],
+    "worms": ["compost", "worm farm", "organic", "garden"],
+    "topsoil": ["soil", "garden", "fill", "dirt"],
+    "vegetable garden": ["garden", "food", "growing", "produce"],
+    "raised bed": ["garden", "growing", "vegetable", "planter"],
+    "garden bed": ["garden", "growing", "soil", "planting"],
+    "greenhouse": ["garden", "growing", "shelter", "propagation"],
+    "trellis": ["garden", "support", "vine", "climbing"],
+    "lawn": ["grass", "garden", "turf", "yard"],
+    "turf": ["grass", "lawn", "garden", "yard"],
+    "gravel": ["landscape", "driveway", "path", "drainage"],
+    "sand": ["landscape", "building", "fill"],
+    "pavers": ["landscape", "path", "patio", "stone"],
+    "irrigation": ["water", "garden", "drip", "sprinkler"],
+    "mowing": ["garden", "lawn", "yard", "landscaping", "grass"],
+    "landscaping": ["garden", "yard", "design", "plants", "outdoor"],
+    "pruning": ["garden", "tree", "hedge", "trimming"],
+    "weeding": ["garden", "yard", "maintenance"],
+    "mulching": ["garden", "soil", "compost", "landscape"],
+    "spraying": ["garden", "pest", "weed", "spray"],
+    "handyman": ["repair", "maintenance", "fix", "odd jobs"],
+    "cleaning": ["domestic", "cleaner", "house", "tidy"],
+    "cleaner": ["domestic", "cleaning", "house"],
+    "ironing": ["domestic", "laundry", "clothes"],
+    "laundry": ["domestic", "washing", "clothes"],
+    "tree removal": ["arborist", "tree", "chainsaw", "stump"],
+    "arborist": ["tree", "pruning", "removal", "chainsaw"],
+    "bobcat": ["earthworks", "excavation", "digging", "grading"],
+    "excavation": ["digging", "earthworks", "bobcat", "trenching"],
+    "demolition": ["removal", "knock down", "building"],
+    "plumbing": ["trades", "plumber", "repair", "water", "pipe"],
+    "plumber": ["trades", "repair", "water", "pipe", "plumbing"],
+    "electrical": ["trades", "electrician", "repair", "wiring", "power"],
+    "electrician": ["trades", "repair", "wiring", "power", "electrical"],
+    "carpentry": ["trades", "carpenter", "woodwork", "building"],
+    "carpenter": ["trades", "woodwork", "building", "carpentry"],
+    "painting": ["trades", "painter", "house", "interior", "decorator"],
+    "painter": ["trades", "painting", "house", "decorator"],
+    "tiling": ["trades", "tiler", "bathroom", "floor"],
+    "roofing": ["trades", "roofer", "repair", "house"],
+    "welding": ["trades", "welder", "metal", "fabrication"],
+    "fencing": ["trades", "fence", "boundary", "property"],
+    "concreting": ["trades", "concrete", "building", "slab"],
+    "plastering": ["trades", "plaster", "wall", "building"],
+    "bricklaying": ["trades", "bricklayer", "building", "masonry"],
+    "locksmith": ["trades", "lock", "key", "security"],
+    "glazier": ["trades", "glass", "window", "repair"],
+    "sewing": ["mending", "clothes", "tailor", "fabric", "textile"],
+    "tailor": ["sewing", "alteration", "clothes", "fabric"],
+    "mechanic": ["vehicle", "car", "repair", "auto", "engine"],
+    "car service": ["vehicle", "mechanic", "auto", "maintenance"],
+    "smash repair": ["vehicle", "panel beater", "car", "auto", "body"],
+    "detailing": ["vehicle", "car", "wash", "polish", "clean"],
+    "bookkeeping": ["accounting", "finance", "business", "service"],
+    "tax": ["accounting", "finance", "business", "return"],
+    "printing": ["paper", "document", "office", "service"],
+    "translation": ["language", "interpreting", "service"],
+    "hammer": ["tool", "hand tool", "building", "nail"],
+    "screwdriver": ["tool", "hand tool", "fixing"],
+    "pliers": ["tool", "hand tool", "grip"],
+    "spanner": ["tool", "hand tool", "wrench", "mechanical"],
+    "shovel": ["tool", "hand tool", "digging", "garden"],
+    "rake": ["tool", "hand tool", "garden", "leaf"],
+    "hoe": ["tool", "hand tool", "garden", "weeding"],
+    "drill": ["tool", "power tool", "building"],
+    "saw": ["tool", "cutting", "wood", "power tool"],
+    "chainsaw": ["tool", "cutting", "wood", "tree", "power tool"],
+    "sander": ["tool", "power tool", "wood", "finishing"],
+    "grinder": ["tool", "power tool", "metal", "cutting"],
+    "welder": ["tool", "metal", "fabrication", "joining"],
+    "mower": ["tool", "garden", "lawn", "grass", "machine"],
+    "whipper snipper": ["tool", "garden", "trimmer", "grass"],
+    "hedge trimmer": ["tool", "garden", "hedge", "cutting"],
+    "blower": ["tool", "garden", "leaf", "clean up"],
+    "wheelbarrow": ["tool", "garden", "carrying", "transport"],
+    "secateurs": ["tool", "garden", "pruning", "cutting"],
+    "loppers": ["tool", "garden", "pruning", "cutting", "branch"],
+    "pressure washer": ["tool", "machine", "cleaning", "water"],
+    "compressor": ["tool", "machine", "air", "power"],
+    "ladder": ["tool", "climbing", "height", "access"],
+    "furniture": ["goods", "home", "household", "decor"],
+    "table": ["furniture", "dining", "home", "wood"],
+    "chair": ["furniture", "seating", "home"],
+    "desk": ["furniture", "office", "work"],
+    "bookshelf": ["furniture", "storage", "books", "shelf"],
+    "wardrobe": ["furniture", "storage", "clothes", "bedroom"],
+    "couch": ["furniture", "seating", "lounge", "sofa"],
+    "sofa": ["furniture", "seating", "lounge", "couch"],
+    "bed": ["furniture", "bedroom", "mattress", "sleeping"],
+    "mattress": ["bed", "bedroom", "sleeping"],
+    "blanket": ["bedding", "warm", "textile"],
+    "towel": ["bathroom", "textile", "linen"],
+    "lamp": ["home", "decor", "lighting"],
+    "rug": ["home", "decor", "floor", "carpet"],
+    "curtains": ["home", "decor", "window", "fabric"],
+    "pots": ["kitchen", "cooking", "garden", "container"],
+    "pan": ["kitchen", "cooking"],
+    "crockery": ["kitchen", "plates", "cups", "dining"],
+    "clothes": ["clothing", "fashion", "textile", "wear"],
+    "shoes": ["clothing", "footwear", "fashion"],
+    "boots": ["clothing", "footwear", "work", "outdoor"],
+    "jacket": ["clothing", "outerwear", "warm"],
+    "books": ["reading", "education", "literature"],
+    "toys": ["children", "kids", "play", "games"],
+    "surfboard": ["surf", "ocean", "sport", "water"],
+    "kayak": ["paddle", "water", "boat", "sport"],
+    "camping": ["outdoor", "tent", "hiking", "adventure"],
+    "tent": ["camping", "outdoor", "shelter"],
+    "backpack": ["bag", "hiking", "travel", "carry"],
+    "fishing": ["rod", "reel", "sport", "ocean", "river"],
+    "timber": ["building", "wood", "lumber", "fence"],
+    "room": ["housing", "accommodation", "rental", "lodging"],
+    "rental": ["housing", "room", "lease", "accommodation"],
+    "share house": ["housing", "room", "rental", "housemate"],
+    "granny flat": ["housing", "accommodation", "rental", "unit"],
+    "cabin": ["housing", "accommodation", "retreat", "cottage"],
+    "cottage": ["housing", "accommodation", "rental", "cabin"],
+    "caravan": ["housing", "mobile", "camping", "travel"],
+    "campsite": ["camping", "outdoor", "accommodation", "tent"],
+    "storage": ["shed", "space", "warehouse", "garage"],
+    "shed": ["storage", "workshop", "building", "garage"],
+    "garage": ["storage", "car", "workshop", "parking"],
+    "studio": ["space", "art", "workshop", "room"],
+    "office": ["workspace", "desk", "coworking", "room"],
+    "ride": ["transport", "lift", "car", "travel"],
+    "lift": ["transport", "ride", "car", "travel"],
+    "carpool": ["transport", "ride", "sharing", "commute"],
+    "delivery": ["transport", "courier", "pickup", "drop off"],
+    "courier": ["transport", "delivery", "parcel", "pickup"],
+    "moving": ["transport", "removalist", "furniture", "relocation"],
+    "removalist": ["transport", "moving", "furniture", "relocation"],
+    "towing": ["transport", "car", "trailer", "vehicle"],
+    "freight": ["transport", "shipping", "cargo", "heavy"],
+    "bike": ["transport", "cycling", "bicycle", "exercise"],
+    "bicycle": ["transport", "cycling", "exercise", "bike"],
+    "trailer": ["transport", "hauling", "carrying", "towing"],
+    "tutoring": ["education", "teaching", "lessons", "learning"],
+    "tutor": ["tutoring", "teaching", "lessons", "learning"],
+    "lessons": ["education", "teaching", "class", "learning"],
+    "math": ["education", "tutoring", "academic", "numbers"],
+    "science": ["education", "tutoring", "academic"],
+    "reading": ["education", "literacy", "books", "learning"],
+    "writing": ["education", "literacy", "creative", "skill"],
+    "language": ["education", "lessons", "speaking", "translation"],
+    "workshop": ["class", "education", "hands on", "skill"],
+    "course": ["class", "education", "learning", "training"],
+    "mentoring": ["education", "guidance", "coaching", "support"],
+    "coaching": ["mentoring", "training", "guidance", "sport"],
+    "painting art": ["art", "canvas", "creative", "visual"],
+    "drawing": ["art", "sketch", "creative", "visual"],
+    "illustration": ["art", "drawing", "digital", "creative"],
+    "photography": ["art", "photo", "camera", "creative", "portrait"],
+    "videography": ["video", "film", "camera", "creative", "editing"],
+    "graphic design": ["art", "design", "digital", "creative", "logo"],
+    "pottery": ["art", "ceramics", "clay", "creative", "craft"],
+    "ceramics": ["art", "pottery", "clay", "creative"],
+    "woodwork": ["craft", "carpentry", "creative", "wood"],
+    "weaving": ["craft", "textile", "fiber", "creative"],
+    "knitting": ["craft", "textile", "wool", "creative"],
+    "crochet": ["craft", "textile", "yarn", "creative"],
+    "jewellery": ["craft", "accessory", "handmade", "creative"],
+    "candle": ["craft", "handmade", "wax", "gift"],
+    "soap": ["craft", "handmade", "bath", "natural"],
+    "music": ["instrument", "lessons", "performance", "entertainment"],
+    "guitar": ["music", "instrument", "lessons", "string"],
+    "piano": ["music", "instrument", "lessons", "keyboard"],
+    "drums": ["music", "instrument", "percussion"],
+    "ukulele": ["music", "instrument", "string"],
+    "singing": ["music", "voice", "lessons", "performance"],
+    "band": ["music", "performance", "entertainment", "live"],
+    "DJ": ["music", "entertainment", "party", "event"],
+    "massage": ["bodywork", "wellness", "therapy", "healing", "relaxation"],
+    "acupuncture": ["health", "traditional", "therapy", "healing", "chinese medicine"],
+    "chiropractic": ["health", "spine", "adjustment", "therapy"],
+    "physiotherapy": ["health", "rehabilitation", "exercise", "injury", "recovery"],
+    "reiki": ["energy", "healing", "wellness", "therapy", "spiritual"],
+    "naturopath": ["health", "natural", "therapy", "wellness", "holistic"],
+    "herbalist": ["health", "natural", "herbs", "wellness", "remedy"],
+    "essential oils": ["health", "natural", "aromatherapy", "wellness"],
+    "herbal tea": ["health", "tea", "natural", "herb", "drink"],
+    "nutrition": ["health", "diet", "food", "wellness", "advice"],
+    "yoga": ["exercise", "wellness", "fitness", "flexibility", "mindfulness"],
+    "pilates": ["exercise", "wellness", "fitness", "core", "strength"],
+    "fitness": ["exercise", "gym", "training", "health", "sport"],
+    "personal training": ["fitness", "exercise", "gym", "coaching"],
+    "swimming": ["sport", "exercise", "water", "pool", "lessons"],
+    "martial arts": ["sport", "fitness", "self defence", "training"],
+    "meditation": ["mindfulness", "wellness", "mental health", "relaxation"],
+    "counselling": ["health", "mental health", "therapy", "support", "talk"],
+    "first aid": ["safety", "health", "emergency", "training", "course"],
+    "babysitting": ["care", "kids", "children", "childcare", "sitting"],
+    "childcare": ["care", "kids", "children", "babysitting", "nanny"],
+    "nanny": ["care", "kids", "children", "babysitting", "childcare"],
+    "aged care": ["care", "support", "elderly", "senior", "home help"],
+    "disability support": ["care", "support", "ndis", "assistance"],
+    "companionship": ["care", "support", "social", "visit", "elderly"],
+    "respite": ["care", "support", "break", "carer", "relief"],
+    "home help": ["care", "cleaning", "domestic", "support", "elderly"],
+    "meal prep": ["care", "cooking", "food", "meals", "support"],
+    "house sitting": ["care", "property", "minding", "security"],
+    "dog": ["pet", "animal", "puppy", "canine"],
+    "puppy": ["pet", "animal", "canine", "dog"],
+    "cat": ["pet", "animal", "kitten", "feline"],
+    "kitten": ["pet", "animal", "feline", "cat"],
+    "rabbit": ["pet", "animal", "bunny"],
+    "guinea pig": ["pet", "animal", "small animal"],
+    "bird": ["pet", "animal", "aviary", "parrot"],
+    "fish tank": ["pet", "aquarium", "fish", "tank"],
+    "chicken": ["poultry", "animal", "farm", "egg", "bird"],
+    "duck": ["poultry", "animal", "farm", "bird", "water"],
+    "goat": ["livestock", "animal", "farm", "milk"],
+    "sheep": ["livestock", "animal", "farm", "wool"],
+    "cow": ["livestock", "animal", "farm", "cattle", "dairy"],
+    "horse": ["livestock", "animal", "equine", "riding"],
+    "beehive": ["bees", "honey", "pollination", "farm"],
+    "hay": ["feed", "animal", "farm", "horse", "livestock"],
+    "feed": ["animal", "food", "farm", "grain"],
+    "vet": ["animal", "health", "veterinary", "pet"],
+    "farrier": ["horse", "hooves", "equine", "blacksmith"],
+    "grooming": ["pet", "animal", "dog", "wash", "trim"],
+    "pet sitting": ["care", "animals", "dog", "cat", "minding"],
+    "dog walking": ["care", "animals", "dog", "exercise", "pet"],
+    "computer": ["tech", "laptop", "desktop", "PC"],
+    "laptop": ["tech", "computer", "portable", "PC"],
+    "phone": ["tech", "mobile", "smartphone", "device"],
+    "tablet": ["tech", "iPad", "device", "screen"],
+    "printer": ["tech", "office", "printing", "device"],
+    "wifi": ["tech", "internet", "network", "connectivity"],
+    "internet": ["tech", "wifi", "network", "broadband"],
+    "IT support": ["tech", "computer", "repair", "help", "troubleshooting"],
+    "data recovery": ["tech", "computer", "hard drive", "repair"],
+    "phone repair": ["tech", "mobile", "screen", "fix"],
+    "computer repair": ["tech", "laptop", "fix", "troubleshooting"],
+    "website": ["tech", "web", "design", "online", "digital"],
+    "web design": ["tech", "website", "digital", "creative"],
+    "programming": ["tech", "coding", "software", "developer"],
+    "3D printing": ["tech", "maker", "prototype", "fabrication"],
+    "firewood": ["energy", "heating", "wood", "fire", "fuel"],
+    "biochar": ["energy", "soil", "carbon", "charcoal", "garden"],
+    "solar": ["energy", "power", "renewable", "panel", "electricity"],
+    "solar panel": ["energy", "solar", "power", "renewable", "electricity"],
+    "inverter": ["energy", "solar", "power", "electrical"],
+    "battery": ["energy", "storage", "power", "backup"],
+    "generator": ["energy", "power", "backup", "fuel", "electricity"],
+    "EV charging": ["energy", "electric vehicle", "charging", "power"],
+    "LED": ["energy", "lighting", "efficient", "bulb"],
+    "hot water": ["energy", "plumbing", "heating", "solar"],
+    "insulation": ["energy", "efficiency", "building", "thermal"],
+    "event": ["general", "community", "gathering", "party"],
+    "party": ["event", "celebration", "entertainment", "hire"],
+    "market stall": ["event", "general", "selling", "booth"],
+    "barter": ["exchange", "trade", "swap"],
+    "swap": ["exchange", "trade", "barter"],
+    "free": ["giveaway", "donation", "surplus"],
+    "donation": ["free", "giveaway", "charity"],
+    "volunteer": ["help", "community", "free", "service"],
 };
 
 export default SYNONYM_MAP;

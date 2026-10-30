@@ -6,6 +6,10 @@
  *   1. An owner's assistant makes each kind: the row (its author, `created_via = 'assistant:<grant id>'`), its photo stored at
  *      most 800 px whatever size it was sent, the search index finds it, the listings' version moves (the phones' sync mark),
  *      the standby copy's payload carries created_via, the AGENT log names the post, and the answer carries no key.
+ *   1b. Its photos go through the node's own image store (storage/image-store.ts) exactly as an upload's do, never a file
+ *      written beside it or a link: on disk (the default), and on the S3-compatible store a node like global keeps in R2
+ *      (IMAGE_S3_*; here the in-process stand-in, fake-s3-test-harness.ts): each photo an object at posts/<post id>/…, the
+ *      row holding its key and no bytes.
  *   2. Refusals in words, none counted against the day: no photo, a PNG, a photo over the per-photo cap, a JPEG cut off halfway
  *      (its header still whole), an event's time with no offset (or a date with no time), an enterprise the owner does not keep
  *      (or a made-up ref), a title longer than the forms take, a listing with neither a pin nor use_my_area. Every field the phone's and the web's composer require for
@@ -41,7 +45,9 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { getProfileSwitches, setSwitchOverride } from './config/node-profile.js';
 import { db } from './db/db.js';
-import { getImageStore, readObject } from './storage/image-store.js';
+import { configuredImageStoreKind, getImageStore, readObject, resetImageStoreForTests } from './storage/image-store.js';
+import { S3ImageStore } from './storage/s3-image-store.js';
+import { startFakeS3 } from './fake-s3-test-harness.js';
 import { imageSize } from './storage/image-metadata.js';
 import { admitAgentCreate, agentCreatesToday, AGENT_POSTS_PER_DAY_DEFAULT } from './agent/limits.js';
 import { getAlertsStatus } from './services/alerts.js';
@@ -219,6 +225,40 @@ async function main(): Promise<void> {
             `the standby copy's payload carries created_via for it, and for no other post (${copied?.createdVia})`);
         const asRead = JSON.stringify(getPosts({ id: o?.postId, viewerPubkey: owner.pub }));
         assert(asRead.includes('Quincefield') && !/created_?via|assistant:/i.test(asRead), 'the listings an app reads never carry it');
+
+        // ── 1b. Through the node's own image store, disk and S3 ─────────────────────────────────────
+        type PhotoRow = { storage_key: string | null; photo_data: string | null };
+        const photoRowsOf = (postId: string) => db.prepare('SELECT storage_key, photo_data FROM post_photos WHERE post_id = ? ORDER BY order_num').all(postId) as PhotoRow[];
+        const diskRows = photoRowsOf(o?.postId);
+        const diskObjects = await Promise.all(diskRows.map(r => (r.storage_key ? readObject(getImageStore(), r.storage_key) : Promise.resolve(null))));
+        assert(configuredImageStoreKind() === 'disk' && diskRows.length === 2
+            && diskRows.every(r => r.photo_data === null && !!r.storage_key && r.storage_key.startsWith(`posts/${o?.postId}/`))
+            && diskObjects.every(b => !!b && !!imageSize(b)), `on disk, each photo is an object in the image store under the post, the row holding its key and no bytes (${diskRows.map(r => r.storage_key).join(', ')})`);
+        const fakeS3 = await startFakeS3();
+        const s3Store = new S3ImageStore(fakeS3.config());
+        resetImageStoreForTests(s3Store);
+        try {
+            // A ticked grant of its own, so the door's 60 a minute holds for the main one; disconnected after.
+            const bucketT = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s bucket check', canPost: true } });
+            const bc = await connect(bucketT.body?.token);
+            const viaS3 = await bc.callTool({ name: 'create_offer', arguments: {
+                title: 'Bucket-kept marmalade', description: 'Seville oranges, last winter.', category: 'food', beans: 2, lat: -28.55, lng: 153.5, photos: [big],
+            } });
+            const s3Rows = photoRowsOf(structured(viaS3)?.postId ?? '');
+            const objects = await fakeS3.objects();
+            const kept = s3Rows[0]?.storage_key ? objects.get(s3Rows[0].storage_key) : undefined;
+            const keptSize = kept ? imageSize(kept.bytes) : null;
+            const signedOk = (await fakeS3.log()).filter(e => e.method === 'PUT').every(e => e.authOk && !e.error);
+            assert(!viaS3.isError && s3Rows.length === 1 && s3Rows[0].photo_data === null && s3Rows[0].storage_key?.startsWith(`posts/${structured(viaS3)?.postId}/`)
+                && !!kept && kept.mime === 'image/jpeg' && !!keptSize && keptSize.width === 800 && keptSize.height === 600 && signedOk,
+                `on the S3-compatible store (global's R2), the photo is put in the bucket, signed, made 800 × 600; the row holds its key (${errorText(viaS3) || s3Rows[0]?.storage_key}; ${JSON.stringify(keptSize)})`);
+            await bc.close().catch(() => {});
+            await call('POST', `/api/local/admin/agent/grants/${encodeURIComponent(bucketT.body?.grant?.id ?? '')}/revoke`, { headers: asSession(ownerS), body: {} });
+        } finally {
+            resetImageStoreForTests();
+            await s3Store.close();
+            await fakeS3.stop();
+        }
 
         const need = await client.callTool({ name: 'create_need', arguments: {
             title: 'Someone to mend a fence', description: 'Three panels blew down; I have the timber.', category: 'labour', beans: 10, lat: -28.56, lng: 153.51, photos: [small],

@@ -276,6 +276,10 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 **Learning:** In `apps/pwa/src/components/EnterpriseDecisions.tsx`, `nameOf` executed `keepers.find(k => k.publicKey === pk)` on every decision card and author name resolution during component rendering.
 **Action:** Pre-computed `keepersMap` indexed by `publicKey` using `React.useMemo`, turning keeper callsign resolution into constant-time $O(1)$ Map retrievals.
 
+## 2026-10-28 - O(1) Group Lookups in PWA ProjectsPage
+**Learning:** In `apps/pwa/src/pages/ProjectsPage.tsx`, resolving full group detail objects in `yourGroupRows.map` executed `groups.find(item => item.id === g.id)` on every rendered user group row, causing $O(N \times G)$ linear array scans on render cycles.
+**Action:** Pre-computed `groupsById` Map via `useMemo` indexed by group `id` to convert group detail lookups into constant-time $O(1)$ retrievals ($O(N + G)$ overall).
+
 ## 2026-10-23 - Batch pre-fetch own decision votes in group and enterprise decision routes
 **Learning:** In `apps/server/src/routes/group-decisions.ts` and `apps/server/src/routes/enterprise-decisions.ts`, rendering decision cards ran `getOwnDecisionVotes(actor, [d.id])` individually inside `.map()` loops over decision items, triggering N+1 separate SQLite query executions per list request.
 **Action:** Batch pre-fetched all own decision votes for the listed decisions in a single call (`getOwnDecisionVotes(actor, decisions.map(d => d.id))`) prior to mapping cards, passing the resulting lookup Map into `card(...)` for O(1) vote retrievals.

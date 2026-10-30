@@ -146,7 +146,7 @@ RUN apk del python3 make g++
 # Link to GitHub repository to inherit README on GHCR package page
 LABEL org.opencontainers.image.source="https://github.com/beanpool-org/beanpool"
 LABEL org.opencontainers.image.description="A decentralized mutual credit protocol for independent communities."
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
 
 # Expose the 4-port layout
 EXPOSE 8080 8443 4001 4002

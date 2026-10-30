@@ -10,6 +10,12 @@
  *   (requirePhoneStepUp). The token is in that answer and nowhere else; no list carries a secret or a hash.
  *   This is the only place an agent token is made (routes/automation-tokens.ts refuses the scope), so the owners' switch and
  *   the per-member cap hold for every one.
+ * - "May post for me" (agent/owner-posts.ts; design Q1): a tick on the make form, default off, kept on the token; only a
+ *   ticked owner's assistant is offered the posting tools. The list shows it, and the posts each made today.
+ * - "Assistant posts a day" (`POST …/agent/posts-per-day`): how many posts one ticked assistant may make in a UTC day,
+ *   1–1,000, 100 unless set (agent/limits.ts). An owner change with a fresh proof every time, as the gateway's settings
+ *   (requireFreshProof: a computer's key session is sent to the phone), in this server's local config (never copied to a
+ *   standby), and the owners are told (sec.agent).
  * - List: an owner sees every assistant (member, name, role, via, last used, calls today); an admin their own.
  * - Disconnect: an owner any assistant, an admin their own. Its next call to /mcp is 401.
  * - Preview (`POST …/agent/preview`): what a tool answers, run by the same table /mcp runs (agent/tools.ts), with the
@@ -19,7 +25,7 @@
  */
 import Router from '@koa/router';
 import type { RouteDeps } from '../routes/types.js';
-import { requireAdminRole, requirePhoneStepUp } from '../admin-auth.js';
+import { requireAdminRole, requireFreshProof, requirePhoneStepUp } from '../admin-auth.js';
 import {
     issueAutomationToken, listAutomationTokens, revokeAutomationToken, AGENT_TOKEN_DEFAULT_DAYS, AGENT_TOKEN_MAX_DAYS,
     type AutomationTokenView,
@@ -29,7 +35,10 @@ import { getMember } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { cleanMemberText, newBoundary } from './fence.js';
-import { agentCallsToday, forgetAgentGrant } from './limits.js';
+import {
+    agentCallsToday, agentCreatesToday, agentPostsPerDay, forgetAgentGrant, isAgentPostsPerDay, setAgentPostsPerDay,
+    AGENT_POSTS_PER_DAY_DEFAULT, AGENT_POSTS_PER_DAY_MAX, AGENT_POSTS_PER_DAY_MIN,
+} from './limits.js';
 import { dropSuggestionsOf } from './suggestions.js';
 import { aiAssistantsAllowed, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
@@ -38,6 +47,7 @@ import { listOAuthGrants, redirectHost, revokeOAuthGrant, type OAuthGrantView } 
 
 export const AGENT_GRANTS_PATH = '/api/local/admin/agent/grants';
 export const AGENT_PREVIEW_PATH = '/api/local/admin/agent/preview';
+export const AGENT_POSTS_PER_DAY_PATH = '/api/local/admin/agent/posts-per-day';
 /** At most this many assistants per member: one member cannot fill the node's TOKEN_LIMIT and shut the owners out. */
 export const AGENT_GRANTS_PER_MEMBER = 5;
 const DAY_MS = 24 * 60 * 60_000;
@@ -104,6 +114,8 @@ function oauthGrantView(g: OAuthGrantView, me: string | null, now = Date.now()) 
         expired: false,
         lastUsedAt: g.lastUsedAt,
         callsToday: agentCallsToday(g.id, now),
+        canPost: g.canPost === true,
+        postsToday: agentCreatesToday(g.id, now),
     };
 }
 
@@ -123,6 +135,8 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
         expired: !liveGrant(t, now),
         lastUsedAt: t.lastUsedAt,
         callsToday: agentCallsToday(t.id, now),
+        canPost: t.canPost === true,
+        postsToday: agentCreatesToday(t.id, now),
     };
 }
 
@@ -133,17 +147,18 @@ function previewGrant(ctx: any, grantId: unknown): AgentGrant | { error: string 
         if (o) {
             const r = nodeRoleOf(o.member);
             if (r !== 'owner' && r !== 'admin') return { error: 'Its member is no longer an owner or admin: it reads nothing now' };
-            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null };
+            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null, canPost: o.canPost === true };
         }
         const t = visibleGrants(ctx).find((g) => g.id === grantId);
         if (!t) return { error: 'No such assistant' };
         const role = nodeRoleOf(t.createdBy);
         if (role !== 'owner' && role !== 'admin') return { error: 'Its member is no longer an owner or admin: it reads nothing now' };
-        return { id: t.id, name: t.name, member: t.createdBy, role, via: 'token', createdAt: t.createdAt, expiresAt: t.expiresAt };
+        return { id: t.id, name: t.name, member: t.createdBy, role, via: 'token', createdAt: t.createdAt, expiresAt: t.expiresAt, canPost: t.canPost === true };
     }
     return {
+        // An owner's own preview lists every tool their assistant can be given, the posting ones ticked (none is run here).
         id: 'preview', name: 'Preview', member: actorOf(ctx) ?? 'owner:password', role: roleOf(ctx), via: 'token',
-        createdAt: Date.now(), expiresAt: null,
+        createdAt: Date.now(), expiresAt: null, canPost: roleOf(ctx) === 'owner',
     };
 }
 
@@ -167,6 +182,11 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             defaultDays: AGENT_TOKEN_DEFAULT_DAYS,
             maxDays: AGENT_TOKEN_MAX_DAYS,
             perMember: AGENT_GRANTS_PER_MEMBER,
+            /** The owners' "Assistant posts a day" (an owner changes it: AGENT_POSTS_PER_DAY_PATH). */
+            postsPerDay: agentPostsPerDay(),
+            postsPerDayDefault: AGENT_POSTS_PER_DAY_DEFAULT,
+            postsPerDayMin: AGENT_POSTS_PER_DAY_MIN,
+            postsPerDayMax: AGENT_POSTS_PER_DAY_MAX,
             grants: [...visibleGrants(ctx).map((t) => grantView(t, me)), ...visibleOAuthGrants(ctx).map((g) => oauthGrantView(g, me))],
         };
     });
@@ -206,19 +226,52 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             ctx.body = { error: `Pick from 1 to ${AGENT_TOKEN_MAX_DAYS} days` };
             return;
         }
-        const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: now + days * DAY_MS, createdBy: me }, now);
+        // "May post for me": ticked, never assumed (default off), and only an owner's assistant posts. A ticked token posts as the owner
+        // for up to 90 days, so it asks the owner's fresh proof every time, as every other token does
+        // (routes/automation-tokens.ts) and as the posts-a-day number does (below): a computer's key session is sent to the phone.
+        // After the range checks: a code is spent when it is checked (#2002 NB1). An unticked token keeps the gate it had.
+        const canPost = b.canPost === true && role === 'owner';
+        if (canPost && !(await requireFreshProof(ctx, b.code, 'connect an assistant that may post for you'))) return;
+        const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: now + days * DAY_MS, createdBy: me, canPost }, now);
         if (!res.ok) {
             ctx.status = 400;
             ctx.body = { error: res.error };
             return;
         }
-        logger.info('AUTH', 'AI assistant connected', { tokenId: res.record.id, role, by: me.slice(0, 16), expiresAt: res.record.expiresAt });
+        logger.info('AUTH', 'AI assistant connected', { tokenId: res.record.id, role, by: me.slice(0, 16), expiresAt: res.record.expiresAt, canPost });
         noteSecurityEvent({
             key: 'sec.agent', actor: me, actorRole: role,
-            detail: agentConnectedWords(cleanMemberText(res.record.name, 60), role, role === 'owner', offersSuggestions()),
+            detail: agentConnectedWords(cleanMemberText(res.record.name, 60), role, role === 'owner', offersSuggestions(), role === 'owner' && canPost),
         });
         ctx.status = 201;
         ctx.body = { token: res.token, grant: grantView(res.record, me) };
+    });
+
+    router.post('/api/local/admin/agent/posts-per-day', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        if (!(await personOnly(ctx, deps))) return;
+        if (!requireAdminRole(ctx, ['owner'], 'Only an owner sets how many posts an assistant may make a day')) return;
+        const perDay = body(ctx).perDay;
+        if (!isAgentPostsPerDay(perDay)) {
+            ctx.status = 400;
+            ctx.body = { error: `Assistant posts a day is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX.toLocaleString('en')}` };
+            return;
+        }
+        // Part of what bounds a leaked posting token (design §2.10), so an owner's fresh proof every time, as the gateway's own
+        // rate limit asks (routes/admin.ts): a computer's key session is sent to the phone, the phone's hand-off must be
+        // fresh, the password sends a current code. After the range check: a code is spent when it is checked (#2002 NB1).
+        if (!(await requireFreshProof(ctx, body(ctx).code, 'change how many posts an assistant may make a day'))) return;
+        const was = agentPostsPerDay();
+        if (was !== perDay) {
+            setAgentPostsPerDay(perDay);
+            const by = actorOf(ctx) ?? 'owner:password';
+            logger.info('ADMIN', 'Assistant posts a day changed', { from: was, to: perDay, by: by.slice(0, 16) });
+            noteSecurityEvent({
+                key: 'sec.agent', actor: by, actorRole: 'owner',
+                detail: `An owner changed how many posts each owner's AI assistant may make a day, from ${was.toLocaleString('en')} to ${perDay.toLocaleString('en')}.`,
+            });
+        }
+        ctx.body = { postsPerDay: perDay };
     });
 
     router.post('/api/local/admin/agent/grants/:id/revoke', async (ctx) => {
@@ -289,7 +342,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         const args: Record<string, unknown> = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
         let out;
         try {
-            out = tool.run(grant, args, newBoundary());
+            out = await tool.run(grant, args, newBoundary());
         } catch (e) {
             logger.warn('ADMIN', 'AI assistant preview failed', { tool: tool.name, error: e instanceof Error ? e.name : 'error' });
             ctx.status = 500;

@@ -21,6 +21,10 @@ Your messages and chats, your balance and trades, your keys, your address, your 
 
 An assistant can suggest what to do about a report, for example to keep your post or take it down. Nothing happens unless the admin it works for reads the report and approves; anything you hear about it comes from your community's moderators, as always.
 
+## When an owner's assistant posts
+
+An owner can let their assistant post for them: they tick "May post for me" when they connect it, and it is off unless they do. Then it can post Offers, Needs and events in the owner's name, or in the name of an enterprise they keep, and each one is live at once, with no approval. It asks for everything the app asks for (a photo, a description, a category and a place), and it can make only as many posts a day as the owners allow. A post it makes is the owner's own, like any they make themselves: it is removed or reported the same way, and moderators can see an assistant made it. It never posts as you.
+
 ## Who receives it
 
 What the assistant reads goes to the company that runs it, as when you paste something into an AI chat yourself. The server sends a report's words or a join message only when the admin's assistant asks for them, marked as words from a member and not instructions.

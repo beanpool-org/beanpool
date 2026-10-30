@@ -1193,6 +1193,7 @@ async function main(): Promise<void> {
             'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
             'POST /api/local/admin/agent/switch': { allowed: false },
             'POST /api/local/admin/agent/grants': { name: 'Sentinel assistant', days: 7 },
+            'POST /api/local/admin/agent/posts-per-day': { perDay: 100 },
             'POST /api/local/admin/agent/preview': { tool: 'reports_list', args: { include_text: true } },
             // A succession statement naming Alice's key as the caller's old one (line-display design §5).
             'POST /api/community/me/key-succession': { oldPubkey: alice.pk, at: '2026-10-03T04:00:00.000Z', sig: 'A'.repeat(86) + '==' },
@@ -1497,6 +1498,8 @@ async function main(): Promise<void> {
             'POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /api/local/admin/agent/switch', 'POST /api/local/admin/agent/switch',
             // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
             'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
+            // "Assistant posts a day" (#2629): an owner's fresh proof only, never a token or a guest.
+            'POST /api/local/admin/agent/posts-per-day',
             'POST /api/local/admin/agent/preview',
             // An assistant's suggestions (agent/suggestions-route.ts): a person's own session only; approve is the existing route.
             'GET /api/local/admin/agent/suggestions', 'POST /api/local/admin/agent/suggestions/:id/decline',

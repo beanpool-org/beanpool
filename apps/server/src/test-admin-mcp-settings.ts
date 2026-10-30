@@ -178,7 +178,8 @@ async function main(): Promise<void> {
         const DAY = 86_400_000;
 
         const before = Date.now();
-        const mOwner = await make(ownerS, { name: 'Olive\'s Claude' });
+        // Ticked "May post for me" (agent/owner-posts.ts): the 90-day one below is not, and its words say no posts.
+        const mOwner = await make(ownerS, { name: 'Olive\'s Claude', canPost: true });
         assert(mOwner.status === 201 && /^bp_[0-9a-f]{12}_[0-9a-f]{64}$/.test(mOwner.body?.token ?? '') && mOwner.cacheControl === 'no-store',
             `an owner's key session connects an assistant, in an answer never cached (${mOwner.status}, Cache-Control: ${mOwner.cacheControl})`);
         const OWNER_TOKEN: string = mOwner.body.token;
@@ -194,8 +195,11 @@ async function main(): Promise<void> {
         const tokens = [OWNER_TOKEN, m90.body.token];
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
-        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take\./.test(d)),
+        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs and events as that owner, and suggest actions it cannot take\./.test(d)),
             `owners are told an owner connected one (${told.join(' | ').slice(0, 300)})`);
+        assert(told.some(d => d === "An AI assistant (Olive's Cursor) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take.")
+            && m90.body?.grant?.canPost === false && mOwner.body?.grant?.canPost === true,
+            `one not ticked "May post for me" is told without posts, and each grant shows its tick (${told.join(' | ').slice(0, 300)})`);
 
         const tooLong = await make(ownerS, { name: 'x', days: 91 });
         const zero = await make(ownerS, { name: 'x', days: 0 });
@@ -331,8 +335,9 @@ async function main(): Promise<void> {
         assert(modList.status === 403, `a moderator sees none (${show(modList)})`);
         const row = (ownerList.body?.grants ?? []).find((g: any) => g.name === "Adam's Claude");
         assert(!!row && row.member === 'Adam' && row.role === 'admin' && row.via === 'token' && row.lastUsedAt === null && row.callsToday === 0 && row.mine === false
-            && Object.keys(row).sort().join() === 'callsToday,createdAt,expired,expiresAt,id,lastUsedAt,member,mine,name,role,via',
-        `each row: member, name, role, via, last used, calls today, and nothing else (${JSON.stringify(row)})`);
+            && Object.keys(row).sort().join() === 'callsToday,canPost,createdAt,expired,expiresAt,id,lastUsedAt,member,mine,name,postsToday,role,via'
+            && row.canPost === false && row.postsToday === 0,
+        `each row: member, name, role, via, last used, calls today, "May post for me" and posts today, and nothing else (${JSON.stringify(row)})`);
         assert(ownerList.body?.mcpUrl === `https://localhost:${port}/mcp` && ownerList.body?.defaultDays === 30 && ownerList.body?.maxDays === 90,
             `the list gives the address to paste and the days (${ownerList.body?.mcpUrl})`);
 
@@ -363,6 +368,8 @@ async function main(): Promise<void> {
         for (const [who, s, client, grantId] of [['owner', ownerS, ownerClient, ownerGrantId], ['admin', adminS, adminClient, adminGrantId]] as const) {
             for (const t of reads) {
                 if (t.name === 'connection_info') continue;
+                // An owner-only read (my_enterprises, agent/owner-posts.ts) is not an admin's assistant's: its lists above say so.
+                if (t.ownerOnly && who === 'admin') continue;
                 const viaMcp = await client.callTool({ name: t.name, arguments: argsFor(t.name) });
                 const viaPreview = await call('POST', PREVIEW, { headers: asSession(s), body: { grant: grantId, tool: t.name, args: argsFor(t.name) } });
                 const a = sameBoundary(viaMcp.structuredContent).replace(VOLATILE, '"$1":~');
@@ -370,7 +377,7 @@ async function main(): Promise<void> {
                 if (viaPreview.status !== 200 || viaPreview.body?.ok !== true || a !== b) differs.push(`${who} ${t.name}: ${a.slice(0, 120)} ≠ ${b.slice(0, 120)}`);
             }
         }
-        assert(differs.length === 0, `every reading tool's preview equals its /mcp answer, fences and redaction included, for an owner's and an admin's (${differs.join(' || ') || `${reads.length - 1} tools × 2`})`);
+        assert(differs.length === 0, `every reading tool's preview equals its /mcp answer, fences and redaction included, for an owner's and an admin's (${differs.join(' || ') || `${reads.length - 1} tools for an owner, ${reads.filter(t => !t.ownerOnly).length - 1} for an admin`})`);
         const pvReport = await call('POST', PREVIEW, { headers: asSession(adminS), body: { tool: 'report_get', args: { report_id: r1!.id } } });
         const fenced = JSON.stringify(pvReport.body?.result ?? {});
         assert(pvReport.body?.ok === true && /untrusted/.test(fenced) && /<<<MEMBER-TEXT [0-9a-f]{8}/.test(fenced) && !fenced.includes(reporter.pub) && !fenced.includes('Reggie'),

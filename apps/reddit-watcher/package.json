@@ -2,7 +2,7 @@
   "private": true,
   "name": "reddit-watcher",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "build": "esbuild --bundle --log-level=warning --target=es2023 --format=cjs --platform=node --outdir=dist/server src/server/index.ts",

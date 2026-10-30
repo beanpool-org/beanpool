@@ -108,6 +108,7 @@ import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
 import { createAlertsRoutes } from './routes/alerts.js';
 import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
 import { createMcpRoutes, mcpBodyLimit, MCP_BODY_MAX } from './agent/mcp-route.js';
+import { createPhotoUploadRoutes } from './agent/photo-upload-route.js';
 import { createAgentGrantRoutes } from './agent/grants-route.js';
 import { createOAuthRoutes, oauthDoorOff } from './agent/oauth-route.js';
 import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
@@ -863,10 +864,13 @@ function refuseSampleId(ctx: Koa.Context): void {
     ctx.body = { error: SAMPLE_ID_MESSAGE, code: SAMPLE_ID_REFUSAL };
 }
 
+/** /mcp/photos, an owner's assistant's photo upload beside /mcp (agent/photo-upload-route.ts), with or without its slash. */
+const MCP_PHOTOS_PATH = /^\/mcp\/photos\/?$/;
+
 /** /api and /ws, ignoring case: answers that are never documents, so they carry no document headers. */
 function isApiOrWsPath(requestPath: string): boolean {
     const lower = requestPath.toLowerCase();
-    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/') || lower === '/mcp';
+    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/') || lower === '/mcp' || MCP_PHOTOS_PATH.test(lower);
 }
 
 /**
@@ -883,6 +887,7 @@ export function isAdminSurfacePath(requestPath: string): boolean {
         p === '/api/local/admin' ||
         p.startsWith('/api/local/admin/') ||
         p === '/mcp' ||
+        p === '/mcp/photos' ||
         p === '/oauth' ||
         p.startsWith('/oauth/') ||
         p.startsWith('/.well-known/oauth-') ||
@@ -1940,6 +1945,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAlertsRoutes(deps),
         createAutomationTokenRoutes(deps),
         createMcpRoutes(deps),
+        createPhotoUploadRoutes(),
         createAgentGrantRoutes(deps),
         createOAuthRoutes(deps),
         createAgentSuggestionRoutes(deps),
@@ -2152,6 +2158,9 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments. An owner's assistant, whose
     // posts carry photos, may send more (mcpBodyLimit, asked before this table).
     [MCP_BODY_PATH, MCP_BODY_MAX],
+    // An assistant's photo upload is one image as its body, read by its route (agent/photo-upload-route.ts), never JSON:
+    // a JSON body there is refused, so this reads next to none of one.
+    [MCP_PHOTOS_PATH, 1024],
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],

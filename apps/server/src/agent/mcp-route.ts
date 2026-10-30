@@ -61,7 +61,7 @@ function jsonRpcError(ctx: any, status: number, message: string, code = -32000):
 }
 
 /** This node's own origin (its public address), or null when it has none: then only a request with no Origin passes. */
-function ownOrigin(): string | null {
+export function ownOrigin(): string | null {
     const url = resolvePublicNodeUrl();
     if (!url) return null;
     try { return new URL(url).origin; } catch { return null; }

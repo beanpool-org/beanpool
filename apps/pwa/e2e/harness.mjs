@@ -26,7 +26,7 @@ process.chdir(PWA_DIR);
  * way apps/manager/e2e does: the root font size goes to 130% (every rem-based Tailwind size follows, padding
  * included, which is harsher than a phone), and the arbitrary pixel sizes the cards use are scaled to match.
  */
-const TEXT_SCALE_CSS = (scale) => `
+export const TEXT_SCALE_CSS = (scale) => `
 html { font-size: ${scale * 100}% !important; }
 ${[8, 9, 10, 11, 12, 13, 14, 15, 16].map(px => `.text-\\[${px}px\\] { font-size: ${px * scale}px !important; }`).join('\n')}
 `;

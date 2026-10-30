@@ -75,6 +75,38 @@ describe('Wants to join on the web', () => {
         expect(calls.filter(c => c.method === 'POST')).toEqual([{ url: '/api/join/knocks/k2/decline', method: 'POST' }]);
     });
 
+    it('more waiting than the first page (20): an answer reads the list again, so the next one comes up and the count is the node\'s', async () => {
+        const waiting = Array.from({ length: 22 }, (_, i) => ({ ...SKY, id: `w${i + 1}`, callsign: `Asker ${i + 1}` }));
+        let answered = 0;
+        const calls = stub((url, init) => {
+            if (init?.method === 'POST') { answered++; return json(200, { knock: { status: 'declined' } }); }
+            const open = waiting.slice(answered);
+            return json(200, { knocks: open.slice(0, 20), total: open.length });
+        });
+        const onCount = vi.fn();
+        render(<WantsToJoin onCount={onCount} />);
+        expect(await screen.findByRole('heading', { name: '🚪 Wants to join (22)' })).toBeTruthy();
+        expect(screen.queryByTestId('wants-to-join-w21')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Not now, Asker 1' }));
+        expect(await screen.findByTestId('wants-to-join-w21')).toBeTruthy();
+        expect(screen.queryByTestId('wants-to-join-w1')).toBeNull();
+        expect(screen.getByRole('heading', { name: '🚪 Wants to join (21)' })).toBeTruthy();
+        expect(onCount).toHaveBeenLastCalledWith(21);
+        expect(calls.filter(c => c.method === 'GET')).toHaveLength(2);
+    });
+
+    it('everyone waiting is on the page: an answer reads nothing again', async () => {
+        const calls = stub((url, init) => init?.method === 'POST'
+            ? json(200, { knock: { id: 'k2', status: 'declined' } })
+            : json(200, { knocks: [RIVER, SKY], total: 2 }));
+        render(<WantsToJoin />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Not now, Sky' }));
+        await waitFor(() => expect(screen.queryByTestId('wants-to-join-k2')).toBeNull());
+        await new Promise(r => setTimeout(r, 20));
+        expect(calls.filter(c => c.method === 'GET')).toHaveLength(1);
+        expect(screen.getByTestId('wants-to-join-k1')).toBeTruthy();
+    });
+
     it('the last one answered: the section goes', async () => {
         stub((url, init) => init?.method === 'POST' ? json(200, { knock: { id: 'k2', status: 'declined' } }) : json(200, { knocks: [SKY], total: 1 }));
         render(<WantsToJoin />);

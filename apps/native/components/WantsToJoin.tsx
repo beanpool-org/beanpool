@@ -96,10 +96,14 @@ export function WantsToJoin({ anchorUrl, identity, onCount }: {
             : await declineJoinRequest(anchorUrl, identity, req.id);
         setBusy(null);
         if (r.ok) {
+            const left = (requests ?? []).filter(k => k.id !== req.id).length;
             setRequests(list => (list ?? []).filter(k => k.id !== req.id));
             setTotal(prev => { const n = Math.max(0, prev - 1); onCount?.(n); return n; });
             setRefusal(null);
             setDone(verb === 'approve' ? t('You invited {name}. Their app will find the invite by itself.', { name: req.callsign }) : null);
+            // More are waiting than this page shows (it holds the first 20): read it again, so the next ones come up and
+            // the count is the node's.
+            if (Math.max(0, total - 1) > left) load();
             return;
         }
         // Another member got there first, or it lapsed: the community's words, then the list as it is now.

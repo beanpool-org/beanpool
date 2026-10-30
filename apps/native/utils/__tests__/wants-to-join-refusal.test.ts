@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * People → Invites → "Wants to join" on the phone (components/WantsToJoin.tsx): a refused answer's words outlive the row
- * they are about (PR #2625 review, the web's twin is apps/pwa/src/components/WantsToJoin.test.tsx).
+ * they are about, and with more waiting than the first page an answer brings the next one up (PR #2625 review; the web's
+ * twin is apps/pwa/src/components/WantsToJoin.test.tsx).
  *
  * After a refusal the list is read again, and the node lists only open requests (engine/knocks.ts: pending, inside 30 days,
  * not a member, key not replaced). So after "answered", "lapsed", "already_member", "key_invalidated" and "not_found" the
@@ -78,7 +79,7 @@ async function settle() {
 
 async function draw(onCount?: (n: number) => void) {
     root = createRoot(host);
-    await act(async () => { root!.render(createElement(WantsToJoin, { anchorUrl: ANCHOR, identity: ME, onCount })); });
+    await act(async () => { root!.render(createElement(WantsToJoin, { anchorUrl: ANCHOR, identity: ME, onCount }) as any); });
     await settle();
 }
 
@@ -92,7 +93,7 @@ async function tap(label: string) {
     await settle();
 }
 
-describe('Wants to join on the phone: a refusal is still said after the list is read again', () => {
+describe('Wants to join on the phone', () => {
     /** Each refusal, and what the node's list then says: the row gone, a 403, or (a standby) the row still listed. */
     const REFUSALS: Array<[string, number, string, string, 'gone' | 'hidden' | 'kept']> = [
         ['another member got there first', 409, 'answered', 'Another member has already answered this request.', 'gone'],
@@ -144,6 +145,34 @@ describe('Wants to join on the phone: a refusal is still said after the list is 
         await tap('Invite River');
         expect(host.textContent).toContain('You invited River. Their app will find the invite by itself.');
         expect(byTestId('wants-to-join-note-k2')).toBeNull();
+    });
+
+    it('more waiting than the first page (20): an answer reads the list again, so the next one comes up and the count is the node\'s', async () => {
+        const waiting = Array.from({ length: 22 }, (_, i) => ({ ...SKY, id: `w${i + 1}`, callsign: `Asker ${i + 1}` }));
+        let answered = 0;
+        post.answer = () => { answered++; return json(200, { knock: { status: 'declined' } }); };
+        const reads = vi.fn(async () => { const open = waiting.slice(answered); return json(200, { knocks: open.slice(0, 20), total: open.length }); });
+        vi.stubGlobal('fetch', reads);
+        const onCount = vi.fn();
+        await draw(onCount);
+        expect(heading()).toBe('🚪 Wants to join (22)');
+        expect(button('Not now, Asker 21')).toBeNull();
+        await tap('Not now, Asker 1');
+        expect(reads).toHaveBeenCalledTimes(2);
+        expect(button('Not now, Asker 21')).not.toBeNull();
+        expect(button('Not now, Asker 1')).toBeNull();
+        expect(heading()).toBe('🚪 Wants to join (21)');
+        expect(onCount).toHaveBeenLastCalledWith(21);
+    });
+
+    it('everyone waiting is on the page: an answer reads nothing again', async () => {
+        post.answer = () => json(200, { knock: { id: 'k2', status: 'declined' } });
+        const reads = serveReads([json(200, { knocks: [RIVER, SKY], total: 2 })]);
+        await draw();
+        await tap('Not now, Sky');
+        expect(reads()).toBe(1);
+        expect(button('Not now, Sky')).toBeNull();
+        expect(button('Not now, River')).not.toBeNull();
     });
 
     it('an answer that couldn\'t reach the community says so in the app\'s words, and the row stays', async () => {

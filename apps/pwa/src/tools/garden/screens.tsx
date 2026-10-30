@@ -5,7 +5,7 @@
  * doors. Optional help for new growers: nothing here gates anything, and nothing is sent anywhere. The rules are core's
  * (tools/garden/guide.ts), shared with the phone's screens.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     GARDEN_ZONES, HEMISPHERE_WORDS, ZONE_ICONS, capitalFirst, climateCreditLine, cropById, cropPage, gardenZoneFix, guideGeneralLine,
     guideView, harvestLine, soonLine, t, weeksText, withGardenClimate, zoneLineText, zoneSourceText,
@@ -129,14 +129,24 @@ export function Zone({ host }: GardenScreenProps) {
     const current = gardenZoneFix(doc.settings, place ?? null);
     const [hemisphere, setHemisphere] = useState<Hemisphere>(current?.hemisphere ?? 'north');
     useEffect(() => { if (current && !doc.settings.hemisphere) setHemisphere(current.hemisphere); }, [current?.hemisphere]);
-    const choose = async (zone: GardenZoneId) => {
-        await host.doc.set(withGardenClimate(host.doc.get(), { zone, hemisphere }));
+    /**
+     * Set once a choice is being kept: a second tap before the first lands would go back twice, out of the guide too
+     * (the web's stack would empty). Cleared only when the write fails, so the member can tap again.
+     */
+    const keeping = useRef(false);
+    const keep = async (climate: { zone: GardenZoneId; hemisphere: Hemisphere } | null) => {
+        if (keeping.current) return;
+        keeping.current = true;
+        try {
+            await host.doc.set(withGardenClimate(host.doc.get(), climate));
+        } catch (e) {
+            keeping.current = false;
+            throw e;
+        }
         host.back();
     };
-    const usePlaceAgain = async () => {
-        await host.doc.set(withGardenClimate(host.doc.get(), null));
-        host.back();
-    };
+    const choose = (zone: GardenZoneId) => keep({ zone, hemisphere });
+    const usePlaceAgain = () => keep(null);
     const hemispheres = (['north', 'south'] as const).map((h) => ({ id: h, label: capitalFirst(t(HEMISPHERE_WORDS[h])) }));
     return (
         <div data-testid="garden-zone" className="min-w-0">

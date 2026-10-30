@@ -1597,6 +1597,30 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
     }, 30_000);
 
+    it('a second tap on Change before the first choice is kept goes back once (not out of the guide too)', async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        const twice = async (testId: string) => {
+            const el = byTestId(testId) as HTMLElement | null;
+            expect(el, testId).not.toBeNull();
+            await act(async () => { el!.click(); el!.click(); });
+        };
+        await twice('garden-zone-mild');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await settle();
+        expect(nav.backs).toBe(1);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+        // And Use my place again, tapped twice the same way.
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        await twice('garden-zone-reset');
+        await settleUntil(() => nav.backs > 1, 8000);
+        await settle();
+        expect(nav.backs).toBe(2);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
+    }, 30_000);
+
     it("takes the member's area, then the phone's last known place only where location is already allowed; never asks", async () => {
         keepHome(null, { lat: 51.5, lng: -0.1 }); // London, as the member's rough area
         await redraw({}, 'en');

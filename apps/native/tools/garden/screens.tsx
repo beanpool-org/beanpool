@@ -5,7 +5,7 @@
  * is the host route's. Optional help for new growers: nothing here gates anything, and nothing leaves the phone. The
  * rules are core's (tools/garden/guide.ts), shared with the web's screens.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     GARDEN_ZONES, HEMISPHERE_WORDS, ZONE_ICONS, capitalFirst, climateCreditLine, cropById, cropPage, gardenZoneFix, guideGeneralLine,
     guideView, harvestLine, soonLine, t, weeksText, withGardenClimate, zoneLineText, zoneSourceText,
@@ -125,14 +125,24 @@ export function Zone({ host }: GardenScreenProps) {
     const current = gardenZoneFix(doc.settings, place ?? null);
     const [hemisphere, setHemisphere] = useState<Hemisphere>(current?.hemisphere ?? 'north');
     useEffect(() => { if (current && !doc.settings.hemisphere) setHemisphere(current.hemisphere); }, [current?.hemisphere]);
-    const choose = async (zone: (typeof GARDEN_ZONES)[number]['id']) => {
-        await host.doc.set(withGardenClimate(host.doc.get(), { zone, hemisphere }));
+    /**
+     * Set once a choice is being kept: a second tap before the first lands would go back twice, out of the guide too
+     * (the web's stack would empty). Cleared only when the write fails, so the member can tap again.
+     */
+    const keeping = useRef(false);
+    const keep = async (climate: { zone: (typeof GARDEN_ZONES)[number]['id']; hemisphere: Hemisphere } | null) => {
+        if (keeping.current) return;
+        keeping.current = true;
+        try {
+            await host.doc.set(withGardenClimate(host.doc.get(), climate));
+        } catch (e) {
+            keeping.current = false;
+            throw e;
+        }
         host.back();
     };
-    const usePlaceAgain = async () => {
-        await host.doc.set(withGardenClimate(host.doc.get(), null));
-        host.back();
-    };
+    const choose = (zone: (typeof GARDEN_ZONES)[number]['id']) => keep({ zone, hemisphere });
+    const usePlaceAgain = () => keep(null);
     const hemispheres = (['north', 'south'] as const).map((h) => ({ value: h, label: capitalFirst(t(HEMISPHERE_WORDS[h])) }));
     return (
         <ToolScreen testID="garden-zone">

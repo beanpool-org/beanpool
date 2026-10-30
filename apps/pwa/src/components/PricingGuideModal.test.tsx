@@ -48,6 +48,31 @@ describe('PricingGuideModal Component', () => {
         expect(clearTimeoutSpy).toHaveBeenCalled();
         clearTimeoutSpy.mockRestore();
     });
+
+    it('resets reporting feedback state when modal closes and reopens', async () => {
+        const { rerender } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+        const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+        await userEvent.click(reportBtns[0]);
+
+        const submitBtn = screen.getByRole('button', { name: 'Submit' });
+        await userEvent.click(submitBtn);
+
+        expect(await screen.findByRole('heading', { name: /Feedback Submitted/i })).toBeInTheDocument();
+
+        // Close modal while success message is showing
+        rerender(<PricingGuideModal isOpen={false} onClose={() => {}} />);
+        expect(screen.queryByRole('heading', { name: /Feedback Submitted/i })).not.toBeInTheDocument();
+
+        // Reopen modal: should be back in main catalog view, not stuck on Feedback Submitted
+        rerender(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+        expect(screen.queryByRole('heading', { name: /Feedback Submitted/i })).not.toBeInTheDocument();
+
+        // Clicking report again should show the report form, not Feedback Submitted
+        const reopenedReportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+        await userEvent.click(reopenedReportBtns[0]);
+        expect(screen.getByRole('heading', { name: /Report Price/i })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /Feedback Submitted/i })).not.toBeInTheDocument();
+    });
 });
 
 describe('PricingGuideModal price accessible text', () => {

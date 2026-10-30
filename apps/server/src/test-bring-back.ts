@@ -497,6 +497,63 @@ async function runTests() {
         }
     }
 
+    // ── J ──
+    section('J. The member is told a copy is kept only when this server can open it, and why when it can\'t (both answers, and the admin\'s)');
+    {
+        const vic = join('VicMember', wordsAccount());
+        const on = await turnOn(vic);
+        const keyFile = recoverySealKeyPath();
+        const liveKey = fs.readFileSync(keyFile);
+        const putKeyBack = () => fs.writeFileSync(keyFile, liveKey, { mode: 0o600 });
+        const answers = async () => {
+            const st = await copyStatus(vic);
+            const shares = await signedReq(vic, 'POST', '/api/recovery/shares/status', {});
+            const adm = await adminStatus(adminSession, vic.pubKeyHex);
+            return { st: st.json, shares: shares.json, sharesStatus: shares.status, admin: adm.json.communityCopy };
+        };
+        try {
+            // It opens here: kept, since the turn-on, on every answer.
+            const opens = await answers();
+            assert(on.status === 200 && opens.st.kept === true && opens.st.since === on.json.since && opens.st.unopenable === null,
+                `a copy this server opens is kept, since the turn-on (got ${JSON.stringify(opens.st)})`);
+            assert(opens.shares.communityCopy?.since === on.json.since && opens.shares.communityCopyUnopenable === null,
+                `...the copies' status lists it as a way back (got ${JSON.stringify([opens.shares.communityCopy, opens.shares.communityCopyUnopenable])})`);
+            assert(opens.admin?.kept === true && opens.admin?.unopenable === null, '...and the admin is told they can be brought back');
+
+            // The seal key gone since the turn-on (a restore that didn't carry data/recovery-seal.key): the row is still here.
+            fs.unlinkSync(keyFile);
+            const gone = await answers();
+            assert(gone.st.kept === false && gone.st.since === null && gone.st.unopenable?.reason === 'recovery_seal_key_missing'
+                && gone.st.unopenable?.since === on.json.since && !!copyRow(vic.pubKeyHex),
+            `with the seal key gone the copy is never "kept": it is kept but can't be opened, since when and why (got ${JSON.stringify(gone.st)})`);
+            assert(gone.sharesStatus === 200 && gone.shares.communityCopy === null && gone.shares.communityCopyUnopenable?.reason === 'recovery_seal_key_missing',
+                `...the copies' status lists no way back there, and says what is kept (got ${gone.sharesStatus} ${JSON.stringify([gone.shares.communityCopy, gone.shares.communityCopyUnopenable])})`);
+            assert(gone.admin?.kept === false && gone.admin?.unopenable?.reason === 'recovery_seal_key_missing',
+                `...and the admin is not told they can be brought back (got ${JSON.stringify(gone.admin)})`);
+            const noKeyAgain = await turnOn(vic);
+            assert(noKeyAgain.status === 503 && noKeyAgain.json.code === 'recovery_seal_key_missing' && (await copyStatus(vic)).json.unopenable?.reason === 'recovery_seal_key_missing',
+                `...turning it on again can't fix that here: refused, nothing changed (got ${noKeyAgain.status} ${noKeyAgain.json.code})`);
+
+            // Another key in its place (a standby promoted without it): the same, with its own why.
+            fs.writeFileSync(keyFile, crypto.randomBytes(32), { mode: 0o600 });
+            const other = await answers();
+            assert(other.st.kept === false && other.st.since === null && other.st.unopenable?.reason === 'recovery_seal_unopenable' && other.st.offered === true,
+                `under a seal key that didn't lock it, the copy is not "kept" either, with its own why (got ${JSON.stringify(other.st)})`);
+            assert(other.sharesStatus === 200 && other.shares.communityCopy === null && other.shares.communityCopyUnopenable?.reason === 'recovery_seal_unopenable',
+                `...the copies' status lists no way back there (got ${other.sharesStatus} ${JSON.stringify([other.shares.communityCopy, other.shares.communityCopyUnopenable])})`);
+            assert(other.admin?.kept === false && other.admin?.unopenable?.reason === 'recovery_seal_unopenable',
+                `...nor does the admin's (got ${JSON.stringify(other.admin)})`);
+            // The member's repair: turning it on again locks a new copy with the key this server has.
+            const again = await turnOn(vic);
+            const fixed = await answers();
+            assert(again.status === 200 && fixed.st.kept === true && fixed.st.unopenable === null && fixed.st.since === again.json.since
+                && fixed.shares.communityCopy?.since === again.json.since && fixed.admin?.kept === true,
+            `turning it on again makes a copy this server opens: kept again, on every answer (got ${again.status} ${JSON.stringify(fixed.st)})`);
+        } finally {
+            putKeyBack();
+        }
+    }
+
     console.log(`\n${passed}/${run} checks passed`);
     if (passed !== run) process.exitCode = 1;
     process.exit();

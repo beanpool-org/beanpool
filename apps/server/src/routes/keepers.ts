@@ -593,7 +593,10 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         }
     });
 
-    /** Whether this server keeps the member's community copy, since when, and whether the community offers it now. */
+    /**
+     * Whether this server keeps the member's community copy, since when, and whether the community offers it now. `kept`
+     * only for a copy it can open; one it keeps but can't is `unopenable: { since, reason }` (engine/community-copy.ts).
+     */
     router.post('/api/recovery/community-copy/status', async (ctx) => {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
@@ -656,7 +659,9 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
         const threshold = isSingle ? 1 : memberThreshold(keepers.some(k => k.holderType === 'sso'));
         const effectiveTotal = (isSingle && !legacySso) ? ssoShares.length : total;
         // The member's community copy here (vault rethink VR3, engine/community-copy.ts), so "Where your account can be
-        // brought back from" lists it beside the sign-ins' copies, wherever it was turned on. Opens nothing.
+        // brought back from" lists it beside the sign-ins' copies, wherever it was turned on. `communityCopy` only for a
+        // copy this server can open; one it can't is `communityCopyUnopenable`, which no app counts as a way back (an app
+        // from before it reads that field not at all, so it sees no copy: never a way back that isn't one).
         const copy = communityCopyStatus(owner);
 
         ctx.status = 200;
@@ -665,6 +670,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             keepers,
             enrolledSso,
             communityCopy: copy.kept ? { since: copy.since } : null,
+            communityCopyUnopenable: copy.unopenable,
             total,
             threshold,
             canAffordToLose: Math.max(0, effectiveTotal - threshold),

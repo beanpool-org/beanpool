@@ -53,7 +53,7 @@ import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
 import { deleteAllShares, moveKeeperCopiesToNewKey } from './recovery-shares.js';
-import { communityCopyStatus, deleteCommunityCopy } from './community-copy.js';
+import { communityCopyStatus, deleteCommunityCopy, type CommunityCopyStatus } from './community-copy.js';
 import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
 import { moveBlocks } from './member-blocks.js';
@@ -717,8 +717,11 @@ export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewe
     /** Wrong numbers typed on the pending code so far (bindRekeyByMatch stops it at REKEY_MATCH_TRIES); beside the code only. */
     wrongNumbers: number;
     history: RekeyAuditLogView[];
-    /** Whether the member keeps a community copy here (engine/community-copy.ts): Bring back is offered only then. */
-    communityCopy: { kept: boolean; since: string | null };
+    /**
+     * Whether the member keeps a community copy here that this server can open (engine/community-copy.ts): Bring back is
+     * offered only then. One it keeps but can't open is `unopenable`, with why, and is never `kept`.
+     */
+    communityCopy: CommunityCopyStatus;
     /** This server's bring-backs of the member, newest first: who and when (bring_back_log). Never the code or the copy. */
     bringBacks: { operatorPubkey: string; releasedAt: string }[];
 } {

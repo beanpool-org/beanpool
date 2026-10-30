@@ -8,7 +8,8 @@
  * clear, and never at all when it has no seal key to lock them with. It opens them only for a bring-back an admin
  * confirmed with the member's new phone in front of them (engine/bring-back.ts), and then only to seal them to that
  * phone's throwaway key; before that, the bring-back opens the copy and lets it go at once, when the code is made and
- * when the number is typed, so no code is made or spent for a copy this server can't open.
+ * when the number is typed, so no code is made or spent for a copy this server can't open. Its status does the same
+ * ({@link communityCopyStatus}), so a copy this server can't open is never said to be kept.
  *
  * Who can open it, said plainly: this server, so the people who run it; nobody else. The words the member reads say so.
  *
@@ -28,6 +29,8 @@ import { getDoor } from '../config/door.js';
 import { KEEPER_ALG_COPY_KEY, isKeySealedCopy, word } from '@beanpool/core';
 import {
     openRecoveryFields,
+    RecoverySealKeyMissing,
+    RecoverySealUnopenable,
     requireRecoverySealKey,
     sealRecoveryFields,
     shareRowAad,
@@ -109,10 +112,45 @@ export function putCommunityCopy(ownerPubkey: string, input: CommunityCopy, now 
     return { since: at };
 }
 
-/** Whether this server keeps a community copy for the member, and since when. Opens nothing. */
-export function communityCopyStatus(ownerPubkey: string): { kept: boolean; since: string | null } {
+/**
+ * Why a copy this server keeps can't be opened here: its recovery-seal key is gone (`recovery_seal_key_missing`: only
+ * the people who run it can fix that, by putting the key back), or the copy was locked with a key it doesn't have
+ * (`recovery_seal_unopenable`: turning it on again makes one locked with the key it has).
+ */
+export type CommunityCopyUnopenableReason = 'recovery_seal_key_missing' | 'recovery_seal_unopenable';
+
+/** What this server can say about a member's community copy. */
+export interface CommunityCopyStatus {
+    /** It keeps the copy AND can open it now: only then can it bring the member back, and only then is it a way back. */
+    kept: boolean;
+    /** Since when it is kept (ISO), when `kept`. */
+    since: string | null;
+    /** It keeps a copy it can't open now: since when, and why. Null otherwise. Never counted as a way back. */
+    unopenable: { since: string; reason: CommunityCopyUnopenableReason } | null;
+}
+
+/**
+ * Whether this server keeps a community copy for the member that it can open, and since when. A copy it keeps but can't
+ * open (its seal key gone since, or another key in its place: a restore or a standby that didn't carry it) is never
+ * `kept`, so no app tells the member they can be brought back when they can't: it is `unopenable`, with why. Opens the
+ * copy to find out and lets it go at once, as a bring-back does before it makes or spends a code (engine/bring-back.ts).
+ */
+export function communityCopyStatus(ownerPubkey: string): CommunityCopyStatus {
     const row = db.prepare('SELECT created_at FROM community_copies WHERE owner_pubkey = ?').get(ownerPubkey) as { created_at: string } | undefined;
-    return { kept: !!row, since: row?.created_at ?? null };
+    if (!row) return { kept: false, since: null, unopenable: null };
+    try {
+        openCommunityCopy(ownerPubkey);
+    } catch (e) {
+        if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) {
+            return { kept: false, since: null, unopenable: { since: row.created_at, reason: e.code } };
+        }
+        // Opened, but not a copy (it can only have been written so by a fault): never "kept"; making it again replaces it.
+        if (e instanceof CommunityCopyRefusal || e instanceof SyntaxError) {
+            return { kept: false, since: null, unopenable: { since: row.created_at, reason: 'recovery_seal_unopenable' } };
+        }
+        throw e;
+    }
+    return { kept: true, since: row.created_at, unopenable: null };
 }
 
 export function hasCommunityCopy(ownerPubkey: string): boolean {

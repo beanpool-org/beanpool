@@ -425,7 +425,7 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
     const hoursEquivalent = Math.abs(balance) / 40;
 
-    // What is held in trust: the Beans of this member's deals under way as the payer, the figure the phone's Ledger shows as IN ESCROW.
+    // What is held in trust: the Beans of this member's deals under way as the payer, the figure the phone's Ledger shows as HELD IN TRUST.
     const inTrust = sample ? 0 : (deals ?? []).reduce((sum, d) => (d.status === 'pending' && d.buyerPublicKey === myKey ? sum + d.credits : sum), 0);
     // A hold's, release's or refund's other side is `escrow_<deal id>` (older ones `escrow_<listing id>`).
     const dealOfAccount = (key: string): MarketplaceTransaction | undefined => {

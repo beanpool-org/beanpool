@@ -17,7 +17,8 @@
  * `avatar` on the next profile save. The node stored it, and from then on
  * `GET /api/avatar/<pk>` 404d: the photo was gone. Such a value reads as NO avatar
  * (emitted null, and no photo for the marketplace gate), so members see their initials rather
- * than a blank ring and the phone's existing self-heal republishes the canonical copy.
+ * than a blank ring and are asked for a photo again (the phone no longer republishes a copy of a
+ * picture chosen in another community: Profile S2).
  * `isSelfAvatarUrl` is the write-side half: see the server's `engine/members.ts` and `db/db.ts`.
  *
  * COST. A photo is about 27 KB of base64. While it sat in its member's row, every list of members

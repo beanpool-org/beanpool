@@ -208,6 +208,21 @@ export function setNodeAdminCheckHook(fn: ((publicKey: string) => boolean) | nul
     isNodeAdminKey = fn;
 }
 
+// A project's cancel (deleteCrowdfundProject) refunds its backers but a closed account, whose share goes to the Commons as
+// the return of an unfunded project's pledges sends it: which account is closed (engine/stranded-pledges.ts
+// isClosedAccount), that move (engine/unfunded-pledges.ts closedPledgeToCommons), and the conserving transaction all of
+// the cancel's moves run in (state-engine.ts conservingTransaction). state-engine registers them; inverted for the same
+// module-cycle reason. Unregistered, a cancel that would refund anyone is refused.
+export interface ProjectCancelLedger {
+    conservingTransaction: <T>(fn: () => T) => T;
+    isClosedAccount: (publicKey: string) => boolean;
+    closedPledgeToCommons: (escrow: string, projectId: string, amount: number) => void;
+}
+let projectCancelLedger: ProjectCancelLedger | null = null;
+export function setProjectCancelLedgerHook(hooks: ProjectCancelLedger | null): void {
+    projectCancelLedger = hooks;
+}
+
 // Enable WAL mode for better concurrency and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
@@ -3523,29 +3538,45 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         throw new Error(`Cannot delete project enterprise with non-zero balance (${account.balance}). Drain or sweep funds first.`);
     }
 
+    // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that already
+    // went back a week after the project's end date (HELD_PLEDGES_SQL), which would be paid twice. But a closed account's
+    // (isClosedAccount: deleted by its owner, removed by the community, or an enterprise that wound up), which can't be paid
+    // here: its share goes to the Commons, by the very move the return of an unfunded project's pledges makes
+    // (engine/unfunded-pledges.ts, A CLOSED ACCOUNT; Marty, board, 27 Oct 2026: "To the Commons"), one row each. Until
+    // this, the cancel credited the closed account (#2599's deciding pass: Ann's 7 onto her removed account, the Commons
+    // unmoved). Decided here, before anything moves.
+    const escrowPubkey = `escrow_${projectId}`;
+    const pledges = project.status === 'ACTIVE'
+        ? db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount: number, id: string }[]
+        : [];
+    const ledger = projectCancelLedger;
+    if (pledges.length > 0 && !ledger) throw new Error('Cannot refund the backers: the ledger is not running');
+    const refunds: typeof pledges = [];
+    const toCommons = new Map<string, number>();
+    for (const pledge of pledges) {
+        if (ledger?.isClosedAccount(pledge.from_pubkey)) toCommons.set(pledge.from_pubkey, (toCommons.get(pledge.from_pubkey) ?? 0) + pledge.amount);
+        else refunds.push(pledge);
+    }
+    // That move needs Beans switched on (config/node-profile.ts), as the return's does: refused before anything moves.
+    if (toCommons.size > 0) assertMoneyMayMove?.();
+
     // #138: close every backer's demurrage window before the refunds raise their balances. This is the
     // widest of the three paths — one deleted project refunds all of its pledgers at once, so an open window
-    // on any of them becomes a retrospective tax on money they are merely getting back.
+    // on any of them becomes a retrospective tax on money they are merely getting back. Not a closed
+    // account's: nothing is paid into it.
     //
-    // Read out here and settled OUTSIDE executeDelete on purpose. Settling is independently correct and must
-    // not be undone by an unrelated failure later in the delete; and a decay credit taken in memory inside a
-    // transaction that then rolls back is the exact conservation hazard conservingTransaction exists for
-    // (state-engine.ts) — which this module cannot reach.
-    if (project.status === 'ACTIVE') {
-        const backers = db.prepare(`SELECT DISTINCT from_pubkey FROM (${HELD_PLEDGES_SQL})`)
-            .all({ escrow: `escrow_${projectId}`, project: projectId }) as { from_pubkey: string }[];
-        if (backers.length > 0) onSettleDemurrage?.(backers.map(b => b.from_pubkey));
-    }
+    // Settled OUTSIDE executeDelete on purpose. Settling is independently correct and must not be undone by
+    // an unrelated failure later in the delete.
+    if (refunds.length > 0) onSettleDemurrage?.([...new Set(refunds.map(p => p.from_pubkey))]);
 
-    const executeDelete = db.transaction(() => {
-        // If still ACTIVE, funds are locked in Escrow. Refund them to backers: the pledges it still holds, never one that
-        // already went back a week after the project's end date (HELD_PLEDGES_SQL), which would be paid twice.
+    const executeDelete = () => {
         if (project.status === 'ACTIVE') {
-            const escrowPubkey = `escrow_${projectId}`;
-            const pledges = db.prepare(HELD_PLEDGES_SQL).all({ escrow: escrowPubkey, project: projectId }) as { from_pubkey: string, amount: number, id: string }[];
+            // A closed account's share first, while the rows and the in-memory ledger agree: the move writes the escrow's
+            // row from memory, so after the raw refunds below it would put back what they took out.
+            for (const amount of toCommons.values()) ledger!.closedPledgeToCommons(escrowPubkey, projectId, amount);
 
             let totalRefunded = 0;
-            for (const pledge of pledges) {
+            for (const pledge of refunds) {
                 // Return Beans to Backer
                 db.prepare(`UPDATE accounts SET balance = balance + ?, last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?`).run(pledge.amount, pledge.from_pubkey);
 
@@ -3590,9 +3621,13 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
         } catch { }
         writeTombstone('projects', projectId);
         writeTombstone('members', projectId);
-    });
+    };
 
-    executeDelete();
+    // In one conserving transaction: a failure after a closed account's share went to the Commons puts the pot back in
+    // memory as well as in its row (a plain one rolled back the row and left memory holding it). One that refunds nobody
+    // needs no ledger.
+    if (ledger) ledger.conservingTransaction(executeDelete);
+    else db.transaction(executeDelete)();
     // A2-1: refunds/escrow drain above mutated balances via raw SQL — re-sync the
     // in-memory ledger so the next transfer() doesn't clobber the DB with stale values.
     onBalanceMutation?.();

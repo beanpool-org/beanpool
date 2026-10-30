@@ -10,6 +10,12 @@ export const NOTIFICATION_PERMISSION_STORE_KEY = 'beanpool_notification_permissi
 export const KNOCKS_STORE_KEY = 'beanpool_knocks';
 
 /**
+ * The public key a knock made on this phone, whose 12 words have never been shown (utils/knock-key.ts `knockKeyIsNew`). Sign
+ * Out and Replace wipe it (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const KNOCK_KEY_STORE_KEY = 'beanpool_knock_key';
+
+/**
  * What the background sync last saw of the community's open requests to join, for the account on it (`{ community,
  * publicKey, count }`; utils/sync-notices.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
  */
@@ -253,6 +259,14 @@ export function vaultConnectWantedStoreKey(publicKey: string): string {
  */
 export function vaultCopyKnownStoreKey(publicKey: string): string {
     return `beanpool_vault_copy_known:${publicKey.toLowerCase()}`;
+}
+
+/**
+ * The rule for where members' copies go that one account last saw in each of its communities (utils/copies-rule.ts),
+ * as JSON `{ <community address>: <rule> }`: a rule that differs from it shows Home's "rule changed" card once.
+ */
+export function copiesRuleSeenStoreKey(publicKey: string): string {
+    return `beanpool_copies_rule_seen:${publicKey.toLowerCase()}`;
 }
 
 /** The key vault holds one account said "Yes, it's me" to on this phone (utils/vault.ts `approvedHolds`). */

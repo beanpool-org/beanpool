@@ -16,7 +16,9 @@
  * when the node next answers, on this visit or a later one; Home is told whether the card is drawn (`onDrawn`).
  *
  * Adding a sign-in (lib/link-signin.ts) leaves the page for the provider, as joining with one does; App.tsx finishes it
- * on the way back and shows the result here (`result`).
+ * on the way back and shows the result here (`result`). Where the community keeps no copies of members' accounts (its
+ * rule `none`, vault rethink VR2; the page passes `keepsNoCopies`), a sign-in only lifts the new-account limits, and its
+ * words say so rather than promise a copy or a way back.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { t, word } from '@beanpool/core';
@@ -32,6 +34,8 @@ export const ONE_WAY_BACK_WORDS = {
     line: word('Your account has one way back: your 12 words. Check you still have them, or add a sign-in.'),
     /** Why a sign-in, for an account that has only its 12 words: what it is, and who can open the copy it keeps. */
     why: word("A sign-in with Google, Apple or Facebook is a second way back if you lose this device. We keep only a scrambled reference to it, never your email or name from there. It also locks a copy of your account; the people who run this community's server can open that copy."),
+    /** Why a sign-in where this community keeps no copies (its rule `none`): no copy is made, so it is no way back. */
+    whyNoCopies: word("A sign-in with Google, Apple or Facebook only lifts the limits on new 12-words accounts. We keep only a scrambled reference to it, never your email or name from there. This community keeps no copies of members' accounts, so your 12 words are your way back."),
 } as const;
 
 export const ONE_WAY_BACK = ONE_WAY_BACK_WORDS.line;
@@ -175,13 +179,15 @@ interface AddSignInProps {
     onLeaving?: () => void | boolean | Promise<void | boolean>;
     /** Ask for the sign-ins as it opens, so the choice is shown at once (the member already chose to add one). */
     autoStart?: boolean;
+    /** This community keeps no copies of members' accounts (its rule `none`): the words promise no copy and no way back. */
+    keepsNoCopies?: boolean;
 }
 
 /**
  * "Add a sign-in": asks the node which sign-ins it offers (a nonce bound to adding one for this member), then the
  * member picks one and the page leaves for it. Every refusal is a sentence beside the button.
  */
-export function AddSignIn({ identity, label, navigate, origin, onLeaving, autoStart = false }: AddSignInProps) {
+export function AddSignIn({ identity, label, navigate, origin, onLeaving, autoStart = false, keepsNoCopies = false }: AddSignInProps) {
     const [nonce, setNonce] = useState<JoinNonce | null>(null);
     // When the nonce came: one held past NONCE_FRESH_MS is asked for again before the trip (time spent reading the
     // tour, say, must not come back from the provider as a failed sign-in), as WebJoin does.
@@ -276,7 +282,9 @@ export function AddSignIn({ identity, label, navigate, origin, onLeaving, autoSt
             {message && (
                 <p role="alert" data-testid="add-sign-in-problem" className="text-sm text-red-800 dark:text-red-300 mt-2 mb-0 break-words">{saidWords(message)}</p>
             )}
-            <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">{t(ONE_WAY_BACK_WORDS.why)}</p>
+            <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">
+                {keepsNoCopies ? t(ONE_WAY_BACK_WORDS.whyNoCopies) : t(ONE_WAY_BACK_WORDS.why)}
+            </p>
         </div>
     );
 }
@@ -301,9 +309,11 @@ interface CardProps {
     known?: boolean;
     /** Told whether the card is drawn, before the page paints (Home: a card not drawn is not a place to move another to). */
     onDrawn?: (drawn: boolean) => void;
+    /** This community keeps no copies of members' accounts (its rule `none`, from the page's /api/community/info). */
+    keepsNoCopies?: boolean;
 }
 
-export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known = false, onDrawn }: CardProps) {
+export function OneWayBackCard({ identity, placement, onSeeWords, result, navigate, origin, refreshKey, frame = (card) => card, known = false, onDrawn, keepsNoCopies = false }: CardProps) {
     const standing = useOneWayBack(identity.publicKey, `${String(refreshKey)}:${result?.kind ?? ''}`);
     const [schedule, setSchedule] = useState(() => readSchedule(identity.publicKey));
     useEffect(() => { setSchedule(readSchedule(identity.publicKey)); }, [identity.publicKey]);
@@ -360,7 +370,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                                 {t('See my 12 words')}
                             </button>
                         )}
-                        <AddSignIn identity={identity} navigate={navigate} origin={origin} />
+                        <AddSignIn identity={identity} navigate={navigate} origin={origin} keepsNoCopies={keepsNoCopies} />
                     </div>
                 </section>
             )}

@@ -280,6 +280,9 @@ vi.mock('../node-admin', () => ({
 }));
 vi.mock('../vault', () => ({
     hasVault: () => false,
+    // Where a copy goes (vault-config.ts signInCopiesAt, with a community's rule since vault rethink VR2): Settings reads it
+    // as it opens. No vault here, so the community, or none where the rule says none.
+    signInCopiesAt: (rule?: string | null) => (rule === 'none' ? 'none' : 'community'),
     vaultCopyKnowledge: async () => 'known',
     vaultStatus: async () => ({ holds: [] }),
     approvedHolds: async () => [],
@@ -818,7 +821,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
 
         // The post-redeem publish, told by the node that it holds a photo, decides from this row.
         const decision = await resolveProfilePublishAvatar({
-            catchUp: { localRow: mockDb.localProfile.avatar_url, canonical: OLDER_PHOTO, nodeHasNoPhoto: false },
+            catchUp: { localRow: mockDb.localProfile.avatar_url },
         });
         expect(decision.avatar).toBeNull();
     });

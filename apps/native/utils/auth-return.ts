@@ -33,17 +33,34 @@ export interface SetupState {
      * answer be the door ({@link LOOK_DOOR}).
      */
     lookingAround?: boolean;
+    /**
+     * An identity, no community in use and no wizard part-way: an account that is a member nowhere, waiting to be let in
+     * (utils/waiting-to-join.ts, slice S3). Read only with an identity and no wizard pending ({@link WAITING_ROOTS}).
+     */
+    waiting?: boolean;
 }
+
+/**
+ * The screens a waiting phone stays on (slice S3): welcome (its waiting mode, an invite, a restore), Find a community (ask
+ * another), Start a community and the guide it links to, and the screens a phone with no account may open (guardian
+ * recovery, a re-key code, a claim, another community's open door, a community's card, a shared post). Every other screen
+ * reads a community the phone is not in, and goes to welcome.
+ */
+const WAITING_ROOTS: ReadonlySet<string> = new Set([
+    'welcome', 'find-community', 'start-community', 'guide', 'recover-identity', 'rekey-code', 'claim-community', 'join-open-door',
+    'community-card', 'peek',
+]);
 
 /** Where the guard sends a screen: the first screen, the door opened from the look, or nowhere (null). */
 export type SetupLanding = '/welcome' | typeof LOOK_DOOR | null;
 
 /**
- * The first two checks of the root guard in app/_layout.tsx: while the member has no identity yet or a join wizard
- * pending, every root except welcome (and, with no identity, guardian recovery, a re-key code, a claim and another
- * community's open door, which run without one; with a claim whose answer is not in, the claim screen; with another
- * community's door join not finished, the door screen) is replaced with welcome. Null means leave the screen where it is.
- * Once the member is set up this is always null, and the guard's node-recognition checks decide as before.
+ * The first checks of the root guard in app/_layout.tsx: while the member has no identity yet or a join wizard
+ * pending, every root except welcome (and, with no identity, guardian recovery, a re-key code, a claim, another
+ * community's open door and Find a community, which run without one; with a claim whose answer is not in, the claim
+ * screen; with another community's door join not finished, the door screen) is replaced with welcome. So, with an
+ * identity that is a member nowhere (`waiting`), is every root but the few it stays on. Null means leave the screen where
+ * it is. Once the member is set up this is always null, and the guard's node-recognition checks decide as before.
  *
  * A sign-in return screen (app/auth/*) gets no exemption. On a phone it never mounts, because the return link does
  * not navigate. Anywhere it does mount (the web preview), the guard replaces it before its own 300 ms timer can open
@@ -55,7 +72,7 @@ export type SetupLanding = '/welcome' | typeof LOOK_DOOR | null;
  */
 export function setupRedirect(segments: readonly string[], state: SetupState & { lookingAround: true }): SetupLanding;
 export function setupRedirect(segments: readonly string[], state: SetupState): '/welcome' | null;
-export function setupRedirect(segments: readonly string[], { hasIdentity, pendingOnboarding, claimOut = false, doorOut = false, lookingAround = false }: SetupState): SetupLanding {
+export function setupRedirect(segments: readonly string[], { hasIdentity, pendingOnboarding, claimOut = false, doorOut = false, lookingAround = false, waiting = false }: SetupState): SetupLanding {
     const root = segments[0];
     // `rekey-code`: a new phone taking over an account with an admin's re-key code (app/rekey-code.tsx) holds no identity
     // until the admin binds it (utils/rekey-redeem.ts).
@@ -68,11 +85,15 @@ export function setupRedirect(segments: readonly string[], { hasIdentity, pendin
     // the community's public card and nothing else, and its doors lead to welcome; a stranger with no account is who it is for.
     // `peek`: one post a member shared outside their community (front doors S6, app/peek.tsx), read from it as a visitor,
     // with Ask to join leading to that community's card. A stranger with no account is who it is for too.
+    // `find-community`: ask a community to let you in, by its address or its code (DESIGN-account-without-global-fable.md
+    // §2.4, slice S3). The knock makes the account, at Send: a stranger who knows a community needs nothing of ours. With no
+    // account the directory of communities near you is not read.
     if (!hasIdentity) {
         // These stay ahead of the look's check, looking around or not: another community's door link opened while the
-        // phone looks around global goes to that door, not global's (S2), a community's card stays (S15), and a shared post's peek stays (S6).
+        // phone looks around global goes to that door, not global's (S2), a community's card stays (S15), a shared post's
+        // peek stays (S6), and so does asking a community by its address (S3; the first screen's quiet row opens it).
         if (root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' || root === 'claim-community' || root === 'community-card'
-            || root === 'join-open-door' || root === 'peek') return null;
+            || root === 'join-open-door' || root === 'peek' || root === 'find-community') return null;
         // The bare root is the app's start: the first screen, looking around or not (a restart lands there).
         if (lookingAround && root !== undefined) return isLookRoute(segments) ? null : LOOK_DOOR;
         return '/welcome';
@@ -82,6 +103,9 @@ export function setupRedirect(segments: readonly string[], { hasIdentity, pendin
     if (pendingOnboarding) {
         return root === 'welcome' || (claimOut && root === 'claim-community') || (doorOut && root === 'join-open-door') ? null : '/welcome';
     }
+    // Waiting to be let in (S3): its screens stay, every other one (the bare root and the tabs among them) goes to welcome,
+    // whose waiting mode is its home. Never on to the tabs, and never asked whether a community knows it.
+    if (waiting) return root !== undefined && WAITING_ROOTS.has(root) ? null : '/welcome';
     return null;
 }
 

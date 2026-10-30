@@ -17,8 +17,10 @@ import {
     sendKnock, rememberedKnocks, cancelledKnocks, rememberKnock, forgetKnock, readKnockStatus, knockCardState, knockFormProblem,
     KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockCardState, type KnockStatusResult,
 } from '../utils/knock';
+import { knockFromNode } from '../utils/knock-address';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { joinedNudgeWords } from '../utils/joined-nudge-words';
+import { copiesAtFor } from '../utils/copies-rule';
 import { findLineWords } from '../components/find-community-lines';
 import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { askNotificationPermissionOnAction } from '../utils/notification-permission';
@@ -67,6 +69,8 @@ async function readCard(origin: string): Promise<CommunityCard | 'unreachable' |
  *     from Find a community: utils/knock.ts); once asked, what the community answered (waiting, a yes to join with, or
  *     ask again), as Find a community shows it; and I have an invite (People's Join Another Community, as it is: no route
  *     fills its server box, so no link can point a member's join at another server: pair-link.test.ts holds it);
+ *   - an account in no community yet (waiting to be let in, slice S3): the same, but its yes goes to welcome, which joins
+ *     it through the invite step so the 12 words its key has never shown come next (as Find a community's Join does);
  *   - no account yet: the first screen, for an invite (Join with an invite), the ways back (Already a member), or
  *     look around global first, join there and find it in Find a community.
  * Nothing is read but the community's public card; nothing is sent until the member taps Send.
@@ -81,7 +85,7 @@ export default function CommunityCardScreen() {
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
         backIcon: { color: colors.text.inverse },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { padding: 16 },
         card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 16 },
         kicker: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, marginBottom: 4 },
@@ -173,7 +177,11 @@ export default function CommunityCardScreen() {
         setSending(true);
         setFormError(null);
         const avatar = await getCanonicalAvatar().catch(() => null);
-        const r = await sendKnock(origin, identity, { callsign, message, avatar });
+        // From the global community only for a member there, as Find a community says it (utils/knock-address.ts): a phone
+        // waiting to be let in (S3), or one in a local community, names no community it came from.
+        const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
+        const r = await sendKnock(origin, identity, { callsign, message, avatar }, knockFromNode(anchor, guest));
         setSending(false);
         if (r.kind === 'waiting' || r.kind === 'invited') {
             await rememberKnock(identity.publicKey, { url: origin, name: c.name });
@@ -194,12 +202,20 @@ export default function CommunityCardScreen() {
     const [joining, setJoining] = useState(false);
     const join = async (c: CommunityCard, invite: string) => {
         if (!identity || !origin) return;
+        const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        if (!returnUrl) {
+            // No community yet (waiting to be let in, slice S3), as Find a community's Join does: welcome joins it through
+            // the invite step, so the wizard shows Your Photo and then the 12 words this key has never shown. Handed over
+            // in memory, never by a link.
+            (await import('../utils/waiting-to-join')).handKnockYesToWelcome({ url: origin, invite, name: c.name }, identity.publicKey);
+            router.replace('/welcome');
+            return;
+        }
         setJoining(true);
         try {
-            const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const joined = await joinAnotherCommunity({ targetUrl: origin, code: invite, identity, returnUrl, knownName: c.name });
             await forgetKnock(identity.publicKey, origin);
-            const nudge = joinedNudgeWords(joinedNudge(joined.name), joined.name);
+            const nudge = joinedNudgeWords(joinedNudge(joined.name, await copiesAtFor(joined.url)), joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
                 // Only where each community keeps its own sign-in copy (a build without a key vault).

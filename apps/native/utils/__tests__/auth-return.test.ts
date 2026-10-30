@@ -257,11 +257,13 @@ describe('the root guard while a phone with no account looks around the global c
         ['(tabs)'], ['(tabs)', 'index'], ['(tabs)', 'market'], ['(tabs)', 'map'], ['(tabs)', 'ledger'], ['(tabs)', 'projects'],
         ['post', '[id]'], ['guide', '[slug]'], ['guide', 'section', '[id]'], ['beanpool'], ['start-community'], ['new-listing'],
     ];
-    // Each needs a key: a message, people, Settings, asking a community, a profile, the not-recognised screen, a sign-in return.
-    // Another community's open door is not one since S2: its join makes the key there (the merged guard's test, below).
+    // Each needs a key: a message, people, Settings, a profile, the not-recognised screen, a sign-in return.
+    // Another community's open door is not one since S2: its join makes the key there (the merged guard's test, below). Nor,
+    // since S3, is asking a community (Find a community): its knock makes the key there (DESIGN-account-without-global-fable.md
+    // §2.4). It was on this list until S3, which moved it to the screens every phone with no account keeps (below).
     const NEEDS_A_KEY: string[][] = [
         ['(tabs)', 'chats'], ['(tabs)', 'people'], ['(tabs)', 'pulse'], ['(tabs)', 'settings'],
-        ['chat', '[id]'], ['new-message'], ['channels'], ['group', '[id]'], ['find-community'], ['profile-setup'],
+        ['chat', '[id]'], ['new-message'], ['channels'], ['group', '[id]'], ['profile-setup'],
         ['public-profile'], ['join-global'], ['node-mismatch'], ['settings-signin'],
         ...PROVIDERS.map((p) => ['auth', p]),
     ];
@@ -275,7 +277,8 @@ describe('the root guard while a phone with no account looks around the global c
     });
 
     it('keeps the screens a phone with no account always had: welcome, guardian recovery, a re-key code, a claim, a community\'s card', () => {
-        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card', 'peek']) {
+        // And, since S3, asking a community by its address or code (Find a community): the knock makes the key there.
+        for (const root of ['welcome', 'recover-identity', 'rekey-code', 'claim-community', 'community-card', 'peek', 'find-community']) {
             expect(setupRedirect([root], LOOKING), root).toBeNull();
         }
         // The bare root is the app's start: the first screen, as always (app/index.tsx redirects there too), never the door.
@@ -302,6 +305,9 @@ describe('the root guard while a phone with no account looks around the global c
             expect(setupRedirect(['join-open-door'], state), `door, looking ${state === LOOKING}`).toBeNull();
             expect(setupRedirect(['community-card'], state), `card, looking ${state === LOOKING}`).toBeNull();
             expect(setupRedirect(['peek'], state), `peek, looking ${state === LOOKING}`).toBeNull();
+            // S3: asking a community by its address stays too, so the first screen's "Ask to join it" works on a phone that
+            // once looked around global (the look's door would send it to join global instead).
+            expect(setupRedirect(['find-community'], state), `find, looking ${state === LOOKING}`).toBeNull();
         }
         // The rest of the merged guard as each slice left it: a screen that needs a key opens the look's door while looking
         // and the first screen otherwise; the global community's door is not let through with no account (S2).

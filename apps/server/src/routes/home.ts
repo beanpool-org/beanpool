@@ -25,7 +25,8 @@
  * ## The ETag
  *
  * `W/"home-<hash>"`, a hash of the reader, of the newest line in the reader's chats where the answer read them (the chat
- * stamp, W3: a line no card shows still moves it) and of the answer itself (without `generatedAt`), `Cache-Control: private,
+ * stamp, W3: a line no card shows still moves it; with each pinned chat's newest line, home-answer.ts HomeBuilt) and of
+ * the answer itself (without `generatedAt`), `Cache-Control: private,
  * max-age=0, must-revalidate` (an unsigned visitor's, on a node with the visitors' view, `public, max-age=0, s-maxage=60`:
  * guest-cache.ts), and a 304 when the app's copy is still the answer (as routes/activity.ts answers). Not a
  * tag made of the version counters alone, as the design first proposed (§5.2): most of what Home shows has no counter to

@@ -345,10 +345,11 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
             priceCol: {
                 alignItems: 'flex-end',
             },
+            // The success tint (emerald-50 in light, as before; emerald-950 in dark): the grey unit was 3.83:1 on emerald-900.
             priceBadge: {
                 flexDirection: 'row',
                 alignItems: 'center',
-                backgroundColor: theme === 'dark' ? '#064e3b' : '#ecfdf5',
+                backgroundColor: colors.feedback.success.bg,
                 paddingHorizontal: 10,
                 paddingVertical: 5,
                 borderRadius: 10,

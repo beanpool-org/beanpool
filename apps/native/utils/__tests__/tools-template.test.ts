@@ -101,6 +101,13 @@ vi.mock('react-native-keyboard-controller', () => ({
 vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn(), launchCameraAsync: vi.fn(), requestCameraPermissionsAsync: vi.fn() }));
 vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'photo-ref' }));
+// The phone's own place, for Your garden's `place`: read only where location is already allowed; never a prompt.
+const loc = vi.hoisted(() => ({ status: 'denied' as string, last: null as null | { coords: { latitude: number; longitude: number } }, asked: 0 }));
+vi.mock('expo-location', () => ({
+    getForegroundPermissionsAsync: async () => ({ status: loc.status }),
+    getLastKnownPositionAsync: async () => loc.last,
+    requestForegroundPermissionsAsync: async () => { loc.asked++; return { status: loc.status }; },
+}));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     return { useTheme: () => ({ theme: 'light', colors: lightColors }), useStyles: (make: (t: unknown) => unknown) => make({ theme: 'light', colors: lightColors }) };
@@ -272,7 +279,7 @@ vi.mock('@beanpool/core', async (importOriginal) => {
 
 import { DatabaseSync } from 'node:sqlite';
 import {
-    TOOLS, pseudoLocalise, setLanguage, toolFixtureProblems, toolHomeCardType, toolManifestProblems, word,
+    GARDEN, HOME_CARD_TYPES, TOOLS, pseudoLocalise, setLanguage, toolFixtureProblems, toolHomeCardType, toolManifestProblems, word,
     type ToolFixtures, type ToolManifest, type ToolScreenProps,
 } from '@beanpool/core';
 import { TOOL_APPS, phoneTools, type PhoneTool } from '../../tools/index';
@@ -294,6 +301,7 @@ import { lightColors } from '../../constants/colors';
 import { HOME_DRAWN } from '../home-cards';
 import ToolRoute from '../../app/tool/[id]';
 import ToolsScreen from '../../app/tools';
+import { homeAnswerStoreKey } from '../storage-keys';
 
 const NATIVE = path.resolve(__dirname, '../..');
 const REPO = path.resolve(NATIVE, '../..');
@@ -551,7 +559,9 @@ describe('every tool, drawn through the host route at 320 dp × 1.3 in xx', asyn
             OTHERS = [];
             await drawTool(id);
             expect(byTestId('tool-frame')).not.toBeNull();
-            expect(byTestId('tool-doors')).not.toBeNull();
+            // A tool that names `doors: false` (Your garden) opens on its first screen: no doors, no examples, no offer.
+            const doors = tool.manifest.doors !== false;
+            expect(byTestId('tool-doors') !== null, 'the doors').toBe(doors);
             // A tool that asks for node-copy, on a server that keeps copies and has none of it yet: on, by default.
             expect(byTestId('tool-backup-line')?.textContent).toBe(pseudoLocalise(keepsNodeCopy(tool.manifest)
                 ? "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could."
@@ -560,6 +570,10 @@ describe('every tool, drawn through the host route at 320 dp × 1.3 in xx', asyn
             expect(bracketed()).toBeGreaterThan(4);
             expect(bypassing()).toEqual([]);
             expect(tooWide()).toEqual([]);
+            if (!doors) {
+                for (const gone of ['tool-door-doing', 'tool-door-starting', 'tool-examples', 'tool-home-offer']) expect(byTestId(gone), gone).toBeNull();
+                return;
+            }
             await click(byTestId('tool-door-starting'), "I'm starting out");
             expect(byTestId('tool-examples')).not.toBeNull();
             expect(bypassing(true)).toEqual([]);
@@ -674,9 +688,9 @@ describe("a tool, a screen or a permission this build doesn't have", () => {
     });
 
     it("a tool that declares a permission this build's host can't grant yet: the same page, not a function missing when called", async () => {
-        // `place` (the phone grants `deals` since the Tool shed, T1.2).
-        reg.extra = [{ manifest: { ...KIT, id: 'needs-place', permissions: [...KIT.permissions, 'place'] }, app: { ...kitApp, id: 'needs-place' } }];
-        await drawTool('needs-place');
+        // `event-door` (the phone grants `deals` since the Tool shed, T1.2, and `place` since Your garden, grow-food G0).
+        reg.extra = [{ manifest: { ...KIT, id: 'needs-event', permissions: [...KIT.permissions, 'event-door'] }, app: { ...kitApp, id: 'needs-event' } }];
+        await drawTool('needs-event');
         expect(byTestId('tool-not-in-version')).not.toBeNull();
     });
 
@@ -834,8 +848,8 @@ describe('the host given to a tool has only what its manifest declared', () => {
     });
 
     it("what this build can't grant yet is named, so its route refuses the tool", () => {
-        // `deals` and `pricing-guide` came with the Tool shed (T1.2), the first tool to ask for them.
-        expect(ungrantedPermissions({ permissions: ['photos', 'place', 'deals', 'event-door', 'pricing-guide', 'reminders'] }, phoneHost(ctx(KIT)))).toEqual(['place', 'event-door']);
+        // `deals` and `pricing-guide` came with the Tool shed (T1.2), the first tool to ask for them; `place` with Your garden (G0).
+        expect(ungrantedPermissions({ permissions: ['photos', 'place', 'deals', 'event-door', 'pricing-guide', 'reminders'] }, phoneHost(ctx(KIT)))).toEqual(['event-door']);
     });
 
     it("`posts` reaches only the member's own Offers: anyone else's post, or a Need, is 'gone' and can't be paused", async () => {
@@ -1513,4 +1527,236 @@ describe("the doors write the composer's own draft (app/new-listing.tsx, map.tsx
         expect(decideDraftOpen(JSON.parse(store.map.get(OFFER_DRAFT_KEY)!), 'https://mullum.example')).toBe('open-tool');
         expect(nav.pushed).toHaveLength(2);
     });
+});
+
+// ── Your garden (grow-food slice G0): the planting guide ─────────────────────────────────────────────────────────
+
+describe('Your garden (grow-food G0): the guide shows the zone line, and is the first open', () => {
+    const URL_HERE = 'https://mullum.example';
+    /** The Home answer this phone kept for the member here (utils/home-store.ts), with the community's place and the area. */
+    const keepHome = (place: { lat: number; lng: number } | null, area: { lat: number; lng: number } | null = null) => {
+        store.map.set(homeAnswerStoreKey(ME.publicKey, URL_HERE), JSON.stringify({
+            url: URL_HERE, publicKey: ME.publicKey, asked: 'community', etag: null, at: NOW,
+            answer: { profile: 'local', generatedAt: '', features: {}, me: area ? { area } : null, cards: place ? { community: { place } } : {} },
+        }));
+    };
+    beforeEach(() => { reg.extra = []; loc.status = 'denied'; loc.last = null; loc.asked = 0; });
+    /** The route on a fresh root: it reads its params once, as a screen pushed on the stack does. */
+    const redraw = async (extra: Record<string, string> = {}, lang: 'xx' | 'en' = 'en') => {
+        act(() => root.unmount());
+        root = createRoot(host);
+        await drawTool('garden', extra, lang);
+    };
+
+    it("draws the zone line in plain words from the community's place, with Change, Sow now and the map's credit", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 }); // Mullumbimby
+        await redraw({}, 'en');
+        // Nothing chosen yet, so the document is empty: the guide itself is the first open, never the template's doors.
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Warm temperate · southern hemisphere');
+        expect(byTestId('tool-doors')).toBeNull();
+        expect(byTestId('garden-zone-source')?.textContent).toContain("From your community's place.");
+        expect(byTestId('garden-now')).not.toBeNull();
+        expect(byTestId('garden-all')?.textContent).toContain('Tomatoes');
+        expect(host.textContent).toContain('Climate map: Beck et al. (2023), CC BY 4.0');
+        expect(host.textContent).toContain('A general guide for your climate. Your neighbours know your patch better.');
+        expect(loc.asked).toBe(0);
+        await click(byTestId('garden-change'), 'Change');
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'zone' } }]);
+    }, 30_000);
+
+    it("the guide is the first open from every door, and nothing of the template's empty state sits above it (review of #2618)", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        const noDoors = () => {
+            for (const id of ['tool-doors', 'tool-door-doing', 'tool-door-starting', 'tool-examples', 'tool-home-offer', 'tool-guide']) expect(byTestId(id), id).toBeNull();
+        };
+        // The Tools row and Home's card both open /tool/garden at its first screen: the guide, not the doors.
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        noDoors();
+        // After "I'm starting out" on an earlier build, the examples card must not come back above the guide for good.
+        await writeToolSettings(ME.publicKey, GARDEN.id, { door: 'starting' });
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        noDoors();
+        // The Home card's second line opens Change itself.
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        noDoors();
+        // With no place known the guide still comes first, asking to choose.
+        store.map.delete(homeAnswerStoreKey(ME.publicKey, URL_HERE));
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-no-zone'), 8000);
+        noDoors();
+        // And once "Use my place again" has emptied a choice, the document is empty again: still the guide.
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        await click(byTestId('garden-zone-reset'), 'Use my place again');
+        await settleUntil(() => nav.backs > 1, 8000);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        noDoors();
+    }, 30_000);
+
+    it('every guide screen in xx at 320 dp × 1.3: every word through t(), none too wide', async () => {
+        keepHome({ lat: 6.52, lng: 3.38 }); // Lagos: wet and dry tropics, so a crop carries the rains note
+        OTHERS = [];
+        await redraw({}, 'xx');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        expect(bypassing()).toEqual([]);
+        expect(tooWide()).toEqual([]);
+        await redraw({ screen: 'crop', key: 'cassava' }, 'xx');
+        await settleUntil(() => !!byTestId('garden-crop-sow'), 8000);
+        expect(byTestId('garden-crop-note')).not.toBeNull();
+        expect(bypassing()).toEqual([]);
+        expect(tooWide()).toEqual([]);
+        await redraw({ screen: 'zone' }, 'xx');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        expect(bypassing()).toEqual([]);
+        expect(tooWide()).toEqual([]);
+    }, 30_000);
+
+    it("Change keeps the member's own choice on this phone, which beats the place; Use my place again clears it", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        expect(byTestId('garden-zone-found')?.textContent).toContain('Warm temperate · southern hemisphere');
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0, 8000);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate · southern hemisphere');
+        expect(byTestId('garden-zone-source')?.textContent).toContain('You chose this.');
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        await click(byTestId('garden-zone-reset'), 'Use my place again');
+        await settleUntil(() => nav.backs > 1, 8000);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
+    }, 30_000);
+
+    it('Change says "(chosen)" only of the member\'s own choice, never of the zone the place gives', async () => {
+        keepHome({ lat: -28.55, lng: 153.5 }); // gives Warm temperate · southern hemisphere
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        expect(byTestId('garden-zone-found')?.textContent).toContain('Warm temperate · southern hemisphere');
+        expect(byTestId('garden-zone')?.textContent).not.toContain('(chosen)');
+        expect(byTestId('garden-zone')?.textContent).not.toContain('✅');
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        expect(byTestId('garden-zone-mild')?.textContent).toContain('Mild temperate (chosen)');
+        expect(byTestId('garden-zone-warm')?.textContent).not.toContain('(chosen)');
+    }, 30_000);
+
+    it('a second tap on Change before the first choice is kept goes back once (not out of the guide too)', async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        const twice = async (testId: string) => {
+            const el = byTestId(testId) as HTMLElement | null;
+            expect(el, testId).not.toBeNull();
+            await act(async () => { el!.click(); el!.click(); });
+        };
+        await twice('garden-zone-mild');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await settle();
+        expect(nav.backs).toBe(1);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+        // And Use my place again, tapped twice the same way.
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        await twice('garden-zone-reset');
+        await settleUntil(() => nav.backs > 1, 8000);
+        await settle();
+        expect(nav.backs).toBe(2);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
+    }, 30_000);
+
+    it("a choice this phone couldn't keep (a full disk) says so and stays on Change; the next tap is kept and goes back once", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        // The INSERT tools/store.ts writeToolDoc runs, refused as SQLite refuses it on a full disk.
+        const real = disk.db.runAsync;
+        let full = true;
+        disk.db.runAsync = async (sql: string, params?: unknown[]) => {
+            if (full && /INSERT INTO tool_docs/.test(sql)) throw new Error('database or disk is full');
+            return real(sql, params);
+        };
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => !!byTestId('garden-zone-problem'), 8000);
+        expect(byTestId('garden-zone-problem')?.textContent).toBe("Couldn't save it on this phone. Try again.");
+        expect(nav.backs).toBe(0);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).stored).toBe(false);
+        // The disk has room again: the same row, tapped again, is kept and goes back once.
+        full = false;
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await settle();
+        expect(nav.backs).toBe(1);
+        expect(byTestId('garden-zone-problem')).toBeNull();
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+        // And Use my place again on a full disk: the same sentence, the choice kept as it was, no back.
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        full = true;
+        await click(byTestId('garden-zone-reset'), 'Use my place again');
+        await settleUntil(() => !!byTestId('garden-zone-problem'), 8000);
+        expect(byTestId('garden-zone-problem')?.textContent).toBe("Couldn't save it on this phone. Try again.");
+        expect(nav.backs).toBe(1);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+    }, 30_000);
+
+    it("takes the member's area, then the phone's last known place only where location is already allowed; never asks", async () => {
+        keepHome(null, { lat: 51.5, lng: -0.1 }); // London, as the member's rough area
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate · northern hemisphere');
+        expect(byTestId('garden-zone-source')?.textContent).toContain('From your area.');
+
+        store.map.delete(homeAnswerStoreKey(ME.publicKey, URL_HERE));
+        loc.last = { coords: { latitude: 1.35, longitude: 103.82 } }; // Singapore, but location isn't allowed here
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-no-zone'), 8000);
+        expect(byTestId('garden-choose')).not.toBeNull();
+        loc.status = 'granted';
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Wet tropical · northern hemisphere');
+        expect(loc.asked).toBe(0);
+    }, 30_000);
+
+    it("opens from the Tools screen, the Commons tab's Tools row and Home's Your shop and tools", async () => {
+        setLanguage('en');
+        await act(async () => { root.render(createElement(ToolsScreen) as any); });
+        await settle();
+        const row = byTestId('tools-row-garden');
+        expect(row?.textContent).toContain('Your garden');
+        await click(row, 'Your garden');
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden' } }]);
+    }, 30_000);
+
+    it('opens from Home: Add a card offers Your garden on every node (the global one too, where the Commons tab is hidden), and its card opens the guide', async () => {
+        const card = HOME_CARD_TYPES.find((c) => c.id === toolHomeCardType('garden'));
+        expect(card).toBeDefined();
+        expect(card?.onNode({ profile: 'global', features: { beans: false } } as any)).toBe(true);
+        expect(card?.onNode({ profile: 'local', features: {} } as any)).toBe(true);
+        expect(HOME_DRAWN.has(toolHomeCardType('garden'))).toBe(true);
+        setLanguage('en');
+        const garden = phoneTools().find((t) => t.manifest.id === 'garden');
+        expect(garden).toBeDefined();
+        await act(async () => { root.render(createElement(ToolHomeBody, { tool: garden!, owner: ME.publicKey, colors: lightColors, now: NOW }) as any); });
+        await settle();
+        expect(host.textContent).toContain('What to sow this month, for your climate.');
+        await click(host.querySelector('button'), 'the card');
+        expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'main' } }]);
+    }, 30_000);
 });

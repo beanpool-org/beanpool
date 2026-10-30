@@ -107,6 +107,8 @@ describe('what the section says', () => {
         expect(wantsToJoinTitle(2)).toBe('Wants to join (2)');
         const now = Date.parse('2026-09-26T09:00:00.000Z');
         expect(joinRequestMeta(knock, now)).toBe('Asked today · from global.beanpool.org');
-        expect(joinRequestMeta({ createdAt: '2026-09-21T00:00:00.000Z', fromNode: null }, now)).toBe('Asked 5 days ago');
+        // A request that named no community it came from (slice S3: a phone with no community yet, or one in a local
+        // community) came from the BeanPool app itself. Before S3 this line read 'Asked 5 days ago' alone.
+        expect(joinRequestMeta({ createdAt: '2026-09-21T00:00:00.000Z', fromNode: null }, now)).toBe('Asked 5 days ago · from the BeanPool app');
     });
 });

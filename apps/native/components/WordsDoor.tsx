@@ -31,6 +31,7 @@ export function DoorChoices({
     busy = null,
     wordsProblem = null,
     signInNote,
+    keepsNoCopies = false,
     colors = lightColors,
     account = 'new',
 }: {
@@ -43,6 +44,11 @@ export function DoorChoices({
     wordsProblem?: string | null;
     /** What a sign-in also does here, said once under the buttons (where the copy goes, and what is never seen). */
     signInNote?: string;
+    /**
+     * The door's community keeps no copies of members' accounts (its rule `none`, vault rethink VR2): the sign-in is no
+     * way back there, so the line that calls it one is left out, and `signInNote` says what it does.
+     */
+    keepsNoCopies?: boolean;
     colors?: AppColors;
     account?: 'new' | 'existing';
 }): React.JSX.Element {
@@ -51,7 +57,7 @@ export function DoorChoices({
     const wordsBtnText = isExisting ? t(DOOR_CHOICE_TEXT.wordsExisting) : t(DOOR_CHOICE_TEXT.words);
     const wordsLineText = isExisting ? t(DOOR_CHOICE_TEXT.wordsLineExisting) : t(DOOR_CHOICE_TEXT.wordsLine);
     const signInHeadingText = isExisting ? t(DOOR_CHOICE_TEXT.signInHeadingExisting) : t(DOOR_CHOICE_TEXT.signInHeading);
-    const signInLineText = isExisting ? t(DOOR_CHOICE_TEXT.signInLineExisting) : t(DOOR_CHOICE_TEXT.signInLine);
+    const signInLineText = keepsNoCopies ? null : isExisting ? t(DOOR_CHOICE_TEXT.signInLineExisting) : t(DOOR_CHOICE_TEXT.signInLine);
     return (
         <View>
             <View style={s.block}>
@@ -78,7 +84,7 @@ export function DoorChoices({
                 )}
                 <GoogleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.google })} onPress={() => onSignIn('google')} disabled={disabled} style={s.sso} />
                 <FacebookButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.facebook })} onPress={() => onSignIn('facebook')} disabled={disabled} style={s.sso} />
-                <Text style={s.line}>{signInLineText}</Text>
+                {signInLineText ? <Text style={s.line}>{signInLineText}</Text> : null}
                 {signInNote ? <Text style={s.small}>{signInNote}</Text> : null}
             </View>
         </View>

@@ -289,10 +289,10 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
 
         fireEvent.click(await screen.findByRole('tab', { name: 'Manage' }));
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Cancel Initiative & Refund Escrow/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Cancel Initiative & Refund Backers/i })).toBeInTheDocument();
         });
 
-        const cancelBtn = screen.getByRole('button', { name: /Cancel Initiative & Refund Escrow/i });
+        const cancelBtn = screen.getByRole('button', { name: /Cancel Initiative & Refund Backers/i });
         fireEvent.click(cancelBtn);
 
         await waitFor(() => {

@@ -27,7 +27,7 @@ import { StoredKeyUnreadableError } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
 import { HOME_REDIRECT } from '../utils/join-another-community';
 import { afterJoinRedirect } from '../utils/pair-device-target';
-import { signInCopiesAt } from '../utils/vault-config';
+import { signInCopiesAt, type SignInCopies } from '../utils/vault-config';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { FROM_LINK } from '../utils/global-link';
 import { doorNodeFromParam, restoreAtDoorHref, takeDoorTap, type DoorNode } from '../utils/open-door';
@@ -71,7 +71,7 @@ function useDoorStyles() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5, textTransform: 'uppercase' },
         scroll: { padding: 16 },
         card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 16 },
         title: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 8 },
@@ -212,6 +212,8 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
      * door opens with the key on this phone. The same key either way: one identity per device.
      */
     const [wordsDoor, setWordsDoor] = useState(false);
+    /** Where a copy made at this door goes (its community's rule, VR2), from the door check; this build's place until then. */
+    const [doorCopies, setDoorCopies] = useState<SignInCopies>(() => signInCopiesAt());
     const [way, setWay] = useState<DoorWay>('sign-in');
     const doorWork = useDoorWork();
     /**
@@ -321,6 +323,8 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                 if (door.global) rememberGlobalDoor(check);
                 if (cancelled) return;
                 if (check.ok) {
+                    // Where a copy made at this door goes, by its community's rule (vault rethink VR2).
+                    setDoorCopies(signInCopiesAt(check.profile.recoveryCopies));
                     // Two ways in where the door has the 12-words one; the sign-in alone where it doesn't, as before.
                     const words = wordsDoorOn(check.profile.features);
                     setWordsDoor(words);
@@ -624,7 +628,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
     }
 
     const signedInWith = signin ? SSO_PROVIDER_NAMES[signin.provider] : null;
-    const keeper = doorKeeperWords(place, signInCopiesAt());
+    const keeper = doorKeeperWords(place, doorCopies);
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -700,6 +704,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                                     busy={doorWork.busy}
                                     wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                     signInNote={keeper.choose}
+                                    keepsNoCopies={doorCopies === 'none'}
                                     account={keyKind}
                                 />
                             )}

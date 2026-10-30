@@ -79,6 +79,12 @@ export interface KeeperEnrolmentResult {
     failure?: VaultFailure;
     /** This sign-in account protected a different BeanPool account until now (the vault told that account's devices). */
     replaced?: boolean;
+    /**
+     * Where the copy just made is kept: at the vault or at the community (vault rethink VR2: a community's rule can send a
+     * vault build's copy to the community). Set on a deposit that landed; a move removes the old copy only when the new
+     * one is where the move meant it to go (utils/vault-move.ts).
+     */
+    keptAt?: 'vault' | 'community';
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +197,7 @@ async function enrolAtVault(input: VaultEnrolmentInput): Promise<KeeperEnrolment
             wordsSealed: sealed.wordsSealed,
         });
         console.log(`[KEEPER] ${provider}: deposited at the key vault${deposit.replaced ? ' (replaced another account\'s copy)' : ''}`);
-        return enrolmentFromVault([provider], { wordsSealed: deposit.wordsSealed, replaced: deposit.replaced });
+        return enrolmentFromVault([provider], { wordsSealed: deposit.wordsSealed, replaced: deposit.replaced, keptAt: 'vault' });
     } catch (e) {
         if (e instanceof VaultError) return nothing(e.message, e.reason);
         return nothing((e as Error).message || 'The sign-in could not be linked.');
@@ -249,6 +255,7 @@ async function enrolAtCommunity(input: CommunityEnrolmentInput): Promise<KeeperE
             threshold: body.threshold ?? 1,
             isSingleBlob: true,
             wordsSealed,
+            keptAt: 'community',
         };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);
@@ -345,19 +352,24 @@ export function enrolmentFromJoin(
         threshold: typeof r.threshold === 'number' ? r.threshold : 1,
         isSingleBlob: true,
         wordsSealed,
+        keptAt: 'community',
     };
 }
 
 /**
  * Disconnect one sign-in. With a vault: the vault deletes its copy at once, and this resolves with the sign-ins still
  * linked, as the vault says after the delete. Without one: the signed DELETE at the community the phone is set to, as
- * before the vault.
+ * before the vault. `at`: where the copies Account Protection listed are (vault rethink VR2: a community whose rule keeps
+ * them itself lists its own, in any build); the build's place when not said.
  */
 export async function disconnectSsoKeeper(
     provider: string,
     identity: BeanPoolIdentity,
+    at?: 'vault' | 'community',
 ): Promise<{ success: boolean; error?: string; enrolledSso?: string[] }> {
     if (signInCopiesAt() === 'community') return disconnectAtCommunity(provider, identity);
+    // A build with a vault, where the community keeps copies itself (its rule): Account Protection listed the community's.
+    if (at === 'community') return disconnectAtCommunity(provider, identity);
     try {
         await disconnectFromVault(identity, provider as SsoProvider);
     } catch (e) {

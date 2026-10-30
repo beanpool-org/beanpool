@@ -39,12 +39,12 @@ const buttonBase = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
 } as const;
 
-/** A card's second line: the amount and where it stands, as the phone writes it ("5 Beans · in escrow"). */
+/** A card's second line: the amount and where it stands, as the phone writes it ("5 Beans · held in trust"). */
 function metaWords(tx: MarketplaceTransaction, me: string, peerName: string | null, showsBeans: boolean): string {
-    // A request holds nothing yet: never "in escrow", whatever Beans it names.
+    // A request holds nothing yet: never "held in trust", whatever Beans it names.
     if (tx.status !== 'requested' && showsBeans && tx.credits > 0) {
         const amount = tn(tx.credits, '{n} Beans', '{n} Beans');
-        return tx.status === 'completed' ? t('{amount} · completed', { amount }) : t('{amount} · in escrow', { amount });
+        return tx.status === 'completed' ? t('{amount} · completed', { amount }) : t('{amount} · held in trust', { amount });
     }
     // Nothing to count: whose step it is, in core's words for a deal.
     return dealStateWords(dealStep(tx, me), peerName);

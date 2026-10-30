@@ -538,7 +538,7 @@ export default function TreasuryManageScreen() {
         if (!treasuryKey || cancelling) return;
         Alert.alert(
             t('Cancel Initiative & Refund Backers?'),
-            t('This will close the initiative and immediately refund all escrowed pledges back to their backers.'),
+            t('This will close the initiative and immediately refund all pledges held in trust back to their backers.'),
             [
                 { text: t('Keep Initiative'), style: 'cancel' },
                 {
@@ -661,7 +661,7 @@ export default function TreasuryManageScreen() {
                 onPress={handleCancelInitiative}
                 disabled={cancelling}
                 accessibilityRole="button"
-                accessibilityLabel={t('Cancel initiative and refund escrow')}
+                accessibilityLabel={t('Cancel initiative and refund backers')}
             >
                 {cancelling ? (
                     <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
@@ -669,7 +669,7 @@ export default function TreasuryManageScreen() {
                     <>
                         <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.fg} />
                         <Text style={{ flexShrink: 1, textAlign: 'center', fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg }}>
-                            {t('Cancel Initiative & Refund Escrow')}
+                            {t('Cancel Initiative & Refund Backers')}
                         </Text>
                     </>
                 )}
@@ -1001,8 +1001,8 @@ export default function TreasuryManageScreen() {
                                             <Text style={{ fontSize: 12, color: colors.text.secondary, marginTop: 2 }}>
                                                 <Sentence
                                                     text={d.action_required === 'fulfill'
-                                                        ? t('Customer: {name} · {amount} 🫘 in escrow', { amount: d.credits })
-                                                        : t('Worker: {name} · {amount} 🫘 in escrow', { amount: d.credits })}
+                                                        ? t('Customer: {name} · {amount} 🫘 held in trust', { amount: d.credits })
+                                                        : t('Worker: {name} · {amount} 🫘 held in trust', { amount: d.credits })}
                                                     parts={{ name: <Text style={{ fontWeight: '700', color: colors.text.body }}>{d.peer_callsign || t('Member')}</Text> }}
                                                 />
                                             </Text>

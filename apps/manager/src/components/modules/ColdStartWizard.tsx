@@ -17,6 +17,7 @@ import {
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { RecoveryCopiesLine, useRecoveryCopies } from './RecoveryCopiesLine';
 
 export interface ColdStartWizardProps {
     activeNode: NodeProfile;
@@ -122,6 +123,9 @@ export function ColdStartWizard({
 
     const nodeBaseUrl = activeNode?.url ? activeNode.url.replace(/\/+$/, '') : '';
     const nodeHost = nodeBaseUrl.replace(/^https?:\/\//, '') || 'this server';
+    // Where members' copies go, for step 5's line (vault rethink VR2): asked once as the wizard opens, so the steps that
+    // follow make no request of their own for it.
+    const copiesRule = useRecoveryCopies(activeNode.url);
 
     // Step 1: Name & check. The step is done only when the node answered its health check AND saved the name. The box
     // starts as the stored name: empty on a community with none, so the owner types one (the box is required). It never
@@ -1270,6 +1274,9 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             </button>
                         )}
                     </div>
+
+                    {/* Before the first members join: where a sign-in they link keeps its copy (vault rethink VR2). */}
+                    <RecoveryCopiesLine rule={copiesRule} />
 
                     {foundingError && !generatingInvites && (
                         <div role="alert" className="p-5 rounded-2xl bg-red-950/60 border border-red-800 space-y-3">

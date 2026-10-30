@@ -1401,7 +1401,7 @@ export default function PostDetailModal() {
                                 <Text style={styles.authorRating}>
                                     {targetPeerAvgRating !== null && targetPeerRatingCount > 0 ? (
                                         <>
-                                            <Text style={{ color: palette.amber400, letterSpacing: -1 }}>{renderBeans(targetPeerAvgRating)}</Text>
+                                            <Text style={{ color: colors.trust.star, letterSpacing: -1 }}>{renderBeans(targetPeerAvgRating)}</Text>
                                             <Text> {reviewsLine(targetPeerAvgRating, targetPeerRatingCount)}</Text>
                                         </>
                                     ) : (
@@ -1429,7 +1429,7 @@ export default function PostDetailModal() {
                                 <Text style={styles.authorRating}>
                                     {authorAvgRating !== null && authorRatingCount > 0 ? (
                                         <>
-                                            <Text style={{ color: palette.amber400, letterSpacing: -1 }}>{renderBeans(authorAvgRating)}</Text>
+                                            <Text style={{ color: colors.trust.star, letterSpacing: -1 }}>{renderBeans(authorAvgRating)}</Text>
                                             <Text> {reviewsLine(authorAvgRating, authorRatingCount)}</Text>
                                         </>
                                     ) : (
@@ -1452,8 +1452,10 @@ export default function PostDetailModal() {
 
                 {/* Action Buttons */}
 
-                {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now. */}
-                {!!pinnedOver && !!listingDealLines.finished(pinnedOver) && (
+                {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now.
+                    Not once the reader has taken the listing up again (a deal of their own held or asked for: no take-up left,
+                    and not its own people): that deal's box is the page, as on the web. */}
+                {!!pinnedOver && !!listingDealLines.finished(pinnedOver) && (deals.own || deals.canTakeUp) && (
                     <Text testID="pinned-deal-over" style={{ color: colors.text.secondary, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 12 }}>
                         {listingDealLines.finished(pinnedOver)}
                     </Text>
@@ -2104,7 +2106,7 @@ export default function PostDetailModal() {
                                         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
                                             {[1,2,3,4,5].map(star => (
                                                 <Pressable key={star} accessibilityRole="button" accessibilityLabel={tn(star, 'Rate {n} star', 'Rate {n} stars')} accessibilityState={{ selected: star <= myRating }} onPress={() => { setMyRating(star); hapticTick(); }}>
-                                                    <Text style={{ fontSize: 32, color: star <= myRating ? palette.amber400 : colors.border.strong }}>{star <= myRating ? '★' : '☆'}</Text>
+                                                    <Text style={{ fontSize: 32, color: star <= myRating ? colors.trust.star : colors.border.strong }}>{star <= myRating ? '★' : '☆'}</Text>
                                                 </Pressable>
                                             ))}
                                         </View>

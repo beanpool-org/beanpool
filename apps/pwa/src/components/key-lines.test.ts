@@ -87,6 +87,7 @@ function libSentences(): string[] {
         for (const code of ['already_joined', 'removed', 'sign_in']) out.push(linkRefusalMessage(answer(400, { code }), p));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: true }));
         out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: false }));
+        out.push(linkResultMessage({ kind: 'linked', provider: p, recoveryStored: false, noCopies: true }));
         const left = leaveForLink({ publicKey: 'k' } as never, p, { nonce: 'n', expiresInSeconds: 600, providers: [p], clientIds: {} }, { navigate: () => {} });
         if (!left.ok) out.push(left.message);
     }
@@ -217,7 +218,7 @@ describe('key-lines.ts', () => {
         const purged = await purgeHere({ kind: 'last', here: window.location.origin });
         expect(purged.ok).toBe(false);
         const reason = purged.ok ? '' : purged.reason;
-        expect(reason).toBe('Failed to purge account from node. Active escrow deals may need to be resolved first.');
+        expect(reason).toBe('Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.');
         const said = webDeleteFailedLine(reason);
         expect(keyLineWords(said)).toBe(said);
         setLanguage('xx');

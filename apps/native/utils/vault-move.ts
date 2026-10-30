@@ -16,6 +16,20 @@
  *
  * Nothing sent to the community here carries a token, a copy or a nonce request: its status, and the delete.
  *
+ * ## Both directions, by the community's rule (vault rethink VR2, design §5.2, §5.3)
+ *
+ * The card goes where the community the phone is on keeps copies now (utils/copies-rule.ts, kept answer; never heard:
+ * this build's place, as before the rule):
+ * - `vault`: the move above, community → vault, and a paused link offered again.
+ * - `server`: the reverse ("keep it with my community instead"): a copy the vault keeps for a sign-in the community
+ *   keeps none for. An ordinary connect, which the rule sends to the community, then the vault's copy for that sign-in
+ *   is removed. No move to the vault is offered, and no paused link: the vault isn't this community's place.
+ * - `none`: nothing to move to. Only the deletes waiting are tried again; a member's copies stay theirs, listed and
+ *   removable on "Where your account can be brought back from".
+ *
+ * A move removes the old copy only once the new one is kept where the move meant it to go (the deposit's `keptAt`):
+ * a rule changed between the card and the connect sends the copy elsewhere, and the old one then stays.
+ *
  * "Where your account can be brought back from" (vault rethink VR1, design §5.1; utils/ways-back.ts) removes a community's
  * copy with the same delete and keeps the same list of deletes that didn't land, so either one's are tried again by the
  * other: when the card looks, when that screen opens, and at app open ({@link retryCommunityRemovals}). A delete it
@@ -29,10 +43,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import type { BeanPoolIdentity } from './identity';
+import type { KeeperEnrolmentResult } from './keeper-enrolment';
 import { signedDelete, signedPost } from './node-post';
 import { offeredProviders, type SsoProvider } from './sso-providers';
 import { vaultMoveLaterStoreKey, vaultMoveUnfinishedStoreKey } from './storage-keys';
-import { connectWanted, hasVault, vaultStatus } from './vault';
+import { connectWanted, disconnectFromVault, hasVault, signInCopiesAt, vaultStatus, VaultError } from './vault';
+import { knownCopiesRule } from './copies-rule';
 import { sameCommunity } from './ways-back-state';
 
 export { sameCommunity };
@@ -44,7 +60,9 @@ export type VaultMoveOffer =
     /** The community keeps a copy for `provider` and the vault none: move it. */
     | { kind: 'move'; provider: SsoProvider; communityUrl: string }
     /** The member tried to link `provider` while the vault was paused: offer it again. */
-    | { kind: 'retry'; provider: SsoProvider };
+    | { kind: 'retry'; provider: SsoProvider }
+    /** The community keeps copies itself (its rule `server`), the vault keeps one for `provider` and it none: move it here. */
+    | { kind: 'keep-here'; provider: SsoProvider; communityUrl: string };
 
 /** The sign-ins this phone can sign in with (Apple on the iPhone only). */
 function canSignInHere(provider: SsoProvider): boolean {
@@ -142,6 +160,12 @@ export async function vaultMoveOffer(
     identity: BeanPoolIdentity, communityUrl: string | null, now: number = Date.now(),
 ): Promise<VaultMoveOffer | null> {
     if (!hasVault()) return null;
+    // Where this community keeps copies now (the header's "Both directions"): never heard reads as this build's place.
+    const place = signInCopiesAt(communityUrl ? await knownCopiesRule(communityUrl) : null);
+    if (place === 'none') {
+        await retryCommunityRemovals(identity);
+        return null;
+    }
     let atVault: SsoProvider[];
     try {
         atVault = (await vaultStatus(identity, 15_000)).providers;
@@ -149,9 +173,15 @@ export async function vaultMoveOffer(
         return null;
     }
     await retryCommunityRemovals(identity);
+    if (place === 'community') {
+        // Only on the community's own answer: one that couldn't say what it keeps may keep that sign-in already.
+        const there = communityUrl ? await communityCopyStatus(identity, communityUrl) : null;
+        if (!there || !communityUrl || await movedLaterRecently(identity, now)) return null;
+        const keep = atVault.find(p => !there.providers.includes(p) && canSignInHere(p));
+        return keep ? { kind: 'keep-here', provider: keep, communityUrl } : null;
+    }
     const atCommunity = communityUrl ? await communityCopies(identity, communityUrl) : [];
-    const later = Number(await AsyncStorage.getItem(vaultMoveLaterStoreKey(identity.publicKey)).catch(() => null));
-    if (later && now - later < MOVE_AGAIN_AFTER_MS) return null;
+    if (await movedLaterRecently(identity, now)) return null;
     // A copy the member asked to remove, whose delete hasn't landed yet, is never offered as one to move.
     const removing = await unfinishedMoves(identity);
     const move = atCommunity.find(p => !atVault.includes(p) && canSignInHere(p)
@@ -159,6 +189,12 @@ export async function vaultMoveOffer(
     if (move && communityUrl) return { kind: 'move', provider: move, communityUrl };
     const retry = (await connectWanted(identity.publicKey)).find(p => !atVault.includes(p) && canSignInHere(p));
     return retry ? { kind: 'retry', provider: retry } : null;
+}
+
+/** Whether "Not now" put the card away less than a week ago. */
+async function movedLaterRecently(identity: BeanPoolIdentity, now: number): Promise<boolean> {
+    const later = Number(await AsyncStorage.getItem(vaultMoveLaterStoreKey(identity.publicKey)).catch(() => null));
+    return !!later && now - later < MOVE_AGAIN_AFTER_MS;
 }
 
 /** "Not now": the card comes back a week later. */
@@ -345,21 +381,46 @@ async function retryAt(identity: BeanPoolIdentity, waiting: UnfinishedMove[]): P
     return waiting.map((was, i) => ({ was, now: counted[i] }));
 }
 
+/** What finishing a move did with the old copy: removed, left (the new copy isn't where the move meant), or not yet. */
+export type MoveFinish = 'removed' | 'kept' | 'not-yet';
+
 /**
- * After the vault has the copy for `provider` (the connect succeeded): the community's copy goes, with a signed
- * DELETE. One that doesn't land now is remembered and tried again the next time the card looks ({@link vaultMoveOffer}).
+ * After the connect: the old copy goes, but only once the new one is kept where the move meant (`result.keptAt`; the
+ * header's "Both directions"). A move to the vault removes the community's copy with a signed DELETE, remembered and
+ * tried again when it doesn't land ({@link vaultMoveOffer}); a move here removes the vault's copy for that sign-in. A
+ * deposit that went elsewhere, as a rule changed meanwhile sends it, leaves the old copy: two copies, never none.
  */
-export async function finishMove(identity: BeanPoolIdentity, offer: VaultMoveOffer): Promise<void> {
-    if (offer.kind !== 'move') return;
-    await deleteOrRemember(identity, offer.communityUrl, offer.provider);
+export async function finishMove(identity: BeanPoolIdentity, offer: VaultMoveOffer, result?: KeeperEnrolmentResult | null): Promise<MoveFinish> {
+    if (offer.kind === 'move') {
+        if (result && result.keptAt !== 'vault') return 'kept';
+        return (await deleteOrRemember(identity, offer.communityUrl, offer.provider)).gone ? 'removed' : 'not-yet';
+    }
+    if (offer.kind === 'keep-here') {
+        if (!result || result.keptAt !== 'community') return 'kept';
+        return (await removeVaultCopy(identity, offer.provider)) ? 'removed' : 'not-yet';
+    }
+    return 'kept';
+}
+
+/** The vault's copies for `provider` go (its signed `deleted`); false when the vault couldn't do it now. Never throws. */
+async function removeVaultCopy(identity: BeanPoolIdentity, provider: SsoProvider): Promise<boolean> {
+    try {
+        await disconnectFromVault(identity, provider);
+        return true;
+    } catch (e) {
+        if (!(e instanceof VaultError)) console.log(`[VAULT] the vault's ${provider} copy was not removed: ${(e as Error).message}`);
+        return false;
+    }
 }
 
 /**
- * "Remove it instead": the community's copy for `provider` goes, with the signed DELETE, and nothing is deposited at the
- * vault. The member's choice: afterwards that sign-in brings the account back nowhere until it is linked again. A
- * delete that doesn't land now is remembered and tried again when the card next looks. True once it is gone.
+ * "Remove it instead": the old copy for `provider` goes and nothing is deposited anywhere. For a move to the vault, the
+ * community's copy, with the signed DELETE, remembered and tried again when the card next looks; for a move here, the
+ * vault's copy. The member's choice: afterwards that sign-in brings the account back from there no more until it is
+ * linked again. True once it is gone.
  */
 export async function removeInstead(identity: BeanPoolIdentity, offer: VaultMoveOffer): Promise<boolean> {
+    if (offer.kind === 'keep-here') return removeVaultCopy(identity, offer.provider);
     if (offer.kind !== 'move') return false;
     return (await deleteOrRemember(identity, offer.communityUrl, offer.provider)).gone;
 }

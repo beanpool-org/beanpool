@@ -549,10 +549,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const { pendingProfileChange } = await import('../utils/pending-profile-sync');
                 if (await pendingProfileChange(anchorUrl, pubKey)) {
                     try {
-                        // Delegate to the single canonical-aware publisher: it verifies
-                        // the node actually stored the avatar before clearing the flag,
-                        // and falls back to the canonical picture when THIS node's local
-                        // row has none yet (e.g. a freshly-joined second community).
+                        // Delegate to the single publisher: it verifies the node actually
+                        // stored the avatar before clearing the flag, and sends only what
+                        // THIS community holds for the member (a photo chosen in another
+                        // community is never sent here: Profile S2).
                         // Pinned to this cycle's community: if the phone switched meanwhile, nothing goes.
                         const { pushProfileToServer } = await import('../utils/db');
                         const ok = await pushProfileToServer({ community: anchorUrl });

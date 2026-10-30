@@ -369,6 +369,79 @@ try {
             await context.close();
         }
     }
+
+    // Where members' copies go (vault rethink VR2): at a community that keeps no copies (its info says `recoveryCopies:
+    // none`), Settings' sign-in line says so where it says where the copy is, with none kept here and with one kept from
+    // before. The line whole, inside the card, at 4.5:1 or more, light and dark, at 320px and 1.3x text.
+    const RULE_CASES = [
+        { name: 'none-not-connected', enrolled: [], where: "This community keeps no copies of members' accounts: your 12 words are your way back here." },
+        { name: 'none-connected', enrolled: ['google'], where: "This community's server keeps the copy of your account that your sign-in opens. This community keeps no new copies now. This one stays until you remove it." },
+    ];
+    for (const theme of ['light', 'dark']) {
+        for (const rc of RULE_CASES) {
+            const context = await browser.newContext({ viewport: { width: 320, height: 900 }, colorScheme: theme });
+            await context.route('**/*', (route) => {
+                const url = route.request().url();
+                if (url.includes('/api/recovery/shares/status')) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enrolledSso: rc.enrolled }) });
+                if (url.includes('/api/community/info')) {
+                    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', recoveryCopies: 'none' }) });
+                }
+                if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
+                return route.continue();
+            });
+            const page = await context.newPage();
+            const pageErrors = [];
+            page.on('pageerror', (e) => pageErrors.push(e.message));
+            await page.goto(`${base}/e2e/settings-recovery-harness.html?words=1`, { waitUntil: 'networkidle' });
+            await page.evaluate((t) => {
+                document.documentElement.classList.toggle('dark', t === 'dark');
+                document.documentElement.classList.toggle('dark-theme', t === 'dark');
+                document.documentElement.style.fontSize = '130%';
+            }, theme);
+            await page.waitForSelector('[data-testid="signin-recovery-where"]');
+            await page.waitForFunction((want) => document.querySelector('[data-testid="signin-recovery-where"]')?.textContent === want, rc.where, { timeout: 5000 }).catch(() => {});
+            await page.evaluate(() => document.fonts.ready);
+            const shot = `copies-rule-${rc.name}-${theme}.png`;
+            await page.locator('[data-testid="signin-recovery"]').screenshot({ path: path.join(OUT_DIR, shot) });
+            const m = await page.evaluate(() => {
+                const vw = document.documentElement.clientWidth;
+                const rgba = (s) => { const p = (s.match(/[\d.]+/g) || []).map(Number); return p.length >= 3 ? { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 } : null; };
+                const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+                const over = (top, under) => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+                const backdrop = (el) => {
+                    const layers = [];
+                    for (let e = el; e; e = e.parentElement) {
+                        const c = rgba(getComputedStyle(e).backgroundColor);
+                        if (c && c.a > 0) { layers.push(c); if (c.a >= 0.999) break; }
+                    }
+                    let base = { r: 255, g: 255, b: 255, a: 1 };
+                    for (const l of layers.reverse()) base = over(l, base);
+                    return base;
+                };
+                const where = document.querySelector('[data-testid="signin-recovery-where"]');
+                const card = document.querySelector('[data-testid="signin-recovery"]');
+                const r = where.getBoundingClientRect();
+                const c = card.getBoundingClientRect();
+                const fg = rgba(getComputedStyle(where).color);
+                const bg = backdrop(where);
+                const [a, b] = [lum(over(fg, bg)), lum(bg)].sort((x, y) => y - x);
+                return {
+                    text: where.textContent,
+                    ratio: (a + 0.05) / (b + 0.05),
+                    inside: r.left >= c.left - 0.5 && r.right <= c.right + 0.5 && r.bottom <= c.bottom + 0.5,
+                    clipped: where.scrollWidth > where.clientWidth + 1,
+                    pageScrollsSideways: document.documentElement.scrollWidth > vw,
+                };
+            });
+            if (m.text !== rc.where) failures.push(`${shot}: the line reads ${JSON.stringify(m.text)}`);
+            if (m.ratio < 4.5) failures.push(`${shot}: the line is ${m.ratio.toFixed(2)}:1`);
+            if (!m.inside || m.clipped) failures.push(`${shot}: the line is outside its card or cut`);
+            if (m.pageScrollsSideways) failures.push(`${shot}: the page scrolls sideways`);
+            if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
+            console.log(`${shot}: ${JSON.stringify(m.text)} at ${m.ratio.toFixed(2)}:1, inside ${m.inside}`);
+            await context.close();
+        }
+    }
 } finally {
     await browser.close();
     await server.close();

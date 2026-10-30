@@ -13,8 +13,9 @@
  * - "May post for me" (agent/owner-posts.ts; design Q1): a tick on the make form, default off, kept on the token; only a
  *   ticked owner's assistant is offered the posting tools. The list shows it, and the posts each made today.
  * - "Assistant posts a day" (`POST …/agent/posts-per-day`): how many posts one ticked assistant may make in a UTC day,
- *   1–1,000, 100 unless set (agent/limits.ts). An owner change, as the switch is (requireAdminRole: the phone's step-up),
- *   in this server's local config (never copied to a standby), and the owners are told (sec.agent).
+ *   1–1,000, 100 unless set (agent/limits.ts). An owner change with a fresh proof every time, as the gateway's settings
+ *   (requireFreshProof: a computer's key session is sent to the phone), in this server's local config (never copied to a
+ *   standby), and the owners are told (sec.agent).
  * - List: an owner sees every assistant (member, name, role, via, last used, calls today); an admin their own.
  * - Disconnect: an owner any assistant, an admin their own. Its next call to /mcp is 401.
  * - Preview (`POST …/agent/preview`): what a tool answers, run by the same table /mcp runs (agent/tools.ts), with the
@@ -24,7 +25,7 @@
  */
 import Router from '@koa/router';
 import type { RouteDeps } from '../routes/types.js';
-import { requireAdminRole, requirePhoneStepUp } from '../admin-auth.js';
+import { requireAdminRole, requireFreshProof, requirePhoneStepUp } from '../admin-auth.js';
 import {
     issueAutomationToken, listAutomationTokens, revokeAutomationToken, AGENT_TOKEN_DEFAULT_DAYS, AGENT_TOKEN_MAX_DAYS,
     type AutomationTokenView,
@@ -245,7 +246,6 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/agent/posts-per-day', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         if (!(await personOnly(ctx, deps))) return;
-        // An owner change, as the switch is: requireAdminRole asks a phone session's step-up for it.
         if (!requireAdminRole(ctx, ['owner'], 'Only an owner sets how many posts an assistant may make a day')) return;
         const perDay = body(ctx).perDay;
         if (!isAgentPostsPerDay(perDay)) {
@@ -253,6 +253,10 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             ctx.body = { error: `Assistant posts a day is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX.toLocaleString('en')}` };
             return;
         }
+        // Part of what bounds a leaked posting token (design §2.10), so an owner's fresh proof every time, as the gateway's own
+        // rate limit asks (routes/admin.ts): a computer's key session is sent to the phone, the phone's hand-off must be
+        // fresh, the password sends a current code. After the range check: a code is spent when it is checked (#2002 NB1).
+        if (!(await requireFreshProof(ctx, body(ctx).code, 'change how many posts an assistant may make a day'))) return;
         const was = agentPostsPerDay();
         if (was !== perDay) {
             setAgentPostsPerDay(perDay);

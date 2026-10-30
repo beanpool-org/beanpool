@@ -37,10 +37,10 @@ import { backupLockState } from '../services/sealed-backup.js';
 import { getBackupStatus } from '../services/backup-puller.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE, type Fenced } from './fence.js';
 import {
-    admitAgentBackup, agentBackupsToday, agentCallsToday, agentCreatesToday, returnAgentBackup,
+    admitAgentBackup, agentBackupsToday, agentCallsToday, returnAgentBackup,
     AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPostsPerDay, AGENT_LIST_MAX,
 } from './limits.js';
-import { OWNER_POST_TOOLS } from './owner-posts.js';
+import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-posts.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -511,7 +511,7 @@ export const AGENT_TOOLS: AgentTool[] = [
         outputSchema: OBJ({
             name: STR, member: STR, role: STR, via: STR, createdAt: STR_OR_NULL, expiresAt: STR_OR_NULL,
             calls: OBJ({ today: NUM, perMinute: NUM, perDay: NUM }), backups: OBJ({ today: NUM, perDay: NUM }), tools: ARR, cannot: ARR,
-            posts: OBJ({ today: NUM, perDay: NUM }), canPost: { type: 'boolean' },
+            posts: OBJ({ today: NUM, perDay: NUM, photoRoom: STR }), canPost: { type: 'boolean' },
         }, ['name', 'member', 'role', 'via', 'createdAt', 'expiresAt', 'calls', 'backups', 'tools', 'cannot', 'canPost']),
         run: (grant) => ({
             ok: true, rows: 1,
@@ -524,10 +524,10 @@ export const AGENT_TOOLS: AgentTool[] = [
                 expiresAt: iso(grant.expiresAt),
                 calls: { today: agentCallsToday(grant.id), perMinute: AGENT_CALLS_PER_MINUTE, perDay: AGENT_CALLS_PER_DAY },
                 backups: { today: agentBackupsToday(grant.id), perDay: AGENT_BACKUPS_PER_DAY },
-                // "May post for me", and the posts it made today against the owners' "Assistant posts a day" (agent/owner-posts.ts);
-                // a grant that does not post (an admin's, or one not ticked) has no count.
+                // "May post for me", and the posts it made today against the owners' "Assistant posts a day" (agent/owner-posts.ts),
+                // with the owner's photo room left in words; a grant that does not post (an admin's, or one not ticked) has no count.
                 canPost: grantPosts(grant),
-                ...(grantPosts(grant) ? { posts: { today: agentCreatesToday(grant.id), perDay: agentPostsPerDay() } } : {}),
+                ...(grantPosts(grant) ? { posts: { today: assistantPostsToday(grant), perDay: agentPostsPerDay(), photoRoom: photoRoomWords(grant.member) } } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
                 cannot: AGENT_CANNOT,
             },

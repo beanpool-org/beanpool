@@ -15,9 +15,13 @@
  *   (enterpriseRef), matched only among the ones the owner keeps.
  * - Each tool runs what its HTTP route runs after the signature check, in the same order and through the same engine call
  *   (routes/marketplace.ts POST /api/marketplace/posts; routes/treasury.ts POST /api/treasury/:treasury/{offer,need,event}),
- *   so the mute, probation and daily-post limits, the engine's validation (text limits, categories, place, reach, an event's
- *   times and pin), the search index, the sync marks and the standby copy behave as for a post from the phone. A server
- *   another took over (services/identity-epoch.ts) refuses, as its /api/ routes do.
+ *   so the mute and probation limits, the engine's validation (text limits, categories, place, reach, an event's times and
+ *   pin), the search index, the sync marks and the standby copy behave as for a post from the phone. A server another took
+ *   over (services/identity-epoch.ts) refuses, as its /api/ routes do. One limit differs: a post as the owner is held to the
+ *   owners' "Assistant posts a day", not to the member's own 100 (WRITER_LIMITS.postsPerDay), and does not use those up
+ *   (the director, 30 Oct, from Marty's "make it 1000 per day … serious seeding on the global node"; engine/writer-bounds.ts).
+ *   Its photos still count against the owner's own photo budget (engine/photo-upload-budget.ts), and the assistant is told
+ *   in words how much of it is left (connection_info, and the day-full and photo refusals).
  * - Every field the phone's and the web's composer require for that kind is required here too (Marty, 30 Oct: "all the
  *   mandatory fields should be mandatory even if seeding through MCP"): by the tool's input schema and again by the server,
  *   from one list per kind (REQUIRED), each one missing or empty refused in words that name it. Then the values go through
@@ -27,7 +31,11 @@
  *   resizeToStoredPhoto), then held to the routes' photo rule. One the node can't read (cut off after a whole header) is
  *   refused, never stored as sent. No composer offers a preset tile instead of a photo, so neither does this.
  * - The owners' "Assistant posts a day" per grant per UTC day (limits.ts agentPostsPerDay: 100 unless an owner sets 1 to 1,000),
- *   read on every post; one the engine refuses is not counted.
+ *   read on every post; one the engine refuses is not counted. Counted in memory as each is admitted (two calls at once
+ *   can't both take the last one) and, just before the row is written, from the rows the grant made today, which a
+ *   restart keeps.
+ * - `use_my_area: true` places a listing at the owner's own area, the point this node keeps for them (engine/member-area.ts),
+ *   rounded as the apps round a pin, on every node; with no area set it is refused, naming the fields to send instead.
  * - The row records `created_via = 'assistant:<grant id>'` (schema.sql posts.created_via); the AGENT line of every create
  *   names the post id (mcp-route.ts). Revoking the grant or turning the switch off stops the next call at the door; posts
  *   made stay, and are deleted as any post is.
@@ -44,8 +52,10 @@ import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS } from '../state
 import { createEventFromBody } from '../routes/event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { assertMayAddPhotos, assertMayPost } from '../engine/probation.js';
-import { assertMayPostToday, enterprisePostLimit } from '../engine/writer-bounds.js';
+import { enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
+import { readMemberArea } from '../engine/member-area.js';
+import { memberPhotoRoom, PhotoBudgetExceededError } from '../engine/photo-upload-budget.js';
 import { photoRefusalText, routePhotosRefusal, sniffRasterImageType } from '../engine/avatar.js';
 import { imageSize } from '../storage/image-metadata.js';
 import { loadSharp, PHOTO_MAX_SIDE, resizeToStoredPhoto } from '../storage/photo-thumbnails.js';
@@ -283,15 +293,65 @@ function gate(grant: AgentGrant): string | null {
     if (!grant.canPost) return NOT_TICKED;
     const replaced = getReplacedInfo();
     if (replaced) return `${replaced.message} This server takes no new posts; use the one that took over.`;
-    if (agentCreatesToday(grant.id) >= agentPostsPerDay()) return dayFull();
+    if (assistantPostsToday(grant) >= agentPostsPerDay()) return dayFull(grant);
     return null;
 }
 
 const NOT_TICKED = 'This assistant was connected without "May post for me", so it cannot post. The owner can connect it again with that ticked.';
 
-function dayFull(): string {
-    return `This assistant has made ${agentPostsPerDay()} posts today, the most a day this community's owners allow: try again tomorrow (UTC).`;
+/** UTC midnight of `now`'s day: the grant's day, as limits.ts counts it. */
+const utcMidnight = (now: number): string => `${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`;
+
+/** The posts this grant made today (UTC), read from their rows (created_via), which a restart keeps. */
+function madeToday(grant: AgentGrant, now = Date.now()): number {
+    return (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE (author_pubkey = ? OR created_by = ?) AND created_via = ?
+        AND origin_node IS NULL AND created_at >= ?`).get(grant.member, grant.member, createdViaOf(grant), utcMidnight(now)) as { c: number }).c;
 }
+
+/** The posts this grant made today: the count kept as each is admitted, or its rows when a restart emptied that count. */
+export function assistantPostsToday(grant: AgentGrant): number {
+    return Math.max(agentCreatesToday(grant.id), madeToday(grant));
+}
+
+/**
+ * The owners' "Assistant posts a day", just before the row is written (createPost's beforeWrite, once every other refusal
+ * has passed), from the rows: what holds an assistant's posts as the owner, in place of the member's own 100.
+ */
+function assertAssistantDay(grant: AgentGrant): void {
+    if (madeToday(grant) >= agentPostsPerDay()) throw new Error(dayFull(grant));
+}
+
+/** Today's count, which may be past the number after an owner lowers it, and the number: then the photo room left. */
+function dayFull(grant: AgentGrant): string {
+    return `This assistant has made ${assistantPostsToday(grant).toLocaleString('en')} posts today, and this community's owners allow `
+        + `${agentPostsPerDay().toLocaleString('en')} a day: try again tomorrow (UTC). ${photoRoomWords(grant.member)}`;
+}
+
+const MB = 1024 * 1024;
+const amount = (bytes: number): string => (bytes >= MB ? `${(bytes / MB).toFixed(1).replace(/\.0$/, '')} MB` : `${Math.round(bytes / 1024)} KB`);
+
+/**
+ * The owner's photo room left, in words. Every photo an assistant posts is charged to the owner as stored (engine/posts.ts
+ * storedPhotoColumns), against what one member may store in any 24 hours (engine/photo-upload-budget.ts: 100 MB unless
+ * the server sets PHOTO_BYTES_PER_MEMBER_PER_DAY), and the owner's own uploads share it.
+ */
+export function photoRoomWords(member: string): string {
+    const room = memberPhotoRoom(member);
+    if (!room) return 'Photos have no daily limit on this community.';
+    const of = `of the ${amount(room.budget)} of photos a member may store in any 24 hours`;
+    return room.left > 0
+        ? `The owner has about ${amount(room.left)} of photo room left, ${of} (each photo counts as stored, at most ${PHOTO_MAX_SIDE} px).`
+        : `The owner has no photo room left, ${of}.`;
+}
+
+/** A refusal's words for the assistant: the photo budget's also says how much room is left. */
+function refusalText(e: unknown, grant: AgentGrant, fallback: string): string {
+    const text = memberErrorText(e, fallback);
+    return e instanceof PhotoBudgetExceededError ? `${text} ${photoRoomWords(grant.member)}` : text;
+}
+
+/** Said with use_my_area: true when the owner has no area on this node. */
+const NO_AREA = 'use_my_area needs your area, and none is set on this community: give lat and lng, or set your area in the app first.';
 
 /** An event's start and end as stored: the clock its members see, in its zone, so the assistant can check what it posted. */
 type EventClock = { startsLocal: string; endsLocal: string; timezone: string };
@@ -303,7 +363,7 @@ function answer(grant: AgentGrant, kind: 'offer' | 'need' | 'event', postId: str
             postId, kind, asEnterprise,
             link: `/?post=${encodeURIComponent(postId)}`,
             ...clock,
-            postsToday: agentCreatesToday(grant.id), postsPerDay: agentPostsPerDay(),
+            postsToday: assistantPostsToday(grant), postsPerDay: agentPostsPerDay(),
         },
     };
 }
@@ -326,6 +386,10 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     if (asEnterprise && args.kind !== 'offer' && args.kind !== 'need') return { ok: false, error: 'kind must be offer or need.' };
     const who = authorFor(grant, args.as_enterprise, asEnterprise);
     if (!who.ok) return who;
+    // Said out loud, the owner's own area: the point this node keeps for them (engine/member-area.ts), on every node,
+    // whether or not it syncs by area. With none set there is no place to give the listing, so it is refused before anything.
+    const area = args.use_my_area === true && !who.enterprise ? readMemberArea(grant.member) : undefined;
+    if (area === null) return { ok: false, error: NO_AREA };
     // Trimmed as both apps send them; held to the route's own limits by createPost (engine/post-fields.ts), never cut here.
     const title = (args.title as string).trim();
     const description = typeof args.description === 'string' ? args.description.trim() : '';
@@ -341,11 +405,11 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     if (!photos.ok) return photos;
     // Counted before the post is made, so two calls at once cannot both take the last one; given back when it is not made.
     if (!admitAgentCreate(grant.id)) {
-        return { ok: false, error: dayFull() };
+        return { ok: false, error: dayFull(grant) };
     }
     const owner = grant.member;
-    // Said out loud, the owner's own area: no pin is sent, so the engine gives it the area a listing without one gets.
-    const { lat, lng } = args.use_my_area === true && !who.enterprise ? { lat: undefined, lng: undefined } : roundedPin(args);
+    // The area rounded as the apps round a pin (@beanpool/core approximateLocation).
+    const { lat, lng } = area ? approximateLocation(area.lat, area.lng) : roundedPin(args);
     const priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
     try {
         let post;
@@ -359,14 +423,15 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
             const repeatable = kind === 'offer' ? args.repeatable !== false : args.repeatable === true;
             post = createPost(kind, category, title, description, credits, priceType, enterprise, lat, lng,
                 photos.photos, repeatable, undefined, undefined,
-                { createdBy: owner, beforeWrite: limit.beforeWrite, shopId, createdVia: createdViaOf(grant) });
+                { createdBy: owner, beforeWrite: () => { assertAssistantDay(grant); limit.beforeWrite(); }, shopId, createdVia: createdViaOf(grant) });
             if (post) limit.stored(post.id);
         } else {
             assertNotMuted(owner);
             assertMayPost(owner, Math.min(photos.photos.length, 5));
+            // The owners' "Assistant posts a day", in place of the member's own 100 (the director, 30 Oct).
             post = createPost(kind, category, title, description, credits, priceType, owner, lat, lng,
                 photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
-                { beforeWrite: () => assertMayPostToday(owner), createdVia: createdViaOf(grant) });
+                { beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant) });
             if (post) syncPulseMarketplaceGate();
         }
         if (!post) {
@@ -376,7 +441,7 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
         return answer(grant, kind, post.id, who.enterprise);
     } catch (e) {
         returnAgentCreate(grant.id);
-        return { ok: false, error: memberErrorText(e, 'The post could not be made: try again later.') };
+        return { ok: false, error: refusalText(e, grant, 'The post could not be made: try again later.') };
     }
 }
 
@@ -392,7 +457,7 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
     const photos = await photosFrom(args.photos);
     if (!photos.ok) return photos;
     if (!admitAgentCreate(grant.id)) {
-        return { ok: false, error: dayFull() };
+        return { ok: false, error: dayFull(grant) };
     }
     const owner = grant.member;
     // The body the apps send (routes/event-post.ts reads it): instants, the zone, the place or the link; the text trimmed as
@@ -412,12 +477,12 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
             assertNotMuted(enterprise);
             assertMayAddPhotos(owner, Math.min(photos.photos.length, 5));
             const limit = enterprisePostLimit(enterprise, owner);
-            post = createEventFromBody(body, enterprise, owner, limit.beforeWrite, timeOut, createdViaOf(grant));
+            post = createEventFromBody(body, enterprise, owner, () => { assertAssistantDay(grant); limit.beforeWrite(); }, timeOut, createdViaOf(grant));
             if (post) limit.stored(post.id);
         } else {
             assertNotMuted(owner);
             assertMayPost(owner, Math.min(photos.photos.length, 5));
-            post = createEventFromBody(body, owner, undefined, () => assertMayPostToday(owner), timeOut, createdViaOf(grant));
+            post = createEventFromBody(body, owner, undefined, () => assertAssistantDay(grant), timeOut, createdViaOf(grant));
             if (post) syncPulseMarketplaceGate();
         }
         if (!post) {
@@ -429,7 +494,7 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
             eventStartLocal && eventEndLocal && eventTz ? { startsLocal: eventStartLocal, endsLocal: eventEndLocal, timezone: eventTz } : undefined);
     } catch (e) {
         returnAgentCreate(grant.id);
-        return { ok: false, error: memberErrorText(e, 'The event could not be made: try again later.') };
+        return { ok: false, error: refusalText(e, grant, 'The event could not be made: try again later.') };
     }
 }
 
@@ -457,7 +522,7 @@ function ownerListingSchema(): Record<string, unknown> {
         type: 'object',
         properties: {
             ...LISTING_PROPS,
-            use_my_area: { type: 'boolean', description: 'true: no pin, your own area instead (as the apps place a listing sent without one); then lat and lng are not asked' },
+            use_my_area: { type: 'boolean', description: 'true: no pin, placed at your own area (the one set in the app, rounded as a pin is); then lat and lng are not asked. Refused when no area is set' },
             cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' },
         },
         // The pin (lat, lng) is required too unless use_my_area is true (REQUIRED.listingPlace): a JSON Schema `required` cannot say "unless".
@@ -476,8 +541,9 @@ const POST_OUT = {
     },
     required: ['postId', 'kind', 'asEnterprise', 'link', 'postsToday', 'postsPerDay'],
 };
-const LIMITS_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), under the member's own posting "
-    + "limits; the post is the owner's, deleted as any post is, and moderators see it was made by an assistant";
+const LIMITS_WORDS = "at most the posts a day this community's owners set (connection_info's posts.perDay), which never use up the member's own "
+    + "posts a day from the apps; its photos count against the member's photo room (connection_info's posts.photoRoom); the post is the "
+    + "owner's, deleted as any post is, and moderators see it was made by an assistant";
 
 /** The rows agent/tools.ts adds to its table: owner-only, all of them. */
 export const OWNER_POST_TOOLS: AgentTool[] = [

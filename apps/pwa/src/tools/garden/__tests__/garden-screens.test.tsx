@@ -316,6 +316,25 @@ describe('Your garden on the web: the guide', () => {
         expect(props.onClose).not.toHaveBeenCalled();
     });
 
+    it("leaving Change while its write is still out (the page's ←, the browser's back) keeps the choice and doesn't go back a second time (review of #2618)", async () => {
+        home.answer = answer({ lat: -28.55, lng: 153.5 });
+        const { props } = draw({ id: 'garden', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('garden-change'));
+        await screen.findByTestId('garden-zone-found');
+        const land = idb.holdNextCommit();
+        fireEvent.click(screen.getByTestId('garden-zone-mild'));
+        // The write is out. The page's ← pops Change, and the guide shows the choice at once.
+        fireEvent.click(screen.getByTestId('tools-back'));
+        expect(screen.getByTestId('garden-zone-line').textContent).toContain('Mild temperate · southern hemisphere');
+        expect(screen.queryByTestId('garden-zone')).toBeNull();
+        // It lands: the choice is kept, and nothing goes back again: not out of the guide, never to an empty stack.
+        await act(async () => { land(); await new Promise((r) => setTimeout(r, 25)); });
+        expect(screen.getByTestId('garden-zone-line').textContent).toContain('Mild temperate · southern hemisphere');
+        expect(screen.getByTestId('tools-page')).toBeTruthy();
+        expect(props.onClose).not.toHaveBeenCalled();
+        expect(JSON.parse((await readToolRecord(OWNER, 'garden'))!.body)).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
+    });
+
     it("opens a crop's page from the guide, with its windows in words and the tropics' note", async () => {
         home.answer = answer({ lat: 6.52, lng: 3.38 }); // Lagos: wet and dry tropics
         await openGuide();

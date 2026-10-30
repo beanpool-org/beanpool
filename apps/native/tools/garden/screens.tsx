@@ -123,8 +123,12 @@ export function Zone({ host }: GardenScreenProps) {
     const place = usePlace(host);
     const found = gardenZoneFix({}, place ?? null);
     const current = gardenZoneFix(doc.settings, place ?? null);
-    const [hemisphere, setHemisphere] = useState<Hemisphere>(current?.hemisphere ?? 'north');
-    useEffect(() => { if (current && !doc.settings.hemisphere) setHemisphere(current.hemisphere); }, [current?.hemisphere]);
+    /**
+     * The hemisphere a zone is chosen in: the member's pick on this screen, else the choice's or the place's. Worked out
+     * as the screen draws, so it is the place's in the same draw as "Your place gives …": a tap can't keep the default.
+     */
+    const [picked, setPicked] = useState<Hemisphere | null>(null);
+    const hemisphere: Hemisphere = picked ?? current?.hemisphere ?? 'north';
     /**
      * Set once a choice is being kept: a second tap before the first lands would go back twice, out of the guide too
      * (the web's stack would empty). Cleared only when the write fails, so the member can tap again.
@@ -148,9 +152,10 @@ export function Zone({ host }: GardenScreenProps) {
         <ToolScreen testID="garden-zone">
             <ToolSection title={t('Your climate')}>
                 <ToolNote text={t('Pick the one closest to where you grow. Hills and coasts can differ from the map.')} />
-                <ToolChips label={t('Hemisphere')} heading options={hemispheres} value={hemisphere} onPick={setHemisphere} testID="garden-hemisphere" />
+                <ToolChips label={t('Hemisphere')} heading options={hemispheres} value={hemisphere} onPick={setPicked} testID="garden-hemisphere" />
                 {GARDEN_ZONES.map((z) => {
-                    const on = current?.zone === z.id && current.hemisphere === hemisphere;
+                    // Only the member's own choice is "(chosen)": a zone worked out from the place is the note below.
+                    const on = current?.source === 'chosen' && current.zone === z.id && current.hemisphere === hemisphere;
                     return (
                         <ToolRow key={z.id} wrap icon={on ? '✅' : ZONE_ICONS[z.id]} title={on ? t('{zone} (chosen)', { zone: t(z.name) }) : t(z.name)} state={t(z.line)}
                             onPress={() => { void choose(z.id); }} testID={`garden-zone-${z.id}`} />

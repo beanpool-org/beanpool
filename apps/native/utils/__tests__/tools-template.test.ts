@@ -1597,6 +1597,21 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
     }, 30_000);
 
+    it('Change says "(chosen)" only of the member\'s own choice, never of the zone the place gives', async () => {
+        keepHome({ lat: -28.55, lng: 153.5 }); // gives Warm temperate · southern hemisphere
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        expect(byTestId('garden-zone-found')?.textContent).toContain('Warm temperate · southern hemisphere');
+        expect(byTestId('garden-zone')?.textContent).not.toContain('(chosen)');
+        expect(byTestId('garden-zone')?.textContent).not.toContain('✅');
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        expect(byTestId('garden-zone-mild')?.textContent).toContain('Mild temperate (chosen)');
+        expect(byTestId('garden-zone-warm')?.textContent).not.toContain('(chosen)');
+    }, 30_000);
+
     it('a second tap on Change before the first choice is kept goes back once (not out of the guide too)', async () => {
         keepHome({ lat: -28.55, lng: 153.5 });
         await redraw({ screen: 'zone' }, 'en');

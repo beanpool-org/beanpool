@@ -109,6 +109,21 @@ describe('Your garden on the web: the guide', () => {
         expect(JSON.parse((await readToolRecord(OWNER, 'garden'))!.body)).toEqual({ v: 1, settings: {} });
     });
 
+    it('Change says "(chosen)" only of the member\'s own choice, never of the zone the place gives', async () => {
+        home.answer = answer({ lat: -28.55, lng: 153.5 }); // gives Warm temperate · southern hemisphere
+        await openGuide();
+        fireEvent.click(screen.getByTestId('garden-change'));
+        expect((await screen.findByTestId('garden-zone-found')).textContent).toContain('Warm temperate · southern hemisphere');
+        expect(screen.getByTestId('garden-zone').textContent).not.toContain('(chosen)');
+        expect(screen.getByTestId('garden-zone').textContent).not.toContain('✅');
+        fireEvent.click(screen.getByTestId('garden-zone-mild'));
+        await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Mild temperate · southern hemisphere'));
+        fireEvent.click(screen.getByTestId('garden-change'));
+        await screen.findByTestId('garden-zone-reset');
+        expect(screen.getByTestId('garden-zone-mild').textContent).toContain('Mild temperate (chosen)');
+        expect(screen.getByTestId('garden-zone-warm').textContent).not.toContain('(chosen)');
+    });
+
     it('a second tap on Change before the first choice is kept goes back once, to the guide (the stack never empties)', async () => {
         home.answer = answer({ lat: -28.55, lng: 153.5 });
         const { props } = draw({ id: 'garden', screen: 'main', key: null });

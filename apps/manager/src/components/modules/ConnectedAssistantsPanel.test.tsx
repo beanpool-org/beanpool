@@ -19,7 +19,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
 type Call = { url: string; method: string; body: any };
 
 /** A fake node: the list is `state.grants`; connecting pushes one; disconnecting removes it; the preview answers its tools. */
-function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown }) {
+function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[] }) {
     const calls: Call[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: RequestInit) => {
         const url = String(input);
@@ -49,6 +49,7 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'a
         }
         if (url.endsWith('/api/local/admin/agent/preview')) {
             if (!body.tool) {
+                if (state.previewTools) return new Response(JSON.stringify({ tools: state.previewTools }), { status: 200 });
                 return new Response(JSON.stringify({ tools: [
                     { name: 'node_overview', title: 'This server', description: 'Reads the community.\nNever returns member rows.', write: false, memberText: false },
                     { name: 'reports_list', title: 'Reports', description: 'Reads reports.\nNever returns the reporter.', write: false, memberText: true },
@@ -195,6 +196,24 @@ describe('ConnectedAssistantsPanel', () => {
         fireEvent.click(within(tools[1]).getByRole('button', { name: 'Show its answer' }));
         expect(await within(tools[1]).findByTestId('agent-preview-answer')).toHaveTextContent('"community": "Mullumbimby"');
         expect(calls.find((c) => c.body?.tool === 'reports_list')?.body).toEqual({ grant: '0123456789ab', tool: 'reports_list', args: { include_text: true } });
+    });
+
+    it('an owner\'s assistant lists its posting tools (MCP-OWNER-POSTS) as writes, each named and never tried', async () => {
+        const creates = ['create_offer', 'create_need', 'create_event', 'create_enterprise_listing'];
+        fakeNode({ grants: [grant()], previewTools: [
+            { name: 'my_enterprises', title: 'Enterprises you may post as', description: 'Reads the enterprises.\nNever returns a key.', write: false, memberText: true },
+            ...creates.map((name) => ({ name, title: `Post (${name})`, description: 'Reads nothing: it posts.\nNever returns another member\'s data.', write: true, memberText: false })),
+        ] });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        fireEvent.click(await screen.findByRole('button', { name: 'What it sees: Claude on my laptop' }));
+        const tools = await within(await screen.findByTestId('agent-preview')).findAllByTestId('agent-preview-tool');
+        expect(tools).toHaveLength(5);
+        for (const [i, name] of creates.entries()) {
+            expect(tools[i + 1]).toHaveTextContent(name);
+            expect(tools[i + 1]).toHaveTextContent('It changes something, so it is not tried here.');
+            expect(within(tools[i + 1]).queryByRole('button', { name: 'Show its answer' })).toBeNull();
+        }
+        expect(within(tools[0]).getByRole('button', { name: 'Show its answer' })).toBeTruthy();
     });
 
     it('with assistants off, an admin\'s preview says it is turned off, never "It would be told" (#1865 finding 2)', async () => {

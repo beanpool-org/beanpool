@@ -601,6 +601,8 @@ export interface AbuseReport {
     postRemoved?: boolean | null;
     /** The reported post is hidden by reports, waiting for a moderator (global profile, G3). */
     postHiddenByReports?: boolean | null;
+    /** The reported post was made by an owner's AI assistant (posts.created_via, agent/owner-posts.ts); null when no post is reported. */
+    postMadeByAssistant?: boolean | null;
     /** Present when the report targets a Pulse item. `removed` is true once it is tombstoned (url/title are then NULL). */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;
     /** The group chat message a report names, with its key (engine/group-chat-report.ts), or absent. */
@@ -7425,7 +7427,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                mt.callsign as target_callsign,
                p.title as post_title, substr(p.description, 1, 500) as post_description,
                p.id as post_row_id, p.active as post_active, p.status as post_status,
-               p.hidden_by_reports_at as post_hidden_at,
+               p.hidden_by_reports_at as post_hidden_at, p.created_via as post_created_via,
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign,
@@ -7488,6 +7490,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         postRemoved: r.post_row_id ? (r.post_active !== 1 || r.post_status === 'cancelled') : null,
         // Hidden by reports, waiting for a moderator (G3): restore it or remove it.
         postHiddenByReports: r.post_row_id ? !!r.post_hidden_at : null,
+        // Made by an owner's AI assistant (agent/owner-posts.ts): moderators see it; members never do.
+        postMadeByAssistant: r.post_row_id ? (typeof r.post_created_via === 'string' && r.post_created_via.startsWith('assistant:')) : null,
         targetPulseItemId: r.target_pulse_item_id || undefined,
         pulseItem: r.target_pulse_item_id
             ? {

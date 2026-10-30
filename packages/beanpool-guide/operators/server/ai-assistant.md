@@ -1,7 +1,7 @@
 ---
 slug: ai-assistant
 title: AI assistants
-summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, the suggestions you approve, its limits, and disconnecting it.
+summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, the suggestions you approve, the listings an owner's assistant posts, its limits, and disconnecting it.
 related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees, install-with-ai
 ---
 
@@ -49,9 +49,21 @@ The other owners get a message when anyone connects or disconnects an assistant,
 - **Reports**: their id, when, status, whether it is a child-safety report, and what was reported. Open child-safety reports come first, then the rest newest first. Only when asked, the report's reason, the reported post's title and description, and the reported post's author's name or the reported member's name.
 - **Join requests**: how many wait. Only when asked, each one's name and message, and the community it says it came from.
 - **Safety settings**: yes or no only, for example whether two-factor sign-in is on, whether there are two owners, whether a recovery code is set.
-- **Its own connection**: its name, who it acts for, until when, and its calls today.
+- **Its own connection**: its name, who it acts for, until when, its calls today and, for an owner's assistant, its posts today.
 
 An owner's assistant can also **take a backup**: a snapshot on the server, or a run to the off-box destinations. At most 2 a day, never while one is running. An admin's assistant can't.
+
+## Posting for you (owners)
+
+An owner's assistant can put things in the Market for them, as they need it: ask it "post an Offer of sourdough on Saturdays, here is a photo" and it is up. There is no list to approve: the post is yours, made at once.
+
+- **What it can post**: an Offer, a Need or an event as you, and an Offer, a Need or an event as an enterprise you keep. It asks the server which enterprises those are; one you no longer keep is refused. An enterprise's Need needs a live Offer of its own first, as in the app.
+- **A photo every time**: 1 to 4, sent by the assistant as JPEG or WebP. The server makes each one 800 pixels on its longest side, as the apps do, and takes out what a camera hides in a photo (where it was taken). A post with no photo is refused, as in the app. Only post photos you may: never one of people who did not agree to it.
+- **The same rules as the app**: the same words, categories, prices and places, the same limits on how many posts a member makes in a day, and the same refusals (a muted account, an event in the past). Each assistant can make at most 50 posts a day.
+- **It is your post**: it carries your name or the enterprise's, and you edit or delete it as any other. Members see an ordinary post. Moderators can see it was made by an assistant, and the log says which one.
+- **Disconnecting stops it at once**, and so does turning AI assistants off. The posts it made stay until you delete them.
+
+An admin's assistant can't post, and an assistant never posts as another member.
 
 ## Suggestions: you approve, it never acts
 
@@ -77,11 +89,11 @@ What members write (a report's reason, a post's title, a join message, a name) m
 
 ## What it sees: try it first
 
-**What would my assistant see?** on the card, or **What it sees** beside a connected one, shows each tool the assistant has and, when you press **Show its answer**, exactly what the server would answer it now, redacted and wrapped the same way. Nothing you look at there is counted against the assistant or changes anything. Taking a backup is not tried there. While AI assistants are turned off, an admin sees the list of tools there but no answers.
+**What would my assistant see?** on the card, or **What it sees** beside a connected one, shows each tool the assistant has and, when you press **Show its answer**, exactly what the server would answer it now, redacted and wrapped the same way. Nothing you look at there is counted against the assistant or changes anything. Taking a backup or posting is not tried there. While AI assistants are turned off, an admin sees the list of tools there but no answers.
 
 ## Limits
 
-Each assistant can make 60 calls a minute and 2,000 a day; past either the server answers "too many requests" and says when to try again. A list returns at most 50 rows. These counts are kept in memory, so a restart starts them again.
+Each assistant can make 60 calls a minute and 2,000 a day; past either the server answers "too many requests" and says when to try again. A list returns at most 50 rows. An owner's assistant can make at most 50 posts a day; a post the server refuses doesn't count. These counts are kept in memory, so a restart starts them again.
 
 ## Disconnecting
 
@@ -91,7 +103,7 @@ If the server sees a used pass presented a second time, someone else may hold a 
 
 Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again. The same goes for assistants connected with a token. The switch that turns AI assistants off belongs to the server too: after a take-over they are allowed again until an owner turns them off on the new main server.
 
-An assistant also stops on its own when its days are up, or when the member it acts for stops being an owner or admin. An owner who becomes an admin keeps theirs, as an admin's assistant (no backups). If a laptop with a token on it is lost or someone may have copied the token, disconnect that assistant and connect it again.
+An assistant also stops on its own when its days are up, or when the member it acts for stops being an owner or admin. An owner who becomes an admin keeps theirs, as an admin's assistant (no backups, no posting). If a laptop with a token on it is lost or someone may have copied the token, disconnect that assistant and connect it again.
 
 ## Turning AI assistants off
 
@@ -99,4 +111,4 @@ AI assistants are allowed unless an owner turns them off: the card's **Turn AI a
 
 ## What the server logs
 
-Every call an assistant makes is logged under AGENT: which assistant, the first part of its member's key, which tool, the names of what it asked with, how many rows it got and how long it took. Never what members wrote and never a token. Refused calls are logged too, a few a minute, then counted.
+Every call an assistant makes is logged under AGENT: which assistant, the first part of its member's key, which tool, the names of what it asked with, how many rows it got and how long it took, and for a post it made, the post. Never what members wrote and never a token. Refused calls are logged too, a few a minute, then counted.

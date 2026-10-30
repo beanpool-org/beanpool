@@ -49,6 +49,8 @@ export function readGardenDoc(raw: unknown): GardenDoc {
 
 /** The document with the member's choice of climate, or with it cleared ("Use my place"). Every other key kept. */
 export function withGardenClimate(doc: GardenDoc, choice: { zone: GardenZoneId; hemisphere: Hemisphere } | null): GardenDoc {
-    const { zone: _z, hemisphere: _h, ...rest } = doc.settings;
+    const rest: GardenSettings = { ...doc.settings };
+    delete rest.zone;
+    delete rest.hemisphere;
     return { ...doc, settings: choice ? { ...rest, zone: choice.zone, hemisphere: choice.hemisphere } : rest };
 }

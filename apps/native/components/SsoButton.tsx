@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { palette } from '../constants/colors';
 
 /**
  * One size for every provider's logo, in a box that never gives way. The label beside it shrinks and wraps
@@ -231,9 +232,10 @@ const styles = StyleSheet.create({
         shadowRadius: 2,
         elevation: 1,
     },
+    // The label in blue-600 (5.17:1 on the white button); Facebook's #1877F2 was 4.23. The logo and the outline keep it.
     facebookBtnText: {
         flexShrink: 1,
-        color: '#1877F2',
+        color: palette.blue600,
         fontSize: 15,
         fontWeight: '600',
         textAlign: 'center',

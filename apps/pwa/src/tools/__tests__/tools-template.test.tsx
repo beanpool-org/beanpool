@@ -184,8 +184,12 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         await keep(c.manifest.id, doc);
         const view = draw(c, { id: c.manifest.id, screen: screenName, key: null });
         const page = await view.findByTestId('tools-page');
-        // Empty: the two doors first; "I already do this" goes in.
+        // Empty: the two doors first; "I already do this" goes in. A tool that names `doors: false` (Your garden) opens on its
+        // first screen instead, with no doors.
         if (screenName === 'main' && JSON.stringify(doc) === JSON.stringify(c.manifest.doc.empty())) {
+            if (c.manifest.doors === false) expect(view.queryByTestId('tool-doors'), `${where}, no doors`).toBeNull();
+        }
+        if (screenName === 'main' && c.manifest.doors !== false && JSON.stringify(doc) === JSON.stringify(c.manifest.doc.empty())) {
             await view.findByTestId('tool-doors');
             expect(layoutProblems(page), `${where}, the doors`).toEqual([]);
             expect(bypassing(page, { others: memberText(doc) }), `${where}, the doors`).toEqual([]);
@@ -270,12 +274,13 @@ describe('a tool this build does not have', () => {
         expect(await readToolRecord(OWNER, 'scaffold')).toBeNull();
     });
 
-    it("the registry as shipped: the Tool shed, core and web half, on the Tools screen's shelf; an id this build doesn't have is not in this version", async () => {
-        // The slice that adds a tool's web half changes both lines on purpose (the Tool shed's was T1.3).
-        expect(TOOLS.map((m) => m.id)).toEqual(['things']);
-        expect(Object.keys(TOOL_APPS)).toEqual(['things']);
+    it("the registry as shipped: the Tool shed and Your garden, core and web half, on the Tools screen's shelf; an id this build doesn't have is not in this version", async () => {
+        // The slice that adds a tool's web half changes both lines on purpose (the Tool shed's was T1.3, Your garden's grow-food G0).
+        expect(TOOLS.map((m) => m.id)).toEqual(['things', 'garden']);
+        expect(Object.keys(TOOL_APPS)).toEqual(['things', 'garden']);
         const list = render(<ToolsPage identity={identity} open={{ id: null, screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
         expect(within(await list.findByTestId('tools-shelf-stock')).getByTestId('tools-row-things')).toBeInTheDocument();
+        expect(within(list.getByTestId('tools-shelf-stock')).getByTestId('tools-row-garden')).toBeInTheDocument();
         expect(list.queryByTestId('tools-none')).toBeNull();
         list.unmount();
         render(<ToolsPage identity={identity} open={{ id: 'scaffold', screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
@@ -316,7 +321,7 @@ describe('the host: only what the manifest declared', () => {
         expect('deals' in seen.host!).toBe(false);
     });
 
-    it('every permission at once: the web grants only what it has built (all but place and the event door); the rest are absent, not undefined', async () => {
+    it('every permission at once: the web grants only what it has built (all but the event door); the rest are absent, not undefined', async () => {
         // The node copy's open asks the community's server, which keeps none yet, so this browser's copy is sent; answered
         // here, and waited for, so it can't land in a later test.
         const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify(init?.method === 'PUT'
@@ -330,12 +335,13 @@ describe('the host: only what the manifest declared', () => {
         await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
         expect(fetchSpy.mock.calls.map(([url, init]) => [String(url).replace(/^.*(\/api\/)/, '$1'), init?.method])).toEqual([['/api/tools/spy', 'GET'], ['/api/tools/spy', 'PUT']]);
         await waitFor(async () => expect((await readToolRecord(OWNER, 'spy'))?.syncedAt).toBe('2026-10-21T08:00:00.000Z'));
-        // Photos, the camera, posts, deals and the pricing guide came with the Tool shed (T1.3), the first tool to ask for them.
+        // Photos, the camera, posts, deals and the pricing guide came with the Tool shed (T1.3), the first tool to ask for them;
+        // the place with Your garden (grow-food G0).
         expect(Object.keys(seen.host!).sort()).toEqual([
-            'back', 'camera', 'deals', 'doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos', 'posts', 'pricingGuide',
+            'back', 'camera', 'deals', 'doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos', 'place', 'posts', 'pricingGuide',
         ]);
         expect((seen.host as unknown as { nodeCopy: { on: boolean } }).nodeCopy).toEqual({ on: true });
-        for (const absent of ['place', 'eventDoor']) {
+        for (const absent of ['eventDoor']) {
             expect(absent in seen.host!, absent).toBe(false);
         }
     });

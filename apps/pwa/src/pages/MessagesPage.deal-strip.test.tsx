@@ -98,7 +98,7 @@ describe('Chat deal strip: the seller (payee) sees the deal too', () => {
         await openChat();
         const card = within(await strip()).getByRole('group', { name: 'Bread tx-s' });
         expect(within(card).getByText('⏳ Awaiting release')).toBeInTheDocument();
-        expect(within(card).getByText('5 Beans · in escrow')).toBeInTheDocument();
+        expect(within(card).getByText('5 Beans · held in trust')).toBeInTheDocument();
         expect(within(card).queryByRole('button', { name: /Release/ })).toBeNull();
         expect(within(card).queryByRole('button', { name: /Cancel/ })).toBeNull();
         expect(screen.queryByText('🔒 Trust Hold: 5 Beans')).toBeNull();

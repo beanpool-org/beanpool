@@ -363,6 +363,8 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     let row: ToolLine | null = null;
     if (doc !== null) { try { row = manifest.row(doc, now()); } catch { row = null; } }
     const empty = doc !== null && isEmptyDoc(manifest, doc);
+    // A tool whose first screen works on an empty document (manifest.doors === false) opens straight on it.
+    const showDoors = manifest.doors !== false && empty && !pastDoors && step.screen === 'main';
 
     return (
         <>
@@ -380,10 +382,10 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
                 {panel === 'tool' && !ready && (
                     <p className="m-0 text-sm text-nature-600 dark:text-nature-300 break-words" role="status">{t('Loading...')}</p>
                 )}
-                {panel === 'tool' && ready && empty && !pastDoors && step.screen === 'main' && (
+                {panel === 'tool' && ready && showDoors && (
                     <EmptyDoors manifest={manifest} owner={owner} onIn={() => setPastDoors(true)} onGuide={onGuide} onAddHomeCard={onAddHomeCard} />
                 )}
-                {ready && (!empty || pastDoors || step.screen !== 'main') && (
+                {ready && !showDoors && (
                     // Drawn under a panel too, only hidden, as the phone's sheet sits over its screen: Settings or About is no
                     // leave, so what Edit holds (what was typed, a photo chosen) and a change under way are there on ←.
                     <div hidden={panel !== 'tool'} className="min-w-0">

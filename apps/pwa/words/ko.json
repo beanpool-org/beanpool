@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-30",
@@ -2134,7 +2134,6 @@
   "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser.": "커뮤니티에서 응답이 없었어요. 다시 시도할 수 있어요: 그 사이에 계정이 삭제되었다면 다시 시도하여 이 브라우저에서 삭제를 완료합니다.",
   "The community's answer didn't confirm the delete. Try again.": "커뮤니티 응답에서 삭제를 확인하지 못했습니다. 다시 시도하세요.",
   "This web app now talks to a different community. Open Delete account again.": "이 웹 앱이 이제 다른 커뮤니티와 통신해요. '계정 삭제'를 다시 여세요.",
-  "Failed to purge account from node. Active escrow deals may need to be resolved first.": "노드에서 계정을 삭제하지 못했어요. 진행 중인 에스크로 거래를 먼저 해결해야 할 수 있어요.",
   "If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.": "이 화면에 머무르면 1분 후 클립보드의 복사본이 지워집니다. iPhone 또는 iPad의 Safari나 Firefox에서는 1분이 지난 후 화면을 탭하거나 키를 누르면 지워집니다. 이 화면을 벗어나거나 다른 앱 또는 탭으로 전환하면 그대로 유지되므로 다른 내용을 복사해 덮어쓰세요.",
   "Try again in {n} minute.|Try again in {n} minutes.": {
     "other": "{n}분 후에 다시 시도해 주세요."
@@ -2837,9 +2836,7 @@
   "Marketplace Activity": "장터 활동",
   "Push alerts on your phone for new offers & needs in your area": "내 지역에 새 '드려요'와 '구해요'가 등록되면 휴대폰으로 푸시 알림 전송",
   "Marketplace Activity Notifications": "장터 활동 알림",
-  "Escrow & Deals": "에스크로 및 거래",
   "Push alerts on your phone for trade updates & credit transfers": "거래 변경 사항 및 크레딧 이체 시 휴대폰으로 푸시 알림 전송",
-  "Escrow & Deals Notifications": "에스크로 및 거래 알림",
   "Event reminders": "이벤트 알림",
   "How long before an event you are going to, or interested in, starts. You can change it on any one event.": "참석하거나 관심 있는 이벤트가 시작되기 전 알림을 받을 시간이에요. 각 이벤트에서 변경할 수 있어요.",
   "Off\u0004event reminders": "꺼짐",
@@ -2953,7 +2950,6 @@
   "Cannot sweep more than current surplus ({amount} 🫘).": "현재 잉여금({amount} 🫘)보다 많은 금액을 이관할 수 없어요.",
   "Successfully swept {amount} 🫘 to the shared Commons pool.": "공유 공간 풀로 {amount} 🫘을(를) 성공적으로 이관했어요.",
   "Failed to sweep surplus to the Commons.": "잉여금을 공유 공간으로 이관하지 못했어요.",
-  "Bid approved! Escrow funds locked in trust.": "제안이 승인되었어요! 에스크로 자금이 안전하게 예치되었습니다.",
   "Failed to approve bid.": "제안을 승인하지 못했어요.",
   "Are you sure you want to decline this request? The member will be notified.": "이 요청을 정말 거절하시겠어요? 해당 멤버에게 알림이 전송돼요.",
   "Bid declined.": "제안이 거절되었어요.",
@@ -2965,7 +2961,6 @@
   "Release payment of {amount} 🫘 for \"deal\"? This action cannot be reversed.": "\"거래\"에 대해 {amount} 🫘 대금을 지급할까요? 이 작업은 되돌릴 수 없어요.",
   "Payment released! Worker has been paid.": "대금이 지급되었어요! 작업자에게 대금이 전달되었습니다.",
   "Failed to release payment.": "대금을 지급하지 못했어요.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.": "계획을 취소하고 후원자에게 환불할까요?\n\n계획이 종료되며 예치된 모든 서약금이 후원자들에게 즉시 환불됩니다.",
   "Initiative Cancelled 🌱\n\nPledges have been refunded to backers.": "계획이 취소되었어요 🌱\n\n서약금이 후원자들에게 환불되었습니다.",
   "Could not cancel initiative.": "이니셔티브를 취소할 수 없음.",
   "Please enter a valid credit amount": "유효한 크레딧 금액을 입력해 주세요",
@@ -3049,7 +3044,6 @@
   "Approve Bid ({amount} 🫘)": "입찰 승인 ({amount} 🫘)",
   "Declining…": "거절 중…",
   "Active Deals": "진행 중인 거래",
-  "{amount} 🫘 in escrow": "에스크로 예치 {amount} 🫘",
   "Customer: {name}": "요청자: {name}",
   "Worker: {name}": "작업자: {name}",
   "Fulfill Deal · Awaiting Customer Release": "거래 완료 · 구매자 승인 대기 중",
@@ -3111,7 +3105,6 @@
   "Stop Wind-Up": "정리 중단",
   "Start Wind-Up": "정리 시작",
   "Cancelling & Refunding Backers…": "취소 및 후원자 환불 진행 중…",
-  "Cancel Initiative & Refund Escrow": "이니셔티브 취소 및 에스크로 환불",
   "Asking to join as collaborators ({n})": "협력자 참여 신청 ({n})",
   "Asking to join as keepers ({n})": "운영자 참여 신청 ({n})",
   "Backing pledge: {amount}": "보증 서약: {amount}",
@@ -3495,5 +3488,13 @@
   "Something that keeps going and trades? Start an enterprise.": "지속적으로 거래하며 운영하고 싶다면? 기업을 시작해 보세요.",
   "Start one with +: a chat group, a project or an enterprise.": "+ 버튼으로 대화 모임, 프로젝트 또는 기업을 시작해 보세요.",
   "No projects to back yet": "아직 후원할 프로젝트가 없어요",
-  "Newest from elsewhere": "다른 곳의 최신 글"
+  "Newest from elsewhere": "다른 곳의 최신 글",
+  "Held in Trust & Deals": "에스크로 및 거래",
+  "Held in Trust & Deals Notifications": "에스크로 및 거래 알림",
+  "Bid approved! The Beans are held in trust.": "제안이 승인되었어요! 에스크로 자금이 안전하게 예치되었습니다.",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "계획을 취소하고 후원자에게 환불할까요?\n\n계획이 종료되며 예치된 모든 서약금이 후원자들에게 즉시 환불됩니다.",
+  "{amount} 🫘 held in trust": "에스크로 예치 {amount} 🫘",
+  "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "노드에서 계정을 삭제하지 못했어요. 진행 중인 에스크로 거래를 먼저 해결해야 할 수 있어요.",
+  "{amount} · held in trust": "{amount} · 보관 중",
+  "Cancel Initiative & Refund Backers": "이니셔티브 취소 및 후원자 환불"
 }

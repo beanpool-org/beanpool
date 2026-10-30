@@ -7,6 +7,7 @@
  * The draft shapes carry what the composers take today; a field a server slice adds (lendable, shop, availableFrom) is
  * dropped by the host until that slice lands. Pure: no I/O.
  */
+import { readSkyPlace } from '../sky.js';
 import type { ToolId, ToolPermission } from './manifest.js';
 
 /** A photo kept on the device for a tool (never inside the document, never on the node until listed): its ref. */
@@ -78,6 +79,27 @@ export function isShopClosedRefusal(e: unknown): boolean {
     return !!e && typeof e === 'object' && (e as { code?: unknown }).code === TOOL_SHOP_CLOSED;
 }
 
+/** A place the app already has, as `place` gives it, and where it came from. */
+export interface ToolPlace {
+    lat: number;
+    lng: number;
+    source: 'community' | 'area' | 'device';
+}
+
+/**
+ * The place `place` gives, by the Sun and moon card's rule (sky.ts skyPlaceFor): the community's own place (the Home
+ * answer's), else the member's rough area, else the device's last known place where location is already allowed. Each
+ * host reads only what it already holds: nothing is asked, no permission is requested, nothing is sent. Null for none.
+ */
+export function toolPlaceOf(known: { community?: unknown; area?: unknown; device?: unknown }): ToolPlace | null {
+    const community = readSkyPlace(known.community);
+    if (community) return { ...community, source: 'community' };
+    const area = readSkyPlace(known.area);
+    if (area) return { ...area, source: 'area' };
+    const device = readSkyPlace(known.device);
+    return device ? { ...device, source: 'device' } : null;
+}
+
 /** What every tool is given, whatever it asked for. */
 export interface ToolHostBase<D> {
     owner: { kind: 'member' | 'enterprise'; publicKey: string; name: string };
@@ -99,7 +121,7 @@ export interface ToolHostBase<D> {
 export interface ToolHostGrants {
     photos: { pick(): Promise<ToolPhoto | null>; remove(ref: string): Promise<void>; uri(ref: string): string };
     camera: { take(): Promise<ToolPhoto | null> };
-    place: () => Promise<{ lat: number; lng: number; source: 'community' | 'area' | 'device' } | null>;
+    place: () => Promise<ToolPlace | null>;
     offerDoor: (draft: ToolOfferDraft) => void;
     needDoor: (draft: ToolNeedDraft) => void;
     eventDoor: (draft: ToolEventDraft) => void;

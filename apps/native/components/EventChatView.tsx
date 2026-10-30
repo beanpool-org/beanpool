@@ -295,7 +295,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.15)' : '#f5f3ff',
             borderColor: theme === 'dark' ? '#6d28d9' : '#ddd6fe',
         },
-        noteLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, color: EVENT_ACCENT, marginBottom: 4 },
+        noteLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, color: colors.event.ink, marginBottom: 4 }, // EVENT_ACCENT was 2.6:1 on the dark tint
         noteText: { fontSize: 15, color: colors.text.body, lineHeight: 21 },
         readOnly: {
             marginHorizontal: 12, marginTop: 10, padding: 10, borderRadius: 10,

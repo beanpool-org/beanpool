@@ -113,7 +113,7 @@ export function tradeLookText(l: HealthLogLine): string {
     const when = whenOf(l);
     if (l.action === 'disputes_listed') return `${who} opened the disputes list · ${when}`;
     if (l.action === 'dispute_opened') return `${who} opened a dispute · ${when}`;
-    if (l.action === 'stranded_escrows_read') return `${who} opened the escrows a member’s removal left stuck · ${when}`;
+    if (l.action === 'stranded_escrows_read') return `${who} opened the deals a member’s removal left holding Beans in trust · ${when}`;
     if (l.action === 'alerts_read') return `${who} read the alerts that named ${l.subjectCallsign ? `@${l.subjectCallsign}` : 'a member'} · ${when}`;
     return `${who} looked at trades · ${when}`;
 }
@@ -224,7 +224,7 @@ export const HEALTH_COPY = {
     /** A vote on removing a member shows their balance to its voters, and isn't logged: said here, so the list isn't read as complete. */
     balanceHint: 'Every opening of the exceptions above, and every look at a member’s balance while removing them. A vote on removing a member also shows their balance and any debt to everyone who can vote in it, and those looks are not in this list. Every admin and the owner can read this.',
     tradesHeading: 'WHO LOOKED AT TRADES AND ALERTS',
-    tradesHint: 'Every look at the disputes, at one dispute or at the escrows a member’s removal left stuck, and each admin’s first look in 24 hours at the alerts that name a member. Every admin and the owner can read this.',
+    tradesHint: 'Every look at the disputes, at one dispute or at the deals a member’s removal left holding Beans in trust, and each admin’s first look in 24 hours at the alerts that name a member. Every admin and the owner can read this.',
     /** Only where the node sent an empty list: this list watches the watchers, so a log the phone couldn't read is never "nobody". */
     nobodyYet: 'Nobody has looked yet.',
     logUnread: 'The log couldn’t be read just now.',

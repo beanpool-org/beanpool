@@ -26,7 +26,9 @@
 // transaction as the other backers' Beans, out of the escrow through moveToCommons (the escrow floor), the row stamped with
 // the project and a memo that names nobody. The escrow still ends at 0. Nobody is told of it: the leader's notice counts the
 // backers who were paid. Still left for the operator: a backer with no member's row, a live visitor's row, or a key a re-key
-// invalidated whose rows did not move to its successor (one whose rows moved is paid under the new key, as anyone is).
+// invalidated whose rows did not move to its successor (one whose rows moved is paid under the new key, as anyone is). The
+// leader's cancel sends a closed account's share of the pledges it holds to the Commons the same way, by the same function
+// (closedPledgeToCommons; db.ts deleteCrowdfundProject): until then it credited the closed account (#2599's deciding pass).
 //
 // HOW. As the stranded return does: transfer() from the escrow to each backer (the escrow floor, fee-exempt, the backer's
 // demurrage settled before the credit), all of a project's payments inside ONE conservingTransaction, each row stamped with
@@ -142,6 +144,18 @@ const beans = (n: number) => String(Math.round(n * 100) / 100);
 /** The memo of a closed account's share moved to the Commons: it names nobody (the row names the project). */
 export const CLOSED_ACCOUNT_PLEDGE_MEMO = 'Pledge from a closed account, returned to the Commons';
 
+/**
+ * A closed account's share of a project's pledges, out of its escrow into the Commons (A CLOSED ACCOUNT above): one row,
+ * naming the project and nobody. Inside the caller's conservingTransaction; throws when the ledger refuses, which unwinds
+ * it. The return below and the leader's cancel (db.ts deleteCrowdfundProject, through the hook state-engine registers)
+ * both send a closed account's share this way.
+ */
+export function closedPledgeToCommons(hooks: Pick<UnfundedPledgeHooks, 'moveToCommons'>, escrow: string, projectId: string, amount: number): void {
+    const txn = hooks.moveToCommons(escrow, amount, CLOSED_ACCOUNT_PLEDGE_MEMO);
+    if (!txn) throw new Error(`the ledger refused to move ${amount} of a closed account's pledge to the Commons`);
+    db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(projectId, txn.id);
+}
+
 interface Notice { to: string; title: string; body: string; id: string | null }
 
 /** Each project left for the operator, by what was logged for it: once a process, as the tick runs every minute. */
@@ -218,11 +232,7 @@ function returnOne(hooks: UnfundedPledgeHooks, s: UnfundedProjectDue & { ok: tru
                 db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
             }
             // A closed account's share, to the Commons (A CLOSED ACCOUNT above): one row each, naming the project, not them.
-            for (const o of toCommons) {
-                const txn = hooks.moveToCommons(s.escrow, o.amount, CLOSED_ACCOUNT_PLEDGE_MEMO);
-                if (!txn) throw new Error(`the ledger refused to move ${o.amount} of a closed account's pledge to the Commons`);
-                db.prepare('UPDATE transactions SET project_id = ? WHERE id = ?').run(s.projectId, txn.id);
-            }
+            for (const o of toCommons) closedPledgeToCommons(hooks, s.escrow, s.projectId, o.amount);
             // An ACTIVE project's raised figure is what its escrow holds (pledgeToProject adds each pledge to both), and the escrow
             // has just paid all of it out: 0. Not the figure less `total`: SQLite adds the pledges up in the order they came and
             // this adds them up backer by backer, so for amounts not exact in binary (0.1, 0.3, 0.2, 0.6, 0.7) the difference was

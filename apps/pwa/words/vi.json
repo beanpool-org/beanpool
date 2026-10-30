@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-30",
@@ -2137,7 +2137,6 @@
   "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser.": "Cộng đồng không phản hồi. Bạn có thể thử lại: nếu cộng đồng đã xóa tài khoản của bạn trong lúc đó, việc thử lại sẽ hoàn tất việc xóa trong trình duyệt này.",
   "The community's answer didn't confirm the delete. Try again.": "Câu trả lời của cộng đồng không xác nhận việc xóa. Hãy thử lại.",
   "This web app now talks to a different community. Open Delete account again.": "Ứng dụng web này hiện đang kết nối với cộng đồng khác. Hãy mở lại mục Xóa tài khoản.",
-  "Failed to purge account from node. Active escrow deals may need to be resolved first.": "Không thể xóa sạch tài khoản khỏi máy chủ. Có thể cần phải giải quyết các giao dịch ký quỹ đang hoạt động trước.",
   "If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.": "Nếu bạn ở lại màn hình này, bản sao sẽ bị xóa khỏi bộ nhớ tạm sau một phút. Trên iPhone hoặc iPad, trong Safari hoặc Firefox, nó sẽ bị xóa khi bạn nhấn hoặc bấm phím lần đầu tiên sau phút đó. Nếu bạn rời khỏi màn hình này hoặc chuyển sang ứng dụng/tab khác trước, nội dung vẫn còn: hãy sao chép thứ khác đè lên.",
   "Try again in {n} minute.|Try again in {n} minutes.": {
     "other": "Thử lại trong {n} phút."
@@ -2837,9 +2836,7 @@
   "Marketplace Activity": "Hoạt động thị trường",
   "Push alerts on your phone for new offers & needs in your area": "Thông báo đẩy trên điện thoại về các tin chia sẻ & nhu cầu mới trong khu vực của bạn",
   "Marketplace Activity Notifications": "Thông báo hoạt động trên Chợ",
-  "Escrow & Deals": "Ký quỹ & Giao dịch",
   "Push alerts on your phone for trade updates & credit transfers": "Thông báo đẩy trên điện thoại về cập nhật giao dịch & chuyển tín dụng",
-  "Escrow & Deals Notifications": "Thông báo ký quỹ & giao dịch",
   "Event reminders": "Nhắc nhở sự kiện",
   "How long before an event you are going to, or interested in, starts. You can change it on any one event.": "Thời gian nhắc trước khi sự kiện bạn tham gia hoặc quan tâm bắt đầu. Bạn có thể thay đổi cho từng sự kiện cụ thể.",
   "Off\u0004event reminders": "Tắt",
@@ -2953,7 +2950,6 @@
   "Cannot sweep more than current surplus ({amount} 🫘).": "Không thể chuyển dọn nhiều hơn mức thặng dư hiện tại ({amount} 🫘).",
   "Successfully swept {amount} 🫘 to the shared Commons pool.": "Đã chuyển dọn thành công {amount} 🫘 vào quỹ chung Commons.",
   "Failed to sweep surplus to the Commons.": "Không thể chuyển dọn thặng dư vào Commons.",
-  "Bid approved! Escrow funds locked in trust.": "Đã phê duyệt đề xuất! Tiền ký quỹ đã được khóa bảo đảm.",
   "Failed to approve bid.": "Không thể phê duyệt đề xuất.",
   "Are you sure you want to decline this request? The member will be notified.": "Bạn có chắc chắn muốn từ chối yêu cầu này không? Thành viên sẽ nhận được thông báo.",
   "Bid declined.": "Đã từ chối đề xuất.",
@@ -2965,7 +2961,6 @@
   "Release payment of {amount} 🫘 for \"deal\"? This action cannot be reversed.": "Giải ngân thanh toán {amount} 🫘 cho \"giao dịch\"? Thao tác này không thể hoàn tác.",
   "Payment released! Worker has been paid.": "Đã giải ngân thanh toán! Người làm việc đã nhận được tiền.",
   "Failed to release payment.": "Không thể giải ngân thanh toán.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.": "Hủy sáng kiến & Hoàn tiền cho người ủng hộ?\n\nThao tác này sẽ đóng sáng kiến và ngay lập tức hoàn lại tất cả các khoản cam kết ký quỹ cho người ủng hộ.",
   "Initiative Cancelled 🌱\n\nPledges have been refunded to backers.": "Đã hủy sáng kiến 🌱\n\nCác khoản cam kết đã được hoàn lại cho người ủng hộ.",
   "Could not cancel initiative.": "Không thể hủy sáng kiến.",
   "Please enter a valid credit amount": "Vui lòng nhập số tiền tín dụng hợp lệ",
@@ -3049,7 +3044,6 @@
   "Approve Bid ({amount} 🫘)": "Duyệt giá thầu ({amount} 🫘)",
   "Declining…": "Đang từ chối…",
   "Active Deals": "Giao dịch đang hoạt động",
-  "{amount} 🫘 in escrow": "{amount} 🫘 đang ký quỹ",
   "Customer: {name}": "Khách hàng: {name}",
   "Worker: {name}": "Người thực hiện: {name}",
   "Fulfill Deal · Awaiting Customer Release": "Hoàn thành giao dịch · Chờ khách hàng giải ngân",
@@ -3111,7 +3105,6 @@
   "Stop Wind-Up": "Dừng giải thể",
   "Start Wind-Up": "Bắt đầu giải thể",
   "Cancelling & Refunding Backers…": "Đang hủy & Hoàn tiền cho người ủng hộ…",
-  "Cancel Initiative & Refund Escrow": "Hủy sáng kiến & hoàn tiền ký quỹ",
   "Asking to join as collaborators ({n})": "Yêu cầu tham gia với tư cách cộng tác viên ({n})",
   "Asking to join as keepers ({n})": "Yêu cầu tham gia với tư cách người quản lý ({n})",
   "Backing pledge: {amount}": "Cam kết bảo chứng: {amount}",
@@ -3495,5 +3488,13 @@
   "Something that keeps going and trades? Start an enterprise.": "Dự định duy trì lâu dài và trao đổi? Hãy bắt đầu một doanh nghiệp.",
   "Start one with +: a chat group, a project or an enterprise.": "Bắt đầu với dấu +: một nhóm chat, một dự án hoặc một doanh nghiệp.",
   "No projects to back yet": "Chưa có dự án nào để ủng hộ",
-  "Newest from elsewhere": "Mới nhất từ nơi khác"
+  "Newest from elsewhere": "Mới nhất từ nơi khác",
+  "Held in Trust & Deals": "Ký quỹ & Giao dịch",
+  "Held in Trust & Deals Notifications": "Thông báo ký quỹ & giao dịch",
+  "Bid approved! The Beans are held in trust.": "Đã phê duyệt đề xuất! Tiền ký quỹ đã được khóa bảo đảm.",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "Hủy sáng kiến & Hoàn tiền cho người ủng hộ?\n\nThao tác này sẽ đóng sáng kiến và ngay lập tức hoàn lại tất cả các khoản cam kết ký quỹ cho người ủng hộ.",
+  "{amount} 🫘 held in trust": "{amount} 🫘 đang ký quỹ",
+  "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Không thể xóa sạch tài khoản khỏi máy chủ. Có thể cần phải giải quyết các giao dịch ký quỹ đang hoạt động trước.",
+  "{amount} · held in trust": "{amount} · đang ký quỹ",
+  "Cancel Initiative & Refund Backers": "Hủy sáng kiến & hoàn tiền cho người ủng hộ"
 }

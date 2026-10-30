@@ -2,7 +2,7 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, events, polls and consent top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, events, polls and consent top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-30",
@@ -2136,7 +2136,6 @@
   "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser.": "Komunitas tidak menjawab. Kamu dapat mencoba lagi: jika akunmu telah dihapus sementara itu, mencoba lagi akan menyelesaikan penghapusan di browser ini.",
   "The community's answer didn't confirm the delete. Try again.": "Jawaban komunitas tidak mengonfirmasi penghapusan. Coba lagi.",
   "This web app now talks to a different community. Open Delete account again.": "Aplikasi web ini sekarang tersambung ke komunitas yang berbeda. Buka Hapus akun lagi.",
-  "Failed to purge account from node. Active escrow deals may need to be resolved first.": "Gagal menghapus akun dari node. Transaksi bersama yang aktif mungkin perlu diselesaikan terlebih dahulu.",
   "If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.": "Jika kamu tetap di layar ini, salinan akan dihapus dari papan klipmu setelah satu menit. Di iPhone atau iPad, di Safari atau Firefox, salinan akan dihapus pada ketukan atau penekanan tombol pertama setelah menit tersebut. Jika kamu meninggalkan layar ini atau beralih ke aplikasi atau tab lain terlebih dahulu, salinan tetap ada: salin hal lain untuk menimpanya.",
   "Try again in {n} minute.|Try again in {n} minutes.": {
     "other": "Coba lagi dalam {n} menit."
@@ -2842,9 +2841,7 @@
   "Marketplace Activity": "Aktivitas Pasar",
   "Push alerts on your phone for new offers & needs in your area": "Peringatan push di ponselmu untuk penawaran & permintaan baru di areamu",
   "Marketplace Activity Notifications": "Notifikasi Aktivitas Pasar",
-  "Escrow & Deals": "Escrow & Transaksi",
   "Push alerts on your phone for trade updates & credit transfers": "Peringatan push di ponselmu untuk pembaruan transaksi & transfer kredit",
-  "Escrow & Deals Notifications": "Notifikasi Escrow & Transaksi",
   "Event reminders": "Pengingat acara",
   "How long before an event you are going to, or interested in, starts. You can change it on any one event.": "Berapa lama sebelum acara yang kamu hadiri, atau minati, dimulai. Kamu dapat mengubahnya di acara mana pun.",
   "Off\u0004event reminders": "Mati",
@@ -2958,7 +2955,6 @@
   "Cannot sweep more than current surplus ({amount} 🫘).": "Tidak dapat menyapu lebih dari surplus saat ini ({amount} 🫘).",
   "Successfully swept {amount} 🫘 to the shared Commons pool.": "Berhasil menyapu {amount} 🫘 ke Sarana Bersama.",
   "Failed to sweep surplus to the Commons.": "Gagal menyapu surplus ke Sarana Bersama.",
-  "Bid approved! Escrow funds locked in trust.": "Tawaran disetujui! Dana bersama terkunci dengan aman.",
   "Failed to approve bid.": "Gagal menyetujui tawaran.",
   "Are you sure you want to decline this request? The member will be notified.": "Apakah kamu yakin ingin menolak permintaan ini? Anggota akan diberi tahu.",
   "Bid declined.": "Tawaran ditolak.",
@@ -2970,7 +2966,6 @@
   "Release payment of {amount} 🫘 for \"deal\"? This action cannot be reversed.": "Lepaskan pembayaran {amount} 🫘 untuk \"transaksi\"? Tindakan ini tidak dapat dibatalkan.",
   "Payment released! Worker has been paid.": "Pembayaran dilepaskan! Pekerja telah dibayar.",
   "Failed to release payment.": "Gagal melepaskan pembayaran.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.": "Batalkan Inisiatif & Kembalikan Dana Pendukung?\n\nIni akan menutup inisiatif dan segera mengembalikan semua komitmen yang terkumpul kepada para pendukungnya.",
   "Initiative Cancelled 🌱\n\nPledges have been refunded to backers.": "Inisiatif Dibatalkan 🌱\n\nKomitmen telah dikembalikan kepada pendukung.",
   "Could not cancel initiative.": "Tidak dapat membatalkan inisiatif.",
   "Please enter a valid credit amount": "Masukkan jumlah kredit yang valid",
@@ -3054,7 +3049,6 @@
   "Approve Bid ({amount} 🫘)": "Setujui Tawaran ({amount} 🫘)",
   "Declining…": "Menolak…",
   "Active Deals": "Transaksi Aktif",
-  "{amount} 🫘 in escrow": "{amount} 🫘 di penampungan",
   "Customer: {name}": "Pelanggan: {name}",
   "Worker: {name}": "Pekerja: {name}",
   "Fulfill Deal · Awaiting Customer Release": "Penuhi Transaksi · Menunggu Pelepasan Pelanggan",
@@ -3116,7 +3110,6 @@
   "Stop Wind-Up": "Hentikan Penutupan",
   "Start Wind-Up": "Mulai Penutupan",
   "Cancelling & Refunding Backers…": "Membatalkan & Mengembalikan Dana Pendukung…",
-  "Cancel Initiative & Refund Escrow": "Batalkan Inisiatif & Kembalikan Escrow",
   "Asking to join as collaborators ({n})": "Meminta bergabung sebagai kolaborator ({n})",
   "Asking to join as keepers ({n})": "Meminta bergabung sebagai pengurus ({n})",
   "Backing pledge: {amount}": "Komitmen dukungan: {amount}",
@@ -3495,5 +3488,13 @@
   "Start one with +: a chat group, a project or an enterprise.": "Mulai satu dengan +: grup obrolan, proyek, atau usaha.",
   "No projects to back yet": "Belum ada proyek untuk didukung",
   "🤝 Your deals": "🤝 Kesepakatan Anda",
-  "Newest from elsewhere": "Terbaru dari tempat lain"
+  "Newest from elsewhere": "Terbaru dari tempat lain",
+  "Held in Trust & Deals": "Escrow & Transaksi",
+  "Held in Trust & Deals Notifications": "Notifikasi Escrow & Transaksi",
+  "Bid approved! The Beans are held in trust.": "Tawaran disetujui! Dana bersama terkunci dengan aman.",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "Batalkan Inisiatif & Kembalikan Dana Pendukung?\n\nIni akan menutup inisiatif dan segera mengembalikan semua komitmen yang terkumpul kepada para pendukungnya.",
+  "{amount} 🫘 held in trust": "{amount} 🫘 di penampungan",
+  "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Gagal menghapus akun dari node. Transaksi bersama yang aktif mungkin perlu diselesaikan terlebih dahulu.",
+  "{amount} · held in trust": "{amount} · dalam jaminan",
+  "Cancel Initiative & Refund Backers": "Batalkan Inisiatif & Kembalikan ke Pendukung"
 }

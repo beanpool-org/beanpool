@@ -89,7 +89,7 @@ export default function RekeyCodeScreen() {
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: c.border.default, backgroundColor: theme === 'dark' ? c.surface.card : c.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
         // In capitals by the language's rule (upperCase below), never a textTransform.
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: c.brand.primary, letterSpacing: 0.5, paddingVertical: 4 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: c.brand.onDark, letterSpacing: 0.5, paddingVertical: 4 },
         scroll: { padding: 16 },
         title: { fontSize: 22, fontWeight: '800', color: c.text.heading, lineHeight: 28 },
         lead: { fontSize: 15, color: c.text.body, lineHeight: 21, marginTop: 12 },

@@ -140,6 +140,14 @@ export interface ToolManifest<D = unknown> {
      * words and never bytes. None: the template's own sentence.
      */
     tooBig?(doc: D, maxBytes: number): ToolLine;
+    /**
+     * Whether an open that finds the document empty shows the template's two doors first ("I already do this", "I'm
+     * starting out"). Omitted or true: it does. False only for a tool whose first screen is worth opening on an empty
+     * document, because it shows something other than the member's own records (Your garden's guide): both apps then open
+     * its `main` screen straight away, on every open and from every door, with no examples card above it and no Home-card
+     * offer inside the tool (the card is still in Home's Add a card). The tool's `examples` are then unused.
+     */
+    doors?: boolean;
     /** The empty state's "I'm starting out" door: three example rows, and the members' guide page it links to. */
     examples: readonly WordKey[];
     guide?: string;

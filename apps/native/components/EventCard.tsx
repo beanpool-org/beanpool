@@ -125,7 +125,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                 </Text>
                 {pending === status && (
                     <View style={styles.rsvpSpinner} pointerEvents="none">
-                        <ActivityIndicator size="small" color={selected ? '#fff' : EVENT_ACCENT} />
+                        <ActivityIndicator size="small" color={selected ? '#fff' : colors.event.ink} />
                     </View>
                 )}
             </Pressable>
@@ -166,7 +166,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                     <View style={styles.whenRow}>
                         {badge && (
                             <View style={[styles.badge, badge === 'CANCELLED' ? { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border } : styles.badgeUpdated]}>
-                                <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : EVENT_ACCENT }]} numberOfLines={1}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
+                                <Text style={[styles.badgeText, { color: badge === 'CANCELLED' ? colors.feedback.danger.fg : colors.event.ink }]} numberOfLines={1}>{badge === 'CANCELLED' ? t('CANCELLED', undefined, 'event') : t('UPDATED', undefined, 'event')}</Text>
                             </View>
                         )}
                         <Text style={[styles.when, badge === 'CANCELLED' && styles.whenCancelled]} numberOfLines={2}>{when}</Text>
@@ -239,7 +239,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             marginBottom: 4,
         },
         repeats: { fontSize: 13, fontWeight: '700', color: colors.accent.primary, marginBottom: 4 },
-        hosting: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT, marginTop: 8 },
+        hosting: { fontSize: 14, fontWeight: '700', color: colors.event.ink, marginTop: 8 },
         whenCancelled: {
             textDecorationLine: 'line-through',
             color: colors.text.secondary,
@@ -301,10 +301,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rsvpBtnDisabled: {
             opacity: 0.5,
         },
+        // The words in the event ink (violet-300 in dark: the fill's violet-600 was 3.05:1 on the card); EVENT_ACCENT stays the
+        // border and the selected fill.
         rsvpText: {
             fontSize: 14,
             fontWeight: '700',
-            color: EVENT_ACCENT,
+            color: colors.event.ink,
         },
         rsvpTextBusy: {
             opacity: 0,

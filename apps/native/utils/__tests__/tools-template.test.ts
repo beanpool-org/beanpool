@@ -1473,10 +1473,10 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
     });
 });
 
-describe("the doors write the map composer's own draft (app/(tabs)/map.tsx, read, never edited)", () => {
-    it('every field map.tsx restores is there, the fee as the sheet set it, no pin, the extra fields dropped', () => {
+describe("the doors write the composer's own draft (app/new-listing.tsx, map.tsx's until MAP-FORM; read, never edited)", () => {
+    it('every field the composer restores is there, the fee as the sheet set it, no pin, the extra fields dropped', () => {
         const d = composerDraft('offer', { title: 'Ladder', description: 'Back within a week.', category: 'tools', lendable: true, shop: true }, 'https://mullum.example', ['data:image/jpeg;base64,AA'], { kind: 'daily', beans: 3 }, NOW);
-        const map = fs.readFileSync(path.join(NATIVE, 'app/(tabs)/map.tsx'), 'utf8');
+        const map = fs.readFileSync(path.join(NATIVE, 'app/new-listing.tsx'), 'utf8');
         const restore = map.slice(map.indexOf('const restoreDraft'), map.indexOf('const restoreDraft') + 1500);
         for (const field of restore.match(/\bd\.(\w+)/g)!.map((m) => m.slice(2))) expect(Object.keys(d), field).toContain(field);
         expect(map).toContain("const OFFER_DRAFT_KEY = 'beanpool_offer_draft'");
@@ -1503,7 +1503,7 @@ describe("the doors write the map composer's own draft (app/(tabs)/map.tsx, read
         const writtenDraft = JSON.parse(store.map.get(OFFER_DRAFT_KEY)!);
         expect(writtenDraft).toMatchObject({ postType: 'need', postTitle: 'A ladder for a day', source: 'tool', tool: 'fixture-kit' });
         expect(decideDraftOpen(writtenDraft, 'https://mullum.example')).toBe('open-tool');
-        expect(nav.pushed).toEqual(['/(tabs)/map?newPost=need']);
+        expect(nav.pushed).toEqual(['/new-listing?newPost=need']);
         // Nothing unfinished: straight to the composer, nothing asked.
         alerts.said.length = 0;
         store.map.delete(OFFER_DRAFT_KEY);

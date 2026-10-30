@@ -284,11 +284,14 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
     });
 
     it('the map: the Offer/Need form’s price section and the preview’s amount are gated, and the post goes up at 0', () => {
-        const src = read('../../app/(tabs)/map.tsx');
-        const lines = src.split('\n');
-        const currency = lines.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
+        // The preview's amount is the map's (map.tsx); the form is its own screen since MAP-FORM (app/new-listing.tsx).
+        const map = read('../../app/(tabs)/map.tsx').split('\n');
+        const currency = map.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
         expect(currency.length).toBe(1);
-        for (const i of currency) expect(lines.slice(Math.max(0, i - 3), i).join('\n')).toContain('{showsBeans && (');
+        for (const i of currency) expect(map.slice(Math.max(0, i - 3), i).join('\n')).toContain('{showsBeans && (');
+        const src = read('../../app/new-listing.tsx');
+        const lines = src.split('\n');
+        expect(lines.some(l => l.includes('<CurrencyDisplay'))).toBe(false);
         // The price section, from its gate to its end: the field, the unit button, FREE, the pricing guide, the fee.
         const open = lines.findIndex(l => l.trim() === '{showsBeans && (<>');
         const close = lines.findIndex((l, i) => i > open && l.trim() === '</>)}');

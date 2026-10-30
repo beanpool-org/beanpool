@@ -158,8 +158,8 @@
         <p class="callout"><strong>Это то же приложение, что и в Google Play, подписанное тем же ключом.</strong> Оно устанавливается поверх BeanPool, который уже есть на вашем телефоне, будь он из Google Play или отсюда, и сохраняет ваш аккаунт.</p>
 
         <h2 id="download">Скачать</h2>
-        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.83/BeanPool-1.2.83-305.apk"><span class="apk-label">Скачать BeanPool <span data-apk="version">1.2.83</span></span></a></p>
-        <p>Версия <span data-apk="version">1.2.83</span>, файл размером <span data-apk="mb">166</span> МБ: по возможности используйте Wi-Fi. Он берётся из выпусков BeanPool на <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a>.</p>
+        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.84/BeanPool-1.2.84-306.apk"><span class="apk-label">Скачать BeanPool <span data-apk="version">1.2.84</span></span></a></p>
+        <p>Версия <span data-apk="version">1.2.84</span>, файл размером <span data-apk="mb">160</span> МБ: по возможности используйте Wi-Fi. Он берётся из выпусков BeanPool на <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a>.</p>
 
         <h2 id="install">Установка</h2>
         <ol>
@@ -167,7 +167,7 @@
             <li>В первый раз Android попросит разрешить браузеру устанавливать приложения. Разрешите это в открывшихся настройках и вернитесь назад.</li>
             <li>Подтвердите установку. Если BeanPool уже есть на телефоне, Android назовёт это обновлением. Затем откройте BeanPool.</li>
         </ol>
-        <p id="not-installed">Если Android пишет, что приложение не установлено, потому что оно конфликтует с тем, что уже стоит на телефоне, посмотрите версию своего BeanPool: в настройках телефона, в разделе «Приложения», затем BeanPool. Версии <span data-apk="version">1.2.83</span> и новее ничего отсюда не нужно: оставьте её. Более старая подписана другим ключом, как, например, тестовая копия. Тогда запишите свои 12 слов (см. <a href="#words">ниже</a>), удалите BeanPool и установите этот файл. Откройте BeanPool, нажмите <strong>Уже участник? Восстановить аккаунт</strong>, затем <strong>Восстановить по 12 словам</strong>.</p>
+        <p id="not-installed">Если Android пишет, что приложение не установлено, потому что оно конфликтует с тем, что уже стоит на телефоне, посмотрите версию своего BeanPool: в настройках телефона, в разделе «Приложения», затем BeanPool. Версии <span data-apk="version">1.2.84</span> и новее ничего отсюда не нужно: оставьте её. Более старая подписана другим ключом, как, например, тестовая копия. Тогда запишите свои 12 слов (см. <a href="#words">ниже</a>), удалите BeanPool и установите этот файл. Откройте BeanPool, нажмите <strong>Уже участник? Восстановить аккаунт</strong>, затем <strong>Восстановить по 12 словам</strong>.</p>
 
         <h2 id="updates">Обновления</h2>
         <p>Приложение, скачанное здесь, не обновляется само. BeanPool сообщит вам, когда выйдет новая версия: вернитесь на эту страницу, скачайте её и установите поверх той, что у вас есть. Ваш аккаунт и всё в приложении останутся.</p>
@@ -179,12 +179,12 @@
         <p>Этот файл подписан тем же ключом, что и BeanPool в Google Play. SHA-256-отпечаток его сертификата:</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>На компьютере с инструментами сборки Android выполните:</p>
-        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>
+        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.84-306.apk</span></code></p>
         <p>Команда должна вывести тот же отпечаток в том виде, в каком его пишет apksigner:</p>
         <p><code class="apk-code" id="apk-digest" dir="ltr">Signer #1 certificate SHA-256 digest: 46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81</code></p>
         <p>Android устанавливает обновление, только если оно подписано тем же ключом, поэтому файл, подписанный любым другим ключом, не сможет заменить ваш BeanPool.</p>
         <p>SHA-256 самого файла:</p>
-        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">ef6112f14891ad653e7ad0d06cc0aa061fa5a97907c84b9055cfdd6229c06089</code></p>
+        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">76dc8a47e74fc8e0f531d678a35a5b94da5c73ec6e3325c0ce395a614fea9f72</code></p>
 
         <h2 id="other-ways">Другие способы получить BeanPool</h2>
         <ul>

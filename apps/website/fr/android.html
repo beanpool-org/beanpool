@@ -158,8 +158,8 @@
         <p class="callout"><strong>C'est la même application que sur Google Play, signée avec la même clé.</strong> Elle s'installe par-dessus le BeanPool déjà présent sur votre téléphone, qu'il vienne de Google Play ou d'ici, et garde votre compte.</p>
 
         <h2 id="download">Télécharger</h2>
-        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.83/BeanPool-1.2.83-305.apk"><span class="apk-label">Télécharger BeanPool <span data-apk="version">1.2.83</span></span></a></p>
-        <p>Version <span data-apk="version">1.2.83</span>, un fichier de <span data-apk="mb">166</span> Mo : utilisez le Wi-Fi si vous le pouvez. Il vient des versions publiées de BeanPool sur <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a>.</p>
+        <p class="apk-download"><a class="btn btn-primary" id="apk-download" data-apk="url" href="https://github.com/beanpool-org/beanpool/releases/download/android-v1.2.84/BeanPool-1.2.84-306.apk"><span class="apk-label">Télécharger BeanPool <span data-apk="version">1.2.84</span></span></a></p>
+        <p>Version <span data-apk="version">1.2.84</span>, un fichier de <span data-apk="mb">160</span> Mo : utilisez le Wi-Fi si vous le pouvez. Il vient des versions publiées de BeanPool sur <a href="https://github.com/beanpool-org/beanpool/releases" target="_blank" rel="noopener">GitHub</a>.</p>
 
         <h2 id="install">L'installer</h2>
         <ol>
@@ -167,7 +167,7 @@
             <li>La première fois, Android vous demande d'autoriser votre navigateur à installer des applications. Autorisez-le dans les paramètres qui s'ouvrent, puis revenez en arrière.</li>
             <li>Confirmez l'installation. Si BeanPool est déjà sur votre téléphone, Android parle de mise à jour. Ouvrez ensuite BeanPool.</li>
         </ol>
-        <p id="not-installed">Si Android indique que l'application n'a pas été installée parce qu'elle est en conflit avec celle de votre téléphone, regardez la version de votre BeanPool : dans les paramètres du téléphone, sous Applications, puis BeanPool. La version <span data-apk="version">1.2.83</span> ou plus récente n'a besoin de rien ici : gardez-la. Une version plus ancienne a été signée avec une autre clé, par exemple une copie de test. Dans ce cas, notez vos 12 mots (voir <a href="#words">plus bas</a>), désinstallez BeanPool et installez ce fichier. Ouvrez BeanPool, touchez <strong>Déjà membre ? Restaurer le compte</strong>, puis <strong>Récupérer avec 12 mots</strong>.</p>
+        <p id="not-installed">Si Android indique que l'application n'a pas été installée parce qu'elle est en conflit avec celle de votre téléphone, regardez la version de votre BeanPool : dans les paramètres du téléphone, sous Applications, puis BeanPool. La version <span data-apk="version">1.2.84</span> ou plus récente n'a besoin de rien ici : gardez-la. Une version plus ancienne a été signée avec une autre clé, par exemple une copie de test. Dans ce cas, notez vos 12 mots (voir <a href="#words">plus bas</a>), désinstallez BeanPool et installez ce fichier. Ouvrez BeanPool, touchez <strong>Déjà membre ? Restaurer le compte</strong>, puis <strong>Récupérer avec 12 mots</strong>.</p>
 
         <h2 id="updates">Mises à jour</h2>
         <p>Une application téléchargée ici ne se met pas à jour toute seule. BeanPool vous prévient quand une nouvelle version sort : revenez sur cette page, téléchargez-la et installez-la par-dessus celle que vous avez. Votre compte et tout ce qui est dans l'application restent.</p>
@@ -179,12 +179,12 @@
         <p>Ce fichier est signé avec la même clé que BeanPool sur Google Play. L'empreinte SHA-256 de son certificat est :</p>
         <p><code class="apk-code" id="apk-key" dir="ltr">46:<wbr>AA:<wbr>D0:<wbr>CB:<wbr>A8:<wbr>9D:<wbr>1F:<wbr>E7:<wbr>EF:<wbr>F0:<wbr>60:<wbr>99:<wbr>77:<wbr>CE:<wbr>06:<wbr>5D:<wbr>85:<wbr>DD:<wbr>7E:<wbr>AC:<wbr>13:<wbr>57:<wbr>D4:<wbr>48:<wbr>97:<wbr>EC:<wbr>70:<wbr>AF:<wbr>B2:<wbr>02:<wbr>6C:<wbr>81</code></p>
         <p>Sur un ordinateur avec les outils de compilation d'Android, lancez :</p>
-        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.83-305.apk</span></code></p>
+        <p><code class="apk-code" id="apk-command" dir="ltr">apksigner verify --print-certs <span data-apk="file">BeanPool-1.2.84-306.apk</span></code></p>
         <p>La commande doit afficher la même empreinte, écrite à la manière d'apksigner :</p>
         <p><code class="apk-code" id="apk-digest" dir="ltr">Signer #1 certificate SHA-256 digest: 46aad0cba89d1fe7eff0609977ce065d85dd7eac1357d44897ec70afb2026c81</code></p>
         <p>Android n'installe une mise à jour que si elle est signée avec la même clé : un fichier signé avec une autre clé ne peut donc pas remplacer votre BeanPool.</p>
         <p>Le SHA-256 du fichier lui-même :</p>
-        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">ef6112f14891ad653e7ad0d06cc0aa061fa5a97907c84b9055cfdd6229c06089</code></p>
+        <p><code class="apk-code" id="apk-file-sha256" dir="ltr" data-apk="sha256">76dc8a47e74fc8e0f531d678a35a5b94da5c73ec6e3325c0ce395a614fea9f72</code></p>
 
         <h2 id="other-ways">Les autres façons d'obtenir BeanPool</h2>
         <ul>

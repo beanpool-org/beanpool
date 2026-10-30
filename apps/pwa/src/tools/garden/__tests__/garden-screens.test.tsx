@@ -12,10 +12,10 @@ import { ToolsPage, type ToolsPageProps } from '../../../pages/ToolsPage';
 import { TOOL_APPS } from '../../index';
 import { ToolHomeCard } from '../../home-card';
 import { readToolRecord, resetToolStoreForTest, writeToolRecord } from '../../store';
-import { PLACE_WAIT_MS } from '../../builder';
+import { PLACE_WAIT_MS, resetPlacesForTest } from '../../builder';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../../../lib/home-cache';
 import { memoryIndexedDB } from '../../../lib/memory-indexeddb';
-import { resetAccountEpochForTest } from '../../../lib/account-epoch';
+import { endAccountEpoch, resetAccountEpochForTest } from '../../../lib/account-epoch';
 import { backToEnglish, bypassing, showIn } from '../../../words-xx.test-support';
 
 // The community's server's Home answer, as getHome reads it: only the Your community card is asked for. `hang`: a
@@ -53,6 +53,7 @@ beforeEach(() => {
     resetToolStoreForTest();
     resetAccountEpochForTest();
     resetHomeCacheForTest();
+    resetPlacesForTest();
     home.answer = null;
     home.asked.length = 0;
     home.hang = false;
@@ -98,6 +99,7 @@ describe('Your garden on the web: the guide', () => {
         expect(line.textContent).toContain('Mild temperate · northern hemisphere');
         expect(screen.getByTestId('garden-zone-source').textContent).toContain('From your area.');
         cleanup();
+        resetPlacesForTest(); // a page loaded again: it remembers no place the server told the last one
         home.answer = null; // the server can't be reached
         draw({ id: 'garden', screen: 'main', key: null });
         fireEvent.click(await screen.findByTestId('tool-door-already'));
@@ -120,6 +122,43 @@ describe('Your garden on the web: the guide', () => {
         const again = await openGuide();
         expect(again.textContent).toContain('Mild temperate · northern hemisphere');
         expect(home.asked).toEqual([{ cards: ['community'] }]);
+    });
+
+    it("a place the server told this page serves every screen: a crop and Change open on it, ask nothing, and a dropped connection can't lose it", async () => {
+        home.answer = answer({ lat: -28.55, lng: 153.5 }); // nothing kept in this browser: the server is asked
+        const line = await openGuide();
+        expect(line.textContent).toContain('Warm temperate · southern hemisphere');
+        expect(home.asked).toEqual([{ cards: ['community'] }]);
+        home.answer = null; // the connection drops: another ask would fail
+        fireEvent.click(screen.getByTestId('garden-all-tomato'));
+        expect((await screen.findByTestId('garden-crop-zone')).textContent).toBe('Warm temperate · southern hemisphere');
+        expect(screen.getByTestId('garden-crop-sow')).toBeTruthy();
+        expect(screen.queryByTestId('garden-choose')).toBeNull();
+        cleanup();
+        draw({ id: 'garden', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('tool-door-already'));
+        fireEvent.click(await screen.findByTestId('garden-change'));
+        expect((await screen.findByTestId('garden-zone-found')).textContent).toContain('Warm temperate · southern hemisphere');
+        expect(home.asked).toHaveLength(1);
+    });
+
+    it("no place is never remembered, so the next open asks again; nor is a place told before the account's copies were cleared", async () => {
+        home.answer = null; // the server can't be reached
+        draw({ id: 'garden', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('tool-door-already'));
+        expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
+        cleanup();
+        home.answer = answer(null, { lat: 51.5, lng: -0.1 }); // back, with London as the member's area
+        expect((await openGuide()).textContent).toContain('Mild temperate · northern hemisphere');
+        expect(home.asked).toHaveLength(2);
+        cleanup();
+        // Force Clear & Re-Sync (or leaving the community): what this page was told before it is not taken again.
+        endAccountEpoch('cleared');
+        home.answer = null;
+        draw({ id: 'garden', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('tool-door-already'));
+        expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
+        expect(home.asked).toHaveLength(3);
     });
 
     it("a server that never answers doesn't hold the guide: Choose your climate comes at the wait's end, the request let go", async () => {

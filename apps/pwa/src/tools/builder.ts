@@ -13,6 +13,7 @@ import {
 import {
     getHome, getMarketplacePosts, getMyMarketplaceTransactions, pauseMarketplacePost, request, resumeMarketplacePost, type MarketplacePost,
 } from '../lib/api';
+import { accountEpoch, accountEpochHolds } from '../lib/account-epoch';
 import { homeCacheKey, readCachedHome } from '../lib/home-cache';
 import type { HomeAnswer } from '../lib/home-cards';
 import { MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
@@ -301,20 +302,41 @@ export const PLACE_WAIT_MS = 8_000;
 const placeInAnswer = (answer: HomeAnswer | null | undefined) => toolPlaceOf({ community: answer?.cards?.community?.place, area: answer?.me?.area });
 
 /**
+ * A place the server told this page, per member and community (homeCacheKey), for the page's life: one answer serves
+ * every screen (the guide, a crop, Change, each asks as it opens), so a second ask that stalls or fails can't take away
+ * the climate the screen behind it shows. None is never remembered, so a later open asks again; nor is one from before
+ * a sign-out or a clear (lib/account-epoch.ts).
+ */
+const toldPlaces = new Map<string, { place: ToolPlace; epoch: number }>();
+
+/** Tests only: a page loaded again, remembering no place the server told it. */
+export function resetPlacesForTest(): void {
+    toldPlaces.clear();
+}
+
+/**
  * `place`: a place the community's server already tells this member (core toolPlaceOf): the community's own place and
  * the member's rough area, from its Home answer's Your community card. First the answer this browser kept for this
  * member and community (lib/home-cache.ts, as the phone reads the one it kept): with a place in it, nothing is sent.
- * Only without one there is the server asked (GET /api/home, as Home reads it; nothing is sent with it).
- * The browser's own position is never asked for. Null for none, when the server can't be reached, or at
- * {@link PLACE_WAIT_MS}, when a request still out is let go: a read that never comes back never holds a screen.
+ * Then one the server told this page before ({@link toldPlaces}). Only without either is the server asked (GET
+ * /api/home, as Home reads it; nothing is sent with it). The browser's own position is never asked for. Null for
+ * none, when the server can't be reached, or at {@link PLACE_WAIT_MS}, when a request still out is let go: a read
+ * that never comes back never holds a screen.
  */
 export function webPlace(owner: string): Promise<ToolPlace | null> {
+    const key = homeCacheKey(owner);
     const letGo = new AbortController();
     const known = async () => {
-        const kept = placeInAnswer((await readCachedHome(homeCacheKey(owner)).catch(() => null))?.answer);
+        const kept = placeInAnswer((await readCachedHome(key).catch(() => null))?.answer);
         if (kept) return kept;
+        const told = toldPlaces.get(key);
+        if (told && accountEpochHolds(told.epoch)) return told.place;
+        toldPlaces.delete(key);
+        const epoch = accountEpoch();
         const read = await getHome({ cards: ['community'] }, null, letGo.signal);
-        return read.notModified ? null : placeInAnswer(read.answer);
+        const place = read.notModified ? null : placeInAnswer(read.answer);
+        if (place && accountEpochHolds(epoch)) toldPlaces.set(key, { place, epoch });
+        return place;
     };
     return new Promise((resolve) => {
         const timer = setTimeout(() => { letGo.abort(); resolve(null); }, PLACE_WAIT_MS);

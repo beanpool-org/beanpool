@@ -194,7 +194,7 @@ async function main(): Promise<void> {
         const tokens = [OWNER_TOKEN, m90.body.token];
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
-        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take\./.test(d)),
+        assert(told.some(d => /An AI assistant \(Olive's Claude\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs and events as that owner, and suggest actions it cannot take\./.test(d)),
             `owners are told an owner connected one (${told.join(' | ').slice(0, 300)})`);
 
         const tooLong = await make(ownerS, { name: 'x', days: 91 });
@@ -363,6 +363,8 @@ async function main(): Promise<void> {
         for (const [who, s, client, grantId] of [['owner', ownerS, ownerClient, ownerGrantId], ['admin', adminS, adminClient, adminGrantId]] as const) {
             for (const t of reads) {
                 if (t.name === 'connection_info') continue;
+                // An owner-only read (my_enterprises, agent/owner-posts.ts) is not an admin's assistant's: its lists above say so.
+                if (t.ownerOnly && who === 'admin') continue;
                 const viaMcp = await client.callTool({ name: t.name, arguments: argsFor(t.name) });
                 const viaPreview = await call('POST', PREVIEW, { headers: asSession(s), body: { grant: grantId, tool: t.name, args: argsFor(t.name) } });
                 const a = sameBoundary(viaMcp.structuredContent).replace(VOLATILE, '"$1":~');
@@ -370,7 +372,7 @@ async function main(): Promise<void> {
                 if (viaPreview.status !== 200 || viaPreview.body?.ok !== true || a !== b) differs.push(`${who} ${t.name}: ${a.slice(0, 120)} ≠ ${b.slice(0, 120)}`);
             }
         }
-        assert(differs.length === 0, `every reading tool's preview equals its /mcp answer, fences and redaction included, for an owner's and an admin's (${differs.join(' || ') || `${reads.length - 1} tools × 2`})`);
+        assert(differs.length === 0, `every reading tool's preview equals its /mcp answer, fences and redaction included, for an owner's and an admin's (${differs.join(' || ') || `${reads.length - 1} tools for an owner, ${reads.filter(t => !t.ownerOnly).length - 1} for an admin`})`);
         const pvReport = await call('POST', PREVIEW, { headers: asSession(adminS), body: { tool: 'report_get', args: { report_id: r1!.id } } });
         const fenced = JSON.stringify(pvReport.body?.result ?? {});
         assert(pvReport.body?.ok === true && /untrusted/.test(fenced) && /<<<MEMBER-TEXT [0-9a-f]{8}/.test(fenced) && !fenced.includes(reporter.pub) && !fenced.includes('Reggie'),

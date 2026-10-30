@@ -215,7 +215,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         logger.info('AUTH', 'AI assistant connected', { tokenId: res.record.id, role, by: me.slice(0, 16), expiresAt: res.record.expiresAt });
         noteSecurityEvent({
             key: 'sec.agent', actor: me, actorRole: role,
-            detail: agentConnectedWords(cleanMemberText(res.record.name, 60), role, role === 'owner', offersSuggestions()),
+            detail: agentConnectedWords(cleanMemberText(res.record.name, 60), role, role === 'owner', offersSuggestions(), role === 'owner'),
         });
         ctx.status = 201;
         ctx.body = { token: res.token, grant: grantView(res.record, me) };

@@ -165,10 +165,11 @@ export function promptText(p: PromptDef, args: Record<string, string>, f: Welcom
     return `${PROMPT_RULE}\n\n${p.body(args, f)}\n\nNothing changes without ${f.callsign}'s approval.`;
 }
 
-/** The owners' sec.agent words (§8), from what the grant can do. */
-export function agentConnectedWords(name: string, role: 'owner' | 'admin', canBackup: boolean, canSuggest: boolean): string {
+/** The owners' sec.agent words (§8), from what the grant can do (an owner's posts: agent/owner-posts.ts). */
+export function agentConnectedWords(name: string, role: 'owner' | 'admin', canBackup: boolean, canSuggest: boolean, canPost = false): string {
     const can = ['read health, backups, totals, reports and join requests'];
     if (canBackup) can.push('take a backup');
+    if (canPost) can.push(`post Offers, Needs and events as that ${role}`);
     if (canSuggest) can.push('suggest actions it cannot take');
     const list = can.length === 1 ? can[0] : `${can.slice(0, -1).join(', ')}, and ${can[can.length - 1]}`;
     return `An AI assistant (${name}) was connected by an ${role}: it can ${list}.`;

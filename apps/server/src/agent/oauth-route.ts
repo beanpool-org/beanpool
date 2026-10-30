@@ -119,7 +119,7 @@ function tellOwners(kind: 'connected' | 'reuse' | 'revoked', grant: OAuthGrantVi
     if (kind === 'connected') {
         noteSecurityEvent({
             key: 'sec.agent', actor: grant.member, actorRole: role ?? 'admin',
-            detail: agentConnectedWords(name, role ?? 'admin', role === 'owner', offersSuggestions()),
+            detail: agentConnectedWords(name, role ?? 'admin', role === 'owner', offersSuggestions(), role === 'owner'),
         });
         return;
     }

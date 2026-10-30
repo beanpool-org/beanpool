@@ -245,7 +245,7 @@ async function main(): Promise<void> {
         assert(byAdmin.status === 403, `an admin's session cannot make one (${show(byAdmin)})`);
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent');
-        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take\./.test(e.detail)),
+        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, post Offers, Needs and events as that owner, and suggest actions it cannot take\./.test(e.detail)),
             `owners are told an assistant connected, in the server's words (${told.map(e => e.detail).join(' | ')})`);
 
         const client = await connect(AGENT);
@@ -267,17 +267,22 @@ async function main(): Promise<void> {
         console.log('── 2. tools/list and prompts/list ──');
         const tools = (await client.listTools()).tools;
         const names = tools.map(t => t.name).sort();
-        assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'community_totals', 'connection_info', 'knocks_list', 'node_overview',
-            'report_get', 'reports_list', 'safety_settings', 'server_health', 'suggest_action', 'take_backup']), `an owner's assistant has the ten S1 tools and S4's suggest_action (${names.join(', ')})`);
+        assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'community_totals', 'connection_info', 'create_enterprise_listing', 'create_event',
+            'create_need', 'create_offer', 'knocks_list', 'my_enterprises', 'node_overview', 'report_get', 'reports_list', 'safety_settings', 'server_health',
+            'suggest_action', 'take_backup']),
+        `an owner's assistant has the ten S1 tools, S4's suggest_action and the owner's posts (MCP-OWNER-POSTS) (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
-        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'knocks_list,report_get,reports_list',
+        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'knocks_list,my_enterprises,report_get,reports_list',
             'the tools that can return member text say it is data');
         const tb = tools.find(t => t.name === 'take_backup');
         const sa = tools.find(t => t.name === 'suggest_action');
+        // The posts an owner's assistant makes (agent/owner-posts.ts): writes, neither idempotent nor destructive.
+        const creates = tools.filter(t => t.name.startsWith('create_'));
         assert(tb?.annotations?.readOnlyHint === false && tb?.annotations?.idempotentHint === true && tb?.annotations?.destructiveHint === false
             && sa?.annotations?.readOnlyHint === false && sa?.annotations?.idempotentHint === false && sa?.annotations?.destructiveHint === false
-            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action').every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false),
-        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action is a write, neither idempotent nor destructive');
+            && creates.length === 4 && creates.every(t => t.annotations?.readOnlyHint === false && t.annotations?.idempotentHint === false && t.annotations?.destructiveHint === false)
+            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && !t.name.startsWith('create_')).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false),
+        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action and the four creates are writes, neither idempotent nor destructive');
         const prompts = (await client.listPrompts()).prompts.map(p => p.name).sort();
         assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'draft-announcement', 'safety-settings-check', 'summarise-reports', 'triage-report',
             'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu (${prompts.join(', ')})`);
@@ -290,7 +295,8 @@ async function main(): Promise<void> {
         // ── 3. Every tool, swept ──────────────────────────────────────────────────────────────────
         console.log('── 3. Every tool answers redacted at the source ──');
         const answers: Record<string, any> = {};
-        for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup')) {
+        // The posts an owner's assistant makes are their own suite's (test-mcp-owner-posts.ts): each needs photos and makes a post.
+        for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_'))) {
             // suggest_action (S4) files one card on r1: swept like every answer; it changes no report.
             const args: Record<string, unknown> = t.name === 'report_get' ? { report_id: r1!.id }
                 : t.name === 'suggest_action' ? { kind: 'dismiss_report', report_id: r1!.id, reason: 'Swept: the reporter may be mistaken.' }

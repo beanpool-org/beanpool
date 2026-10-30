@@ -147,7 +147,8 @@ const cached = new Map<string, TagIndex>();
 /** The device language's index, built on first use and again after a language switch (or its words arriving: the first
  *  top's label as translated now is part of the cache key). */
 export function tagIndex(): TagIndex {
-    const key = `${currentLanguage()}\u0000${t(TAG_LIBRARY[0].en)}`;
+    const firstLabel = t(TAG_LIBRARY[0].en);
+    const key = `${currentLanguage()}\u0000${firstLabel}`;
     let index = cached.get(key);
     if (!index) {
         cached.clear();

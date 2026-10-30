@@ -34,7 +34,12 @@ vi.mock('react-native', () => {
 });
 
 const nav = vi.hoisted(() => ({ params: {} as Record<string, string>, router: { push: vi.fn(), replace: vi.fn(), back: vi.fn() } }));
-vi.mock('expo-router', () => ({ router: nav.router, useLocalSearchParams: () => nav.params, ErrorBoundary: () => null }));
+vi.mock('expo-router', () => ({
+    router: nav.router,
+    useLocalSearchParams: () => nav.params,
+    ErrorBoundary: () => null,
+    useFocusEffect: (cb: () => void) => { cb(); },
+}));
 vi.mock('expo-status-bar', () => ({ StatusBar: () => null }));
 
 const mem = vi.hoisted(() => ({ store: new Map<string, string>() }));
@@ -203,5 +208,33 @@ describe('public-profile quiz publishes this community name (Profile S2-W)', () 
         expect(published()[0].callsign).toBe('Rosa Phone');
         expect(calls.updateMemberProfile).toHaveLength(1);
         expect(calls.updateMemberProfile[0].data.callsign).toBe('Rosa Phone');
+    });
+
+    it('does not send callsign when callsign is empty, and never touches bio/contact on quiz complete', async () => {
+        const origCallsign = IDENTITY.callsign;
+        IDENTITY.callsign = '';
+        try {
+            communityRow.value = null;
+            await render();
+
+            const quizBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Take 60s Quiz'));
+            expect(quizBtn).toBeDefined();
+            await act(async () => { quizBtn!.click(); });
+            await settle();
+
+            const completeBtn = document.querySelector('[data-testid="complete-quiz"]') as HTMLElement;
+            expect(completeBtn).not.toBeNull();
+            await act(async () => { completeBtn.click(); });
+            await settle();
+
+            expect(published()).toHaveLength(1);
+            expect(published()[0]).not.toHaveProperty('callsign');
+            expect(calls.updateMemberProfile).toHaveLength(1);
+            expect(calls.updateMemberProfile[0].data).not.toHaveProperty('bio');
+            expect(calls.updateMemberProfile[0].data).not.toHaveProperty('contact_value');
+            expect(calls.updateMemberProfile[0].data).not.toHaveProperty('avatar_url');
+        } finally {
+            IDENTITY.callsign = origCallsign;
+        }
     });
 });

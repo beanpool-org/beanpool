@@ -1977,7 +1977,11 @@ export default function MarketScreen() {
                                 </Pressable>
                             </View>
                             {showExamples && <ExampleListings />}
-                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
+                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                                viewerPubkey={identity?.publicKey}
+                                onOpenPost={(postId) => router.push(`/post/${postId}`)}
+                                onOpenProfile={(publicKey, callsign) => router.push({ pathname: '/public-profile', params: { publicKey: publicKey, callsign: callsign || '' } })}
+                            />
                         </View>
                     ) : (
                     <View style={{ padding: 32, alignItems: 'center' }}>

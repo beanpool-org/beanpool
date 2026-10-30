@@ -13,7 +13,7 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
-import { t, word } from '@beanpool/core';
+import { formatDate, t, word } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { useStyles } from '../app/ThemeContext';
 import { authenticateUser } from '../utils/LocalAuth';
@@ -141,7 +141,7 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
             <Text style={styles.body}>{t(COMMUNITY_ADMINS_ROW.body)}</Text>
             {kept && (
                 <Text style={styles.state} testID="community-admins-on">
-                    {t(COMMUNITY_ADMINS_ROW.on, { community: place, date: since && Number.isFinite(since.getTime()) ? since.toLocaleDateString() : '…' })}
+                    {t(COMMUNITY_ADMINS_ROW.on, { community: place, date: since && Number.isFinite(since.getTime()) ? formatDate(since, 'day-month-year') : '…' })}
                 </Text>
             )}
             {kept && !offered && <Text style={styles.note}>{t(COMMUNITY_ADMINS_ROW.noLongerOffered, { community: place })}</Text>}

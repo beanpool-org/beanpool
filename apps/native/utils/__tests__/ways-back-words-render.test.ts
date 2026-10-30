@@ -367,7 +367,7 @@ describe('what each confirm offers, and what a result says (English)', () => {
 
     it("the copy Mullumbimby keeps for its admins (VR3): its row with since when, its own confirm, and only what Mullumbimby answered", async () => {
         await mount('en');
-        // Drawn under Mullumbimby, after its sign-in copies and before the next community (the host stubs carry no testID).
+        // Drawn under Mullumbimby, first (the whole copy, as design §5.1 lists it), before the next community (the host stubs carry no testID).
         const text = host!.textContent!;
         const row = text.slice(text.indexOf('Mullumbimby'), text.indexOf('Global community'));
         expect(row).toContain("Your community's admins");

@@ -7,7 +7,7 @@
  * say the same. The flow is lib/community-copy.ts.
  */
 import { useState } from 'react';
-import { t, word } from '@beanpool/core';
+import { formatDate, t, word } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     webRemoveCommunityCopy, webTurnOnCommunityCopy, WEB_COMMUNITY_COPY_TEXT, type WebCommunityCopyStatus,
@@ -88,7 +88,7 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
             <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed m-0">{t(COMMUNITY_ADMINS_WEB.body)}</p>
             {kept && (
                 <p className="text-sm font-semibold m-0" data-testid="community-admins-on">
-                    {t(COMMUNITY_ADMINS_WEB.on, { date: since && Number.isFinite(since.getTime()) ? since.toLocaleDateString() : '…' })}
+                    {t(COMMUNITY_ADMINS_WEB.on, { date: since && Number.isFinite(since.getTime()) ? formatDate(since, 'day-month-year') : '…' })}
                 </p>
             )}
             {kept && !offeredHere && <p className="text-xs text-nature-600 dark:text-nature-300 m-0">{t(COMMUNITY_ADMINS_WEB.noLongerOffered)}</p>}

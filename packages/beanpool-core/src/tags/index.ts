@@ -3,7 +3,7 @@
  * in any of the 25 languages into tag ids (DESIGN-owner-seeding-tags-fable.md §4.2, §4.7). The picker's search, suggestTags,
  * the Market's search and the assistant's tags_search all read one index, built once per language.
  */
-import { CONTEXT_SEPARATOR, currentLanguage, currentWords, t, type Words } from '../words.js';
+import { CONTEXT_SEPARATOR, currentLanguage, currentWords, t, wordsFor, type UiLang, type Words } from '../words.js';
 import { compoundWords, joinCompounds, plainWords } from '../search-terms.js';
 import { TAG_LIBRARY, type TagDef } from './library.js';
 import { SEARCH_TAGS_MAX } from './post-tags.js';
@@ -272,7 +272,7 @@ export function tagIndex(langOrWords?: string | Words | Translate): TagIndex {
         let idx = langIndices.get(langOrWords);
         if (!idx) {
             const seed = SEED_TAG_TRANSLATIONS[langOrWords];
-            const w = wordsFor(langOrWords, seed ? [seed] : []);
+            const w = wordsFor(langOrWords as UiLang, seed ? [seed] : []);
             idx = buildTagIndex(w);
             langIndices.set(langOrWords, idx);
         }

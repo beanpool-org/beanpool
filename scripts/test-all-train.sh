@@ -113,7 +113,8 @@ rides_alone() {
   mb=$(git merge-base "$MAIN_SHA" "$1") || { echo "shares no history with main"; return; }
   files=$(git diff --name-only "$mb" "$1" | grep -E "$MONEY_PATHS" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && { echo "touches ledger or money paths (${files% })"; return; }
-  files=$(git diff --name-only -G 'conservingTransaction\|accounts SET balance' "$mb" "$1" | head -3 | tr '\n' ' ')
+  # -G takes an extended regex: a bare | (\| would be a literal bar, and match nothing).
+  files=$(git diff --name-only -G 'conservingTransaction|accounts SET balance' "$mb" "$1" | head -3 | tr '\n' ' ')
   [ -n "$files" ] && echo "changes a line that moves Beans: conservingTransaction or accounts SET balance (${files% })"
 }
 
@@ -178,9 +179,17 @@ prepare() {
 
 # failing_parts <test-all log dir>: one line per part a red run failed, from test-all.sh's own logs:
 # "suite <name>", "vitest <package> <file>", "package <package>" (its test task, when no vitest file is named), or
-# "stage <check>" for a check that cannot be run alone. The same reading as the load recheck.
+# "stage <check>" for a check that cannot be run alone. The same reading as the load recheck (v2): a check with no .rc was
+# killed or never finished, and a vitest package whose failed files are not all listed, or that has an unhandled error, is
+# run whole, never on the listed files alone.
 failing_parts() {
-  local L=$1 r s names files p
+  local L=$1 x r s names pkgs files p nfail nlisted
+  for x in "$L"/*.log "$L"/*.dur; do
+    [ -e "$x" ] || continue
+    s=$(basename "$x"); s=${s%.*}
+    case "$s" in recheck-*) continue ;; esac
+    [ -s "$L/$s.rc" ] || echo "stage $s"
+  done | sort -u
   for r in "$L"/*.rc; do
     [ -f "$r" ] && [ "$(cat "$r")" != 0 ] || continue
     s=$(basename "$r" .rc)
@@ -190,12 +199,18 @@ failing_parts() {
         names=$(grep -E 'Server suites failed:' "$L/server_suites.log" | tail -1 | sed -E 's/.*Server suites failed: //; s/\([^)]*\)//g' | tr ' ' '\n' | sed '/^$/d' | sort -u)
         if [ -n "$names" ]; then echo "$names" | sed 's/^/suite /'; else echo "stage server_suites"; fi ;;
       test)
-        files=$(grep -E '^\S+:test: +❯ \S+ \([0-9]+ tests? \| [0-9]+ failed\)' "$L/test.log" | sed -E 's/^([^ ]+):test: +❯ ([^ ]+) .*/\1 \2/' | sort -u)
-        [ -n "$files" ] && echo "$files" | sed 's/^/vitest /'
-        for p in $(grep -E '^ *Failed: ' "$L/test.log" | tail -1 | sed -E 's/^ *Failed: +//; s/#test//g; s/,/ /g'); do
-          echo "$files" | grep -q "^$p " || echo "package $p"
-        done
-        [ -z "$files" ] && ! grep -qE '^ *Failed: ' "$L/test.log" && echo "stage test" ;;
+        pkgs=$(grep -E '^ *Failed: ' "$L/test.log" | tail -1 | sed -E 's/^ *Failed: +//; s/#test//g; s/,/ /g')
+        [ -n "$(echo $pkgs)" ] || { echo "stage test"; continue; }
+        for p in $pkgs; do
+          files=$(grep -E "^$p:test: +❯ \S+ \([0-9]+ tests? \| [0-9]+ failed\)" "$L/test.log" | sed -E 's/^[^ ]+:test: +❯ ([^ ]+) .*/\1/' | sort -u)
+          nfail=$(grep -E "^$p:test: +Test Files +[0-9]+ failed" "$L/test.log" | tail -1 | sed -E 's/.*Test Files +([0-9]+) failed.*/\1/')
+          nlisted=$(echo "$files" | sed '/^$/d' | wc -l | tr -d ' ')
+          if [ -z "$files" ] || [ "${nfail:-0}" != "$nlisted" ] || grep -qE "^$p:test: .*Unhandled (Error|Rejection)" "$L/test.log"; then
+            echo "package $p"
+          else
+            echo "$files" | sed "s|^|vitest $p |"
+          fi
+        done ;;
       *) echo "stage $s" ;;
     esac
   done

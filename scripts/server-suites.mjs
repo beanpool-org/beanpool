@@ -111,6 +111,7 @@ export const SUITES = [
     'test-home-steps',
     'test-home-chat-card',
     'test-knock',
+    'test-knock-ceiling',
     'test-knock-notices',
     'test-knock-to-node',
     'test-commons-conservation',

@@ -428,6 +428,7 @@ async function main() {
         && pausedLines().length === 0 && ownerPushes().length === q0 + 1,
         `Abe pauses Mo, a moderator: one line, his role's, pushed once (${moPause.status} ${roleLines.map(e => e.detail).join(' | ')}; ${pausedLines().length} pause lines)`);
     await lift(mo);
+    await settle(); // his role back is told too, on its own line: counted before the next step's lines are
     advance(2 * HOUR);
     const h0 = topicHits().length;
     q0 = ownerPushes().length;

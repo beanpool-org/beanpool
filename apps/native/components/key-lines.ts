@@ -415,7 +415,7 @@ export function agentLinesWords(a: AgentAsking): string[] {
     return [
         a.name ? t('Assistant: “{name}” (the name it gave itself)', { name: a.name }) : t('Assistant: no name given'),
         t('Sends what it reads to: {host}', { host: a.sendsTo }),
-        t('It reads health, backups, totals, reports and join requests as you, and can only suggest changes for you to approve.'),
+        t('It reads health, backups, totals, reports and join requests as you. If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval. Anything else it can only suggest, and nothing changes until you approve.'),
     ];
 }
 

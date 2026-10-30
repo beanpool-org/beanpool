@@ -23,6 +23,11 @@
  * Which posts those were is the one thing here not read from the rows the member wrote: keeper_own_posts (schema.sql
  * 11e), this server's own and a day's, so a take-over forgets it (the enterprise's day then counts them, and the keepers'
  * own don't). The money routes have their own limits (engine/money-limits.ts).
+ *
+ * A post an owner's AI assistant made for them (posts.created_via 'assistant:<grant id>', agent/owner-posts.ts) is not
+ * one of the member's own 100: it is held to the owners' "Assistant posts a day" instead (1 to 1,000; the director,
+ * 30 Oct, from Marty's "make it 1000 per day … serious seeding on the global node"), so it never uses up what the
+ * member posts from the apps. An enterprise's post an assistant made still counts against the enterprise as any keeper's.
  */
 import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
@@ -86,24 +91,29 @@ const since = (now: number) => iso(now - DAY_MS);
 
 // ── Posts ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** A post an owner's AI assistant did not make (its own limit is the owners' "Assistant posts a day"). */
+const NOT_BY_ASSISTANT = `(p.created_via IS NULL OR p.created_via NOT LIKE 'assistant:%')`;
+
 /**
  * Posts of any kind put up in the day that count against `account`. A member's: their own, and those they put up for an
- * enterprise once its own day's were up (keeper_own_posts). An enterprise's: the ones it is the author of, less those.
+ * enterprise once its own day's were up (keeper_own_posts), never the ones their assistant made (`memberOwn`). An
+ * enterprise's: the ones it is the author of, less those.
  */
-function postTimes(account: string, now: number): string[] {
+function postTimes(account: string, now: number, memberOwn = false): string[] {
+    const own = memberOwn ? `AND ${NOT_BY_ASSISTANT}` : '';
     return column(db.prepare(`
         SELECT p.created_at AS t FROM posts p
-         WHERE p.author_pubkey = ? AND p.origin_node IS NULL AND p.created_at > ?
+         WHERE p.author_pubkey = ? AND p.origin_node IS NULL AND p.created_at > ? ${own}
            AND NOT EXISTS (SELECT 1 FROM keeper_own_posts k WHERE k.post_id = p.id)
         UNION ALL
         SELECT p.created_at AS t FROM keeper_own_posts k JOIN posts p ON p.id = k.post_id
-         WHERE k.keeper = ? AND p.origin_node IS NULL AND p.created_at > ?`).all(account, since(now), account, since(now)));
+         WHERE k.keeper = ? AND p.origin_node IS NULL AND p.created_at > ? ${own}`).all(account, since(now), account, since(now)));
 }
 
 /** A member's own posts limit, in their words, with `note` after when it is a post for an enterprise whose day is spent. */
 function assertOwnPostsToday(member: string, now: number, note = ''): void {
     const limit = WRITER_LIMITS.postsPerDay;
-    assertUnderDaily(postTimes(member, now), limit, now, 'posts_per_day',
+    assertUnderDaily(postTimes(member, now, true), limit, now, 'posts_per_day',
         (when) => `You can put up ${limit} new posts in any 24 hours. You can post again ${when}.${note}`);
 }
 

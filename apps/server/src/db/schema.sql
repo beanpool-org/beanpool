@@ -344,6 +344,10 @@ CREATE TABLE IF NOT EXISTS posts (
     -- the board (live or paused). A pause or an end takes it off the shopfront by its status and the stamp stays; out of its
     -- shop, or its shop closed, the stamp goes. NULL on every other row. Added to an older database by db.ts.
     featured_at TEXT,
+    -- What made it when that was not its author's own app: 'assistant:<grant id>' for a post an owner's AI assistant made
+    -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
+    -- an older database by db.ts.
+    created_via TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

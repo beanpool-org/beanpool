@@ -3,7 +3,7 @@ Pod::Spec.new do |s|
   s.version        = '1.0.0'
   s.summary        = "The phone's since-boot clock, counting sleep, for App Lock"
   s.description    = "The phone's since-boot clock (mach_continuous_time), counting sleep, for BeanPool's App Lock"
-  s.license        = 'MIT'
+  s.license      = 'AGPL-3.0-only'
   s.author         = 'BeanPool'
   s.homepage       = 'https://beanpool.org'
   s.platforms      = {

@@ -40,7 +40,8 @@ const AREA = { lat: -28.5, lng: 153.5, updatedAt: '2026-10-01T00:00:00Z' };
 
 /** The feed's reads of the node (not the viewer's own, which names an author). */
 // The read for online events beside a radius read (DESIGN-event-times §9) is its own: `onlineReads`.
-const feedReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !f?.author && !f?.id && !f?.online);
+// The fill beneath a short list (MarketplacePage.fill.test.tsx) is its own read: one page of the newest, no point.
+const feedReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !f?.author && !f?.id && !f?.online && !(f?.lat == null && f?.limit === 50));
 const onlineReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.online);
 const ownReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.author);
 

@@ -1031,6 +1031,8 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.shop_id != null ? { shopId: row.shop_id } : {}),
         // When it was featured in its shop, as the main server holds it (apps/server engine/sync.ts postFeatured).
         ...(row.featured_at != null ? { featuredAt: row.featured_at } : {}),
+        // What made it, when an owner's AI assistant did (apps/server engine/sync.ts postCreatedVia): none said is none.
+        ...(row.created_via != null ? { createdVia: row.created_via } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

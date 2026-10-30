@@ -54,7 +54,7 @@ import { db } from './db/db.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { setSecurityAlertHandler } from './services/security-signal.js';
 import {
-    isPendingRegistration, markRegistrationOpened, OAUTH_ACCESS_TTL_MS, OAUTH_CODE_TTL_MS, OAUTH_GRANTS_PER_MEMBER, OAUTH_PENDING_MAX,
+    isPendingRegistration, listOAuthGrants, markRegistrationOpened, OAUTH_ACCESS_TTL_MS, OAUTH_CODE_TTL_MS, OAUTH_GRANTS_PER_MEMBER, OAUTH_PENDING_MAX,
     OAUTH_PENDING_PER_ADDRESS, OAUTH_PENDING_TTL_MS, OAUTH_REFRESH_IDLE_MS, pendingRegistrations, registerClient, resetOAuthForTests,
 } from './agent/oauth.js';
 import { AGENT_REFUSAL_LOG_BUDGET, endAgentRefusalLogMinute } from './agent/mcp-route.js';
@@ -148,12 +148,12 @@ async function phoneApproves(k: Key, id: string, shortCode: string, extra: Recor
 }
 
 /** The whole consent: page → phone → digits → the redirect back with a code. */
-async function consent(url: string, k: Key): Promise<{ redirect: URL | null; page: Awaited<ReturnType<typeof openConsent>>; approve: Reply }> {
+async function consent(url: string, k: Key, canPost?: boolean): Promise<{ redirect: URL | null; page: Awaited<ReturnType<typeof openConsent>>; approve: Reply }> {
     const page = await openConsent(url);
     const approve = await phoneApproves(k, page.id, page.shortCode);
     const cookie = { Cookie: page.cookie };
     await call('POST', `/oauth/authorize/${page.id}/wait`, { body: { wait: false }, headers: cookie });
-    const done = await call('POST', `/oauth/authorize/${page.id}/confirm`, { body: { code: approve.body?.confirmCode }, headers: cookie });
+    const done = await call('POST', `/oauth/authorize/${page.id}/confirm`, { body: { code: approve.body?.confirmCode, ...(canPost !== undefined ? { canPost } : {}) }, headers: cookie });
     return { redirect: done.body?.redirect ? new URL(done.body.redirect) : null, page, approve };
 }
 
@@ -187,12 +187,12 @@ function authorizeUrl(clientId: string, over: Record<string, string | null> = {}
 }
 
 /** Register, consent and exchange by hand: the access and refresh tokens, and what was sent. */
-async function manualConnect(k: Key, name = 'Manual Assistant'): Promise<{ clientId: string; access: string; refresh: string; code: string; verifier: string; token: Reply }> {
+async function manualConnect(k: Key, name = 'Manual Assistant', canPost?: boolean): Promise<{ clientId: string; access: string; refresh: string; code: string; verifier: string; token: Reply }> {
     const reg = await call('POST', '/oauth/register', { body: { client_name: name, redirect_uris: [REDIRECT] } });
     const clientId = reg.body?.client_id ?? '';
     const verifier = crypto.randomBytes(32).toString('base64url');
     const url = authorizeUrl(clientId, { code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url') });
-    const { redirect } = await consent(url, k);
+    const { redirect } = await consent(url, k, canPost);
     assert(redirect?.searchParams.get('state') === 'st-1', `the assistant's state comes back with its code (${redirect?.searchParams.get('state')})`);
     const code = redirect?.searchParams.get('code') ?? '';
     const token = await call('POST', '/oauth/token', { form: { grant_type: 'authorization_code', code, client_id: clientId, redirect_uri: REDIRECT, code_verifier: verifier, resource: `${BASE}/mcp` } });
@@ -263,6 +263,10 @@ async function main(): Promise<void> {
         assert(!!page && page.status === 200 && page.id.length === 64 && page.html.includes('assistant.example')
             && /calling itself “Claude”, at assistant\.example/.test(page.html) && /Everything it reads goes to assistant\.example/.test(page.html),
         'the consent page names the assistant only beside the host its answers go to, and says everything it reads goes there');
+        assert(!!page && /If you are an owner, it can also take a backup; and, only if you tick “May post for me” below, post Offers, Needs and events for you \(as you, or as an enterprise you keep\), at once, with no approval\./.test(page.html)
+            && /Anything else it can only SUGGEST/.test(page.html) && !/It can take a backup \(owners only\) and SUGGEST actions/.test(page.html)
+            && /<input type="checkbox" id="canpost">/.test(page.html) && !/id="canpost" checked/.test(page.html),
+            "the consent page says, before anyone approves, that an owner's assistant takes a backup and, ticked \"May post for me\" (off until ticked), posts at once with no approval (MCP-OWNER-POSTS)");
         assert(!!page && /script-src 'nonce-/.test(String((await fetch(claude.authUrl!.toString(), { redirect: 'manual' })).headers.get('content-security-policy'))),
             'the consent page carries its own nonce CSP');
         assert(e2e.approve.status === 200 && /^\d{2}$/.test(String(e2e.approve.body?.confirmCode)) && e2e.approve.body?.role === 'admin',
@@ -596,6 +600,17 @@ async function main(): Promise<void> {
         assert(both.map(r => r.status).sort().join(',') === '200,400' && !(getLocalConfig().agentOAuthGrants ?? []).some(g => g.clientName === 'Race Check')
             && notes.filter(n => n.high).length === highBefore + 1,
         `two refreshes at once: the strict rule holds, the grant revoked and the owners told, high (${both.map(r => r.status).join(',')})`);
+
+        // ── 10b. "May post for me" (design Q1): the page's tick, sent with its digits, is what the grant keeps; off unless ticked ──
+        resetOAuthForTests();
+        resetLimits();
+        const tickedC = await manualConnect(owner, 'Ticked', true);
+        resetLimits();
+        const plainC = await manualConnect(owner, 'Not ticked');
+        resetLimits();
+        const keptTicks = Object.fromEntries(listOAuthGrants().map(g => [g.clientName, g.canPost]));
+        assert(tickedC.token.status === 200 && plainC.token.status === 200 && keptTicks['Ticked'] === true && keptTicks['Not ticked'] === false,
+            `the consent page's "May post for me" is kept on the grant, and is off when not ticked (${JSON.stringify(keptTicks)})`);
 
         // ── 11. Lifetimes and the pins finding 9 asked for ──
         resetOAuthForTests();

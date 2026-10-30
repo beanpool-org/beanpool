@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, ledger and invite top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, ledger and invite top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-30",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "「{name}」はこのコミュニティですでに使われています。別の名前を選んでください。",
@@ -1827,7 +1827,6 @@
   "The community didn't answer. You can try again: if it deleted your account meanwhile, trying again finishes the delete in this browser.": "コミュニティから応答がありませんでした。もう一度試すことができます。その間にコミュニティ側で削除が完了していれば、再試行によってこのブラウザでの削除も完了します。",
   "The community's answer didn't confirm the delete. Try again.": "コミュニティの応答で削除が確認されませんでした。もう一度お試しください。",
   "This web app now talks to a different community. Open Delete account again.": "このWebアプリの接続先が別のコミュニティに変更されました。もう一度「アカウントの削除」を開いてください。",
-  "Failed to purge account from node. Active escrow deals may need to be resolved first.": "ノードからのアカウントの完全削除に失敗しました。進行中のエスクロー取引を先に解決する必要がある可能性があります。",
   "If you stay on this screen, the copy clears from your clipboard after a minute. On an iPhone or iPad, in Safari or in Firefox, it clears at your first tap or key press after that minute. If you leave this screen or switch to another app or tab first, it stays: copy something else over it.": "この画面を開いたままにしておくと、1分後にクリップボードのコピーが消去されます。iPhoneやiPadのSafariまたはFirefoxでは、1分経過後の最初のタップまたはキー入力時に消去されます。先に画面を離れたり別のアプリやタブに切り替えた場合はそのまま残るため、別の内容を上書きコピーしてください。",
   "Try again in {n} minute.|Try again in {n} minutes.": {
     "other": "{n}分後にもう一度お試しください。"
@@ -2156,9 +2155,7 @@
   "Marketplace Activity": "マーケットプレイスの動き",
   "Push alerts on your phone for new offers & needs in your area": "お住まいの地域で新しい提供や求めがあったときにスマートフォンにプッシュ通知",
   "Marketplace Activity Notifications": "マーケットの動きの通知",
-  "Escrow & Deals": "エスクローと取引",
   "Push alerts on your phone for trade updates & credit transfers": "取引の進捗や豆の送金があったときにスマートフォンにプッシュ通知",
-  "Escrow & Deals Notifications": "エスクローと取引の通知",
   "Event reminders": "イベントのリマインダー",
   "How long before an event you are going to, or interested in, starts. You can change it on any one event.": "参加予定または興味のあるイベントが始まるどれくらい前に通知するかを設定します。イベントごとに個別に変更も可能です。",
   "Off\u0004event reminders": "オフ",
@@ -2952,7 +2949,6 @@
   "Cannot sweep more than current surplus ({amount} 🫘).": "現在の余剰金（{amount} 🫘）を超える移転はできません。",
   "Successfully swept {amount} 🫘 to the shared Commons pool.": "共有コモンズプールに{amount} 🫘を移転しました。",
   "Failed to sweep surplus to the Commons.": "コモンズへの余剰金の移転に失敗しました。",
-  "Bid approved! Escrow funds locked in trust.": "提案が承認されました！信託エスクローに資金が預けられました。",
   "Failed to approve bid.": "提案の承認に失敗しました。",
   "Are you sure you want to decline this request? The member will be notified.": "このリクエストを辞退してもよろしいですか？メンバーに通知されます。",
   "Bid declined.": "提案を辞退しました。",
@@ -2964,7 +2960,6 @@
   "Release payment of {amount} 🫘 for \"deal\"? This action cannot be reversed.": "「取引」に対する{amount} 🫘の支払いを実行しますか？この操作を取り消すことはできません。",
   "Payment released! Worker has been paid.": "支払いを実行しました！作業者への支払いが完了しました。",
   "Failed to release payment.": "支払いの実行に失敗しました。",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all escrowed pledges back to their backers.": "取り組みを中止して支援者に返金しますか？\n\nこれにより取り組みは終了し、エスクローに預けられているすべてのプレッジが支援者に直ちに返金されます。",
   "Initiative Cancelled 🌱\n\nPledges have been refunded to backers.": "取り組みを中止しました 🌱\n\n支援者にプレッジが返金されました。",
   "Could not cancel initiative.": "取り組みを取り消せませんでした。",
   "Please enter a valid credit amount": "有効な豆の数量を入力してください",
@@ -3048,7 +3043,6 @@
   "Approve Bid ({amount} 🫘)": "入札を承認（{amount} 🫘）",
   "Declining…": "辞退中…",
   "Active Deals": "進行中の取引",
-  "{amount} 🫘 in escrow": "エスクロー預かり中：{amount} 🫘",
   "Customer: {name}": "依頼者：{name}",
   "Worker: {name}": "作業者：{name}",
   "Fulfill Deal · Awaiting Customer Release": "取引完了 · 顧客による承認待ち",
@@ -3110,7 +3104,6 @@
   "Stop Wind-Up": "解散を停止",
   "Start Wind-Up": "解散を開始",
   "Cancelling & Refunding Backers…": "中止して支援者に返金中…",
-  "Cancel Initiative & Refund Escrow": "取り組みを取り消してエスクローを返金",
   "Asking to join as collaborators ({n})": "協力者としての参加希望（{n}人）",
   "Asking to join as keepers ({n})": "運営者としての参加希望（{n}人）",
   "Backing pledge: {amount}": "裏付けプレッジ：{amount}",
@@ -3494,5 +3487,14 @@
   "Something that keeps going and trades? Start an enterprise.": "継続して取引を行う活動ですか？事業体を立ち上げましょう。",
   "Start one with +: a chat group, a project or an enterprise.": "「+」でグループを立ち上げましょう：チャットグループ、プロジェクト、または事業体。",
   "No projects to back yet": "応援できるプロジェクトはまだありません",
-  "🤝 Your deals": "🤝 あなたの取引"
+  "🤝 Your deals": "🤝 あなたの取引",
+  "Newest from elsewhere": "ほかの場所の新着",
+  "Held in Trust & Deals": "エスクローと取引",
+  "Held in Trust & Deals Notifications": "エスクローと取引の通知",
+  "Bid approved! The Beans are held in trust.": "提案が承認されました！信託エスクローに資金が預けられました。",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "取り組みを中止して支援者に返金しますか？\n\nこれにより取り組みは終了し、エスクローに預けられているすべてのプレッジが支援者に直ちに返金されます。",
+  "{amount} 🫘 held in trust": "エスクロー預かり中：{amount} 🫘",
+  "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "ノードからのアカウントの完全削除に失敗しました。進行中のエスクロー取引を先に解決する必要がある可能性があります。",
+  "{amount} · held in trust": "{amount} · エスクロー中",
+  "Cancel Initiative & Refund Backers": "取り組みを取り消して支援者に返金"
 }

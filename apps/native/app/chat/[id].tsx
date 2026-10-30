@@ -971,19 +971,19 @@ function ChatScreen({ id }: { id: string }) {
         if (!pendingTx || !identity?.publicKey) return;
         await KeyboardController.dismiss();
         Alert.alert(
-            t('Cancel Escrow'),
-            t('Are you sure you want to cancel this escrow? The credits will be refunded.'),
+            t('Cancel Hold'),
+            t('Are you sure you want to cancel this hold? The Beans held in trust will be refunded.'),
             [
                 { text: t('Keep'), style: 'cancel' },
                 {
-                    text: t('Cancel Escrow'),
+                    text: t('Cancel Hold'),
                     style: 'destructive',
                     onPress: async () => {
                         setActionLoading(true);
                         try {
                             await cancelMarketplaceTransaction(pendingTx.id, identity.publicKey);
                             hapticWarning();
-                            Alert.alert(t('Cancelled'), t('Escrow has been cancelled and credits refunded.'));
+                            Alert.alert(t('Cancelled'), t('The hold has been cancelled and the Beans refunded.'));
                             syncSingleConversation(id as string).then(() => {
                                 loadConversationData();
                                 loadDeals();
@@ -991,7 +991,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel escrow.'));
+                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel the hold.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -1084,7 +1084,7 @@ function ChatScreen({ id }: { id: string }) {
     const handleCancelDeal = async (txId: string) => {
         if (!identity?.publicKey) return;
         await KeyboardController.dismiss();
-        Alert.alert(t('Cancel Deal'), t('Cancel this deal? The escrow will be refunded.'), [
+        Alert.alert(t('Cancel Deal'), t('Cancel this deal? The Beans held in trust will be refunded.'), [
             { text: t('Keep'), style: 'cancel' },
             { text: t('Cancel Deal'), style: 'destructive', onPress: async () => {
                 setActionLoading(true);
@@ -1494,12 +1494,12 @@ function ChatScreen({ id }: { id: string }) {
                             >
                                 <Text style={styles.dealCardTitle} numberOfLines={1}>{d.postTitle || t('Deal')}</Text>
                                 {d.status === 'requested' ? (
-                                    // Nothing is held yet, so never "in escrow": whose step it is, in core's words. Approve and Deny
+                                    // Nothing is held yet, so never "held in trust": whose step it is, in core's words. Approve and Deny
                                     // live on the listing, which the card opens at this deal.
                                     <Text style={styles.dealCardMeta} numberOfLines={1}>{dealStateWords(dealStep(localDealRow(d, identity!.publicKey), identity!.publicKey), null)}</Text>
                                 ) : (
                                     <Text style={styles.dealCardMeta} numberOfLines={1}>
-                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · in escrow')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
+                                        <Sentence text={d.status === 'completed' ? t('{amount} · completed') : t('{amount} · held in trust')} parts={{ amount: <CurrencyDisplay amount={d.credits} style={styles.dealCardMeta} /> }} />
                                     </Text>
                                 )}
                                 <View style={styles.dealCardActions}>

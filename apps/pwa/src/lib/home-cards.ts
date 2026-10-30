@@ -763,12 +763,12 @@ export function enterpriseLatestLine(l: EnterpriseLine): string {
     if (l.kind === 'deal') {
         if (isOut) {
             return when
-                ? tn(l.amount, 'Latest: {amount} Bean to escrow · {when}', 'Latest: {amount} Beans to escrow · {when}', { amount, when })
-                : tn(l.amount, 'Latest: {amount} Bean to escrow', 'Latest: {amount} Beans to escrow', { amount });
+                ? tn(l.amount, 'Latest: {amount} Bean held in trust · {when}', 'Latest: {amount} Beans held in trust · {when}', { amount, when })
+                : tn(l.amount, 'Latest: {amount} Bean held in trust', 'Latest: {amount} Beans held in trust', { amount });
         }
         return when
-            ? tn(l.amount, 'Latest: {amount} Bean from escrow · {when}', 'Latest: {amount} Beans from escrow · {when}', { amount, when })
-            : tn(l.amount, 'Latest: {amount} Bean from escrow', 'Latest: {amount} Beans from escrow', { amount });
+            ? tn(l.amount, 'Latest: {amount} Bean released from trust · {when}', 'Latest: {amount} Beans released from trust · {when}', { amount, when })
+            : tn(l.amount, 'Latest: {amount} Bean released from trust', 'Latest: {amount} Beans released from trust', { amount });
     }
     if (l.kind === 'commons') {
         if (isOut) {

@@ -35,7 +35,7 @@ export default function StartCommunityScreen() {
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
         // In capitals the language's way (inCapitalsOf), never a textTransform: that follows the phone's rules.
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { padding: 16 },
         intro: { fontSize: 15, color: colors.text.body, lineHeight: 22 },
         sectionLabel: { fontSize: 12, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginTop: 20, marginBottom: 8, marginLeft: 4 },

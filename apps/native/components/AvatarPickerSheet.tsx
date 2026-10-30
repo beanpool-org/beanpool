@@ -434,8 +434,9 @@ const makeStyles = (tone: ReturnType<typeof tonesFor>) => StyleSheet.create({
         borderRadius: 35,
         overflow: 'hidden',
     },
+    // blue-600, the onboarding blue fill: white words on blue-500 were 3.68:1.
     confirmButton: {
-        backgroundColor: palette.blue500,
+        backgroundColor: palette.blue600,
         borderRadius: 12,
         padding: 16,
         alignItems: 'center',

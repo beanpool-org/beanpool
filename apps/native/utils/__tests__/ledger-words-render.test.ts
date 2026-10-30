@@ -343,7 +343,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         await renderIn('xx');
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         expect(text()).toContain(xx('YOUR BALANCE'));
-        expect(text()).toContain(xx('IN ESCROW'));
+        expect(text()).toContain(xx('HELD IN TRUST'));
         expect(text()).toContain(xx('⚠️ Balance above 1000 — consider spending!'));
         expect(text()).toContain(xx('-{amount} B').replace('{amount}', '25'));
         expect(text()).toContain(xx('Held in Trust: {title} (to {name})').replace('{title}', 'Fix the gate').replace('{name}', 'Mia'));
@@ -523,7 +523,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
             expect(text(), english).toContain(english);
         }
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
-        for (const english of ['YOUR BALANCE', '≈ 30.0 hrs of value · Floor -200', 'COMMONS ⓘ', 'CREDIT FLOOR', 'IN ESCROW', 'Community Circulation ⓘ', 'per month → commons pool',
+        for (const english of ['YOUR BALANCE', '≈ 30.0 hrs of value · Floor -200', 'COMMONS ⓘ', 'CREDIT FLOOR', 'HELD IN TRUST', 'Community Circulation ⓘ', 'per month → commons pool',
             'PROJECT PLEDGES', '-25 B', '3 Oct 2026', 'RECENT TRANSACTIONS', 'Export CSV', 'Held in Trust: Fix the gate (to Mia)', 'Held in Trust: Bike repair (from Mia)',
             'Held in Trust', 'Project Wallet', BLOCKED_BEANS_NOTE, 'View Offer', '+1200.0']) {
             expect(text(), english).toContain(english);
@@ -621,7 +621,7 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
         await click(byTestId('ledger-wallet-tab'), 'Wallet');
         const wallet = Array.from(host.querySelectorAll('span')).filter((s) => styleOf(s).textTransform);
         expect([...levels, ...wallet].map((s) => s.textContent)).toEqual([]);
-        for (const label of ['YOUR BALANCE', 'COMMONS ⓘ', 'CREDIT FLOOR', 'IN ESCROW', 'RECENT TRANSACTIONS']) expect(text(), label).toContain(xx(label));
+        for (const label of ['YOUR BALANCE', 'COMMONS ⓘ', 'CREDIT FLOOR', 'HELD IN TRUST', 'RECENT TRANSACTIONS']) expect(text(), label).toContain(xx(label));
     });
 
     it('a confirmed member\'s levels card at 320 dp with 1.3× text in the pseudo-locale', async () => {

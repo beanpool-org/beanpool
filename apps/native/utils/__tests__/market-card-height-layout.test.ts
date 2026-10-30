@@ -324,6 +324,42 @@ describe('the grid and compact views keep their cards their own height too', () 
     });
 });
 
+// The Market's fill (market-fill.ts): on a community that reads by area, a short nearby list is followed, in the list's
+// footer, by the newest from elsewhere. Those cards sit in views of their own (a plain one in the list view, a row of two
+// in the grid), so each view is laid out with Yoga here too.
+describe('the fill beneath a short nearby list: its cards are their own height, in every view', () => {
+    const FAR = Array.from({ length: 4 }, (_, i) => ({
+        id: `far-${i}`, type: 'offer', status: 'active', title: `Far listing ${i} with a title long enough to need a second line`, description: 'From elsewhere',
+        category: ['tech', 'food', 'tools', 'garden'][i], authorPublicKey: 'far-key', authorCallsign: 'Bo', credits: i + 1, priceType: 'fixed',
+        photos: i % 2 ? [PHOTO(`far-${i}`)] : [], ...(i === 2 ? { authorBannerUrl: BANNER } : {}), lat: 48.8, lng: 2.3, createdAt: iso(now - (i + 1) * 3_600_000),
+    }));
+    beforeEach(() => {
+        store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'global', features: { beans: false, nearbyListings: { radiusKm: 250, max: 500 } }, checkedAt: new Date().toISOString() } }));
+        globalThis.fetch = vi.fn(async (url: unknown) => (String(url).includes('/api/marketplace/posts') ? new Response(JSON.stringify(FAR)) : new Response('{}', { status: 404 }))) as typeof fetch;
+    });
+
+    it.each(['list', 'grid', 'compact'] as const)('%s view: one listing near, four from elsewhere beneath it', async (view) => {
+        await show([LONE], view);
+        expect(host.querySelector('[data-testid="market-fill"]')).not.toBeNull();
+        const cap = view === 'grid' ? 400 : view === 'list' ? 250 : 120;
+        for (const p of [LONE, ...FAR]) {
+            const heights = heightsAcross(cardOf(p.title));
+            expect(new Set(heights).size, `${p.title}: ${heights.join(', ')}`).toBe(1);
+            expect(heights[0], p.title).toBeLessThan(cap);
+        }
+    });
+
+    it('nothing near: the fill alone, with its short line above, every card its own height', async () => {
+        await show([], 'list');
+        expect(host.querySelector('[data-testid="market-near-empty"]')).not.toBeNull();
+        for (const p of FAR) {
+            const heights = heightsAcross(cardOf(p.title));
+            expect(new Set(heights).size, `${p.title}: ${heights.join(', ')}`).toBe(1);
+            expect(heights[0], p.title).toBeLessThan(250);
+        }
+    });
+});
+
 describe('the layout check sees the fault it is here for', () => {
     // The row as it was drawn before: a `height: '100%'` slot and a tile of the same, in the same list with the examples
     // under it. Built by hand, not rendered, so the check shows itself to find the fault, whatever the screen draws now.

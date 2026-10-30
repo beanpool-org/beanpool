@@ -330,7 +330,8 @@ describe('the model is the app', () => {
     it("app/_layout.tsx's guard ends by landing where memberRedirect says, and replaces to the tabs nowhere else from welcome", () => {
         const layout = read('../../app/_layout.tsx');
         const guard = layout.slice(layout.indexOf('        if (isLoading) return;\n        const root = (segments as string[])[0];'));
-        const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding]);'));
+        // Since S3 the guard also looks again when the phone's community comes or goes (`noCommunity`, a waiting phone).
+        const body = guard.slice(0, guard.indexOf('}, [identity, isLoading, segments, recognition, pendingOnboarding, noCommunity]);'));
         expect(body).toMatch(/\n\s*const landing = memberRedirect\(segments as string\[\], identity\.publicKey\);\n\s*if \(landing\) router\.replace\(landing\);\n\s*const notice = landing === DEFAULT_MEMBER_LANDING \? takeOpenAfterLanding\(identity\.publicKey, nodeUrl\) : null;\n\s*if \(notice\) router\.push\(notice\);\n\s*$/);
         expect(body).not.toMatch(/root === 'welcome'\) \{\s*router\.replace/);
     });

@@ -192,7 +192,7 @@ export function HomeButton({ text, a11y, onPress, colors, primary, busy, testID 
         <Pressable
             onPress={onPress}
             disabled={busy}
-            style={({ pressed }) => [s.button, primary && s.buttonPrimary, pressed && s.pressed]}
+            style={({ pressed }) => [s.button, primary && s.buttonPrimary, pressed && (primary ? s.buttonPrimaryPressed : s.pressed)]}
             accessibilityRole="button"
             accessibilityLabel={a11y ?? text}
             accessibilityState={busy ? { disabled: true, busy: true } : undefined}
@@ -242,6 +242,8 @@ function make(colors: AppColors) {
             borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center',
         },
         buttonPrimary: { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary },
+        // Pressed, the primary button goes a deeper green: surface.subtle under its white words was 1.15:1 in light.
+        buttonPrimaryPressed: { backgroundColor: colors.brand.fillPressed },
         buttonText: { fontSize: 14, fontWeight: '700', color: colors.text.body, textAlign: 'center' },
         buttonTextPrimary: { color: colors.text.inverse },
         thumb: { width: HOME_THUMB_DP, height: HOME_THUMB_DP, borderRadius: 10, backgroundColor: colors.surface.subtle, flexShrink: 0 },

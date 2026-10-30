@@ -29,7 +29,7 @@ export function gardenHomeLines(doc: GardenDoc, now: number): ToolLine[] {
     const n = sowNow(zone, hemi, monthOf(now)).length;
     return [
         { key: wordn('{n} crop to sow this month', '{n} crops to sow this month'), n, screen: 'main' },
-        { key: word('{zone}, {hemisphere}'), values: zoneLineValues(zone, hemi), screen: 'zone' },
+        { key: word('{zone} · {hemisphere}'), values: zoneLineValues(zone, hemi), screen: 'zone' },
     ];
 }
 
@@ -45,7 +45,7 @@ export const GARDEN: ToolManifest<GardenDoc> = {
     doc: { version: GARDEN_DOC_VERSION, empty: emptyGardenDoc, read: readGardenDoc },
     screens: ['main', 'crop', 'zone'],
     row: (doc) => (doc.settings.zone
-        ? { key: word('{zone}, {hemisphere}'), values: zoneLineValues(doc.settings.zone, doc.settings.hemisphere ?? 'north') }
+        ? { key: word('{zone} · {hemisphere}'), values: zoneLineValues(doc.settings.zone, doc.settings.hemisphere ?? 'north') }
         : null),
     examples: [word('Tomatoes'), word('Cassava'), word('Lettuce')],
     homeCard: {

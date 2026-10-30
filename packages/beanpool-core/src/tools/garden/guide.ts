@@ -128,14 +128,14 @@ export function gardenZoneFix(
     return { zone, hemisphere: chosen?.hemisphere ?? hemisphereOf(place.lat), source: place.source };
 }
 
-/** The zone line's values, in the language shown, for t('{zone}, {hemisphere}', …) (a Tools row, a Home line). */
+/** The zone line's values, in the language shown, for t('{zone} · {hemisphere}', …) (a Tools row, a Home line). */
 export function zoneLineValues(zone: GardenZoneId, hemisphere: Hemisphere): { zone: string; hemisphere: string } {
     return { zone: t(gardenZone(zone).name), hemisphere: t(HEMISPHERE_WORDS[hemisphere]) };
 }
 
-/** The zone line in plain words: "Warm temperate, southern hemisphere". */
+/** The zone line in plain words: "Warm temperate · southern hemisphere". */
 export function zoneLineText(zone: GardenZoneId, hemisphere: Hemisphere): string {
-    return t('{zone}, {hemisphere}', zoneLineValues(zone, hemisphere));
+    return t('{zone} · {hemisphere}', zoneLineValues(zone, hemisphere));
 }
 
 const ENGLISH_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

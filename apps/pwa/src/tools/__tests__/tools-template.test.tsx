@@ -270,12 +270,13 @@ describe('a tool this build does not have', () => {
         expect(await readToolRecord(OWNER, 'scaffold')).toBeNull();
     });
 
-    it("the registry as shipped: the Tool shed, core and web half, on the Tools screen's shelf; an id this build doesn't have is not in this version", async () => {
-        // The slice that adds a tool's web half changes both lines on purpose (the Tool shed's was T1.3).
-        expect(TOOLS.map((m) => m.id)).toEqual(['things']);
-        expect(Object.keys(TOOL_APPS)).toEqual(['things']);
+    it("the registry as shipped: the Tool shed and Your garden, core and web half, on the Tools screen's shelf; an id this build doesn't have is not in this version", async () => {
+        // The slice that adds a tool's web half changes both lines on purpose (the Tool shed's was T1.3, Your garden's grow-food G0).
+        expect(TOOLS.map((m) => m.id)).toEqual(['things', 'garden']);
+        expect(Object.keys(TOOL_APPS)).toEqual(['things', 'garden']);
         const list = render(<ToolsPage identity={identity} open={{ id: null, screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
         expect(within(await list.findByTestId('tools-shelf-stock')).getByTestId('tools-row-things')).toBeInTheDocument();
+        expect(within(list.getByTestId('tools-shelf-stock')).getByTestId('tools-row-garden')).toBeInTheDocument();
         expect(list.queryByTestId('tools-none')).toBeNull();
         list.unmount();
         render(<ToolsPage identity={identity} open={{ id: 'scaffold', screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);

@@ -206,7 +206,7 @@ try {
 
     for (const scheme of ['light', 'dark']) {
         await open(`screen=main&scheme=${scheme}`);
-        await page.getByText('Warm temperate, southern hemisphere').waitFor();
+        await page.getByText('Warm temperate · southern hemisphere').waitFor();
         await measure(`${scheme} · the guide, from the community's place`);
         await open(`screen=crop&key=tomato&scheme=${scheme}`);
         await page.getByText('First harvest').waitFor();

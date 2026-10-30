@@ -1548,7 +1548,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         // Nothing chosen yet: the template's two doors; the guide is behind either, never a gate.
         await click(byTestId('tool-door-starting'), "I'm starting out");
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
-        expect(byTestId('garden-zone-line')?.textContent).toContain('Warm temperate, southern hemisphere');
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Warm temperate · southern hemisphere');
         expect(byTestId('garden-zone-line')?.textContent).toContain("From your community's place.");
         expect(byTestId('garden-now')).not.toBeNull();
         expect(byTestId('garden-all')?.textContent).toContain('Tomatoes');
@@ -1582,13 +1582,13 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         keepHome({ lat: -28.55, lng: 153.5 });
         await redraw({ screen: 'zone' }, 'en');
         await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
-        expect(byTestId('garden-zone-found')?.textContent).toContain('Warm temperate, southern hemisphere');
+        expect(byTestId('garden-zone-found')?.textContent).toContain('Warm temperate · southern hemisphere');
         await click(byTestId('garden-zone-mild'), 'Mild temperate');
         await settleUntil(() => nav.backs > 0, 8000);
         expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
         await redraw({}, 'en');
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
-        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate, southern hemisphere');
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate · southern hemisphere');
         expect(byTestId('garden-zone-line')?.textContent).toContain('You chose this.');
         await redraw({ screen: 'zone' }, 'en');
         await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
@@ -1602,7 +1602,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         await redraw({}, 'en');
         await click(byTestId('tool-door-doing'), 'I already do this');
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
-        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate, northern hemisphere');
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate · northern hemisphere');
         expect(byTestId('garden-zone-line')?.textContent).toContain('From your area.');
 
         store.map.delete(homeAnswerStoreKey(ME.publicKey, URL_HERE));
@@ -1613,7 +1613,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         loc.status = 'granted';
         await redraw({}, 'en');
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
-        expect(byTestId('garden-zone-line')?.textContent).toContain('Wet tropical, northern hemisphere');
+        expect(byTestId('garden-zone-line')?.textContent).toContain('Wet tropical · northern hemisphere');
         expect(loc.asked).toBe(0);
     }, 30_000);
 

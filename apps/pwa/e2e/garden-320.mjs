@@ -2,7 +2,7 @@
  * MEASURES Your garden's web screens (grow-food slice G0: the planting guide) in a real Chromium layout at the documented
  * floor, 320 px with 1.3x text, in English and in the pseudo-locale `xx` (every sentence ~35 % longer, as the longer
  * languages are), light and dark: the guide (its zone line worked out from the community's place, Mullumbimby: warm
- * temperate, southern hemisphere), a crop's page (tomatoes) and Change (e2e/garden-harness.tsx draws each through the
+ * temperate · southern hemisphere), a crop's page (tomatoes) and Change (e2e/garden-harness.tsx draws each through the
  * real tools' covered page). For each it lists:
  *   - the page, or any box in it, scrolling sideways; any element reaching past either edge of the screen;
  *   - a button, link, field or switch under 44 px tall;

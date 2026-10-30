@@ -166,8 +166,8 @@ describe('the zone of a place', () => {
 
     it('says the zone in plain words', () => {
         setLanguage('en');
-        expect(zoneLineText('warm', 'south')).toBe('Warm temperate, southern hemisphere');
-        expect(zoneLineText('tropical-seasonal', 'north')).toBe('Tropical wet and dry, northern hemisphere');
+        expect(zoneLineText('warm', 'south')).toBe('Warm temperate · southern hemisphere');
+        expect(zoneLineText('tropical-seasonal', 'north')).toBe('Tropical wet and dry · northern hemisphere');
     });
 });
 

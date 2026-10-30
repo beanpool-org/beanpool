@@ -15,7 +15,7 @@ export type Hemisphere = 'north' | 'south';
 
 export interface GardenZone {
     id: GardenZoneId;
-    /** Its name in the zone line ("Warm temperate, southern hemisphere"). */
+    /** Its name in the zone line ("Warm temperate · southern hemisphere"). */
     name: WordKey;
     /** One line under it in Change. */
     line: WordKey;

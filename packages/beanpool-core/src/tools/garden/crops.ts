@@ -24,7 +24,7 @@ export interface Crop {
     icon: string;
     /** Days from sowing to the first harvest, fewest to most. */
     days: readonly [number, number];
-    /** When to sow, per zone, northern hemisphere (see above). */
+    /** When to sow, per zone · northern hemisphere (see above). */
     sow: Readonly<Record<GardenZoneId, string>>;
 }
 
@@ -48,11 +48,11 @@ export const CROPS: readonly Crop[] = [
     crop('bitter-gourd', word('Bitter gourd'), '🥒', [55, 70], ['1-12', '5-8', '3-6', '4-6', '', '', '']),
     crop('pumpkin', word('Pumpkins and squash'), '🎃', [90, 120], ['1-12', '5-7', '3-5', '3-6', '4-6', '5-6', '']),
     crop('zucchini', word('Zucchini'), '🥒', [45, 60], ['1-12', '5-7,10-11', '2-4,8-9', '3-7', '4-6', '5-6', '6']),
-    crop('watermelon', word('Watermelons'), '🍉', [80, 100], ['11-3', '9-12', '2-4', '3-5', '4-5', '', '']),
+    crop('watermelon', word('Water melons'), '🍉', [80, 100], ['11-3', '9-12', '2-4', '3-5', '4-5', '', '']),
     crop('melon', word('Melons'), '🍈', [80, 100], ['11-3', '9-12', '2-4', '3-5', '4-5', '', '']),
     crop('okra', word('Okra'), '🌱', [55, 70], ['1-12', '5-7', '3-6', '4-6', '', '', '']),
     crop('maize', word('Maize (corn)'), '🌽', [70, 110], ['1-12', '5-7', '3-5', '3-6', '4-6', '5-6', '']),
-    crop('sunflower', word('Sunflowers'), '🌻', [80, 100], ['1-12', '5-7,10', '3-6', '3-6', '4-6', '5-6', '']),
+    crop('sunflower', word('Sunflower'), '🌻', [80, 100], ['1-12', '5-7,10', '3-6', '3-6', '4-6', '5-6', '']),
     // Beans and peas
     crop('bush-bean', word('Bush beans'), '🌱', [50, 65], ['1-12', '5-7,9-10', '2-4,8-9', '3-8', '4-7', '5-7', '6']),
     crop('climbing-bean', word('Climbing beans'), '🌱', [60, 80], ['1-12', '5-7', '3-4,8', '3-7', '4-6', '5-6', '']),
@@ -97,7 +97,7 @@ export const CROPS: readonly Crop[] = [
     crop('basil', word('Basil'), '🌿', [50, 75], ['1-12', '5-11', '3-5,8-9', '3-6', '4-6', '5', '']),
     crop('parsley', word('Parsley'), '🌿', [70, 90], ['11-2', '10-12', '2-3,9-10', '2-4,8-10', '3-7', '4-6', '5-6']),
     crop('mint', word('Mint'), '🌿', [60, 90], ['1-12', '5-10', '2-4,9-10', '3-5,9-10', '3-6,9', '4-6', '6']),
-    crop('lemongrass', word('Lemongrass'), '🌿', [120, 180], ['1-12', '5-7', '3-5', '3-5', '', '', '']),
+    crop('lemongrass', word('Lemon grass'), '🌿', [120, 180], ['1-12', '5-7', '3-5', '3-5', '', '', '']),
 ];
 
 /** A crop by its id, or undefined for one this build doesn't have (a newer app's, or a member's own in G1). */

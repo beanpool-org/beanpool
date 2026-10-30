@@ -70,7 +70,7 @@ describe('Your garden on the web: the guide', () => {
     it("draws the zone line in plain words from the community's place, with Change, Sow now and the map's credit", async () => {
         home.answer = answer({ lat: -28.55, lng: 153.5 }); // Mullumbimby
         const line = await openGuide();
-        expect(line.textContent).toContain('Warm temperate, southern hemisphere');
+        expect(line.textContent).toContain('Warm temperate · southern hemisphere');
         expect(line.textContent).toContain("From your community's place.");
         expect(screen.getByTestId('garden-now')).toBeTruthy();
         expect(screen.getByTestId('garden-all').textContent).toContain('Tomatoes');
@@ -83,7 +83,7 @@ describe('Your garden on the web: the guide', () => {
     it("takes the member's area when the community has no place, and asks to choose when there is neither", async () => {
         home.answer = answer(null, { lat: 51.5, lng: -0.1 }); // London
         const line = await openGuide();
-        expect(line.textContent).toContain('Mild temperate, northern hemisphere');
+        expect(line.textContent).toContain('Mild temperate · northern hemisphere');
         expect(line.textContent).toContain('From your area.');
         cleanup();
         home.answer = null; // the server can't be reached
@@ -97,15 +97,15 @@ describe('Your garden on the web: the guide', () => {
         home.answer = answer({ lat: -28.55, lng: 153.5 });
         await openGuide();
         fireEvent.click(screen.getByTestId('garden-change'));
-        expect((await screen.findByTestId('garden-zone-found')).textContent).toContain('Warm temperate, southern hemisphere');
+        expect((await screen.findByTestId('garden-zone-found')).textContent).toContain('Warm temperate · southern hemisphere');
         fireEvent.click(screen.getByTestId('garden-zone-mild'));
-        await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Mild temperate, southern hemisphere'));
+        await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Mild temperate · southern hemisphere'));
         expect(screen.getByTestId('garden-zone-line').textContent).toContain('You chose this.');
         const kept = await readToolRecord(OWNER, 'garden');
         expect(JSON.parse(kept!.body)).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
         fireEvent.click(screen.getByTestId('garden-change'));
         fireEvent.click(await screen.findByTestId('garden-zone-reset'));
-        await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Warm temperate, southern hemisphere'));
+        await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Warm temperate · southern hemisphere'));
         expect(JSON.parse((await readToolRecord(OWNER, 'garden'))!.body)).toEqual({ v: 1, settings: {} });
     });
 

@@ -143,7 +143,7 @@ export function Zone({ host }: GardenScreenProps) {
                 {GARDEN_ZONES.map((z) => {
                     const on = current?.zone === z.id && current.hemisphere === hemisphere;
                     return (
-                        <ToolRow key={z.id} icon={on ? '✅' : ZONE_ICONS[z.id]} title={on ? t('{zone}, chosen', { zone: t(z.name) }) : t(z.name)} state={t(z.line)}
+                        <ToolRow key={z.id} icon={on ? '✅' : ZONE_ICONS[z.id]} title={on ? t('{zone} (chosen)', { zone: t(z.name) }) : t(z.name)} state={t(z.line)}
                             onClick={() => { void choose(z.id); }} testId={`garden-zone-${z.id}`} />
                     );
                 })}

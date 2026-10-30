@@ -2,7 +2,7 @@
 
 > A free app a community runs for itself, to trade help, goods and skills in Beans instead of money.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![Status: Beta](https://img.shields.io/badge/Status-Beta-emerald.svg)]()
 
 ---
@@ -24,7 +24,7 @@ BeanPool is part of the wider [Technomutualism](https://technomutualism.org) mov
 - One server per community, run by people that community chose.
 - A phone app and a web app for members.
 - Beans as mutual credit. A small monthly circulation fee on balances above 200 Beans goes to the community's Commons.
-- Open source (MIT), and free to run yourself with Docker.
+- Open source (AGPL-3.0), and free to run yourself with Docker.
 - Optional: a free `name.beanpool.org` address, and links between communities.
 
 ### What it isn't
@@ -179,4 +179,4 @@ cd apps/server && pnpm dev                      # the server, with hot reload
 
 ## Licence
 
-[MIT](LICENSE)
+BeanPool is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only), from version 1.2.32. You may use, change and share it; if you share a changed version, or run one that people use over a network, you must offer its source code under the same licence. Releases up to 1.2.31 were MIT and stay so for those copies. The BeanPool name and logo are not covered by the licence. See [NOTICE](NOTICE).

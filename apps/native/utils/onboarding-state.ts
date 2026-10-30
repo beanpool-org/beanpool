@@ -164,7 +164,10 @@ export async function clearPendingOnboarding(): Promise<void> {
  *
  * - At `create`, not redeemed: a restart comes back to Next with the name and invite, and Next redeems. The redeem's own
  *   write replaces the record, as before.
- * - Only for the key that Next made. The caller never passes a key the phone already had.
+ * - Only for the key that Next made, or a key a knock made on this phone whose words have never been shown (knock-key.ts
+ *   `knockKeyIsNew`): its first join. Next writes the knock's before it sets the community, so a join stopped part-way
+ *   never reads as a key that has joined (a community and no record), where the root layout takes the knock's mark off.
+ *   The caller never passes any other key the phone already had.
  * - Written over no record, or an invite join's (which then has no key behind it: Next made a key because the phone had
  *   none). A record of the global door's, and the invite join it holds in `before`, is left as it is: a retry then asks
  *   the phone's lock, never anything ungated that the record doesn't name.

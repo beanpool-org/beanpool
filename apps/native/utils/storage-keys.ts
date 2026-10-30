@@ -10,6 +10,12 @@ export const NOTIFICATION_PERMISSION_STORE_KEY = 'beanpool_notification_permissi
 export const KNOCKS_STORE_KEY = 'beanpool_knocks';
 
 /**
+ * The public key a knock made on this phone, whose 12 words have never been shown (utils/knock-key.ts `knockKeyIsNew`). Sign
+ * Out and Replace wipe it (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const KNOCK_KEY_STORE_KEY = 'beanpool_knock_key';
+
+/**
  * What the background sync last saw of the community's open requests to join, for the account on it (`{ community,
  * publicKey, count }`; utils/sync-notices.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage).
  */

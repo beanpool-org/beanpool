@@ -505,6 +505,18 @@ describe("a listing's page in the pseudo-locale: every word on it came through t
     });
 });
 
+describe('a listing an owner\'s AI assistant posted (MCP-OWNER-POSTS)', () => {
+    it('renders as any other: the same page, and nothing on it says an assistant made it', async () => {
+        // The node keeps who made it (posts.created_via) for moderators only; a copy that carried it anyway changes nothing here.
+        await open({ ...OFFER, createdVia: 'assistant:0123456789ab' }, 'en');
+        expect(host.textContent).toContain('Bike repairs at home');
+        expect(host.textContent).toContain('● OFFER · TRANSPORT · RECURRING');
+        expect(host.textContent).toContain('ASKING PRICE');
+        expect(host.querySelector('img[aria-label="Photo 2 of 2"]')).not.toBeNull();
+        expect(host.textContent ?? '').not.toMatch(/assistant/i);
+    });
+});
+
 describe('the review sheet after a deal, in the pseudo-locale', () => {
     it('its title, the question with the name in it, the stars, the note and both buttons', async () => {
         await act(async () => {

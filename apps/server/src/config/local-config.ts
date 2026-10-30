@@ -106,6 +106,11 @@ export interface LocalConfig {
     aiAssistantsAllowed?: boolean;
     /** AI assistants connected through OAuth with the phone's approval (agent/oauth.ts): this server's own, never in a backup. */
     agentOAuthGrants?: AgentOAuthGrantRecord[];
+    /**
+     * "Assistant posts a day" (agent/limits.ts agentPostsPerDay): the most posts one owner's assistant ticked "May post for me"
+     * makes in a UTC day, 1–1,000, an owners' setting. Left out: 100. This server's own, never copied to a standby.
+     */
+    agentPostsPerDay?: number;
     // Backup side: the plaintext token this backup presents to its primary.
     backupReplicationToken?: string | null;
     // --- Backup pull cadence (operator-tunable, e.g. from the fleet manager) ---
@@ -225,6 +230,8 @@ export interface AgentOAuthGrantRecord {
     refreshHash: string;
     /** SHA-256 (hex) of the last spent refresh tokens: one presented again revokes the grant. */
     spentRefresh: string[];
+    /** "May post for me", ticked on the consent page when it was approved (agent/owner-posts.ts): left out, it may not. */
+    canPost?: boolean;
 }
 
 /** One owner automation token as local-config.json keeps it (automation-tokens.ts). */
@@ -240,6 +247,8 @@ export interface AutomationTokenRecord {
     lastUsedRoute: string | null;
     /** SHA-256 (hex) of the secret. */
     hash: string;
+    /** An agent token's "May post for me", ticked when it was made (agent/owner-posts.ts): left out, it may not. */
+    canPost?: boolean;
 }
 
 /**

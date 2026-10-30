@@ -82,7 +82,9 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
 
     const since = status?.since ? new Date(status.since) : null;
     return (
-        <div className="rounded-2xl border border-nature-200 dark:border-nature-700 p-4 space-y-2" data-testid="community-admins-section">
+        // The card the Ways back section above draws in (WaysBackSection CARD): white under its words, as their 4.5:1 needs
+        // (on the page's own cream, nature-600 is 4.27:1: e2e/signin-recovery-check.mjs measured it).
+        <div className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white border border-nature-200 dark:border-nature-800 shadow-sm space-y-2 break-words" data-testid="community-admins-section">
             <div className="text-[15px] font-bold">{t(COMMUNITY_ADMINS_WEB.title)}</div>
             {/* nature-600 on white is 4.9:1 (WaysBackSection measured the pair); 500 is under 4.5:1. */}
             <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed m-0">{t(COMMUNITY_ADMINS_WEB.body)}</p>

@@ -16,7 +16,8 @@
  * inside the card, at 4.5:1 or more.
  *
  * "Where your account can be brought back from" (vault rethink VR1) on the real Settings page: opened, and with the
- * confirm of removing the server's last copy, with the words and without, light and dark (see WAYS_CASES below).
+ * confirm of removing the server's last copy, with the words and without, light and dark (see WAYS_CASES below). With the
+ * copy a community keeps for its admins (VR3), and the section that turns it on (ADMINS_CASES).
  *
  * Nothing here touches a BeanPool node: the line takes the node's answer as a prop, and any /api or /ws request is
  * aborted and counted, so a stray fetch fails the run instead of escaping.
@@ -366,6 +367,114 @@ try {
             if (wc.enrolled.length && !wc.words && !/This browser has no 12 words/.test(m.wordsFirst ?? '')) failures.push(`${shot}: without the words, the line reads ${JSON.stringify(m.wordsFirst)}`);
             if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
             console.log(`${shot}: ${m.faint.length} faint, ${m.short.length} short buttons, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
+            await context.close();
+        }
+    }
+
+    // "Your community's admins" (vault rethink VR3) at a community that keeps copies itself (`recoveryCopies: server`):
+    // the Ways back list with the copy its admins can bring the member back from (alone, then the confirm of removing it,
+    // the last copy, so the 12 words line is in it; and beside a sign-in's copy), and the section that turns it on (off,
+    // and on since a date). Both boxes: every text at 4.5:1 on what it is drawn on, every button 44px, nothing past the
+    // viewport; the list never says "Keeps no copy" while the copy is kept.
+    const SINCE = '2026-10-29T04:05:06.000Z';
+    const ADMINS_CASES = [
+        { name: 'admins-only-confirm', enrolled: [], kept: true, confirm: true },
+        { name: 'admins-and-google', enrolled: ['google'], kept: true, confirm: false },
+        { name: 'admins-off', enrolled: [], kept: false, confirm: false },
+    ];
+    for (const theme of ['light', 'dark']) {
+        for (const ac of ADMINS_CASES) {
+            const context = await browser.newContext({ viewport: { width: 320, height: 900 }, colorScheme: theme });
+            await context.route('**/*', (route) => {
+                const url = route.request().url();
+                const json = (body) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+                if (url.includes('/api/recovery/shares/status')) return json({ enrolledSso: ac.enrolled, communityCopy: ac.kept ? { since: SINCE } : null });
+                if (url.includes('/api/recovery/community-copy/status')) return json({ kept: ac.kept, since: ac.kept ? SINCE : null, offered: true });
+                if (url.includes('/api/community/info')) return json({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', recoveryCopies: 'server' });
+                if (url.includes('/api/') || url.startsWith('ws')) { blocked++; return route.abort(); }
+                return route.continue();
+            });
+            const page = await context.newPage();
+            const pageErrors = [];
+            page.on('pageerror', (e) => pageErrors.push(e.message));
+            await page.goto(`${base}/e2e/settings-recovery-harness.html?words=1`, { waitUntil: 'networkidle' });
+            await page.evaluate((t) => {
+                document.documentElement.classList.toggle('dark', t === 'dark');
+                document.documentElement.classList.toggle('dark-theme', t === 'dark');
+                document.documentElement.style.fontSize = '130%';
+            }, theme);
+            await page.waitForSelector('[data-testid="community-admins-section"]');
+            if (ac.kept) await page.waitForSelector('[data-testid="community-admins-on"]');
+            await page.getByRole('button', { name: /Where your account can be brought back from/ }).click();
+            await page.waitForSelector('[data-testid="ways-back"]');
+            if (ac.confirm) {
+                await page.getByRole('button', { name: "Remove the copy at this community's server that its admins can bring you back from" }).click();
+                await page.waitForSelector('[data-testid="ways-back-confirm"]');
+            }
+            await page.evaluate(() => document.fonts.ready);
+            const shot = `community-admins-${ac.name}-${theme}.png`;
+            await page.locator('[data-testid="ways-back"]').locator('xpath=..').screenshot({ path: path.join(OUT_DIR, shot) });
+            await page.locator('[data-testid="community-admins-section"]').screenshot({ path: path.join(OUT_DIR, shot.replace('community-admins-', 'community-admins-section-')) });
+            const m = await page.evaluate(() => {
+                const vw = document.documentElement.clientWidth;
+                const out = [];
+                const rgba = (s) => { const p = (s.match(/[\d.]+/g) || []).map(Number); return p.length >= 3 ? { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 } : null; };
+                const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+                const over = (top, under) => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a), b: top.b * top.a + under.b * (1 - top.a), a: 1 });
+                const backdrop = (el) => {
+                    const layers = [];
+                    for (let e = el; e; e = e.parentElement) {
+                        const c = rgba(getComputedStyle(e).backgroundColor);
+                        if (c && c.a > 0) { layers.push(c); if (c.a >= 0.999) break; }
+                    }
+                    let base = { r: 255, g: 255, b: 255, a: 1 };
+                    for (const l of layers.reverse()) base = over(l, base);
+                    return base;
+                };
+                for (const el of document.querySelectorAll('#root *')) {
+                    const r = el.getBoundingClientRect();
+                    if (r.width === 0 && r.height === 0) continue;
+                    if (r.right > vw + 0.5 || r.left < -0.5) out.push(`${el.tagName.toLowerCase()} "${(el.textContent || '').slice(0, 40)}" spans ${Math.round(r.left)}..${Math.round(r.right)} of ${vw}`);
+                }
+                const boxes = [document.querySelector('[data-testid="ways-back"]'), document.querySelector('[data-testid="community-admins-section"]')];
+                const faint = [];
+                const short = [];
+                for (const box of boxes) {
+                    for (const el of box.querySelectorAll('*')) {
+                        if (![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())) continue;
+                        if (/^[\p{Extended_Pictographic}\uFE0F\s]+$/u.test(el.textContent)) continue;
+                        const cs = getComputedStyle(el);
+                        const fg = rgba(cs.color);
+                        if (!fg) continue;
+                        const bg = backdrop(el);
+                        const [a, b] = [lum(over(fg, bg)), lum(bg)].sort((x, y) => y - x);
+                        const ratio = (a + 0.05) / (b + 0.05);
+                        const size = parseFloat(cs.fontSize);
+                        const large = size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700);
+                        if (ratio < (large ? 3 : 4.5)) faint.push(`"${el.textContent.trim().slice(0, 40)}" ${ratio.toFixed(2)}:1`);
+                    }
+                    for (const b of box.querySelectorAll('button')) if (b.getBoundingClientRect().height < 43.5) short.push(b.textContent.trim());
+                }
+                const list = boxes[0];
+                return {
+                    overflow: out,
+                    pageScrollsSideways: document.documentElement.scrollWidth > vw,
+                    faint,
+                    short,
+                    listed: !!list.querySelector('[data-testid="ways-back-admins-copy"]'),
+                    keepsNone: /Keeps no copy of your account/.test(list.textContent),
+                    wordsFirst: list.querySelector('[data-testid="ways-back-words-first"]')?.textContent ?? null,
+                };
+            });
+            if (m.pageScrollsSideways) failures.push(`${shot}: the page scrolls sideways`);
+            for (const o of m.overflow) failures.push(`${shot}: ${o}`);
+            for (const f of m.faint) failures.push(`${shot}: too faint to read: ${f}`);
+            for (const sh of m.short) failures.push(`${shot}: the button "${sh}" is under 44px tall`);
+            if (m.listed !== ac.kept) failures.push(`${shot}: the copy for the admins is ${m.listed ? '' : 'not '}listed`);
+            if (ac.kept && m.keepsNone) failures.push(`${shot}: "Keeps no copy" while the server keeps one`);
+            if (ac.confirm && !m.wordsFirst) failures.push(`${shot}: removing the last copy doesn't ask about the 12 words first`);
+            if (pageErrors.length) failures.push(`${shot}: page errors ${JSON.stringify(pageErrors)}`);
+            console.log(`${shot}: listed ${m.listed}, ${m.faint.length} faint, ${m.short.length} short buttons, ${m.overflow.length} overflowing, sideways ${m.pageScrollsSideways}`);
             await context.close();
         }
     }

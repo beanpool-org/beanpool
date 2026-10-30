@@ -91,7 +91,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
                 transactions={mockTransactions}
             />
         );
-        expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Your deals' })).toBeInTheDocument();
     });
 
     it('renders with role="dialog", aria-modal="true", and accessible title', () => {
@@ -104,7 +104,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
                 transactions={mockTransactions}
             />
         );
-        const dialog = screen.getByRole('dialog', { name: 'My Deals' });
+        const dialog = screen.getByRole('dialog', { name: 'Your deals' });
         expect(dialog).toBeInTheDocument();
         expect(dialog).toHaveAttribute('aria-modal', 'true');
     });
@@ -196,7 +196,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
         expect(screen.queryByRole('dialog', { name: 'Photo viewer: Organic Sourdough Bread' })).not.toBeInTheDocument();
 
         // But MyDealsModal must STILL be open! onClose was NOT called yet!
-        expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+        expect(screen.getByRole('dialog', { name: 'Your deals' })).toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
 
         // Second Escape: closes MyDealsModal
@@ -230,8 +230,8 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
         // Lightbox closes
         expect(screen.queryByRole('dialog', { name: 'Photo viewer: Organic Sourdough Bread' })).not.toBeInTheDocument();
 
-        // My Deals modal is still open, onClose not called
-        expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+        // Your deals modal is still open, onClose not called
+        expect(screen.getByRole('dialog', { name: 'Your deals' })).toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
     });
 
@@ -252,7 +252,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             />
         );
 
-        const closeBtn = screen.getByRole('button', { name: 'Close My Deals' });
+        const closeBtn = screen.getByRole('button', { name: 'Close Your deals' });
         const allButtons = screen.getAllByRole('button');
         const lastBtn = allButtons[allButtons.length - 1];
 
@@ -283,7 +283,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
                 />
             );
 
-            expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+            expect(screen.getByRole('dialog', { name: 'Your deals' })).toBeInTheDocument();
             expect(screen.getByTestId('deals-preview-head')).toBeInTheDocument();
             expect(screen.getByTestId('sample-deal-sample-deal-shelves')).toBeInTheDocument();
             expect(screen.getByTestId('sample-deal-sample-deal-bike')).toBeInTheDocument();
@@ -319,7 +319,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
                 />
             );
 
-            expect(screen.getByRole('dialog', { name: 'My Deals' })).toBeInTheDocument();
+            expect(screen.getByRole('dialog', { name: 'Your deals' })).toBeInTheDocument();
             expect(screen.queryByTestId('deals-preview-head')).not.toBeInTheDocument();
             expect(screen.getByTestId('deal-card-tx-1')).toBeInTheDocument();
         });
@@ -555,7 +555,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             expect(document.activeElement).toBe(card);
         });
 
-        it('preview: Escape on a marker\'s own sheet or Start screen closes only that; My Deals stays open', async () => {
+        it('preview: Escape on a marker\'s own sheet or Start screen closes only that; Your deals stays open', async () => {
             const onClose = vi.fn();
             render(<MyDealsModal visible identity={mockIdentity} preview onClose={onClose} />);
             const bike = screen.getByTestId('sample-deal-sample-deal-bike');
@@ -572,7 +572,7 @@ describe('MyDealsModal Component & Keyboard Accessibility', () => {
             expect(screen.queryByTestId('start-community-screen')).toBeNull();
             expect(onClose).not.toHaveBeenCalled();
 
-            // With no sheet open, Escape closes My Deals as before
+            // With no sheet open, Escape closes Your deals as before
             fireEvent.keyDown(window, { key: 'Escape' });
             expect(onClose).toHaveBeenCalledTimes(1);
         });

@@ -29,7 +29,7 @@ import { boundSignatureValid } from './server-signature-check';
 import {
     sendKnock, readKnockStatus, readStatus, knockCardState, knockFormProblem, knockBody, knockAvatar,
     rememberKnock, rememberedKnocks, forgetKnock, cardKnockLines, cancelKnock, cancelledKnocks, KNOCK_MESSAGES, KNOCK_FROM_NODE, KNOCK_CANCEL_BLOCK_HOURS,
-    KNOCK_ANSWERABLE_DAYS, knockStillAnswerable,
+    KNOCK_ANSWERABLE_DAYS, knockStillAnswerable, withVisitCancelled,
     type KnockStatusResult,
 } from '../knock';
 import { GLOBAL_NODE_URL } from '../node-profile';
@@ -374,6 +374,26 @@ describe('"Cancel my request" (front doors S1)', () => {
         await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' }, new Date(AT.getTime() + 2 * HOUR));
         expect((await rememberedKnocks(me.publicKey)).map(k => k.url)).toEqual([COMMUNITY]);
         expect(await cancelledKnocks(me.publicKey, AT.getTime() + 3 * HOUR)).toEqual({});
+    });
+
+    it('Home draws the request again for the visit it was cancelled in (LG-L1-W), unless a newer one to that community has replaced it', async () => {
+        const me = await member();
+        const byron = 'https://byron.example.org';
+        await rememberKnock(me.publicKey, { url: COMMUNITY, name: 'Mullumbimby' }, new Date('2026-10-26T00:00:00Z'));
+        await rememberKnock(me.publicKey, { url: byron, name: 'Byron' }, new Date('2026-10-27T00:00:00Z'));
+        const [byronKnock, mullumKnock] = await rememberedKnocks(me.publicKey);
+        answer = () => ({ status: 200, body: { knock: { status: 'cancelled' } } });
+        await cancelKnock(byron, me, AT);
+        // The phone's memory no longer lists it; the visit's own list does, in its place (newest first).
+        const remembered = await rememberedKnocks(me.publicKey);
+        expect(remembered).toEqual([mullumKnock]);
+        expect(withVisitCancelled(remembered, [byronKnock])).toEqual([byronKnock, mullumKnock]);
+        expect(withVisitCancelled(remembered, [])).toEqual(remembered);
+        // The same request still listed (a read from before the cancel landed): once, not twice.
+        expect(withVisitCancelled([byronKnock, mullumKnock], [byronKnock])).toEqual([byronKnock, mullumKnock]);
+        // A newer request to that community stands in for it.
+        const again = { ...byronKnock, sentAt: '2026-10-29T00:00:00.000Z' };
+        expect(withVisitCancelled([again, mullumKnock], [byronKnock])).toEqual([again, mullumKnock]);
     });
 
     it('refused (nothing open: it lapsed, or a member said yes meanwhile): the community’s words, and the request is kept', async () => {

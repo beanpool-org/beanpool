@@ -29,12 +29,13 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
+    HOME_DECIDE_ROWS_MAX, TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
-    homeCardType, listPhotoUrl, readSearchSettings,
+    homeCardType, listPhotoUrl, readDecideSettings, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
     communityAnswersLine, currentLanguage, FIND_COMMUNITY_WORDS, formatCount, formatDate, knockStillAnswerable, t, tn, word,
+    communityShapeSummary, type CommunityShapeFeatures,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, communityOrigin, forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../lib/knock';
@@ -83,6 +84,7 @@ import { VISITOR_WORDS } from '../lib/visitor-lobby';
 import { CardMenu, HomeCard, HomeLine, HomeMore, useCardContainer } from '../components/HomeCard';
 import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
+import { CommunityShapeModal } from '../components/CommunityShapeModal';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { UsePhoneAppCard, isUsePhoneAppDismissed } from '../components/UsePhoneAppCard';
 import { ToolHomeCard } from '../tools/home-card';
@@ -735,7 +737,8 @@ function DecideBody({
 
     return (
         <div>
-            {items.slice(0, 3).map(item => {
+            {/* As many rows as the node sent for the card's setting (core HOME_DECIDE_ROWS): three, or five for "All open" and "My votes". */}
+            {items.slice(0, HOME_DECIDE_ROWS_MAX).map(item => {
                 const when = closesIn(item.closesAt, now);
                 const votedStatus = item.voted ? t('You voted') : t('Not yet');
                 const sub = [when, votedStatus].filter(Boolean).join(' · ');
@@ -846,16 +849,22 @@ function CommunityBody({
     cm,
     profile,
     isVisitor,
+    features,
+    onOpenShape,
     onAddCard,
     onEditHome,
 }: {
     cm: NonNullable<HomeCards['community']>;
     profile: string;
     isVisitor: boolean;
+    features?: CommunityShapeFeatures | null;
+    onOpenShape?: () => void;
     onAddCard: () => void;
     onEditHome: () => void;
 }) {
     const { wide } = useCardContainer();
+    // The members' card (design §4.1): a visitor, who reads the lobby's Home, is told none of it.
+    const shapeSummary = isVisitor ? null : communityShapeSummary(features);
     const isGlobal = profile === 'global';
     const hasDetailedStats = !isGlobal
         ? (typeof cm.joined7d === 'number' || typeof cm.commonsPot === 'number' || typeof cm.listings === 'number' || typeof cm.eventsSoon === 'number')
@@ -935,6 +944,17 @@ function CommunityBody({
                     </p>
                 </div>
             )}
+            {shapeSummary && (
+                <button
+                    type="button"
+                    onClick={onOpenShape}
+                    className="w-full min-h-[44px] text-left p-0 mb-3 bg-transparent border-none cursor-pointer flex items-center justify-between gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+                    data-testid="home-community-shape-summary"
+                >
+                    <span className="break-words">{shapeSummary}</span>
+                    <span className="text-text-muted text-base shrink-0 select-none">›</span>
+                </button>
+            )}
             {!isVisitor && (
                 <div className="flex flex-wrap justify-end gap-x-4">
                     <HomeMore onClick={onAddCard} testId="home-add-open" label={t('Add a card to Home')}>{t('Add a card ›')}</HomeMore>
@@ -970,6 +990,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     });
     const [editOpen, setEditOpen] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [shapeModalOpen, setShapeModalOpen] = useState(false);
     // A card's Settings… (from its "…" or Edit home).
     const [settingsFor, setSettingsFor] = useState<HomeCardInstance | null>(null);
     // The node refused the version-2 layout (a node from before the frame): Edit home says the cards stay here (§2.3).
@@ -2382,12 +2403,14 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             case 'decide': {
                 const d = c.decide;
                 if (!d) return null;
-                const hasItems = (d.items && d.items.length > 0) || !!d.poll;
+                // "My votes" sends `open` as the number of the member's own Decisions, not of all that are open: the counts would read
+                // as the community's, so the aside is left off there (the phone draws none either). Its rows say when each closes.
+                const showAside = ((d.items && d.items.length > 0) || !!d.poll) && readDecideSettings(card.settings).show !== 'mine';
                 return (
                     <HomeCard
                         key={id}
                         {...common}
-                        titleAside={hasItems ? (
+                        titleAside={showAside ? (
                             <span className="text-xs font-normal text-text-secondary min-w-0 break-words text-right">
                                 {decideLine(d, now)}
                             </span>
@@ -2466,6 +2489,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             cm={cm}
                             profile={profile}
                             isVisitor={isVisitor}
+                            features={a?.features}
+                            onOpenShape={() => setShapeModalOpen(true)}
                             onAddCard={() => setPickerOpen(true)}
                             onEditHome={() => setEditOpen(true)}
                         />
@@ -2673,6 +2698,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         }}
                     />
                 )}
+                <CommunityShapeModal
+                    isOpen={shapeModalOpen}
+                    onClose={() => setShapeModalOpen(false)}
+                    features={answer?.features}
+                    onOpenGuide={() => onNavigate('guide', 'how-your-community-works')}
+                />
             </div>
         </div>
     );

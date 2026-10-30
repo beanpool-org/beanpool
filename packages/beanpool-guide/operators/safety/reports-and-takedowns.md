@@ -35,6 +35,8 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 - **Freeze Accounts**: freezes the person's credit line and their voting. It does not mark the report handled.
 - **Remove from the Pulse** (for Pulse items): hides the item from the Pulse and marks the report handled. The person is not suspended.
 - To stop a person using the community, **Suspend** them from their page (see Members and invites). Members then vote on removing them.
+- **A false accusation**: the member a vote on removing them is about can report its case as false from the vote. The report is about whoever brought the case (the admin who suspended them), and its reason says which vote. If the case is shown to be false, **Hide case** on the vote (see Decisions and emergencies). If they already had a report waiting about that person, the case is added to it.
+- **A reply that harms someone**: the member a vote on removing them is about can reply to its case, and every member reads it. If it gives someone's address or phone number, or threatens them, **Take down reply** on the vote deletes it (see Decisions and emergencies).
 
 ## If you are a moderator
 
@@ -75,9 +77,17 @@ In **Triage & Moderation**, find the post in the posts list and delete it.
 
 **Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: "The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report." The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed.
 
-## On the global community: posts hidden by reports
+## Automated safety and reports
 
-On the global community, reports can hide a post before anyone looks at it. On a local community they never do: every report waits for you.
+On the global community, automated safety rules are on by default. On a local community, an owner can choose to turn them on under **How this community works** (under Safety):
+
+- **Limits on new accounts (probation)**: New accounts have small daily posting and messaging limits during their first days, protecting the community from rapid spam.
+- **Reported posts hidden automatically (auto-hide reports)**: Posts reported by members in 3 independent circles are hidden automatically until a moderator reviews them. Off by default on local communities (where reports wait for a moderator to review).
+- **Repeat offenders muted automatically (auto-mute)**: A member whose posts moderators have removed 3 times in 30 days is automatically muted from posting and messaging until a moderator lifts it.
+
+### How posts are hidden by reports
+
+When automatic hiding is on (by default on the global community, or switched on for a local community under How this community works), reports can hide a post before anyone looks at it. Off, every report waits for a moderator to review.
 
 A post is hidden when reporters from **three independent circles** count towards it. A reporter counts when all of these hold:
 
@@ -95,7 +105,7 @@ A post by someone who joined with **12 words** and is still on the new-account l
 
 A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above.
 
-On the global community, a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet.
+When **Repeat offenders muted automatically** is on (by default on the global community, or switched on for a local community under How this community works), a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet.
 
 ## On the global community: accounts that joined together
 

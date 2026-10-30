@@ -493,7 +493,7 @@ export async function verifiedNotice(n: IncomingNotice, ctx: NoticeContext): Pro
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
 export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | '/(tabs)/people?view=invites' | '/find-community'
-    | '/(tabs)/chats?filter=requests'
+    | '/(tabs)/chats?filter=requests' | '/(tabs)/projects?section=decide'
     | `/post/${string}` | `/chat/${string}`
     | `/treasury-manage?publicKey=${string}` | `/group/${string}?invited=1`;
 
@@ -531,6 +531,9 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     // An invitation to a group: its invite landing, opened as an invitation (utils/your-groups.ts inviteLandingHref), with
     // Join; never the group's chat, which they are not in yet.
     if (d.screen === 'invite' && typeof d.groupId === 'string' && NODE_ID.test(d.groupId)) return `/group/${d.groupId}?invited=1`;
+    // The community's vote on removing a member, to its voters and to the member it is about (removal by vote, Amendment A):
+    // Commons, Decide, where the case, who brought it and the member's reply sit side by side.
+    if (d.screen === 'decide') return '/(tabs)/projects?section=decide';
     if (d.screen === 'settings') return '/(tabs)/settings';
     const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
     return TAB_ROUTES[tab] ?? TAB_ROUTES.home;

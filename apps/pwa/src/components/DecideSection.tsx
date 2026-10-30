@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { formatDate, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
 import {
     castDecisionVote,
+    replyToRemovalCase,
+    reportRemovalCase,
     type DecisionWithTally,
     type MyPoolVoting,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import {
-    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody, pauseVoteHeadline,
-    poolVoteBlocker, turnoutLine, voiceCreditsLine,
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
+    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, turnoutLine, voiceCreditsLine,
 } from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
@@ -78,6 +80,13 @@ export function DecideSection({
     const [selectedVoteCount, setSelectedVoteCount] = useState<Record<string, number>>({});
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
     const [voteError, setVoteError] = useState<string | null>(null);
+    // The member's own reply to the case for removing them (removal by vote, Amendment A point 2): a draft per vote, and
+    // whether they are changing one they sent.
+    const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+    const [replyEditing, setReplyEditing] = useState<Record<string, boolean>>({});
+    const [replySendingId, setReplySendingId] = useState<string | null>(null);
+    // Votes whose case the member has reported as false (Amendment A point 4).
+    const [reportedCases, setReportedCases] = useState<Record<string, boolean>>({});
 
     const openDecisions = decisions.filter(d => d.status === 'open');
     const pastDecisions = decisions.filter(d => d.status !== 'open');
@@ -139,6 +148,128 @@ export function DecideSection({
         } finally {
             setVotingId(null);
         }
+    };
+
+    const handleReply = async (decision: DecisionWithTally) => {
+        const text = (replyDrafts[decision.id] ?? '').trim();
+        if (!text) return;
+        setReplySendingId(decision.id);
+        setVoteError(null);
+        try {
+            await replyToRemovalCase(decision.id, text);
+            setReplyEditing(prev => ({ ...prev, [decision.id]: false }));
+            await onRefresh();
+        } catch (err: any) {
+            setVoteError(err?.message || t('Your reply could not be sent.'));
+        } finally {
+            setReplySendingId(null);
+        }
+    };
+
+    const handleReportCase = async (decision: DecisionWithTally) => {
+        if (!window.confirm(t('Report this case as a false accusation? The admins and owners see your report, and who brought the case.'))) return;
+        setVoteError(null);
+        try {
+            await reportRemovalCase(decision.id);
+            setReportedCases(prev => ({ ...prev, [decision.id]: true }));
+        } catch (err: any) {
+            setVoteError(err?.message || t('Your report could not be sent.'));
+        }
+    };
+
+    /**
+     * A vote on removing a member, beside its case (removal by vote, Amendment A): who proposed it (a member's own, from
+     * before; a pause's names its admin in its box), the member's reply or, once an admin took it down, their reason in its
+     * place, and to the member themself the way to reply while it is open (not after a takedown) and to report the case as
+     * false. Nothing for any other Decision.
+     */
+    const removalCaseParts = (item: DecisionWithTally, open: boolean) => {
+        if (item.effect !== 'remove_member') return null;
+        const mine = !preview && isOwnRemoval(item, identity?.publicKey);
+        const proposedBy = proposedByLine(item);
+        const takenDown = !!item.replyHiddenAt;
+        const editing = mine && open && !takenDown && (!item.subjectReply || !!replyEditing[item.id]);
+        const draft = replyDrafts[item.id] ?? '';
+        const name = item.subject?.slice(0, 8) || t('a member');
+        return (
+            <>
+                {proposedBy && <p className="text-xs text-nature-400" data-testid="removal-proposed-by">{proposedBy}</p>}
+                {takenDown && (
+                    <p className="text-sm text-amber-200 leading-relaxed break-words" data-testid="removal-reply-taken-down">
+                        {replyTakenDownLine(item.params, name, mine, item.replyHiddenReason)}
+                    </p>
+                )}
+                {item.subjectReply && !editing && (
+                    <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3 space-y-1" data-testid="removal-reply">
+                        <div className="text-xs font-bold text-sky-200">{replyHeading(item.params, name, mine)}</div>
+                        <p className="text-sm text-nature-200 whitespace-pre-wrap break-words">{item.subjectReply}</p>
+                        {mine && open && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setReplyDrafts(prev => ({ ...prev, [item.id]: item.subjectReply ?? '' }));
+                                    setReplyEditing(prev => ({ ...prev, [item.id]: true }));
+                                }}
+                                className="text-xs font-bold text-sky-300 underline min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 rounded"
+                            >
+                                {t('Change your reply')}
+                            </button>
+                        )}
+                    </div>
+                )}
+                {editing && (
+                    <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3 space-y-2" data-testid="removal-reply-form">
+                        <label htmlFor={`removal-reply-${item.id}`} className="block text-xs font-bold text-sky-200">
+                            {item.subjectReply ? t('Change your reply') : t('Reply to this case')}
+                        </label>
+                        <p className="text-xs text-nature-300">{t('Everyone who reads this vote sees your reply beside the case.')}</p>
+                        <textarea
+                            id={`removal-reply-${item.id}`}
+                            value={draft}
+                            maxLength={1000}
+                            rows={4}
+                            onChange={(e) => setReplyDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => handleReply(item)}
+                                disabled={!draft.trim() || replySendingId === item.id}
+                                className="py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                            >
+                                {replySendingId === item.id ? t('Sending...') : t('Send reply')}
+                            </button>
+                            {item.subjectReply && (
+                                <button
+                                    type="button"
+                                    onClick={() => setReplyEditing(prev => ({ ...prev, [item.id]: false }))}
+                                    className="py-2.5 px-4 rounded-xl bg-nature-800 text-nature-200 font-semibold text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                >
+                                    {t('Cancel')}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+                {mine && item.proposer?.kind !== 'password' && (
+                    reportedCases[item.id] ? (
+                        <p className="text-xs font-semibold text-emerald-300" data-testid="removal-case-reported">
+                            {t('Reported. The admins and owners will look at it.')}
+                        </p>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => handleReportCase(item)}
+                            className="text-xs font-semibold text-red-300 underline min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded"
+                            data-testid="removal-case-report"
+                        >
+                            {t('Report this case as false')}
+                        </button>
+                    )
+                )}
+            </>
+        );
     };
 
     return (
@@ -311,14 +442,20 @@ export function DecideSection({
                                             </div>
                                         </div>
 
-                                        {/* Title & Description */}
+                                        {/* Title & Description; a case an admin hid as false, in its place (Amendment A point 4) */}
                                         <div>
                                             <h4 className="text-white font-extrabold text-lg tracking-tight">
                                                 {item.title}
                                             </h4>
-                                            <p className="text-nature-300 text-sm mt-1 leading-relaxed">
-                                                {item.description}
-                                            </p>
+                                            {item.caseHiddenAt ? (
+                                                <p className="text-amber-200 text-sm mt-1 leading-relaxed" data-testid="removal-case-hidden">
+                                                    {caseHiddenLine(item.caseHiddenReason)}
+                                                </p>
+                                            ) : (
+                                                <p className="text-nature-300 text-sm mt-1 leading-relaxed">
+                                                    {item.description}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Emergency suspension: the node opened this vote when an admin suspended someone (answer L) */}
@@ -337,13 +474,15 @@ export function DecideSection({
                                         {isPauseVote(item) && (
                                             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 my-2 space-y-1" data-testid="pause-vote-box">
                                                 <div className="text-sm font-bold text-amber-200">
-                                                    {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'))}
+                                                    {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'), item.proposer)}
                                                 </div>
                                                 <div className="text-xs text-nature-300">
                                                     {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                                 </div>
                                             </div>
                                         )}
+
+                                        {removalCaseParts(item, true)}
 
                                         {/* §3.8 Removal Ballot Debt Write-Off Warning Box */}
                                         {item.effect === 'remove_member' && (
@@ -585,10 +724,18 @@ export function DecideSection({
                                             <h4 className="text-white font-extrabold text-base">
                                                 {item.title}
                                             </h4>
-                                            <p className="text-nature-300 text-xs sm:text-sm mt-0.5 leading-relaxed">
-                                                {item.description}
-                                            </p>
+                                            {item.caseHiddenAt ? (
+                                                <p className="text-amber-200 text-xs sm:text-sm mt-0.5 leading-relaxed" data-testid="removal-case-hidden">
+                                                    {caseHiddenLine(item.caseHiddenReason)}
+                                                </p>
+                                            ) : (
+                                                <p className="text-nature-300 text-xs sm:text-sm mt-0.5 leading-relaxed">
+                                                    {item.description}
+                                                </p>
+                                            )}
                                         </div>
+
+                                        {removalCaseParts(item, false)}
 
                                         {/* Final Tally */}
                                         <div className="bg-nature-800/40 border border-nature-700/50 rounded-xl p-3 text-xs text-nature-300 flex justify-between items-center">

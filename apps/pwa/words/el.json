@@ -2,7 +2,7 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -461,8 +461,6 @@
   "Your account opens here only after the right digits. Three wrong tries and nothing is sent.": "Ο λογαριασμός σας ανοίγει εδώ μόνο μετά τα σωστά ψηφία. Τρεις λάθος προσπάθειες και δεν αποστέλλεται τίποτα.",
   "Nothing has come from your phone yet. This code is from {host}. If your phone says it is from a server it doesn't use, open BeanPool at your own community's address, or join {host} on your phone first, then scan again. If your phone shows no digits, update the BeanPool app on it, then scan again.": "Δεν έχει έρθει τίποτα ακόμη από το τηλέφωνό σας. Αυτός ο κωδικός προέρχεται από τον {host}. Αν το τηλέφωνό σας λέει ότι είναι από διακομιστή που δεν χρησιμοποιεί, ανοίξτε το BeanPool στη διεύθυνση της δικής σας κοινότητας ή εγγραφείτε πρώτα στον {host} από το τηλέφωνό σας και μετά σαρώστε ξανά. Αν το τηλέφωνό σας δεν δείχνει ψηφία, ενημερώστε την εφαρμογή BeanPool σε αυτό και μετά σαρώστε ξανά.",
   "A keyboard's clipboard history or a clipboard shared with your other devices may keep a copy BeanPool can't clear.": "Το ιστορικό προχείρου ενός πληκτρολογίου ή ένα πρόχειρο κοινό με τις άλλες συσκευές σου μπορεί να κρατήσει ένα αντίγραφο που το BeanPool δεν μπορεί να σβήσει.",
-  "My Deals": "Οι συμφωνίες μου",
-  "Close My Deals": "Κλείσιμο Συμφωνιών μου",
   "In Progress": "Σε εξέλιξη",
   "My Posts": "Οι αναρτήσεις μου",
   "History": "Ιστορικό",
@@ -1232,7 +1230,6 @@
   "Failed to save": "Αποτυχία αποθήκευσης",
   "Failed to delete post as convenor": "Αποτυχία διαγραφής δημοσίευσης ως συντονιστής",
   "Loading Location Services...": "Φόρτωση υπηρεσιών τοποθεσίας...",
-  "🤝 My Deals": "🤝 Οι συναλλαγές μου",
   "Switch to List View": "Προβολή λίστας",
   "Switch to Compact View": "Συμπαγής προβολή",
   "Switch to Card View": "Προβολή καρτών",
@@ -3619,5 +3616,6 @@
   "Got an idea that needs Beans? Start a project.": "Έχεις μια ιδέα που χρειάζεται φασόλια; Ξεκίνα ένα έργο.",
   "Something that keeps going and trades? Start an enterprise.": "Κάτι που διαρκεί και κάνει συναλλαγές; Ξεκίνα ένα εγχείρημα.",
   "Start one with +: a chat group, a project or an enterprise.": "Ξεκίνα μία με το +: μια ομάδα συνομιλίας, ένα έργο ή ένα εγχείρημα.",
-  "No projects to back yet": "Δεν υπάρχουν έργα προς υποστήριξη ακόμα"
+  "No projects to back yet": "Δεν υπάρχουν έργα προς υποστήριξη ακόμα",
+  "🤝 Your deals": "🤝 Οι συμφωνίες σας"
 }

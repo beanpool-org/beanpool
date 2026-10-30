@@ -3,14 +3,14 @@
  * The Market tab on the worldwide community, the whole screen rendered for real (scratch/global-node/
  * DESIGN-global-showcase-fable.md §1 rows 2 and 5, §4): listings are real, and Beans and deals are Example Valley's
  * preview, so the screen reads the feed and nothing of the reader's own balance (getBalance also asks the node) or
- * deals, and My Deals opens on Example Valley's. The first-draw recipe of showcase-ledger-render.test.ts: the mode is
+ * deals, and Your deals opens on Example Valley's. The first-draw recipe of showcase-ledger-render.test.ts: the mode is
  * decided as on a phone (the phone's own copy of the node's profile, through useNodeProfile → useReaderFeatures, nothing
  * mocked between); nothing of a previewed feature is asked until it is known, and an answer begun under another mode
  * never draws over the preview.
  *
  * The net spy: fetch, XMLHttpRequest, WebSocket and every export of utils/db (net-spy-db.ts). A local community's
  * Market, the same screen, is drawn first as the control: its calls are seen. Children that only draw what they are
- * given (the composer, pickers, cards) are stand-ins; the screen, its hooks and My Deals are real.
+ * given (the composer, pickers, cards) are stand-ins; the screen, its hooks and Your deals are real.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
@@ -172,7 +172,7 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => {}); };
 const render = async (node: unknown) => { await act(async () => { root.render(node as any); }); await settle(); };
 const text = () => host.textContent ?? '';
-const dealsPill = () => host.querySelector('[aria-label^="My Deals"]');
+const dealsPill = () => host.querySelector('[aria-label^="Your deals"]');
 
 describe("the control: a local community's Market, the same screen", () => {
     it("reads the member's own balance and deals, so the spy sees this screen's calls", async () => {
@@ -189,10 +189,10 @@ describe('the Market on the worldwide community, its profile on the phone', () =
         await render(createElement(MarketScreen));
         expect(net.calls).toContain('db.getPosts');
         for (const call of PREVIEWED) expect(net.calls, call).not.toContain(call);
-        expect(dealsPill()?.getAttribute('aria-label')).toBe('My Deals');
+        expect(dealsPill()?.getAttribute('aria-label')).toBe('Your deals');
     });
 
-    it("a link that opens My Deals at once opens Example Valley's deals, and asks nothing for the member's own", async () => {
+    it("a link that opens Your deals at once opens Example Valley's deals, and asks nothing for the member's own", async () => {
         rememberProfile('global', WORLDWIDE);
         params.now = { tab: 'deals' };
         await render(createElement(MarketScreen));
@@ -250,16 +250,16 @@ describe("a phone that has never heard the worldwide community's profile", () =>
     });
     const landAll = async () => { for (let i = 0; i < 8 && held.length; i++) { await act(async () => { held.shift()!(); }); await settle(); } };
 
-    it("starts as a local community; the member's own deals that land after the switch never count on the My Deals pill", async () => {
+    it("starts as a local community; the member's own deals that land after the switch never count on the Your deals pill", async () => {
         await render(createElement(MarketScreen));
         expect(net.calls).toEqual(expect.arrayContaining(['db.getMarketplaceTransactions', `fetch ${NODE}/api/community/info`]));
         profileLands();
         await settle();
         await landAll();
-        expect(dealsPill()?.getAttribute('aria-label')).toBe('My Deals');
+        expect(dealsPill()?.getAttribute('aria-label')).toBe('Your deals');
     });
 
-    it("My Deals opened by a link before the switch: the member's own deals landing after it never draw over Example Valley's", async () => {
+    it("Your deals opened by a link before the switch: the member's own deals landing after it never draw over Example Valley's", async () => {
         params.now = { tab: 'deals' };
         await render(createElement(MarketScreen));
         profileLands();

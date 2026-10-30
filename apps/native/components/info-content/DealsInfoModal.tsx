@@ -223,7 +223,7 @@ export function DealsInfoModal({ isOpen, onClose }: Props) {
         <InfoModal
             isOpen={isOpen}
             onClose={onClose}
-            title={t('My Deals & Trust Hold')}
+            title={t('Your deals & Trust Hold')}
             icon="🤝"
             tabs={tabs}
         />

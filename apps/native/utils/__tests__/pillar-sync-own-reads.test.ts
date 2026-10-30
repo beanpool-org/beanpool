@@ -1,7 +1,7 @@
 /**
  * The sync reads nothing of the member's own where its feature is in preview (global previews audit, "Across all
  * five", P3): on the worldwide community it asked for the member's balance, ledger and deals every cycle, while its
- * Ledger and My Deals are Example Valley's. In preview: never asked (utils/reads-own.ts). A local community: asked,
+ * Ledger and Your deals are Example Valley's. In preview: never asked (utils/reads-own.ts). A local community: asked,
  * as before. performSync for real, its fetch recorded; the phone's database is a stand-in.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

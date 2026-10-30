@@ -118,6 +118,22 @@ export function epochOf(res: { headers?: { get?(name: string): string | null } }
 /** The referenced keys a community that says `membersOnDemand` answered no card for lately (utils/members-on-demand.ts). */
 const MEMBERS_ABSENT = 'members_absent';
 
+// The own card first (scratch/fable-design/DESIGN-per-community-profile-fable.md §2.5, slice S1). On a community that says
+// `membersOnDemand` it is one of up to 1,000 held cards, re-checked only when its turn among the 100 fetched longest ago
+// came round: a photo or name changed on the web or a paired phone never reached this phone's header, and after a switch
+// it waited behind every other card. So the sync's by-key reads ask for it first: once on each community it moves to
+// (and at each start), and again whenever the node says this member's card changed (ownCardChanged).
+/** The community the last cycle ran for: a cycle on any other one wants the own card again. */
+let ownCardCommunity: string | null = null;
+/** Bumped by each reason to read the own card again; `ownCardHad` is the bump the last read of it answered. */
+let ownCardWants = 0;
+let ownCardHad = -1;
+
+/** The node said this member's card changed (`profile_updated` naming them, services/ws-client.ts): read it first again. */
+export function ownCardChanged(): void {
+    ownCardWants++;
+}
+
 export async function getSyncCursorKey(keyId: string): Promise<string> {
     // Never read before the phone's copies and their cursors have their new names (utils/cache-file-migration.ts): a
     // cursor read under the new name before its file moved would start a whole sync for nothing.
@@ -498,6 +514,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // belongs to `anchorUrl`; if the user switches communities mid-sync we
         // must NOT apply it to the newly-active node's local DB.
         const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
+        if (ownCardCommunity !== anchorUrl) {
+            ownCardCommunity = anchorUrl;
+            ownCardWants++;
+        }
 
         // Step 2: Fetch Posts and Balance directly via standard REST APIs
         // Through the identity module, the one reader of the stored key (and a seam a test can stand in for).
@@ -568,7 +588,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // The reader's own balance, ledger and deals are not asked where their feature is in preview (utils/reads-own.ts;
-        // the global node, whose Ledger and My Deals are Example Valley's): from the node's profile just read and the
+        // the global node, whose Ledger and Your deals are Example Valley's): from the node's profile just read and the
         // account's own set as last answered. Everywhere else, as before.
         const readerSet = pubKey ? readerFeaturesHeld.get(readerFeaturesKey(anchorUrl, pubKey))?.features ?? null : null;
         const readsOwnHere = (feature: 'beans' | 'escrow') => readsOwnWith(feature, profile?.features, readerSet);
@@ -1533,10 +1553,11 @@ const _lastAppliedFingerprints: Record<string, number> = {};
 /**
  * Reset all in-memory payload fingerprints, and start a new copy generation (utils/db.ts copyGeneration): a cycle in
  * flight writes and stores nothing more. Must be called when clearing or resetting
- * the local SQLite database so the subsequent sync doesn't skip applying payloads.
+ * the local SQLite database so the subsequent sync doesn't skip applying payloads. The own card is read first again too.
  */
 export function resetSyncFingerprints() {
     newCopyGeneration();
+    ownCardWants++;
     for (const key of Object.keys(_lastAppliedFingerprints)) {
         delete _lastAppliedFingerprints[key];
     }
@@ -1611,7 +1632,8 @@ async function syncMembersOnDemand(anchorUrl: string, ownKey: string, expectedDb
         const kAbsent = await getSyncCursorKey(MEMBERS_ABSENT);
         const absentRaw = await AsyncStorage.getItem(kAbsent);
         const absent = readAbsent(absentRaw, now);
-        const plan = planMembersCycle(ownKey, world.referenced.filter(k => !absent.has(k)), world.held);
+        const ownWanted = ownCardHad !== ownCardWants ? ownCardWants : null;
+        const plan = planMembersCycle(ownKey, world.referenced.filter(k => !absent.has(k)), world.held, ownWanted !== null);
         const rows: any[] = [];
         const asked: string[] = [];
         const read = async (path: string): Promise<any[] | null> => {
@@ -1665,6 +1687,8 @@ async function syncMembersOnDemand(anchorUrl: string, ownKey: string, expectedDb
             const wrote = await applyDelta({ members: rows, membersByKey: true, membersFetched: { keys: fetched, at: fetchedAt }, membersDrop: drop }, expectedDbName, copyGen);
             if (wrote === false) return;
         }
+        // Asked and written (or the node holds none for it): not asked first again until something says it changed.
+        if (ownWanted !== null && asked.includes(ownKey)) ownCardHad = ownWanted;
         if (asked.length > 0 || absent.size > 0 || absentRaw) {
             const next = absentAfter(absent, asked, answered, now);
             if (next !== absentRaw && copyGenerationNow() === copyGen) await AsyncStorage.setItem(kAbsent, next);

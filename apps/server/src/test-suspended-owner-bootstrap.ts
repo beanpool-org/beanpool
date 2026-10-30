@@ -298,8 +298,10 @@ async function main() {
         // — 6. A suspended owner who deletes their own account leaves nothing parked behind —
         console.log('\nTesting a suspended owner who purges their own account...');
 
-        // Back to the same state as step 2: suspend one of the two owners, then lose the other.
-        const suspendAgain = adminEmergencySuspend(olivia.pub, 'owner:password', 'A second dispute, heard while the appointed owner is still here.');
+        // Back to the same state as step 2: suspend one of the two owners, then lose the other. This pause is the appointed
+        // owner's: whoever brought a vote on removing a member that ended without removing them (the password's, which the
+        // lift above stopped) waits 90 days to bring another (removal by vote, Amendment A point 5; test-removal-fairness).
+        const suspendAgain = adminEmergencySuspend(olivia.pub, priya.pub, 'A second dispute, heard while the appointed owner is still here.');
         assert(suspendAgain.success === true, `the owner is suspended again while a co-owner remains (${suspendAgain.error || 'no error'})`);
         adminSetUserStatus(priya.pub, 'disabled');
         assert(activeOwners().length === 0 && parkedOwners().length === 1, 'the node is back to zero active owners with one role held aside');

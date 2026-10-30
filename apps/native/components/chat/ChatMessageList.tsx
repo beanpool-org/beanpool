@@ -27,6 +27,7 @@ import { useKeyboardHandler } from 'react-native-keyboard-controller';
 import { scheduleOnRN } from 'react-native-worklets';
 import { isAtBottom, isDaySeparator, isRemovedRun, type ChatListItem } from '../../utils/chat-actions';
 import { ChatDaySeparator, ChatRemovedRunLine } from './ChatBubble';
+import { ChatFoldProvider } from './ChatFold';
 import type { ChatStyles } from './styles';
 
 /** The list is inverted, so "the bottom" is offset 0. */
@@ -96,26 +97,28 @@ export function ChatMessageList({
     }, [onAtBottomChange]);
 
     return (
-        <FlatList
-            ref={listRef}
-            data={items}
-            keyExtractor={(item: any) => item.id}
-            renderItem={renderItem}
-            CellRendererComponent={renderCell}
-            contentContainerStyle={contentContainerStyle ?? styles.listContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            inverted
-            initialNumToRender={15}
-            windowSize={9}
-            onScroll={onAtBottomChange ? onScroll : undefined}
-            scrollEventThrottle={onAtBottomChange ? 100 : undefined}
-            // Inverted list: "end" = the oldest loaded message (visual top).
-            onEndReachedThreshold={0.8}
-            onEndReached={onEndReached}
-            onScrollBeginDrag={onScrollBeginDrag}
-            ListEmptyComponent={ListEmptyComponent}
-            ListFooterComponent={ListFooterComponent}
-        />
+        <ChatFoldProvider>
+            <FlatList
+                ref={listRef}
+                data={items}
+                keyExtractor={(item: any) => item.id}
+                renderItem={renderItem}
+                CellRendererComponent={renderCell}
+                contentContainerStyle={contentContainerStyle ?? styles.listContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                inverted
+                initialNumToRender={15}
+                windowSize={9}
+                onScroll={onAtBottomChange ? onScroll : undefined}
+                scrollEventThrottle={onAtBottomChange ? 100 : undefined}
+                // Inverted list: "end" = the oldest loaded message (visual top).
+                onEndReachedThreshold={0.8}
+                onEndReached={onEndReached}
+                onScrollBeginDrag={onScrollBeginDrag}
+                ListEmptyComponent={ListEmptyComponent}
+                ListFooterComponent={ListFooterComponent}
+            />
+        </ChatFoldProvider>
     );
 }

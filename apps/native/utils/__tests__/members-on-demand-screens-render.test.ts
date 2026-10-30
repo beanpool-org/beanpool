@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Never a dead end, screen by screen (DESIGN-global-members-by-area §2.4, #1792, slice M2): People → Community, New
- * message, the chats list, My Deals and the public profile rendered for real at the floor's window (320 × 569 dp, text at
+ * message, the chats list, Your deals and the public profile rendered for real at the floor's window (320 × 569 dp, text at
  * 1.3×), in the real light and dark palettes, online and offline, on a community that says `membersOnDemand`.
  *
  * The phone's own utils/db runs on its real schema in an in-memory SQLite (as pillar-sync-members-on-demand.test.ts), so
@@ -819,7 +819,7 @@ for (const scheme of ['light', 'dark'] as const) {
             });
         });
 
-        describe('My Deals', () => {
+        describe('Your deals', () => {
             async function holdDeal(partner: string) {
                 await (await db.getDb()).runAsync(
                     "INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at, post_title) VALUES ('tx-1', 'post-1', ?, ?, 12, 'completed', ?, ?, 'Sourdough loaf')",
@@ -944,6 +944,17 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(box.textContent).not.toMatch(/trade|vouch|Trust|Newcomer|precaution|⚠️/i);
                 for (const w of TRUST_PANEL_WORDS) expect(text(), w).not.toContain(w);
                 await fits([OWN, KOFI]);
+            });
+
+            // Profile S1 (DESIGN-per-community-profile-fable.md §2): the header passed the phone-wide name, and it was shown.
+            it("the member's own profile: this community's name for them, never the name the door passed", async () => {
+                await (await db.getDb()).runAsync('UPDATE members SET callsign = ? WHERE public_key = ?', ['Marty of Mullum', OWN]);
+                nav.params = { publicKey: OWN, callsign: 'Phone Wide Name' };
+                await render(createElement(PublicProfileScreen));
+                await settle(50);
+                expect(text()).toContain('Marty of Mullum');
+                expect(text()).not.toContain('Phone Wide Name');
+                expect(host.querySelector('[data-avatar]')?.getAttribute('data-avatar')).toBe('Marty of Mullum');
             });
 
             it("the member's own profile on the worldwide community: no meeting tips", async () => {

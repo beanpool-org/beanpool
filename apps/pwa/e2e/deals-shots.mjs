@@ -25,7 +25,7 @@ const browser = await chromium.launch();
 const TEXT_SCALE = 1.3;
 
 for (const theme of ['light', 'dark']) {
-    // 1. My Deals Modal
+    // 1. Your deals Modal
     {
         const ctx = await browser.newContext({
             viewport: { width: 320, height: 600 },

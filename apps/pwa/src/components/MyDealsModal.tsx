@@ -1,5 +1,5 @@
 /**
- * My Deals modal: tabbed overview of in-progress (escrow) and completed deals.
+ * Your deals modal: tabbed overview of in-progress (escrow) and completed deals.
  * Accessible: focus trap and Escape to close; the tabs, filters, photos, a deal card that opens something and its
  * Leave Review all work from the keyboard. On a local node the modal is exactly as before the preview came
  * (it still sits under the bottom nav at 320 px, an old bug kept out of this change).
@@ -89,7 +89,7 @@ export function MyDealsModal({
     } | null>(null);
 
     // The card's sheet: read by the key handler through a ref, so opening it does not re-run the focus effect
-    // (which would pull focus back to Close My Deals behind the sheet). Closing it gives focus back to the card.
+    // (which would pull focus back to Close Your deals behind the sheet). Closing it gives focus back to the card.
     const [sheetShown, setSheetShown] = useState<'sheet' | 'start' | null>(null);
     const sheetShownRef = useRef(sheetShown);
     sheetShownRef.current = sheetShown;
@@ -286,7 +286,7 @@ export function MyDealsModal({
                     {/* Header */}
                     <div className="flex justify-between items-center px-6 py-4 border-b border-nature-100 dark:border-nature-800 shrink-0">
                         <div>
-                            <h3 id="my-deals-title" className="text-xl font-black text-nature-900 dark:text-white">{t('My Deals')}</h3>
+                            <h3 id="my-deals-title" className="text-xl font-black text-nature-900 dark:text-white">{t('Your deals')}</h3>
                             <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
                                 {titleRowText}
                             </p>
@@ -294,7 +294,7 @@ export function MyDealsModal({
                         <button
                             ref={closeBtnRef}
                             onClick={onClose}
-                            aria-label={t('Close My Deals')}
+                            aria-label={t('Close Your deals')}
                             className={`${preview ? 'min-h-[44px] min-w-[44px]' : 'w-8 h-8'} rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:ring-2 focus-visible:ring-nature-500`}
                         >
                             ✕

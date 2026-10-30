@@ -1,5 +1,5 @@
 /**
- * My Deals in the member's language (words S3, web sweep W1): every tab (In Progress, My Posts, History and its
+ * Your deals in the member's language (words S3, web sweep W1): every tab (In Progress, My Posts, History and its
  * filters), each tab's empty state, a deal's status badge, its date (core's formatDate, as the phone's MyDealsSheet),
  * "Bought from / Sold to {who}" as ONE sentence with the name bold inside it, the photo buttons and the Beans sign.
  * Listing titles and names are the members' own, shown as written.
@@ -51,11 +51,11 @@ function drawLocal(posts = POSTS, transactions = TXS) {
 
 afterEach(() => { cleanup(); backToEnglish(); });
 
-describe('My Deals in the pseudo-locale', () => {
+describe('Your deals in the pseudo-locale', () => {
     it('every tab and filter of a local node: the words through t(), the names and titles theirs', async () => {
         await showIn('xx');
         drawLocal();
-        const dialog = screen.getByRole('dialog', { name: xx('My Deals') });
+        const dialog = screen.getByRole('dialog', { name: xx('Your deals') });
 
         // In Progress: the status badge, the date, the partner sentence with the name bold inside it.
         expect(screen.getAllByText(xx('pending'))).toHaveLength(2);
@@ -125,7 +125,7 @@ describe('My Deals in the pseudo-locale', () => {
         expect(screen.getAllByText('pending')).toHaveLength(2);
         expect(screen.getByText('Kofi').closest('p')!.textContent).toBe('Bought from Kofi');
         expect(screen.getByText('Tama').closest('p')!.textContent).toBe('Sold to Tama');
-        // The date as core writes it, as the phone's My Deals does (it was the browser's toLocaleDateString()).
+        // The date as core writes it, as the phone's Your deals does (it was the browser's toLocaleDateString()).
         expect(screen.getByText('15 Oct 2026')).toBeInTheDocument();
         expect(screen.getByText('- 20')).toBeInTheDocument();
         expect(screen.getAllByAltText('B').length).toBeGreaterThan(0);

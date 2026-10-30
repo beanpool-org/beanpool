@@ -7,7 +7,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useIdentity } from '../IdentityContext';
-import { getBalance, getTransactions, getMemberProfile, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
+import { getBalance, getTransactions, getAllCommunityMembers, sendTransfer, getPledgeHistory, getEscrowTotal, signedRequest } from '../../utils/db';
+import { useOwnProfile } from '../../utils/use-own-profile';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
@@ -66,7 +67,7 @@ const INVITE_PERK = word('Invite others to join');
  * A Ledger row's other side in the member's language: a hold's name from its parts (utils/db.ts getTransactions writes
  * `peer` in English, with `held` and `projectWallet` beside it), else the member's name or key as it came.
  */
-function peerWords(item: { peer: string; held?: { title: string | null; counterparty: string | null; toCounterparty: boolean } | null; projectWallet?: boolean }): string {
+function peerWords(item: { peer: string; held?: { title: string | null; counterparty: string | null; toCounterparty: boolean; dealId?: string | null; postId?: string | null } | null; projectWallet?: boolean }): string {
     if (item.projectWallet) return t('Project Wallet');
     const held = item.held;
     if (!held) return item.peer;
@@ -75,6 +76,14 @@ function peerWords(item: { peer: string; held?: { title: string | null; counterp
     return held.toCounterparty
         ? t('Held in Trust: {title} (to {name})', { title: held.title, name: held.counterparty })
         : t('Held in Trust: {title} (from {name})', { title: held.title, name: held.counterparty });
+}
+
+const LISTING_ID = /\s*[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
+
+/** The deal a hold row opens, when this phone has it (utils/db.ts getTransactions: `held`); else null and the row is just a row. */
+function dealOf(item: { held?: { dealId?: string | null; postId?: string | null } | null }): { dealId: string; postId: string } | null {
+    const held = item.held;
+    return held?.dealId && held.postId ? { dealId: held.dealId, postId: held.postId } : null;
 }
 
 /** A day from the node's time ("3 Oct 2026"), in the member's language; null for a time that isn't one. */
@@ -149,7 +158,9 @@ export default function LedgerScreen() {
     const [heldSample, setHeldSample] = useState(false);
     const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;
     const txns = heldSample === preview ? heldTxns : NO_TXNS;
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    // Your name and picture in this community (utils/use-own-profile.ts), as the header and My Profile draw them. Never
+    // read while the mode is unknown or in preview, where the card is Example Valley's member and not yours.
+    const own = useOwnProfile(beansMode !== undefined && !preview);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
     // Where the list is and where the tab bar sits in it. Switching tab from below the tab bar (Send from Levels)
     // brings the tab bar to the top, so the other tab opens at its start; from above it, the list stays put.
@@ -330,7 +341,7 @@ export default function LedgerScreen() {
         walletHero: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
         walletBigBalance: { fontSize: 42, fontWeight: '900', letterSpacing: -2, marginVertical: 8 },
         walletMetricRow: { flexDirection: 'row', backgroundColor: theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 14, overflow: 'hidden', marginTop: 16 },
-        walletMetric: { flex: 1, alignItems: 'center', paddingVertical: 10, gap: 3 },
+        walletMetric: { flex: 1, alignItems: 'center', minHeight: 44, paddingVertical: 10, gap: 3 },
         walletMetricDivider: { width: 1, backgroundColor: colors.border.default },
         walletMetricVal: { fontSize: 15, fontWeight: '800', color: colors.text.heading },
         walletMetricLabel: { fontSize: 10, fontWeight: '700', color: colors.text.muted, letterSpacing: 0.5, textAlign: 'center' },
@@ -370,6 +381,7 @@ export default function LedgerScreen() {
         confirmBtnOff: { backgroundColor: colors.border.default },
         confirmBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700' },
         txnRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
+        txnRowDoor: { minHeight: 44 },
         txnIcon: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
         txnIconCredit: { backgroundColor: colors.feedback.success.bg },
         txnIconDebit: { backgroundColor: colors.feedback.danger.bg },
@@ -416,7 +428,6 @@ export default function LedgerScreen() {
             getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);
             getTransactions(identity.publicKey).then(latest(setTxns)).catch(console.error);
             getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
-            getMemberProfile(identity.publicKey).then(latest(p => setAvatarUrl(p?.avatar_url || null))).catch(console.error);
             getEscrowTotal(identity.publicKey).then(latest(setEscrowTotal)).catch(() => {});
             getPledgeHistory(identity.publicKey).then(latest(setPledgeHistory)).catch(() => {});
         }
@@ -852,11 +863,22 @@ export default function LedgerScreen() {
                         {escrowTotal > 0 && (
                             <>
                                 <View style={styles.walletMetricDivider} />
-                                <View style={styles.walletMetric}>
+                                {/* The total opens the deals that hold it: Your deals, In Progress (the Market's sheet, as the listing's "All your deals" does).
+                                    In preview it is Example Valley's, and like every button there it opens the marker's sheet and goes nowhere. */}
+                                <Pressable
+                                    style={styles.walletMetric}
+                                    accessibilityRole="button"
+                                    accessibilityHint={t('Opens your deals in progress')}
+                                    testID="ledger-in-escrow"
+                                    onPress={() => {
+                                        if (preview) { setSheetOpen(true); return; }
+                                        router.push({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
+                                    }}
+                                >
                                     <MaterialCommunityIcons name="lock-clock" size={14} color={colors.feedback.warning.fg} />
                                     <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{formatNumber(escrowTotal, 1)}</Text>
                                     <Text style={styles.walletMetricLabel}>{t('IN ESCROW')}</Text>
-                                </View>
+                                </Pressable>
                             </>
                         )}
                     </View>
@@ -997,10 +1019,11 @@ export default function LedgerScreen() {
         );
     };
 
-    const renderMemoText = (memo: string) => {
+    // `link` false: the row is itself a button to the deal, and a link inside a button is two doors for one tap.
+    const renderMemoText = (memo: string, link = true) => {
         if (!memo) return null;
         const uuidRegex = /([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/;
-        const match = memo.match(uuidRegex);
+        const match = link ? memo.match(uuidRegex) : null;
         if (match) {
             const offerId = match[1];
             const parts = memo.split(offerId);
@@ -1023,22 +1046,38 @@ export default function LedgerScreen() {
     const renderTxn = ({ item }: { item: any }) => {
         const isCredit = item.type === 'credit';
         const note = ledgerItemNote(item, blocked);
-        return (
-            <View style={styles.txnRow}>
+        // A hold whose deal this phone has opens that deal (the listing at that transaction, as Your deals does). The row is then
+        // the one button, so the memo shows without its listing id and its own "View Offer" link: the deal opens the listing.
+        const deal = dealOf(item);
+        const body = (
+            <>
                 <View style={[styles.txnIcon, isCredit ? styles.txnIconCredit : styles.txnIconDebit]}>
                     <MaterialCommunityIcons name={isCredit ? 'arrow-bottom-left' : 'arrow-top-right'} size={18} color={isCredit ? colors.brand.primary : colors.feedback.danger.fg} />
                 </View>
                 <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={styles.txnPeer}>{peerWords(item)}</Text>
                     {/* The neutral line for Beans from someone blocked is core's BLOCKED_BEANS_NOTE, in the member's language. */}
-                    {note.fromBlocked ? <Text style={styles.txnMemoBlocked}>{t('Beans from a member you blocked')}</Text> : renderMemoText(note.text)}
+                    {note.fromBlocked ? <Text style={styles.txnMemoBlocked}>{t('Beans from a member you blocked')}</Text> : renderMemoText(deal ? note.text.replace(LISTING_ID, '') : note.text, !deal)}
                     <Text style={styles.txnTime}>{rowWhen(item)}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[styles.txnAmount, isCredit ? styles.pos : styles.neg]}>{isCredit ? '+' : '-'}{formatNumber(Number(item.amount))}</Text>
                     <Image source={require('../../assets/images/bean.png')} accessibilityElementsHidden={true} importantForAccessibility="no-hide-descendants" style={{ width: 16, height: 16, marginLeft: 2, resizeMode: 'contain', flexShrink: 0 }} />
+                    {deal && <MaterialCommunityIcons name="chevron-right" size={18} color={colors.text.muted} />}
                 </View>
-            </View>
+            </>
+        );
+        if (!deal) return <View style={styles.txnRow}>{body}</View>;
+        return (
+            <Pressable
+                style={[styles.txnRow, styles.txnRowDoor]}
+                accessibilityRole="button"
+                accessibilityHint={t('Opens the deal')}
+                testID="ledger-held-row"
+                onPress={() => router.push({ pathname: '/post/[id]', params: { id: deal.postId, txId: deal.dealId } })}
+            >
+                {body}
+            </Pressable>
         );
     };
 
@@ -1054,12 +1093,12 @@ export default function LedgerScreen() {
             {/* ── Compact profile + balance bar ── */}
             <View style={styles.topBar}>
                 {/* Avatar + name + tier — left side */}
-                <Pressable style={styles.profileChunk} accessibilityRole="button" onPress={() => preview ? setSheetOpen(true) : identity?.publicKey && router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } })}>
+                <Pressable style={styles.profileChunk} accessibilityRole="button" onPress={() => preview ? setSheetOpen(true) : identity?.publicKey && router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: own.callsign || identity.callsign } })}>
                     <View style={styles.avatarRing}>
-                        <MemberAvatar avatarUrl={preview ? null : avatarUrl} pubkey={preview ? '' : identity?.publicKey || ''} callsign={preview ? SAMPLE_MEMBER : identity?.callsign || 'G'} size={48} />
+                        <MemberAvatar avatarUrl={preview ? null : own.avatarUrl} updatedAt={preview ? undefined : own.updatedAt} pubkey={preview ? '' : identity?.publicKey || ''} callsign={preview ? SAMPLE_MEMBER : own.callsign || identity?.callsign || 'G'} size={48} />
                     </View>
                     <View>
-                        <Text style={styles.profileName}>{preview ? SAMPLE_MEMBER : identity?.callsign || t('GUEST')}</Text>
+                        <Text style={styles.profileName}>{preview ? SAMPLE_MEMBER : own.callsign || identity?.callsign || t('GUEST')}</Text>
                         <View style={[styles.tierChip, { backgroundColor: tier.bg, borderColor: tier.border }]}>
                             <Text style={styles.tierChipEmoji}>{tier.emoji}</Text>
                             <Text style={[styles.tierChipText, { color: tier.color }]}>{t(TIER_WORDS[tier.name])}</Text>

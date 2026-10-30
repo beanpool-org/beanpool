@@ -344,8 +344,8 @@ const VIEWS: Record<View, () => Record<string, unknown>> = {
     lead: () => leadsView(),
     paused: () => leadsView({ paused: true, pausedAt: iso(now - 5 * DAY) }),
     windingUp: () => leadsView({ status: 'winding_up', windUpInitiatedBy: KOFI, windUpGraceEndsAt: iso(now - 3600_000) }),
-    // A project its leader reads: its cancel is theirs alone, as the node takes it (apps/server db.ts leadsProject).
-    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120 }),
+    // A project its leader reads: the node says they may cancel it (apps/server db.ts mayCancelProject, `mayCancel`).
+    leadProject: () => leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120, mayCancel: true }),
     quietProject: () => quietProject(),
     quietProjectVote: () => quietProject({ succession: { proposals: [PROPOSAL] } }),
 };
@@ -415,6 +415,34 @@ for (const dark of [false, true]) {
             net.answer = community({ getTreasuryDetail: VIEWS.leadProject() });
             await render('console');
             expect(byLabel('Cancel initiative and refund escrow')).not.toBeNull();
+        });
+
+        it("a project's cancel is drawn from the node's word alone, for whoever it names (Marty's answers CF-Q1, CF-Q2)", async () => {
+            const cancel = () => byLabel('Cancel initiative and refund escrow');
+            // Its leader, whom the node no longer lets cancel it (operator access switched off): none.
+            net.answer = community({ getTreasuryDetail: leadsView({ lifecycle: 'bounded', status: 'active', goalAmount: 500, currentAmount: 120, mayCancel: false }) });
+            await render('console');
+            expect(byId('manage-screen')).not.toBeNull();
+            expect(cancel()).toBeNull();
+            // Its only collaborator, with nobody leading it: the node lets them, and it is drawn.
+            const alone = { keepers: [{ publicKey: ME, callsign: 'Ana', role: 'keeper', grantedAt: iso(now - 30 * DAY) }], leadInactivity: null };
+            net.answer = community({ getTreasuryDetail: quietProject({ ...alone, isLeadOrSoleKeeperOrAdmin: true, mayCancel: true }) });
+            await render('console');
+            expect(cancel()).not.toBeNull();
+            // A node admin who keeps none of it, so has no operator controls: the node lets them, and it is drawn on its own,
+            // in the central tokens.
+            const admin = { keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'keeper' }], leadInactivity: null, isLeadOrSoleKeeperOrAdmin: true, mayCancel: true };
+            net.answer = community({ getTreasuryDetail: quietProject(admin), getBalance: { balance: 10, keeperOf: [] } });
+            await render('console');
+            expect(byId('manage-screen')).not.toBeNull();
+            expect(host.textContent).not.toContain('OPERATOR CONTROLS');
+            expect(cancel()).not.toBeNull();
+            expect(styleOf(cancel()).borderColor).toBe(colors().feedback.danger.solid);
+            // The same reader when the node says no (say, no longer an admin): none.
+            net.answer = community({ getTreasuryDetail: quietProject({ ...admin, mayCancel: false }), getBalance: { balance: 10, keeperOf: [] } });
+            await render('console');
+            expect(byId('manage-screen')).not.toBeNull();
+            expect(cancel()).toBeNull();
         });
 
         it('a release by the hour asks the hours; a candidate is picked from the keepers', async () => {

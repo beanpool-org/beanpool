@@ -10,6 +10,7 @@ Settings is where owners and admins run the community's server. Members never se
 ## The screens
 
 - **Home**: what needs you, the community at a glance, how many times the web app was opened each day, and shortcuts to invite someone, make an enterprise, download a backup and check the books. **Action Required** lists your server's alerts (the same ones the app's "This server has alerts" counts; press one to open the Alerts card), reports, disputes and a disk filling up. It says **All clear** only when it could check all of them. A number that didn't load says "Couldn't load", with **Retry**, never 0.
+- **How it works** (the page is titled **How this community works**): Who can join, Beans, decisions, directory listing, and safety switches. The one screen where owners set the structural rules of the community. Admins can view every setting and its reasons, but only owners can make changes.
 - **People & Safety**: Members (each person's page and role), Invites & QR, Onboarding Funnel (where people stop when they try to join), Triage & Moderation (reports and taking posts down), and Owners & admins (who runs the server).
 - **Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).
 - **Bulletin & News**: Announcements to every member, and Pulse Channels.

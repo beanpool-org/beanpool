@@ -90,7 +90,7 @@ const knock: RememberedKnock = {
     sentAt: '2026-10-25T00:00:00.000Z',
 };
 
-async function render(knocks: RememberedKnock[], onKnocksChange?: (knocks: RememberedKnock[]) => void): Promise<HTMLElement> {
+async function render(knocks: RememberedKnock[], onKnocksChange?: (knocks: RememberedKnock[]) => void, onCancelled?: (knock: RememberedKnock) => void): Promise<HTMLElement> {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const card = createElement(FindCommunityBody, {
@@ -101,6 +101,7 @@ async function render(knocks: RememberedKnock[], onKnocksChange?: (knocks: Remem
         point: { lat: -28.65, lng: 153.6 },
         colors: lightColors,
         onKnocksChange,
+        onCancelled,
     });
     await act(async () => {
         createRoot(host).render(card as unknown as Parameters<Root['render']>[0]);
@@ -179,6 +180,26 @@ describe('FindCommunityBody honest waiting card (Lounge L1)', () => {
         // The card stays for this visit: the button is gone, and the card says what happened.
         expect(host.querySelector('[data-testid="home-find-waiting-https://byron.example.org"]')).not.toBeNull();
         expect(host.querySelector('[data-testid="home-find-cancel-https://byron.example.org"]')).toBeNull();
+    });
+
+    it('tells Home only of a Cancel that worked, so Home can keep the card and its line for the visit (LG-L1-W)', async () => {
+        readKnockStatusMock.mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        const onCancelled = vi.fn();
+        const host = await render([knock], undefined, onCancelled);
+        const press = async () => {
+            await act(async () => { (host.querySelector('[data-testid="home-find-cancel-https://byron.example.org"]') as HTMLButtonElement).click(); });
+            const destructive = alertMock.mock.calls.at(-1)![2].find((b: any) => b.style === 'destructive');
+            await act(async () => { await destructive.onPress(); });
+        };
+
+        cancelKnockMock.mockResolvedValueOnce({ ok: false, message: 'Network offline' });
+        await press();
+        expect(onCancelled).not.toHaveBeenCalled();
+
+        cancelKnockMock.mockResolvedValueOnce({ ok: true });
+        await press();
+        expect(onCancelled).toHaveBeenCalledTimes(1);
+        expect(onCancelled).toHaveBeenCalledWith(knock);
     });
 
     it('shows error note when cancellation fails (never false success)', async () => {
@@ -432,7 +453,7 @@ describe('FindCommunityBody tells the truth about what the community now answers
         expect(cancelledLine(host, lismore)).toBe(CANCELLED_LINE);
         expect(cancelButton(host, byron)).toBeNull();
         expect(cancelButton(host, lismore)).toBeNull();
-        // Home is not told: the cards stay for this visit, and with them the pin.
+        // The card's own knock list is not changed (Home hears of a Cancel through onCancelled, not onKnocksChange): the cards stay for this visit, and with them the pin.
         expect(changes).toEqual([]);
     });
 });

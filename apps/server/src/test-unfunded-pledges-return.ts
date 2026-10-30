@@ -66,6 +66,7 @@ import {
 import { startHttpsServer } from './https-server.js';
 import { db, createCrowdfundProject, getCrowdfundProject, pledgeToProject } from './db/db.js';
 import { setNodeRole } from './config/node-role.js';
+import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { isPastDeadline } from '@beanpool/core';
@@ -757,6 +758,14 @@ async function main(): Promise<void> {
         `Uma, who made it but no longer leads it, can't move it (${umaMove.status}; end date ${gateAfter?.deadline_at})`);
     // Nor cancel it: the cancel asked the projects row's creator_pubkey, its maker, so Uma could refund every backer and
     // delete it, and Kim, its lead, could not (db.ts leadsProject). Cal, who neither made nor leads it, can't either.
+    // Its page says who may cancel it, as the cancel asks (db.ts mayCancelProject), and both apps draw Cancel from that alone:
+    // Kim, its lead, and Ada, an admin of the node; not Uma, who made it, nor Cal (Marty's answers CF-Q1 and CF-Q2, 29 Oct 2026).
+    const ada = makeMember('Ada');
+    grantNodeRole(ada.pubKeyHex, 'admin', 'owner:password');
+    const mayCancelOf = async (who: Id) => (await readPage(who, gate))?.mayCancel;
+    const flags = { kim: await mayCancelOf(kim), ada: await mayCancelOf(ada), uma: await mayCancelOf(uma), cal: await mayCancelOf(cal) };
+    assert(flags.kim === true && flags.ada === true && flags.uma === false && flags.cal === false,
+        `its page says Kim and Ada may cancel it, Uma and Cal not (${JSON.stringify(flags)})`);
     const gateBefore = { ann: balanceOf(ann.pubKeyHex), ben: balanceOf(ben.pubKeyHex), uma: balanceOf(uma.pubKeyHex), sum: sumBalances() };
     const umaCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: uma.pubKeyHex }, uma);
     assert(umaCancel.status !== 200 && near(escrowOf(gate), 6) && rowsOutOf(gate).length === 0,
@@ -769,6 +778,8 @@ async function main(): Promise<void> {
     const kimOffCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: kim.pubKeyHex }, kim);
     assert(kimOffCancel.status !== 200 && near(escrowOf(gate), 6) && rowsOutOf(gate).length === 0,
         `nor Kim, its lead, with operator access switched off: nothing moves (${kimOffCancel.status} ${kimOffCancel.body?.error ?? ''}; escrow ${escrowOf(gate)})`);
+    const kimOffFlag = await mayCancelOf(kim);
+    assert(kimOffFlag === false, `and its page doesn't offer Kim the cancel then (${kimOffFlag})`);
     stateEngine.adminSetOperator(kim.pubKeyHex, true);
     const kimCancel = await signedFetch('POST', '/api/crowdfund/projects/delete', { id: gate, creatorPubkey: kim.pubKeyHex }, kim);
     assert(kimCancel.status === 200, `Kim, its lead, cancels it (${kimCancel.status} ${kimCancel.body?.error ?? ''})`);

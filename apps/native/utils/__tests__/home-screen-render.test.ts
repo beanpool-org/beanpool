@@ -55,6 +55,8 @@ vi.mock('react-native', () => {
 });
 const nav = vi.hoisted(() => ({
     focus: null as null | (() => void | (() => void)),
+    /** What the screen's focus effect handed back when it ran on landing: Home losing focus (a tab left). */
+    blur: null as null | (() => void),
     params: {} as Record<string, string>,
     router: { push: vi.fn(), navigate: vi.fn(), replace: vi.fn(), setParams: vi.fn() },
 }));
@@ -63,7 +65,12 @@ vi.mock('expo-router', () => ({
     useLocalSearchParams: () => nav.params,
     useNavigation: () => ({ addListener: () => () => {}, isFocused: () => true }),
     useFocusEffect: (cb: () => void | (() => void)) => {
-        useEffect(() => { nav.focus = cb; return cb() ?? undefined; }, [cb]);
+        useEffect(() => {
+            nav.focus = cb;
+            const leave = cb();
+            nav.blur = typeof leave === 'function' ? leave : null;
+            return leave ?? undefined;
+        }, [cb]);
     },
 }));
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) }));
@@ -200,6 +207,11 @@ const node = {
     keepsRow: false,
     /** What a community this phone knocked on says of the knock (GET /api/join/knock/status, routes/knocks.ts). */
     knockStatus: 'pending' as string,
+    /**
+     * While set, a saved Home layout is kept on the account and the Decide card is rebuilt from the setting stored for it, as
+     * the node's decideCard does (routes/home-answer.ts): the `show` it holds, or undefined for none.
+     */
+    decideFor: null as null | ((show: unknown) => HomeAnswer['cards']['decide']),
 };
 const etagOf = (pk: string, a: HomeAnswer) => {
     const { generatedAt: _g, ...rest } = a;
@@ -226,6 +238,7 @@ beforeEach(async () => {
     node.role = null;
     node.keepsRow = false;
     node.knockStatus = 'pending';
+    node.decideFor = null;
     loc.status = 'denied';
     loc.last = null;
     loc.asked = 0;
@@ -277,6 +290,12 @@ beforeEach(async () => {
             const body = JSON.parse(req.body);
             if (node.keepsRow && node.answer.me && 'interests' in body.preferences) {
                 node.answer = { ...node.answer, me: { ...node.answer.me, interests: body.preferences.interests } };
+            }
+            if (node.decideFor && body.preferences['home.layout']) {
+                const layout = body.preferences['home.layout'];
+                const decide = node.decideFor(layout.cards.find((c: { type: string }) => c.type === 'decide')?.settings?.show);
+                const { decide: _old, ...rest } = node.answer.cards;
+                node.answer = { ...node.answer, layout, cards: { ...rest, ...(decide ? { decide } : {}) } };
             }
             record(200);
             return new Response(JSON.stringify({ success: true, ...body.preferences }), { status: 200 });
@@ -881,7 +900,7 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
 };
 
 /** Controls that act on Home itself rather than open a screen. */
-const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-add-card|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show)$/;
+const IN_PLACE = /^(home-card-[a-z]+-menu|home-edit|home-add-card|home-market-tune|home-notice-line|home-needs-admin|home-step-interests|home-interest-[a-z]+|home-tip-next|home-tips-dont-show|home-community-shape-summary)$/;
 
 /** Ids a link passes as they are; every other param's value must be one its screen names. */
 const FREE_PARAMS = new Set(['id', 'txId', 'publicKey', 'name']);
@@ -1606,6 +1625,95 @@ describe('the global node\'s Home (H4): Find your community on top, the global F
         expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
         expect(cards()[0]).toBe('find');
         expect(node.requests.filter(r => new URL(r.url).pathname === '/api/join/knock/cancel')).toHaveLength(1);
+    });
+
+    // LG-L1-W (review of #2573): the next read of that visit re-reads the phone's knocks, where the cancelled one is no longer
+    // listed. The line and the pin stay until Home loses focus (Fable's pick: the Cancel's line is for THIS Home visit).
+    describe('a Cancel that worked: its line stays for the whole Home visit, and goes when Home loses focus', () => {
+        const url = 'https://byron.example.org';
+        const waitingCard = () => document.querySelector(`[data-testid="home-find-waiting-${url}"]`);
+        const CANCELLED = 'You cancelled your request. You can ask again after 24 hours.';
+        /** Home read again within the visit: the app coming back to the front while Home is shown. */
+        const refreshInVisit = async () => {
+            const onChange = vi.mocked(AppState.addEventListener).mock.calls.filter(c => c[0] === 'change').at(-1)![1] as (s: string) => void;
+            await act(async () => { onChange('active'); });
+            await settle();
+        };
+        const cancelIt = async () => {
+            await act(async () => { (document.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLElement).click(); });
+            const confirm = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!.find(b => b.style === 'destructive')!;
+            await act(async () => { await confirm.onPress!(); });
+            await settle();
+        };
+        const leaveAndReturn = async () => {
+            await act(async () => { nav.blur!(); });
+            // Leaving Home drops the visit's cancelled knocks at once (index.tsx focus cleanup), before any return.
+            expect(waitingCard()).toBeNull();
+            await act(async () => { nav.focus!(); });
+            await settle();
+        };
+
+        it('past day 30 (pinned by the wait alone): the next read keeps the card, its line and the pin; leaving Home and coming back drops them', async () => {
+            node.answer = globalMember(40);
+            node.knockStatus = 'pending';
+            await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+            await render();
+            await settle();
+            await cancelIt();
+            expect(waitingCard()?.textContent).toContain(CANCELLED);
+
+            const reads = homeReads().length;
+            await refreshInVisit();
+            expect(homeReads().length).toBeGreaterThan(reads);
+            expect(waitingCard()?.textContent).toContain(CANCELLED);
+            expect(document.querySelector(`[data-testid="home-find-cancel-${url}"]`)).toBeNull();
+            expect(cards()[0]).toBe('find');
+            expect(byLabel('Card options for Find your community')).toBeNull();
+            // The line is for the visit alone: the phone has the request cancelled, and the next visit draws no card for it.
+            expect(JSON.parse(mem.store.get(KNOCKS_STORE_KEY)!).knocks[0].cancelledAt).toEqual(expect.any(String));
+
+            await leaveAndReturn();
+            expect(waitingCard()).toBeNull();
+            expect(document.body.textContent).not.toContain(CANCELLED);
+            // Nothing open there any more, so Find is a card like any other again: its "…" is back (the pin went with the visit).
+            expect(byLabel('Card options for Find your community')).not.toBeNull();
+        });
+
+        it('in the first 30 days (pinned anyway): the line also stays through the read, and goes with the visit', async () => {
+            node.answer = globalMember(3);
+            node.knockStatus = 'pending';
+            await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+            await render();
+            await settle();
+            await cancelIt();
+            await refreshInVisit();
+            expect(waitingCard()?.textContent).toContain(CANCELLED);
+            expect(cards()[0]).toBe('find');
+
+            await leaveAndReturn();
+            expect(waitingCard()).toBeNull();
+            expect(cards()[0]).toBe('find');
+        });
+
+        it('a Cancel that finishes after Home lost focus leaves no line for the next visit', async () => {
+            node.answer = globalMember(40);
+            node.knockStatus = 'pending';
+            await rememberKnock(who.identity.publicKey, { url, name: 'Byron Shire BeanPool' });
+            await render();
+            await settle();
+            await act(async () => { (document.querySelector(`[data-testid="home-find-cancel-${url}"]`) as HTMLElement).click(); });
+            const confirm = vi.mocked(Alert.alert).mock.calls.at(-1)![2]!.find(b => b.style === 'destructive')!;
+            let done!: Promise<void>;
+            await act(async () => { done = Promise.resolve(confirm.onPress!()); nav.blur!(); });
+            await act(async () => { await done; });
+            await settle();
+            // The late Cancel lands while Home is away: it leaves nothing behind for the next visit (the guard's else-branch).
+            expect(waitingCard()).toBeNull();
+            await act(async () => { nav.focus!(); });
+            await settle();
+            expect(waitingCard()).toBeNull();
+            expect(document.body.textContent).not.toContain(CANCELLED);
+        });
     });
 
     // A list that does not hold Find, as the newcomer's and the starter set are (Lounge L1, review of #2573). The stub node
@@ -2931,6 +3039,115 @@ describe('sun and moon: worked out on the phone, from the place it already has (
         const after = node.requests.slice(before);
         expect(after.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences']);
         expect(JSON.parse(after[0].body).preferences['home.layout'].cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
+    });
+});
+
+describe('the Decide card shows just the votes that are yours: one setting on the card (My votes)', () => {
+    const decideRow = (id: string, title: string, voted: boolean, inHours: number) => ({ id, title, closesAt: iso(Date.now() + inHours * H), voted });
+    const ALL = [
+        decideRow('d1', 'Compost bay', false, 2), decideRow('d2', 'Bus shelter', true, 5), decideRow('d3', 'Tool library', false, 9),
+        decideRow('d4', 'Seed fund', false, 20), decideRow('d5', 'Hall roof', false, 30),
+    ];
+    /** What the node's decideCard answers for each setting (apps/server routes/home-answer.ts): three rows, five, or the member's own. */
+    const decideFor = (show: unknown): HomeAnswer['cards']['decide'] => show === 'mine'
+        ? { open: 1, soonestClosesAt: ALL[1].closesAt, polls: 0, pollsMore: false, items: [ALL[1]], poll: null }
+        : { open: 5, soonestClosesAt: ALL[0].closesAt, polls: 0, pollsMore: false, items: show === 'open' ? ALL : ALL.slice(0, 3), poll: null };
+    const phoneKey = () => homeLayoutStoreKey(who.identity.publicKey, NODE);
+    function withDecide(settings?: Record<string, unknown>, onHome = true) {
+        const base = localMember();
+        const layout = {
+            v: 2 as const, dismissed: {}, updatedAt: iso(Date.now() - 72 * H),
+            cards: [{ id: 'market', type: 'market' }, ...(onHome ? [{ id: 'decide', type: 'decide', ...(settings ? { settings } : {}) }] : []), { id: 'events', type: 'events' }],
+        };
+        node.decideFor = decideFor;
+        node.answer = { ...base, layout, cards: { ...base.cards, ...(onHome ? { decide: decideFor(settings?.show) } : {}) } };
+        mem.store.set(phoneKey(), JSON.stringify(layout));
+    }
+    const rowIds = () => Array.from(document.querySelectorAll('[data-testid^="home-decide-d"]'), e => e.getAttribute('data-testid')!.replace('home-decide-', ''));
+    const labels = () => Array.from(document.querySelectorAll('[data-testid="card-settings-show"] button'), e => e.textContent);
+    const chosen = () => Array.from(document.querySelectorAll('[data-testid="card-settings-show"] [aria-selected="true"]'), e => e.textContent);
+    const note = () => document.querySelector('[data-testid="card-settings-show-note"]')?.textContent;
+    const sentCards = (r: { body: string }) => JSON.parse(r.body).preferences['home.layout'].cards as { id: string; type: string; settings?: unknown }[];
+    const requestsAfter = (from: number) => node.requests.slice(from).filter(r => r.method === 'POST' || new URL(r.url).pathname === '/api/home');
+    const openSettings = async () => {
+        await act(async () => { byLabel('Card options for Decide')!.click(); });
+        await act(async () => { byLabel('Settings for Decide')!.click(); });
+        await settle(2);
+    };
+
+    it('Settings… from the card\'s "…": the three choices with the stored one chosen; My votes and Save keep the card where it is, save the setting, read Home after the save, and draw only the voted row', async () => {
+        withDecide({ show: 'open' });
+        await render();
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
+        // "All open" sends five rows, and the card draws all five (Summary's three stop at three).
+        expect(rowIds()).toEqual(['d1', 'd2', 'd3', 'd4', 'd5']);
+        await openSettings();
+        expect(document.querySelector('[data-testid="card-settings-words"]')).toBeNull();
+        expect(labels()).toEqual(['Summary', 'All open', 'My votes']);
+        expect(chosen()).toEqual(['All open']);
+        expect(note()).toBe('Up to five open Decisions, and the first poll.');
+        expect(byLabel('Save Decide')).not.toBeNull();
+        expect(byLabel('Add Decide to Home')).toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="card-settings-show-mine"]') as HTMLElement).click(); });
+        expect(chosen()).toEqual(['My votes']);
+        expect(note()).toBe('Open Decisions you voted in or proposed.');
+        const before = node.requests.length;
+        await act(async () => { byLabel('Save Decide')!.click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
+        expect(rowIds()).toEqual(['d2']);
+        expect(document.querySelector('[data-testid="home-decide-d2"]')!.textContent).toContain('You voted');
+        const sent = requestsAfter(before);
+        expect(sent.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(sentCards(sent[0])).toEqual([{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide', settings: { show: 'mine' } }, { id: 'events', type: 'events' }]);
+        expect(new URL(sent[1].url).searchParams.get('cards')!.split(',')).toContain('decide');
+        expect(boundSignatureValid(sent[0], who.identity.publicKey)).toBe(true);
+    });
+
+    it('a card with no setting, or one this build cannot read, opens on Summary and draws three rows', async () => {
+        for (const settings of [undefined, { show: 'watching', ids: ['d1'] }]) {
+            withDecide(settings);
+            await render();
+            expect(rowIds()).toEqual(['d1', 'd2', 'd3']);
+            await openSettings();
+            expect(chosen(), JSON.stringify(settings)).toEqual(['Summary']);
+            expect(note()).toBe('The Decisions closing soonest, and the first poll.');
+            act(() => root?.unmount());
+            host?.remove();
+            resetHomeStoreForTests();
+        }
+    });
+
+    it('Add a card: Decide asks what it shows first (Summary chosen); My votes and Add to Home save it first on Home, read after the save, and draw the voted row', async () => {
+        withDecide(undefined, false);
+        await render();
+        expect(cards()).not.toContain('decide');
+        await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+        await act(async () => { byLabel('Add Decide to Home')!.click(); });
+        await settle(2);
+        expect(chosen()).toEqual(['Summary']);
+        expect(byLabel('Add Decide to Home')).not.toBeNull();
+        await act(async () => { (document.querySelector('[data-testid="card-settings-show-mine"]') as HTMLElement).click(); });
+        const before = node.requests.length;
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        expect(cards()[0]).toBe('decide');
+        expect(rowIds()).toEqual(['d2']);
+        expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith('Decide added to Home');
+        const sent = requestsAfter(before);
+        expect(sent.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['POST /api/members/preferences', 'GET /api/home']);
+        expect(sentCards(sent[0])[0]).toEqual({ id: 'decide', type: 'decide', settings: { show: 'mine' } });
+        expect(new URL(sent[1].url).searchParams.get('cards')!.split(',')).toContain('decide');
+    });
+
+    it('a node from before the setting answers the Summary card whatever is stored: the phone draws the rows it was sent', async () => {
+        withDecide({ show: 'mine' });
+        node.decideFor = null;
+        node.answer = { ...node.answer, cards: { ...node.answer.cards, decide: decideFor('counts') } };
+        await render();
+        expect(rowIds()).toEqual(['d1', 'd2', 'd3']);
+        expect(cards()).toEqual(['market', 'decide', 'events', 'community']);
     });
 });
 

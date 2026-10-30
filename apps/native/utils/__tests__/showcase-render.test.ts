@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The showcase on the phone rendered for real (scratch/global-node/DESIGN-global-showcase-fable.md §2, §6 W3): the marker
- * (strip expanded and collapsed, pill, action, line), its sheet, the Commons preview, the member's own My Deals sheet fed
+ * (strip expanded and collapsed, pill, action, line), its sheet, the Commons preview, the member's own Your deals sheet fed
  * Example Valley, and Home's Your Beans
  * card, in the real light and dark palettes, at 320 dp and 1.3× text. React Native's host components are plain tags
  * carrying their accessibility props and flattened style (as enterprise-decisions-render.test.ts).
@@ -51,6 +51,13 @@ vi.mock('react-native', () => {
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
+// Decide holds the reply sheet for a vote on removing the member (components/RemovalReplySheet.tsx), which keeps clear of the
+// keyboard with keyboard-controller: its React Native source doesn't load here, so a pass-through, as the other Commons
+// renders have.
+vi.mock('react-native-keyboard-controller', () => {
+    const pass = ({ children }: { children?: unknown }) => createElement('div', null, children as any);
+    return { KeyboardAvoidingView: pass, KeyboardAwareScrollView: pass, KeyboardController: { dismiss: async () => {} }, useKeyboardState: () => false };
+});
 const routes = vi.hoisted(() => ({ pushed: [] as unknown[] }));
 vi.mock('expo-router', () => ({
     router: { push: (to: unknown) => routes.pushed.push(to), navigate: (to: unknown) => routes.pushed.push(to) },
@@ -83,7 +90,7 @@ vi.mock('../../app/ThemeContext', async () => {
 vi.mock('../../components/CommonsInfoModal', () => ({
     CommonsInfoModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? createElement('div', { 'data-testid': 'commons-info' }, 'About the Commons') : null),
 }));
-// The net spy's third arm: every call into the node client is recorded (My Deals imports it; its preview must call
+// The net spy's third arm: every call into the node client is recorded (Your deals imports it; its preview must call
 // nothing). Every export by name, each a function that records its call (net-spy-db.ts).
 const net = vi.hoisted(() => ({ calls: [] as string[] }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls));
@@ -335,7 +342,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(net.calls).toEqual([]);
         });
 
-        it("My Deals in preview is the member's own sheet fed Example Valley: the deal waiting on you, the one held safely, the one sold; every press opens the sheet", async () => {
+        it("Your deals in preview is the member's own sheet fed Example Valley: the deal waiting on you, the one held safely, the one sold; every press opens the sheet", async () => {
             review.opened = 0;
             await render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {}, preview: true }));
             const sheetText = () => host.querySelector('[data-testid="local-community-sheet"]')?.textContent ?? '';
@@ -373,7 +380,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(net.calls).toEqual([]);
         });
 
-        it('My Deals in preview at 320 dp: the strip and Example head the scrolling list, so the tabs and a deal show on open', async () => {
+        it('Your deals in preview at 320 dp: the strip and Example head the scrolling list, so the tabs and a deal show on open', async () => {
             await render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {}, preview: true }));
             const head = host.querySelector('[data-testid="deals-preview-head"]')!;
             expect(head.querySelector('[data-testid="local-community-strip"]')).not.toBeNull();
@@ -392,13 +399,13 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(host.querySelectorAll('[data-testid="local-community-strip"]')).toHaveLength(1);
         });
 
-        it('My Deals live: no preview head in the list', async () => {
+        it('Your deals live: no preview head in the list', async () => {
             await render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {}, preview: false }));
             expect(host.querySelector('[data-testid="deals-preview-head"]')).toBeNull();
             expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
         });
 
-        it('My Deals in preview, then live while open (the node\'s switch, or the reader\'s own set): Example Valley is gone at once, and no press reaches a sample id', async () => {
+        it('Your deals in preview, then live while open (the node\'s switch, or the reader\'s own set): Example Valley is gone at once, and no press reaches a sample id', async () => {
             review.opened = 0;
             review.txIds.length = 0;
             const props = { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {} };

@@ -48,6 +48,7 @@ import {
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
 import { EVENT_ACCENT } from './EventCard';
+import { TagPicker } from './TagPicker';
 import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
@@ -124,6 +125,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         mapRef.current?.animateToRegion({ ...DEFAULT_REGION, latitude, longitude }, 400);
     };
     const [description, setDescription] = useState('');
+    const [tags, setTags] = useState<string[]>([]);
     const [photo, setPhoto] = useState<string | null>(null);
     const [note, setNote] = useState('');
     // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): ticked where anyone can
@@ -242,7 +244,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const reset = () => {
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false); exactPin.current = null;
-        setDescription(''); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
+        setDescription(''); setTags([]); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
         setCopiedHost(null); setIsCopy(false);
         setOnline(false); setLink(''); setZone(NO_ZONE); setZonePicker({ open: false, query: '', error: null });
         zoneTicket.current++;
@@ -261,6 +263,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setIsCopy(true);
         setTitle(prefill.title);
         setDescription(prefill.description);
+        const prefillTags = (prefill as any)?.tags;
+        setTags(Array.isArray(prefillTags) ? prefillTags : (typeof prefillTags === 'string' ? prefillTags.split(' ').filter(Boolean) : []));
         setPlaceName(prefill.placeName);
         setNote(prefill.privateNote);
         setStart(null); setEnd(null); setPicker(null); setPhoto(null);
@@ -297,6 +301,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setIsCopy(false);
         setTitle(v.title);
         setDescription(v.description);
+        const editTags = (v as any)?.tags;
+        setTags(Array.isArray(editTags) ? editTags : (typeof editTags === 'string' ? editTags.split(' ').filter(Boolean) : []));
         setStart(v.start);
         setEnd(v.end);
         setRepeat(v.repeat ?? 'never');
@@ -485,14 +491,15 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             Alert.alert(t('Almost there'), t('Add a photo first'));
             return;
         }
-        if (Object.keys(editCheck.patch).length === 0) {
+        const patch: any = { ...editCheck.patch, tags };
+        if (Object.keys(editCheck.patch).length === 0 && tags.join(' ') === ((editOf.values as any).tags ? (Array.isArray((editOf.values as any).tags) ? (editOf.values as any).tags.join(' ') : (editOf.values as any).tags) : '')) {
             onClose();
             return;
         }
         setSubmitting(true);
         try {
             const out: { eventTimeAdjusted?: any } = {};
-            const saved = await updateEvent(editOf.id, editCheck.patch, out);
+            const saved = await updateEvent(editOf.id, patch, out);
             const dst = eventTimeAdjustedText(out.eventTimeAdjusted, zone.tz);
             // The node's word on UPDATED: a new zone with the same offset (Lagos → Kinshasa) moves no instant, so it marks
             // nothing and tells nobody (#1946 review, finding 6).
@@ -553,6 +560,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                 ...built.draft,
                 photos: photo ? JSON.stringify([photo]) : null,
                 created_at: new Date().toISOString(),
+                ...(tags.length > 0 ? { tags } : {}),
             });
             const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, tz);
             const done = t('Your event is in the Market feed.');
@@ -877,6 +885,16 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 onChangeText={setDescription}
                                 multiline
                                 accessibilityLabel={t('Description')}
+                            />
+                        </View>
+
+                        <View style={styles.field}>
+                            <TagPicker
+                                value={tags}
+                                onChange={setTags}
+                                category="community"
+                                title={title}
+                                description={description}
                             />
                         </View>
 

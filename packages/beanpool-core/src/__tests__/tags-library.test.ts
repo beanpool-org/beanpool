@@ -9,7 +9,7 @@ import { SYNONYM_MAP } from '../synonyms.js';
 import { CONTEXT_SEPARATOR, setLanguage, wordsFor } from '../words.js';
 import {
     TAG_ID_PATTERN, TAG_LIBRARY, TAG_TOPS, buildTagIndex, isTagId, tagById, tagChildren, tagEnglish, tagIndex, tagParent,
-    tagSearchWords,
+    tagSearchWords, searchTagsFor,
 } from '../tags/index.js';
 import { suggestTags } from '../tags/suggest.js';
 import before from './fixtures/synonym-map-before-tags.json';
@@ -296,4 +296,39 @@ describe('suggestTags', () => {
         // A spaced script is never read inside a word: "lemonade" is not looked through for "lemon".
         expect(buildTagIndex(wordsFor('en')).inside('lemonade')).toEqual([]);
     });
+
+    describe('searchTagsFor: resolving search queries to tag ids', () => {
+        it('resolves a member’s typed word into tag ids in English and another language', () => {
+            const es = buildTagIndex(wordsFor('es', [{
+                [`Lemon${CONTEXT_SEPARATOR}tag`]: 'Limón',
+                [`Lime${CONTEXT_SEPARATOR}tag`]: 'Lima',
+                [`Eggs${CONTEXT_SEPARATOR}tag`]: 'Huevos',
+            }]));
+            expect(searchTagsFor('limón', { index: es })).toEqual(['food.fruit.lemon']);
+            expect(searchTagsFor('lemon', { index: es })).toEqual(['food.fruit.lemon']);
+            expect(searchTagsFor('huevos', { index: es })).toEqual(['food.eggs']);
+            expect(searchTagsFor('eggs', { index: es })).toEqual(['food.eggs']);
+        });
+
+        it('resolves an alias into the tags under it', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            expect(searchTagsFor('citrus', { index: en })).toEqual(expect.arrayContaining(['food.fruit.lemon', 'food.fruit.lime', 'food.fruit.orange']));
+        });
+
+        it('resolves multiple words in a query, excluding top categories', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            const res = searchTagsFor('fresh lemons and limes', { index: en });
+            expect(res).toContain('food.fruit.lemon');
+            expect(res).toContain('food.fruit.lime');
+            // Tops (category level) are never returned
+            for (const id of res) expect(id).toContain('.');
+        });
+
+        it('respects the limit option and ignores whitespace', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            expect(searchTagsFor('   ', { index: en })).toEqual([]);
+            expect(searchTagsFor('citrus', { index: en, limit: 2 })).toHaveLength(2);
+        });
+    });
 });
+

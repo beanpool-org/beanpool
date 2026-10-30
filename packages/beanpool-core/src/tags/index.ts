@@ -4,8 +4,9 @@
  * the Market's search and the assistant's tags_search all read one index, built once per language.
  */
 import { CONTEXT_SEPARATOR, currentLanguage, currentWords, t, type Words } from '../words.js';
-import { joinCompounds, plainWords } from '../search-terms.js';
+import { compoundWords, joinCompounds, plainWords } from '../search-terms.js';
 import { TAG_LIBRARY, type TagDef } from './library.js';
+import { SEARCH_TAGS_MAX } from './post-tags.js';
 
 export { TAG_LIBRARY, type TagDef } from './library.js';
 
@@ -255,3 +256,57 @@ export function tagIndex(): TagIndex {
     if (cached?.words !== words) cached = { words, index: buildTagIndex(words) };
     return cached.index;
 }
+
+/**
+ * Resolves a search query's typed words into tag ids through the label index (DESIGN-owner-seeding-tags-fable.md §4.7).
+ * Reads the member's language and English: "limón" in Spanish resolves to `food.fruit.lemon`, and "citrus" to the
+ * citrus fruits. Tops (the 17 categories) are omitted because category is its own field. At most `limit` (default SEARCH_TAGS_MAX)
+ * unique tag ids returned.
+ */
+export function searchTagsFor(query: string, options: { index?: TagIndex; limit?: number } = {}): string[] {
+    const text = query.trim();
+    if (!text) return [];
+    const index = options.index ?? tagIndex();
+    const limit = options.limit ?? SEARCH_TAGS_MAX;
+    const out = new Set<string>();
+
+    const addIds = (ids: readonly string[]) => {
+        for (const id of ids) {
+            if (id.includes('.')) {
+                out.add(id);
+                if (out.size >= limit) return true;
+            }
+        }
+        return false;
+    };
+
+    // First try the whole query as a name/label or alias: e.g. "limón", "citrus", "free-range eggs"
+    if (addIds(index.byName(text))) return [...out];
+    if (addIds(index.byAlias(text))) return [...out];
+
+    // Part words (handling compounds as in suggestTags and search-terms)
+    const words = compoundWords(text);
+    if (words.length > 0) {
+        for (let n = Math.min(index.maxWords, words.length); n >= 1; n--) {
+            for (let i = 0; i + n <= words.length; i++) {
+                const phrase = words.slice(i, i + n).join(' ');
+                const byName = index.byName(phrase);
+                if (byName.length > 0) {
+                    if (addIds(byName)) return [...out];
+                } else if (n === 1) {
+                    const byAlias = index.byAlias(phrase);
+                    if (byAlias.length > 0) {
+                        if (addIds(byAlias)) return [...out];
+                    }
+                    const inside = index.inside(phrase);
+                    if (inside.length > 0) {
+                        if (addIds(inside)) return [...out];
+                    }
+                }
+            }
+        }
+    }
+
+    return [...out];
+}
+

@@ -40,7 +40,8 @@ import { useReaderFeatures } from '../../utils/use-reader-features';
 import { readsOwn } from '../../utils/reads-own';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, upperCase, parseAmount, amountRefusalWords, ANY_DECIMALS, dealQuantityUnit, type DealQuantityUnit, listingDeals, listingDealLines, dealSideOf, dealMoves, releaseLine, type DealMoves, type DealRow, postTagsOf, tagIndex } from '@beanpool/core';
+import { TagPicker } from '../../components/TagPicker';
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
@@ -204,6 +205,9 @@ export default function PostDetailModal() {
         // Title & Description
         postTitle: { color: colors.text.body, fontSize: 24, fontWeight: '800', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 },
         description: { color: colors.text.secondary, fontSize: 15, lineHeight: 22, paddingHorizontal: 20, paddingBottom: 16 },
+        tagChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 20, paddingBottom: 16 },
+        detailTagChip: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 22, backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center' },
+        detailTagChipText: { fontSize: 13, fontWeight: '700', color: colors.text.body },
 
         // Photos
         carouselWrap: { marginHorizontal: 20, marginBottom: 16 },
@@ -497,6 +501,7 @@ export default function PostDetailModal() {
     // Edit form state
     const [editType, setEditType] = useState<'offer' | 'need'>('offer');
     const [editCategory, setEditCategory] = useState('general');
+    const [editTags, setEditTags] = useState<string[]>([]);
     const [editTitle, setEditTitle] = useState('');
     const [editDescription, setEditDescription] = useState('');
     const [editCredits, setEditCredits] = useState('');
@@ -1061,6 +1066,7 @@ export default function PostDetailModal() {
     const startEdit = () => {
         setEditType(post.type);
         setEditCategory(post.category);
+        setEditTags(postTagsOf(post.tags));
         setEditTitle(post.title);
         setEditDescription(post.description || '');
         // In the language's way ("12,5"), so it reads back as the same price.
@@ -1100,6 +1106,7 @@ export default function PostDetailModal() {
             await updatePost(post.id, {
                 type: editType,
                 category: editCategory,
+                tags: editTags,
                 title: editTitle.trim(),
                 description: editDescription.trim(),
                 credits: price?.ok ? price.value : 0,
@@ -1356,6 +1363,27 @@ export default function PostDetailModal() {
 
                 {/* Description */}
                 <Text style={styles.description}>{post.description || t('No description provided.')}</Text>
+
+                {/* Tag Chips */}
+                {postTagsOf(post.tags).length > 0 && (
+                    <View style={styles.tagChipsRow} testID="detail-tags-row">
+                        {postTagsOf(post.tags).map(id => {
+                            const label = tagIndex().label(id);
+                            if (!label) return null;
+                            return (
+                                <Pressable
+                                    key={id}
+                                    style={styles.detailTagChip}
+                                    onPress={() => router.push({ pathname: '/(tabs)/market', params: { tag: id } })}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Tag {name}', { name: label })}
+                                >
+                                    <Text style={styles.detailTagChipText}>{label}</Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
+                )}
 
                 {/* Photos */}
                 {photos.length > 0 && (
@@ -1689,6 +1717,15 @@ export default function PostDetailModal() {
                                     {POST_CATEGORIES.map(c => <Picker.Item key={c.id} label={t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) })} value={c.id} />)}
                                 </Picker>
                             </View>
+
+                            {/* Tags */}
+                            <TagPicker
+                                value={editTags}
+                                onChange={setEditTags}
+                                category={editCategory}
+                                title={editTitle}
+                                description={editDescription}
+                            />
 
                             {/* Title */}
                             <TextInput accessibilityLabel={t('Title')} style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder={t('Title')} placeholderTextColor={colors.text.muted} />

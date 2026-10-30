@@ -22,6 +22,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { useOwnProfile } from '../utils/use-own-profile';
+import { ownRowOf } from '../utils/own-profile-anchor';
 import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
 import { useShowcaseMode } from '../utils/use-reader-features';
 import { readsOwn } from '../utils/reads-own';
@@ -540,8 +541,17 @@ export default function PublicProfileScreen() {
             updatedAt: quizResult.updatedAt,
         });
 
+        // Profile S2-W: publish this community's name, not the phone-wide name (identity.callsign).
+        // Same mechanism #2617 used: ownRowOf(row).callsign, falling back to viewerProfile/own,
+        // and identity.callsign only if this community holds no row yet.
+        const memberProfile = await getMemberProfile(identity.publicKey).catch(() => null);
+        const communityName = ownRowOf(memberProfile)?.callsign?.trim()
+            || viewerProfile?.callsign?.trim()
+            || (ownShown ? own.callsign?.trim() : undefined);
+        const nameToUse = communityName || identity.callsign || '';
+
         const localUpdate: any = {
-            callsign: identity.callsign || viewerProfile?.callsign || '',
+            callsign: nameToUse,
             avatar_url: viewerProfile?.avatar_url || null,
             bio: viewerProfile?.bio || '',
             contact_value: viewerProfile?.contact_value || '',
@@ -558,7 +568,7 @@ export default function PublicProfileScreen() {
             if (url) {
                 const payloadObj: any = {
                     publicKey: identity.publicKey,
-                    callsign: identity.callsign || '',
+                    callsign: nameToUse,
                     archetype: publicArchetype,
                 };
                 const bodyString = JSON.stringify(payloadObj);

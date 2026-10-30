@@ -162,7 +162,7 @@ describe('MarketplacePage: a short nearby list is filled with the newest from el
         ));
         render(<MarketplacePage identity={identity} />);
         await screen.findByTestId('market-fill');
-        fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'bicycle' } });
+        fireEvent.change(screen.getByPlaceholderText('Search marketplace...'), { target: { value: 'bicycle' } });
         await waitFor(() => expect(screen.queryByText('Jam jars')).toBeNull());
         expect(screen.getByText('Bicycle repair')).toBeInTheDocument();
         expect(within(screen.getByTestId('market-fill')).getByText('Bicycle pump')).toBeInTheDocument();

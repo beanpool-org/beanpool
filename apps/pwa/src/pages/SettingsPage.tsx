@@ -1711,13 +1711,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 <div className="flex justify-between items-center p-4 rounded-xl border border-nature-200 dark:border-nature-800">
                                     <div>
-                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Escrow & Deals')}</div>
+                                        <div className="text-sm font-bold text-nature-900 dark:text-white">{t('Held in Trust & Deals')}</div>
                                         <div className="text-xs text-nature-500 dark:text-nature-400">{t('Push alerts on your phone for trade updates & credit transfers')}</div>
                                     </div>
                                     <ToggleSwitch
                                         checked={notifEscrow}
                                         onChange={() => handleToggleNotif('escrow')}
-                                        label={t('Escrow & Deals Notifications')}
+                                        label={t('Held in Trust & Deals Notifications')}
                                     />
                                 </div>
 

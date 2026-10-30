@@ -1721,7 +1721,7 @@ export default function SettingsScreen() {
             if (!identity || !plan) return;
             switch (outcome.kind) {
                 case 'not-deleted':
-                    Alert.alert(t("Purge Failed"), deleteFailedWords(outcome.reason || t("Failed to purge account from node. Active escrow trades may need to be completed or cancelled first."), words));
+                    Alert.alert(t("Purge Failed"), deleteFailedWords(outcome.reason || t("Failed to purge account from node. Active deals holding Beans in trust may need to be completed or cancelled first."), words));
                     return;
                 case 'left-unfinished':
                     Alert.alert(t("Account Deleted Here"), deletedButWords(plan.hereName, outcome.reason, true, words));

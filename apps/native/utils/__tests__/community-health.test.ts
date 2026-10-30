@@ -167,7 +167,7 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
         expect(trades.lines.map((l) => l.key)).toEqual(['t4', 't3', 't2', 't1']);
         expect(trades.lines.map((l) => l.text.split(' · ')[0])).toEqual([
             '@Ada read the alerts that named @Kimberly',
-            'An admin opened the escrows a member’s removal left stuck',
+            'An admin opened the deals a member’s removal left holding Beans in trust',
             '@Ada opened a dispute',
             '@Ada opened the disputes list',
         ]);

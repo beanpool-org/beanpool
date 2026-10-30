@@ -884,7 +884,7 @@ export default function LedgerScreen() {
                                 >
                                     <MaterialCommunityIcons name="lock-clock" size={14} color={colors.feedback.warning.fg} />
                                     <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{formatNumber(escrowTotal, 1)}</Text>
-                                    <Text style={styles.walletMetricLabel}>{t('IN ESCROW')}</Text>
+                                    <Text style={styles.walletMetricLabel}>{t('HELD IN TRUST')}</Text>
                                 </Pressable>
                             </>
                         )}

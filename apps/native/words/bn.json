@@ -2,7 +2,7 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -832,11 +832,10 @@
   "Search": "অনুসন্ধান",
   "Search marketplace...": "বাজারে অনুসন্ধান করুন...",
   "Search marketplace": "বাজারে অনুসন্ধান করুন",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "আমার চুক্তি, {n}টি মুলতুবি",
-    "other": "আমার চুক্তি, {n}টি মুলতুবি"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "আপনার চুক্তিগুলো, {n}টি মুলতুবি",
+    "other": "আপনার চুক্তিগুলো, {n}টি মুলতুবি"
   },
-  "My Deals": "আমার চুক্তি",
   "Opens your active and pending deals sheet": "আপনার সক্রিয় এবং মুলতুবি চুক্তির তালিকা খোলে",
   "Grid view": "গ্রিড ভিউ",
   "Compact view": "কমপ্যাক্ট ভিউ",
@@ -3413,7 +3412,6 @@
   "TRUST SCORE": "আস্থা স্কোর",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "আপনার পর্যালোচনাগুলো সরাসরি আপনার **আস্থা স্কোর**-কে প্রভাবিত করে, যা আপনার সর্বজনীন প্রোফাইলে দৃশ্যমান। একটি উচ্চ আস্থা স্কোর তৈরি করা বাণিজ্যের অংশীদার খুঁজে পাওয়া সহজ করে!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "বারবার খারাপ পর্যালোচনা ব্যবসায়িক অংশীদারদের সাথে আপনার অবস্থান কমিয়ে দেয়। ৭ দিনের বেশি এসক্রোতে আটকে থাকা অমীমাংসিত বিরোধগুলো অ্যাডমিনিস্ট্রেটররা সর্বজনীন, স্বাক্ষরিত সিদ্ধান্তের (ছাড়, ফেরত বা বিভাজন) মাধ্যমে নিষ্পত্তি করেন।",
-  "My Deals & Trust Hold": "আমার ডিল ও আস্থায় স্থগিত",
   "🎟️ Network Invites": "🎟️ নেটওয়ার্ক আমন্ত্রণ",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "প্রতিটি BeanPool সম্প্রদায় কেবল আমন্ত্রণের মাধ্যমে চলে: একজন সদস্য আপনাকে প্রবেশ করতে দেন। সম্প্রদায়কে নিরাপদে গড়ে তুলতে আমরা একটি **পারস্পরিক সমর্থন** ব্যবস্থার ওপর নির্ভর করি।",
   "WHO CAN INVITE": "কে আমন্ত্রণ জানাতে পারে",
@@ -6032,7 +6030,7 @@
   "Nothing in it yet": "এতে এখনও কিছু নেই",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "এতে এখনও কিছু নেই। একটি প্রস্তাবের সম্পাদনা স্ক্রিন থেকে সেটি এতে রাখুন, অথবা এখানে আপনার চালু প্রস্তাবগুলো যোগ করুন।",
   "On the Market": "বাজারে",
-  "Open my deals": "আমার চুক্তিগুলো খুলুন",
+  "Open your deals": "আপনার চুক্তিগুলোগুলো খুলুন",
   "Open my shop": "আমার দোকান খুলুন",
   "Open on Instagram": "Instagram-এ খুলুন",
   "Open your shop": "আপনার দোকান খুলুন",

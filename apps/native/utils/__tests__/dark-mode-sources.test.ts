@@ -268,9 +268,9 @@ describe('dark mode: themed screens draw with the theme', () => {
         expect(contrast(value(review, 'color', /submitText/), value(review, 'backgroundColor', /submitBtn/))).toBeGreaterThanOrEqual(4.5);
     });
 
-    // My Deals' History tab (showcase lane, 13 Oct): on main the Edit label was 2.00:1, the dates 3.60:1 (the shared
+    // Your deals' History tab (showcase lane, 13 Oct): on main the Edit label was 2.00:1, the dates 3.60:1 (the shared
     // dark muted), and the Completed badge and Review button kept their pale light fills. Text needs 4.5:1 on what is behind it.
-    it("My Deals' History rows read at 4.5:1 in dark and keep their light colours", () => {
+    it("Your deals' History rows read at 4.5:1 in dark and keep their light colours", () => {
         const file = 'components/MyDealsSheet.tsx';
         const src = ALL.find(s => s.file === file)!.src;
         const block = (name: string) => src.slice(src.indexOf(`        ${name}: {`), src.indexOf('},', src.indexOf(`        ${name}: {`)));

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-20",
@@ -787,10 +787,9 @@
   "Search": "搜索",
   "Search marketplace...": "搜索市集...",
   "Search marketplace": "搜索市集",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "other": "我的交易，{n} 笔待处理"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "other": "你的交易，{n} 笔待处理"
   },
-  "My Deals": "我的交易",
   "Opens your active and pending deals sheet": "打开你的进行中和待处理交易列表",
   "Grid view": "网格视图",
   "Compact view": "精简视图",
@@ -3273,7 +3272,7 @@
   "TRUST SCORE": "信任分",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "你的评价直接影响你的**信任分**，该分数在你的公开资料中可见。建立高信任分有助于更容易找到交易伙伴！",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "屡次差评会降低你在交易伙伴中的声誉。托管中搁置超过 7 天的未决争议由管理员通过公开签署的决议（释放、退款或均分）进行仲裁。",
-  "My Deals & Trust Hold": "我的交易与信托托管",
+  "Your deals & Trust Hold": "你的交易与信托托管",
   "🎟️ Network Invites": "🎟️ 网络邀请",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "每个 BeanPool 社区都仅限邀请加入：由现有成员邀请进入。为了安全发展社区，我们依赖**同伴担保**系统。",
   "WHO CAN INVITE": "谁能邀请",
@@ -5796,7 +5795,7 @@
   "Nothing in it yet": "里面还没有东西",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "里面还没有东西。可以在提供的编辑页面把它放进来，或在此添加你正在进行的提供。",
   "On the Market": "在市集上",
-  "Open my deals": "打开我的交易",
+  "Open your deals": "打开你的交易",
   "Open my shop": "开设我的店铺",
   "Open on Instagram": "在 Instagram 上打开",
   "Open your shop": "开设你的店铺",

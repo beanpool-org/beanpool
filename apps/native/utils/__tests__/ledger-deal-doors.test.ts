@@ -3,7 +3,7 @@
  * The Ledger's doors to deals (deals S6, scratch/fable-design/DESIGN-deals-fable.md §2.2 and §5): app/(tabs)/ledger.tsx
  * rendered for real, its Wallet tab at 320 dp × 1.3 text. The IN ESCROW total is one button that opens Your deals on
  * In Progress; a "Held in Trust" row whose deal the phone has is one button that opens that deal (the post, at its
- * transaction: what My Deals does for a card); a hold the phone has no deal for, and every other row, stay plain rows.
+ * transaction: what Your deals does for a card); a hold the phone has no deal for, and every other row, stay plain rows.
  *
  * React Native's host components are plain tags carrying their accessibility props and the layout props read here;
  * `router.push` is the spy. Components the Ledger shares with other screens are stand-ins, as in

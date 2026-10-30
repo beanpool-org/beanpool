@@ -54,7 +54,7 @@ In the Tool shed, **Lent to someone outside BeanPool** and **Delete** pause a th
 
 Tap **Close my shop**. Its Offers stay in the Market as ordinary Offers, or end too if you choose **End its Offers too**. Your private tool lists stay on your phone. You can open a new shop any time.
 
-You can't close it, or close it for now, while a deal on one of its things is asked for or under way. The app says how many deals are open, with a button to **My Deals**.
+You can't close it, or close it for now, while a deal on one of its things is asked for or under way. The app says how many deals are open, with a button to **Your deals**.
 
 ## On the global community
 

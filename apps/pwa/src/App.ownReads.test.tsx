@@ -1,7 +1,7 @@
 /**
  * The app shell reads nothing of the member's where a feature is in preview (global previews audit, "Across all five",
  * P3): on the global node it asked GET /api/marketplace/transactions for the member's deals on every load and poll,
- * while My Deals there is Example Valley's. Deals in preview: never asked. A local node: asked, as before.
+ * while Your deals there is Example Valley's. Deals in preview: never asked. A local node: asked, as before.
  *
  * The whole App, with the pages stood in for and the node's reads mocked at lib/api.
  */

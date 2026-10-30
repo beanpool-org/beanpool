@@ -4,7 +4,7 @@
  * for real inside the real LanguageProvider, with what only the Ledger draws drawn for real too: the frozen card's and
  * the bar's lines (utils/credit-line-card.ts), the rows' holds and dates, Example Valley's rows in preview, and every
  * sheet it opens (Trust & Reputation, Credit Slider Info, Available Balance, System Circulation) with their frame
- * (components/InfoModal.tsx). The sheets nothing on the Ledger opens (Pricing & Fees, My Deals & Trust Hold, Invites &
+ * (components/InfoModal.tsx). The sheets nothing on the Ledger opens (Pricing & Fees, Your deals & Trust Hold, Invites &
  * Vouching) are rendered on their own. React Native's host components are plain tags carrying their accessibility props,
  * placeholders and the layout props the 320 dp checks read; the node client answers a member's ledger.
  *
@@ -496,7 +496,7 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(bypassing([...sample, ...OTHERS])).toEqual([]);
     });
 
-    it('the sheets nothing on the Ledger opens: Pricing & Fees, My Deals & Trust Hold, Invites & Vouching', async () => {
+    it('the sheets nothing on the Ledger opens: Pricing & Fees, Your deals & Trust Hold, Invites & Vouching', async () => {
         const sheets: Array<[ReactElement, string[]]> = [
             [createElement(PricingInfoModal, { isOpen: true, onClose() {} }), ['🔒 Transaction Fee']],
             [createElement(DealsInfoModal, { isOpen: true, onClose() {} }), ['⚖️ Disputes', '⭐ Reviews']],

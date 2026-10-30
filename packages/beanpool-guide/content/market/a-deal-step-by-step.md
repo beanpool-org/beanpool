@@ -75,7 +75,7 @@ Each person can be in one deal on a Repeatable post at a time. Taking it up agai
 
 After releasing, the person paying is asked to rate the deal: 1 to 5 stars and a short, optional comment. Tap **Submit Rating**, or **Skip for now**.
 
-Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in My Deals, History (**Leave Review** in the web app). You can change your rating; the new one replaces the old.
+Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in Your deals, History (**Leave Review** in the web app). You can change your rating; the new one replaces the old.
 
 Everyone in your community can read the stars and words of a review. Only the two people in the trade can see who wrote it and which deal it was about.
 

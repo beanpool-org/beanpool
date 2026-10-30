@@ -505,7 +505,7 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
         expect(over()).toBeNull();
     });
 
-    it('one who asked to borrow, opened on their request by its id (My Deals, Home): whom they wait on, and Withdraw', async () => {
+    it('one who asked to borrow, opened on their request by its id (Your deals, Home): whom they wait on, and Withdraw', async () => {
         node.mine = [deal({ id: 'tx-q', status: 'requested' })];
         await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0 }), { txId: 'tx-q' });
         expect(host.textContent).toContain('You asked to borrow it · nothing is held until Damo says yes');

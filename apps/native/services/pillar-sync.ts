@@ -588,7 +588,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // The reader's own balance, ledger and deals are not asked where their feature is in preview (utils/reads-own.ts;
-        // the global node, whose Ledger and My Deals are Example Valley's): from the node's profile just read and the
+        // the global node, whose Ledger and Your deals are Example Valley's): from the node's profile just read and the
         // account's own set as last answered. Everywhere else, as before.
         const readerSet = pubKey ? readerFeaturesHeld.get(readerFeaturesKey(anchorUrl, pubKey))?.features ?? null : null;
         const readsOwnHere = (feature: 'beans' | 'escrow') => readsOwnWith(feature, profile?.features, readerSet);

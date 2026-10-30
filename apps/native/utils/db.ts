@@ -924,7 +924,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
  */
 /**
  * `includeEvents`: events are opt-in here as they are on the server's list route. Only screens that know how
- * to draw an event ask for them; the map tab, the deals badge and My Deals read this cache too and would
+ * to draw an event ask for them; the map tab, the deals badge and Your deals read this cache too and would
  * otherwise show an event as a trade listing (the native map layer is its own, later slice).
  *
  * Audience: with no `audienceScope` or `targetGroupId` this reads public listings only, for the map (#823).

@@ -2,7 +2,7 @@
   "_meta": {
     "language": "es",
     "name": "Spanish (neutral Latin American)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, shops and probes); claude-opus-5-5 (machine draft, front doors S15: the community card); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-sonnet-5-5 (machine draft, words drafts 23 Oct, shops and probes); claude-opus-5-5 (machine draft, front doors S15: the community card); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -832,11 +832,10 @@
   "Search": "Buscar",
   "Search marketplace...": "Buscar en el mercado...",
   "Search marketplace": "Buscar en el mercado",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "Mis tratos, {n} pendiente",
-    "other": "Mis tratos, {n} pendientes"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "Tus tratos, {n} pendiente",
+    "other": "Tus tratos, {n} pendientes"
   },
-  "My Deals": "Mis tratos",
   "Opens your active and pending deals sheet": "Abre el panel de tus tratos activos y pendientes",
   "Grid view": "Vista en cuadrícula",
   "Compact view": "Vista compacta",
@@ -3297,7 +3296,7 @@
   "TRUST SCORE": "PUNTUACIÓN DE CONFIANZA",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Tus reseñas influyen directamente en tu **Puntuación de confianza**, visible en tu perfil público. ¡Construir una alta puntuación de confianza facilita encontrar personas con quienes intercambiar!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Las malas reseñas reiteradas disminuyen tu reputación ante otros miembros. Las disputas sin resolver estancadas en custodia por más de 7 días son arbitradas por administradores mediante resoluciones públicas y firmadas (liberación, reembolso o división).",
-  "My Deals & Trust Hold": "Mis tratos y retención en custodia",
+  "Your deals & Trust Hold": "Tus tratos y retención en custodia",
   "🎟️ Network Invites": "🎟️ Invitaciones a la red",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Cada comunidad de BeanPool es solo por invitación: un miembro te da acceso. Para que la comunidad crezca de forma segura, contamos con un sistema de **Aval entre pares**.",
   "WHO CAN INVITE": "QUIÉN PUEDE INVITAR",
@@ -6032,7 +6031,7 @@
   "Nothing in it yet": "Aún no hay nada en ella",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "Aún no hay nada en ella. Pon una Oferta desde su pantalla de edición o agrega aquí tus Ofertas activas.",
   "On the Market": "En el Mercado",
-  "Open my deals": "Abrir mis tratos",
+  "Open your deals": "Abrir tus tratos",
   "Open my shop": "Abrir mi tienda",
   "Open on Instagram": "Abrir en Instagram",
   "Open your shop": "Abre tu tienda",

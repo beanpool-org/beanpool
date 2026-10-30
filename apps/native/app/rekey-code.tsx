@@ -226,6 +226,9 @@ export default function RekeyCodeScreen() {
                 setPhase('ended');
                 return;
             }
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and saved
+            // communities, and its key unless even that failed): the app must not go on as it, as welcome.tsx's restores don't.
+            if (e instanceof restore.ReplaceNotSaved) setIdentity(null);
             setError(e instanceof StoredKeyUnreadableError
                 ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
                 : keyLineWords(e instanceof Error ? e.message : REKEY_TEXT.changedAccount));

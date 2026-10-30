@@ -49,8 +49,12 @@ describe('Phone Market card ladder (Pictures S6)', () => {
     });
 
     it('sets absolute banner URL directly to prevent relative paths resolving on native', () => {
-        expect(marketSrc).toMatch(/author_banner_url:\s*absoluteBannerUrl/);
-        expect(marketSrc).toMatch(/authorBannerUrl:\s*absoluteBannerUrl/);
+        // The row normaliser the server search and the fill both read through (utils/market-fill.ts), which the screen calls.
+        const normaliserSrc = source('utils/market-fill.ts');
+        expect(marketSrc).toMatch(/normalizeServerPosts\(data, anchorUrl\)/);
+        expect(normaliserSrc).toMatch(/author_banner_url:\s*absoluteBannerUrl/);
+        expect(normaliserSrc).toMatch(/authorBannerUrl:\s*absoluteBannerUrl/);
+        expect(normaliserSrc).not.toMatch(/authorBannerUrl:\s*p\.authorBannerUrl\s*\?\?\s*absoluteBannerUrl/);
         expect(marketSrc).not.toMatch(/authorBannerUrl:\s*p\.authorBannerUrl\s*\?\?\s*absoluteBannerUrl/);
     });
 

@@ -12,6 +12,7 @@ import type { HomeCardType, HomeNodeFacts } from '../home-frame.js';
 import type { ShopCategory } from '../shops.js';
 import type { ToolManifest, ToolShelf } from './manifest.js';
 import { THINGS } from './things/index.js';
+import { GARDEN } from './garden/index.js';
 
 export * from './manifest.js';
 export * from './line.js';
@@ -20,10 +21,12 @@ export * from './check.js';
 export * from './reconcile.js';
 export * from './node-copy.js';
 export * from './things/index.js';
+export * from './garden/index.js';
 
 /** Every tool this build has, in shelf order. */
 export const TOOLS: readonly ToolManifest[] = [
     THINGS,
+    GARDEN,
 ];
 
 /** A tool by its id, or undefined for one this build doesn't have ("This tool isn't in this version of the app"). */

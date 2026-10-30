@@ -68,6 +68,8 @@ describe('beanpool://community-card?node=…', () => {
 describe('the card with no account on the phone', () => {
     it('stays: a stranger is who it is for (the guard sends every other screen to welcome)', () => {
         expect(setupRedirect(['community-card'], { hasIdentity: false, pendingOnboarding: false })).toBeNull();
-        expect(setupRedirect(['find-community'], { hasIdentity: false, pendingOnboarding: false })).toBe('/welcome');
+        // A screen that needs a key still goes to welcome. Until S3 this witness was Find a community, which since S3 takes a
+        // phone with no account too (its knock makes the key: DESIGN-account-without-global-fable.md §2.4).
+        expect(setupRedirect(['new-message'], { hasIdentity: false, pendingOnboarding: false })).toBe('/welcome');
     });
 });

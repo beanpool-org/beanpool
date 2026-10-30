@@ -24,6 +24,7 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
+    FILL_BELOW, FILL_MAX, elsewhereFill, wantsFill,
 } from '@beanpool/core';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
@@ -289,6 +290,9 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
 
 /** How long the first read waits to learn whether this node reads by area, before it reads as before. */
 const NEAR_WAIT_MS = 1500;
+
+/** The least time between two reads of the fill for the same filters (the phone's minute, market.tsx). */
+const FILL_REREAD_MS = 60_000;
 
 /**
  * The Save-search button's words: core's word() key, shown here through t(), so the words a member sees are in the same
@@ -842,6 +846,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
                 // until the 300s backstop, which is exactly the window this stage widened.
                 lastRefreshTimeRef.current = Date.now();
+                setFillStamp(n => n + 1);
             } catch (e: any) {
                 if (isMembersOnlyRefusal(e)) {
                     setMembersOnly(true);
@@ -973,48 +978,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));
         return () => { offView(); offTie(); };
     }, [typeFilter, categoryFilter, beansOnly, groupFilter, identity?.publicKey, fitsNear]);
-
-    // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
-    useEffect(() => {
-        if (posts.length === 0 || isVisitor) return;
-        const now = Date.now();
-        const uniqueAuthors = [...new Set(posts.map(p => p.authorPublicKey))];
-        const uncachedAuthors = uniqueAuthors.filter(pk => {
-            if (ratingsInFlightRef.current.has(pk)) return false;
-            const cached = ratingsCacheRef.current.get(pk);
-            return !cached || (now - cached.fetchedAt > RATINGS_CACHE_TTL_MS);
-        });
-
-        if (uncachedAuthors.length === 0) return;
-
-        uncachedAuthors.forEach(pk => ratingsInFlightRef.current.add(pk));
-
-        Promise.all(
-            uncachedAuthors.map(pk =>
-                getMemberRatings(pk)
-                    .then(r => [pk, { average: r.average, count: r.count }] as const)
-                    // A failed fetch yields null, NOT a zero rating. Caching {average: 0, count: 0}
-                    // would show an established member as unrated for the full cache TTL because
-                    // of one transient blip — in a marketplace where the rating is the trust
-                    // signal, that is worse than showing nothing. Leaving it uncached lets the
-                    // next cycle retry; the in-flight set and the poll cadence bound the retries.
-                    .catch(() => [pk, null] as const)
-            )
-        ).then(results => {
-            const fetchedAt = Date.now();
-            setAuthorRatingsCache(prev => {
-                const next = { ...prev };
-                for (const [pk, rating] of results) {
-                    if (!rating) continue;
-                    ratingsCacheRef.current.set(pk, { rating, fetchedAt });
-                    next[pk] = rating;
-                }
-                return next;
-            });
-        }).finally(() => {
-            uncachedAuthors.forEach(pk => ratingsInFlightRef.current.delete(pk));
-        });
-    }, [posts]);
 
     // On a community where people are asked for, not read whole (lib/members-on-demand, the worldwide one), each listing
     // carries its author's face (authorAvatarUrl) and nothing is read for it. Elsewhere, and while the node hasn't said,
@@ -1197,6 +1160,162 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             setMessaging(false);
         }
     }
+
+    // What the member's own filters leave of a list of listings (the type pills, the category, search, the people they
+    // blocked, a picked distance, For You, Beans only, groups): the same for the nearby listings and the fill beneath.
+    const clientFilter = (source: MarketplacePost[]): MarketplacePost[] => {
+        let filtered = source.filter(p => {
+            if (p.type === 'poll') {
+                return p.status === 'active' || p.status === 'completed';
+            }
+            if (inactiveEnterprises.has(p.authorPublicKey)) {
+                return false;
+            }
+            // Cancelled and ended events leave the feed (§1).
+            if (p.type === 'event') return isEventOpen(p);
+            return p.status === 'active';
+        });
+
+        // Group filter (Item 10)
+        if (groupFilter !== 'all') {
+            filtered = filtered.filter(p => p.targetGroupId === groupFilter || (p as any).target_group_id === groupFilter);
+        }
+
+        // Text search (synonym-expanded): exclude polls from goods search unless polls filter active
+        if (searchQuery.trim()) {
+            filtered = filtered.filter(p => {
+                if (p.type === 'poll' && typeFilter !== 'poll') return false;
+                return matchesExpandedSearch(searchQuery, p.title, p.description);
+            });
+        }
+
+        // Blocked user filtering
+        const blocked = getBlockedUsers();
+        if (blocked.length > 0) {
+            const blockedSet = new Set(blocked);
+            filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
+        }
+
+        // Radius filter: polls have null coordinates and never pin to map; allow on "all" and "poll" tabs.
+        // Not under Events, where the distance chip is off screen.
+        if (radiusSettings && typeFilter !== 'event') {
+            filtered = filtered.filter(p => {
+                if (p.type === 'poll') return typeFilter === 'all' || typeFilter === 'poll';
+                if (p.lat == null || p.lng == null) return false;
+                const dist = haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng);
+                return dist <= radiusSettings.radiusKm;
+            });
+        }
+
+        // Local "★ For You" category filter (exclude polls)
+        if (typeFilter === 'for-you') {
+            filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && favCategories.includes(p.category));
+        }
+
+        // Beans-only filter (exclude polls and events). Off screen under Events.
+        if (beansOnly && typeFilter !== 'event') {
+            filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event');
+        }
+
+        // Founding-trade filter (exclude polls). Off screen under Events.
+        if (foundingOnly && typeFilter !== 'event') {
+            filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && p.authorFoundingNeeded);
+        }
+
+        // Specific type filter
+        if (typeFilter === 'offer') {
+            filtered = filtered.filter(p => p.type === 'offer');
+        } else if (typeFilter === 'need') {
+            filtered = filtered.filter(p => p.type === 'need');
+        } else if (typeFilter === 'poll') {
+            filtered = filtered.filter(p => p.type === 'poll');
+        } else if (typeFilter === 'event') {
+            filtered = eventsFeedFilter(filtered, feedEventWindow);
+        }
+        return filtered;
+    };
+
+    // The fill (core market-fill): where the list is cut to the member's area and fewer than FILL_BELOW listings are left
+    // near them under their filters, the newest from elsewhere come beneath them, read as "Show everywhere" reads. Not
+    // under Events (the list is not cut there), not for a visitor, and not when the member picked a distance: that is the
+    // circle they asked for, and the filter above would cut the fill to it anyway.
+    const fillOn = !!near && !isVisitor && !membersOnly && typeFilter !== 'event' && !radiusSettings;
+    const fillWanted = fillOn && !loading && wantsFill(clientFilter(posts).length);
+    const fillFilter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
+    const fillKey = JSON.stringify(fillFilter);
+    const [elsewhere, setElsewhere] = useState<{ key: string; posts: MarketplacePost[] | null } | null>(null);
+    // Bumped by each successful read of the nearby listings, so the fill is read again with it (not more often than
+    // FILL_REREAD_MS, below).
+    const [fillStamp, setFillStamp] = useState(0);
+    // The fill's latest read: its filters, when it came back (0 until it has, and left 0 if it failed, so the next stamp
+    // tries again), and whether it is still out.
+    const fillReadRef = useRef<{ key: string; at: number; out: boolean } | null>(null);
+    useEffect(() => {
+        if (!fillWanted) return;
+        // The nearby list is read on the 300 s poll and on every sync tick the node pushes, so a stamp is not a reason to
+        // ask again on its own: a minute per filter, as the phone does (market.tsx), and never while a read for these
+        // filters is out. A read already out is not cancelled by the next stamp either: with sync ticks quicker than the
+        // read, each one threw its answer away and asked again, and a member with nothing near sat on "Loading...".
+        // While a later read is out the earlier answer stays on screen.
+        const last = fillReadRef.current;
+        if (last && last.key === fillKey && (last.out || Date.now() - last.at < FILL_REREAD_MS)) return;
+        const read = { key: fillKey, at: 0, out: true };
+        fillReadRef.current = read;
+        // One page (the node's own 50), so the fill never holds more than core's FILL_MAX.
+        getMarketplacePosts({ ...fillFilter, limit: FILL_MAX })
+            .then(rows => { read.at = Date.now(); return rows; }, () => null)
+            .then(rows => {
+                read.out = false;
+                // Dropped only if the member has since moved to other filters, whose read has replaced this one.
+                if (fillReadRef.current === read) setElsewhere({ key: read.key, posts: rows });
+            });
+    }, [fillWanted, fillKey, fillStamp]);
+
+    // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll.
+    // The authors of the fill are asked for too, once it is read and while it is shown: its listings are not in `posts`,
+    // and a card without its author's stars is a card without the trust signal (the same listings under "Show
+    // everywhere" have it, there `posts` is that read). The cache and the in-flight set make an author in both parts one ask.
+    useEffect(() => {
+        const fillPosts = fillWanted && elsewhere?.key === fillKey ? elsewhere.posts ?? [] : [];
+        if ((posts.length === 0 && fillPosts.length === 0) || isVisitor) return;
+        const now = Date.now();
+        const uniqueAuthors = [...new Set([...posts, ...fillPosts].map(p => p.authorPublicKey))];
+        const uncachedAuthors = uniqueAuthors.filter(pk => {
+            if (ratingsInFlightRef.current.has(pk)) return false;
+            const cached = ratingsCacheRef.current.get(pk);
+            return !cached || (now - cached.fetchedAt > RATINGS_CACHE_TTL_MS);
+        });
+
+        if (uncachedAuthors.length === 0) return;
+
+        uncachedAuthors.forEach(pk => ratingsInFlightRef.current.add(pk));
+
+        Promise.all(
+            uncachedAuthors.map(pk =>
+                getMemberRatings(pk)
+                    .then(r => [pk, { average: r.average, count: r.count }] as const)
+                    // A failed fetch yields null, NOT a zero rating. Caching {average: 0, count: 0}
+                    // would show an established member as unrated for the full cache TTL because
+                    // of one transient blip — in a marketplace where the rating is the trust
+                    // signal, that is worse than showing nothing. Leaving it uncached lets the
+                    // next cycle retry; the in-flight set and the poll cadence bound the retries.
+                    .catch(() => [pk, null] as const)
+            )
+        ).then(results => {
+            const fetchedAt = Date.now();
+            setAuthorRatingsCache(prev => {
+                const next = { ...prev };
+                for (const [pk, rating] of results) {
+                    if (!rating) continue;
+                    ratingsCacheRef.current.set(pk, { rating, fetchedAt });
+                    next[pk] = rating;
+                }
+                return next;
+            });
+        }).finally(() => {
+            uncachedAuthors.forEach(pk => ratingsInFlightRef.current.delete(pk));
+        });
+    }, [posts, elsewhere, fillWanted, fillKey]);
 
     const inputStyle: React.CSSProperties = {
         width: '100%', padding: '0.5rem', background: 'var(--bg-secondary)',
@@ -3411,74 +3530,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {loading ? (
                 <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
             ) : membersOnly ? null : (() => {
-                let filtered = posts.filter(p => {
-                    if (p.type === 'poll') {
-                        return p.status === 'active' || p.status === 'completed';
-                    }
-                    if (inactiveEnterprises.has(p.authorPublicKey)) {
-                        return false;
-                    }
-                    // Cancelled and ended events leave the feed (§1).
-                    if (p.type === 'event') return isEventOpen(p);
-                    return p.status === 'active';
-                });
-
-                // Group filter (Item 10)
-                if (groupFilter !== 'all') {
-                    filtered = filtered.filter(p => p.targetGroupId === groupFilter || (p as any).target_group_id === groupFilter);
-                }
-
-                // Text search (synonym-expanded): exclude polls from goods search unless polls filter active
-                if (searchQuery.trim()) {
-                    filtered = filtered.filter(p => {
-                        if (p.type === 'poll' && typeFilter !== 'poll') return false;
-                        return matchesExpandedSearch(searchQuery, p.title, p.description);
-                    });
-                }
-
-                // Blocked user filtering
-                const blocked = getBlockedUsers();
-                if (blocked.length > 0) {
-                    const blockedSet = new Set(blocked);
-                    filtered = filtered.filter(p => !blockedSet.has(p.authorPublicKey));
-                }
-
-                // Radius filter: polls have null coordinates and never pin to map; allow on "all" and "poll" tabs.
-                // Not under Events, where the distance chip is off screen.
-                if (radiusSettings && typeFilter !== 'event') {
-                    filtered = filtered.filter(p => {
-                        if (p.type === 'poll') return typeFilter === 'all' || typeFilter === 'poll';
-                        if (p.lat == null || p.lng == null) return false;
-                        const dist = haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng);
-                        return dist <= radiusSettings.radiusKm;
-                    });
-                }
-
-                // Local "★ For You" category filter (exclude polls)
-                if (typeFilter === 'for-you') {
-                    filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && favCategories.includes(p.category));
-                }
-
-                // Beans-only filter (exclude polls and events). Off screen under Events.
-                if (beansOnly && typeFilter !== 'event') {
-                    filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event');
-                }
-
-                // Founding-trade filter (exclude polls). Off screen under Events.
-                if (foundingOnly && typeFilter !== 'event') {
-                    filtered = filtered.filter(p => p.type !== 'poll' && p.type !== 'event' && p.authorFoundingNeeded);
-                }
-
-                // Specific type filter
-                if (typeFilter === 'offer') {
-                    filtered = filtered.filter(p => p.type === 'offer');
-                } else if (typeFilter === 'need') {
-                    filtered = filtered.filter(p => p.type === 'need');
-                } else if (typeFilter === 'poll') {
-                    filtered = filtered.filter(p => p.type === 'poll');
-                } else if (typeFilter === 'event') {
-                    filtered = eventsFeedFilter(filtered, feedEventWindow);
-                }
+                let filtered = clientFilter(posts);
 
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {
@@ -3497,6 +3549,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     if (!isPulseA && isPulseB) return 1;
                     return 0;
                 });
+
+                // The fill beneath a short nearby list (see clientFilter): none of them already shown, and not the node's own
+                // Daily Pulse, which is not from elsewhere. Pending while the read is out; nothing if it failed or came back empty.
+                const isPulsePost = (p: MarketplacePost) => ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse')
+                    && !(p as any).originNode && !(p as any)._remoteNode;
+                const fillRead = fillWanted && elsewhere?.key === fillKey ? elsewhere.posts : undefined;
+                const fillRows = fillRead ? elsewhereFill(filtered, clientFilter(fillRead).filter(p => !isPulsePost(p))) : [];
+                const fillPending = fillWanted && elsewhere?.key !== fillKey;
 
                 // Distance on a card: the node's, where it read from a point, else from the centre the viewer picked for
                 // "near me" (§3).
@@ -3550,7 +3610,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 const narrowed = !!searchQuery.trim() || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
                     || groupFilter !== 'all' || beansOnly || foundingOnly;
-                const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: filtered.length })
+                const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: fillPending ? FILL_BELOW : filtered.length + fillRows.length })
                     ? <ExampleListings />
                     : null;
 
@@ -3606,6 +3666,236 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </div>
                     );
                 }
+
+                // The cards of a list, in the member's view mode: the nearby listings, and the fill beneath them (`fillHeading`
+                // given: one section under that heading, not the day groups, and no distance, as "Show everywhere" shows them).
+                const renderCards = (filtered: MarketplacePost[], fillHeading?: string) => {
+                    if (viewMode === 'grid') {
+                        return (
+                            // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a
+                            // plain auto-placed grid cannot put it in the last column of a row — it moves to
+                            // the next row and leaves that cell empty, a hole that walks about as the feed
+                            // and the window change. Dense lets the tiles after it back-fill the cell.
+                            // It only ever moves a tile forward past the poll, and only into a cell that
+                            // would otherwise be blank; with no item wider than one column there is nothing
+                            // to back-fill, so below `md` this changes nothing.
+                            <>
+                            {fillHeading && (
+                                <div className="flex items-center gap-3 mt-2 mb-2">
+                                    <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">{fillHeading}</span>
+                                    <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
+                                </div>
+                            )}
+                            <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                                {filtered.map((post) => {
+                                    if (post.type === 'event') {
+                                        return (
+                                            <div key={post.id} className="h-full">
+                                                <EventCard
+                                                    post={post}
+                                                    identity={identity}
+                                                    viewMode={viewMode}
+                                                    distanceKm={fillHeading ? null : eventDistance(post)}
+                                                    onOpen={() => setSelectedPost(post)}
+                                                    onRsvpChange={() => { refresh().catch(() => {}); }}
+                                                />
+                                            </div>
+                                        );
+                                    }
+                                    if (post.type === 'poll') {
+                                        return (
+                                            // A poll is the tallest thing in the grid: four answers, the open-ballot
+                                            // note and the turnout row. One column of a 3+ column grid is too narrow
+                                            // for its answers ("It's Am…"), so from `md` up it takes two.
+                                            <div key={post.id} className="h-full md:col-span-2">
+                                                <PollCard
+                                                    post={post}
+                                                    identity={identity}
+                                                    viewMode={viewMode}
+                                                    onVoteSuccess={() => refresh()}
+                                                    onOpenProfile={onOpenProfile}
+                                                    informal={informalPolls} localWays={markWays}
+                                                />
+                                            </div>
+                                        );
+                                    }
+                                    const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
+                                    return (
+                                    <div
+                                        key={post.id}
+                                        onClick={isPulse ? undefined : () => setSelectedPost(post)}
+                                        onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                        role={isPulse ? undefined : "button"}
+                                        tabIndex={isPulse ? undefined : 0}
+                                        aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
+                                        // No `h-full`: the tile keeps its own height rather than stretching to
+                                        // whatever shares its row (see MarketplaceCard's grid return).
+                                        // `self-start` is the other half of that: this div is the grid
+                                        // ITEM, and a grid with no `items-*` stretches its items to the
+                                        // row. Dropping `h-full` stops the tile filling the cell but
+                                        // leaves the cell row-tall, and the cell is what carries the
+                                        // click and the focus ring — so in the poll's row the ring drew
+                                        // around blank space below the card and a click there opened the
+                                        // listing (review on #1092).
+                                        className={`self-start rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                    >
+                                        <MarketplaceCard
+                                            post={post as any}
+                                            authorRating={authorRatingsCache[post.authorPublicKey]}
+                                            authorEnergy={(post as any).authorEnergyCycled || 0}
+                                            authorAvatarUrl={authorFaceOf(post)}
+                                            // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
+                                            // the SERVER pulled and cached (#143 step 4). Same badge either way:
+                                            // a member wants the community it came from, not the mechanism.
+                                            remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
+                                            viewMode={viewMode}
+                                            isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                            dealChip={dealChips.get(post.id) ?? null}
+                                            distanceKm={near && !fillHeading ? distanceOf(post) : null}
+                                            beansMarked={priceMarked}
+                                            onPhotoClick={(photos, idx, e) => {
+                                                setLightboxState({
+                                                    isOpen: true,
+                                                    photos,
+                                                    initialIndex: idx,
+                                                    title: post.title,
+                                                    triggerElement: (e?.currentTarget as HTMLElement) || null,
+                                                });
+                                            }}
+                                        />
+                                    </div>
+                                    );
+                                })}
+                            </div>
+                            </>
+                        );
+                    }
+
+                    // Group chronologically for List & Compact modes
+                    const today: MarketplacePost[] = [];
+                    const yesterday: MarketplacePost[] = [];
+                    const thisWeek: MarketplacePost[] = [];
+                    const older: MarketplacePost[] = [];
+
+                    const now = Date.now();
+                    filtered.forEach(p => {
+                        const postTime = new Date(p.createdAt).getTime();
+                        const diffDays = Math.floor((now - postTime) / (24 * 60 * 60 * 1000));
+                        if (diffDays === 0) {
+                            today.push(p);
+                        } else if (diffDays === 1) {
+                            yesterday.push(p);
+                        } else if (diffDays < 7) {
+                            thisWeek.push(p);
+                        } else {
+                            older.push(p);
+                        }
+                    });
+
+                    const renderSection = (title: string, items: MarketplacePost[]) => {
+                        if (items.length === 0) return null;
+                        return (
+                            <div key={title} className="flex flex-col gap-1.5 mb-2">
+                                <div className="flex items-center gap-3 mt-2 mb-1">
+                                    <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
+                                        {title}
+                                    </span>
+                                    <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    {items.map(post => {
+                                        if (post.type === 'event') {
+                                            return (
+                                                <div key={post.id} className="w-full my-1">
+                                                    <EventCard
+                                                        post={post}
+                                                        identity={identity}
+                                                        viewMode={viewMode}
+                                                        distanceKm={fillHeading ? null : eventDistance(post)}
+                                                        onOpen={() => setSelectedPost(post)}
+                                                        onRsvpChange={() => { refresh().catch(() => {}); }}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+                                        if (post.type === 'poll') {
+                                            return (
+                                                <div key={post.id} className="w-full my-1">
+                                                    <PollCard
+                                                        post={post}
+                                                        identity={identity}
+                                                        viewMode={viewMode}
+                                                        onVoteSuccess={() => refresh()}
+                                                        onOpenProfile={onOpenProfile}
+                                                        informal={informalPolls} localWays={markWays}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+                                        const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
+                                        return (
+                                        <div
+                                            key={post.id}
+                                            onClick={isPulse ? undefined : () => setSelectedPost(post)}
+                                            onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
+                                            role={isPulse ? undefined : "button"}
+                                            tabIndex={isPulse ? undefined : 0}
+                                            aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
+                                            className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
+                                        >
+                                            <MarketplaceCard
+                                                post={post as any}
+                                                authorRating={authorRatingsCache[post.authorPublicKey]}
+                                                authorEnergy={(post as any).authorEnergyCycled || 0}
+                                                authorAvatarUrl={authorFaceOf(post)}
+                                                // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
+                                            // the SERVER pulled and cached (#143 step 4). Same badge either way:
+                                            // a member wants the community it came from, not the mechanism.
+                                            remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
+                                            viewMode={viewMode}
+                                            isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                            dealChip={dealChips.get(post.id) ?? null}
+                                            distanceKm={near && !fillHeading ? distanceOf(post) : null}
+                                            beansMarked={priceMarked}
+                                            onPhotoClick={(photos, idx, e) => {
+                                                setLightboxState({
+                                                    isOpen: true,
+                                                    photos,
+                                                    initialIndex: idx,
+                                                    title: post.title,
+                                                    triggerElement: (e?.currentTarget as HTMLElement) || null,
+                                                });
+                                            }}
+                                        />
+                                        </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    };
+
+                    if (fillHeading) return renderSection(fillHeading, filtered);
+
+                    if (typeFilter === 'for-you') {
+                        return renderSection(t(FEED_SECTION_WORDS.forYou), filtered);
+                    }
+
+                    return (
+                        <>
+                            {renderSection(t(FEED_SECTION_WORDS.today), today)}
+                            {renderSection(t(FEED_SECTION_WORDS.yesterday), yesterday)}
+                            {renderSection(t(FEED_SECTION_WORDS.thisWeek), thisWeek)}
+                            {renderSection(t(FEED_SECTION_WORDS.older), older)}
+                        </>
+                    );
+                };
+
+                const fillSection = fillRows.length > 0 ? (
+                    <div data-testid="market-fill" className="mt-4">
+                        {renderCards(fillRows, t('Newest from elsewhere'))}
+                    </div>
+                ) : null;
 
                 return (
                     <div className="pb-32">
@@ -3705,18 +3995,29 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             />
                         )}
 
-                        {filtered.length > 0 && (
+                        {(filtered.length > 0 || fillRows.length > 0) && (
                             <ActivityWaterfall
                                 isFullView={false}
                                 isMember={isMember}
                                 onOpenPost={openPostFromActivity}
                                 onOpenProfile={onOpenProfile}
+                                viewerPubkey={identity?.publicKey}
                             />
                         )}
 
                         {nearLine}
-                        {filtered.length === 0 && examples}
-                        {filtered.length === 0 ? (
+                        {filtered.length === 0 && fillRows.length === 0 && examples}
+                        {filtered.length === 0 && (fillRows.length > 0 || fillPending) ? (
+                            <div>
+                                <p data-testid="market-near-empty" className="m-0 mb-2 px-1 text-sm font-bold text-nature-700 dark:text-nature-300">
+                                    {t('Nothing within 250 km yet.')}
+                                </p>
+                                {fillPending ? (
+                                    <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
+                                ) : fillSection}
+                                {examples}
+                            </div>
+                        ) : filtered.length === 0 ? (
                             (searchQuery.trim() || radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all' || beansOnly || foundingOnly || posts.length > 0) ? (
                                 <div className="bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-3xl p-10 mt-2 text-center shadow-soft">
                                     <div className="text-5xl opacity-30 mb-4" aria-hidden="true">
@@ -3762,220 +4063,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             <span>+</span> {t('ADD POST')}
                                         </button>
                                     </div>
-                                    <ActivityWaterfall isFullView={true} isMember={isMember} />
+                                    <ActivityWaterfall
+                                        isFullView={true}
+                                        isMember={isMember}
+                                        onOpenPost={openPostFromActivity}
+                                        onOpenProfile={onOpenProfile}
+                                        viewerPubkey={identity?.publicKey}
+                                    />
                                 </div>
                             )
-                        ) : (() => {
-                            if (viewMode === 'grid') {
-                                return (
-                                    // `grid-flow-row-dense`: the poll below takes two columns from `md` up, and a
-                                    // plain auto-placed grid cannot put it in the last column of a row — it moves to
-                                    // the next row and leaves that cell empty, a hole that walks about as the feed
-                                    // and the window change. Dense lets the tiles after it back-fill the cell.
-                                    // It only ever moves a tile forward past the poll, and only into a cell that
-                                    // would otherwise be blank; with no item wider than one column there is nothing
-                                    // to back-fill, so below `md` this changes nothing.
-                                    <div className="grid grid-flow-row-dense grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
-                                        {filtered.map((post) => {
-                                            if (post.type === 'event') {
-                                                return (
-                                                    <div key={post.id} className="h-full">
-                                                        <EventCard
-                                                            post={post}
-                                                            identity={identity}
-                                                            viewMode={viewMode}
-                                                            distanceKm={eventDistance(post)}
-                                                            onOpen={() => setSelectedPost(post)}
-                                                            onRsvpChange={() => { refresh().catch(() => {}); }}
-                                                        />
-                                                    </div>
-                                                );
-                                            }
-                                            if (post.type === 'poll') {
-                                                return (
-                                                    // A poll is the tallest thing in the grid: four answers, the open-ballot
-                                                    // note and the turnout row. One column of a 3+ column grid is too narrow
-                                                    // for its answers ("It's Am…"), so from `md` up it takes two.
-                                                    <div key={post.id} className="h-full md:col-span-2">
-                                                        <PollCard
-                                                            post={post}
-                                                            identity={identity}
-                                                            viewMode={viewMode}
-                                                            onVoteSuccess={() => refresh()}
-                                                            onOpenProfile={onOpenProfile}
-                                                            informal={informalPolls} localWays={markWays}
-                                                        />
-                                                    </div>
-                                                );
-                                            }
-                                            const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
-                                            return (
-                                            <div
-                                                key={post.id}
-                                                onClick={isPulse ? undefined : () => setSelectedPost(post)}
-                                                onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                                role={isPulse ? undefined : "button"}
-                                                tabIndex={isPulse ? undefined : 0}
-                                                aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
-                                                // No `h-full`: the tile keeps its own height rather than stretching to
-                                                // whatever shares its row (see MarketplaceCard's grid return).
-                                                // `self-start` is the other half of that: this div is the grid
-                                                // ITEM, and a grid with no `items-*` stretches its items to the
-                                                // row. Dropping `h-full` stops the tile filling the cell but
-                                                // leaves the cell row-tall, and the cell is what carries the
-                                                // click and the focus ring — so in the poll's row the ring drew
-                                                // around blank space below the card and a click there opened the
-                                                // listing (review on #1092).
-                                                className={`self-start rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
-                                            >
-                                                <MarketplaceCard
-                                                    post={post as any}
-                                                    authorRating={authorRatingsCache[post.authorPublicKey]}
-                                                    authorEnergy={(post as any).authorEnergyCycled || 0}
-                                                    authorAvatarUrl={authorFaceOf(post)}
-                                                    // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
-                                                    // the SERVER pulled and cached (#143 step 4). Same badge either way:
-                                                    // a member wants the community it came from, not the mechanism.
-                                                    remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
-                                                    viewMode={viewMode}
-                                                    isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
-                                                    dealChip={dealChips.get(post.id) ?? null}
-                                                    distanceKm={near ? distanceOf(post) : null}
-                                                    beansMarked={priceMarked}
-                                                    onPhotoClick={(photos, idx, e) => {
-                                                        setLightboxState({
-                                                            isOpen: true,
-                                                            photos,
-                                                            initialIndex: idx,
-                                                            title: post.title,
-                                                            triggerElement: (e?.currentTarget as HTMLElement) || null,
-                                                        });
-                                                    }}
-                                                />
-                                            </div>
-                                            );
-                                        })}
-                                    </div>
-                                );
-                            }
-
-                            // Group chronologically for List & Compact modes
-                            const today: MarketplacePost[] = [];
-                            const yesterday: MarketplacePost[] = [];
-                            const thisWeek: MarketplacePost[] = [];
-                            const older: MarketplacePost[] = [];
-
-                            const now = Date.now();
-                            filtered.forEach(p => {
-                                const postTime = new Date(p.createdAt).getTime();
-                                const diffDays = Math.floor((now - postTime) / (24 * 60 * 60 * 1000));
-                                if (diffDays === 0) {
-                                    today.push(p);
-                                } else if (diffDays === 1) {
-                                    yesterday.push(p);
-                                } else if (diffDays < 7) {
-                                    thisWeek.push(p);
-                                } else {
-                                    older.push(p);
-                                }
-                            });
-
-                            const renderSection = (title: string, items: MarketplacePost[]) => {
-                                if (items.length === 0) return null;
-                                return (
-                                    <div key={title} className="flex flex-col gap-1.5 mb-2">
-                                        <div className="flex items-center gap-3 mt-2 mb-1">
-                                            <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
-                                                {title}
-                                            </span>
-                                            <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
-                                        </div>
-                                        <div className="flex flex-col gap-1.5">
-                                            {items.map(post => {
-                                                if (post.type === 'event') {
-                                                    return (
-                                                        <div key={post.id} className="w-full my-1">
-                                                            <EventCard
-                                                                post={post}
-                                                                identity={identity}
-                                                                viewMode={viewMode}
-                                                                distanceKm={eventDistance(post)}
-                                                                onOpen={() => setSelectedPost(post)}
-                                                                onRsvpChange={() => { refresh().catch(() => {}); }}
-                                                            />
-                                                        </div>
-                                                    );
-                                                }
-                                                if (post.type === 'poll') {
-                                                    return (
-                                                        <div key={post.id} className="w-full my-1">
-                                                            <PollCard
-                                                                post={post}
-                                                                identity={identity}
-                                                                viewMode={viewMode}
-                                                                onVoteSuccess={() => refresh()}
-                                                                onOpenProfile={onOpenProfile}
-                                                                informal={informalPolls} localWays={markWays}
-                                                            />
-                                                        </div>
-                                                    );
-                                                }
-                                                const isPulse = (post as any).author_callsign === 'Daily Pulse' || post.authorCallsign === 'Daily Pulse';
-                                                return (
-                                                <div
-                                                    key={post.id}
-                                                    onClick={isPulse ? undefined : () => setSelectedPost(post)}
-                                                    onKeyDown={isPulse ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
-                                                    role={isPulse ? undefined : "button"}
-                                                    tabIndex={isPulse ? undefined : 0}
-                                                    aria-label={isPulse ? t('Daily Pulse: {title}', { title: post.title }) : openListingLabel(post)}
-                                                    className={`rounded-xl ${isPulse ? '' : 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500'}`}
-                                                >
-                                                    <MarketplaceCard
-                                                        post={post as any}
-                                                        authorRating={authorRatingsCache[post.authorPublicKey]}
-                                                        authorEnergy={(post as any).authorEnergyCycled || 0}
-                                                        authorAvatarUrl={authorFaceOf(post)}
-                                                        // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
-                                                    // the SERVER pulled and cached (#143 step 4). Same badge either way:
-                                                    // a member wants the community it came from, not the mechanism.
-                                                    remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
-                                                    viewMode={viewMode}
-                                                    isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
-                                                    dealChip={dealChips.get(post.id) ?? null}
-                                                    distanceKm={near ? distanceOf(post) : null}
-                                                    beansMarked={priceMarked}
-                                                    onPhotoClick={(photos, idx, e) => {
-                                                        setLightboxState({
-                                                            isOpen: true,
-                                                            photos,
-                                                            initialIndex: idx,
-                                                            title: post.title,
-                                                            triggerElement: (e?.currentTarget as HTMLElement) || null,
-                                                        });
-                                                    }}
-                                                />
-                                                </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                );
-                            };
-
-                            if (typeFilter === 'for-you') {
-                                return renderSection(t(FEED_SECTION_WORDS.forYou), filtered);
-                            }
-
-                            return (
-                                <>
-                                    {renderSection(t(FEED_SECTION_WORDS.today), today)}
-                                    {renderSection(t(FEED_SECTION_WORDS.yesterday), yesterday)}
-                                    {renderSection(t(FEED_SECTION_WORDS.thisWeek), thisWeek)}
-                                    {renderSection(t(FEED_SECTION_WORDS.older), older)}
-                                </>
-                            );
-                        })()}
+                        ) : renderCards(filtered)}
+                        {filtered.length > 0 && fillSection}
                         {filtered.length > 0 && examples}
                     </div>
                 );

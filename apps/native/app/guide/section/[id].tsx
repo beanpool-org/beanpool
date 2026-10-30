@@ -25,7 +25,7 @@ export default function GuideSectionScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { padding: 16 },
         title: { fontSize: 26, fontWeight: '800', color: colors.text.heading, lineHeight: 32, marginTop: 4 },
         summary: { fontSize: 16, color: colors.text.secondary, lineHeight: 23, marginTop: 6, marginBottom: 16 },

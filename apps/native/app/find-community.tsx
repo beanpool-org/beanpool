@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
+import type { BeanPoolIdentity } from '../utils/identity';
 import { getCanonicalAvatar } from '../utils/canonical-profile';
 import {
     fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts, notAnsweringLine,
@@ -19,6 +20,8 @@ import {
     KNOCK_MESSAGES, KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
+import { knockAddressFrom, knockFromNode, knockScanTarget } from '../utils/knock-address';
+import type { JoinKey } from '../utils/door-key';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
 import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult } from '@beanpool/core';
@@ -50,11 +53,18 @@ const LIST_LIMIT = 20;
  * shared address search); the name box below is for a community whose name they know. `?town=1` opens the town box
  * (the Home card's "or type your town"); Cancel closes it, leaving the place as it was. A place from the phone's
  * location keeps a quiet "Not here? Type your town".
+ *
+ * With no account on the phone (DESIGN-account-without-global-fable.md §2.4, slice S3; the first screen's "Know a community
+ * near you? Ask to join it"): the community's address, typed or scanned, and Ask to join it. The list of communities near
+ * you is the global community's directory and is not read: nothing of ours is asked. The knock's key is drafted when its
+ * form opens and written to the phone when Send is tapped (utils/knock-key.ts); from then the phone waits on welcome's
+ * waiting mode (utils/waiting-to-join.ts). A typed or scanned address works for an account too, for a community the list
+ * doesn't have. A knock says it came from the global community only from a member there (utils/knock-address.ts).
  */
 export default function FindCommunityScreen() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { identity } = useIdentity();
+    const { identity, setIdentity } = useIdentity();
     const pubkey = identity?.publicKey ?? null;
     const params = useLocalSearchParams<{ town?: string }>();
 
@@ -63,7 +73,7 @@ export default function FindCommunityScreen() {
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
         // In capitals in the words, never a textTransform (the phone's rules, not the language's).
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5 },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.onDark, letterSpacing: 0.5 },
         scroll: { padding: 16 },
         lead: { fontSize: 15, color: colors.text.body, lineHeight: 21, marginBottom: 12 },
         sectionLabel: { fontSize: 12, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginTop: 20, marginBottom: 8, marginLeft: 4 },
@@ -110,6 +120,8 @@ export default function FindCommunityScreen() {
     const [townOpen, setTownOpen] = useState(params.town === '1');
 
     useEffect(() => {
+        // With no account there is no list to place: nothing about where the phone is is read.
+        if (!pubkey) return;
         let alive = true;
         readTypedPlace().then(async t => {
             if (!alive) return;
@@ -121,7 +133,7 @@ export default function FindCommunityScreen() {
             if (alive && last) setPoint(was => was ?? { lat: last.coords.latitude, lng: last.coords.longitude });
         }).catch(() => {});
         return () => { alive = false; };
-    }, []);
+    }, [pubkey]);
 
     const pickTown = async (r: AddressResult) => {
         const t = await saveTypedPlace(r);
@@ -177,9 +189,11 @@ export default function FindCommunityScreen() {
     }, [point, query]);
 
     useEffect(() => {
+        // The global community's directory, read only for an account (S3): with none, the address box and Scan a code.
+        if (!pubkey) return;
         const t = setTimeout(loadList, query ? 400 : 0);
         return () => clearTimeout(t);
-    }, [loadList, query]);
+    }, [loadList, query, pubkey]);
 
     // ── A typed server address with no owner yet: "Claim ‹name›" (utils/node-claim.ts) ─────────────────────
     // Asked only for an address, never a name, and offered only while that server answers that it has no owner: a
@@ -205,10 +219,11 @@ export default function FindCommunityScreen() {
     // Requests this key cancelled within the day (utils/knock.ts cancelledKnocks): said so, and not asked again yet.
     const [cancelled, setCancelled] = useState<Record<string, number>>({});
 
-    const readStatus = useCallback(async (url: string) => {
-        if (!identity) return;
+    const readStatus = useCallback(async (url: string, signer?: BeanPoolIdentity) => {
+        const key = signer ?? identity;
+        if (!key) return;
         setStatuses(s => ({ ...s, [url]: null }));
-        const r = await readKnockStatus(url, identity);
+        const r = await readKnockStatus(url, key);
         setStatuses(s => ({ ...s, [url]: r }));
     }, [identity]);
 
@@ -229,15 +244,26 @@ export default function FindCommunityScreen() {
     const [watches, setWatches] = useState<PlaceWatch[] | null>(null);
     const [watchNote, setWatchNote] = useState<string | null>(null);
     const [watchBusy, setWatchBusy] = useState(false);
+    /**
+     * Whether the phone is in a community. An account that is a member nowhere yet (waiting to be let in, S3) sends the
+     * global community nothing signed with its key: no watches are read or kept for it.
+     */
+    const [inCommunity, setInCommunity] = useState(false);
+    useEffect(() => {
+        if (!pubkey) { setInCommunity(false); return; }
+        let alive = true;
+        AsyncStorage.getItem('beanpool_anchor_url').then(a => { if (alive) setInCommunity(!!a); }).catch(() => {});
+        return () => { alive = false; };
+    }, [pubkey]);
 
     useEffect(() => {
-        if (!identity) return;
+        if (!identity || !inCommunity) return;
         let alive = true;
         fetchGlobalHome(point, identity).then(r => {
             if (alive && r.ok) setWatches(r.value.watches);
         });
         return () => { alive = false; };
-    }, [identity, point]);
+    }, [identity, point, inCommunity]);
 
     const watchHere = async () => {
         if (!identity || !point) return;
@@ -260,6 +286,25 @@ export default function FindCommunityScreen() {
         else setWatchNote(findLineWords(r.message));
     };
 
+    // ── Scan a code (S3): a community's QR (its address, its card, its door) fills the address box; an invite's goes to
+    // the first screen's invite step, as it is. The camera loads, and is asked for, only at the tap. ──────────────────
+    const [Scanner, setScanner] = useState<null | typeof import('../components/ScanCodeModal').default>(null);
+    const openScanner = async () => {
+        const m = await import('../components/ScanCodeModal');
+        setScanner(() => m.default);
+    };
+    const onScanned = (data: string): boolean => {
+        const target = knockScanTarget(data);
+        if (!target) return false;
+        setScanner(null);
+        if (target.kind === 'invite') {
+            router.push({ pathname: '/welcome', params: { invite: target.raw } });
+            return true;
+        }
+        setQuery(target.origin.replace(/^https:\/\//, ''));
+        return true;
+    };
+
     // ── Asking, and joining ─────────────────────────────────────────────────────────────────────────────
     const [openForm, setOpenForm] = useState<string | null>(null);
     const [callsign, setCallsign] = useState(identity?.callsign ?? '');
@@ -267,27 +312,58 @@ export default function FindCommunityScreen() {
     const [formError, setFormError] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     const [joining, setJoining] = useState<string | null>(null);
+    /**
+     * The key a knock from a phone with no account signs with (utils/knock-key.ts): drafted in memory when the form opens,
+     * written to the phone only at Send. With an account, the account's key, and nothing is drafted.
+     */
+    const [heldKey, setHeldKey] = useState<JoinKey | null>(null);
 
     useEffect(() => { if (identity?.callsign && !callsign) setCallsign(identity.callsign.slice(0, KNOCK_CALLSIGN_CHARS)); }, [identity?.callsign]);
 
+    useEffect(() => {
+        if (!openForm || identity) return;
+        let alive = true;
+        // Loaded at the tap, as the key store is only needed here (utils/knock-key.ts).
+        import('../utils/knock-key').then(m => m.knockKeyForThisPhone(heldKey)).then(k => { if (alive) setHeldKey(k); }).catch(() => {});
+        return () => { alive = false; };
+    }, [openForm, !!identity]);
+
     const send = async (c: DirectoryCommunity) => {
-        if (!identity || !c.url) return;
+        if (!c.url) return;
         const problem = knockFormProblem({ callsign, message });
         if (problem) { setFormError(problem); return; }
-        await askNotificationPermissionOnAction('knock', identity.publicKey);
+        // The key the knock signs with: the account's, or the one this form drafted, written to the phone now, before the
+        // knock goes out, and never taken off again on its own (utils/knock-key.ts). An account the phone has stored since
+        // the form opened (an invite join in between) signs it instead, and the draft is dropped: never a second key.
+        let signer: BeanPoolIdentity;
+        try {
+            if (identity) signer = identity;
+            else {
+                const { commitKnockKey, knockKeyForThisPhone } = await import('../utils/knock-key');
+                signer = await commitKnockKey(await knockKeyForThisPhone(heldKey), callsign);
+            }
+        } catch (e: any) {
+            setFormError(e?.message ? welcomeLineWords(e.message) : t('Please try again.'));
+            return;
+        }
+        if (!identity) setIdentity(signer);
+        await askNotificationPermissionOnAction('knock', signer.publicKey);
         setSending(true);
         setFormError(null);
-        const avatar = await getCanonicalAvatar().catch(() => null);
-        const r = await sendKnock(c.url, identity, { callsign, message, avatar });
+        const avatar = identity ? await getCanonicalAvatar().catch(() => null) : null;
+        // From the global community only for a member there; otherwise the knock names no community it came from.
+        const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
+        const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;
+        const r = await sendKnock(c.url, signer, { callsign, message, avatar }, knockFromNode(anchor, guest));
         setSending(false);
         switch (r.kind) {
             case 'waiting':
             case 'invited': {
-                await rememberKnock(identity.publicKey, c);
-                setAsked(await rememberedKnocks(identity.publicKey));
+                await rememberKnock(signer.publicKey, c);
+                setAsked(await rememberedKnocks(signer.publicKey));
                 setOpenForm(null);
                 setMessage('');
-                readStatus(c.url);
+                readStatus(c.url, signer);
                 return;
             }
             case 'member':
@@ -302,9 +378,16 @@ export default function FindCommunityScreen() {
 
     const join = async (url: string, name: string | null, invite: string) => {
         if (!identity) return;
+        const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+        if (!returnUrl) {
+            // No community yet (waiting to be let in, slice S3): welcome joins it through the invite step, so the wizard
+            // shows Your Photo and then the 12 words this key has never shown. Handed over in memory, never by a link.
+            (await import('../utils/waiting-to-join')).handKnockYesToWelcome({ url, invite, name }, identity.publicKey);
+            router.replace('/welcome');
+            return;
+        }
         setJoining(url);
         try {
-            const returnUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const joined = await joinAnotherCommunity({ targetUrl: url, code: invite, identity, returnUrl, knownName: name });
             await forgetKnock(identity.publicKey, url);
             // Where a copy made there goes, by the new community's rule (vault rethink VR2, utils/copies-rule.ts).
@@ -429,7 +512,6 @@ export default function FindCommunityScreen() {
                         <Pressable
                             style={styles.primary}
                             onPress={() => { setOpenForm(community.key); setFormError(null); }}
-                            disabled={!identity}
                             accessibilityRole="button"
                             accessibilityLabel={t('Ask to join {name}', { name: communityLabel(community) })}
                         >
@@ -485,6 +567,15 @@ export default function FindCommunityScreen() {
         ? FIND_COMMUNITY_WORDS.farLine(listed.length)
         : null;
     const askedNotListed = asked.filter(a => !listed.some(c => c.url === a.url));
+    // An address typed or scanned (S3): asked directly, with no list in between. Not when the list has it already, nor
+    // when this key's requests above have it.
+    const typedOrigin = knockAddressFrom(query);
+    const typedCommunity: DirectoryCommunity | null = typedOrigin && !listed.some(c => c.url === typedOrigin) && !askedNotListed.some(a => a.url === typedOrigin)
+        ? {
+            key: `address:${typedOrigin}`, name: typedOrigin.replace(/^https:\/\//, ''), url: typedOrigin, lat: null, lng: null, radiusKm: null,
+            memberCount: null, contactEmail: null, contactPhone: null, distanceKm: null,
+        }
+        : null;
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -505,6 +596,11 @@ export default function FindCommunityScreen() {
                 <Text style={styles.lead}>
                     {t('Communities are where neighbours trade and help each other. Ask to join one near you: any member there can let you in.')}
                 </Text>
+                {!pubkey && (
+                    <Text style={styles.lead} testID="find-no-account">
+                        {t("Type the community's address, or scan its code. Communities near you show here once you have an account.")}
+                    </Text>
+                )}
 
                 {asked.length > 0 && (
                     <>
@@ -521,6 +617,8 @@ export default function FindCommunityScreen() {
                     </>
                 )}
 
+                {/* Where "near" is: only for an account, whose list it places (S3: with none, the address and the code). */}
+                {!!pubkey && <>
                 <Text style={styles.sectionLabel}>{point ? t('NEAREST FIRST') : t('COMMUNITIES')}</Text>
                 {typed && !townOpen && (
                     <View style={styles.placeRow} testID="find-town-picked">
@@ -558,21 +656,35 @@ export default function FindCommunityScreen() {
                         </Pressable>
                     </View>
                 )}
+                </>}
 
-                <Text style={[styles.label, { marginTop: 16 }]}>{t("Know the community's name, or its server address?")}</Text>
+                <Text style={[styles.label, { marginTop: 16 }]}>{pubkey ? t("Know the community's name, or its server address?") : t("The community's address")}</Text>
                 <View style={styles.searchBox}>
-                    <MaterialCommunityIcons name="magnify" size={20} color={colors.text.muted} />
+                    <MaterialCommunityIcons name={pubkey ? 'magnify' : 'web'} size={20} color={colors.text.muted} />
                     <TextInput
                         style={styles.searchInput}
                         value={query}
                         onChangeText={setQuery}
-                        placeholder={t('Community name')}
+                        placeholder={pubkey ? t('Community name') : t('Its address, like riverside.example.org')}
                         placeholderTextColor={colors.text.muted}
-                        returnKeyType="search"
+                        returnKeyType={pubkey ? 'search' : 'done'}
                         autoCorrect={false}
-                        accessibilityLabel={t('Search communities by name')}
+                        autoCapitalize="none"
+                        keyboardType={pubkey ? 'default' : 'url'}
+                        accessibilityLabel={pubkey ? t('Search communities by name') : t("The community's address")}
+                        testID="find-address"
                     />
                 </View>
+                <Pressable style={styles.pillBtn} onPress={() => { void openScanner(); }} accessibilityRole="button" testID="find-scan">
+                    <MaterialCommunityIcons name="qrcode-scan" size={20} color={colors.brand.primary} />
+                    <Text style={styles.pillText}>{t('Scan a code')}</Text>
+                </Pressable>
+                {typedCommunity && (
+                    <View style={[styles.card, { marginTop: 10 }]} testID="find-typed-community">
+                        <Text style={styles.name} numberOfLines={2}>{typedCommunity.name}</Text>
+                        {renderKnock(typedCommunity.url, typedCommunity.name, typedCommunity)}
+                    </View>
+                )}
                 {claimable && (
                     <View style={[styles.card, { marginTop: 10 }]}>
                         <Text style={styles.name}>{t('{name} has no owner yet', { name: claimable.name })}</Text>
@@ -590,7 +702,7 @@ export default function FindCommunityScreen() {
                     </View>
                 )}
 
-                <View style={{ marginTop: 12 }}>
+                {!!pubkey && <View style={{ marginTop: 12 }}>
                     {loading && communities === null ? (
                         <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 24 }} />
                     ) : listError ? (
@@ -620,7 +732,7 @@ export default function FindCommunityScreen() {
                         </View>
                     )),
                     ]}
-                </View>
+                </View>}
 
                 <Text style={styles.sectionLabel}>{t('NOTHING NEAR YOU?')}</Text>
                 <View style={styles.card}>
@@ -633,6 +745,7 @@ export default function FindCommunityScreen() {
                         <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} />
                     </Pressable>
                     <SetUpServerRow divider />
+                    {inCommunity && <>
                     <View style={[styles.row, styles.divider]}>
                         <MaterialCommunityIcons name="bell-ring-outline" size={24} color={colors.brand.primary} />
                         <View style={styles.rowText}>
@@ -660,8 +773,17 @@ export default function FindCommunityScreen() {
                             </Pressable>
                         </View>
                     ))}
+                    </>}
                 </View>
             </KeyboardAwareScrollView>
+            {Scanner && (
+                <Scanner
+                    hint={t("Point the camera at the community's code.")}
+                    deniedText={t("Allow the camera for BeanPool in your phone settings, or type the community's address.")}
+                    onRead={onScanned}
+                    onClose={() => setScanner(null)}
+                />
+            )}
         </SafeAreaView>
     );
 }

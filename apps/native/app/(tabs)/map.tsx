@@ -143,7 +143,7 @@ const ClusterMarker = ({ cluster, clustersReady }: any) => {
         >
             <View collapsable={false} style={{ width: glow, height: glow, justifyContent: 'center', alignItems: 'center' }}>
                 <View collapsable={false} style={{ position: 'absolute', width: glow, height: glow, borderRadius: glow / 2, backgroundColor: 'rgba(59, 130, 246, 0.25)' }} />
-                <View collapsable={false} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#3b82f6', justifyContent: 'center', alignItems: 'center', borderColor: '#ffffff', borderWidth: 3 }}>
+                <View collapsable={false} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: palette.blue600, justifyContent: 'center', alignItems: 'center', borderColor: '#ffffff', borderWidth: 3 }}>
                     <Text style={{ color: '#ffffff', fontWeight: '800', fontSize }}>{points}</Text>
                 </View>
             </View>
@@ -300,8 +300,8 @@ export default function MapScreen() {
         // Slim, as before #892 (~34dp; the pill is the tap target). The active variants below only add colour.
         filterChip: { paddingVertical: 8, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 24 },
         filterChipActive: { backgroundColor: colors.border.strong },
-        filterChipActiveOffers: { backgroundColor: '#10b981' },
-        filterChipActiveNeeds: { backgroundColor: '#ea580c' },
+        filterChipActiveOffers: { backgroundColor: colors.brand.fill },
+        filterChipActiveNeeds: { backgroundColor: colors.action.fab },
         // The event violet — the same one the event card and the web map's pin use.
         filterChipActiveEvents: { backgroundColor: EVENT_ACCENT },
         filterChipText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
@@ -330,8 +330,8 @@ export default function MapScreen() {
         eventPreviewCard: { borderLeftWidth: 4, borderLeftColor: EVENT_ACCENT },
         eventPreviewBody: { flex: 1, padding: 16, paddingRight: 48 },
         eventPreviewWhenRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
-        eventPreviewWhen: { flexShrink: 1, fontSize: 17, fontWeight: '800', color: EVENT_ACCENT },
-        eventPreviewBadge: { fontSize: 11, fontWeight: '800', color: EVENT_ACCENT, borderWidth: 1, borderColor: EVENT_ACCENT, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
+        eventPreviewWhen: { flexShrink: 1, fontSize: 17, fontWeight: '800', color: colors.event.ink },
+        eventPreviewBadge: { fontSize: 11, fontWeight: '800', color: colors.event.ink, borderWidth: 1, borderColor: EVENT_ACCENT, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
         eventPreviewMeta: { fontSize: 14, color: colors.text.secondary, marginTop: 2 },
         previewCard: { backgroundColor: colors.surface.card, margin: 16, borderRadius: 24, padding: 0, flexDirection: 'row', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 20, overflow: 'hidden' },
         previewThumb: { width: 125, height: '100%', minHeight: 125, borderTopLeftRadius: 24, borderBottomLeftRadius: 24, borderTopRightRadius: 0, borderBottomRightRadius: 0, backgroundColor: colors.surface.subtle },
@@ -339,7 +339,7 @@ export default function MapScreen() {
         previewInfo: { flex: 1, padding: 14, justifyContent: 'center' },
         previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingRight: 32 },
         previewCategory: { fontSize: 12, fontWeight: '700', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, flex: 1 },
-        previewCredits: { fontSize: 14, fontWeight: '800', color: '#10b981' },
+        previewCredits: { fontSize: 14, fontWeight: '800', color: colors.brand.primary },
         previewTitle: { fontSize: 18, fontWeight: '800', color: colors.text.heading, marginBottom: 4 },
         previewAuthor: { fontSize: 14, fontWeight: '500', color: colors.text.secondary },
         previewActionBtn: { paddingVertical: 7, paddingHorizontal: 16, borderRadius: 12, alignItems: 'center' },
@@ -387,8 +387,8 @@ export default function MapScreen() {
         // Type toggle — colours match map pins (green offer / orange need)
         typeRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
         typeBtn: { flex: 1, paddingVertical: 8, borderRadius: 12, borderWidth: 2, borderColor: colors.border.default, backgroundColor: colors.surface.app, alignItems: 'center' },
-        typeBtnOffer: { backgroundColor: '#10b981', borderColor: '#10b981' },
-        typeBtnNeed: { backgroundColor: '#ea580c', borderColor: '#ea580c' },
+        typeBtnOffer: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
+        typeBtnNeed: { backgroundColor: colors.action.fab, borderColor: colors.action.fab },
         typeBtnText: { fontSize: 15, fontWeight: '800', color: colors.text.secondary },
         typeBtnTextActive: { color: '#fff' },
 
@@ -454,8 +454,8 @@ export default function MapScreen() {
         priceTypeBtn: { width: 72, backgroundColor: colors.surface.app, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center', alignItems: 'center' },
         priceTypeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },
         freeChip: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 12, borderWidth: 2, borderColor: theme === 'dark' ? 'rgba(16,185,129,0.6)' : 'rgba(16,185,129,0.4)', backgroundColor: theme === 'dark' ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.08)' },
-        freeChipActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
-        freeChipText: { color: '#059669', fontSize: 13, fontWeight: '800' },
+        freeChipActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
+        freeChipText: { color: colors.brand.primary, fontSize: 13, fontWeight: '800' },
         freeChipTextActive: { color: '#fff' },
         pricingGuideLink: { marginBottom: 12, paddingVertical: 4 },
         pricingGuideLinkText: { color: colors.text.muted, fontSize: 12, fontWeight: '600' },
@@ -466,12 +466,12 @@ export default function MapScreen() {
         locationChipActive: { borderColor: colors.brand.primary, backgroundColor: theme === 'dark' ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)' },
         locationChipIcon: { fontSize: 15 },
         locationChipLabel: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
-        locationConfirmInline: { color: '#10b981', fontSize: 13, fontWeight: '800' },
+        locationConfirmInline: { color: colors.brand.primary, fontSize: 13, fontWeight: '800' },
 
         // Repeatable
         repeatableRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 2, marginBottom: 4 },
         checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: colors.border.strong, backgroundColor: 'transparent', justifyContent: 'center', alignItems: 'center' },
-        checkboxActive: { backgroundColor: '#10b981', borderColor: '#10b981' },
+        checkboxActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.fill },
         checkboxTick: { color: '#fff', fontSize: 14, fontWeight: '800' },
         repeatableText: { flex: 1, color: colors.text.secondary, fontSize: 13, fontWeight: '500' },
         // #108
@@ -521,8 +521,8 @@ export default function MapScreen() {
 
         // Submit
         submitBtn: { paddingVertical: 12, borderRadius: 14, alignItems: 'center', marginBottom: 8, marginTop: 4 },
-        submitBtnOffer: { backgroundColor: '#10b981' },
-        submitBtnNeed: { backgroundColor: '#ea580c' },
+        submitBtnOffer: { backgroundColor: colors.brand.fill },
+        submitBtnNeed: { backgroundColor: colors.action.fab },
         submitBtnDisabled: { backgroundColor: colors.border.default },
         submitBtnText: { color: '#fff', fontSize: 15, fontWeight: '800', letterSpacing: 0.5 },
         submitBtnTextDisabled: { color: colors.text.muted },
@@ -1355,7 +1355,7 @@ export default function MapScreen() {
                             </Pressable>
                             <Pressable
                                 accessibilityRole="button"
-                                style={[styles.previewActionBtn, { backgroundColor: selectedPostPreview.type === 'offer' ? '#10b981' : '#ea580c' }]}
+                                style={[styles.previewActionBtn, { backgroundColor: selectedPostPreview.type === 'offer' ? colors.brand.fill : colors.action.fab }]}
                                 onPress={() => {
                                     setSelectedPostPreview(null);
                                     router.push(`/post/${selectedPostPreview.id}`);
@@ -1424,7 +1424,7 @@ export default function MapScreen() {
                         </Pressable>
                         <Pressable
                             accessibilityRole="button"
-                            style={{ flex: 1, padding: 14, backgroundColor: postLat != null ? '#10b981' : (theme === 'dark' ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.15)'), borderRadius: 12, marginLeft: 8, alignItems: 'center' }}
+                            style={{ flex: 1, padding: 14, backgroundColor: postLat != null ? colors.brand.fill : (theme === 'dark' ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.15)'), borderRadius: 12, marginLeft: 8, alignItems: 'center' }}
                             disabled={postLat == null}
                             onPress={() => setPinDropMode(false)}
                         >
@@ -1638,7 +1638,7 @@ export default function MapScreen() {
                                             return postType === 'offer' ? t('1.5% fee: You will receive {amount} B.', { amount: formatNumber(net, 2) }) : t('1.5% fee: Fulfiller receives {amount} B.', { amount: formatNumber(net, 2) });
                                         }
                                         return t('1.5% transaction fee funds community projects & solvency.');
-                                    })()}{' '}<Text style={{ color: colors.feedback.warning.solid, fontWeight: 'bold' }}>{t('Learn more ⓘ')}</Text>
+                                    })()}{' '}<Text style={{ color: colors.feedback.warning.fg, fontWeight: 'bold' }}>{t('Learn more ⓘ')}</Text>
                                     <Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> {t('(100% community owned)')}</Text>
                                 </Text>
                             </Pressable>
@@ -1657,7 +1657,7 @@ export default function MapScreen() {
                                 cash, so a figure would imply it settles money it never touches. */}
                             <Pressable accessibilityRole="button" accessibilityState={{ selected: postCashAlsoNeeded }} style={styles.repeatableRow} onPress={() => setPostCashAlsoNeeded(!postCashAlsoNeeded)}>
                                 <View style={[styles.checkbox, postCashAlsoNeeded && styles.checkboxCash]}>
-                                    {postCashAlsoNeeded && <Text style={styles.checkboxTick}>✓</Text>}
+                                    {postCashAlsoNeeded && <Text style={[styles.checkboxTick, { color: colors.text.onGold }]}>✓</Text>}
                                 </View>
                                 <Text style={styles.repeatableText}>{t('💸 Cash also needed — for fuel or materials')}</Text>
                             </Pressable>

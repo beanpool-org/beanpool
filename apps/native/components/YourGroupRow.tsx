@@ -66,7 +66,8 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
         },
         badgeMuted: { backgroundColor: colors.text.muted },
         badgeText: { color: colors.text.onAccent, fontSize: 11, fontWeight: '800' },
-        badgeTextMuted: { color: colors.text.inverse },
+        // Dark words on the dark scheme's mid-grey (white was 3.25:1 there); white on it in light, as before.
+        badgeTextMuted: { color: theme === 'dark' ? colors.surface.app : colors.text.inverse },
     }));
 
     const badge = rowBadge(item, showUnread);

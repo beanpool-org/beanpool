@@ -66,6 +66,31 @@ const ASCII_MARKS_AROUND = /^[!-/:-@[-`{-~]+|[!-/:-@[-`{-~]+$/g;
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
 const NOT_WORD_SPACE = /[\u0000-\u001f\u007f-\u009f\u00a0\u3000]/g;
 
+/** The words of a text in lower case, parted at every punctuation mark as a search parts them (letters of every script
+ *  kept): what the tag library's label index and suggestTags read a label, a title or a typed word as. */
+export function plainWords(text: string): string[] {
+    return foldApostrophes(text.toLowerCase()).replace(NOT_WORD_SPACE, ' ').replace(PUNCTUATION, ' ').split(/\s+/).filter(Boolean);
+}
+
+/** The words of a text with a compound kept whole, as queryWords keeps it (wi-fi, free-range, 3.5; lower case, without the
+ *  ASCII marks around it), and every other chunk parted at its punctuation as plainWords parts it: "Lemons/limes" and
+ *  "Eggs&milk" are two words each. What suggestTags reads a title as, so a compound names a tag only whole. */
+export function compoundWords(text: string): string[] {
+    const words: string[] = [];
+    for (const chunk of text.toLowerCase().replace(NOT_WORD_SPACE, ' ').split(/\s+/)) {
+        const bare = chunk.replace(ASCII_MARKS_AROUND, '');
+        if (COMPOUND.test(bare)) words.push(foldApostrophes(bare.replace(/[\u2010\u2011]/g, '-')));
+        else words.push(...plainWords(chunk));
+    }
+    return words;
+}
+
+/** A text with each compound joined, as queryWords looks it up (wi-fi → wifi: the joined form is what the synonyms are keyed
+ *  on): "Wi-Fi setup" → "wifi setup". The tag index keys and finds a text by this form too, so "Wi-Fi" finds the label "Wifi". */
+export function joinCompounds(text: string): string {
+    return compoundWords(text).map((w) => w.replace(COMPOUND_JOINS, '')).join(' ');
+}
+
 /** The words of a query: a compound whole and joined (wi-fi, wifi: the joined form is what the synonyms are looked up on),
  *  and an elided word on its own too (l'eau, leau, eau); every other chunk parted at its punctuation. */
 function queryWords(query: string): string[] {

@@ -110,6 +110,10 @@ import { claimSuccessActions, readNodeAddresses } from '../utils/node-claim';
 import { numberNudge, numberOnlyAddress } from '../utils/address-follow';
 import { useManageNode } from '../components/useManageNode';
 import { Sentence } from '../components/Sentence';
+import { WaitingToJoin } from '../components/welcome/WaitingToJoin';
+import { forgetKnock, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../utils/knock';
+import { forgetKnockKey, knockKeyIsNew } from '../utils/knock-key';
+import { phoneIsWaiting, readWaitingFacts, takeKnockYes, waitingLines, type KnockYes, type WaitingLine } from '../utils/waiting-to-join';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
 // rejection rather than crash with an unhandled promise warning.
@@ -497,6 +501,90 @@ export default function WelcomeScreen() {
         restoreAtDoor.current = at;
         setRecoveryAnchorUrl(at);
     }, [mode]));
+
+    // --- Waiting to be let in (utils/waiting-to-join.ts; DESIGN-account-without-global-fable.md §2.4, slice S3): this phone's
+    // account is a member nowhere yet, most often after asking a community from a phone with no account. Home draws the
+    // waiting mode in place of the doors (components/welcome/WaitingToJoin.tsx): the communities it asked and what each
+    // said, Check again, Ask another community, Join with an invite (the same key). Read whenever home comes into view. ---
+    const [waitingToJoin, setWaitingToJoin] = useState(false);
+    const [waitKnocks, setWaitKnocks] = useState<RememberedKnock[]>([]);
+    const [waitStatuses, setWaitStatuses] = useState<Record<string, KnockStatusResult | null>>({});
+    const [waitChecking, setWaitChecking] = useState(false);
+    const [waitJoining, setWaitJoining] = useState<string | null>(null);
+    /** A community's yes being joined: the invite step's Next, run once its fields hold this invite (the effect below). */
+    const [knockJoin, setKnockJoin] = useState<KnockYes | null>(null);
+    const waitTurn = useRef(0);
+
+    /** What each community this key asked says now: read from those communities only, signed by the key that asked. */
+    const readWaitStatuses = useCallback(async (knocks: readonly RememberedKnock[], identity: BeanPoolIdentity) => {
+        const turn = ++waitTurn.current;
+        setWaitChecking(true);
+        const read = await Promise.all(knocks.map(async (k) => [k.url, await readKnockStatus(k.url, identity)] as const));
+        if (turn !== waitTurn.current) return;
+        setWaitStatuses(Object.fromEntries(read));
+        setWaitChecking(false);
+    }, []);
+
+    useFocusEffect(useCallback(() => {
+        if (mode !== 'home' || !accountOnPhone) {
+            setWaitingToJoin(false);
+            return;
+        }
+        let alive = true;
+        const me = accountOnPhone;
+        readWaitingFacts().then(async ({ record, anchorUrl }) => {
+            if (!alive) return;
+            const waiting = phoneIsWaiting({ hasIdentity: true, record, anchorUrl });
+            setWaitingToJoin(waiting);
+            if (!waiting) return;
+            // A yes Find a community handed over, in memory (never a link): joined here, through the invite step.
+            const yes = takeKnockYes(me.publicKey);
+            if (yes) {
+                startKnockJoin(yes);
+                return;
+            }
+            const knocks = await rememberedKnocks(me.publicKey);
+            if (!alive) return;
+            setWaitKnocks(knocks);
+            await readWaitStatuses(knocks, me);
+        }).catch(() => {});
+        return () => { alive = false; };
+    }, [mode, accountOnPhone?.publicKey]));
+
+    /**
+     * A community's yes, joined with one tap: its invite and address go into the invite step with this phone's key and
+     * name, and Next runs (handleCreate, the ordinary invite path; the effect below). Its answers show there as for any
+     * invite; once in, the wizard goes on at Your Photo, then Safety Backup with the 12 words (the knock's key is new).
+     */
+    function startKnockJoin(yes: KnockYes) {
+        if (!accountOnPhone) return;
+        setError(null);
+        setWaitJoining(yes.url);
+        setInviteCode(yes.invite);
+        setCreateAnchorUrl(yes.url);
+        setCallsign(accountOnPhone.callsign || '');
+        setKnockJoin(yes);
+        setMode('create');
+    }
+    useEffect(() => {
+        if (!knockJoin || mode !== 'create' || inviteCode !== knockJoin.invite || createAnchorUrl !== knockJoin.url) return;
+        setKnockJoin(null);
+        setWaitJoining(null);
+        void handleCreate();
+    }, [knockJoin, mode, inviteCode, createAnchorUrl]);
+
+    // The invite step on a phone that holds an account, however the invite came (a link the root layout handed over to a
+    // phone in no community, a scan, a paste): the name box starts with the account's name, as Join with an invite fills it.
+    useEffect(() => {
+        if (mode === 'create' && accountOnPhone?.callsign) setCallsign(c => c || accountOnPhone.callsign);
+    }, [mode, accountOnPhone?.callsign]);
+
+    /** Got it, on a request its community no longer holds: the phone forgets it, as the L1 card does. */
+    const forgetWaitLine = async (line: WaitingLine) => {
+        if (!accountOnPhone) return;
+        await forgetKnock(accountOnPhone.publicKey, line.url);
+        setWaitKnocks(await rememberedKnocks(accountOnPhone.publicKey));
+    };
 
     // --- Identity-overwrite guard (recovering a DIFFERENT account onto a phone
     // that already holds one). Rare, but destructive: the phone can only hold one
@@ -1091,6 +1179,9 @@ export default function WelcomeScreen() {
         // Every way off this step is closed until this ends, however it ends (utils/invite-next.ts `runNext`).
         await runNext(nextOutRef, setLoading, async () => {
             setError(null);
+            let undoCommunity = false;
+            // Set once Next writes a record for a knock's key (below): puts back the record it wrote over, with the community.
+            let undoKnockRecord: (() => Promise<void>) | null = null;
             try {
                 const parsedCode = normaliseInviteCode(rawInvite);
                 const { checkInvite, redeemInvite } = await import('../utils/db');
@@ -1098,15 +1189,21 @@ export default function WelcomeScreen() {
                 // Whether the phone's key is one this join made (an earlier pass through this wizard, or the global door): read
                 // before adoptJoinKey below takes the door's mark off the record.
                 const joinRecord = storedIdentity ? await getPendingOnboarding() : null;
+                // A key a knock made on this phone, its 12 words never shown (utils/knock-key.ts): this invite is its first
+                // join, so Safety Backup shows the words as new, as for a key this join made. Read before the community is set.
+                const knockMade = storedIdentity ? await knockKeyIsNew(storedIdentity.publicKey) : false;
+                // A key with no community yet (waiting to be let in, slice S3): a redeem that doesn't land puts it back with
+                // none, never on a community that hasn't taken it (the not-recognised screen at the next look).
+                undoCommunity = !!storedIdentity && !(await AsyncStorage.getItem('beanpool_anchor_url'));
 
                 const check = await checkInvite(parsedCode, nodeUrl);
                 // The node has this phone's key already: nothing is redeemed again (below).
                 let inAlready = false;
                 if (check && !check.valid) {
                     // A spent invite may have been spent by this phone's key: a first redeem that landed with its answer lost,
-                    // or a member back at this step from a later one. The node says whether the key is in, and the record read
-                    // above whether this join made it (utils/invite-next.ts).
-                    const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord) : 'spent';
+                    // or a member back at this step from a later one. The node says whether the key is in, and the record and the
+                    // knock's mark read above whether this join made it (utils/invite-next.ts).
+                    const spent = check.reason === 'used' ? await afterSpentInvite(nodeUrl, storedIdentity, joinRecord, knockMade) : 'spent';
                     if (spent === 'enterApp' && storedIdentity) {
                         // A key the phone already had, an established account already in this community: into the app, as
                         // before. Its words stay behind Settings' lock. Into the app on this community: the anchor is the app's
@@ -1155,19 +1252,23 @@ export default function WelcomeScreen() {
                 }
                 setCallsignSuggestions([]);
 
+                const identity = storedIdentity
+                    ? { ...storedIdentity, callsign: callsign.trim() }
+                    : await createIdentity(callsign.trim());
+                // A key made here, or the knock's, says so in the record now, before the community and the redeem: a redeem that
+                // fails, or an app stopped before its answer, still knows at the next Next or after a restart that these are
+                // the member's own new words. Never a community with no record for the knock's key, not even for a moment:
+                // that reads as a key that has joined, and the root layout takes its mark off (app/_layout.tsx).
+                if (knockMade) undoKnockRecord = () => (joinRecord ? setPendingOnboarding(joinRecord) : clearPendingOnboarding());
+                if (!storedIdentity || knockMade) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
+
                 await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
                 // The update screen asks the community now in use (utils/community-switch.ts).
                 communitySwitched();
 
-                const identity = storedIdentity
-                    ? { ...storedIdentity, callsign: callsign.trim() }
-                    : await createIdentity(callsign.trim());
-                // A key made here says so in the record now, before the redeem: a redeem that fails, or an app stopped before
-                // its answer, still knows at the next Next or after a restart that these are the member's own new words.
-                if (!storedIdentity) await recordJoinKeyMade({ inviteCode: parsedCode, anchorUrl: nodeUrl, callsign: callsign.trim() }, identity.publicKey);
                 // A key made here is the member's own new account; the phone's own key is an established account, whose words
                 // Safety Backup shows only once the phone's lock has passed.
-                const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey);
+                const keyIsNew = !storedIdentity || keyMadeForThisJoin(joinRecord, storedIdentity.publicKey) || knockMade;
                 setPendingIdentity(identity);
                 setPendingNewKey(keyIsNew ? identity.publicKey : null);
                 setPendingInviteCode(parsedCode);
@@ -1193,6 +1294,7 @@ export default function WelcomeScreen() {
                 // Redemption is done — it just succeeded, or the node has this member already.
                 // Either way the final step has nothing left to do.
                 setInviteRedeemed(true);
+                undoCommunity = false;
 
                 // The consent the member ticked above, recorded now they are a member: signed with their key, on the anchor
                 // just set. Never in the way: a refusal (the lines changed meanwhile) or no answer leaves Settings to offer it.
@@ -1211,9 +1313,22 @@ export default function WelcomeScreen() {
                     ...(keyIsNew ? { newKey: identity.publicKey } : {}),
                 });
 
+                // The knock's key is in a community now: the record says its words are new from here, and the mark goes; so
+                // does the request this invite answered (utils/knock-key.ts, utils/knock.ts).
+                if (knockMade) await forgetKnockKey();
+                if (storedIdentity) await forgetKnock(storedIdentity.publicKey, nodeUrl);
+
                 // Go to avatar selection (Step 2)
                 setMode('profileSetup');
             } catch (err: any) {
+                if (undoCommunity) {
+                    await AsyncStorage.removeItem('beanpool_anchor_url').catch(() => {});
+                    // No community on the phone again: the update screen asks none (utils/community-switch.ts).
+                    communitySwitched();
+                    // Nor the record Next wrote for a knock's key: the phone waits again as it did, with the knock's mark, which
+                    // tells the next Next its words are new (utils/invite-next.ts). After the community, never before it.
+                    if (undoKnockRecord) await undoKnockRecord();
+                }
                 // An account this phone holds but can't read is never replaced by a new one (identity.ts KEY-04).
                 if (err instanceof StoredKeyUnreadableError) {
                     setError(t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words."));
@@ -3855,6 +3970,36 @@ export default function WelcomeScreen() {
 
 
 
+    // --- WAITING TO BE LET IN (slice S3) ---
+    // Home for an account that is a member nowhere yet (utils/waiting-to-join.ts): the title, then the waiting mode in place
+    // of the doors, with Restore below as on the first screen. An invite opened goes to the invite step as there.
+    if (mode === 'home' && waitingToJoin && accountOnPhone) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style={dark ? 'light' : 'dark'} />
+                <ScrollView contentContainerStyle={styles.homeContent}>
+                    <View style={styles.homeMain}>
+                        <LanguageSwitch />
+                        <Text style={styles.headerTitle}>{t('Welcome to BeanPool')}</Text>
+                        <WaitingToJoin
+                            lines={waitingLines(waitKnocks, waitStatuses)}
+                            checking={waitChecking}
+                            joining={waitJoining}
+                            onCheckAgain={() => { void readWaitStatuses(waitKnocks, accountOnPhone); }}
+                            onJoin={(line) => startKnockJoin({ url: line.url, invite: line.invite, name: line.name })}
+                            onGotIt={(line) => { void forgetWaitLine(line); }}
+                            onAskAnother={() => router.push('/find-community')}
+                            onJoinWithInvite={() => { setError(null); setCallsign(c => c || accountOnPhone.callsign || ''); setMode('create'); }}
+                            onRestore={() => setMode('member')}
+                            styles={styles}
+                            accent={colors.text.inverse}
+                        />
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
+        );
+    }
+
     // --- MAIN WELCOME SCREEN ---
     // Drawn from the top, not centred: the line under Explore arrives after drawing (and comes and goes as the app returns
     // to the front), and in a centred column it moved the doors up by half its height; from the top it moves only what is
@@ -3910,6 +4055,19 @@ export default function WelcomeScreen() {
                     {/* Whoever installed a community server claims it here, and the claim makes their account: no invite,
                         and nothing of ours (app/claim-community.tsx). Quiet, under the fold: the doors and their hint stay
                         where they are (utils/__tests__/welcome-doors-render.test.ts). */}
+                    {/* A stranger who knows a community (its sign, its website, a friend) asks it by its address or its code, and
+                        the knock makes their account: no invite, and nothing of ours (app/find-community.tsx, slice S3). Quiet,
+                        under the fold, as the claim's link below. */}
+                    <Pressable
+                        style={styles.claimServerLink}
+                        onPress={() => router.push('/find-community')}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Know a community near you? Ask to join it')}
+                        testID="welcome-ask-to-join"
+                    >
+                        <Text style={styles.claimServerLinkText}>{t('Know a community near you? Ask to join it →')}</Text>
+                    </Pressable>
+
                     <Pressable
                         style={styles.claimServerLink}
                         onPress={() => router.push(CLAIM_NEW_SERVER_ROUTE)}
@@ -3941,7 +4099,8 @@ const styles = StyleSheet.create({
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
     inviteVerifiedText: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 14, lineHeight: 20 },
     clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
-    clipboardHintText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    // blue-700 in light: blue-600 was 4.48:1 on the pale blue pill over the page.
+    clipboardHintText: { color: dark ? palette.blue400 : palette.blue700, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     clipboardHintBox: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', alignItems: 'center', width: '100%' },
     homePasteSystemBtn: { width: 170, height: 44, marginTop: 12 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },

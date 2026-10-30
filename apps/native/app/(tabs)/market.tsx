@@ -59,7 +59,8 @@ import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { listingChips, listingChipWords, readsOwnData, t, tn, upperCase, word, type WordKey } from '@beanpool/core';
+import { listingChips, listingChipWords, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, type WordKey } from '@beanpool/core';
+import { ELSEWHERE_HEADING, fillWanted as marketFillWanted, readElsewhere, marketServerFilter, normalizeServerPosts } from '../../utils/market-fill';
 
 /** The For You interests' categories. Labels are word() keys (the same as constants/categories.ts), shown through t(). */
 export const MARKETPLACE_CATEGORIES: ReadonlyArray<{ id: string; emoji: string; label: WordKey }> = [
@@ -886,11 +887,8 @@ export default function MarketScreen() {
                     setIsSearching(false);
                     return;
                 }
-                // Events are opt-in on the list route; All and Events ask for them.
-                const type = filter === 'all' ? `&${EVENT_TYPES_QUERY}` : filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : filter === 'events' ? '&type=event' : '&type=offer';
-                // Only while the category chip is on screen (not under Polls or Events).
-                const row = marketSecondRow(filter);
-                const cat = categoryFilter !== 'all' && row.kind === 'filters' && row.category ? `&category=${categoryFilter}` : '';
+                // Events are opt-in on the list route; All and Events ask for them. The category only while its chip is on screen.
+                const { type, cat } = marketServerFilter(filter, categoryFilter);
                 
                 // Expand synonyms so the server's FTS5 'OR' logic can find them
                 const expandedQ = marketSearchQuery(q);
@@ -900,37 +898,7 @@ export default function MarketScreen() {
                 const res = await fetch(`${anchorUrl}/api/marketplace/posts?q=${encodeURIComponent(expandedQ)}${type}${cat}${near}&limit=50`);
                 if (res.ok) {
                     const data = await res.json();
-                    // Server returns camelCase MarketplacePost; the UI reads snake_case
-                    // (matching local SQLite shape). Normalize and parse photos.
-                    const parsed = (Array.isArray(data) ? data : []).map((p: any) => {
-                        let photosArr = p.photos;
-                        if (typeof p.photos === 'string') {
-                            try { photosArr = JSON.parse(p.photos); } catch { photosArr = []; }
-                        }
-                        if (Array.isArray(photosArr)) {
-                            photosArr = photosArr.map((url: string) => url && url.startsWith('/') ? `${anchorUrl}${url}` : url);
-                        }
-                        const bannerUrl = p.authorBannerUrl || p.author_banner_url || null;
-                        const absoluteBannerUrl = bannerUrl && bannerUrl.startsWith('/') ? `${anchorUrl}${bannerUrl}` : bannerUrl;
-                        return {
-                            ...p,
-                            photos: photosArr,
-                            author_pubkey: p.author_pubkey ?? p.authorPublicKey,
-                            author_callsign: p.author_callsign ?? p.authorCallsign,
-                            author_avatar: p.author_avatar ?? p.authorAvatarUrl ?? null,
-                            author_banner_url: absoluteBannerUrl,
-                            authorBannerUrl: absoluteBannerUrl,
-                            author_energy_cycled: p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                            authorFoundingNeeded: p.authorFoundingNeeded ?? (p.author_founding_needed === 1),
-                            author_founding_needed: p.author_founding_needed ?? (p.authorFoundingNeeded ? 1 : 0),
-                            // #108: the server returns camelCase `cashAlsoNeeded`; local SQLite rows carry
-                            // snake_case 0/1. Normalise here — the same place the other mixed-casing fields
-                            // are reconciled — so the beans-only filter AND the card badge both keep working
-                            // while a server search is active. Guarding at each call site instead would leave
-                            // the next reader to rediscover this.
-                            cash_also_needed: p.cash_also_needed ?? (p.cashAlsoNeeded ? 1 : 0),
-                        };
-                    });
+                    const parsed = normalizeServerPosts(data, anchorUrl);
                     setSearchResults(parsed);
                 } else {
                     setSearchResults(null); // Fall back to local filtering
@@ -1045,6 +1013,44 @@ export default function MarketScreen() {
         return 0;
     });
 
+    // The fill (utils/market-fill.ts, core market-fill): fewer than FILL_BELOW shown near the member, under their filters, and the
+    // newest from elsewhere come beneath, read as the search reads the node. The same filters apply to both parts.
+    const fillNeeded = marketFillWanted({
+        profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
+        searching: searchQuery.trim().length > 0, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
+        shownNear: filteredPosts.length,
+    });
+    const fillKey = `${filter}|${categoryFilter}`;
+    const [elsewhere, setElsewhere] = useState<{ key: string; posts: any[] | null } | null>(null);
+    // The fill's latest read: its filters, when it came back (0 until it has, and left 0 if it failed, so the next
+    // change of `posts` tries again), and whether it is still out.
+    const elsewhereReadRef = useRef<{ key: string; at: number; out: boolean } | null>(null);
+    useEffect(() => {
+        if (!fillNeeded) return;
+        // `posts` is a fresh array on every sync tick the node pushes, so a change of it is not a reason to ask again on
+        // its own: a minute per filter (the web's FILL_REREAD_MS), and never while a read for these filters is out. A
+        // read already out is not cancelled by the next change either: with ticks quicker than the read, each one threw
+        // its answer away and asked again, and a member with nothing near sat on the spinner. While a later read is out
+        // the earlier answer stays on screen.
+        const last = elsewhereReadRef.current;
+        if (last && last.key === fillKey && (last.out || Date.now() - last.at < 60_000)) return;
+        const read = { key: fillKey, at: 0, out: true };
+        elsewhereReadRef.current = read;
+        readElsewhere(filter, categoryFilter).then(rows => {
+            read.out = false;
+            // Only an answer is stamped: a read that failed (null) is stored, so the spinner ends, but is not a read.
+            if (rows) read.at = Date.now();
+            // Dropped only if the member has since moved to other filters, whose read has replaced this one.
+            if (elsewhereReadRef.current === read) setElsewhere({ key: read.key, posts: rows });
+        });
+    }, [fillNeeded, fillKey, posts]);
+    const elsewhereRead = fillNeeded && elsewhere?.key === fillKey ? elsewhere.posts : null;
+    const fillPending = fillNeeded && elsewhere?.key !== fillKey;
+    const isOwnPulse = (p: any) => (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
+    const fillRows: any[] = elsewhereRead
+        ? elsewhereFill(filteredPosts, elsewhereRead.filter(p => feedPostVisible(p, filterState, filterCtx) && !isOwnPulse(p)))
+        : [];
+
     const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
     const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0;
 
@@ -1052,7 +1058,7 @@ export default function MarketScreen() {
     // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
     // empty state's welcome, or after the real listings.
     const showExamples = showExampleListings({
-        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: filteredPosts.length,
+        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: fillPending ? FILL_BELOW : filteredPosts.length + fillRows.length,
     });
 
     // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
@@ -1797,6 +1803,34 @@ export default function MarketScreen() {
         );
     };
 
+    // The fill beneath the nearby listings (see fillRows): in the list's footer so every view mode has it. A grid takes its cards
+    // two to a row, as its FlatList does.
+    const fillCards = viewMode === 'grid'
+        ? Array.from({ length: Math.ceil(fillRows.length / 2) }, (_, i) => fillRows.slice(i * 2, i * 2 + 2)).map(pair => (
+            <View key={pair[0].id} style={{ flexDirection: 'row', gap: 16 }}>
+                {pair.map(item => <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>)}
+                {pair.length === 1 ? <View style={{ flex: 1 }} /> : null}
+            </View>
+        ))
+        : fillRows.map(item => <View key={item.id}>{renderItem({ item })}</View>);
+    const fillFooter = fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? (
+        <View testID="market-fill" style={{ marginTop: filteredPosts.length > 0 ? 8 : 0 }}>
+            {filteredPosts.length === 0 && (
+                <Text testID="market-near-empty" style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
+                    {t('Nothing within 250 km yet.')}
+                </Text>
+            )}
+            {fillRows.length === 0 ? (
+                <ActivityIndicator size="small" color={colors.brand.primary} />
+            ) : (
+                <>
+                    {renderItem({ item: { isHeader: true, title: ELSEWHERE_HEADING, id: 'header-elsewhere' } })}
+                    {fillCards}
+                </>
+            )}
+        </View>
+    ) : null;
+
     // With no listing to show: a refusal is said as one, and "Having trouble connecting" only when no answer came.
     const emptyState = marketEmptyState({ refusal, hasActiveFilters, firstSyncDone, syncTimedOut });
     const refusedLines = emptyState.kind === 'refused' && emptyState.refusal.code !== 'members_only' ? refusalLines(emptyState.refusal) : null;
@@ -1816,7 +1850,12 @@ export default function MarketScreen() {
                 keyExtractor={(item: any) => item.id}
                 renderItem={renderItem}
                 ListHeaderComponent={ListHeader}
-                ListFooterComponent={showExamples && filteredPosts.length > 0 ? <ExampleListings /> : null}
+                ListFooterComponent={fillFooter || (showExamples && filteredPosts.length > 0) ? (
+                    <>
+                        {fillFooter}
+                        {showExamples && filteredPosts.length + fillRows.length > 0 ? <ExampleListings /> : null}
+                    </>
+                ) : null}
                 contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
                 columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
                 showsVerticalScrollIndicator={false}
@@ -1835,7 +1874,7 @@ export default function MarketScreen() {
                     />
                 }
                 ListEmptyComponent={
-                    emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
+                    fillRows.length > 0 || (fillPending && filteredPosts.length === 0) ? null : emptyState.kind === 'refused' && emptyState.refusal.code === 'members_only' ? (
                         // Not a member of this community: its listings are its members'. Not "trouble connecting".
                         <View style={{ padding: 32, alignItems: 'center' }} testID="members-only-listings">
                             <Text style={{ fontSize: 40, opacity: 0.4, marginBottom: 12 }}>🔒</Text>
@@ -1938,7 +1977,11 @@ export default function MarketScreen() {
                                 </Pressable>
                             </View>
                             {showExamples && <ExampleListings />}
-                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
+                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                                viewerPubkey={identity?.publicKey}
+                                onOpenPost={(postId) => router.push(`/post/${postId}`)}
+                                onOpenProfile={(publicKey, callsign) => router.push({ pathname: '/public-profile', params: { publicKey: publicKey, callsign: callsign || '' } })}
+                            />
                         </View>
                     ) : (
                     <View style={{ padding: 32, alignItems: 'center' }}>

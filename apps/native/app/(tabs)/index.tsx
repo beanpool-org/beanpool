@@ -808,7 +808,7 @@ export default function HomeScreen() {
 
     const onStep = useCallback((step: StepLine['id']) => {
         // The global node's first post is an Offer too: something free or for swap (Beans are off there).
-        if (step === 'offer' || step === 'post') router.push({ pathname: '/map', params: { newPost: 'offer' } });
+        if (step === 'offer' || step === 'post') router.push({ pathname: '/new-listing', params: { newPost: 'offer' } });
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
         else if (step === 'ask') router.push('/find-community');
@@ -1264,8 +1264,8 @@ export default function HomeScreen() {
                         const target = composeTargetFor(type);
                         if (target === 'poll-modal') { setPollModal(true); return; }
                         if (target === 'event-modal') { setEventModal(true); return; }
-                        // The Offer/Need form lives on the map, which takes the chosen type in the link (as the Market's).
-                        router.push({ pathname: '/map', params: { newPost: type } });
+                        // The Offer/Need form is its own screen, which takes the chosen type in the link (as the Market's).
+                        router.push({ pathname: '/new-listing', params: { newPost: type } });
                     }}
                 />
                 <NewPollModal visible={pollModal} onClose={() => setPollModal(false)} onSuccess={() => void refresh('again')} />

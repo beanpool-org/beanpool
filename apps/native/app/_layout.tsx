@@ -964,6 +964,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="public-profile" options={sheetOptions} />
                 <Stack.Screen name="new-message" options={{ headerShown: false, animation: 'slide_from_right' }} />
+                {/* The listing form, out of the map (MAP-FORM): its sheet over the screen that opened it, as it was over the map. */}
+                <Stack.Screen name="new-listing" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
                 <Stack.Screen name="chat/[id]" />
                 <Stack.Screen name="pulse-intake" options={sheetOptions} />
                 <Stack.Screen name="apple-probe" />

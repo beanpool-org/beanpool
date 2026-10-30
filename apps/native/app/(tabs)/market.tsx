@@ -1348,7 +1348,7 @@ export default function MarketScreen() {
                     </Text>
                     <Pressable
                         style={{ marginTop: 10, backgroundColor: colors.feedback.warning.solid, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
-                        onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                        onPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
                         accessibilityRole="button"
                     >
                         <Text style={{ color: colors.text.onGold, fontSize: 14, fontWeight: '800' }}>{t('➕ Post your first Offer')}</Text>
@@ -1938,7 +1938,7 @@ export default function MarketScreen() {
                                 </Pressable>
                             </View>
                             {showExamples && <ExampleListings />}
-                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
+                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })} />
                         </View>
                     ) : (
                     <View style={{ padding: 32, alignItems: 'center' }}>
@@ -1959,7 +1959,7 @@ export default function MarketScreen() {
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
-                            onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                            onPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
                         >
                             <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>{t('+ Post a Deal')}</Text>
                         </Pressable>
@@ -2034,10 +2034,10 @@ export default function MarketScreen() {
                     const target = composeTargetFor(type);
                     if (target === 'poll-modal') { setShowNewPollModal(true); return; }
                     if (target === 'event-modal') { setShowNewEventModal(true); return; }
-                    // The offer/need form lives on the map, so this hands the chosen type over in the
-                    // deep link. It used to push a bare `newPost=true`, which dropped the choice and
+                    // The offer/need form is its own screen (app/new-listing.tsx), so this hands the chosen type
+                    // over in the link. It used to push a bare `newPost=true`, which dropped the choice and
                     // opened the form on Offer even when the member had picked Need.
-                    router.push({ pathname: '/map', params: { newPost: type } });
+                    router.push({ pathname: '/new-listing', params: { newPost: type } });
                 }}
             />
 

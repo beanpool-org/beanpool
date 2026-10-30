@@ -3118,8 +3118,11 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     // This app opens an enterprise's own screen and a chat group's (HomePage needsLine, { to: 'enterprise' | 'group', id }), so
     // the node may point a keepers' or a group's vote line there and count it, and a group invitation's ({ to: 'invite' },
     // the group's info with Join), so it sends the line for the member's open invitations (routes/home-answer.ts
-    // parseLands). The two ship together.
-    q.set('lands', 'enterprise,group,invite');
+    // parseLands). The two ship together. And People → Invites, where requests to join are listed and answered (front doors
+    // S2, components/WantsToJoin): `people` gets "N people asked to join" as its own line landing there ({ to: 'people' }),
+    // for owners and admins out of the admin line (whose settings page has no list of them), and for any member where any
+    // member may answer, once a request has waited 3 days.
+    q.set('lands', 'enterprise,group,invite,people');
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
         q.set('lat', String(params.lat));
         q.set('lng', String(params.lng));

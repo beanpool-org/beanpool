@@ -297,7 +297,7 @@ export function TagPicker({
                 onRequestClose={() => setSheetVisible(false)}
             >
                 <Pressable style={styles.overlay} onPress={() => setSheetVisible(false)}>
-                    <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+                    <Pressable testID="tag-picker-sheet" style={styles.sheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.handleBar} />
                         <View style={styles.headerRow}>
                             <Text style={styles.headerTitle}>{t('Tags')}</Text>

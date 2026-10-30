@@ -737,26 +737,21 @@ export default function SettingsScreen() {
             const cleaned = (profile?.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
             if (!edited.avatar) setAvatar(cleaned);
             {
+                // Profile S2-W: bio and contact belong to this community alone; no fallback to canonical across communities.
                 if (profile) {
                     if (!edited.bio) {
-                        if (profile.bio) setBio(profile.bio);
-                        else if (canonical?.bio) setBio(canonical.bio);
+                        setBio(profile.bio ?? '');
                     }
                     if (!edited.contact) {
-                        if (profile.contact_value) setContact(profile.contact_value);
-                        else if (canonical?.contactValue) setContact(canonical.contactValue);
+                        setContact(profile.contact_value ?? '');
                         if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
-                        else if (canonical?.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
                     }
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
                     else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
-                } else if (canonical) {
-                    if (canonical.bio && !edited.bio) setBio(canonical.bio);
-                    if (!edited.contact) {
-                        if (canonical.contactValue) setContact(canonical.contactValue);
-                        if (canonical.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
-                    }
-                    if (canonical.archetype) setArchetypeRaw(canonical.archetype);
+                } else {
+                    if (!edited.bio) setBio('');
+                    if (!edited.contact) setContact('');
+                    if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 }
             }
 

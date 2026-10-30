@@ -968,6 +968,8 @@ describe('redeemInvite reports whether the node already holds a photo', () => {
 
         const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
         expect('avatar' in body).toBe(false);
+        // Profile S2-W: bio and contact fall back to this community's row only, never phone-wide canonical.
+        expect(body.bio).toBe('');
     });
 });
 

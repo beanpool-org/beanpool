@@ -7270,9 +7270,10 @@ export async function pushProfileToServer(opts?: { community?: string }): Promis
     // node still holds over the row. Once the community has refused the waiting name for good, no name goes (the row
     // may still hold the refused one), and the community keeps the name it holds (#2461 review r4368601839).
     const callsign = pending?.callsign || (pending?.refusedCallsign !== undefined ? undefined : profile?.callsign || identity.callsign);
-    const bio = profile?.bio ?? canonical?.bio ?? '';
-    const contactValue = profile?.contact_value ?? canonical?.contactValue ?? null;
-    const contactVisibility = profile?.contact_visibility ?? canonical?.contactVisibility ?? 'community';
+    // Profile S2-W: bio and contact belong to this community alone; no fallback to phone-wide canonical across communities.
+    const bio = profile?.bio ?? '';
+    const contactValue = profile?.contact_value ?? null;
+    const contactVisibility = profile?.contact_visibility ?? 'community';
     const archetypeRaw = profile?.archetype ?? canonical?.archetype ?? null;
 
     // The bail-out used to be `if (!avatar)`, from when a picture was the only thing this

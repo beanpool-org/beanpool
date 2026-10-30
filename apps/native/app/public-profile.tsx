@@ -511,29 +511,16 @@ export default function PublicProfileScreen() {
             getMemberProfile(identity.publicKey).then(async vp => {
                 const canonical = await getCanonicalProfile().catch(() => null);
                 if (vp) {
-                    // Backfill the bio, contact and archetype from canonical, not just archetype.
-                    // handleQuizComplete rebuilds the whole profile row from viewerProfile —
-                    // `bio: … || ''` — and updateMemberProfile mirrors that straight back into
-                    // canonical storage, which merges on `!== undefined`. So '' and null both count
-                    // as present and overwrite. On a node where the local row hasn't synced yet,
-                    // taking the quiz here wiped the user's canonical bio and contact device-wide.
-                    // Filling the gaps on mount is what stops that.
-                    // NEVER the picture (Profile S2): the quiz writes viewerProfile into THIS community's row,
-                    // so a photo or preset chosen in another community was written into it as its own. An
-                    // empty photo is safe without it: updateMemberProfile keeps the row's by COALESCE and
-                    // mirrors a null photo into canonical as "unchanged".
-                    if (!vp.bio && canonical?.bio) vp.bio = canonical.bio;
-                    if (!vp.contact_value && canonical?.contactValue) vp.contact_value = canonical.contactValue;
-                    if (!vp.contact_visibility && canonical?.contactVisibility) vp.contact_visibility = canonical.contactVisibility;
+                    // Profile S2-W: bio and contact belong to this community alone; no fallback to canonical across communities.
                     if (!vp.archetype && canonical?.archetype) vp.archetype = canonical.archetype;
                     setViewerProfile(vp);
                 } else if (canonical) {
                     setViewerProfile({
                         public_key: identity.publicKey,
                         callsign: identity.callsign,
-                        bio: canonical.bio,
-                        contact_value: canonical.contactValue,
-                        contact_visibility: canonical.contactVisibility,
+                        bio: '',
+                        contact_value: '',
+                        contact_visibility: 'hidden',
                         archetype: canonical.archetype,
                     });
                 }

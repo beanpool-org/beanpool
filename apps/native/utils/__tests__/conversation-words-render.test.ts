@@ -338,6 +338,14 @@ describe('a direct message in the pseudo-locale: every word came through t() (wo
         // Read by value: the selector engine trips on an emoji inside an attribute selector.
         expect(Array.from(host.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label'))).toContain('1 reaction: 👍');
     });
+
+    it('a held deal\'s card says "held in trust", never "in escrow" (held-in-trust words)', async () => {
+        await renderIn('en');
+        expect(host.textContent).toMatch(/5.*· held in trust/);
+        expect(host.textContent).toMatch(/3.*· held in trust/);
+        expect(host.textContent).toContain('· completed');
+        expect(host.textContent).not.toMatch(/escrow/i);
+    });
 });
 
 describe('the admin page\'s message in a direct message, in the pseudo-locale (#2179 review)', () => {
@@ -510,7 +518,7 @@ describe("a request waiting for the member's answer in the chat's deal strip", (
         await renderIn('en');
         expect(host.textContent).toContain('Paint the fence');
         expect(host.textContent).toContain('Waiting on you: answer');
-        expect(host.textContent).not.toContain('in escrow');
+        expect(host.textContent).not.toContain('held in trust');
         expect(byLabel('Cancel deal')).toBeNull();
         expect(labels().filter((l) => /^(Release|Leave a review)/.test(l))).toEqual([]);
     });

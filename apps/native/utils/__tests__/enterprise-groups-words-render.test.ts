@@ -506,7 +506,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         expect(host.textContent).toContain('PENDING KEEPER REQUESTS (2)');
         expect(host.textContent).toContain('Adding Zoe as a keeper, backing 10 beans');
         expect(host.textContent).toContain('Bid by Ivo · 30 🫘');
-        expect(host.textContent).toContain('Worker: Member · 30 🫘 in escrow');
+        expect(host.textContent).toContain('Worker: Member · 30 🫘 held in trust');
         expect(host.textContent).toContain('Votes among this enterprise\'s keepers. More than half must vote.');
         expect(byLabel('Vote Yes on Pay Mia for the oven door')).not.toBeNull();
         expect(host.textContent).toContain('removed by a keeper');
@@ -750,7 +750,7 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
         await renderIn('xx', consoleScreen());
         const approve = buttonWith(xx('Approve Bid ({amount} 🫘)').replace('{amount}', '30'))!;
         expect(approve.parentElement!.getAttribute('data-wrap')).toBe('wrap');
-        for (const words of ['Fulfill Deal · Awaiting Customer Release', 'Cancel Initiative & Refund Escrow']) {
+        for (const words of ['Fulfill Deal · Awaiting Customer Release', 'Cancel Initiative & Refund Backers']) {
             const label = spanWith(xx(words));
             if (!label) continue; // the cancel button is a project's alone
             expect(label.getAttribute('data-gives'), words).toBe('true');

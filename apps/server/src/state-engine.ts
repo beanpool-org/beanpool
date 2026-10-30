@@ -1280,7 +1280,7 @@ const KEYWORDS_WITH_TAGS_MARKER = 'migration_search_keywords_tags_v1';
  * whole without a rebuild. A page of rowids at a time, so a large board is never read whole into memory. A failure
  * writes nothing, marker included, and the next boot tries again.
  */
-function keywordsWithTagsOnce(): void {
+export function keywordsWithTagsOnce(): void {
     try {
         if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(KEYWORDS_WITH_TAGS_MARKER)) return;
         let changed = 0;

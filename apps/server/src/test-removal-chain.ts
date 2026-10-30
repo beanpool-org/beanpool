@@ -15,9 +15,10 @@
  *  2. A third pause within 90 days of the first is refused to everyone, an owner from the phone and the server's password
  *     too, by the route, through a report and in the engine; a member with standing can still propose a Decision on them.
  *     Once the first is 90 days old, an owner may pause them again.
- *  3. The other endings: too few voted (an owner's second pause says so on its card), a vote stopped before it closed (its
- *     own words, and its card), a removal the community passed that an admin halted in its window (no owner needed: the
- *     community agreed with that case), and 31 days on (an admin may again, and the card says nothing).
+ *  3. The other endings: too few voted (an admin's refusal says so, never that the community decided, and so does an
+ *     owner's second pause on its card), a vote stopped before it closed (its own words, and its card), a removal the
+ *     community passed that an admin halted in its window (no owner needed: the community agreed with that case), and
+ *     31 days on (an admin may again, and the card says nothing).
  *  4. The owners are told of every pause: one counted line a day by who acted (an admin, an owner, the admin password),
  *     on the channel and pushed to the owners only; a pause that held a role aside is told by its role line alone, pushed
  *     once; a refused pause tells nothing; with votes off a pause is told too. Nothing names the member or the case.
@@ -366,8 +367,8 @@ async function main() {
     assert(row(e1).status === 'unresolved' && statusOf(erin) === 'active', `too few vote on Erin's: unresolved, and she is back (${row(e1).status})`);
     const abeOnErin = await pause(abeSession, erin, 'Threatened another stallholder');
     assert(abeOnErin.status === 403 && abeOnErin.body?.code === de.REPAUSE_NEEDS_OWNER_CODE
-        && abeOnErin.body?.error === `The community decided on ErinEast on ${dayOf(endedOn(e1))}. Only an owner can pause them again before ${dayOf(endedOn(e1) + 30 * DAY)}.`,
-        `another admin is refused (${abeOnErin.body?.error})`);
+        && abeOnErin.body?.error === `Too few members voted on ErinEast by ${dayOf(endedOn(e1))}. Only an owner can pause them again before ${dayOf(endedOn(e1) + 30 * DAY)}.`,
+        `another admin is refused in words that say too few voted, as the card does, never that the community decided (${abeOnErin.body?.error})`);
     const e2 = await pause(ottoSession, erin, 'Threatened another stallholder, on video');
     assert(e2.status === 200 && row(e2.body?.decision?.id).params.secondPause?.after === 'too_few'
         && row(e2.body?.decision?.id).description.startsWith('Second pause in 30 days. Too few members voted on the last one. '),

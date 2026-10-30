@@ -2788,7 +2788,8 @@ function caseOf(decision: Decision): string {
  *     stays open to them.
  *  3. Within REPAUSE_NEEDS_OWNER_DAYS of a vote that ended without removing them, only an owner (or the server's password,
  *     which only owners hold) pauses them again, and with a reason that is not that vote's case (not equal once both are
- *     trimmed: cheap, and enough to make the second reason a visible act). That pause's card says so (secondPauseOf).
+ *     trimmed: cheap, and enough to make the second reason a visible act). That pause's card says so (secondPauseOf). An
+ *     admin's refusal says how that vote ended: the community decided (No), too few voted, or it was stopped.
  *  4. The tripwire: an admin with OPEN_PAUSES_BEFORE_PROOF pauses whose votes are still open makes another only with the
  *     owner's fresh proof, which the routes ask (`freshProof`), so a plain admin is refused and an owner proves it.
  */
@@ -2810,11 +2811,14 @@ export function pauseChainRefusal(
     if (window) {
         const values = { name, date: dayOf(window.endedAt), until: dayOf(window.until) };
         if (!isOwnerLevelActor(actor)) {
+            // Told as that vote ended, as the card of an owner's second pause tells it (secondPauseSentence).
             return {
                 status: 403, code: REPAUSE_NEEDS_OWNER_CODE,
                 error: window.decision.status === 'admin_halted'
                     ? tr('A vote on {name} was stopped on {date} without removing them. Only an owner can pause them again before {until}.', values)
-                    : tr('The community decided on {name} on {date}. Only an owner can pause them again before {until}.', values),
+                    : window.decision.status === 'unresolved'
+                        ? tr('Too few members voted on {name} by {date}. Only an owner can pause them again before {until}.', values)
+                        : tr('The community decided on {name} on {date}. Only an owner can pause them again before {until}.', values),
             };
         }
         if (caseOf(window.decision).trim() === reason.trim()) {

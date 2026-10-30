@@ -2651,8 +2651,8 @@ const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
  * same proposer is the same actor: an admin's key, or the server's password (an owner). pauseChainRefusal asks it first,
  * so adminEmergencySuspend, actionReport and pauseMember refuse a pause with it, and the routes ask it before any fresh
  * proof. Its last sentence says who else may pause them now, as the chain rules allow: another admin; or, while a vote
- * on them ended less than REPAUSE_NEEDS_OWNER_DAYS ago, an owner with a new reason; or, with a third pause refused to
- * everyone, nobody, which it then leaves unsaid.
+ * on them ended less than REPAUSE_NEEDS_OWNER_DAYS ago, an owner with a new reason (another owner, to an owner or the
+ * password: they are refused here too); or, with a third pause refused to everyone, nobody, which it then leaves unsaid.
  */
 export function removalCoolDownRefusal(subjectPubkey: string | null | undefined, actor: string | null | undefined, now: number = Date.now()): string | null {
     if (!actor || !subjectPubkey || !decisionsOn()) return null;
@@ -2667,7 +2667,9 @@ export function removalCoolDownRefusal(subjectPubkey: string | null | undefined,
         return tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}.", values);
     }
     if (repauseWindow(subjectPubkey, now)) {
-        return tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. An owner can, with a new reason.", values);
+        return isOwnerLevelActor(actor)
+            ? tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. Another owner can, with a new reason.", values)
+            : tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. An owner can, with a new reason.", values);
     }
     return tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. Another admin can.", values);
 }

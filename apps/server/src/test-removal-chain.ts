@@ -24,6 +24,8 @@
  *  5. The tripwire: an admin with 5 pauses whose votes are still open is refused a sixth (route, report, engine), nothing
  *     written; an owner is asked the fresh proof (from a computer: do it from the phone), and from the phone it is made;
  *     a pause refused for another reason is answered without asking any proof; the password makes one with its current code.
+ *     Before Otto's five: an owner, and the password, inside the cool-down of a pause they made themselves read that
+ *     another owner can, never "an owner can".
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   SERVER_SUITES_ONLY=test-removal-chain node scripts/run-server-suites.mjs
@@ -497,6 +499,15 @@ async function main() {
     // An owner with five open is asked the proof: from a computer, to do it from the phone; from the phone, it is made.
     // His five are on members he has not paused before (his own pause of Tam2 holds him to its cool-down).
     for (const t of [...tams.slice(0, 7)]) await lift(t).catch(() => undefined);
+    // Those lifts stopped their votes. Inside their 30 days an owner who made one meets its cool-down, which names another
+    // owner, not "an owner": he is one, and may have a new reason. So does the password, on the one it made.
+    const ottoOwn = await pause(ottoSession, tams[1], 'Sent threats in the market chat again');
+    assert(ottoOwn.status === 403 && ottoOwn.body?.code === de.REMOVAL_COOL_DOWN_CODE && /until \d{4}-\d\d-\d\d\. Another owner can, with a new reason\.$/.test(ottoOwn.body?.error ?? ''),
+        `Otto, an owner, meets the cool-down of his own pause of Tam2: another owner can (${ottoOwn.status} ${ottoOwn.body?.code}: ${ottoOwn.body?.error})`);
+    fresh();
+    const pwOwn = await admin(`/api/local/admin/users/${tams[2].pubKeyHex}/suspend`, password(), { reason: 'Sent threats in the market chat, once more' });
+    assert(pwOwn.status === 403 && pwOwn.body?.code === de.REMOVAL_COOL_DOWN_CODE && /until \d{4}-\d\d-\d\d\. Another owner can, with a new reason\.$/.test(pwOwn.body?.error ?? ''),
+        `so does the password, on its own pause of Tam3 (${pwOwn.status} ${pwOwn.body?.code}: ${pwOwn.body?.error})`);
     const ottosFive = [tams[0], tams[2], tams[3], tams[4], tams[5]];
     for (const [i, t] of ottosFive.entries()) {
         const r = await pause(ottoSession, t, `A spam wave from new accounts, case ${i + 1} seen by an owner`);

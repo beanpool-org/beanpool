@@ -27,7 +27,8 @@
  *   names the post id (mcp-route.ts). Revoking the grant or turning the switch off stops the next call at the door; posts
  *   made stay, and are deleted as any post is.
  * - An answer carries the new post's id and its link in the app (`/?post=<id>`, a path the assistant joins to the address in
- *   its welcome), and the day's count: no key, no token, nothing about another member.
+ *   its welcome), an event's start and end as its members see them, and the day's count: no key, no token, nothing about
+ *   another member. An event's times must carry their offset: one without would be read in this server's own zone.
  */
 import crypto from 'node:crypto';
 import { PRICING_CATEGORIES } from '@beanpool/core';
@@ -119,6 +120,21 @@ const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> =
 export function missingField(args: Record<string, unknown>, required: readonly string[]): string | null {
     const field = required.find((k) => !FIELDS[k].there(args[k]));
     return field ? `${field} is required: ${FIELDS[field].asks}.` : null;
+}
+
+/** An ISO 8601 date and time with its offset (Z or ±hh:mm): the one kind every server reads as the same instant. */
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/i;
+
+/**
+ * The event's start or end sent without its offset, refused in words that name it; null when both carry one (an end left
+ * out is the engine's default length). The engine reads such a time in this server's own zone (engine/posts.ts
+ * parseEventTime), not the event's: on a UTC host a Melbourne 10:00 would be shown at 21:00, public at once.
+ */
+function unzonedTime(args: Record<string, unknown>): string | null {
+    const field = (['start_at', 'end_at'] as const).find((k) => args[k] !== undefined && args[k] !== '' && !(typeof args[k] === 'string' && ISO_WITH_OFFSET.test(args[k])));
+    return field
+        ? `${field} must carry its offset from UTC, in ISO 8601: e.g. 2026-11-07T10:00:00+11:00, or Z for UTC. Without one this server would read it in its own time zone.`
+        : null;
 }
 
 const BLOCKED = new Set(['disabled', 'suspended', 'pruned']);
@@ -229,12 +245,16 @@ function gate(grant: AgentGrant): string | null {
     return null;
 }
 
-function answer(grant: AgentGrant, kind: 'offer' | 'need' | 'event', postId: string, asEnterprise: boolean): ToolResult {
+/** An event's start and end as stored: the clock its members see, in its zone, so the assistant can check what it posted. */
+type EventClock = { startsLocal: string; endsLocal: string; timezone: string };
+
+function answer(grant: AgentGrant, kind: 'offer' | 'need' | 'event', postId: string, asEnterprise: boolean, clock?: EventClock): ToolResult {
     return {
         ok: true, rows: 1,
         result: {
             postId, kind, asEnterprise,
             link: `/?post=${encodeURIComponent(postId)}`,
+            ...clock,
             postsToday: agentCreatesToday(grant.id), postsPerDay: AGENT_CREATES_PER_DAY,
         },
     };
@@ -313,7 +333,7 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
 async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Promise<ToolResult> {
     const refused = gate(grant);
     if (refused) return { ok: false, error: refused };
-    const missing = missingField(args, args.online === true ? REQUIRED.event : [...REQUIRED.event, ...REQUIRED.eventInPerson]);
+    const missing = missingField(args, args.online === true ? REQUIRED.event : [...REQUIRED.event, ...REQUIRED.eventInPerson]) ?? unzonedTime(args);
     if (missing) return { ok: false, error: missing };
     const who = authorFor(grant, args.as_enterprise, false);
     if (!who.ok) return who;
@@ -352,7 +372,9 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
             returnAgentCreate(grant.id);
             return { ok: false, error: 'The event could not be made.' };
         }
-        return answer(grant, 'event', post.id, who.enterprise);
+        const { eventStartLocal, eventEndLocal, eventTz } = post;
+        return answer(grant, 'event', post.id, who.enterprise,
+            eventStartLocal && eventEndLocal && eventTz ? { startsLocal: eventStartLocal, endsLocal: eventEndLocal, timezone: eventTz } : undefined);
     } catch (e) {
         returnAgentCreate(grant.id);
         return { ok: false, error: memberErrorText(e, 'The event could not be made: try again later.') };
@@ -390,6 +412,9 @@ const POST_OUT = {
     type: 'object',
     properties: {
         postId: { type: 'string' }, kind: { type: 'string' }, asEnterprise: { type: 'boolean' }, link: { type: 'string' },
+        startsLocal: { type: 'string', description: "an event's: when it starts as members see it, YYYY-MM-DDTHH:MM in its timezone" },
+        endsLocal: { type: 'string', description: "an event's: when it ends, the same way" },
+        timezone: { type: 'string', description: "an event's: the IANA zone its times are shown in" },
         postsToday: { type: 'number' }, postsPerDay: { type: 'number' },
     },
     required: ['postId', 'kind', 'asEnterprise', 'link', 'postsToday', 'postsPerDay'],
@@ -461,8 +486,8 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
             properties: {
                 title: { type: 'string', description: 'the event\'s name' },
                 description: { type: 'string', description: 'what happens, for whom' },
-                start_at: { type: 'string', description: 'when it starts: ISO 8601 with its offset, e.g. 2026-11-07T10:00:00+11:00' },
-                end_at: { type: 'string', description: 'when it ends (ISO 8601); left out, the server\'s default length' },
+                start_at: { type: 'string', description: 'when it starts: ISO 8601 with its offset, e.g. 2026-11-07T10:00:00+11:00 (Z for UTC); one without is refused' },
+                end_at: { type: 'string', description: 'when it ends: ISO 8601 with its offset, as start_at; left out, the server\'s default length' },
                 timezone: { type: 'string', description: 'the IANA zone it is in, e.g. Australia/Melbourne' },
                 place_name: { type: 'string', description: 'the name of the place: required in person (the default), none online' },
                 lat: { type: 'number', description: 'latitude of the place on the map: required in person, none online' },

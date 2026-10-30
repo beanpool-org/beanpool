@@ -7,7 +7,8 @@
  *      most 800 px whatever size it was sent, the search index finds it, the listings' version moves (the phones' sync mark),
  *      the standby copy's payload carries created_via, the AGENT log names the post, and the answer carries no key.
  *   2. Refusals in words, none counted against the day: no photo, a PNG, a photo over the per-photo cap, a JPEG cut off halfway
- *      (its header still whole), an enterprise the owner does not keep (or a made-up ref), the 51st post in a UTC day. Every field the phone's and the web's composer require for
+ *      (its header still whole), an event's time with no offset (or a date with no time), an enterprise the owner does not keep
+ *      (or a made-up ref), the 51st post in a UTC day. Every field the phone's and the web's composer require for
  *      each kind (Marty, 30 Oct: "all the mandatory fields should be mandatory even if seeding through MCP") is in the tool's
  *      input schema and, left out or empty, refused by the server in words that name it; a price only where Beans are on.
  *   3. An admin's assistant has none of the tools (and is refused if it calls one); its maker no longer an owner or admin → 401;
@@ -228,6 +229,12 @@ async function main(): Promise<void> {
         const eRow = db.prepare('SELECT type, author_pubkey, created_via, event_start_at FROM posts WHERE id = ?').get(e?.postId) as any;
         assert(!event.isError && e?.kind === 'event' && eRow?.type === 'event' && eRow.author_pubkey === owner.pub && eRow.created_via === `assistant:${grantId}`
             && Date.parse(eRow.event_start_at) === Date.parse(startAt), `create_event posts an event as the owner (${JSON.stringify(e ?? event.content)})`);
+        // The answer says when it starts and ends as members see it (the clock in the event's zone), so the assistant can check it.
+        const clockIn = (iso: string, tz: string) => new Intl.DateTimeFormat('sv-SE', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso)).replace(' ', 'T');
+        const clockRow = db.prepare('SELECT event_start_local, event_end_local, event_tz FROM posts WHERE id = ?').get(e?.postId) as any;
+        assert(typeof e?.timezone === 'string' && e.timezone === clockRow?.event_tz && e.startsLocal === clockRow.event_start_local && e.endsLocal === clockRow.event_end_local
+            && e.startsLocal === clockIn(startAt, e.timezone), `the answer carries the start and end members see, in the event's zone (${e?.startsLocal} → ${e?.endsLocal}, ${e?.timezone})`);
         const online = await client.callTool({ name: 'create_event', arguments: {
             title: 'Seed-saving talk', start_at: startAt, online: true, link: 'https://meet.example.org/seeds', photos: [small],
         } });
@@ -283,6 +290,14 @@ async function main(): Promise<void> {
         const madeUp = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, as_enterprise: 'ffffffffffffffff' } });
         assert(otherRef.isError === true && /not an enterprise you keep/.test(errorText(otherRef)) && madeUp.isError === true && /not an enterprise you keep/.test(errorText(madeUp)),
             `an enterprise the owner does not keep, or a made-up ref → refused (${errorText(otherRef)})`);
+        // A time with no offset would be read in this server's own zone (on a UTC host a Melbourne 10:00 is shown at 21:00), and a
+        // date alone as UTC midnight: each is refused naming its field, the same on every host.
+        const noOffset = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, start_at: startAt.slice(0, 19), timezone: 'Australia/Melbourne' } });
+        const endNoOffset = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, end_at: new Date(Date.parse(startAt) + 2 * 3600_000).toISOString().slice(0, 16) } });
+        const dateOnly = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, start_at: startAt.slice(0, 10) } });
+        assert(noOffset.isError === true && /^start_at must carry its offset/.test(errorText(noOffset)) && endNoOffset.isError === true && /^end_at must carry its offset/.test(errorText(endNoOffset))
+            && dateOnly.isError === true && /^start_at must carry its offset/.test(errorText(dateOnly)),
+            `a start or an end with no offset, or a date with no time → refused naming the field (${errorText(noOffset)} | ${errorText(endNoOffset).slice(0, 40)} | ${errorText(dateOnly).slice(0, 40)})`);
         const engineRefusal = await client.callTool({ name: 'create_event', arguments: { ...eventArgs, start_at: new Date(Date.now() - DAY).toISOString() } });
         const badCategory = await client.callTool({ name: 'create_offer', arguments: { ...offerArgs, category: 'trades' } });
         const freeEnterprise = await client.callTool({ name: 'create_enterprise_listing', arguments: { ...entArgs, beans: 0 } });

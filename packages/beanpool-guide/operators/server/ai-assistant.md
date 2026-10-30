@@ -79,9 +79,23 @@ An owner's assistant can put things in the Market for them, as they need it: ask
 - **Everything the app's form asks for**: an Offer or a Need needs its title (at most 50 characters), description, category, place and photo, and its price in Beans where your community has Beans. The place is a pin on the map, or your own area if the assistant says so: the area you set in the app, on every server. If you have set none, the server refuses and asks for a pin. An event needs its title (at most 140 characters), description, start (with its offset from UTC), time zone and photo, and in person its place's name and its pin on the map. An enterprise's Offer or Need needs its category and a price of more than 0 Beans. If the assistant leaves one out, the server refuses the post and names what is missing. A pin is rounded to about 100 metres, as the apps round it.
 - **The same rules as the app**: the same words, categories, prices and places, and the same refusals (a muted account, an event in the past). One limit is different. Posts in your own name are held to the owners' **Assistant posts a day** (below), not to the 100 a day a member can post from the app. They never use up your own 100: you can still post all of those from the app. Their photos do count in your own photos for the day (100 MB unless your server sets another number), and the assistant is told how much of that is left. An enterprise's posts count against the enterprise, as any keeper's do.
 - **It is your post**: it carries your name or the enterprise's, and you edit or delete it as any other. Members see an ordinary post. Moderators can see it was made by an assistant, and the log says which one.
-- **Disconnecting stops it at once**, and so does turning AI assistants off. The posts it made stay until you delete them.
+- **Disconnecting stops it at once**, and so does turning AI assistants off. The posts it made stay until you delete them, or press **Remove its posts** (below).
 
 An admin's assistant can't post, and an assistant never posts as another member.
+
+## Before it posts: what it reads (owners)
+
+An assistant that may post for you can also read what it needs to seed your community well, and no more:
+
+- **The Market as you see it**, to find a listing that is already up before it posts another: each one's kind, category, when it was posted, and whether it is yours, an enterprise's you keep or another member's. Its title only if the assistant asks for the words. Never who posted it, their key, its pin, its photos or its price. It sees nothing your own Market doesn't show you: not a group's post outside your groups, a message between two others, or a post hidden by reports.
+- **The Market's categories**, so it picks from the list instead of making one up.
+- **Your community's area**: its centre and radius, to about 1 km, as a member's app shows it, and the place names of your community's public events of the last 90 days, each at its pin rounded to about 100 metres. Never a member's area or pin, and never the exact pin set in Node Identity.
+
+## Undoing what it made (owners)
+
+- **It can tend its own posts**: list the posts it made, edit one (its title, description, category, price or photos, at most 200 edits a day), remove one, or remove everything it made, once a day. Only posts that assistant made itself: never one you made in the app, another assistant's or another member's. A post with a deal in escrow stays up, and no tool moves a Bean.
+- **Remove its posts, in Settings**: under Connected assistants each assistant says how many of its posts are still up, and an owner can press **Remove its posts**. Each one is taken down as its author would take it down (an event is cancelled and its goers told). It works after you disconnect the assistant too: one that is gone but whose posts are still up is listed as a disconnected assistant, with the same button. It asks for a fresh proof each time, as the other owner changes here do: press it from the phone's Manage, or with the password and a current code.
+- **Every removal is logged**: the server writes an ADMIN line with the assistant and the ids of the posts it took down, whether the assistant removed them or an owner pressed the button.
 
 ## Suggestions: you approve, it never acts
 

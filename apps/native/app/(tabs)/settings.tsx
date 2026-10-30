@@ -791,10 +791,10 @@ export default function SettingsScreen() {
                         // whatever the row had.
                         await updateMemberProfile(identity.publicKey, {
                             callsign: remoteName,
-                            bio: profile?.bio,
-                            contact_value: profile?.contact_value,
-                            contact_visibility: profile?.contact_visibility,
-                            archetype: profile?.archetype ?? canonical?.archetype,
+                            bio: profile?.bio ?? undefined,
+                            contact_value: profile?.contact_value ?? undefined,
+                            contact_visibility: profile?.contact_visibility ?? undefined,
+                            archetype: profile?.archetype ?? canonical?.archetype ?? undefined,
                         });
                     }
                     if (!identity.callsign?.trim()) {

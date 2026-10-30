@@ -76,7 +76,7 @@ From there you can **Ask to join** that community, **Get the app**, or **Look ar
 
 People can ask to join your community from the global community. When someone asks, owners and admins get a notification (**Someone asked to join your community.**) and a count on **Home** under **Needs you** (**2 people asked to join**). In a community where any member can invite, members who turned on **Requests to join** under **Notification Preferences** are notified too, and if nobody answers within 3 days, the count is shown to every member on **Home** so someone can welcome them.
 
-Tapping the line or the notification opens them in the phone app. Or tap **Talk**, then **People**, then **Invites**: requests are listed under **Wants to join**, with their name, their words and where they came from. In the web app, open **People**, then **Invites**: the same list, with the same two buttons.
+The notification opens the phone app. Tapping the line opens **People**, then **Invites**, in whichever app you are using. To go there yourself, tap **Talk**, then **People**, then **Invites** in the phone app, or open **People**, then **Invites** in the web app. Requests are listed under **Wants to join**, with their name, their words and where they came from, and the same two buttons in both apps.
 
 - **Invite:** makes an invite that only their account can use. Their app finds it by itself, and they join with one tap.
 - **Not now:** they are not told. They keep seeing "no answer yet", and can't ask again for 30 days.

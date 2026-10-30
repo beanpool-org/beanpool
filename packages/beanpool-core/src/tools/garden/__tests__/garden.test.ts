@@ -14,6 +14,7 @@ import {
     ALL_MONTHS, cropPage, cropsByName, gardenZoneFix, growsHere, guideView, harvestLine, harvestWeeks, inMonths, monthShortName, monthsMask,
     monthsText, plantingWindows, shiftMonths, sowNow, sowSoon, zoneLineText,
 } from '../guide.js';
+import { THINGS } from '../../things/manifest.js';
 import { GARDEN, gardenHomeLines } from '../manifest.js';
 import { GARDEN_ZONES, GARDEN_ZONE_IDS, KOPPEN_ZONES, climateLayer, decodeClimateRuns, hemisphereOf, zoneAt, zoneOfKoppen } from '../zones.js';
 
@@ -269,6 +270,13 @@ describe('the document and the manifest', () => {
         expect(GARDEN.permissions).toEqual(['place']);
         expect(GARDEN.permissions).not.toContain('node-copy');
         expect(GARDEN.screens[0]).toBe('main');
+    });
+
+    it("opens on the guide itself: no empty-state doors, because its document is empty in normal use", () => {
+        expect(GARDEN.doors).toBe(false);
+        expect(GARDEN.doc.empty()).toEqual({ v: 1, settings: {} });
+        // The Tool shed keeps the doors: only a tool that names `doors: false` opens without them.
+        expect(THINGS.doors).toBeUndefined();
     });
 
     it('says on Home what to sow this month in the climate chosen, and its own line before a choice', () => {

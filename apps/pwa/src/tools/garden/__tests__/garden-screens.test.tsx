@@ -74,10 +74,71 @@ function draw(open: ToolsPageProps['open'], over: Partial<ToolsPageProps> = {}) 
 }
 const openGuide = async () => {
     draw({ id: 'garden', screen: 'main', key: null });
-    // Nothing chosen yet: the template's two doors; the guide is behind either, never a gate.
-    fireEvent.click(await screen.findByTestId('tool-door-already'));
+    // Nothing chosen yet, so the document is empty: the guide itself is the first open, never the template's doors.
     return screen.findByTestId('garden-zone-line');
 };
+
+describe('Your garden on the web: the guide is the first open, from every door (review of #2618)', () => {
+    /** Nothing of the template's empty state sits in front of, or above, the guide. */
+    const noDoors = () => {
+        for (const id of ['tool-doors', 'tool-door-already', 'tool-door-starting', 'tool-examples', 'tool-home-offer']) {
+            expect(screen.queryByTestId(id), id).toBeNull();
+        }
+    };
+
+    it("the Tools row: with a place, the guide is the first thing drawn, and no door or examples card comes before it", async () => {
+        home.answer = answer({ lat: -28.55, lng: 153.5 });
+        draw({ id: 'garden', screen: 'main', key: null });
+        // The first thing drawn that isn't "Loading..." is the guide's zone line: the doors are never drawn at all.
+        expect((await screen.findByTestId('garden-zone-line')).textContent).toContain('Warm temperate · southern hemisphere');
+        noDoors();
+    });
+
+    it("the Home card's open: the same guide whether the member had chosen a climate or not, doors never there", async () => {
+        home.answer = answer({ lat: -28.55, lng: 153.5 });
+        // Nothing chosen: the document is empty, as in normal use.
+        draw({ id: 'garden', screen: 'main', key: null });
+        await screen.findByTestId('garden-zone-line');
+        noDoors();
+        // The card's second line opens Change itself.
+        cleanup();
+        draw({ id: 'garden', screen: 'zone', key: null });
+        await screen.findByTestId('garden-zone-found');
+        noDoors();
+        // A climate chosen (the document holds it): the guide, as before.
+        fireEvent.click(await screen.findByTestId('garden-zone-mild'));
+        await screen.findByTestId('garden-zone-reset');
+        cleanup();
+        draw({ id: 'garden', screen: 'main', key: null });
+        expect((await screen.findByTestId('garden-zone-line')).textContent).toContain('Mild temperate · southern hemisphere');
+        noDoors();
+    });
+
+    it("with no place at all it is still the guide (asking to choose), not the doors; and it stays the guide after 'Use my place again' empties the document", async () => {
+        home.answer = null;
+        draw({ id: 'garden', screen: 'main', key: null });
+        expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
+        expect(screen.getByTestId('garden-choose')).toBeTruthy();
+        noDoors();
+        cleanup();
+        home.answer = answer({ lat: -28.55, lng: 153.5 });
+        resetPlacesForTest();
+        draw({ id: 'garden', screen: 'zone', key: null });
+        fireEvent.click(await screen.findByTestId('garden-zone-mild'));
+        fireEvent.click(await screen.findByTestId('garden-zone-reset'));
+        await screen.findByTestId('garden-zone-found');
+        cleanup();
+        draw({ id: 'garden', screen: 'main', key: null });
+        await screen.findByTestId('garden-zone-line');
+        noDoors();
+    });
+
+    it("the Tool shed, which names no `doors`, still opens on the template's doors", async () => {
+        draw({ id: 'things', screen: 'main', key: null });
+        expect(await screen.findByTestId('tool-doors')).toBeTruthy();
+        expect(screen.getByTestId('tool-door-already')).toBeTruthy();
+    });
+});
 
 describe('Your garden on the web: the guide', () => {
     it("draws the zone line in plain words from the community's place, with Change, Sow now and the map's credit", async () => {
@@ -102,7 +163,6 @@ describe('Your garden on the web: the guide', () => {
         resetPlacesForTest(); // a page loaded again: it remembers no place the server told the last one
         home.answer = null; // the server can't be reached
         draw({ id: 'garden', screen: 'main', key: null });
-        fireEvent.click(await screen.findByTestId('tool-door-already'));
         expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
         expect(screen.getByTestId('garden-choose')).toBeTruthy();
     });
@@ -136,7 +196,6 @@ describe('Your garden on the web: the guide', () => {
         expect(screen.queryByTestId('garden-choose')).toBeNull();
         cleanup();
         draw({ id: 'garden', screen: 'main', key: null });
-        fireEvent.click(await screen.findByTestId('tool-door-already'));
         fireEvent.click(await screen.findByTestId('garden-change'));
         expect((await screen.findByTestId('garden-zone-found')).textContent).toContain('Warm temperate · southern hemisphere');
         expect(home.asked).toHaveLength(1);
@@ -145,7 +204,6 @@ describe('Your garden on the web: the guide', () => {
     it("no place is never remembered, so the next open asks again; nor is a place told before the account's copies were cleared", async () => {
         home.answer = null; // the server can't be reached
         draw({ id: 'garden', screen: 'main', key: null });
-        fireEvent.click(await screen.findByTestId('tool-door-already'));
         expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
         cleanup();
         home.answer = answer(null, { lat: 51.5, lng: -0.1 }); // back, with London as the member's area
@@ -156,7 +214,6 @@ describe('Your garden on the web: the guide', () => {
         endAccountEpoch('cleared');
         home.answer = null;
         draw({ id: 'garden', screen: 'main', key: null });
-        fireEvent.click(await screen.findByTestId('tool-door-already'));
         expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
         expect(home.asked).toHaveLength(3);
     });
@@ -166,8 +223,7 @@ describe('Your garden on the web: the guide', () => {
         try {
             home.hang = true;
             draw({ id: 'garden', screen: 'main', key: null });
-            fireEvent.click(await screen.findByTestId('tool-door-already'));
-            expect(await screen.findByTestId('garden-finding')).toBeTruthy();
+                expect(await screen.findByTestId('garden-finding')).toBeTruthy();
             await act(async () => { await vi.advanceTimersByTimeAsync(PLACE_WAIT_MS); });
             expect(await screen.findByTestId('garden-no-zone')).toBeTruthy();
             expect(screen.getByTestId('garden-choose')).toBeTruthy();
@@ -212,7 +268,6 @@ describe('Your garden on the web: the guide', () => {
     it('a second tap on Change before the first choice is kept goes back once, to the guide (the stack never empties)', async () => {
         home.answer = answer({ lat: -28.55, lng: 153.5 });
         const { props } = draw({ id: 'garden', screen: 'main', key: null });
-        fireEvent.click(await screen.findByTestId('tool-door-already'));
         fireEvent.click(await screen.findByTestId('garden-change'));
         await screen.findByTestId('garden-zone-found');
         const mild = screen.getByTestId('garden-zone-mild');
@@ -233,7 +288,6 @@ describe('Your garden on the web: the guide', () => {
     it("a choice this browser couldn't keep says so, out loud, and stays on Change; the next tap is kept and goes back once", async () => {
         home.answer = answer({ lat: -28.55, lng: 153.5 });
         const { props } = draw({ id: 'garden', screen: 'main', key: null });
-        fireEvent.click(await screen.findByTestId('tool-door-already'));
         fireEvent.click(await screen.findByTestId('garden-change'));
         await screen.findByTestId('garden-zone-found');
         idb.failNextCommit();

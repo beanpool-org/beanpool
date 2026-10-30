@@ -559,7 +559,9 @@ describe('every tool, drawn through the host route at 320 dp × 1.3 in xx', asyn
             OTHERS = [];
             await drawTool(id);
             expect(byTestId('tool-frame')).not.toBeNull();
-            expect(byTestId('tool-doors')).not.toBeNull();
+            // A tool that names `doors: false` (Your garden) opens on its first screen: no doors, no examples, no offer.
+            const doors = tool.manifest.doors !== false;
+            expect(byTestId('tool-doors') !== null, 'the doors').toBe(doors);
             // A tool that asks for node-copy, on a server that keeps copies and has none of it yet: on, by default.
             expect(byTestId('tool-backup-line')?.textContent).toBe(pseudoLocalise(keepsNodeCopy(tool.manifest)
                 ? "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could."
@@ -568,6 +570,10 @@ describe('every tool, drawn through the host route at 320 dp × 1.3 in xx', asyn
             expect(bracketed()).toBeGreaterThan(4);
             expect(bypassing()).toEqual([]);
             expect(tooWide()).toEqual([]);
+            if (!doors) {
+                for (const gone of ['tool-door-doing', 'tool-door-starting', 'tool-examples', 'tool-home-offer']) expect(byTestId(gone), gone).toBeNull();
+                return;
+            }
             await click(byTestId('tool-door-starting'), "I'm starting out");
             expect(byTestId('tool-examples')).not.toBeNull();
             expect(bypassing(true)).toEqual([]);
@@ -1525,7 +1531,7 @@ describe("the doors write the map composer's own draft (app/(tabs)/map.tsx, read
 
 // ── Your garden (grow-food slice G0): the planting guide ─────────────────────────────────────────────────────────
 
-describe('Your garden (grow-food G0): the guide shows the zone line, and opens from both doors', () => {
+describe('Your garden (grow-food G0): the guide shows the zone line, and is the first open', () => {
     const URL_HERE = 'https://mullum.example';
     /** The Home answer this phone kept for the member here (utils/home-store.ts), with the community's place and the area. */
     const keepHome = (place: { lat: number; lng: number } | null, area: { lat: number; lng: number } | null = null) => {
@@ -1545,10 +1551,10 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
     it("draws the zone line in plain words from the community's place, with Change, Sow now and the map's credit", async () => {
         keepHome({ lat: -28.55, lng: 153.5 }); // Mullumbimby
         await redraw({}, 'en');
-        // Nothing chosen yet: the template's two doors; the guide is behind either, never a gate.
-        await click(byTestId('tool-door-starting'), "I'm starting out");
+        // Nothing chosen yet, so the document is empty: the guide itself is the first open, never the template's doors.
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Warm temperate · southern hemisphere');
+        expect(byTestId('tool-doors')).toBeNull();
         expect(byTestId('garden-zone-source')?.textContent).toContain("From your community's place.");
         expect(byTestId('garden-now')).not.toBeNull();
         expect(byTestId('garden-all')?.textContent).toContain('Tomatoes');
@@ -1559,11 +1565,49 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         expect(nav.pushed).toEqual([{ pathname: '/tool/[id]', params: { id: 'garden', screen: 'zone' } }]);
     }, 30_000);
 
+    it("the guide is the first open from every door, and nothing of the template's empty state sits above it (review of #2618)", async () => {
+        keepHome({ lat: -28.55, lng: 153.5 });
+        const noDoors = () => {
+            for (const id of ['tool-doors', 'tool-door-doing', 'tool-door-starting', 'tool-examples', 'tool-home-offer', 'tool-guide']) expect(byTestId(id), id).toBeNull();
+        };
+        // The Tools row and Home's card both open /tool/garden at its first screen: the guide, not the doors.
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        noDoors();
+        // After "I'm starting out" on an earlier build, the examples card must not come back above the guide for good.
+        await writeToolSettings(ME.publicKey, GARDEN.id, { door: 'starting' });
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        noDoors();
+        // The Home card's second line opens Change itself.
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        noDoors();
+        // With no place known the guide still comes first, asking to choose.
+        store.map.delete(homeAnswerStoreKey(ME.publicKey, URL_HERE));
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-no-zone'), 8000);
+        noDoors();
+        // And once "Use my place again" has emptied a choice, the document is empty again: still the guide.
+        keepHome({ lat: -28.55, lng: 153.5 });
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-found'), 8000);
+        await click(byTestId('garden-zone-mild'), 'Mild temperate');
+        await settleUntil(() => nav.backs > 0, 8000);
+        await redraw({ screen: 'zone' }, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
+        await click(byTestId('garden-zone-reset'), 'Use my place again');
+        await settleUntil(() => nav.backs > 1, 8000);
+        expect((await readToolDoc(ME.publicKey, GARDEN)).doc).toEqual({ v: 1, settings: {} });
+        await redraw({}, 'en');
+        await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
+        noDoors();
+    }, 30_000);
+
     it('every guide screen in xx at 320 dp × 1.3: every word through t(), none too wide', async () => {
         keepHome({ lat: 6.52, lng: 3.38 }); // Lagos: wet and dry tropics, so a crop carries the rains note
         OTHERS = [];
         await redraw({}, 'xx');
-        await click(byTestId('tool-door-doing'), 'I already do this');
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(bypassing()).toEqual([]);
         expect(tooWide()).toEqual([]);
@@ -1674,7 +1718,6 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
     it("takes the member's area, then the phone's last known place only where location is already allowed; never asks", async () => {
         keepHome(null, { lat: 51.5, lng: -0.1 }); // London, as the member's rough area
         await redraw({}, 'en');
-        await click(byTestId('tool-door-doing'), 'I already do this');
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate · northern hemisphere');
         expect(byTestId('garden-zone-source')?.textContent).toContain('From your area.');

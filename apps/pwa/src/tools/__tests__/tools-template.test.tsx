@@ -184,8 +184,12 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         await keep(c.manifest.id, doc);
         const view = draw(c, { id: c.manifest.id, screen: screenName, key: null });
         const page = await view.findByTestId('tools-page');
-        // Empty: the two doors first; "I already do this" goes in.
+        // Empty: the two doors first; "I already do this" goes in. A tool that names `doors: false` (Your garden) opens on its
+        // first screen instead, with no doors.
         if (screenName === 'main' && JSON.stringify(doc) === JSON.stringify(c.manifest.doc.empty())) {
+            if (c.manifest.doors === false) expect(view.queryByTestId('tool-doors'), `${where}, no doors`).toBeNull();
+        }
+        if (screenName === 'main' && c.manifest.doors !== false && JSON.stringify(doc) === JSON.stringify(c.manifest.doc.empty())) {
             await view.findByTestId('tool-doors');
             expect(layoutProblems(page), `${where}, the doors`).toEqual([]);
             expect(bypassing(page, { others: memberText(doc) }), `${where}, the doors`).toEqual([]);

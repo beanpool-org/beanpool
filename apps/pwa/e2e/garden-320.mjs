@@ -35,8 +35,8 @@ const HEIGHT = 860;
 const FONT_SCALE = 1.3;
 
 const SCREENS = [
-    // Nothing chosen yet: the template's two doors first; "I already do this" goes straight to the guide.
-    { name: 'guide', screen: 'main', key: null, door: 'tool-door-already', waitFor: 'garden-zone-line' },
+    // Nothing chosen yet, so the document is empty: the guide itself is the first open (manifest `doors: false`), no doors.
+    { name: 'guide', screen: 'main', key: null, waitFor: 'garden-zone-line' },
     { name: 'crop', screen: 'crop', key: 'tomato', waitFor: 'garden-crop-sow' },
     { name: 'change', screen: 'zone', key: null, waitFor: 'garden-zone-found' },
 ];
@@ -111,8 +111,11 @@ try {
                 }, [theme, FONT_SCALE]);
                 const q = new URLSearchParams({ screen: s.screen, lang, ...(s.key ? { key: s.key } : {}) });
                 await page.goto(`${base}/e2e/garden-harness.html?${q}`, { waitUntil: 'networkidle' });
-                if (s.door) await page.click(`[data-testid="${s.door}"]`, { timeout: 20_000 });
                 await page.waitForSelector(`[data-testid="${s.waitFor}"]`, { timeout: 20_000 });
+                // Nothing of the template's empty state is drawn on any of its screens.
+                for (const id of ['tool-doors', 'tool-examples', 'tool-home-offer']) {
+                    if (await page.$(`[data-testid="${id}"]`)) throw new Error(`${s.name}: ${id} is drawn before the guide`);
+                }
                 await page.waitForTimeout(400);
                 await page.evaluate(() => document.fonts.ready);
 

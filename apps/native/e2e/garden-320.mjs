@@ -4,7 +4,7 @@
  * Your garden's phone screens (grow-food slice G0: the planting guide) at the floor (memory product-audience-small-screens:
  * 320dp wide, the phone's text at 1.3x), in the light and the dark scheme, rendered for real: the tool's own screens
  * (tools/garden/screens.tsx) and the template's primitives (tools/ui.tsx) through react-native-web in headless Chromium.
- * A stand-in for the device, not the device: the host route's frame (header, menu, the two doors) is drawn by the app
+ * A stand-in for the device, not the device: the host route's frame (header, menu) is drawn by the app
  * around these and is not here. The host is a stand-in too: the place is Mullumbimby's (warm temperate, southern
  * hemisphere), as the Home answer the phone kept would give it, and nothing is chosen.
  *

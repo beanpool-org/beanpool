@@ -63,7 +63,10 @@ it scrolls a box being typed in, and the buttons under it, above the keyboard),
    `wordn('{n} thing', '{n} things')` pair with its count as `n`, so "1 thing" reads right in every language), one emoji,
    the permissions you need and no more, `doc` with `version: 1`, `empty()`, `read()`, `row()`, `examples`. Add `homeCard` and `reminders` only if the
    tool has something to say on Home or at a time. A tool's Home card is offered once from inside the tool, never added
-   to Home by itself. A tool with `node-copy` that names a bigger `doc.maxBytes` may add `tooBig(doc, maxBytes)`, a line
+   to Home by itself. An empty document opens on the template's two doors ("I already do this", "I'm starting out");
+   a tool whose first screen is worth opening on an empty document (Your garden's guide) names `doors: false` and both
+   apps open its `main` screen straight away, from every door, with no examples card and no in-tool Home-card offer
+   (its card stays in Home's Add a card). Every other tool is unchanged. A tool with `node-copy` that names a bigger `doc.maxBytes` may add `tooBig(doc, maxBytes)`, a line
    that says how to make room in its own terms (the Tool shed: about how many things to delete).
 3. **Write the document's rules and tests in core** (`<id>/doc.ts`, `<id>/__tests__/`), and `<id>/fixtures.ts`: a stored
    value of every version the tool ever wrote, and the empty, small and full documents. `read()` never throws, reads every

@@ -49,6 +49,10 @@ export const GARDEN: ToolManifest<GardenDoc> = {
     row: (doc) => (doc.settings.zone
         ? { key: word('{zone} · {hemisphere}'), values: zoneLineValues(doc.settings.zone, doc.settings.hemisphere ?? 'north') }
         : null),
+    // The guide is the first open (design §3): a document that only holds the member's choice of climate is empty in
+    // normal use, so the template's empty-state doors would sit before it on every open. Its examples are the guide's own
+    // crops, so the three here are only what the manifest's shape asks for.
+    doors: false,
     examples: [word('Tomatoes'), word('Cassava'), word('Lettuce')],
     homeCard: {
         line: word('What to sow this month, for your climate.'),

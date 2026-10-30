@@ -68,6 +68,8 @@ If a request waits **3 days** without an answer in an Invite community (any memb
 
 If a request waits **7 days** with no answer, the server sends an operator alert (knock.waiting: "A request to join has waited 7 days.") to your configured webhook or ntfy address and an owner alert push.
 
+If a burst of requests reaches the ceiling (30 made in any 24 hours, or 50 open from the last 3 days), the server turns new requests away and sends an operator alert (knock.busy: "requests to join ceiling reached"). Applicants are told "This community isn't taking new requests right now" meanwhile, and it clears by itself as older requests lapse or are answered. Because any web page's visitors can now send a request to join directly to your community (open CORS on `POST /api/join/knock`), this ceiling answers the risk of a flood from the web. The alert is told at most once per UTC day, kept in memory, so restarting the server can send it again on the same day.
+
 **While no new members are being taken** (the community is paused), **Who can join** shows **Paused**, and **Paused: nobody new for now** is the choice marked when you open it. Pick **Invite** or **Known** and save to take new members again; the page says what that changes, and every member is told. Until the page has loaded, there is nothing to save: if it can't load, tap **Retry**.
 
 **While the server is in a private preview**, only owners and admins invite, whatever is chosen here. The **Who can join** row says so, in the server's words, with what would end it, and cannot be opened until the preview is off.

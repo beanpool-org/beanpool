@@ -1823,6 +1823,7 @@ export default function SettingsScreen() {
                 setShowSsoSheet(true);
             } : undefined}
             onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
+            listCommunitiesFor={identity?.publicKey}
         />
     );
 

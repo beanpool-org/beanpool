@@ -14,6 +14,7 @@ import { authenticateUser } from '../utils/LocalAuth';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
+import { communitiesForCopy } from '../utils/copy-communities';
 
 export function SsoEnrolSheet({
     visible,
@@ -126,10 +127,13 @@ export function SsoEnrolSheet({
                 setStep('error');
                 return;
             }
+            // The member's communities ride inside the copy when their tick beside Protect with is on (vault rethink VR5).
+            const communities = await communitiesForCopy(identity.publicKey);
             const result = await connectAndDeposit({
                 provider,
                 url,
                 identity,
+                communities,
                 ...(copyAt ? { copyAt } : {}),
                 // Where the screen said the copy goes: it is made only there.
                 ...(copiesAt ? { shownAt: copiesAt } : {}),
@@ -155,8 +159,9 @@ export function SsoEnrolSheet({
                 setEnrolResult(result);
                 setStep('success');
                 if (timerRef.current) clearTimeout(timerRef.current);
-                // A copy that replaced another account's stays up until Done: that line has to be read.
-                if (result.replaced) return;
+                // A copy that replaced another account's, or whose list left communities out, stays up until Done: that
+                // line has to be read.
+                if (result.replaced || result.communitiesLeftOut) return;
                 timerRef.current = setTimeout(() => {
                     onEnrolled(result);
                     onClose();
@@ -259,6 +264,14 @@ export function SsoEnrolSheet({
                             </Text>
                             {enrolResult?.replaced && (
                                 <Text style={styles.body}>{signInReplacedWords(PROVIDER_NAME)}</Text>
+                            )}
+                            {/* More communities than a copy holds (vault rethink VR5): said, never dropped silently. */}
+                            {!!enrolResult?.communitiesLeftOut && (
+                                <Text style={styles.body}>
+                                    {t('The copy lists your first {listed} communities. {left} more did not fit.', {
+                                        listed: String(enrolResult.communitiesListed ?? 0), left: String(enrolResult.communitiesLeftOut),
+                                    })}
+                                </Text>
                             )}
                             <TouchableOpacity
                                 style={styles.primaryButton}

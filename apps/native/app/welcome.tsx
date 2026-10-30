@@ -95,6 +95,7 @@ import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
 import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
+import { fieldTextFor, withCopyCommunities } from '../utils/restore-community-choices';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -323,6 +324,10 @@ export default function WelcomeScreen() {
                 setError(t(VAULT_WORDS.stopped));
             } else {
                 setSsoReleased(result.restored);
+                // The copy listed the member's communities (vault rethink VR5): the first is the one the phone was on when
+                // the sign-in was linked, so "Which community?" starts there. Global otherwise, as before.
+                const first = result.restored.communities?.[0];
+                if (first) setSsoCommunity(fieldTextFor(first.url));
                 setError(null);
             }
         } catch (e) {
@@ -2422,6 +2427,7 @@ export default function WelcomeScreen() {
                                 if (prov) setSsoProvider(prov);
                                 setShowSsoSheet(true);
                             } : undefined}
+                            listCommunitiesFor={pendingIdentity?.publicKey}
                         />
                         )}
                         {linked && (
@@ -3842,12 +3848,14 @@ export default function WelcomeScreen() {
                                     <Text style={styles.subtitle}>
                                         {t('Your account is back. Which community do you want to open it in? You can add your other communities afterwards.')}
                                     </Text>
+                                    {/* With the copy's list (vault rethink VR5), the member's communities from it beside this
+                                        phone's own; a copy without one shows this phone's, as before. */}
                                     <SavedNodePicker
-                                        nodes={savedNodes}
+                                        nodes={withCopyCommunities(savedNodes, ssoReleased.communities)}
                                         onPick={(url) => { setSsoCommunity(url); setError(null); }}
                                         disabled={loading}
                                         selectedUrl={normalizeNodeUrl(ssoCommunity.trim())}
-                                        label={t('Your communities on this phone')}
+                                        label={ssoReleased.communities?.length ? t('Your communities, on this phone and in your copy') : t('Your communities on this phone')}
                                         actionLabel={t('Open in')}
                                         hint={t("Or type a community's name or address below.")}
                                     />

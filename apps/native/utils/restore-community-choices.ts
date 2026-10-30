@@ -9,7 +9,8 @@
  * typed.
  */
 import { GLOBAL_NODE_URL } from './global-node-url';
-import { normalizeNodeUrl } from './node-url';
+import type { CopyCommunity } from '@beanpool/core';
+import { isPlainNodeAddress, normalizeNodeUrl } from './node-url';
 import type { SavedNode } from './nodes';
 
 /** One chip: the global community, or a community saved on this phone, with the address it puts in the field. */
@@ -50,6 +51,26 @@ export function restoreCommunityChoices(saved: readonly SavedNode[], globalUrl: 
         choices.push({ kind: 'saved', url: node.url, fills: fieldTextFor(node.url), name: node.alias?.trim() || host });
     }
     return choices;
+}
+
+/**
+ * The phone's saved communities, then each community a restored copy listed that the phone hasn't saved (vault rethink
+ * VR5, utils/copy-communities.ts), by the name the copy gives it: what a restore from such a copy offers to open the
+ * account in. A copy without a list leaves the saved list exactly as it is. Nothing is saved here.
+ */
+export function withCopyCommunities(
+    saved: readonly SavedNode[], fromCopy: readonly CopyCommunity[] | null | undefined,
+): SavedNode[] {
+    const out = [...saved];
+    const seen = new Set(saved.filter((n) => n && typeof n.url === 'string').map((n) => sameAddress(n.url)));
+    for (const c of fromCopy ?? []) {
+        if (!c || typeof c.url !== 'string' || !isPlainNodeAddress(c.url)) continue;
+        const key = sameAddress(c.url);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ url: c.url, ...(c.name?.trim() ? { alias: c.name.trim() } : {}) });
+    }
+    return out;
 }
 
 /**

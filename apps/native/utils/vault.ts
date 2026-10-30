@@ -83,6 +83,7 @@ import {
     sealVaultDepositBox,
     vaultCopyDigest,
     vaultTicketNonce,
+    type CopyCommunity,
     type SealedShare,
     type VaultAnswer,
     type VaultAnswerKind,
@@ -805,6 +806,11 @@ export interface RestoredFromVault {
     privateKey: string;
     /** Only when the copy carried them and they make this key. */
     mnemonic?: string[];
+    /**
+     * The member's communities, only when the copy carried a readable list (vault rethink VR5, utils/copy-communities.ts):
+     * offered to open the account in, and saved on the phone once it is.
+     */
+    communities?: CopyCommunity[];
 }
 
 export type VaultCollect =
@@ -832,7 +838,7 @@ export async function openRelease(signed: VaultAnswer, pending: PendingVaultRest
         throw unverified('/v1/restore/collect', 'a release whose box says other than its signature');
     }
     if (contents.provider !== pending.provider) throw new VaultError('wrong_account', VAULT_MESSAGES.wrongAccount);
-    let opened: { seed: Uint8Array; words: string[] | null; wordsStatus?: string };
+    let opened: { seed: Uint8Array; words: string[] | null; wordsStatus?: string; communities?: CopyCommunity[] | null; communitiesStatus?: string };
     try {
         opened = await openSeedFromSso(contents.clientCopy, pending.provider, pending.sub);
     } catch {
@@ -855,11 +861,14 @@ export async function openRelease(signed: VaultAnswer, pending: PendingVaultRest
         console.log(`[VAULT] ${pending.provider}: the copy's 12 words do not make the restored key; restoring the key alone`);
         words = null;
     }
+    // A list that didn't open costs the list, never the account (core openSeedFromSso). Never the list in a log.
+    if (opened.communitiesStatus === 'unreadable') console.log(`[VAULT] ${pending.provider}: the copy's list of communities did not open; restoring without it`);
     return {
         provider: pending.provider,
         publicKey: keypair.publicKeyHex,
         privateKey: keypair.privateKeyHex,
         ...(words ? { mnemonic: words } : {}),
+        ...(opened.communities?.length ? { communities: opened.communities } : {}),
     };
 }
 

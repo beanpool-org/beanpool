@@ -19,6 +19,7 @@ import { hasVault, type SignInCopies } from '../utils/vault-config';
 import { t, tn, word } from '@beanpool/core';
 import { welcomeLineWords } from './welcome/welcome-lines';
 import { WhoCanOpen } from './WhoCanOpen';
+import { CopyCommunitiesTick } from './CopyCommunitiesTick';
 
 /**
  * Under a connected sign-in, in a build without a key vault (utils/vault.ts `signInCopiesAt`): who can open the copy
@@ -125,6 +126,7 @@ export function KeeperProtectionPanel({
     hasWords,
     waysBack = false,
     colors = lightColors,
+    listCommunitiesFor,
 }: {
     protection: Protection;
     /**
@@ -159,6 +161,11 @@ export function KeeperProtectionPanel({
     copiesAt?: SignInCopies;
     onProtectSso?: (provider: SsoProvider) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
+    /**
+     * The account's public key: the panel shows the tick for whether a copy made here also carries the account's list of
+     * communities (vault rethink VR5, components/CopyCommunitiesTick.tsx), beside Protect with. Absent: no tick.
+     */
+    listCommunitiesFor?: string;
 }): React.JSX.Element {
     const styles = stylesFor(colors);
     const enrolledSso = protection.enrolledSso ?? [];
@@ -322,6 +329,8 @@ export function KeeperProtectionPanel({
                 {/* With a key vault: one tap away, before a sign-in is linked as well as after (VR0: said where the
                     copy is made). Without one: every enrolled sign-in, not just the ones this phone lists: Apple
                     connected on an iPhone has no row on Android, and its copy is on the server all the same. */}
+                {/* Said before Protect with or Connect again is tapped: it applies to the next copy made (VR5). */}
+                {listCommunitiesFor && <CopyCommunitiesTick publicKey={listCommunitiesFor} colors={colors} />}
                 {atVault ? (
                     <WhoCanOpen label={t(SIGN_IN_ROW.whoCanOpenButton)} colors={colors}>{openersLine}</WhoCanOpen>
                 ) : enrolledSso.length > 0 && openersLine}

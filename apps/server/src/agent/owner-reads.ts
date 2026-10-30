@@ -80,9 +80,9 @@ const DAY_MS = 24 * 60 * 60_000;
 export const COMMUNITY_AREA_PLACES_MAX = 30;
 
 function communityArea(boundary: string): ToolResult {
-    const config = getNodeConfig() as { serviceRadius?: { lat: number; lng: number; radiusKm: number }; location?: { lat: number; lng: number; name?: string } };
-    // As a member's app reads it (config/community-place.ts 'rounded'): never the manager's exact pin, which may be a home.
-    const area = placeAs(config.serviceRadius, 'rounded') ?? placeAs(config.location, 'rounded');
+    // The service area (the manager's one pin, config/community-place.ts) as a member's app reads it, to two decimals: never
+    // the exact pin, which may be a home.
+    const area = placeAs(getNodeConfig().serviceRadius, 'rounded');
     const since = new Date(Date.now() - 90 * DAY_MS).toISOString();
     // This community's own public events, by their place's name on the card: an assistant reuses a hall, never finds a home.
     const rows = db.prepare(`SELECT event_place_name AS name, lat, lng FROM posts
@@ -104,7 +104,7 @@ function communityArea(boundary: string): ToolResult {
         ok: true, rows: places.length,
         result: {
             centre: area ? { lat: area.lat, lng: area.lng } : null,
-            radiusKm: area && typeof (area as { radiusKm?: number }).radiusKm === 'number' ? (area as { radiusKm: number }).radiusKm : null,
+            radiusKm: typeof area?.radiusKm === 'number' ? area.radiusKm : null,
             pinRounding: 'a listing\'s or an event\'s pin is stored rounded to 3 decimals (about 100 m), as the apps send it',
             useMyArea: 'create_offer and create_need take use_my_area: true to place a listing at your own area',
             eventPlaces: places,

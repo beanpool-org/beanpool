@@ -7,7 +7,8 @@
  * Backup. The next Next then finds the invite spent, and only the node can say whether it was this key that spent it.
  *
  * - A key this join made that the node already has is the member's own new account, whose 12 words they have never been
- *   shown (onboarding-state.ts `keyMadeForThisJoin`). Next carries on to the photo and Safety Backup as the redeem would
+ *   shown (onboarding-state.ts `keyMadeForThisJoin`). So is a key a knock made on this phone, which this invite lets in
+ *   for the first time (knock-key.ts `knockKeyIsNew`). Next carries on to the photo and Safety Backup as the redeem would
  *   have, and nothing redeems again.
  * - A key the phone already had that the node already has is an established account, already in that community: into
  *   the app, as before. Its words stay where they have always been, behind Settings' lock.
@@ -65,12 +66,19 @@ export type SpentInvite =
     | 'spent';
 
 /**
- * `stored` is the key on this phone when Next was tapped, `record` the wizard's record read before Next changed it. The
- * node is asked only about a stored key: with none, Next hasn't made one yet, so nothing on this phone spent the invite.
+ * `stored` is the key on this phone when Next was tapped, `record` the wizard's record read before Next changed it, and
+ * `knockMade` whether the knock's mark names `stored` (knock-key.ts `knockKeyIsNew`, read with the record): its words have
+ * never been shown either, so it carries on as a key the record names does. The node is asked only about a stored key:
+ * with none, Next hasn't made one yet, so nothing on this phone spent the invite.
  */
-export async function afterSpentInvite(nodeUrl: string, stored: BeanPoolIdentity | null, record: PendingOnboarding | null): Promise<SpentInvite> {
+export async function afterSpentInvite(
+    nodeUrl: string,
+    stored: BeanPoolIdentity | null,
+    record: PendingOnboarding | null,
+    knockMade = false,
+): Promise<SpentInvite> {
     if (!stored || !(await nodeSaysMember(nodeUrl, stored))) return 'spent';
-    return keyMadeForThisJoin(record, stored.publicKey) ? 'carryOn' : 'enterApp';
+    return keyMadeForThisJoin(record, stored.publicKey) || knockMade ? 'carryOn' : 'enterApp';
 }
 
 /**

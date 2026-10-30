@@ -53,7 +53,11 @@ vi.mock('expo-location', () => ({
     getCurrentPositionAsync: vi.fn(async () => null),
     Accuracy: { Balanced: 3 },
 }));
-vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
+// The member's community is the global one: since slice S3 an account with no community in use is waiting to be let in,
+// and the screen signs nothing to the global community for it (app/find-community.tsx `inCommunity`).
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? 'https://global.beanpool.org' : null)), setItem: vi.fn(), removeItem: vi.fn() },
+}));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
     const ctx = () => ({ theme: 'light', colors: lightColors });

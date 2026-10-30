@@ -62,8 +62,8 @@ export function CommunityShapeSection({
                 getTfaSessionToken(activeNode.id),
             );
             setShape(data);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load community shape');
+        } catch (err: unknown) {
+            setError(err instanceof Error && err.message ? err.message : String(err) || 'Failed to load community shape');
         } finally {
             setLoading(false);
         }
@@ -166,8 +166,8 @@ export function CommunityShapeSection({
                     : t('Saved!'),
             );
             successTimer.schedule(() => setSaveSuccess(null), 4000);
-        } catch (err: any) {
-            setRowError(err.message || 'Failed to save change');
+        } catch (err: unknown) {
+            setRowError(err instanceof Error && err.message ? err.message : String(err) || 'Failed to save change');
         } finally {
             setSaving(false);
         }

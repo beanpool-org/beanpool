@@ -58,9 +58,6 @@ const STUBS = {
     'expo-router': `export const router = { back() {}, push() {}, replace() {}, navigate() {}, canGoBack: () => true }; export const useFocusEffect = () => {};`,
     'react-native-keyboard-controller': `import React from 'react'; import { ScrollView } from 'react-native'; export const KeyboardAwareScrollView = ({ bottomOffset, ...p }) => React.createElement(ScrollView, p);`,
     '@expo/vector-icons': `import React from 'react'; import { Text } from 'react-native'; export const MaterialCommunityIcons = ({ size, color }) => React.createElement(Text, { style: { fontSize: size, color, lineHeight: size } }, '›');`,
-};`,
-    'IdentityContext': `export const useIdentity = () => ({ identity: globalThis.__identity, isLoading: false });`,
-    'LanguageProvider': `import { t, tn } from '@beanpool/core'; export const useWords = () => ({ t, tn });`,
 };
 /** Import specifiers (bare, or a relative path's last part) that resolve to a stub. */
 const stubFor = (spec) => {

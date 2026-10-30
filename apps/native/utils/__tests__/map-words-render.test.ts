@@ -468,7 +468,7 @@ describe('the Map in the pseudo-locale: every word on it came through t() (words
         net.answer = community();
         store.map.set('beanpool_offer_draft', JSON.stringify({ anchorUrl: NODE, postType: 'offer', postTitle: 'Half-written', postPhotos: [] }));
         await renderIn('xx', listing());
-        expect(said()).toEqual([xx('Unfinished post'), xx('You started a post earlier. Continue it, or start fresh?'), xx('Start fresh'), xx('Continue')]);
+        expect(said()).toEqual([xx('Unfinished post'), xx('You started a post earlier. Continue it, or start fresh?'), xx('Cancel'), xx('Start fresh'), xx('Continue')]);
         await pressAlert(xx('Continue'));
         expect(bypassing()).toEqual([]);
     });
@@ -571,6 +571,16 @@ describe('the listing screen (app/new-listing.tsx): the form out of the map, ope
         await renderIn('en', listing());
         expect(said()[0]).toBe('Finish your profile first');
         await pressAlert('Not now');
+        expect(nav.pushed).toEqual(['back']);
+    });
+
+    it('"Cancel" on the unfinished post question takes the member back: the screen never sits empty', async () => {
+        net.answer = community();
+        store.map.set('beanpool_offer_draft', JSON.stringify({ anchorUrl: NODE, postType: 'offer', postTitle: 'Half-written', postPhotos: [] }));
+        params.now = { newPost: 'offer' };
+        await renderIn('en', listing());
+        expect(said()[0]).toBe('Unfinished post');
+        await pressAlert('Cancel');
         expect(nav.pushed).toEqual(['back']);
     });
 });

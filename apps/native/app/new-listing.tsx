@@ -457,12 +457,18 @@ export default function NewListingScreen() {
                     return;
                 }
                 if (decision === 'ask-unfinished') {
-                    Alert.alert(t('Unfinished post'), t('You started a post earlier. Continue it, or start fresh?'), [
-                        // Start fresh honours the type just chosen in the chooser; Continue keeps the
-                        // draft's own type, because that is the post the member asked to go back to.
-                        { text: t('Start fresh'), style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); if (type) setPostType(type); setShowNewPost(true); } },
-                        { text: t('Continue'), onPress: () => { restoreDraft(d); setShowNewPost(true); } },
-                    ]);
+                    Alert.alert(
+                        t('Unfinished post'),
+                        t('You started a post earlier. Continue it, or start fresh?'),
+                        [
+                            { text: t('Cancel'), style: 'cancel', onPress: leave },
+                            // Start fresh honours the type just chosen in the chooser; Continue keeps the
+                            // draft's own type, because that is the post the member asked to go back to.
+                            { text: t('Start fresh'), style: 'destructive', onPress: () => { clearDraft(); resetNewPost(); if (type) setPostType(type); setShowNewPost(true); } },
+                            { text: t('Continue'), onPress: () => { restoreDraft(d); setShowNewPost(true); } },
+                        ],
+                        { cancelable: true, onDismiss: leave }
+                    );
                     return;
                 }
             }

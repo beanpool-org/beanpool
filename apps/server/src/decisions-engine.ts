@@ -48,7 +48,7 @@ import * as engine from '@beanpool/engine';
 import type { Member } from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage, word, wordsFor } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
-import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
+import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR, noteKeeperLeftProject } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
@@ -1671,6 +1671,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         ).run(entPubkey, leadPubkey);
                         if (removed.changes === 0) continue;
                         engine.keepersChanged(db, entPubkey);
+                        // A project's maker no longer stands in for its cancel once a keeper has left it (db.ts mayCancelProject).
+                        noteKeeperLeftProject(entPubkey);
                         closePendingKeeperChangesFor(entPubkey, leadPubkey, 'The community removed this lead keeper');
                         const { promoted } = promoteOrPauseAfterLeadLeft(entPubkey, `decision:${decision.id}`);
                         touchedEnterprises.push(entPubkey);

@@ -201,6 +201,13 @@ export function setMoneyGuardHook(fn: (() => void) | null): void {
     assertMoneyMayMove = fn;
 }
 
+// Whether a key is an owner or admin of the node who may act (state-engine.ts isAdminPubkey), for a project's cancel
+// (mayCancelProject). state-engine registers it; inverted for the same module-cycle reason. Unregistered, nobody is.
+let isNodeAdminKey: ((publicKey: string) => boolean) | null = null;
+export function setNodeAdminCheckHook(fn: ((publicKey: string) => boolean) | null): void {
+    isNodeAdminKey = fn;
+}
+
 // Enable WAL mode for better concurrency and performance
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
@@ -1490,6 +1497,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN migrated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE projects ADD COLUMN enterprise_pubkey TEXT`).run(); } catch { }
+    // When a keeper first left the project (noteKeeperLeftProject): its maker's cancel asks it (mayCancelProject).
+    try { db.prepare(`ALTER TABLE projects ADD COLUMN keeper_left_at DATETIME`).run(); } catch { }
 
     // Deploy 2: drop the Deploy 1 members trigger so schema.sql re-creates it with the
     // column-whitelist form that excludes last_active_at heartbeats from cursor sync.
@@ -3011,12 +3020,12 @@ export function getCrowdfundProject(id: string): ProjectRow | undefined {
 }
 
 /**
- * Whether `pubkey` leads the project: the rule its edit (updateCrowdfundProject) asks, and its cancel (mayCancelProject)
- * starts from. Its lead is getCrowdfundProject's creator_pubkey: its lead keeper (treasury_operators, role 'lead'); with no
- * lead row, its first keeper; with no keepers at all, the projects row's own creator_pubkey. That column keeps whoever made
- * it, and the lead changes after (a keepers' vote, or a lead who stepped down or closed their account and a keeper promoted
- * in their place). Asked of that column first, the maker who no longer led it could still cancel it, refunding every backer
- * and deleting it, and the new lead could not (review of #2525).
+ * Whether `pubkey` leads the project: the rule its edit (updateCrowdfundProject) asks. Its lead is getCrowdfundProject's
+ * creator_pubkey: its lead keeper (treasury_operators, role 'lead'); with no lead row, its first keeper; with no keepers at
+ * all, the projects row's own creator_pubkey. That column keeps whoever made it, and the lead changes after (a keepers'
+ * vote, or a lead who stepped down or closed their account and a keeper promoted in their place). Asked of that column
+ * first, the maker who no longer led it could still change it, and the new lead could not (review of #2525). Its cancel asks
+ * its own rule (mayCancelProject).
  */
 export function leadsProject(projectId: string, pubkey: string): boolean {
     const lead = getCrowdfundProject(projectId)?.creator_pubkey;
@@ -3024,22 +3033,46 @@ export function leadsProject(projectId: string, pubkey: string): boolean {
 }
 
 /**
- * May `pubkey` cancel the project (deleteCrowdfundProject), refunding every backer and deleting it? Its lead (leadsProject),
- * and only a lead who may act now. The cancel is its wind-up (docs/the-commons.md: its lead keeper starts one) and can't be
- * undone, so it takes neither of the edit's softer readings (review of #2554):
- * - Not the first keeper when no keeper leads it. Nobody leads it when its lead left and no keeper was active with operator
- *   access to take over (promoteOrPauseAfterLeadLeft paused it), so that keeper is one the engine just passed over. Its maker
- *   stands in only when it has no keepers at all.
- * - Not a lead whose account isn't active, or whose operator access an admin switched off: such a keeper acts for no
- *   enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up (isLeadOrSoleKeeperOrAdmin) ask.
+ * May `pubkey` cancel the project (deleteCrowdfundProject), refunding every backer and deleting it? The cancel is its
+ * wind-up (docs/the-commons.md) and can't be undone, so it asks for the people wind-up allows (isLeadOrSoleKeeperOrAdmin),
+ * and its maker only where nobody else could ever have run it (Marty, board, 29 Oct 2026, CF-Q1 and CF-Q2):
+ * - A node admin (an owner or admin of the node, isAdminPubkey, which asks that their account is active).
+ * - Its lead keeper (treasury_operators, role 'lead').
+ * - With no lead, its only keeper. Nobody leads it when its lead left and no keeper was active with operator access to take
+ *   over (promoteOrPauseAfterLeadLeft paused it). One of two or more keepers can't, and nothing names a lead after: its
+ *   keepers can't vote one (decisions-engine.ts PROJECT_LEADER_STAYS), succession replaces only a lead it has
+ *   (proposeLeadSuccession), and an admin's assign binds a keeper. So a node admin alone cancels it then. Every binding
+ *   counts, a suspended keeper's too, as isLeadOrSoleKeeperOrAdmin counts them.
+ * - Its maker, only while it has no keepers and never had one that left (projects.keeper_left_at, noteKeeperLeftProject):
+ *   a maker an admin or the community removed as its last keeper, or who stepped down, no longer may ("removal ends it").
+ *   Every way of making a project binds its maker as its lead, so that is a projects row no keeper was ever bound to.
+ * The lead, the only keeper and the maker only while they may act now: an active account with operator access on. Such a
+ * keeper acts for no enterprise (docs/enterprises-and-operators.md §4.1), as createCrowdfundProject and wind-up ask.
  */
 export function mayCancelProject(projectId: string, pubkey: string): boolean {
-    if (!leadsProject(projectId, pubkey)) return false;
-    const keeps = db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?')
-        .get(projectId, pubkey) as { role: string } | undefined;
-    const hasKeepers = !!db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? LIMIT 1').get(projectId);
-    if (hasKeepers && keeps?.role !== 'lead') return false;
-    return isMemberActive(pubkey) && !isOperatorSwitchedOff(pubkey);
+    if (!pubkey) return false;
+    const project = db.prepare('SELECT creator_pubkey, keeper_left_at FROM projects WHERE id = ?').get(projectId) as
+        { creator_pubkey: string | null; keeper_left_at: string | null } | undefined;
+    if (!project || namesNoProject(projectId)) return false;
+    if (isNodeAdminKey?.(pubkey) === true) return true;
+    const keepers = db.prepare('SELECT member_pubkey, role FROM treasury_operators WHERE treasury_pubkey = ?')
+        .all(projectId) as { member_pubkey: string; role: string }[];
+    const lead = keepers.find((k) => k.role === 'lead');
+    const named = lead ? lead.member_pubkey === pubkey
+        : keepers.length === 1 ? keepers[0].member_pubkey === pubkey
+        : keepers.length === 0 && !project.keeper_left_at && project.creator_pubkey === pubkey;
+    return named && isMemberActive(pubkey) && !isOperatorSwitchedOff(pubkey);
+}
+
+/**
+ * A keeper left the project: they stepped down, its lead, a node admin or the community removed them, they closed their
+ * account, or its wind-up released them. The first time stamps projects.keeper_left_at, after which its maker no longer
+ * stands in for its cancel (mayCancelProject). Nothing for an enterprise that is no project (no projects row). Runs in the
+ * caller's transaction, on a main server: a standby takes the stamp with the row.
+ */
+export function noteKeeperLeftProject(projectId: string): void {
+    db.prepare("UPDATE projects SET keeper_left_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND keeper_left_at IS NULL")
+        .run(projectId);
 }
 
 /**
@@ -3475,7 +3508,8 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     // Never a person's row (namesNoProject): a projects row under a member's key pruned that member.
     if (!project || namesNoProject(projectId)) throw new Error("Project not found");
-    // Its lead's, and only a lead who may act now (mayCancelProject): this row's creator_pubkey is whoever made it.
+    // A node admin's, its lead's, its only keeper's when nobody leads it, or its maker's when it never had a keeper
+    // (mayCancelProject): this row's creator_pubkey is whoever made it.
     if (!mayCancelProject(projectId, requesterPubkey)) throw new Error("Unauthorized to delete this project");
 
     // Guard against deleting funded/completed projects

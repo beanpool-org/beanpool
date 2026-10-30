@@ -2144,8 +2144,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // migrated each project again (db/unify-projects-migration.ts) and a project's delete could be skipped. One
                 // the main server holds unstamped (an older database's ALTER, no backfill) takes its `created_at`, as the
                 // stamp's own migration fills it (db.ts): a NULL one is in no delta, and any tombstone for it would win.
-                const writeProject = db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                // `keeper_left_at` too: without it, a server that took over would let a maker removed as its last keeper
+                // cancel it again (db.ts mayCancelProject).
+                const writeProject = db.prepare(`INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, current_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at, keeper_left_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
                 for (const pr of remote.projects) {
                     writeProject.run(
                         pr.id,
@@ -2161,6 +2163,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         pr.enterprise_pubkey ?? null,
                         pr.created_at,
                         pr.updated_at ?? pr.created_at ?? new Date().toISOString(),
+                        pr.keeper_left_at ?? null,
                     );
                 }
             }

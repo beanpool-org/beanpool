@@ -30,7 +30,7 @@ import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, setNodeAdminCheckHook, noteKeeperLeftProject, afterTransactionCommit, whenPostCommitBatchOver, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -787,6 +787,9 @@ export function initStateEngine(): void {
     // affected accounts through this hook first — same dependency inversion, for the same module-cycle
     // reason as above.
     setDemurrageSettleHook(settleDemurrage);
+
+    // A project's cancel (db.ts mayCancelProject) is a node admin's too, as its wind-up is: same inversion, same reason.
+    setNodeAdminCheckHook(isAdminPubkey);
 
     // Onboarding funnel retention. Once at startup rather than behind the read, because a
     // DELETE on the read path both takes a write lock and can destroy what the caller
@@ -3919,7 +3922,11 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
     if (keeperPledge > 0) assertPledgeWritable();
     const unbound = db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .run(treasuryPubkey, memberPubkey);
-    if (unbound.changes > 0) engine.keepersChanged(db, treasuryPubkey);
+    if (unbound.changes > 0) {
+        engine.keepersChanged(db, treasuryPubkey);
+        // A project's maker no longer stands in for its cancel once a keeper has left it (db.ts mayCancelProject).
+        noteKeeperLeftProject(treasuryPubkey);
+    }
     const left = db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?")
         .get(memberPubkey) as any;
     if (!left?.c) db.prepare("UPDATE members SET can_operate = 0 WHERE public_key = ?").run(memberPubkey);
@@ -6357,7 +6364,11 @@ export function finaliseWindUp(enterprisePubkey: string, actorPubkey: string): {
 
         const ops = db.prepare("SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?").all(enterprisePubkey) as any[];
         db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(enterprisePubkey);
-        if (ops.length > 0) engine.keepersChanged(db, enterprisePubkey);
+        if (ops.length > 0) {
+            engine.keepersChanged(db, enterprisePubkey);
+            // Its keepers released: a wound-up project's maker cancels nothing (db.ts mayCancelProject).
+            noteKeeperLeftProject(enterprisePubkey);
+        }
 
         for (const op of ops) {
             const remaining = db.prepare("SELECT COUNT(*) as c FROM treasury_operators WHERE member_pubkey = ?").get(op.member_pubkey) as any;

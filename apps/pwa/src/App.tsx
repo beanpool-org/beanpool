@@ -680,7 +680,7 @@ export function App() {
         if (!identity) return;
         const currentPubkey = identity.publicKey;
         try {
-            // Deals in preview (the global node): My Deals is Example Valley's, and the member's own are never asked.
+            // Deals in preview (the global node): Your deals is Example Valley's, and the member's own are never asked.
             if (!(await readsOwn('escrow'))) return;
             const txs = await getMyMarketplaceTransactions(currentPubkey);
             if (identityPubkeyRef.current !== currentPubkey) return;
@@ -709,7 +709,7 @@ export function App() {
                     // and since MarketplacePage stopped polling transactions itself and now reads them
                     // from here, one unrelated endpoint erroring starved the whole marketplace view.
                     // The member's own deals only where deals are not in preview (lib/features readsOwn): on the
-                    // global node My Deals is Example Valley's, and null here leaves the counts as they are.
+                    // global node Your deals is Example Valley's, and null here leaves the counts as they are.
                     const [convResult, txResult] = await Promise.allSettled([
                         getConversations(identity.publicKey),
                         readsOwn('escrow').then((reads) => (reads ? getMyMarketplaceTransactions(identity.publicKey) : null)),

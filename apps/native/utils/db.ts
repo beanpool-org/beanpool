@@ -34,6 +34,7 @@ import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
 import { reportKind, t, requestAfterOwnLine, requestAfterRead } from '@beanpool/core';
+import { dealAction } from './deal-rows';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -924,7 +925,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
  */
 /**
  * `includeEvents`: events are opt-in here as they are on the server's list route. Only screens that know how
- * to draw an event ask for them; the map tab, the deals badge and My Deals read this cache too and would
+ * to draw an event ask for them; the map tab, the deals badge and Your deals read this cache too and would
  * otherwise show an event as a trade listing (the native map layer is its own, later slice).
  *
  * Audience: with no `audienceScope` or `targetGroupId` this reads public listings only, for the map (#823).
@@ -1480,10 +1481,12 @@ export async function getConversations(myPubkey: string) {
  */
 export async function getActionableDeals(myPubkey: string): Promise<any[]> {
     const database = await getDb();
+    // The listing joins in for who answers a request (its author) and what kind it is: core's dealStep needs both.
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.buyer_pubkey as buyerPubkey,
                mt.seller_pubkey as sellerPubkey, mt.credits as credits, mt.status as status,
-               mt.post_title as postTitle,
+               mt.post_title as postTitle, mt.created_at as createdAt,
+               p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                (SELECT c.id FROM conversations c
                   WHERE c.type = 'dm' AND c.post_id IS NULL
                     AND EXISTS(SELECT 1 FROM conversation_participants cpa WHERE cpa.conversation_id = c.id AND cpa.public_key = mt.buyer_pubkey)
@@ -1494,18 +1497,16 @@ export async function getActionableDeals(myPubkey: string): Promise<any[]> {
                (SELECT memb.callsign FROM members memb WHERE memb.public_key = (CASE WHEN mt.buyer_pubkey = ? THEN mt.seller_pubkey ELSE mt.buyer_pubkey END)) as peerCallsign,
                (SELECT memb.avatar_url FROM members memb WHERE memb.public_key = (CASE WHEN mt.buyer_pubkey = ? THEN mt.seller_pubkey ELSE mt.buyer_pubkey END)) as peerAvatar
         FROM marketplace_transactions mt
+        LEFT JOIN posts p ON p.id = mt.post_id
         WHERE (mt.buyer_pubkey = ? OR mt.seller_pubkey = ?)
-          AND mt.status IN ('pending', 'completed')
+          AND mt.status IN ('requested', 'pending', 'completed')
         ORDER BY mt.created_at DESC
     `, [myPubkey, myPubkey, myPubkey, myPubkey, myPubkey, myPubkey]);
 
     return rows.map(r => {
         const iAmBuyer = r.buyerPubkey === myPubkey;
-        let action: 'release' | 'fulfill' | 'review' | null = null;
-        if (r.status === 'pending' && iAmBuyer) action = 'release';
-        else if (r.status === 'pending' && !iAmBuyer) action = 'fulfill';
-        else if (r.status === 'completed' && !r.iRated) action = 'review';
-        return { ...r, iAmBuyer, action };
+        // Whose step it is is core's rule, the web list's too (a deal waiting on the other side is no item here).
+        return { ...r, iAmBuyer, action: dealAction(r, myPubkey) };
     }).filter(d => d.action && d.conversationId);
 }
 
@@ -1517,9 +1518,11 @@ export async function getDealsBetween(myPubkey: string, peerPubkey: string): Pro
     const database = await getDb();
     const rows = await database.getAllAsync<any>(`
         SELECT mt.id as txId, mt.post_id as postId, mt.post_title as postTitle, mt.credits as credits,
-               mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey,
+               mt.status as status, mt.buyer_pubkey as buyerPubkey, mt.seller_pubkey as sellerPubkey, mt.created_at as createdAt,
+               p.author_pubkey as postAuthorPublicKey, p.type as postType, p.repeatable as postRepeatable, p.lendable as postLendable,
                EXISTS(SELECT 1 FROM ratings r WHERE r.transaction_id = mt.id AND r.rater_pubkey = ?) as iRated
         FROM marketplace_transactions mt
+        LEFT JOIN posts p ON p.id = mt.post_id
         WHERE (mt.buyer_pubkey = ? AND mt.seller_pubkey = ?)
            OR (mt.buyer_pubkey = ? AND mt.seller_pubkey = ?)
         ORDER BY mt.created_at DESC
@@ -2205,8 +2208,8 @@ export async function createPost(post: any) {
             // Auto-heal: server may not yet know about the user's avatar if the
             // onboarding publish failed. Push the profile and retry once.
             if (_isProfilePhotoError(errMsg)) {
-                // Same signal as in `_signedRequest`: the node has told us it holds no photo.
-                const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
+                // As in `_signedRequest`: publishes only what this community holds for us (a pick that never reached it).
+                const healed = await pushProfileToServer();
                 if (healed) {
                     const retryHeaders = await buildSignedHeaders('POST', postUrl, bodyString, identity.privateKey, identity.publicKey);
                     const retryRes = await fetch(postUrl, {
@@ -7077,13 +7080,13 @@ export const REDEEM_NO_ANSWER = 'No answer from the community node in time. Chec
 /**
  * Redeem an invite against the active node.
  *
- * `nodeHasPhoto` is the node's OWN answer about the picture it holds for us, and the only
- * reason it is here: `/api/invite/redeem` and `redeem-offline` both return the existing member
- * row for someone who was already registered (`engine/invites.ts`), so the answer is already in
- * the response and the caller needs no extra request. Without it, a member re-entering a node
- * this device has never synced has an empty local row, `catchUpAvatar` reads that as "the node
- * holds nothing" and the follow-up publish puts the canonical copy over whatever newer photo
- * the node actually had.
+ * `nodeHasPhoto` is the node's OWN answer about the picture it holds for us: `/api/invite/redeem`
+ * and `redeem-offline` both return the existing member row for someone who was already registered
+ * (`engine/invites.ts`), so the answer is already in the response and the caller needs no extra
+ * request. It was the follow-up publish's guard against putting the phone's copy of a photo chosen
+ * in another community over whatever newer photo the node actually had; that copy is no longer
+ * published (Profile S2), so the publish no longer asks. It stays the node's answer for a reader
+ * that wants it (the join's offer of the last photo, S3).
  *
  * A self-referential `/api/avatar/<pk>` value is the broken-row case and counts as NO photo —
  * the node cannot serve it, so there is nothing there worth protecting. A brand-new join is
@@ -7212,7 +7215,7 @@ export async function redeemInvite(
 // Publish the user's profile (callsign + avatar + bio + contact) to the ACTIVE
 // node. Used three ways: the marketplace "please set a profile photo" auto-heal,
 // pillar-sync's offline-edit retry loop, and a proactive push right after joining
-// a new node so the picture lands before the user ever opens the composer.
+// a new node.
 //
 // It publishes the change waiting for the ACTIVE community (pending-profile-sync.ts) and no other:
 // that community's own row, with the name and photo its entry keeps over the row's. The retry
@@ -7222,26 +7225,18 @@ export async function redeemInvite(
 //
 // The avatar is resolved in two steps: a photo picked during an OFFLINE save, parked in this
 // community's entry by the screen that could not publish it, always goes — it has
-// reached nothing yet, so it is the newest copy anywhere. Otherwise `catchUpAvatar` decides,
-// and the canonical copy goes only when the node is KNOWN to hold no photo for us. That
-// fallback is what makes the picture follow the user onto a freshly-joined second community,
-// where the local row exists (from registration) but has no avatar yet.
+// reached nothing yet, so it is the newest copy anywhere. Otherwise `catchUpAvatar` decides, from
+// this community's own row alone: a portable photo still sitting there goes, anything else sends
+// nothing. The phone's copy of the last photo chosen in ANY community is not a source (Profile S2): a
+// freshly-joined second community, whose row exists from registration but holds no photo, used to
+// be given the picture the member chose in the first — a preset included — and showed it as theirs.
+// A photo reaches a community when it is chosen there.
 //
 // The parked pick exists because the local row is NOT a durable place to keep it: both
 // full-directory writers replace it with the node's own URL, and a single members sync landing
 // before this retry succeeds used to turn the pick into "the node has a photo, say nothing"
 // — the member's chosen photo then never reached the node and nothing ever resent it.
-//
-// `nodeHasNoPhoto` must always be the NODE's answer, never an inference from local state.
-// Two callers have one: the marketplace photo gate, where the node has just said "please set
-// a profile photo", and the invite-redeem publish, where the redeem response carried the
-// member row the node holds. Both outrank the local row, which a sync may have left stale.
-// The caller WITHOUT one — the pending-profile retry — can reach a node that already
-// holds a NEWER photo from another device, so it leaves `avatar` out rather than posting
-// canonical over it. The flag is passed THROUGH, undefined and all: an explicit `false` is the
-// node saying it holds a photo, which withholds the canonical copy that an empty local row
-// would otherwise license — on a node this device has never synced, empty means unsynced.
-export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; community?: string }): Promise<boolean> {
+export async function pushProfileToServer(opts?: { community?: string }): Promise<boolean> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const identity = await loadIdentity();
     if (!anchorUrl || !identity) return false;
@@ -7253,23 +7248,21 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
     // another community's, and none of it goes to this one (#2461 review).
     if (!(await stillOnCommunity(anchorUrl))) return false;
 
+    // Still read for the bio, contact and archetype below; the picture is never taken from it (Profile S2).
     const canonical = await getCanonicalProfile();
     // Since #725 the members sync writes the node's own `/api/avatar/<pk>?size=thumb` string
-    // into the local row, and `profile?.avatar_url || canonical?.avatar` happily preferred
-    // that — so this function published the node's URL back to the node as the member's
-    // avatar, and from then on `GET /api/avatar/<pk>` 404d: the photo was destroyed. But the
-    // canonical copy is not an unconditional replacement for it: only a local pick ever writes
-    // canonical, so when the node holds a photo this phone has not picked, canonical is the
-    // OLDER one and posting it would overwrite the member's newest choice.
+    // into the local row, and `profile?.avatar_url` happily offered that — so this function
+    // published the node's URL back to the node as the member's avatar, and from then on
+    // `GET /api/avatar/<pk>` 404d: the photo was destroyed. The rule below only takes a portable value.
     // Through the one shared rule, which every publish path uses: a pick the offline branch of
     // settings Save / Re-run Setup parked for THIS community first (re-checked for portability,
     // since anything that is not a `data:`/`bundled://` value is not ours to publish), otherwise
-    // the catch-up inference below. There is no session pick on this path — it runs with no screen
-    // in front of it. The parked copy, and the change it waits in, retire only after a verified
-    // 2xx: every `return false` below leaves them for the next retry.
+    // a portable photo still sitting in this community's row (an offline pick). There is no session pick on this
+    // path — it runs with no screen in front of it. The parked copy, and the change it waits in, retire only
+    // after a verified 2xx: every `return false` below leaves them for the next retry.
     const decision = await resolveProfilePublishAvatar({
         parked: pending?.avatar,
-        catchUp: { localRow: profile?.avatar_url, canonical: canonical?.avatar, nodeHasNoPhoto: opts?.nodeHasNoPhoto },
+        catchUp: { localRow: profile?.avatar_url },
     });
     const avatar = decision.avatar;
 
@@ -7366,7 +7359,7 @@ export async function pushProfileToServer(opts?: { nodeHasNoPhoto?: boolean; com
         // The local mirror writes the copy open now (getDb): after a switch while the update was out, that is another
         // community's, and this one's profile stays out of it. This community's next members sync brings it home.
         if (!(await stillOnCommunity(anchorUrl))) return true;
-        // Mirror the canonical avatar into THIS node's local DB when it was
+        // Mirror what was just published into THIS node's local DB when it was
         // missing, so local reads and the marketplace pre-check see it at once.
         if (!profile?.avatar_url || (!profile?.archetype && archetypeRaw)) {
             try {
@@ -7458,10 +7451,10 @@ async function _signedRequest(endpoint: string, payload: any) {
         // server doesn't know about it (common for users whose initial onboarding
         // publish failed), push the profile and retry the request once.
         if (_isProfilePhotoError(errorMsg)) {
-            // The node itself just said it holds no photo for us, so the canonical copy
-            // cannot be overwriting anything newer — push it even though the local row may
-            // still hold a (now broken) node URL.
-            const healed = await pushProfileToServer({ nodeHasNoPhoto: true });
+            // The node itself just said it holds no photo for us. Whatever this community holds that never reached
+            // it (a pick made here while offline) goes now; a photo chosen in another community does not (Profile S2),
+            // so a member with none here is asked for one, as the node's words say.
+            const healed = await pushProfileToServer();
             if (healed) {
                 const retryHeaders = { ...await buildSignedHeaders('POST', `${anchorUrl}${endpoint}`, bodyString, identity.privateKey, identity.publicKey), ...languageHeader() };
                 const retryRes = await fetch(`${anchorUrl}${endpoint}`, {

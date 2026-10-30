@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 /**
- * My Deals' ways forward on the worldwide community (global previews audit, item 4; PHONE.md §1 c): My Deals is a
+ * Your deals' ways forward on the worldwide community (global previews audit, item 4; PHONE.md §1 c): Your deals is a
  * Modal, and the strip's Start a community / Communities near you, and the sheet's three ways forward, pushed the next
- * screen with My Deals still open, so it opened UNDER it. Each now closes My Deals first: when the route is pushed, My
+ * screen with Your deals still open, so it opened UNDER it. Each now closes Your deals first: when the route is pushed, My
  * Deals has already been told to close (and the marker's own sheet with it). The harness of showcase-render.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -79,7 +79,7 @@ vi.mock('../../app/ThemeContext', async () => {
 vi.mock('../../components/CommonsInfoModal', () => ({
     CommonsInfoModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? createElement('div', { 'data-testid': 'commons-info' }, 'About the Commons') : null),
 }));
-// The net spy's third arm: every call into the node client is recorded (My Deals imports it; its preview must call
+// The net spy's third arm: every call into the node client is recorded (Your deals imports it; its preview must call
 // nothing). Every export by name, each a function that records its call (net-spy-db.ts).
 const net = vi.hoisted(() => ({ calls: [] as string[] }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls));
@@ -107,7 +107,7 @@ const render = async (node: unknown) => { await act(async () => { root.render(no
 const press = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); await act(async () => {}); };
 
 
-describe('My Deals in preview: every way forward closes My Deals before it routes', () => {
+describe('Your deals in preview: every way forward closes Your deals before it routes', () => {
     const waysOut = [LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou, LOCAL_COMMUNITY_SHEET.howItWorks];
     let closedWhenPushed: number[];
     const openDeals = async () => {
@@ -139,7 +139,7 @@ describe('My Deals in preview: every way forward closes My Deals before it route
     }
 
     for (const label of waysOut) {
-        it(`the strip's pill, then the sheet's "${label}": the sheet and My Deals both close`, async () => {
+        it(`the strip's pill, then the sheet's "${label}": the sheet and Your deals both close`, async () => {
             await openDeals();
             await press(host.querySelector('[data-testid="local-community-strip"] [aria-label$="why?"]')!);
             await press(buttonIn('[data-testid="local-community-sheet"]', label));
@@ -147,7 +147,7 @@ describe('My Deals in preview: every way forward closes My Deals before it route
             expect(host.querySelector('[data-testid="local-community-sheet"]')).toBeNull();
         });
 
-        it(`an example deal, then the sheet's "${label}": the sheet and My Deals both close`, async () => {
+        it(`an example deal, then the sheet's "${label}": the sheet and Your deals both close`, async () => {
             await openDeals();
             const waiting = SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!;
             await press(Array.from(host.querySelectorAll('button')).filter(b => b.textContent?.includes(waiting.what)).pop()!);

@@ -1046,7 +1046,7 @@ export default function LedgerScreen() {
     const renderTxn = ({ item }: { item: any }) => {
         const isCredit = item.type === 'credit';
         const note = ledgerItemNote(item, blocked);
-        // A hold whose deal this phone has opens that deal (the listing at that transaction, as My Deals does). The row is then
+        // A hold whose deal this phone has opens that deal (the listing at that transaction, as Your deals does). The row is then
         // the one button, so the memo shows without its listing id and its own "View Offer" link: the deal opens the listing.
         const deal = dealOf(item);
         const body = (

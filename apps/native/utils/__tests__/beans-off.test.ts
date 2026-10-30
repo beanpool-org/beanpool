@@ -121,7 +121,7 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         return lines.slice(i, end + 1).join('\n');
     }
 
-    it('My Deals: neither card draws its amount, and the Market passes the rule in', () => {
+    it('Your deals: neither card draws its amount, and the Market passes the rule in', () => {
         const src = read('components/MyDealsSheet.tsx');
         expect(src).toContain("initialTab = 'pending', showsBeans = true }: MyDealsSheetProps");
         const lines = src.split('\n');

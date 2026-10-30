@@ -54,7 +54,7 @@ The screens with the marker show **Example Valley**: a made-up community, so you
 
 - **Ledger:** an example member with 85 Beans, room to spend down to −200, a trust badge, and a few recent trades, such as bread, an hour of gardening and some seedlings.
 - **Commons:** the Example Valley Bakery, an enterprise its members keep, and one Decision: a compost bay, paid for from the Commons' shared Beans.
-- **My Deals,** in the Market: three example deals: one waiting on you, one with the Beans held safely, and one done.
+- **Your deals,** in the Market: three example deals: one waiting on you, one with the Beans held safely, and one done.
 
 Nobody in Example Valley has a name. You see "a neighbour", "the Commons" or "the Example Valley Bakery". None of it is real, and none of it is yours.
 

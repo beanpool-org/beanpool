@@ -1,6 +1,6 @@
 /**
  * Words sweep W1 at 320 px with 1.3× text (translation slice S3; director amendment 1 item 7): the Market, its cards,
- * My Deals, the pricing guide, the report card, the photo viewer, the activity feed, events and their chat, the Pulse
+ * Your deals, the pricing guide, the report card, the photo viewer, the activity feed, events and their chat, the Pulse
  * and its cards, Messages and Channels, each opened on its own (e2e/words-w1-harness.tsx) in English and in the
  * pseudo-locale `xx`, where every sentence that came through t() is ~35 % longer, as the longer languages are.
  *

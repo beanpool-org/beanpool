@@ -66,7 +66,10 @@ vi.mock('../nodes', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../nodes')>()),
     getDatabaseFilenameForNode: vi.fn((url: string | null) => (url ? `beanpool_${new URL(url).hostname}.db` : 'beanpool_none.db')),
 }));
-vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
+// What the phone keeps of the member's own choice across every community (utils/canonical-profile.ts): nothing unless a
+// case below says a picture was chosen in one.
+const canonical = vi.hoisted(() => ({ value: null as null | { avatar?: string } }));
+vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => canonical.value), saveCanonicalProfile: vi.fn(async () => {}) }));
 // Signed as the phone signs, minus the key: what is checked here is what each community is sent, not the signature.
 vi.mock('../crypto', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../crypto')>()),
@@ -81,7 +84,7 @@ const realLoad = (Module as any)._load;
 afterAll(() => { (Module as any)._load = realLoad; });
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { closeDB, getDb, pushProfileToServer, updateMemberProfile } from '../db';
+import { closeDB, getDb, pushProfileToServer, signedRequest, updateMemberProfile } from '../db';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 /** The module under test, read when a test asks for it: the upgrade tests below run on a build without it. */
@@ -133,6 +136,12 @@ const fetchMock = vi.fn(async (url: string, init?: { method?: string; body?: str
         return answer(200, JSON.stringify({ success: true, profile: { ...node.held } }));
     }
     if (node.mode === 'offline') throw new TypeError('Network request failed');
+    // A marketplace action, as the node answers it: with the photo it asks every member for first (engine/posts.ts).
+    if (pathname === '/api/marketplace/needs-photo' && init?.method === 'POST') {
+        return node.held.avatar
+            ? answer(200, JSON.stringify({ success: true }))
+            : answer(400, JSON.stringify({ error: 'Please set a profile photo before using the marketplace. Tap your profile to add one.' }));
+    }
     if (pathname === '/api/marketplace/posts') return answer(200, '[]');
     // The member directory, the member in it as the node holds them: a members sync writes this name over the row.
     if (pathname === '/api/members') {
@@ -158,6 +167,7 @@ beforeEach(async () => {
     files.clear();
     store.clear();
     nodes.clear();
+    canonical.value = null;
     fetchMock.mockClear();
     (globalThis as any).fetch = fetchMock;
     me.identity = { publicKey: ME, privateKey: 'aa', callsign: 'Marty' };
@@ -633,5 +643,61 @@ describe('a phone updated from a build with one flag for the phone', () => {
         await performSync();
         expect(sentTo(A).map(u => u.avatar)).toEqual([PHOTO]);
         expect(await pendingProfileChange(A, ME)).toBeNull();
+    });
+});
+
+// Profile S2 (scratch/fable-design/DESIGN-per-community-profile-fable.md §3, Marty 28-29 Oct): a name or picture chosen in
+// one community never shows or publishes in another. The phone keeps a copy of the last photo chosen anywhere
+// (utils/canonical-profile.ts); the catch-up publish used to send it to any community whose row held no photo, so a
+// preset picked once (`bundled://bean-green`) became the picture in every community the member joined, unasked. And
+// the marketplace's "please set a profile photo" gate was satisfied by it in a fresh community, which now asks again:
+// the photo of a listing is that community's (design §5 question 3, Marty: yes).
+describe('a picture chosen in one community is never published to another', () => {
+    const PRESET = 'bundled://bean-green';
+    const ownRowAvatar = async () =>
+        (await (await getDb()).getFirstAsync<{ avatar_url: string | null }>('SELECT avatar_url FROM members WHERE public_key = ?', [ME]))?.avatar_url ?? null;
+
+    it('a preset chosen in A, kept phone-wide: a change waiting in B publishes B\'s own row with no photo, and B\'s row shows none', async () => {
+        const { keepPendingProfileChange, pendingProfileChange } = await pendingModule();
+        canonical.value = { avatar: PRESET };
+        await openCommunity(A);
+        await rowHere({ callsign: 'Marty', avatar_url: PRESET });
+        await openCommunity(B);
+        // B's row as joining leaves it: a name and no photo. A rename made here while offline waits for B.
+        await rowHere({ callsign: 'Marty in B' });
+        await keepPendingProfileChange(B, ME, { callsign: 'Marty in B' });
+
+        await performSync();
+
+        expect(sentTo(B)).toHaveLength(1);
+        expect(sentTo(B)[0].callsign).toBe('Marty in B');
+        expect('avatar' in sentTo(B)[0]).toBe(false);
+        expect(JSON.stringify(sentTo(B))).not.toContain(PRESET);
+        expect(nodeAt(B).held.avatar).toBeNull();
+        expect(await ownRowAvatar()).toBeNull();
+        expect(await pendingProfileChange(B, ME)).toBeNull();
+        expect(sentTo(A)).toEqual([]);
+    });
+
+    it('the marketplace photo gate in a fresh community asks for a photo again: the one chosen elsewhere is not published to open it', async () => {
+        canonical.value = { avatar: PRESET };
+        await openCommunity(B);
+        await rowHere({ callsign: 'Marty in B' });
+
+        await expect(signedRequest('/api/marketplace/needs-photo', {})).rejects.toThrow(/set a profile photo/i);
+
+        expect(sentTo(B)).toEqual([]);
+        expect(nodeAt(B).held.avatar).toBeNull();
+        expect(await ownRowAvatar()).toBeNull();
+    });
+
+    it('the same gate still heals with a photo chosen in THIS community that never reached it (an offline pick in its row)', async () => {
+        canonical.value = { avatar: PRESET };
+        await openCommunity(B);
+        await rowHere({ callsign: 'Marty in B', avatar_url: PHOTO });
+
+        await expect(signedRequest('/api/marketplace/needs-photo', {})).resolves.toEqual({ success: true });
+
+        expect(sentTo(B).map(u => u.avatar)).toEqual([PHOTO]);
     });
 });

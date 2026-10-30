@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * My Deals' History at the floor: 320 dp wide with the phone's text at 1.3x (memory product-audience-small-screens).
+ * Your deals' History at the floor: 320 dp wide with the phone's text at 1.3x (memory product-audience-small-screens).
  * The Beans amount ("- 12") was cut off at the right edge: the badge and the date sat in a group that couldn't shrink,
  * beside it on one line (#1834 emulator note). The row now wraps, and the amount keeps the right edge and never shrinks,
  * so it drops to its own line whole where the three do not fit. The sheet is rendered for real (react-native drawn as
@@ -126,7 +126,7 @@ const render = async () => {
     for (let i = 0; i < 4; i++) await act(async () => {});
 };
 
-describe('My Deals History at 320 dp with the text at 1.3x, light and dark', () => {
+describe('Your deals History at 320 dp with the text at 1.3x, light and dark', () => {
     for (const dark of [false, true]) {
         it(`${dark ? 'dark' : 'light'}: the Beans amount is always whole, at the right, and the badge and date too`, async () => {
             theme.dark = dark;

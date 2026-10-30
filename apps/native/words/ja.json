@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, settings and trust top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, settings and trust top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-21",
@@ -787,10 +787,9 @@
   "Search": "検索",
   "Search marketplace...": "マーケットを検索...",
   "Search marketplace": "マーケットを検索",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "other": "自分の取引（保留中: {n}件）"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "other": "あなたの取引（保留中: {n}件）"
   },
-  "My Deals": "自分の取引",
   "Opens your active and pending deals sheet": "進行中および保留中の取引一覧を開きます",
   "Grid view": "グリッド表示",
   "Compact view": "コンパクト表示",
@@ -1287,7 +1286,6 @@
   "Groups\u0004talk pane": "グループ",
   "People\u0004talk pane": "仲間",
   "🔓 Release Credits": "🔓 クレジットを支払う",
-  "📦 Fulfill Order": "📦 注文を完了する",
   "⭐ Leave Review": "⭐ レビューを書く",
   "⚡ Action Required": "⚡ 対応が必要",
   "Transaction": "取引",
@@ -1299,9 +1297,6 @@
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "other": "レビューが必要 ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "other": "注文の完了 ({n})"
   },
   "New\u0004conversation": "新規",
   "Action Required": "対応が必要",
@@ -3273,7 +3268,7 @@
   "TRUST SCORE": "信用スコア",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "レビューは公開プロフィールに表示される**信用スコア**に直結します。高い信用スコアを築くことで、取引相手が見つかりやすくなります！",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "低評価が続くと取引相手からの信頼が下がります。7日以上未解決のエスクローは、管理者が署名付きの決定（支払い・返金・分割）を通じて仲裁します。",
-  "My Deals & Trust Hold": "自分の取引とエスクロー",
+  "Your deals & Trust Hold": "あなたの取引とエスクロー",
   "🎟️ Network Invites": "🎟️ ネットワーク招待",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "BeanPoolのコミュニティは完全招待制です。安全に成長させるため、**相互推薦**システムを採用しています。",
   "WHO CAN INVITE": "招待できる人",
@@ -5796,7 +5791,7 @@
   "Nothing in it yet": "まだ何もありません",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "まだ何もありません。提供の編集画面から入れるか、ここで公開中の提供を追加してください。",
   "On the Market": "マーケットに掲載中",
-  "Open my deals": "自分の取引を開く",
+  "Open your deals": "あなたの取引を開く",
   "Open my shop": "お店を開く",
   "Open on Instagram": "Instagramで開く",
   "Open your shop": "お店を開く",

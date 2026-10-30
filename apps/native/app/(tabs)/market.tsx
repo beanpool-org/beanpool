@@ -136,7 +136,7 @@ export default function MarketScreen() {
     const modeOf = (f: 'beans' | 'escrow' | 'decisions') => (reader.known ? showcaseMode(f, reader.node, reader.reader) : undefined);
     // Where the node previews Decisions, a poll says what a local community's Decision does (design §1 row 7).
     const decisionsPreview = modeOf('decisions') === 'preview';
-    // Deals are escrow: off where escrow is off, unless the node previews them; then My Deals is the member's own sheet
+    // Deals are escrow: off where escrow is off, unless the node previews them; then Your deals is the member's own sheet
     // fed Example Valley (design §1 row 3, §4).
     const escrowMode = modeOf('escrow');
     const dealsPreview = escrowMode === 'preview';
@@ -196,7 +196,7 @@ export default function MarketScreen() {
         searchInput: { flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: 14, color: colors.text.body, fontWeight: '500', includeFontPadding: false, textAlignVertical: 'center' },
         iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
         dealsIconBtn: {
-            // Capped, so My Deals in a longer language never squeezes the search field to nothing: its words shrink instead.
+            // Capped, so Your deals in a longer language never squeezes the search field to nothing: its words shrink instead.
             paddingHorizontal: 14, height: 38, borderRadius: 19, maxWidth: 120,
             backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
             borderWidth: 1,
@@ -1078,7 +1078,7 @@ export default function MarketScreen() {
     // and group pills. Everything else above the listings is the list's own header and scrolls with it.
     const controls = (
         <View style={{ paddingBottom: 2 }}>
-            {/* Top row: Search + My Deals + View Toggle. The field is 40dp to look at, inside a 48dp target
+            {/* Top row: Search + Your deals + View Toggle. The field is 40dp to look at, inside a 48dp target
                 that focuses it; its text is capped at 1.3x so the placeholder is never cut top and bottom. */}
             <View style={[styles.searchRow, { paddingHorizontal: 16 }]}>
                 <Pressable
@@ -1108,12 +1108,12 @@ export default function MarketScreen() {
                     onPress={() => setShowDealsSheet(true)}
                     style={styles.dealsIconBtn}
                     accessibilityRole="button"
-                    accessibilityLabel={pendingCount > 0 ? tn(pendingCount, 'My Deals, {n} pending', 'My Deals, {n} pending') : t('My Deals')}
+                    accessibilityLabel={pendingCount > 0 ? tn(pendingCount, 'Your deals, {n} pending', 'Your deals, {n} pending') : t('Your deals')}
                     accessibilityHint={t('Opens your active and pending deals sheet')}
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
                     {/* Capped (dealsIconBtn maxWidth): a longer name in another language shrinks to fit, never squeezing the search. */}
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('My Deals')}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: colors.feedback.warning.fg }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('Your deals')}</Text>
                     {pendingCount > 0 && (
                         <View style={styles.dealsIconBadge}>
                             <Text style={{ color: colors.text.inverse, fontSize: 8, fontWeight: '900' }}>{pendingCount}</Text>

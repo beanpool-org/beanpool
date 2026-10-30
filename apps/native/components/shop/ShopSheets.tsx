@@ -71,8 +71,8 @@ function Refused({ refusal, colors, testID, onDeals }: { refusal: ShopSheetRefus
         <View style={sheet.refused}>
             <Text style={[s.note, { color: colors.feedback.danger.fg }]} testID={`${testID}-error`}>{refusal.message}</Text>
             {refusal.code === 'shop_deals_open' && onDeals ? (
-                <Pressable onPress={onDeals} style={s.button} accessibilityRole="button" accessibilityLabel={t('Open my deals')} testID={`${testID}-deals`}>
-                    <Text style={s.buttonText}>{t('Open my deals')}</Text>
+                <Pressable onPress={onDeals} style={s.button} accessibilityRole="button" accessibilityLabel={t('Open your deals')} testID={`${testID}-deals`}>
+                    <Text style={s.buttonText}>{t('Open your deals')}</Text>
                 </Pressable>
             ) : null}
         </View>

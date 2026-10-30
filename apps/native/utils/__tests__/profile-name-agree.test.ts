@@ -818,7 +818,7 @@ describe('profile-name-agree: My Profile and Invite picker', () => {
 
         // The post-redeem publish, told by the node that it holds a photo, decides from this row.
         const decision = await resolveProfilePublishAvatar({
-            catchUp: { localRow: mockDb.localProfile.avatar_url, canonical: OLDER_PHOTO, nodeHasNoPhoto: false },
+            catchUp: { localRow: mockDb.localProfile.avatar_url },
         });
         expect(decision.avatar).toBeNull();
     });

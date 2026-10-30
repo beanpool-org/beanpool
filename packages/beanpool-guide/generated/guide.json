@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 160,
-  "hash": "c4321ec2c893697a7bac1f23004e93a9a06c9bc6047cc392339dba19a7684096",
+  "version": 161,
+  "hash": "6b0bc3ae575a443c469dd246a7fc22375cd5aca895b61695db086a1777a37b32",
   "sections": [
     {
       "id": "about",
@@ -21,6 +21,7 @@
       "slugs": [
         "home",
         "joining",
+        "how-your-community-works",
         "finding-a-community",
         "beans-and-the-global-community",
         "global-community-limits",
@@ -359,7 +360,7 @@
             "Freeze a member's credit, or unfreeze it.",
             "Give a member the right to vouch for newcomers, or take it away.",
             "Remove a lead keeper from an enterprise, or a leader from a project.",
-            "Remove a member from the community, or reinstate them."
+            "Remove a member from the community, or reinstate them. Nobody proposes a removal: that vote opens when an admin suspends the member (see \"Emergency suspension\")."
           ]
         },
         {
@@ -486,6 +487,7 @@
         {
           "type": "ul",
           "items": [
+            "In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. For now one thing still does without a vote: an owner can remove a member together with everyone they invited, and everyone those people invited.",
             "If a removal passes, the member is suspended and their credit frozen at once.",
             "After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.",
             "A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.",
@@ -519,6 +521,23 @@
         },
         {
           "type": "h2",
+          "text": "A fair vote on removing a member"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The member is told at once.** When the vote on removing you opens, BeanPool tells you on your phone, and the web app tells you the next time you open it.",
+            "**You can reply.** In **Commons**, open **Decide** and tap **Reply to this case** on the vote about you. Everyone who reads the vote sees your reply beside the case. You can change it until the vote closes, unless an admin takes it down (below).",
+            "**The vote names who brought the case:** the admin who suspended the member. If an owner used the server's password, it says an owner did.",
+            "**A false case can be hidden.** When a case is shown to be false, an admin can hide it. Members then read the admin's reason in its place. Hiding a case doesn't stop the vote: an admin stops it by halting it, which lifts the suspension.",
+            "**A reply that harms someone can be taken down.** If a reply gives someone's address or phone number, or threatens them, an owner or admin can take it down, with a reason. The reply is deleted, and members read the reason in its place. The member is told, and can't write another reply on that vote. The vote carries on.",
+            "**A false accusation can be reported.** The member the vote is about can tap **Report this case as false**. The report goes to the admins and owners, and names whoever brought the case.",
+            "**No second case for a while.** After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can.",
+            "**Everyone who can vote is told.** When the vote opens, each member who can vote on it gets an alert on their phone, if their **Direct Messages** alerts are on. The alert never says who the vote is about."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "What admins can and cannot do"
         },
         {
@@ -530,6 +549,8 @@
           "items": [
             "An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.",
             "If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.",
+            "An admin can hide the case of a vote on removing a member once it is shown to be false, with a reason members can read. They can also take down the member's reply if it harms someone, with a reason members can read.",
+            "An admin cannot remove a member without the community's vote. Where the people who run the server have switched community votes off, the admins remove members themselves.",
             "Admins can give members the right to vouch for newcomers.",
             "Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.",
             "Admins sort out stuck trades, but never one they are part of."
@@ -571,7 +592,8 @@
             "**A quiet lead:** if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. While the lead's account is suspended, nothing they do counts as coming back. Keeper votes cannot be changed.",
             "**Votes among the keepers:** in an enterprise with two or more keepers, any keeper can propose paying Beans out of the enterprise's own account (never more than it holds, never to themselves, and to a keeper only out of what it has earned, with the 1.5% trade fee), removing a keeper, or, in an enterprise but not a project, making another keeper the lead. The keepers at the time it opens vote; more than half must vote; 60% Yes to pay out or remove, more than half to choose a lead. It runs 7 days or ends sooner once the answer can't change, and is carried out by itself. Only the keepers see it. While it is open it shows how many have voted; Yes and No show once it closes. Nobody sees who voted how, but in a very small group the result and who has voted can show it. These votes never touch the Commons or anyone's standing in the community: those are community Decisions. A vote can't remove the lead (vote for a new lead instead), the only keeper, or a keeper whose pledge covers a debt. A keeper can't propose their own removal; they step down instead.",
             "**If the lead leaves or is removed,** the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.",
-            "**Winding up:** the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. Nothing finishes a wind-up by itself: after the 7 days, the lead keeper, the only keeper or a community admin has to finish closing it, and it can't be finished while a trade is still open. When it closes, any beans left go to the Commons."
+            "**Winding up:** the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. Nothing finishes a wind-up by itself: after the 7 days, the lead keeper, the only keeper or a community admin has to finish closing it, and it can't be finished while a trade is still open. When it closes, any beans left go to the Commons.",
+            "**Cancelling a project:** before a project reaches its goal, its leader or a community admin can cancel it, and every pledge goes back to the person who made it. If it has no leader, its only collaborator can cancel it; with two or more and no leader, only a community admin can. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it."
           ]
         },
         {
@@ -800,7 +822,8 @@
           "items": [
             "**Said where it is made.** When you link Google, Apple or Facebook in the phone app, or join with one, **Safety Backup** and **Account Protection** now say, under **A sign-in you link**, that BeanPool's key vault, a small server in Iceland, keeps a locked copy of your key and 12 words for it, and who can open that copy, with the whole answer under **Who can open it**. See \"Getting your account back\".",
             "**Your 12 words first.** **Account Protection** lists **Your 12 words** first, then **A sign-in you link**.",
-            "**In a web browser.** **Safety Backup** and Settings say whether the community's server keeps a copy of your account: on the global community it does, for a sign-in you joined with. The web app never uses BeanPool's key vault."
+            "**In a web browser.** **Safety Backup** and Settings say whether the community's server keeps a copy of your account: on the global community it does, for a sign-in you joined with. The web app never uses BeanPool's key vault.",
+            "**Where your account can be brought back from.** In **Account Protection**, a new screen lists every copy of your account your phone can find, at the key vault (with the day each was made) and at your communities' servers, with **Remove** next to each and **Remove everything**. Before the last one goes, it asks **Show my 12 words first?**. The web app's Settings lists the copy that community's server keeps. See \"Getting your account back\"."
           ]
         },
         {
@@ -1047,6 +1070,7 @@
             "A card that is already on Home says **On Home** instead of **Add**. Some cards can be added more than once, such as **A saved search**: they say how many you have, such as \"2 of 5 on Home\".",
             "**A saved search** asks for the words to look for before it is added, such as \"eggs\". You can also choose **Offers**, **Needs** or **Both**, a category, and how far to look: 1, 2, 5, 10 or 25 km. The distance is offered only where your community knows your area, or where you have shared your place; without one, the search looks everywhere.",
             "**Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.",
+            "**Decide** asks what it shows before it is added: **Summary** (the usual choice), **All open** or **My votes**.",
             "A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.",
             "Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says \"Your community's server needs an update before your cards follow you to other devices.\" They are sent again each time you open Home.",
             "If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and the tour's **Skip** or **Done** gives you the five, or the cards you picked (above). If you joined more than a week ago, Home also tells you once, under **Getting started** the first time it opens: \"Home now starts with fewer cards. Add a card brings the rest back.\""
@@ -1073,16 +1097,16 @@
           "items": [
             "**Needs you:** only while something is waiting for you: a deal waiting on you (someone asked for your listing, or your Beans are held in trust and waiting for you to release them), unread messages from people, new lines in your groups, a vote you have not cast yet (amber when it closes within two days), an invitation to join a group (tap it to see the invitation and join; in the web app it opens the group, with **Accept invitation**), and, for owners, admins and moderators, the admin work waiting for them, such as reports to review. On the phone and in the web app these are the same things the small icons at the top of the screen show (the web app has no icon for admin work: it is in this card only). This card stays first and cannot be moved or hidden.",
             "**Your way back in:** if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap **✕** to put it away. It comes back once after your first post and once after a week, then lives only in **Settings**: under **Account Protection** on the phone, and at the top of Settings, headed **One way back**, in the web app. It does not show where BeanPool's key vault already holds a copy of your key.",
-            "**Find your community:** on the global community only. It shows the communities nearest you and lets you ask to join them (see \"Finding a community near you\"). On the phone it has **Communities near you**, **Start a community** and **Tell me when one starts here**. In the web app, each community is a link to its own page. If it does not know where you are, tap **or type your town** and pick your town instead of sharing your location, on the phone and in the web app. The web app's card also has **Share my area**. Once you have picked a town, the web app's card says \"Near\" and the town, with **change**. If the web app's card already has a place, **Not here? Type your town** does the same. For your first 30 days on the global community it stays at the top, and it cannot be removed or moved. After that it is a card like any other.",
+            "**Find your community:** on the global community only. It shows the communities nearest you and lets you ask to join them (see \"Finding a community near you\"). On the phone it has **Communities near you**, **Start a community** and **Tell me when one starts here**. In the web app, each community is a link to its own page. If it does not know where you are, tap **or type your town** and pick your town instead of sharing your location, on the phone and in the web app. The web app's card also has **Share my area**. Once you have picked a town, the web app's card says \"Near\" and the town, with **change**. If the web app's card already has a place, **Not here? Type your town** does the same. For your first 30 days on the global community it stays at the top, and it cannot be removed or moved. After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again.",
             "**First steps:** a short checklist. On a local community: post your first Offer, add a profile photo, pick a few things you like, and, once you have posted an Offer, where invites are on, invite someone. Where only the admins invite, the phone shows that last line only to owners and admins. The web app shows it to every member, and a line not done keeps the card. On the phone the card goes when every line is done. In the web app it also stays for your first 14 days.",
-            "**First steps on the global community:** post something free or for swap, and, if a community within 250 km of you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. It stays for your first 14 days, and after that until the post is done and the limits are over.",
+            "**Your first week on the global community:** a seven-step checklist: choose a name, say roughly where you are, add a picture, look at an example Ledger, post something free or for swap, say hello to someone near you, and tell me when a community starts here or say you'd help start one. Steps are ticked as you do them. It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. The card ends after 14 days or when all steps are done.",
             "**Tips:** one short tip at a time about how BeanPool works, for members. Tap **Next** for the next one, or **Read more** to open the page of this guide it comes from. A new tip also shows on your first visit of a new day. The card goes by itself once you have seen every tip, or at once when you tap **Don't show tips again**. Adding it again with **Add a card** starts the tips again from the first one.",
             "**What are you into?:** lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap **Tune** on the Market card, and it stays on screen while you pick.",
-            "**Your deals:** shows up to 3 open deals: title, with whom, whether it is waiting on you or waiting on them, and when; tapping a deal opens it in the Market. **All deals ›** opens your deals in the Market. Not on the global community: there, **My Deals** in the Market shows example deals from a local community instead.",
+            "**Your deals:** shows up to 3 open deals: title, with whom, whether it is waiting on you or waiting on them, and when; tapping a deal opens it in the Market. **All deals ›** opens your deals in the Market. Not on the global community: there, **Your deals** in the Market shows example deals from a local community instead.",
             "**Your enterprise:** shows the enterprise's name and whether it is ongoing or a project, its balance and keepers, this month's trades and figures in and out, the latest line on its book, and requests waiting to be approved. It is called **Your project** when the one you keep is a project. Tap a request to open **Manage**, where you approve it. Not on the global community: there, **Commons** shows an example enterprise from a local community instead.",
             "**Coming up:** upcoming events near you, with your RSVP.",
             "**New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. If you typed your town in **Find your community**, the phone counts from that town. On wide cards (480 px and over in the web app), listings stand in a 2 × 2 grid of tiles with their photo, Offer or Need badge, title, price and distance. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.",
-            "**Decide:** open Decisions and open polls. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app, the card shows open counts at the top right, then up to 3 open Decisions (title, when it closes, and whether you voted or **Not yet**), the question and closing day of the first open poll, and **Decide ›** to open Commons. Not on the global community: polls there are in the Market's **Polls**, and **Commons** shows an example Decision from a local community.",
+            "**Decide:** open Decisions and open polls. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app, the card shows open counts at the top right, then up to 3 open Decisions (title, when it closes, and whether you voted or **Not yet**), the question and closing day of the first open poll, and **Decide ›** to open Commons. You choose what it shows: tap **…** then **Settings…** (or choose when you add it). **Summary** is the usual choice: the Decisions closing soonest (up to 3) and the first open poll. **All open** shows up to 5 open Decisions and the first open poll. **My votes** shows only the open Decisions you have voted in or proposed (up to 5), each saying whether you voted or **Not yet**, and no polls, and no open counts at the top right (they would count only your Decisions); when none are yours the card doesn't show, and **Edit home** says \"Nothing to show now\". The phone and the web app offer the same three choices. Not on the global community: polls there are in the Market's **Polls**, and **Commons** shows an example Decision from a local community.",
             "**A saved search:** listings that match words you choose. You can have up to five. Its first line is your words and the distance, such as \"eggs · within 5 km\". Then come up to four listings (in rows or wide tiles, like the Market card), each opening the listing; **See more** opens the Market with your words already in its search. It finds what the Market's search finds, so \"eggs\" also finds listings with words that mean much the same. When nothing matches it says so, such as \"No eggs within 5 km right now\". A search you have just added or changed without a connection says \"Shows when your community answers\" until your community's server answers. To change the words, tap **…** then **Settings…**: the card stays where it is.",
             "**Your groups:** your groups, enterprises and events, with unread message counts or quiet. In the web app, each also shows the latest message, with who sent it and how long ago (locked messages show 🔒 Message). Tap opens the chat.",
             "**Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.",
@@ -1091,7 +1115,7 @@
             "**Your Beans:** your balance, room to spend, this month's trades and figures in and out, and your trust badge. For a new member it says \"0 Beans · nothing to repay\" and how credit opens with your first trade. Not on the global community. There the phone shows an example card instead: what Beans do in a local community, and **See an example ledger**. It comes once the tour is done or skipped (while **Getting started** is up, the tour's Ledger step shows the example), and stays until you tap **Hide this card**, even after **First steps** has gone.",
             "**From your community:** announcements and notices from your community's admins.",
             "**Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin. In the web app it does not show there at all.",
-            "**Your community:** the last card, titled with your community's name (**The worldwide community** on the global community). It runs across the full width. On wide screens in the web app, it shows a figure tile for each number your community shares: members, who joined this week, trades this month, Commons pot, listings and upcoming events (with Beans off, no trades or Commons pot; on the global community: members, communities listed and listings); on narrower screens, three lines. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed."
+            "**Your community:** the last card, titled with your community's name (**The global community** on the global community). It runs across the full width. On wide screens in the web app, it shows a figure tile for each number your community shares: members, who joined this week, trades this month, Commons pot, listings and upcoming events (with Beans off, no trades or Commons pot; on the global community: members, communities listed and listings); on narrower screens, three lines. It has **Add a card** and **Edit home**. This card stays at the bottom and cannot be moved or removed."
           ]
         },
         {
@@ -1111,7 +1135,7 @@
           "items": [
             "**Needs you**, **Getting started** and **Your community**. **Getting started** has **Skip** instead.",
             "**Your way back in**, on the phone. It has its own **✕**.",
-            "**Find your community**, during your first 30 days on the global community."
+            "**Find your community**, during your first 30 days on the global community, and after that while a request to join is waiting for an answer (or its card has not been put away with **Got it**) or you have a watch for a community near you."
           ]
         },
         {
@@ -1121,7 +1145,7 @@
         {
           "type": "ul",
           "items": [
-            "**Settings…:** only on a card that has settings, such as **A saved search** or **Sun and moon**. It changes the card where it stands.",
+            "**Settings…:** only on a card that has settings, such as **A saved search**, **Decide** or **Sun and moon**. It changes the card where it stands.",
             "**Move up:** swaps the card with the card above it.",
             "**Move down:** swaps the card with the card below it.",
             "**Remove:** takes the card off Home, with its settings. **Add a card** puts it back. Nothing asks you to confirm. Removing **Tips** is the same as **Don't show tips again**."
@@ -1156,9 +1180,9 @@
             "A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from.",
             "Tap **Reset to defaults** to go back to the usual five cards.",
             "There are no switches and no hidden list: a card you removed is in **Add a card**.",
-            "Only the cards your community can show are listed, on the phone and in the web app. For example, the global community's list has no **Your Beans** or **Your deals**: there, the Ledger and **My Deals** show examples from a local community instead.",
+            "Only the cards your community can show are listed, on the phone and in the web app. For example, the global community's list has no **Your Beans** or **Your deals**: there, the Ledger and **Your deals** show examples from a local community instead.",
             "**Needs you** always stays at the top, and **Your community** always stays at the bottom.",
-            "**Find your community**, in your first 30 days on the global community, is not listed. It stays near the top for now.",
+            "**Find your community**, in your first 30 days on the global community, or after that while a request to join is waiting for an answer (or its card has not been put away with **Got it**) or you have a watch for a community near you, is not listed. It stays near the top for now.",
             "**Your way back in** is listed, with its arrows and **…**, while it is on your Home."
           ]
         },
@@ -1246,6 +1270,10 @@
         },
         {
           "type": "p",
+          "text": "A community that lets anyone join sent you its link? On the phone app, the link opens its door, and joining there makes your account: no invite, and nothing from the BeanPool project."
+        },
+        {
+          "type": "p",
           "text": "Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password."
         },
         {
@@ -1260,7 +1288,8 @@
           "type": "ul",
           "items": [
             "An invite works **once**.",
-            "An invite lasts **30 days**. After that, ask for a new one."
+            "An invite lasts **30 days**. After that, ask for a new one.",
+            "If a community has **paused joining**, it is not taking new members for now. Existing invites cannot be used while joining is paused, and members cannot make new ones. Try again once the community reopens, or ask the admins."
           ]
         },
         {
@@ -1289,7 +1318,7 @@
         {
           "type": "ul",
           "items": [
-            "On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. The button is there on Android, and on iPhone from the app's next update. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.",
+            "On the first screen, tap **Explore BeanPool worldwide**, right under **Join with an invite**. It is always there. When the global community can't take you right now, a line under it says why: **Can't reach the global community right now. Try again, or join with an invite.**, **Not taking new members right now.**, or **This community is in a private preview. Ask its owner for an invite.** Tapping it asks again.",
             "The app opens the global community first, so you can look around before you join: **Home**, the **Market** and the **Map**, with each listing's photo, title and rough area, but not who posted it. A card at the top says **You're looking around as a visitor. Nothing is saved until you join.** Looking makes no account and asks for nothing: no location, no notifications. **Talk**, people's profiles and **Settings** need an account, so they open the way in instead, and so do **Join to post** and **Join to message**. If you close the app while looking, it opens on the first screen again.",
             "When you are ready, tap **Join**: at the top, beside the **?**, or on the card. **← Back** takes you back to looking around.",
             "Choose one of the two ways in. **Create an account with 12 secret words** is first. It needs no Google, Apple or Facebook account: your 12 words are the only way back in.",
@@ -1299,7 +1328,7 @@
         },
         {
           "type": "p",
-          "text": "**From the website, on a phone.** On beanpool.org/global, **Open in the BeanPool app** opens the app right at this way in: the two ways above on a phone with no account yet, or **Join the global community** with the account the phone already has (see \"Already have an account?\" below). If that account is already a member there, it opens the **BeanPool** sheet instead, where **Global community** under **Your communities** switches to it. If the global community closed that account, the app just opens. On Android, if the app isn't installed, Google Play opens; after installing, the first time you open BeanPool it goes straight to this way in. On an iPhone, the website offers the browser first, and the app's open door comes in its next update. The link only opens a screen: nobody joins until you tap. When it opens the **BeanPool** sheet, the sheet checks, as it always does, whether this phone's account is a member of each community it lists. An invite comes first: if you were sent one, the app opens the invite instead, and if you were halfway through joining, it carries on with that."
+          "text": "**From the website, on a phone.** On beanpool.org/global, **Open in the BeanPool app** opens the app right at this way in: the two ways above on a phone with no account yet, or **Join the global community** with the account the phone already has (see \"Already have an account?\" below). If that account is already a member there, it opens the **BeanPool** sheet instead, where **Global community** under **Your communities** switches to it. If the global community closed that account, the app just opens. On Android, if the app isn't installed, Google Play opens; after installing, the first time you open BeanPool it goes straight to this way in. On an iPhone, the App Store opens; after installing, tap **Explore BeanPool worldwide**. The link only opens a screen: nobody joins until you tap. When it opens the **BeanPool** sheet, the sheet checks, as it always does, whether this phone's account is a member of each community it lists. An invite comes first: if you were sent one, the app opens the invite instead, and if you were halfway through joining, it carries on with that."
         },
         {
           "type": "p",
@@ -1447,6 +1476,114 @@
       ]
     },
     {
+      "slug": "how-your-community-works",
+      "title": "How this community works",
+      "summary": "The rules and settings for your community: who can join, Beans, decisions, message requests, and safety.",
+      "help": "This page explains the settings on your community's card: how people join, Beans, message requests, votes and safety rules.",
+      "section": "getting-started",
+      "related": [
+        "home",
+        "joining",
+        "rules",
+        "messages",
+        "what-the-admins-can-see"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "How this community works"
+        },
+        {
+          "type": "p",
+          "text": "Every BeanPool community chooses its own rules and settings. You can check your community's rules at any time on Home, on the bottom card under the figures, by tapping **How it works**, or in **Settings → How this community works**."
+        },
+        {
+          "type": "p",
+          "text": "Here is what each rule means."
+        },
+        {
+          "type": "h2",
+          "text": "Joining"
+        },
+        {
+          "type": "p",
+          "text": "**Joining** tells you who can bring new people into the community. In most communities, any member can invite someone and people can ask to join. In some communities, only the admins invite people. When joining is paused, no new members are being taken for now, and people cannot ask to join. On an open community, anyone can join with 12 secret words or a sign-in."
+        },
+        {
+          "type": "h2",
+          "text": "Private preview"
+        },
+        {
+          "type": "p",
+          "text": "When a **Private preview** is active, the community is getting ready. Only people the owner or an admin invites get in, and visitors from outside see nothing about the community."
+        },
+        {
+          "type": "h2",
+          "text": "Beans"
+        },
+        {
+          "type": "p",
+          "text": "**Beans** are the community's mutual credit currency. When Beans are on, members can trade, prices are shown, credit is available, and the community has a Commons pool. When Beans are off, the community runs on mutual aid and gifts without prices or balances."
+        },
+        {
+          "type": "h2",
+          "text": "Confirmed members and the known floor"
+        },
+        {
+          "type": "p",
+          "text": "In communities where Beans and member confirmation are active, **confirmed members** can owe up to an agreed amount of Beans — the known floor — while keeping an offer listed. This gives members the confidence to start trading from day one."
+        },
+        {
+          "type": "h2",
+          "text": "Messages"
+        },
+        {
+          "type": "p",
+          "text": "**Messages** controls what happens when someone who hasn't talked with you or added you writes to you for the first time. When message requests are on, their first message waits under requests until you accept it. When message requests are off, all direct messages arrive in your chat list straight away."
+        },
+        {
+          "type": "h2",
+          "text": "Decisions"
+        },
+        {
+          "type": "p",
+          "text": "**Decisions** are how the community makes formal choices together. When decisions are on, members can vote on proposals, and anyone who has completed a trade (as well as admins) can submit a proposal. When decisions are off, the moderators look after the community's operations."
+        },
+        {
+          "type": "h2",
+          "text": "Limits on new accounts"
+        },
+        {
+          "type": "p",
+          "text": "When limits on new accounts are active, new members have small daily posting and messaging allowances during their first days. This helps keep spam and fraud out while newcomers get settled."
+        },
+        {
+          "type": "h2",
+          "text": "Reported posts"
+        },
+        {
+          "type": "p",
+          "text": "When automatic hiding of reported posts is on, a post that is reported by established members from three independent circles is hidden from view until a moderator reviews it."
+        },
+        {
+          "type": "h2",
+          "text": "Repeat offenders"
+        },
+        {
+          "type": "p",
+          "text": "When repeat offender rules are active, an account that has posts removed three times in 30 days by moderators is muted automatically from posting and messaging until a moderator lifts it."
+        },
+        {
+          "type": "h2",
+          "text": "Questions about rules"
+        },
+        {
+          "type": "p",
+          "text": "Your community's owners can update these settings to suit how the community evolves. Whenever a structural rule changes, members are notified on Home. If you have questions about how your community is run, ask the admins."
+        }
+      ]
+    },
+    {
       "slug": "finding-a-community",
       "title": "Finding a community near you",
       "summary": "From the global community, find a community near you and ask to join it, be told when one starts near you, or start one yourself.",
@@ -1482,7 +1619,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved; after that you can remove it like any other card. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app."
+          "text": "On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays near the top of Home and can't be removed or moved. After your first 30 days it stays while a request to join is waiting for an answer or you have a watch for a community near you. When a community no longer holds your request, the card says so; tap **Got it** and the card can be moved or removed again. In the web app, each community on the card is a link to its own page. If it doesn't know where you are, tap **Share my area**, or **or type your town** and pick your town. The steps below are for the phone app."
         },
         {
           "type": "p",
@@ -1531,11 +1668,11 @@
         },
         {
           "type": "p",
-          "text": "While you wait, the community's card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection."
+          "text": "While you wait, the waiting card on **Home** shows when you asked (**You asked to join {name} on {date}.**) and whether your request arrived (**Your request arrived.**), and the community's own card says **You asked to join. No answer yet**. Communities usually answer within a few days. You can have one request open with each community, and each community takes only a few requests a day from one internet connection."
         },
         {
           "type": "p",
-          "text": "If you change your mind while waiting, tap **Cancel my request**. The request is closed, and you can ask again after 24 hours."
+          "text": "If you change your mind while waiting, tap **Cancel my request**. The request is really withdrawn, and you can ask again after 24 hours."
         },
         {
           "type": "p",
@@ -1543,7 +1680,7 @@
         },
         {
           "type": "p",
-          "text": "If nobody answers within 30 days, the card says **No answer came. You can ask again.**"
+          "text": "If nobody answers within 30 days, the card says **This request is no longer open. You can ask again.**"
         },
         {
           "type": "p",
@@ -1569,6 +1706,18 @@
         {
           "type": "p",
           "text": "You stay a member of the global community, and can switch between them: see \"More than one community\"."
+        },
+        {
+          "type": "h2",
+          "text": "A post someone shared with you"
+        },
+        {
+          "type": "p",
+          "text": "A member of a community can share one of its posts with you outside BeanPool: a link in a chat or a message. It opens that one post, in the app if you have it and in your web browser if not. It shows what the post is, its photos, its price and roughly where it is, and says that a member of that community shared it with you. Names and faces appear only once you join that community."
+        },
+        {
+          "type": "p",
+          "text": "From there you can **Ask to join** that community, **Get the app**, or **Look around the global community**. If the link says **This link has stopped working**, the person who shared it stopped it, it ran out after 7 days, or the post is gone: ask them for a new one."
         },
         {
           "type": "h2",
@@ -1716,7 +1865,7 @@
           "items": [
             "**Ledger:** an example member with 85 Beans, room to spend down to −200, a trust badge, and a few recent trades, such as bread, an hour of gardening and some seedlings.",
             "**Commons:** the Example Valley Bakery, an enterprise its members keep, and one Decision: a compost bay, paid for from the Commons' shared Beans.",
-            "**My Deals,** in the Market: three example deals: one waiting on you, one with the Beans held safely, and one done."
+            "**Your deals,** in the Market: three example deals: one waiting on you, one with the Beans held safely, and one done."
           ]
         },
         {
@@ -2283,7 +2432,7 @@
         {
           "type": "ul",
           "items": [
-            "**A handshake:** a deal is waiting for you. Someone asked for your listing and is waiting for you to answer, or your Beans are held in trust and waiting for you to release them. It does not show when you are waiting on them. If there is one, the tap opens that deal. If there are more, it opens **My Deals**.",
+            "**A handshake:** a deal is waiting for you. Someone asked for your listing and is waiting for you to answer, or your Beans are held in trust and waiting for you to release them. It does not show when you are waiting on them. If there is one, the tap opens that deal. If there are more, it opens **Your deals**.",
             "**A ballot box:** a vote you have not cast yet. The tap opens **Commons**, at **Decide**. If the first vote is one in a group or a keepers' vote in an enterprise, the tap opens that group or enterprise instead. A vote you cannot cast yet does not count here, for example one that needs you to finish a trade first.",
             "**An envelope:** you are invited to join a group. If there is one invitation, the tap opens it: what the group is, who invited you, and **Join the group**. If there are more, it opens **Commons**, at **Groups**, where each is marked **INVITED**. It goes once you join, say no, or the convenor takes the invitation back. An invitation to a group its members closed does not count, and none count while your account is suspended.",
             "**A speech bubble:** an unread message from a person. If it is from one person, the tap opens that chat. If it is from several people, it opens **Talk**, at **Messages**, showing only the unread ones.",
@@ -2580,7 +2729,7 @@
         {
           "type": "ul",
           "items": [
-            "**Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you join the global community, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**",
+            "**Ask to join**: on an Android phone with the BeanPool app, this opens the community's card in the app. Elsewhere it opens the global community with that community first: you look around global first, join there to get an account, and the **Find a community** card then shows the community you came to ask. Today you send the request from the app: open **Find a community** there and choose the community. A community that doesn't link to the global community says **Ask to join from the BeanPool app.**",
             "**I have an invite**: the form for your invite code.",
             "**Already a member**: the ways back into your account.",
             "**Look around the global community**: where the community links to one."
@@ -2952,7 +3101,7 @@
         },
         {
           "type": "p",
-          "text": "If you joined in a browser, bring the same account to the phone app. Don't join again on the phone: that makes a second account, and two accounts can never be joined into one. **Safety Backup**, next to your 12 words, and the **Sign-in recovery** card in Settings say how:"
+          "text": "If you joined in a browser, bring the same account to the phone app. Don't join again on the phone: that makes a second account, and two accounts can never be joined into one. Settings has a **Use the phone app** row, and a card appears on Home after your first post or a week, with links to the App Store, Google Play and a direct Android download. **Safety Backup**, next to your 12 words, and the **Sign-in recovery** card in Settings say how:"
         },
         {
           "type": "ul",
@@ -2987,7 +3136,7 @@
         },
         {
           "type": "p",
-          "text": "The web app may offer **Install BeanPool** so it opens from your home screen like an app. If your browser cannot do that, tap **How?** for steps."
+          "text": "On a computer, you can install BeanPool so it opens in its own window from your desktop or dock: look for the install icon in your browser's address bar, or use **Settings** → **Install on this computer**. On a phone, use the phone app from Google Play, the App Store, or beanpool.org/android instead: it keeps your account safe, supports notifications, and avoids creating a second account or icon."
         },
         {
           "type": "h2",
@@ -3105,7 +3254,7 @@
         },
         {
           "type": "p",
-          "text": "The button next to **My Deals** changes how the list looks: a list, a grid, or compact."
+          "text": "The button next to **Your deals** changes how the list looks: a list, a grid, or compact."
         },
         {
           "type": "h2",
@@ -3119,6 +3268,7 @@
             "the price in beans, with **/Hr** if it is priced by the hour;",
             "**RECURRING** if it stays open after each deal;",
             "**CASH TOO** if the person also needs some cash, for fuel or materials;",
+            "**🤝 IN TRUST** if you have a deal on it with beans held, or **✋ ASKED** if you have asked for it, or someone has asked for yours. Only the two people in the deal see this: nobody else is told who traded;",
             "a lock and a group name if only that group can see it;",
             "who posted it, with their trust badge and stars. A member who has not traded yet shows 🔑 on their author line."
           ]
@@ -3137,7 +3287,9 @@
             "**Message** and their name: ask a question before you commit.",
             "Tap their name to see their profile, reviews and trust.",
             "**Report Post** if it is a scam, offensive, misleading, or puts a child at risk (**Child safety**).",
-            "**Block User** to hide their posts and chats on your phone. It also tells your admins. See \"Blocking someone\"."
+            "**Block User** to hide their posts and chats on your phone. It also tells your admins. See \"Blocking someone\".",
+            "Your deal on it, if you have one: what is held, whose step it is, and the buttons for it, in place of **Accept Offer** or **Offer to Fulfill**. On your own post, every deal under way on it. See \"A deal, step by step\".",
+            "**Taken up by someone else for now.** if someone else has taken it up and it is not one that stays open."
           ]
         },
         {
@@ -3150,7 +3302,33 @@
         },
         {
           "type": "p",
-          "text": "You cannot save or share a post yet."
+          "text": "You cannot save a post yet."
+        },
+        {
+          "type": "h2",
+          "text": "Sharing a post"
+        },
+        {
+          "type": "p",
+          "text": "Open a post and tap **Share with members**. Your phone's share sheet opens with the post's title and a link; on a computer the link is copied for you to paste. Anyone in your community who taps it opens the post. Someone who isn't a member lands on your community's own page, with how to ask to join."
+        },
+        {
+          "type": "p",
+          "text": "Where your community allows it, you can also tap **Share outside the community**. It is for showing one listing to a friend or a neighbour who isn't in BeanPool yet, in a chat or a message:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The link shows that one post for 7 days: its title, words, photos, price and roughly where it is (the area, never the exact place).",
+            "It never shows a name, a face or anything else about the person who posted it, or about you. It says only that a member of your community shared it.",
+            "It opens nothing else: no other post, no member, nothing about your community beyond what its public card says.",
+            "Whoever opens it can ask to join your community, open it in the app, or look around the global community.",
+            "A post only your group or one person can see can't be shared outside."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Each link you share outside is listed under **Settings**, **Shared outside**, until it runs out. Tap **Stop sharing** and that link stops working at once. A link also stops if the post is taken down, if you leave the community, or if your community's owners turn sharing outside off."
         }
       ]
     },
@@ -3414,7 +3592,7 @@
         },
         {
           "type": "p",
-          "text": "You can't close it, or close it for now, while a deal on one of its things is asked for or under way. The app says how many deals are open, with a button to **My Deals**."
+          "text": "You can't close it, or close it for now, while a deal on one of its things is asked for or under way. The app says how many deals are open, with a button to **Your deals**."
         },
         {
           "type": "h2",
@@ -3440,7 +3618,7 @@
     },
     {
       "slug": "my-deals",
-      "title": "My Deals",
+      "title": "Your deals",
       "summary": "One place for every trade you are in, every post you have up, and your past trades.",
       "help": "Every trade you are in and every post you have up. A deal waiting on you is at the top.",
       "section": "market",
@@ -3458,11 +3636,11 @@
         },
         {
           "type": "p",
-          "text": "Tap **My Deals** at the top of the Market tab. A red number on it counts the deals waiting on you."
+          "text": "Tap **Your deals** at the top of the Market tab. A red number on it counts the deals waiting on you."
         },
         {
           "type": "p",
-          "text": "On the global community there are no deals, so **My Deals** shows three example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you, one with the Beans held safely, and one done. Their buttons say why deals live in a local community, and change nothing. See \"Beans and the global community\"."
+          "text": "On the global community there are no deals, so **Your deals** shows three example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you, one with the Beans held safely, and one done. Their buttons say why deals live in a local community, and change nothing. See \"Beans and the global community\"."
         },
         {
           "type": "h2",
@@ -3558,13 +3736,13 @@
         },
         {
           "type": "p",
-          "text": "Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, only the person who did not post the listing sees **Message**, and the button to call it off is **Cancel Hold**."
+          "text": "Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, the button to call it off is **Cancel Hold**."
         },
         {
           "type": "ul",
           "items": [
             "Do the job, or hand over the thing.",
-            "The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at.",
+            "The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at. Before they confirm, the app says how many beans will go and to whom, such as **Transferring 100 B to Kofi**.",
             "The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons."
           ]
         },
@@ -3578,6 +3756,46 @@
         },
         {
           "type": "h2",
+          "text": "What the post says while it is under way"
+        },
+        {
+          "type": "p",
+          "text": "The post itself shows your deal, so you never need to go looking for it. It says the same in the phone app and the web app."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**You took up someone's Offer:** **You took this up on 24 Oct · 45 Beans held in trust**, with **Release Credits** and the button to call it off.",
+            "**You are helping with someone's Need, and they said yes:** **You're helping with this · 20 Beans held for you**, or **no Beans held** on a free Need, and **Pending Release by** their name. Do the job; they release the beans.",
+            "**You offered to help, and they have not answered:** **You offered to help · waiting on** their name, and the button to withdraw.",
+            "**You posted it:** **Deals under way**, one line for each deal, such as **Ana · 45 Beans held · since 24 Oct**, or **no Beans held** on a deal for nothing, such as a thing you lend for free. A Repeatable post can have several. Where you are paying (a Need you posted), each line has **Release Credits** and the button to call it off; where you are paid, it says **Pending Release by** their name. Each line has **Message** for the person in that deal, and **All your deals ›** sits under them.",
+            "**Someone else took it up:** **Taken up by someone else for now.** You see nothing of their deal.",
+            "**You finished a deal on a Repeatable Offer:** **You've had this before · done 20 Oct**, with **⭐ Review** if you have not reviewed it yet, and you can take it up again."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "An alert about a deal, and a deal on Home or in the top bar, opens the post at that deal. On a Repeatable post you posted, that deal's line comes first. If that deal is over by then, the post opens as it is now, with one line on what became of it: **That request was declined.**, **That deal was cancelled.** or **That deal is done.** Whatever you can do on the post, such as take it up again, is there as usual."
+        },
+        {
+          "type": "h2",
+          "text": "A post of an enterprise you keep"
+        },
+        {
+          "type": "p",
+          "text": "If you are a keeper of an enterprise, its posts show its deals to you as if you had posted them, with **You act for** the enterprise's name **here.** above them."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Where the enterprise pays (a Need it posted), you can **Release Credits** for it. You cannot release your own pay: if you are the one doing the job, another keeper releases it.",
+            "You can **Approve** or **Deny** the requests on its posts, except your own. If you asked to borrow its thing or offered to help with its Need yourself, that request shows as yours, with the button to withdraw it.",
+            "You cannot call off a deal for the enterprise. The other person in the deal can, as anyone can on their own deal.",
+            "You do not see **Accept Offer** on its posts."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "A Repeatable post"
         },
         {
@@ -3586,7 +3804,7 @@
         },
         {
           "type": "p",
-          "text": "If you open a Repeatable Offer that you have already taken up, it shows your own deal instead of the Accept button: the date you took it up, the beans held in trust, and the button to release them once it is done."
+          "text": "If you open a Repeatable Offer that you have already taken up, it shows your own deal instead of the Accept button: the date you took it up, the beans held in trust, and the button to release them once it is done. Everyone else's deals on it stay theirs: you see only your own."
         },
         {
           "type": "p",
@@ -3602,7 +3820,7 @@
         },
         {
           "type": "p",
-          "text": "Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in My Deals, History (**Leave Review** in the web app). You can change your rating; the new one replaces the old."
+          "text": "Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in Your deals, History (**Leave Review** in the web app). You can change your rating; the new one replaces the old."
         },
         {
           "type": "p",
@@ -3758,7 +3976,7 @@
         },
         {
           "type": "p",
-          "text": "Someone who wants to borrow it asks through the Offer, as for any Offer, and you agree it in the deal (see \"A deal step by step\"). While it is out, the thing says **Out on a loan**. When the deal is finished, its Offer is finished too, so the thing says **Its Offer has gone from the Market**. Tap **List it again** to post a new one, or **Forget it** to keep it on your shelf."
+          "text": "Someone who wants to borrow it asks through the Offer, as for any Offer, and you agree it in the deal (see \"A deal step by step\"). Their copy of the Offer says **You asked to borrow it · nothing is held until** your name **says yes**, and its card in the Market says **✋ ASKED**. While it is out, the thing says **Out on a loan**, your Offer lists the loan under **Deals under way**, and anyone else who opens it reads **Taken up by someone else for now.** When the deal is finished, its Offer is finished too, so the thing says **Its Offer has gone from the Market**. Tap **List it again** to post a new one, or **Forget it** to keep it on your shelf."
         },
         {
           "type": "p",
@@ -4074,7 +4292,8 @@
         "groups",
         "mute",
         "the-top-bar",
-        "key-changed"
+        "key-changed",
+        "how-your-community-works"
       ],
       "blocks": [
         {
@@ -4098,16 +4317,38 @@
           "items": [
             "Search with **Search chats, posts, partners...**.",
             "The filter button sorts by **Recent** or **Unread** (and, where your community uses Beans, by the Beans in each deal, highest or lowest first), and can show **Unread Only** or **Friends Only**.",
-            "On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top."
+            "On the phone, the search and filter button slide away as you scroll down. Scroll up a little and they come back. Tap **Talk** again to jump to the top.",
+            "On the phone, a chat with a deal that needs you has the same tag under the name as in the web app (below): **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. A chat where you only have a finished deal to rate says **Review Needed**."
           ]
         },
         {
           "type": "p",
-          "text": "In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter."
+          "text": "In the web app this is the **Chat** tab. It lists all your chats, groups' and events' too, with **All**, **Transactions**, **Direct** and **Groups** at the top, and it has no search or filter. A chat with a deal that needs you has a tag under the name, **Action Required (2)**, or **Release Credits (2)** when every one of them is Beans of yours to release. It counts only the deals where the next step is yours: Beans of yours held in trust, or a request on your listing waiting for your answer. A deal where you are the one being paid adds nothing to it. A chat with a finished deal you haven't rated also says **Action Needed: Review Partner**."
         },
         {
           "type": "p",
           "text": "At the top of a chat with one person, tapping their name opens their profile (an enterprise's page for an enterprise), on the phone and the web."
+        },
+        {
+          "type": "h2",
+          "text": "Deals in a chat"
+        },
+        {
+          "type": "p",
+          "text": "When you and the other person have a deal, it is pinned above the messages, on the phone and in the web app. There is one card for each deal that still needs something, with the name of the item and the Beans held for it, marked **completed** once the deal is done. Tap a card to open the listing at that deal."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**If you are paying,** the card has **Release** and **Cancel**. Release only once the other person has done what you agreed. Both ask you to confirm first. Release cannot be undone; Cancel gives the Beans back to you.",
+            "**If you are being paid,** the card says **⏳ Awaiting release**. The Beans are held for you, and only the person paying can release them.",
+            "**When a deal is finished** and you haven't rated it, the card has **⭐ Review**.",
+            "**If the other person has asked for your listing,** the card says **Waiting on you: answer**. No Beans are held yet, so it has no buttons of its own: tap it to open the listing and answer there."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "When you are paying for just one deal in the chat, it is in the bar above the messages instead of a card: **⚠️ Action Required: Release Credits** with **Release** and **Cancel** on the phone, **🔒 Trust Hold** with **✅ Release Credits** and **Cancel** in the web app. If you are paying for several, the bar has the newest and the cards have the rest."
         },
         {
           "type": "h2",
@@ -4228,6 +4469,27 @@
         {
           "type": "p",
           "text": "Tap their name at the top of the chat to open their profile (an enterprise's page for an enterprise), on the phone and the web. Tap **Block**, then confirm: **Block User** in the phone app (**Block** on an enterprise's page), **OK** in the web app. In the web app you can also tap **Block** at the top of the chat, then **OK**. See \"Blocking someone\"."
+        },
+        {
+          "type": "h2",
+          "text": "Message requests"
+        },
+        {
+          "type": "p",
+          "text": "Where your community's owners have turned on message requests, a first message from someone you haven't added as a friend, messaged before, or traded with arrives as a **message request**. You can read it before deciding. The sender cannot write anything more until you accept, and they are never told if you ignore the request or block them. Messages from your community's admins and moderators, and chats that come with a trade, always arrive straight away."
+        },
+        {
+          "type": "p",
+          "text": "If your community turns message requests off, every message arrives straight away, and any request still waiting becomes an ordinary chat. See \"How this community works\"."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**On your phone**: in **Talk** under **Messages**, tap the **Requests** pill at the top. You will see who wants to message you, with a preview of their message. Tap **Accept** to reply, or **Ignore** to dismiss it without letting them know. You can also tap **Block** to block them. If you have several requests waiting, you can tap **Ignore all**. A push notification that says someone wants to message you opens this Requests section directly when tapped.",
+            "**In the web app**: the same **Requests** pill appears above your list of chats.",
+            "**When you send a request**: your first message is sent as a request. While you wait for them to accept, you cannot send further messages or photos, and you see **Sent as a request. {name} will see it under Requests. You can write more once they accept.**",
+            "**Cancel request**: beside the waiting line on both the phone and the web, you can tap **Cancel request**. This withdraws your request and removes your first message for both of you. You can then write a fresh message if you wish."
+          ]
         }
       ]
     },
@@ -5325,7 +5587,7 @@
         },
         {
           "type": "p",
-          "text": "Tap **Commons**, then **Decide**. Open Decisions are under **Open Decisions**."
+          "text": "Tap **Commons**, then **Decide**. Open Decisions are under **Open Decisions**. To propose one, tap **Start something** (on the phone, the round **+** button) on **Commons**, then pick **Decision** (or tap **+ Propose a Decision** on **Decide**). See \"Proposing a Decision\"."
         },
         {
           "type": "p",
@@ -5356,6 +5618,14 @@
             "**Turnout:** how many votes it needs, and whether it has them yet;",
             "**Tally:** the Yes and No so far, and how much Yes it needs."
           ]
+        },
+        {
+          "type": "p",
+          "text": "A vote on removing a member also shows who brought the case (the admin who suspended them), and the member's own reply, beside the case, once they have written one. If an admin hid the case because it was shown to be false, you read the admin's reason in its place. If an admin took down the reply because it harmed someone, you read their reason in the reply's place. When a vote on removing a member opens, everyone who can vote on it gets an alert on their phone. See \"Rules and how decisions work\"."
+        },
+        {
+          "type": "p",
+          "text": "If the vote is about you, the card says you can't vote on it, and offers **Reply to this case** while it is open, and **Report this case as false**."
         },
         {
           "type": "h2",
@@ -5422,7 +5692,8 @@
         {
           "type": "ul",
           "items": [
-            "A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.",
+            "A Decision is for something your community's server can carry out: suspending a member or reinstating one, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.",
+            "Nobody proposes removing a member. That vote opens only when an admin suspends someone, and the community then decides. To ask for it, report them (see \"Reporting a problem\").",
             "A Decision cannot remove or suspend an owner or admin of your community's server. See \"Rules and how decisions work\".",
             "You can propose once you have completed a trade. Your community's admins can always propose. A trust badge or a vouch is not enough.",
             "In a community with Beans switched off, nobody can complete a new trade, so its admins can propose, and so can members who completed a trade before Beans were switched off.",
@@ -5441,7 +5712,7 @@
             "Choose what it is about: **Member** or **Commons Pool**.",
             "**Title:** one line, like \"Grant 200 beans to the Tool Library\".",
             "**Description & Case:** explain why, in at least 10 characters. Say it plainly. People vote on what they read here.",
-            "From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.",
+            "From the list below that, choose exactly what should happen. For example, for a member: Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.",
             "Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. To pay off a debt or replace a lead, tap the project or enterprise in the list, or type its key.",
             "Tap **Submit Community Decision**."
           ]
@@ -5488,6 +5759,7 @@
             "**No Trades Here** (on the phone): your community has Beans switched off, so you can't complete the trade you need. Its admins can propose.",
             "**Limit Reached** (on the phone): you already have an open Decision. Wait for it to close. In the web app the button is greyed out here too, with a line saying why.",
             "**A community vote can't remove or suspend an owner or admin of this community's server:** the person you chose runs the server. An owner can take their role away first.",
+            "**A vote on removing a member opens only when an admin pauses them:** nobody proposes one. Report the member instead.",
             "**This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.",
             "**Invalid Amount** (in the web app, \"Please enter a valid positive grant amount in Beans\"): fill in how many beans.",
             "**Error:** check your description is at least 10 characters long."
@@ -5536,8 +5808,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap **+ ADD POST** on the Market tab or the Map.",
-            "Choose **Community Poll**.",
+            "On **Commons**, tap **Start something** (on the phone, the round **+** button) and pick **Poll**. Or tap **+ ADD POST** on the Market tab or the Map, and choose **Community Poll**.",
             "Write the **Question**.",
             "Add **Context / Notes** if it helps. This is optional.",
             "Write 2 to 4 **Options**. Tap **+ Add Option** for more.",
@@ -5696,6 +5967,10 @@
           "text": "Anyone who taps that link opens the event — in the app if they have it, in the web app otherwise. Someone who is not in your community lands on its join page. In a web browser, the global community shows them the event first, as a visitor sees it, and opens it again once they have joined."
         },
         {
+          "type": "p",
+          "text": "Where your community allows it, the event also has **Share outside the community**: a link that shows someone who isn't a member this one event for 7 days, without anyone's name or face, and without the place you typed or the private note: only roughly where it is and when. See \"Browsing the Market\" for what it shows and how to stop it."
+        },
+        {
           "type": "h2",
           "text": "Putting it in your calendar"
         },
@@ -5722,7 +5997,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap **+ ADD POST** on the Market tab or the Map, then **Event**.",
+            "On **Commons**, tap **Start something** (on the phone, the round **+** button) and pick **Event**. Or tap **+ ADD POST** on the Market tab or the Map, then **Event**.",
             "**Title**, and when it **Starts**. **Ends** is optional; it is 2 hours later unless you change it.",
             "Times are in the event's own time zone, taken from the pin. When that is not your own zone, a line under the times names it. Tap **Change** beside it if it is wrong.",
             "**Repeats:** choose how often it comes round, such as every week on that day or once a month, or leave it at **Does not repeat**. **Until** is optional: leave it blank and the event repeats until you cancel it.",
@@ -5912,7 +6187,7 @@
         },
         {
           "type": "p",
-          "text": "Before a project reaches its goal, its leader can also cancel it (on the phone, under **Manage**), and every pledge goes back. If nobody cancels it and the goal isn't met by its end date, every pledge goes back by itself a week after the end date, and its leader gets a notice saying how many backers and how many beans."
+          "text": "Before a project reaches its goal, it can also be cancelled under **Manage**, and every pledge goes back. Its leader or a community admin can cancel it. If it has no leader, its only collaborator can too; with two or more and no leader, only a community admin can. Once you stop helping run a project, because you stepped down or were removed, you can't cancel it, even if you started it. If nobody cancels it and the goal isn't met by its end date, every pledge goes back by itself a week after the end date, and its leader gets a notice saying how many backers and how many beans."
         },
         {
           "type": "h2",
@@ -6170,7 +6445,7 @@
             "**Your balance**, and roughly how many hours of help it is worth, at 40 beans an hour.",
             "**Commons:** your community's shared pool.",
             "**Credit Floor:** how far below zero you could go.",
-            "How many of your beans are held in deals that are under way, when there are some.",
+            "How many of your beans are held in deals that are under way, when there are some. Tap it to open **Your deals** on **In Progress**, where those deals are. On the web it is the **Held in Trust** box.",
             "**Community Circulation:** shows when you hold beans. See \"The circulation fee\".",
             "**Project pledges:** beans you have pledged to projects, if any.",
             "**Send Beans:** send a gift. See \"Sending a gift\"."
@@ -6178,7 +6453,7 @@
         },
         {
           "type": "p",
-          "text": "In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger."
+          "text": "In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Held in Trust** (when beans are held), **Send Beans** and **Community Circulation**. Your balance is at the top of the Ledger."
         },
         {
           "type": "h2",
@@ -6187,6 +6462,10 @@
         {
           "type": "p",
           "text": "Every trade, gift and fee, newest first, with a note, the time, and plus or minus. On the phone each line also says who it was with; in the web app it says **Sent** or **Received**. If a note mentions a post, tap **View Offer** to open it."
+        },
+        {
+          "type": "p",
+          "text": "A line for beans held in a deal (or paid out or returned from one) opens that deal when you tap it, on the phone and in the web app. You land on the post, where you release or cancel the deal."
         },
         {
           "type": "p",
@@ -6646,7 +6925,7 @@
             "**Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person.",
             "**Your friends list, who you chat with, and the invites you made.** Only you can read them, in the app or from your community's server. Others see only the connections in common you share with them.",
             "If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only. An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.",
-            "If an admin removes your account, the admin who starts it sees your balance, so that what you hold or owe can be settled. The other admins and the owner can see who looked and when.",
+            "If your account is removed (after your community voted for it, or by an admin where votes are switched off), the admin who settles it sees your balance, so that what you hold or owe can be settled. The other admins and the owner can see who looked and when.",
             "In a known community, if you agreed to it when you joined and an admin has confirmed you, the admins can see your balance once it passes one of your community's lines. You can take that back at any time in Settings. In any community, any admin can also see some of your trades: a trade that isn't finished yet or that an admin settled, a trade whose Beans were left stuck when a member was removed on an older server, fraud alerts, and an alert if no Beans have moved in or out of your account for a set number of days. Every look at one of those trades is logged, and a look at the alerts that name you is logged the first time each admin opens them in 24 hours. The owner and the admins can see that log. The admins also see how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours; and, as every member does, your trust profile, unlogged. Whoever runs your community's server holds its whole database, with its backups, snapshots and standby copies. See \"What the admins can see\"."
           ]
         },
@@ -6749,7 +7028,8 @@
           "type": "ul",
           "items": [
             "Open Settings: tap the sliders button at the top right of the screen (on a wide computer screen, the gear in the left sidebar).",
-            "Under **App Settings**, tap **Your area**. On the phone it is just under **Location**."
+            "Under **App Settings**, tap **Your area**. On the phone it is just under **Location**.",
+            "You can also reach it from **People** → **Community** when no area is set, by tapping **Set your area**."
           ]
         },
         {
@@ -6812,7 +7092,8 @@
         "privacy",
         "joining",
         "leaving-or-deleting",
-        "admins-ai-assistants"
+        "admins-ai-assistants",
+        "how-your-community-works"
       ],
       "blocks": [
         {
@@ -6917,7 +7198,7 @@
         {
           "type": "ul",
           "items": [
-            "**When an admin removes your account.** The admin who starts removing you sees your balance and how many trades you have open, so that what you hold or owe can be settled. The other admins and the owner can see who looked, at whose balance, and when.",
+            "**When your account is removed.** In a community that votes, that is after it voted to remove you; where votes are switched off, it is when an admin removes your account. The admin who settles it sees your balance and how many trades you have open, so that what you hold or owe can be settled. The other admins and the owner can see who looked, at whose balance, and when.",
             "**When your community votes on removing you.** Everyone who can vote in it sees your balance and any debt, in that vote only. An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.",
             "**Whoever runs your community's server** holds its whole database, your balance and trades included, and its backups, snapshots and standby copies."
           ]
@@ -6971,6 +7252,14 @@
         {
           "type": "p",
           "text": "You can ask your admins what your entry says, to correct it, or to delete it when you no longer belong to the community. They keep the list, not BeanPool."
+        },
+        {
+          "type": "h2",
+          "text": "Changes to community rules"
+        },
+        {
+          "type": "p",
+          "text": "Your community's owners can change these rules (such as who can join, Beans, and message requests), and members are automatically notified on Home whenever a rule changes. See \"How this community works\"."
         }
       ]
     },
@@ -7161,7 +7450,8 @@
         "blocking",
         "getting-help",
         "when-a-deal-goes-wrong",
-        "the-pulse"
+        "the-pulse",
+        "how-your-community-works"
       ],
       "blocks": [
         {
@@ -7235,6 +7525,14 @@
           "text": "If one of your own posts is removed by the moderators, you get an alert saying so, and why if they gave a reason. It does not say who reported it."
         },
         {
+          "type": "h2",
+          "text": "A false accusation in a vote about you"
+        },
+        {
+          "type": "p",
+          "text": "If your community is voting on removing you and the case against you is false, open **Commons**, then **Decide**, and tap **Report this case as false** on the vote. The report goes to the owners and admins like any other, and names whoever brought the case. You can also reply to the case on the vote itself, where everyone reads it beside the case. If the case is shown to be false, an admin can hide it, with a reason everyone can read in its place. See \"Rules and how decisions work\"."
+        },
+        {
           "type": "p",
           "text": "Now and then the admins clear out old listings to keep the Market tidy. If some of yours are cleared, you get one alert saying how many. That is routine tidying, not a report."
         },
@@ -7262,7 +7560,7 @@
         },
         {
           "type": "p",
-          "text": "None of this happens in your own local community: there, every report waits for the moderators."
+          "text": "None of this happens in your own local community unless its owners turn it on: by default, every report there waits for the moderators. See \"How this community works\" to check which rules yours has."
         },
         {
           "type": "p",
@@ -7295,7 +7593,7 @@
           "items": [
             "Open **Settings**. Under **App Settings**, tap **Notification Preferences**.",
             "Switch each kind on or off:",
-            "**Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in.",
+            "**Direct Messages:** when someone messages you, writes in one of your groups or mentions you, invites you to join a group, or when a vote opens in a group or enterprise you are in. Also when your community opens a vote on removing a member that you can vote on.",
             "**Marketplace Activity:** requests, approvals and refusals on your deals, and what happened to a post you reported or one of yours the admins removed. Also news about events you are going to, notices from your community's admins, and a community starting near a place you asked about.",
             "**Held in Trust & System:** beans held, released or in question.",
             "**Requests to join:** when someone asks to join your community from the global community, so you can help welcome them. Only members who can let people in see it: owners and admins are always told, so they have no switch, and in a community where only admins let people in it isn't shown."
@@ -7311,7 +7609,7 @@
         },
         {
           "type": "p",
-          "text": "Two alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, and that an admin started moving your account to a new phone. If you run your community's server, its alerts about the server always come through too."
+          "text": "Four alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, that an admin started moving your account to a new phone, that your community opened a vote about your account, and that an admin took down your reply on that vote. If you run your community's server, its alerts about the server always come through too."
         },
         {
           "type": "h2",
@@ -7328,6 +7626,7 @@
             "\"There is news on one of your trades.\"",
             "\"An event you're going to starts soon.\"",
             "\"Your community has a notice for you.\"",
+            "\"Your community opened a vote on removing a member.\" It never says who the vote is about.",
             "\"Someone asked to join your community.\"",
             "\"A community answered your request.\""
           ]
@@ -7615,6 +7914,7 @@
             "Your profile becomes \"Deleted Member\".",
             "Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as \"Deleted post\".",
             "Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and project and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see \"What stays a while\" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.",
+            "If you replied to the case on a vote on removing you, your reply is deleted, whether the vote is still open or has closed. The vote and its case stay.",
             "Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.",
             "A poll you asked is closed. It keeps its question and its votes.",
             "The block list your community kept for you goes too.",
@@ -7706,6 +8006,7 @@
           "items": [
             "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.",
             "Every message you wrote reads **This message was deleted**, and the photos you sent are deleted.",
+            "If you replied to the case on the vote about you, your reply is deleted. The vote and its case stay.",
             "After that, your community cannot vote to bring the account back. To come back, join again with a new invite. The global community takes no invites, and a sign-in it removed cannot join it again.",
             "If a deal of yours is still under way, the other member or an admin must close it first."
           ]
@@ -7791,7 +8092,7 @@
         },
         {
           "type": "p",
-          "text": "**Account Protection** lists your ways back: **Your 12 words** first, then **A sign-in you link**, which says where its copy is kept before you link one. **Who can open it** under it says who can open that copy (see \"Who can open the copy\")."
+          "text": "**Account Protection** lists your ways back: **Your 12 words** first, then **A sign-in you link**, which says where its copy is kept before you link one. **Who can open it** under it says who can open that copy (see \"Who can open the copy\"). **Where your account can be brought back from**, under them, lists every copy and lets you remove them (see below)."
         },
         {
           "type": "ul",
@@ -7840,7 +8141,73 @@
         },
         {
           "type": "p",
-          "text": "If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remove it**. Your community's copy is deleted and none is made at the key vault, so that sign-in account no longer brings your account back until you link it again. On a phone with no 12 words, the app warns you first: without them, and without a sign-in account, nothing brings your account back. If your community doesn't answer, the app says **Not removed yet** and tries again the next time you open **Settings**."
+          "text": "If you'd rather not keep a copy anywhere, tap **Remove it instead**, then **Remove it**. Your community's copy is deleted and none is made at the key vault, so that sign-in account no longer brings your account back until you link it again. On a phone with no 12 words, the app warns you first: without them, and without a sign-in account, nothing brings your account back. If your community doesn't answer, the app says **Not removed yet** and tries again the next time you open **Settings**, and each time the app opens."
+        },
+        {
+          "type": "h2",
+          "text": "Where your account can be brought back from"
+        },
+        {
+          "type": "p",
+          "text": "In the phone app, open **Settings**, **Account Protection**, then **Where your account can be brought back from**. It lists every place a copy of your account is kept, as far as your phone can ask:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Your 12 words**: whether this phone has them, and **I have them written down**, which you tick yourself. The app never checks it.",
+            "**BeanPool's key vault**: each sign-in account it keeps a copy for, and **Kept since**, the day that copy was made. Linking the same account again makes a new copy, with a new day. If you linked more than one account of the same sign-in (two Google accounts, say), each copy is listed under that sign-in, and its **Remove** takes them all: the key vault removes a sign-in's copies together. If the vault is paused or doesn't answer, the screen says so and lists nothing there.",
+            "**Your communities' servers**: each community on this phone, and the sign-in accounts its server keeps a copy for, from before the key vault, from the web app, or as a community's first owner. A community that doesn't answer is shown as not answering, and nothing there is listed."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap **Remove** next to a copy, or **Remove everything** under them all. A copy shows as removed only once the key vault or the community says it is gone:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The key vault deletes its copy at once, and from its backups within 30 days, or later if the vault is paused in that time.",
+            "A community's server deletes its copy. Copies already in that server's backups stay there (see \"Who can open the copy\").",
+            "If a community doesn't answer, the screen says **Not removed yet**, and the app tries again each time it opens. If you link that sign-in account there again in the meantime, the app leaves the new copy alone.",
+            "If a community couldn't be asked at all, **Remove everything** removes nothing there and says so. Open the screen again later."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Before you remove the last copy your phone knows of, the app asks **Show my 12 words first?**, unless you ticked **I have them written down**. On a phone with no 12 words, it says plainly what is left: if you lose the phone and have no 12 words written down, an admin can only move your Beans and your name to a new key (see \"Lost your phone and your 12 words\"). It never stops you."
+        },
+        {
+          "type": "p",
+          "text": "Nothing is lost by removing a copy: to have that way back again, link the sign-in account in **Account Protection** (see \"Protecting your account now\")."
+        },
+        {
+          "type": "p",
+          "text": "In the web app, **Settings** has **Where your account can be brought back from** too. It lists whether that browser has your 12 words and the copies that community's server keeps, each with **Remove**. The web app can't reach the key vault, so it says **Copies in BeanPool's key vault are managed in the phone app**."
+        },
+        {
+          "type": "h2",
+          "text": "What the key vault keeps about you"
+        },
+        {
+          "type": "p",
+          "text": "For each sign-in account you link in the phone app, BeanPool's key vault keeps:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "the locked copy of your key, with your 12 words if the phone had them, which only that sign-in opens;",
+            "two fingerprints, one of your sign-in account and one of your key, made with a secret only the running vault holds, so it can find your copy when your sign-in or your key asks;",
+            "the push addresses of your phones, locked with the copy, so it can tell them when someone starts getting back into your account;",
+            "the day the copy was made, and when it last brought your account back."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "While someone is getting back in with a sign-in (see \"If someone else tries\"), it keeps the new phone's one-time key and the times, until 7 days after that ends. When you remove a copy, it keeps a note of the removal for 30 days, with the two fingerprints and the day, so that a restore from an older backup removes the copy again."
+        },
+        {
+          "type": "p",
+          "text": "It never keeps your name, email, phone number or address, your sign-in account's id itself (only its fingerprint), which communities you are in, or a copy of what it handed back. It never writes down your IP address: to limit abuse, it counts the requests from each address in its memory, and forgets them when it restarts. The totals it signs each day count copies, restores and removals, and say nothing about anyone."
         },
         {
           "type": "h2",
@@ -7884,7 +8251,7 @@
         },
         {
           "type": "p",
-          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Disconnect** next to each sign-in account in the phone app. That deletes the key vault's copy at once, and from its backups within 30 days, or later if the vault is paused in that time. A copy on a community's server goes with **Remove it instead** (above). A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Removing a copy there does not delete the copies already in that server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back from it. The people who run the server can open those too. Your 12 words always work, with or without any copy."
+          "text": "If you would rather nobody but you could get in, use only your 12 words: keep them written down, and tap **Remove everything** in **Where your account can be brought back from** (see above), or **Disconnect** next to each sign-in account in the phone app. That deletes the key vault's copy at once, and from its backups within 30 days, or later if the vault is paused in that time. A copy on a community's server goes with **Remove** there, or **Remove it instead** (above). A standby server, the second server some communities keep ready to take over, deletes its copy too, the next time it copies from the main one (about once a minute). Removing a copy there does not delete the copies already in that server's backups, or the copy the server keeps, as a record, each time a sign-in brings your account back from it. The people who run the server can open those too. Your 12 words always work, with or without any copy."
         },
         {
           "type": "h2",

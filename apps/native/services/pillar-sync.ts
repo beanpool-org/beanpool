@@ -549,10 +549,10 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 const { pendingProfileChange } = await import('../utils/pending-profile-sync');
                 if (await pendingProfileChange(anchorUrl, pubKey)) {
                     try {
-                        // Delegate to the single canonical-aware publisher: it verifies
-                        // the node actually stored the avatar before clearing the flag,
-                        // and falls back to the canonical picture when THIS node's local
-                        // row has none yet (e.g. a freshly-joined second community).
+                        // Delegate to the single publisher: it verifies the node actually
+                        // stored the avatar before clearing the flag, and sends only what
+                        // THIS community holds for the member (a photo chosen in another
+                        // community is never sent here: Profile S2).
                         // Pinned to this cycle's community: if the phone switched meanwhile, nothing goes.
                         const { pushProfileToServer } = await import('../utils/db');
                         const ok = await pushProfileToServer({ community: anchorUrl });
@@ -588,7 +588,7 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // The reader's own balance, ledger and deals are not asked where their feature is in preview (utils/reads-own.ts;
-        // the global node, whose Ledger and My Deals are Example Valley's): from the node's profile just read and the
+        // the global node, whose Ledger and Your deals are Example Valley's): from the node's profile just read and the
         // account's own set as last answered. Everywhere else, as before.
         const readerSet = pubKey ? readerFeaturesHeld.get(readerFeaturesKey(anchorUrl, pubKey))?.features ?? null : null;
         const readsOwnHere = (feature: 'beans' | 'escrow') => readsOwnWith(feature, profile?.features, readerSet);

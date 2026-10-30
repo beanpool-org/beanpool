@@ -6,7 +6,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 
 // Marty, 15 Oct: "when I click on View Post it just takes me to the marketplace screen", and the chat's Rate your partner
-// had nowhere to rate. A finished trade's post has left the feed (status completed); the rating form is My Deals' one.
+// had nowhere to rate. A finished trade's post has left the feed (status completed); the rating form is Your deals' one.
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),

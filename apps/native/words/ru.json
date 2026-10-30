@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (one sentence, #1977); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-23",
@@ -922,13 +922,12 @@
   "Search": "Поиск",
   "Search marketplace...": "Поиск на рынке...",
   "Search marketplace": "Поиск на рынке",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "Мои сделки, {n} ожидает",
-    "few": "Мои сделки, {n} ожидают",
-    "many": "Мои сделки, {n} ожидают",
-    "other": "Мои сделки, {n} ожидает"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "Ваши сделки, {n} ожидает",
+    "few": "Ваши сделки, {n} ожидают",
+    "many": "Ваши сделки, {n} ожидают",
+    "other": "Ваши сделки, {n} ожидает"
   },
-  "My Deals": "Мои сделки",
   "Opens your active and pending deals sheet": "Открывает список ваших активных и ожидающих сделок",
   "Grid view": "Сетка",
   "Compact view": "Компактный вид",
@@ -1473,7 +1472,6 @@
   "Groups\u0004talk pane": "Группы",
   "People\u0004talk pane": "Люди",
   "🔓 Release Credits": "🔓 Разблокировать кредиты",
-  "📦 Fulfill Order": "📦 Выполнить заказ",
   "⭐ Leave Review": "⭐ Оставить отзыв",
   "⚡ Action Required": "⚡ Требуется действие",
   "Transaction": "Сделка",
@@ -1494,12 +1492,6 @@
     "few": "Нужны отзывы ({n})",
     "many": "Нужны отзывы ({n})",
     "other": "Нужны отзывы ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Выполнить заказ ({n})",
-    "few": "Выполнить заказы ({n})",
-    "many": "Выполнить заказы ({n})",
-    "other": "Выполнить заказы ({n})"
   },
   "New\u0004conversation": "Новая беседа",
   "Action Required": "Требуется действие",
@@ -3565,7 +3557,7 @@
   "TRUST SCORE": "РЕЙТИНГ ДОВЕРИЯ",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Отзывы напрямую влияют на ваш **Рейтинг доверия**, который виден в профиле. Высокий рейтинг помогает быстрее находить партнёров для сделок!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Повторяющиеся негативные отзывы снижают вашу репутацию среди партнёров. Неразрешённые споры, зависшие более чем на 7 дней, рассматриваются администраторами с вынесением публичных подписанных решений (выплата, возврат или разделение).",
-  "My Deals & Trust Hold": "Мои сделки и удержание",
+  "Your deals & Trust Hold": "Ваши сделки и удержание",
   "🎟️ Network Invites": "🎟️ Приглашения в сеть",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Каждое сообщество BeanPool доступно только по приглашению: вас приглашает один из участников. Для безопасного роста мы опираемся на **Систему взаимных поручительств**.",
   "WHO CAN INVITE": "КТО МОЖЕТ ПРИГЛАШАТЬ",
@@ -6505,7 +6497,7 @@
   "Nothing in it yet": "Пока пусто",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "Пока пусто. Добавьте Предложение с его экрана редактирования или добавьте сюда свои активные Предложения.",
   "On the Market": "На Рынке",
-  "Open my deals": "Открыть мои сделки",
+  "Open your deals": "Открыть ваши сделки",
   "Open my shop": "Открыть мою витрину",
   "Open on Instagram": "Открыть в Instagram",
   "Open your shop": "Откройте свою витрину",

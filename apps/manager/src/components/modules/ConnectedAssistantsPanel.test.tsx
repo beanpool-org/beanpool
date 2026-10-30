@@ -19,7 +19,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
 type Call = { url: string; method: string; body: any };
 
 /** A fake node: the list is `state.grants`; connecting pushes one; disconnecting removes it; the preview answers its tools. */
-function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[] }) {
+function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[]; postsPerDay?: number }) {
     const calls: Call[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: RequestInit) => {
         const url = String(input);
@@ -30,11 +30,12 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'a
             return new Response(JSON.stringify({
                 allowed: state.allowed ?? true, mcpUrl: 'https://mullum.example/mcp', role: state.role ?? 'owner', canConnect: state.canConnect ?? true, canConnectOAuth: true,
                 seesAll: state.seesAll ?? true, defaultDays: 30, maxDays: 90, perMember: 5, grants: state.grants,
+                postsPerDay: state.postsPerDay ?? 100, postsPerDayDefault: 100, postsPerDayMin: 1, postsPerDayMax: 1000,
             }), { status: 200 });
         }
         if (url.endsWith('/api/local/admin/agent/grants') && method === 'POST') {
             if (state.makeStatus && state.makeStatus !== 201) return new Response(JSON.stringify(state.makeBody ?? { error: 'bad' }), { status: state.makeStatus });
-            const g = grant({ name: body.name });
+            const g = grant({ name: body.name, canPost: body.canPost === true, postsToday: 0 });
             state.grants = [...state.grants, g];
             return new Response(JSON.stringify({ token: NEW_TOKEN, grant: g }), { status: 201 });
         }
@@ -42,6 +43,10 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'a
         if (revoke) {
             state.grants = state.grants.filter((g) => g.id !== revoke[1]);
             return new Response(JSON.stringify({ revoked: revoke[1] }), { status: 200 });
+        }
+        if (url.endsWith('/api/local/admin/agent/posts-per-day')) {
+            state.postsPerDay = body.perDay;
+            return new Response(JSON.stringify({ postsPerDay: body.perDay }), { status: 200 });
         }
         if (url.endsWith('/api/local/admin/agent/switch')) {
             state.allowed = body.allowed;
@@ -95,15 +100,17 @@ describe('ConnectedAssistantsPanel', () => {
         Object.assign(navigator, { clipboard: { writeText } });
         const calls = fakeNode({ grants: [] });
         const { container } = render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
-        // Before an owner connects one, the card says it can post as them at once, with no approval (MCP-OWNER-POSTS).
+        // Before an owner connects one, the card says it can post as them at once, with no approval, if they tick it (MCP-OWNER-POSTS).
         expect(await screen.findByTestId('connected-assistants-card')).toHaveTextContent(
-            'take a backup, and post Offers, Needs and events for you at once, with no approval.');
+            'take a backup, and, if you tick “May post for me” when you connect it, post Offers, Needs and events for you at once, with no approval.');
         fireEvent.change(await screen.findByLabelText('Assistant’s name'), { target: { value: 'Claude on my laptop' } });
         fireEvent.change(screen.getByLabelText('For how long'), { target: { value: '7' } });
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         expect(await screen.findByTestId('agent-token-value')).toHaveTextContent(NEW_TOKEN);
-        expect(screen.getByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads, and can post as you.');
-        expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Claude on my laptop', days: 7 });
+        // Not ticked "May post for me" (off by default): it reads only, and the warning says only that.
+        expect(screen.getByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads.');
+        expect(screen.getByTestId('agent-token-shown')).not.toHaveTextContent('can post as you');
+        expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Claude on my laptop', days: 7, canPost: false });
         expect(countIn(container.innerHTML, NEW_TOKEN)).toBe(1);
         expect(countIn(container.innerHTML, 'c'.repeat(64))).toBe(1);
         expect(screen.getByTestId('agent-mcp-url')).toHaveTextContent('https://mullum.example/mcp');
@@ -118,6 +125,37 @@ describe('ConnectedAssistantsPanel', () => {
         expect(countIn(container.innerHTML, 'c'.repeat(64))).toBe(0);
         // The list, reloaded, names it, never with a secret.
         expect(await screen.findByText('Claude on my laptop')).toBeInTheDocument();
+    });
+
+    it('"May post for me" is ticked or not at connect, each row says which, and an owner sets the posts a day (MCP-OWNER-POSTS)', async () => {
+        const calls = fakeNode({ grants: [grant({ id: 'aaaaaaaaaaaa', name: 'Reader', canPost: false, postsToday: 0 })] });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        expect(await screen.findByTestId('agent-grant-posts')).toHaveTextContent('Reads only: not ticked to post');
+        fireEvent.change(screen.getByLabelText('Assistant’s name'), { target: { value: 'Seeder' } });
+        const tick = screen.getByRole('checkbox', { name: /May post for me/ });
+        expect(tick).not.toBeChecked();
+        fireEvent.click(tick);
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        expect(await screen.findByTestId('agent-token-shown')).toHaveTextContent('whoever holds it reads what your assistant reads, and can post as you.');
+        expect(calls.find((c) => c.method === 'POST' && c.url.endsWith('/agent/grants'))?.body).toEqual({ name: 'Seeder', days: 30, canPost: true });
+        await waitFor(() => expect(screen.getAllByTestId('agent-grant-posts').map((p) => p.textContent)).toEqual(
+            ['Reads only: not ticked to post', 'May post for me · 0 posts today']));
+        expect(screen.getByTestId('agent-posts-per-day')).toHaveTextContent('Assistant posts a day: 100.');
+        fireEvent.change(screen.getByLabelText('Assistant posts a day'), { target: { value: '1001' } });
+        fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
+        expect(await screen.findByText('A whole number from 1 to 1,000.')).toBeInTheDocument();
+        expect(calls.some((c) => c.url.endsWith('/agent/posts-per-day'))).toBe(false);
+        fireEvent.change(screen.getByLabelText('Assistant posts a day'), { target: { value: '1000' } });
+        fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(calls.find((c) => c.url.endsWith('/agent/posts-per-day'))?.body).toEqual({ perDay: 1000 }));
+        expect(await screen.findByText('Assistant posts a day: 1,000. Each owner’s assistant ticked “May post for me” may make this many posts in a day (UTC), under the member’s own limits.')).toBeInTheDocument();
+    });
+
+    it('an admin sees the posts a day but cannot change it', async () => {
+        fakeNode({ grants: [], role: 'admin', canConnect: false, seesAll: false });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        expect(await screen.findByTestId('agent-posts-per-day')).toHaveTextContent('Only an owner changes this.');
+        expect(screen.queryByLabelText('Assistant posts a day')).toBeNull();
     });
 
     it('the password session is told to connect with a key; the node\'s refusal is shown in its words', async () => {

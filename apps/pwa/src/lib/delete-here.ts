@@ -154,7 +154,7 @@ export async function purgeHere(
         // api.ts `request` reads a 2xx with res.json(): a page that isn't JSON throws a SyntaxError.
         if (e instanceof SyntaxError) return { ok: false, reason: WEB_PURGE_NOT_CONFIRMED };
         const reason = (e instanceof Error && e.message)
-            || 'Failed to purge account from node. Active escrow deals may need to be resolved first.';
+            || 'Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.';
         return { ok: false, reason };
     } finally {
         clearTimeout(timer);

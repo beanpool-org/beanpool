@@ -141,6 +141,17 @@ describe('the label index', () => {
         const index = buildTagIndex(wordsFor('en'));
         expect(index.search('beans', 20)).toEqual(expect.arrayContaining(['food.vegetables.green-beans', 'food.vegetables.broad-beans']));
     });
+
+    it('the picker’s search never offers a top, and puts the label itself first, then a label starting with the word', () => {
+        const index = buildTagIndex(wordsFor('en'));
+        for (const q of ['hel', 'pet', 'rides', 'food', 'tools', 'transport']) expect(index.search(q).filter((id) => !id.includes('.')), q).toEqual([]);
+        expect(index.search('bed')).toEqual(['goods.furniture.beds', 'garden.beds', 'goods.bedding', 'garden.beds.raised-beds', 'garden.beds.garden-beds']);
+        expect(index.search('rides')).toEqual(['transport.rides']);
+        expect(index.search('lemon')).toEqual(['food.fruit.lemon', 'food.herbs.lemongrass']);
+        // Every tag below a top is first for its own label (no two tags share one).
+        const notFirst = TAG_LIBRARY.filter((t) => t.id.includes('.') && index.search(tagEnglish(t))[0] !== t.id).map((t) => t.id);
+        expect(notFirst).toEqual([]);
+    });
 });
 
 describe('suggestTags', () => {

@@ -13,6 +13,7 @@ export { TAG_LIBRARY, type TagDef } from './library.js';
 export const TAG_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*){0,2}$/;
 
 const BY_ID: ReadonlyMap<string, TagDef> = new Map(TAG_LIBRARY.map((tag) => [tag.id, tag]));
+const ORDER: ReadonlyMap<string, number> = new Map(TAG_LIBRARY.map((tag, i) => [tag.id, i]));
 const CHILDREN = new Map<string, TagDef[]>();
 for (const tag of TAG_LIBRARY) {
     const parent = tagParent(tag.id);
@@ -26,7 +27,9 @@ export function tagById(id: string): TagDef | undefined {
     return BY_ID.get(id);
 }
 
-/** Whether an id is a tag in this library. An id from a newer library is not: it shows as nothing, never breaks (§4.3). */
+/** Whether an id is a tag in this library. An id from a newer library is not: it shows as nothing, never breaks (§4.3). A top
+ *  is in the library (its root, the listing's category), but the picker's search and suggestTags never offer one: the
+ *  category is its own field. */
 export function isTagId(id: string): boolean {
     return BY_ID.has(id);
 }
@@ -90,7 +93,9 @@ export interface TagIndex {
     byName(text: string): readonly string[];
     /** The tags an English broader word is on: a tag's words (for it and everything under it) or its aliases. */
     byAlias(text: string): readonly string[];
-    /** Tags whose label (this language first, then English) has a word starting with what is typed; from 2 characters. */
+    /** The picker's search, from 2 characters: tags whose label (in this language or English) has a word starting with what
+     *  is typed, the nearest first (the label itself, then a label starting with it, then a later word starting with it;
+     *  within each, this language's labels and the shorter label first). Never a top: the category is its own field. */
     search(text: string, limit?: number): string[];
     /** The label in this language; the English when the words have none. An unknown id gives ''. */
     label(id: string): string;
@@ -139,7 +144,8 @@ export function buildTagIndex(words?: Translate): TagIndex {
         for (const form of tagForms(label)) own.push([form, tag.id]);
         if (lang !== 'en') for (const form of tagForms(en)) english.push([form, tag.id]);
     }
-    const matches = (text: string, q: string) => text.startsWith(q) || text.includes(` ${q}`);
+    // How near a label is to what is typed: the label itself 0, the label's start 1, a later word's start 2; none -1.
+    const nearness = (label: string, q: string) => (label === q ? 0 : label.startsWith(q) ? 1 : label.includes(` ${q}`) ? 2 : -1);
     return {
         lang,
         byName: (text) => find(names, text),
@@ -147,14 +153,23 @@ export function buildTagIndex(words?: Translate): TagIndex {
         search(text, limit = 8) {
             const qs = tagForms(text);
             if (qs[0].length < 2) return [];
-            const out: string[] = [];
-            for (const list of [own, english]) {
+            // id → its best rank: how near, then this language before English, then the shorter label.
+            const ranks = new Map<string, number>();
+            [own, english].forEach((list, inEnglish) => {
                 for (const [label, id] of list) {
-                    if (out.length >= limit) return out;
-                    if (qs.some((q) => matches(label, q)) && !out.includes(id)) out.push(id);
+                    if (!id.includes('.')) continue; // a top is the listing's category, its own field
+                    for (const q of qs) {
+                        const near = nearness(label, q);
+                        if (near < 0) continue;
+                        const rank = (near * 2 + inEnglish) * 1000 + Math.min(label.length, 999);
+                        if (rank < (ranks.get(id) ?? Infinity)) ranks.set(id, rank);
+                    }
                 }
-            }
-            return out;
+            });
+            return [...ranks]
+                .sort((a, b) => a[1] - b[1] || (ORDER.get(a[0]) ?? 0) - (ORDER.get(b[0]) ?? 0))
+                .slice(0, limit)
+                .map(([id]) => id);
         },
         label: (id) => labels.get(id) ?? '',
     };

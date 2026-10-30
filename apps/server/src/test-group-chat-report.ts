@@ -407,7 +407,7 @@ async function main(): Promise<void> {
         `a further repeat finds the new one and adds nothing (got ${show(handledAgain)})`);
 
     // The assistant (agent/tools.ts) calls a message's report what it is, and still never sees its key or its words.
-    const grant: AgentGrant = { id: 'test-grant', name: 'Test', member: owner.pk, role: 'owner', via: 'token', createdAt: Date.now(), expiresAt: null };
+    const grant: AgentGrant = { id: 'test-grant', name: 'Test', member: owner.pk, role: 'owner', via: 'token', createdAt: Date.now(), expiresAt: null, canPost: false };
     const tool = (name: string) => AGENT_TOOLS.find((t) => t.name === name)!;
     const got = tool('report_get').run(grant, { report_id: repId }, 'B0UNDARY') as any;
     const listedOpen = tool('reports_list').run(grant, { include_text: true }, 'B0UNDARY') as any;
@@ -419,7 +419,8 @@ async function main(): Promise<void> {
     const seen = JSON.stringify([got, listedOpen]);
     assert(!seen.includes(b64(mkOf(photo))) && !seen.includes(b64(mkOf(handledLine))) && !seen.includes(photo.text) && !seen.includes(handledLine.text),
         'and it is given neither the key nor the words');
-    const removeIt = tool('suggest_action').run(grant, { kind: 'remove_reported', report_id: newOnDismissed[0] ?? '', reason: 'Take it down' }, 'B0UNDARY');
+    // A tool's answer may be a promise (agent/owner-posts.ts creates resize photos first); suggest_action's is not, but is awaited as any.
+    const removeIt = await tool('suggest_action').run(grant, { kind: 'remove_reported', report_id: newOnDismissed[0] ?? '', reason: 'Take it down' }, 'B0UNDARY');
     assert(!removeIt.ok, `nor may it suggest removing one, as there is no post to remove (got ${JSON.stringify(removeIt)})`);
 
     // ── 5. The form ──────────────────────────────────────────────────────────────────────────────────────────────

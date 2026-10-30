@@ -344,6 +344,10 @@ CREATE TABLE IF NOT EXISTS posts (
     -- the board (live or paused). A pause or an end takes it off the shopfront by its status and the stamp stays; out of its
     -- shop, or its shop closed, the stamp goes. NULL on every other row. Added to an older database by db.ts.
     featured_at TEXT,
+    -- What made it when that was not its author's own app: 'assistant:<grant id>' for a post an owner's AI assistant made
+    -- through /mcp (agent/owner-posts.ts). For moderators and the audit; never on a card. NULL on every other row. Added to
+    -- an older database by db.ts.
+    created_via TEXT,
     -- Its tags from the library in core (DESIGN-owner-seeding-tags-fable.md §4.5; @beanpool/core tags/post-tags.ts): ids
     -- such as food.fruit.lemon, space-separated, at most 5 in 200 characters, each one the library knows when a member
     -- sets them (engine/post-fields.ts). Their words are in search_keywords; the Market's tag filter is a LIKE on this

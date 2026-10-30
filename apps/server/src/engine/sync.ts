@@ -1191,6 +1191,15 @@ function postFeatured(rp: any): [string | null] {
 }
 
 /**
+ * created_via: what made the post when its author's own app did not ('assistant:<grant id>', agent/owner-posts.ts), as the
+ * main server holds it, so a standby's moderators read what the main server's do. Set once at create and never changed:
+ * a payload from a main server older than it says nothing, and the row keeps what it has.
+ */
+function postCreatedVia(rp: any): [string | null] {
+    return [typeof rp.createdVia === 'string' && rp.createdVia !== '' ? rp.createdVia.slice(0, 80) : null];
+}
+
+/**
  * tags: the listing's tags (DESIGN-owner-seeding-tags-fable.md §4.5, slice T2), plain assignment, so tags taken off on the
  * main server are off here too. Kept as the main server holds them (@beanpool/core copiedPostTags): well-formed ids, at
  * most five, one this server's library does not know included (the main server may run a newer one). A payload from a
@@ -1974,8 +1983,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, tags)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at, created_via, tags)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2019,6 +2028,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postLending(rp),
                         ...postShop(rp),
                         ...postFeatured(rp),
+                        ...postCreatedVia(rp),
                         ...postTags(rp),
                     );
                     newPosts++;
@@ -2077,6 +2087,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         replacement_value = ?,
                         shop_id = ?,
                         featured_at = ?,
+                        created_via = COALESCE(?, created_via),
                         tags = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
@@ -2114,6 +2125,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postLending(rp),
                         ...postShop(rp),
                         ...postFeatured(rp),
+                        ...postCreatedVia(rp),
                         ...postTags(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id

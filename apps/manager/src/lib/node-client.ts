@@ -220,6 +220,8 @@ export interface NodeReport {
     /** The reported post's author's key, read by the node from the post (null when no post is reported). */
     postAuthorPubkey?: string | null;
     postRemoved?: boolean | null;
+    /** The reported post was made by an owner's AI assistant (the server's posts.created_via). */
+    postMadeByAssistant?: boolean | null;
     targetPulseItemId?: string;
     /** Set when the report targets a Pulse item; `removed` once it is off the feed. */
     pulseItem?: { title: string | null; platform: string; url: string | null; removed: boolean } | null;

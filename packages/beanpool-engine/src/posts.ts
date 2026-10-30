@@ -122,6 +122,11 @@ export interface MarketplacePost {
      * featureOffer): one of the six the shopfront draws first. Only on a featured Offer; a visitor's copy never carries it.
      */
     featuredAt?: string;
+    /**
+     * What made it when its author's own app did not: 'assistant:<grant id>' for an owner's AI assistant (apps/server
+     * agent/owner-posts.ts). Only on the standby copy's payload (sync.ts postOfRow); the listings an app reads never carry it.
+     */
+    createdVia?: string;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -2395,6 +2400,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // Which of a shop's Offers its keepers featured, and when: the shopfront's, a members' page (round 3 §5), so not a
     // visitor's. The listing itself stays.
     featuredAt: 'drop',
+    // What made it (an owner's assistant): the moderators' and the standby copy's, never a visitor's.
+    createdVia: 'drop',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.

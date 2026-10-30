@@ -336,6 +336,13 @@ describe("an AI assistant's consent (admin MCP S2)", () => {
         expect(AGENT_WARNING).toMatch(/sent you this code/);
     });
 
+    it("tells an owner who approves that their assistant posts at once, with no approval (MCP-OWNER-POSTS), never that it can only suggest", () => {
+        const line = agentLines({ name: 'Claude', sendsTo: 'claude.ai' })[2];
+        expect(line).toMatch(/If you are an owner, it can also take a backup and post Offers, Needs and events for you, at once, with no approval\./);
+        expect(line).toMatch(/Anything else it can only suggest, and nothing changes until you approve\.$/);
+        expect(line).not.toMatch(/can only suggest changes/);
+    });
+
     it('the Connect press sends agentShown after the unlock', async () => {
         const qr = { nodeUrl: 'https://mullum.beanpool.org', pairingId: ID, shortCode: 'K7F3QX' };
         const calls = mockFetch([{ status: 200, body: { success: true, role: 'admin', confirmCode: '42' } }]);

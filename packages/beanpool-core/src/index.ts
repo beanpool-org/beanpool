@@ -111,3 +111,5 @@ export type {
     OpenedGroupLine, GroupWrapBinding, GroupWrapOpenBinding, GroupServedWrap, MakeGroupEpochInput, GroupEpochCheck, GroupKeyOpenCheck, GroupTopUpCheck, SealGroupLineInput,
     GroupEpochProgress, GroupLineVerifyMemo, FormerKey,
 } from './group-crypto.js';
+export { activityTarget } from './activity-target.js';
+export type { ActivityTarget, ActivityTargetItem } from './activity-target.js';

@@ -214,7 +214,7 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
                     <>
                         {canTurnOn && (
                             <Pressable style={styles.primary} onPress={turnOn} accessibilityRole="button" testID="community-admins-turn-on">
-                                <Text style={styles.primaryText}>{t(unopenable ? COMMUNITY_ADMINS_ROW.turnOnAgain : COMMUNITY_ADMINS_ROW.turnOn)}</Text>
+                                <Text style={styles.primaryText}>{unopenable ? t(COMMUNITY_ADMINS_ROW.turnOnAgain) : t(COMMUNITY_ADMINS_ROW.turnOn)}</Text>
                             </Pressable>
                         )}
                         {(kept || unopenable) && (

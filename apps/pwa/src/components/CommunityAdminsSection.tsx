@@ -134,7 +134,7 @@ export function CommunityAdminsSection({ identity, offeredHere, status, onChange
             <div className="flex flex-wrap gap-2">
                 {canTurnOn && (
                     <button type="button" disabled={busy} onClick={turnOn} className="min-h-[44px] px-4 py-2 rounded-xl bg-bp-commit-fill text-bp-commit-on text-sm font-semibold disabled:opacity-50" data-testid="community-admins-turn-on">
-                        {t(unopenable ? COMMUNITY_ADMINS_WEB.turnOnAgain : COMMUNITY_ADMINS_WEB.turnOn)}
+                        {unopenable ? t(COMMUNITY_ADMINS_WEB.turnOnAgain) : t(COMMUNITY_ADMINS_WEB.turnOn)}
                     </button>
                 )}
                 {(kept || unopenable) && (

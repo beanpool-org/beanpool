@@ -432,10 +432,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // switch off, is answered as without it, byte for byte. A whole read must page (paged=1, X-Posts-Next), as a phone
     // (S3) does: without it, it answers only the first `limit` rows, newest first, and no key to the next page, and the
     // rest of the set comes only by `ids=`. Its types are `types=` alone: a singular `type=` would keep the rows to it
-    // and not the set, which would name listings no page of the read answers.
+    // and not the set, which would name listings no page of the read answers. So would `tags=` (PR #2637 review).
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
-    if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
+    if (nearby && (id || ids || point || author || q || ctx.query.tags !== undefined || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
         || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined || ctx.query.lendable !== undefined
         || ctx.query.shop !== undefined)) {
         ctx.status = 400;
@@ -460,7 +460,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
     // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
     // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
-    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo && !lendableOnly && !shopId) {
+    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !tags && !category && !audienceScope && !targetGroupId && !assignedTo && !lendableOnly && !shopId) {
         restartPhotoHealFor(ctx.state.actor as string | undefined);
     }
 

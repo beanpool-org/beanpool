@@ -17,8 +17,15 @@
  *      input schema and, left out or empty, refused by the server in words that name it; a price only where Beans are on.
  *   2c. "May post for me" (design Q1): a token made without the tick lists no posting tool, is refused if it calls one, and
  *      says so in connection_info; the list shows the tick. "Assistant posts a day", an owners' setting: 100 by default (the
- *      101st refused); set to 1,000 the 1,001st is refused; set back to 100 it holds at once; out of range, or from an admin,
- *      refused; each change alerts the owners (sec.agent) and is shown on the list and in connection_info.
+ *      101st refused); a change asks an owner's fresh proof (a computer's key session → 403 phone_required, unchanged; the
+ *      phone's Manage just now → changed); set to 1,000 the 1,001st is refused; set back to 100 it holds at once, the refusal
+ *      saying today's count; out of range, or from an admin, refused; each change alerts the owners (sec.agent) and is shown
+ *      on the list and in connection_info, with the owner's photo room left in words.
+ *   2d. Seeding (the director, 30 Oct): set to 1,000, 1,000 real posts as the owner are taken, past the member's own 100, and
+ *      the owner's own posts from the app keep all of their 100 (the 101st refused as before); the 1,001st refused, still
+ *      after a restart empties the count in memory; the owner's photo budget refusal says the room left.
+ *   use_my_area (in 1): with no area set, refused naming the fields; with one, stored at it rounded, on a node that syncs
+ *      by area and one that doesn't, and in the nearby read of a member with an area about 4 km away.
  *   3. An admin's assistant has none of the tools (and is refused if it calls one); its maker no longer an owner or admin → 401;
  *      a body over 64 KiB from anyone but an owner's assistant → 413; the owner switch off → 404; the grant revoked → 401.
  *   4. The ledger audit is the same after as before: posting moves no Bean.
@@ -36,20 +43,24 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
-import { PRICING_CATEGORIES } from '@beanpool/core';
+import { setMemberPhoto, clearEnterpriseFloorCache, getNearbySet } from '@beanpool/engine';
+import { approximateLocation, PRICING_CATEGORIES } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, runLedgerAudit, getPosts, getPostsVersion, exportSyncState } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, runLedgerAudit, getPosts, getPostsVersion, exportSyncState, createPost } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
-import { getProfileSwitches, setSwitchOverride } from './config/node-profile.js';
+import { getProfileSwitches, nearbyListingsLimits, setSwitchOverride } from './config/node-profile.js';
+import { readMemberArea, setMemberArea } from './engine/member-area.js';
+import { assertMayPostToday } from './engine/writer-bounds.js';
+import { memberPhotoRoom } from './engine/photo-upload-budget.js';
+import { ownerPhoneSessionHeaders, ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { configuredImageStoreKind, getImageStore, readObject, resetImageStoreForTests } from './storage/image-store.js';
 import { S3ImageStore } from './storage/s3-image-store.js';
 import { startFakeS3 } from './fake-s3-test-harness.js';
 import { imageSize } from './storage/image-metadata.js';
-import { admitAgentCreate, agentCreatesToday, AGENT_POSTS_PER_DAY_DEFAULT } from './agent/limits.js';
+import { admitAgentCreate, agentCreatesToday, AGENT_POSTS_PER_DAY_DEFAULT, forgetAgentGrant } from './agent/limits.js';
 import { getAlertsStatus } from './services/alerts.js';
 import { OWNER_POST_TOOLS, enterpriseRef } from './agent/owner-posts.js';
 import type { AgentGrant } from './agent/tools.js';
@@ -271,12 +282,36 @@ async function main(): Promise<void> {
             title: 'y'.repeat(50), description: 'A title as long as the form takes.', category: 'food', beans: 1, lat: -28.55, lng: 153.5, photos: [small],
         } });
         assert(!at50.isError, `a title of exactly 50, the form's most, is taken (${errorText(at50) || 'posted'})`);
-        // use_my_area said out loud: no pin asked and none sent, so the engine gives it the owner's own area as a listing without one gets.
-        const myArea = await client.callTool({ name: 'create_offer', arguments: {
-            title: 'Spare jars', description: 'A box of them.', category: 'food', beans: 1, use_my_area: true, photos: [small],
-        } });
-        const myAreaRow = db.prepare('SELECT lat, lng, author_pubkey FROM posts WHERE id = ?').get(structured(myArea)?.postId) as any;
-        assert(!myArea.isError && myAreaRow?.author_pubkey === owner.pub, `use_my_area: true posts with no pin asked (${JSON.stringify(myAreaRow ?? myArea.content)})`);
+        // use_my_area said out loud: no pin asked; the listing is placed at the owner's own area (the point this node keeps for
+        // them), rounded as the apps round a pin, on every node, whether or not it syncs by area. With no area set: refused.
+        const myAreaArgs = { title: 'Spare jars', description: 'A box of them.', category: 'food', beans: 1, use_my_area: true, photos: [small] };
+        const countNoArea = agentCreatesToday(grantId);
+        const postsNoArea = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
+        const noArea = await client.callTool({ name: 'create_offer', arguments: myAreaArgs });
+        assert(noArea.isError === true && errorText(noArea) === 'use_my_area needs your area, and none is set on this community: give lat and lng, or set your area in the app first.'
+            && agentCreatesToday(grantId) === countNoArea && (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c === postsNoArea,
+            `use_my_area with no area set → refused naming the fields to send instead, nothing made or counted (${errorText(noArea)})`);
+        const ownerArea = setMemberArea(owner.pub, { lat: -28.64312, lng: 153.61274 });
+        const placed = approximateLocation(ownerArea!.lat, ownerArea!.lng);
+        // A member with an area about 4 km away reads what is near them (the nearby set, as GET /api/marketplace/posts works it out).
+        setMemberArea(owner2.pub, { lat: -28.68, lng: 153.61 });
+        const nearbyOf = (pk: string): string[] => {
+            const a = readMemberArea(pk);
+            const lim = nearbyListingsLimits();
+            return getNearbySet(db, pk, { area: a ? { lat: a.lat, lng: a.lng } : null, radiusKm: lim.radiusKm, max: lim.max, newestWithoutArea: 100, excludeEvents: true }).near;
+        };
+        for (const syncsByArea of [false, true]) {
+            // The community profile reads every listing; global's (nearbyListings) reads by area.
+            setSwitchOverride('nearbyListings', syncsByArea);
+            const r = await client.callTool({ name: 'create_offer', arguments: { ...myAreaArgs, title: syncsByArea ? 'Spare jars, by area' : 'Spare jars' } });
+            const id = structured(r)?.postId;
+            const at = db.prepare('SELECT lat, lng, author_pubkey FROM posts WHERE id = ?').get(id) as any;
+            const near = nearbyOf(owner2.pub);
+            assert(!r.isError && getProfileSwitches().nearbyListings === syncsByArea && at?.author_pubkey === owner.pub && at.lat === placed.lat && at.lng === placed.lng
+                && typeof at.lat === 'number' && near.includes(id),
+                `use_my_area on a node that ${syncsByArea ? 'syncs by area (global\'s mode)' : 'does not sync by area'}: stored at the owner's area rounded (${at?.lat}, ${at?.lng}), and in the nearby read of a member with an area (${near.length} near)`);
+        }
+        setSwitchOverride('nearbyListings', false);
 
         const startAt = new Date(Date.now() + 7 * DAY).toISOString();
         const event = await client.callTool({ name: 'create_event', arguments: {
@@ -482,11 +517,18 @@ async function main(): Promise<void> {
         // Default 100: the 101st is refused.
         while (agentCreatesToday(capId) < 100) admitAgentCreate(capId);
         const hundredFirst = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'One too many' } });
-        assert(hundredFirst.isError === true && /made 100 posts today, the most a day this community's owners allow/.test(errorText(hundredFirst))
-            && (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c === postsAfter, `by default the 101st post in a day → refused, nothing made (${errorText(hundredFirst)})`);
-        // An owner sets 1,000 (Marty, 30 Oct: seeding the global node): it takes effect at once, and the 1,001st is refused.
-        // As the second owner: the first has used their hour's security lines connecting and disconnecting (alerts.ts raiseBounded).
-        const set1000 = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: asSession(owner2S), body: { perDay: 1000 } });
+        assert(hundredFirst.isError === true && /^This assistant has made 100 posts today, and this community's owners allow 100 a day: try again tomorrow \(UTC\)\. The owner has about [\d.]+ MB of photo room left, of the 100 MB of photos a member may store in any 24 hours/.test(errorText(hundredFirst))
+            && (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c === postsAfter, `by default the 101st post in a day → refused, nothing made, the photo room left said (${errorText(hundredFirst)})`);
+        // Changing it is an owner change with a fresh proof, as the gateway's own rate limit (routes/admin.ts): a computer's key
+        // session is sent to the phone, and nothing changes.
+        const fromComputer = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: ownerSessionHeaders(owner2.pub), body: { perDay: 1000 } });
+        const stillAt = (await call('GET', '/api/local/admin/agent/grants', { headers: asSession(ownerS) })).body?.postsPerDay;
+        assert(fromComputer.status === 403 && fromComputer.body?.code === 'phone_required' && stillAt === 100,
+            `from a computer's key session, with no fresh proof → 403 phone_required, and it stays 100 (${show(fromComputer)}; ${stillAt})`);
+        // An owner sets 1,000 (Marty, 30 Oct: seeding the global node) from the phone's Manage just now: it takes effect at once,
+        // and the 1,001st is refused. As the second owner: the first has used their hour's security lines connecting and
+        // disconnecting (alerts.ts raiseBounded).
+        const set1000 = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: ownerPhoneSessionHeaders(owner2.pub), body: { perDay: 1000 } });
         const after1000 = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Seeding day' } });
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
         assert(set1000.status === 200 && set1000.body?.postsPerDay === 1000 && !after1000.isError && structured(after1000)?.postsPerDay === 1000 && structured(after1000)?.postsToday === 101
@@ -496,14 +538,16 @@ async function main(): Promise<void> {
         const thousandFirst = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Past a thousand' } });
         const info1000 = structured(await cc.callTool({ name: 'connection_info', arguments: {} }));
         const listed1000 = await call('GET', '/api/local/admin/agent/grants', { headers: asSession(owner2S) });
-        assert(thousandFirst.isError === true && /made 1000 posts today/.test(errorText(thousandFirst)) && info1000?.posts?.perDay === 1000 && info1000?.posts?.today === 1000
-            && listed1000.body?.postsPerDay === 1000, `set to 1,000, the 1,001st is refused; connection_info and the list say 1,000 (${errorText(thousandFirst)})`);
-        // Back to 100: it holds at once, for a grant already past it.
-        const set100 = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: asSession(owner2S), body: { perDay: 100 } });
+        assert(thousandFirst.isError === true && /^This assistant has made 1,000 posts today, and this community's owners allow 1,000 a day/.test(errorText(thousandFirst))
+            && info1000?.posts?.perDay === 1000 && info1000?.posts?.today === 1000
+            && /^The owner has about [\d.]+ MB of photo room left, of the 100 MB of photos a member may store in any 24 hours/.test(info1000?.posts?.photoRoom ?? '')
+            && listed1000.body?.postsPerDay === 1000, `set to 1,000, the 1,001st is refused; connection_info and the list say 1,000, and connection_info the photo room left (${errorText(thousandFirst)} | ${info1000?.posts?.photoRoom})`);
+        // Back to 100: it holds at once, for a grant already past it, and the refusal says today's count, not the new number.
+        const set100 = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: ownerPhoneSessionHeaders(owner2.pub), body: { perDay: 100 } });
         const after100 = await cc.callTool({ name: 'create_offer', arguments: { ...offerArgs, title: 'Back to a hundred' } });
         const toldBack = getAlertsStatus().history.filter(e => e.key === 'sec.agent').map(e => e.detail);
-        assert(set100.status === 200 && after100.isError === true && /made 100 posts today/.test(errorText(after100))
-            && toldBack.some(d => /from 1,000 to 100/.test(d)), `set back to 100, the next post is refused at once (${errorText(after100)})`);
+        assert(set100.status === 200 && after100.isError === true && /^This assistant has made 1,000 posts today, and this community's owners allow 100 a day/.test(errorText(after100))
+            && toldBack.some(d => /from 1,000 to 100/.test(d)), `set back to 100, the next post is refused at once, saying the 1,000 made and the 100 allowed (${errorText(after100)})`);
         await cc.close().catch(() => {});
         const outOfRange = await Promise.all([0, 1001, 1.5, '50', null].map(perDay => call('POST', '/api/local/admin/agent/posts-per-day', { headers: asSession(ownerS), body: { perDay } })));
         assert(outOfRange.every(r => r.status === 400 && /whole number from 1 to 1,000/.test(r.body?.error ?? '')),
@@ -515,6 +559,61 @@ async function main(): Promise<void> {
         revokeNodeRole(keeper.pub, 'admin', owner.pub);
         assert(byAdmin.status === 403 && byToken.status >= 400 && byToken.status < 500 && (await call('GET', '/api/local/admin/agent/grants', { headers: asSession(ownerS) })).body?.postsPerDay === 100,
             `an admin, or a token, cannot change it (${byAdmin.status}, ${byToken.status})`);
+
+        // ── 2d. Seeding: real posts as the owner past the member's own 100, which stay untouched ─────────────
+        // The director, 30 Oct (from Marty's "make it 1000 per day … serious seeding on the global node"): a ticked owner's
+        // assistant is held to "Assistant posts a day", not to WRITER_LIMITS.postsPerDay, and never uses those up.
+        console.log('── 2d. Set to 1,000, an assistant makes 1,000 real posts as the owner; the owner\'s own 100 stay theirs ──');
+        const set1000Again = await call('POST', '/api/local/admin/agent/posts-per-day', { headers: ownerPhoneSessionHeaders(owner2.pub), body: { perDay: 1000 } });
+        const seedT = await call('POST', '/api/local/admin/agent/grants', { headers: asSession(ownerS), body: { name: 'Olive\'s seeding day', canPost: true } });
+        const seedGrant = { id: seedT.body?.grant?.id, name: 'Olive\'s seeding day', member: owner.pub, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: true } as AgentGrant;
+        // Through the tool's own run, what /mcp calls after the door: 1,000 calls through the door would wait out its 60 a minute.
+        const createOffer = OWNER_POST_TOOLS.find(t => t.name === 'create_offer')!;
+        const tiny = await jpeg(64, 48, 60);
+        const seedArgs = (i: number) => ({ title: `Seedling tray ${i}`, description: 'Tomato seedlings, ready to plant.', category: 'food', beans: 1, lat: -28.55, lng: 153.5, photos: [tiny] });
+        const seedRefused: string[] = [];
+        const seed = async (from: number, to: number) => {
+            for (let i = from; i <= to; i++) {
+                const r = await createOffer.run(seedGrant, seedArgs(i), 'b0b0b0b0');
+                if (!r.ok) seedRefused.push(`${i}: ${r.error}`);
+            }
+        };
+        const madeBy = (g: AgentGrant) => (db.prepare('SELECT COUNT(*) AS c FROM posts WHERE created_via = ?').get(`assistant:${g.id}`) as any).c;
+        await seed(1, 500);
+        // The owner's own posts from the app, as POST /api/marketplace/posts makes them (its limit: assertMayPostToday): with the
+        // assistant's 500 made, all 100 are still theirs, and the 101st is refused as before.
+        const ownPost = (i: number) => createPost('offer', 'food', `Own jar ${i}`, 'From the app.', 1, 'fixed', owner.pub, -28.55, 153.5, [tiny], false, undefined, false,
+            { beforeWrite: () => assertMayPostToday(owner.pub) });
+        let ownMade = 0, ownRefusal = '';
+        for (let i = 1; i <= 101; i++) {
+            try { if (ownPost(i)) ownMade++; } catch (err) { ownRefusal = (err as Error).message; break; }
+        }
+        assert(set1000Again.status === 200 && seedT.status === 201 && seedRefused.length === 0 && madeBy(seedGrant) === 500
+            && ownMade === 100 && /^You can put up 100 new posts in any 24 hours/.test(ownRefusal),
+            `with the assistant's 500 made, the owner's own app posts are untouched: 100 taken, the 101st refused as before (${seedRefused.slice(0, 2).join(' | ')}; ${ownMade}; ${ownRefusal})`);
+        await seed(501, 1000);
+        assert(seedRefused.length === 0 && madeBy(seedGrant) === 1000 && agentCreatesToday(seedGrant.id) === 1000,
+            `set to 1,000, the assistant's posts 101 to 1,000 as the owner are all taken, the owner's own 100 used up too (${madeBy(seedGrant)} made; ${seedRefused.slice(0, 2).join(' | ')})`);
+        const thousandAndOne = await createOffer.run(seedGrant, seedArgs(1001), 'b0b0b0b0');
+        // A restart empties the count kept in memory; the rows still hold the day.
+        forgetAgentGrant(seedGrant.id);
+        const afterRestart = await createOffer.run(seedGrant, seedArgs(1002), 'b0b0b0b0');
+        assert(!thousandAndOne.ok && /^This assistant has made 1,000 posts today, and this community's owners allow 1,000 a day/.test(thousandAndOne.ok ? '' : thousandAndOne.error)
+            && !afterRestart.ok && /^This assistant has made 1,000 posts today/.test(afterRestart.ok ? '' : afterRestart.error) && madeBy(seedGrant) === 1000,
+            `the 1,001st is refused, and still after a restart empties the count kept in memory (${thousandAndOne.ok ? 'made' : thousandAndOne.error.slice(0, 80)} | ${afterRestart.ok ? 'made' : afterRestart.error.slice(0, 50)})`);
+        // The owner's photo budget stays as it is (100 MB unless the server sets another); its refusal says the room left.
+        const photoGrant = { ...seedGrant, id: 'photo-room-check' } as AgentGrant;
+        const budgetWas = process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY;
+        process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = String(memberPhotoRoom(owner.pub)!.used + 2048);
+        try {
+            const overBudget = await createOffer.run(photoGrant, { ...seedArgs(0), title: 'One photo too many', photos: [small] }, 'b0b0b0b0');
+            const said = overBudget.ok ? '' : overBudget.error;
+            assert(!overBudget.ok && /^You've shared a lot of photos today\. Try again tomorrow\. The owner has about 2 KB of photo room left, of the [\d.]+ [KM]B of photos a member may store in any 24 hours/.test(said)
+                && madeBy(photoGrant) === 0 && agentCreatesToday(photoGrant.id) === 0,
+                `past the owner's photo budget → refused, saying the room left, nothing made or counted (${said})`);
+        } finally {
+            if (budgetWas === undefined) delete process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY; else process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = budgetWas;
+        }
 
         // ── 3. Who may, and the door ────────────────────────────────────────────────────────────────
         console.log('── 3. Only an owner\'s assistant; the door still decides ──');

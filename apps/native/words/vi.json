@@ -2,7 +2,7 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-30",
@@ -787,10 +787,9 @@
   "Search": "Tìm kiếm",
   "Search marketplace...": "Tìm kiếm trên chợ...",
   "Search marketplace": "Tìm kiếm trên chợ",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "other": "Giao dịch của tôi, {n} đang chờ"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "other": "Giao dịch của bạn, {n} đang chờ"
   },
-  "My Deals": "Giao dịch của tôi",
   "Opens your active and pending deals sheet": "Mở danh sách các giao dịch đang diễn ra và đang chờ",
   "Grid view": "Dạng lưới",
   "Compact view": "Dạng thu gọn",
@@ -1287,7 +1286,6 @@
   "Groups\u0004talk pane": "Nhóm",
   "People\u0004talk pane": "Mọi người",
   "🔓 Release Credits": "🔓 Giải phóng tín dụng",
-  "📦 Fulfill Order": "📦 Hoàn tất đơn hàng",
   "⭐ Leave Review": "⭐ Viết đánh giá",
   "⚡ Action Required": "⚡ Cần xử lý",
   "Transaction": "Giao dịch",
@@ -1299,9 +1297,6 @@
   },
   "Review Needed ({n})|Review Needed ({n})": {
     "other": "Cần đánh giá ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "other": "Hoàn tất đơn hàng ({n})"
   },
   "New\u0004conversation": "Mới",
   "Action Required": "Cần hành động",
@@ -3273,7 +3268,6 @@
   "TRUST SCORE": "ĐIỂM TIN CẬY",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Đánh giá ảnh hưởng trực tiếp đến **Điểm tin cậy** hiển thị trên hồ sơ công khai của bạn. Điểm tin cậy cao giúp bạn dễ dàng tìm được đối tác giao dịch hơn!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Nhiều đánh giá xấu liên tiếp sẽ làm giảm vị thế của bạn với đối tác giao dịch. Các tranh chấp chưa giải quyết bị đình trệ trong ký quỹ quá 7 ngày sẽ được quản trị viên phân xử qua nghị quyết công khai, có chữ ký số (giải phóng, hoàn tiền, hoặc chia đôi).",
-  "My Deals & Trust Hold": "Giao dịch & Quỹ tín thác của tôi",
   "🎟️ Network Invites": "🎟️ Lời mời tham gia mạng lưới",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Mọi cộng đồng BeanPool đều chỉ gia nhập qua lời mời: một thành viên sẽ mời bạn vào. Để phát triển cộng đồng an toàn, chúng tôi dựa vào hệ thống **Bảo lãnh ngang hàng**.",
   "WHO CAN INVITE": "AI CÓ THỂ MỜI",
@@ -5796,7 +5790,7 @@
   "Nothing in it yet": "Chưa có gì trong đó",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "Chưa có gì trong đó. Hãy đưa một Chia sẻ vào từ màn hình chỉnh sửa của nó, hoặc thêm các Chia sẻ đang hoạt động của bạn tại đây.",
   "On the Market": "Trên Chợ",
-  "Open my deals": "Mở các giao dịch của tôi",
+  "Open your deals": "Mở các giao dịch của bạn",
   "Open my shop": "Mở cửa hàng của tôi",
   "Open on Instagram": "Mở trên Instagram",
   "Open your shop": "Mở cửa hàng của bạn",

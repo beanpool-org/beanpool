@@ -358,6 +358,12 @@ export interface CommunityInfo {
      * a browser with no choice of its own and a language BeanPool doesn't write (lib/language.ts). Absent: English.
      */
     language?: string;
+    /**
+     * Where members' copies go (vault rethink VR2, apps/server config/recovery-copies.ts): BeanPool's key vault (the
+     * default; this browser has no vault client, so its own copy stays on this server), this server, or nowhere. Absent:
+     * a node from before the rule. Settings' sign-in line says `none` (components/SignInRecoveryLine.tsx).
+     */
+    recoveryCopies?: 'vault' | 'server' | 'none';
 }
 
 export interface Member {

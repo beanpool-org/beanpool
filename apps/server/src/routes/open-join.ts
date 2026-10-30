@@ -105,7 +105,9 @@
  * it opens a sign-in sheet; it says only which vault this door trusts, which is public.
  *
  * Global is BeanPool's own node, so its door may trust BeanPool's vault. Any other door leaves the keys unset and runs
- * exactly as before, needing nothing of ours.
+ * exactly as before, needing nothing of ours. And the community's rule for members' copies decides too (config/
+ * recovery-copies.ts, vault rethink VR2): the door takes tickets only while it is `vault`. Under `server` the copy rides
+ * in the join (`recovery: { shares }`) and is kept here; under `none` none is kept, and the join stands without one.
  *
  * ## Adding a sign-in later (design §2.5)
  *
@@ -179,6 +181,7 @@ import { doorCeilingReached, doorLevel, noteWordsJoin, WORDS_PROVIDER, type Door
 import { checkDoorWork, issueDoorWork, type DoorWorkRefusal } from '../services/door-work.js';
 import { OpenJoinKeyMissing, openJoinKeyState } from '../services/open-join-key.js';
 import { vaultTicketKeys, VAULT_TICKET_KEYS_ENV } from '../services/vault-ticket-keys.js';
+import { keepsNoCopies, recoveryCopies, NO_COPIES_HERE, NO_COPIES_HERE_MESSAGE } from '../config/recovery-copies.js';
 import { checkSsoKeeperShares, storeVerifiedSsoKeeperGeneration, KeeperDepositError } from '../engine/keeper-deposit.js';
 import { RecoveryShareError, type KeeperShareInput } from '../engine/recovery-shares.js';
 import { BadRequest, parseShares, ssoDepositBody } from './keepers.js';
@@ -397,11 +400,22 @@ function noteTicketRefusal(reason: VaultTicketRefusal, raw: unknown, now: number
 }
 
 /**
+ * The vault's ticket keys this door takes now: the pinned ones (services/vault-ticket-keys.ts), and only while the
+ * community's rule keeps members' copies at the vault (config/recovery-copies.ts). Under `server` or `none` a phone
+ * joining here is never bound to a deposit at the vault: the nonce answer says `vault: null`, so a phone signs in with
+ * the door's own nonce, and a ticket sent anyway is refused (`ticket_unsupported`), which today's apps answer with that
+ * nonce (the backstop, utils/global-join.ts). An app from before the rule then joins without a copy.
+ */
+function doorTicketKeys(): string[] {
+    return recoveryCopies() === 'vault' ? vaultTicketKeys() : [];
+}
+
+/**
  * The ticket a join carries, checked for the key that signed it (`actor`), or null once the refusal is written. Offline:
  * no provider and no vault is asked, and nothing is written but the funnel's count (`count`: a join's, not a link's).
  */
 function acceptVaultTicket(ctx: any, raw: unknown, actor: string, count = true): VaultTicketSignIn | null {
-    const ticketKeys = vaultTicketKeys();
+    const ticketKeys = doorTicketKeys();
     if (!ticketKeys.length) { refuseTicket(ctx, 'ticket_unsupported', count); return null; }
     const now = Date.now();
     const check = checkVaultTicket(raw, { ticketKeys, now, key: actor, purpose: 'deposit' });
@@ -416,7 +430,7 @@ function acceptVaultTicket(ctx: any, raw: unknown, actor: string, count = true):
 
 /** The keys the nonce answer advertises (the header), or null when the door takes no tickets. */
 function vaultAnswer(): { ticketKeys: string[] } | null {
-    const ticketKeys = vaultTicketKeys();
+    const ticketKeys = doorTicketKeys();
     return ticketKeys.length ? { ticketKeys } : null;
 }
 
@@ -449,8 +463,13 @@ function readRecoveryShares(ctx: any, body: any, provider: SsoProvider, actor: s
     }
 }
 
-/** Store the recovery copy from the sign-in just verified. Never a gate: a failure is said in the answer. */
+/**
+ * Store the recovery copy from the sign-in just verified. Never a gate: a failure is said in the answer. Where the
+ * community keeps no copies (config/recovery-copies.ts `none`), none is stored and the answer says so in its sentence:
+ * an app from before the rule may still send one.
+ */
 async function storeRecovery(identity: SsoIdentity, actor: string, shares: KeeperShareInput[]): Promise<Record<string, unknown>> {
+    if (keepsNoCopies()) return { enrolled: false, error: NO_COPIES_HERE_MESSAGE, code: NO_COPIES_HERE };
     try {
         const result = await storeVerifiedSsoKeeperGeneration(identity, actor, shares);
         return { enrolled: true, ...ssoDepositBody(actor, result) };

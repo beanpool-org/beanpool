@@ -2,7 +2,7 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-30",
@@ -832,11 +832,10 @@
   "Search": "Tafuta",
   "Search marketplace...": "Tafuta sokoni...",
   "Search marketplace": "Tafuta sokoni",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "Biashara Zangu, {n} inasubiri",
-    "other": "Biashara Zangu, {n} zinasubiri"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "Makubaliano yako, {n} inasubiri",
+    "other": "Makubaliano yako, {n} zinasubiri"
   },
-  "My Deals": "Biashara Zangu",
   "Opens your active and pending deals sheet": "Hufungua ukurasa wa biashara zako zinazoendelea na zinazosubiri",
   "Grid view": "Mwonekano wa gridi",
   "Compact view": "Mwonekano mfupi",
@@ -1349,7 +1348,6 @@
   "Groups\u0004talk pane": "Vikundi",
   "People\u0004talk pane": "Watu",
   "🔓 Release Credits": "🔓 Toa Salio",
-  "📦 Fulfill Order": "📦 Tekeleza Agizo",
   "⭐ Leave Review": "⭐ Acha Maoni",
   "⚡ Action Required": "⚡ Hatua Inahitajika",
   "Transaction": "Muamala",
@@ -1364,10 +1362,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "Maoni Yanahitajika ({n})",
     "other": "Maoni Yanahitajika ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Tekeleza Agizo ({n})",
-    "other": "Tekeleza Maagizo ({n})"
   },
   "New\u0004conversation": "Mpya",
   "Action Required": "Hatua Inahitajika",
@@ -3413,7 +3407,6 @@
   "TRUST SCORE": "ALAMA YA UAMINIFU",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Tathmini zako zinaathiri moja kwa moja **Alama yako ya Uaminifu**, ambayo inaonekana kwenye wasifu wako wa umma. Kujenga alama ya juu ya uaminifu hurahisisha kupata washirika wa biashara!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Tathmini mbaya zinazorudiwa hupunguza hadhi yako mbele ya washirika wa kibiashara. Migogoro ambayo haijatatuliwa iliyokwama kwenye amana kwa zaidi ya siku 7 huamuliwa na wasimamizi kupitia maamuzi ya wazi na yaliyosainiwa (utoaji, urejeshaji, au mgawanyo).",
-  "My Deals & Trust Hold": "Makubaliano Yangu na Kushikilia kwa Amana",
   "🎟️ Network Invites": "🎟️ Mialiko ya Mtandao",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Kila jumuiya ya BeanPool ni ya mwaliko pekee: mwanachama anakuruhusu kuingia. Ili kukuza jumuiya kwa usalama, tunategemea mfumo wa **Kuthibitishana**.",
   "WHO CAN INVITE": "NANI ANAYEWEZA KUALIKA",
@@ -6059,7 +6052,6 @@
   "A front window on your own account, for the Offers you choose.": "Dirisha la mbele kwenye akaunti yako mwenyewe, kwa Ofa unazochagua.",
   "Open your shop: a front window on your own account, for the Offers you choose.": "Fungua duka lako: dirisha la mbele kwenye akaunti yako mwenyewe, kwa Ofa unazochagua.",
   "{shop}: {state}. Opens your shop.": "{shop}: {state}. Hufungua duka lako.",
-  "Open my deals": "Fungua makubaliano yangu",
   "Your shop's name": "Jina la duka lako",
   "Leave it empty and it is called \"{name}\".": "Ukiliacha tupu litaitwa \"{name}\".",
   "What it is, in a few words.": "Ni nini, kwa maneno machache.",

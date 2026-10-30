@@ -21,6 +21,7 @@ import {
 import { accountDoorMessage } from './global-join-existing';
 import { GLOBAL_DOOR_MESSAGES, type GlobalDoorRefusal } from './node-profile';
 import { communityName } from './community-name';
+import type { SignInCopies } from './vault-config';
 
 /** The phone's fixed door sentences by their exact English: see the note above. */
 const PHONE_DOOR_LINES: Readonly<Record<string, WordKey>> = {
@@ -134,8 +135,16 @@ export function newPhoneDoorWords(place: DoorPlace) {
  * `signIn` above the buttons. The global community's door as before. At another community's door, a build without the
  * key vault sends the copy in the join and that community keeps it; a build with the vault deposits it there only where
  * the door lists the vault's ticket keys (global-join.ts doorTicketKeys), which is not known until the sign-in starts.
+ * A door whose community keeps no copies (its rule, vault rethink VR2: `none`) says so: the sign-in only joins.
  */
-export function doorKeeperWords(place: DoorPlace, copiesAt: 'vault' | 'community'): { choose: string; signIn: string } {
+export function doorKeeperWords(place: DoorPlace, copiesAt: SignInCopies): { choose: string; signIn: string } {
+    if (copiesAt === 'none') {
+        const name = place.global ? t('The global community') : place.name;
+        return {
+            choose: t("{name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.", { name }),
+            signIn: t("To keep out fake accounts, sign in once with an account you already have. {name} keeps no copies of members' accounts, so the sign-in only lets you in: your 12 words are your way back. BeanPool never sees your password and never posts anything for you.", { name }),
+        };
+    }
     if (place.global) {
         return copiesAt === 'vault'
             ? {

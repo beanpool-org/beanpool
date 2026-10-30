@@ -140,9 +140,11 @@ the only recovery path that works across any node independently.
 ## Where the copies actually live
 
 Each sign-in copy is one row in `recovery_shares` on the node's disk. Every copy a recovery
-released is also kept, for good, in `recovery_releases`: that table is the record of each
-recovery, permanent by design (`pruneCollectionsFor` in `engine/recovery-release.ts` never deletes
-a collection that released anything). Every row in both is wrapped with `data/recovery-seal.key`:
+released is also kept in `recovery_releases`: that table is the record of each recovery, its rows
+permanent by design (`pruneCollectionsFor` in `engine/recovery-release.ts` never deletes a
+collection that released anything). The copy a row carries is kept 30 days, then emptied, and the
+record stays (vault rethink VR2, Marty's pick 6: `forgetOldReleasedCopies`, on a main server, with
+its sweep). Every row in both is wrapped with `data/recovery-seal.key`:
 
 | Row | Stored | Node can open |
 |---|---|---|
@@ -290,8 +292,8 @@ takes over. What such a copy holds opens only with the key and the `sub` togethe
   manual (`operators/server/backups-and-replicas.md`, "Backups made before the recovery seal")
   tells operators to delete them.
 - **Disconnecting a sign-in deletes its row in `recovery_shares`, not the copies earlier
-  recoveries released**, which stay wrapped in `recovery_releases`, nor the ones in snapshots and
-  backups. The operator can still open those. The members' guide says so.
+  recoveries released**, which stay wrapped in `recovery_releases` for 30 days after each release,
+  nor the ones in snapshots and backups. The operator can still open those. The members' guide says so.
 - **A copy deleted after the seal reaches a standby** (#1197): `deleteAllShares` writes a
   `recovery_shares` tombstone keyed `<owner>|<generation>`, the standby deletes that member's copies
   of that generation or older stamped no later than the deletion (a copy re-deposited after it is

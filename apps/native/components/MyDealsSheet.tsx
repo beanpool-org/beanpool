@@ -670,7 +670,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                     {/* Header */}
                     <View style={styles.sheetHeader}>
                         <View>
-                            <Text style={styles.sheetTitle}>{t('My Deals')}</Text>
+                            <Text style={styles.sheetTitle}>{t('Your deals')}</Text>
                             <Text style={styles.sheetSubtitle}>{titleRowText}</Text>
                         </View>
                         <Pressable accessibilityRole="button" accessibilityLabel={t('Close')} onPress={onClose}>
@@ -734,7 +734,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         // fixed head they filled a 320 dp sheet, and no deal showed until the strip was closed.
                         ListHeaderComponent={preview ? (
                             <View testID="deals-preview-head">
-                                {/* My Deals is a Modal: every way forward closes it first, so the next screen opens on top. */}
+                                {/* Your deals is a Modal: every way forward closes it first, so the next screen opens on top. */}
                                 <LocalCommunityMark variant="strip" feature="escrow" onLeave={onClose} />
                                 <ExampleHeader />
                             </View>

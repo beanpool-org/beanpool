@@ -2,7 +2,7 @@
   "_meta": {
     "language": "uk",
     "name": "Ukrainian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-30",
@@ -922,13 +922,12 @@
   "Search": "Пошук",
   "Search marketplace...": "Пошук на ринку...",
   "Search marketplace": "Пошук на ринку",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "Мої обміни, {n} очікує",
-    "few": "Мої обміни, {n} очікують",
-    "many": "Мої обміни, {n} очікують",
-    "other": "Мої обміни, {n} очікує"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "Ваші угоди, {n} очікує",
+    "few": "Ваші угоди, {n} очікують",
+    "many": "Ваші угоди, {n} очікують",
+    "other": "Ваші угоди, {n} очікує"
   },
-  "My Deals": "Мої обміни",
   "Opens your active and pending deals sheet": "Відкриває список ваших активних обмінів та обмінів в очікуванні",
   "Grid view": "Сітка",
   "Compact view": "Компактний вигляд",
@@ -1473,7 +1472,6 @@
   "Groups\u0004talk pane": "Групи",
   "People\u0004talk pane": "Люди",
   "🔓 Release Credits": "🔓 Виплатити бали",
-  "📦 Fulfill Order": "📦 Виконати замовлення",
   "⭐ Leave Review": "⭐ Залишити відгук",
   "⚡ Action Required": "⚡ Потрібна дія",
   "Transaction": "Обмін",
@@ -1494,12 +1492,6 @@
     "few": "Потрібні відгуки ({n})",
     "many": "Потрібно відгуків ({n})",
     "other": "Потрібні відгуки ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "Виконати замовлення ({n})",
-    "few": "Виконати замовлення ({n})",
-    "many": "Виконати замовлення ({n})",
-    "other": "Виконати замовлення ({n})"
   },
   "New\u0004conversation": "Новий",
   "Action Required": "Потрібна дія",
@@ -3693,7 +3685,6 @@
   "TRUST SCORE": "ПОКАЗНИК ДОВІРИ",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "Ваші відгуки безпосередньо впливають на ваш **Показник довіри**, видимий у вашому публічному профілі. Високий показник довіри допомагає легше знаходити надійних партнерів!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "Повторні негативні відгуки знижують вашу репутацію. Невирішені спори в ескроу понад 7 днів вирішуються адміністраторами через публічні підписані постанови (виплата, повернення чи розподіл).",
-  "My Deals & Trust Hold": "Мої угоди та Довірче утримання",
   "🎟️ Network Invites": "🎟️ Запрошення до мережі",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "Кожна спільнота BeanPool діє лише за запрошеннями: чинний учасник запрошує вас. Щоб безпечно розвивати мережу, ми використовуємо систему **Взаємної поруки**.",
   "WHO CAN INVITE": "ХТО МОЖЕ ЗАПРОШУВАТИ",
@@ -6504,7 +6495,6 @@
   "Nothing in it yet": "Поки порожньо",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "Поки порожньо. Додайте Пропозицію на її екрані редагування або додайте сюди свої чинні Пропозиції.",
   "On the Market": "На Ринку",
-  "Open my deals": "Відкрити мої домовленості",
   "Open my shop": "Відкрити мою крамницю",
   "Open on Instagram": "Відкрити в Instagram",
   "Open your shop": "Відкрити вашу крамницю",

@@ -478,7 +478,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [showDealsModal, setShowDealsModal] = useState(false);
-    // Deals off here and the node shows previews: My Deals opens Example Valley's two deals (DESIGN-global-showcase-fable.md §1 row 5).
+    // Deals off here and the node shows previews: Your deals opens Example Valley's two deals (DESIGN-global-showcase-fable.md §1 row 5).
     const dealsMode = useFeatureMode('escrow');
     // Beans and deals that live in a local community (preview or read-only): the price slot and the deal action carry the
     // 🏘️ marker instead of a price and a Request that would move Beans (design §1 rows 2 and 4). Live and hidden: as before.
@@ -695,7 +695,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>('active');
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string; targetRole: 'provider' | 'receiver' } | null>(null);
-    // A chat's "Rate your partner" lands on the same rating form My Deals opens, for that trade. The member's own trades
+    // A chat's "Rate your partner" lands on the same rating form Your deals opens, for that trade. The member's own trades
     // are read once if the ones this page holds don't have it yet (the page has just opened).
     useEffect(() => {
         if (!openReviewTxId || !identity) return;
@@ -1337,7 +1337,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         // definition of the fee, so it is imported.
         const commissionNeeded = Math.round(selectedPost.credits * (1 + TRANSACTION_FEE_RATE) * 100) / 100;
 
-        // A pinned deal (My Deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
+        // A pinned deal (Your deals' View deal, a deal_open refusal) counts only on ITS listing: carried to the next listing
         // opened, it hid Accept there and could put Release (of this deal) on someone else's held listing.
         // Only while its Beans are held: a finished pin gives way to the listing's live deal, and so does a request, which the
         // listing's own read shows (Withdraw for one who asked; a pinned request hid that box, as on the phone). Accept stays
@@ -1790,8 +1790,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                  {/* Action buttons */}
 
-                 {/* The deal a door named, when it is over by now: what became of it, above the listing as it stands for the reader. */}
-                 {pinnedOver && (
+                 {/* The deal a door named, when it is over by now: what became of it, above the listing as it stands for the reader.
+                     Not once the reader has taken the listing up again (a deal of their own held or asked for: no take-up left,
+                     and not its own people): that deal's box is the page, as on the phone. */}
+                 {pinnedOver && (deals.own || deals.canTakeUp) && (
                      <p data-testid="pinned-deal-over" className="mt-4 text-sm font-semibold text-center text-nature-600 dark:text-nature-400">{pinnedOver}</p>
                  )}
 
@@ -2314,7 +2316,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             } catch (err) {
                                                 // The member's deal on this listing is under way already (made in another tab or on their
                                                 // phone): said, their deals refreshed, and the listing opened at the deal the node named, as
-                                                // My Deals' View deal opens one.
+                                                // Your deals' View deal opens one.
                                                 const open = openDealIn(err);
                                                 if (open) {
                                                     alert(t('You already have a deal under way on this. Finish or cancel it first.'));
@@ -3129,14 +3131,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         />
                     </div>
 
-                    {/* Highly Important My Deals Button */}
+                    {/* Highly Important Your deals Button */}
                     {!isVisitor && (<>
                     <button
                         onClick={() => setShowDealsModal(true)}
                         className="min-h-9 min-w-0 px-3 py-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-400 text-xs font-black leading-tight shadow-sm transition-all flex items-center gap-1.5 hover:bg-amber-200 dark:hover:bg-amber-900/60 hover:shadow-md cursor-pointer"
                     >
                         {/* A longer language wraps inside the pill rather than pushing the view toggle off a 320 px screen. */}
-                        <span className="min-w-0 break-words text-center">{t('🤝 My Deals')}</span>
+                        <span className="min-w-0 break-words text-center">{t('🤝 Your deals')}</span>
                         {pendingDealsCount > 0 && (
                             <span className="bg-bp-danger-fill text-bp-danger-on text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                                 {pendingDealsCount}

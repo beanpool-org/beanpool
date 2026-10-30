@@ -4,7 +4,8 @@ import { clearPendingProfileChange } from './pending-profile-sync';
  * Is an avatar value ours to publish, or is it something a node handed us?
  *
  * The phone keeps a member's avatar in two places: the per-node `members` row in SQLite, and
- * the canonical (node-independent) profile that follows the person onto every node they join.
+ * the canonical (node-independent) profile that used to follow the person onto every node they
+ * join (no publish and no screen reads it for a picture any more: Profile S2, see catchUpAvatar).
  * Since #725 a node emits photo avatars as `/api/avatar/<pk>?size=thumb` and the members sync
  * writes THAT into the local row. So the local row does not hold the photo — it holds a
  * pointer back at the node.
@@ -83,41 +84,22 @@ export function localRowHasNoAvatar(localRow: string | null | undefined): boolea
  * offline save, the publish right after redeeming an invite, and the marketplace photo-gate
  * heal.
  *
- * Unlike an explicit edit there is no session pick to go on, so the canonical copy is sent only
- * when the node is KNOWN to hold no photo for us. `nodeHasNoPhoto` is the node's own answer and
- * has three states, because "the node did not say" and "the node said it has one" are not the
- * same thing:
+ * Unlike an explicit edit there is no session pick to go on, so the one thing it can send is a
+ * photo picked during an OFFLINE save here: it is sitting portable in this community's row —
+ * nothing has reached the node yet, so it is the newest copy anywhere and always goes. A row
+ * that holds the node's own URL, or no photo, sends nothing: the field is left out, which is how
+ * the node is told "unchanged".
  *
- *   undefined — the node was not asked. Fall back to the local row: no avatar there is the
- *               phone's evidence that there is nothing on the node to overwrite.
- *   true      — the node just said it holds none ("please set a profile photo", or a redeem
- *               response with no servable avatar). Stronger than any local row, so canonical
- *               goes even over a stale URL. Both answers say it only when the node holds no
- *               photo at all: one still inline while its move out of the rows is stopped
- *               part way counts as held (server db.ts memberHasPhoto for the gate,
- *               memberPhotoNotMovedYet for the member's own redeem card, #1482), so a newer
- *               photo set on another device is not written over. The members list gives
- *               such a photo a URL too (server db.ts MEMBER_PHOTO_INLINE_REF), so the local
- *               row the `undefined` case reads is not empty for it either.
- *   false     — the node said it HOLDS one. It may be newer than canonical, and the local row
- *               is no longer evidence of anything: an empty row on a node this device has
- *               never synced means unsynced, not empty. Nothing is published.
- *
- * A photo picked during an OFFLINE save is sitting portable in the local row — nothing has
- * reached the node yet, so it is the newest copy anywhere and always goes, whatever the node
- * holds.
+ * It no longer sends the phone's last choice anywhere else (the copy of it kept for every
+ * community, utils/canonical-profile.ts), to a community whose row holds no photo. That was a
+ * picture chosen in one community appearing in every other the member joined, unasked — a preset
+ * included (Profile S2, scratch/fable-design/DESIGN-per-community-profile-fable.md §3: nothing is
+ * published to community B from a choice made in community A). A fresh community has no photo for
+ * the member until they choose one there, and the marketplace's photo gate says so (utils/
+ * profile-status.ts), as it does in any community without one.
  */
-export function catchUpAvatar(
-    localRow: string | null | undefined,
-    canonical: string | null | undefined,
-    nodeHasNoPhoto?: boolean,
-): string | null {
-    if (isPortableAvatarValue(localRow)) return localRow.trim();
-    if (nodeHasNoPhoto === false) return null;
-    if (nodeHasNoPhoto === true || localRowHasNoAvatar(localRow)) {
-        return isPortableAvatarValue(canonical) ? canonical.trim() : null;
-    }
-    return null;
+export function catchUpAvatar(localRow: string | null | undefined): string | null {
+    return isPortableAvatarValue(localRow) ? localRow.trim() : null;
 }
 
 /**
@@ -159,8 +141,8 @@ export type ProfilePublishAvatar = {
  *   1. a photo picked in THIS session — an explicit edit, and the newest copy that exists;
  *   2. otherwise the pick an offline save parked for THIS community (`parked`, from its
  *      pending-profile-sync.ts entry), re-checked for portability;
- *   3. otherwise, and only for a CATCH-UP caller, what `catchUpAvatar` licenses: the canonical
- *      copy when the node is known to hold no photo for us;
+ *   3. otherwise, and only for a CATCH-UP caller, what `catchUpAvatar` licenses: a photo picked
+ *      offline in this community that is still sitting portable in its row;
  *   4. otherwise nothing, and the field is left out.
  *
  * NOTE ON THE ORDER OF 1 AND 2 — the fix brief specified the parked pick first. That loses a
@@ -173,9 +155,8 @@ export type ProfilePublishAvatar = {
  *
  * A caller passes `catchUp` only when it is entitled to step 3: `pushProfileToServer` (the
  * pending-sync retry, the marketplace photo-gate heal, the post-redeem publish) and Re-run
- * Setup, whose whole job is to satisfy the "finish your profile" gate without a re-pick. The
- * settings Save passes none: a Save the member did not make about their photo must never
- * republish a canonical copy that may be older than what the node holds.
+ * Setup. The settings Save passes none: a Save the member did not make about their photo must
+ * never republish a copy that may be older than what the node holds.
  *
  * `parked` is the caller's to read, from the change waiting for the community it publishes to
  * (pending-profile-sync.ts `pendingProfileChange`), never one for the phone: a photo parked in
@@ -186,8 +167,6 @@ export async function resolveProfilePublishAvatar(input: {
     parked?: string | null;
     catchUp?: {
         localRow?: string | null;
-        canonical?: string | null;
-        nodeHasNoPhoto?: boolean;
     };
 }): Promise<ProfilePublishAvatar> {
     const sessionPick = explicitEditAvatar(input.sessionPick);
@@ -200,7 +179,7 @@ export async function resolveProfilePublishAvatar(input: {
 
     if (input.catchUp) {
         return {
-            avatar: catchUpAvatar(input.catchUp.localRow, input.catchUp.canonical, input.catchUp.nodeHasNoPhoto),
+            avatar: catchUpAvatar(input.catchUp.localRow),
             clearsParkedPick: false,
         };
     }

@@ -49,7 +49,7 @@ On the phone, if nothing matches, tap **Clear All Filters**. In the web app an e
 
 On the phone, when you have scrolled down and a search or filter is on, a small chip at the top shows what it is. Tap the chip to change it. Tap **✕** on it to clear the search and every filter.
 
-The button next to **My Deals** changes how the list looks: a list, a grid, or compact.
+The button next to **Your deals** changes how the list looks: a list, a grid, or compact.
 
 ## What a post shows
 

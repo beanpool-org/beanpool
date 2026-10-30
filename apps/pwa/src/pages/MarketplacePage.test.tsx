@@ -750,7 +750,7 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
     });
 
     // Deciding review on 9bf7d11d, finding 1: the link opens the deals sheet from the listing page itself.
-    it('"All your deals ›" on the listing page opens My Deals there', async () => {
+    it('"All your deals ›" on the listing page opens Your deals there', async () => {
         const myPendingTx: api.MarketplaceTransaction = {
             id: 'tx-damo', postId: 'post-rec', postTitle: 'Gardening Mentorship', credits: 45, status: 'pending',
             buyerPublicKey: identity.publicKey, buyerCallsign: identity.callsign, sellerPublicKey: 'damo-pk', sellerCallsign: 'Damo',
@@ -758,9 +758,9 @@ describe('MarketplacePage (deals-s1): recurring Offer and deal visibility', () =
         };
         render(<MarketplacePage identity={identity} openPostId="post-rec" transactions={[myPendingTx]} />);
         await screen.findByText('Gardening Mentorship');
-        expect(screen.queryByRole('heading', { name: 'My Deals' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: 'Your deals' })).not.toBeInTheDocument();
         fireEvent.click(await screen.findByRole('button', { name: /All your deals ›/ }, { timeout: 5000 }));
-        expect(await screen.findByRole('heading', { name: 'My Deals' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Your deals' })).toBeInTheDocument();
     });
 
     // Finding 2: on a Need the author pays, and is never told they "took this up".
@@ -1277,7 +1277,59 @@ describe('MarketplacePage (deals-s4): a listing shows your deal for who you are'
         expect(screen.getByRole('button', { name: /Accept Offer/ })).toBeInTheDocument();
     });
 
-    it('one who asked to borrow, opened on their request by its id (My Deals, Home): whom they wait on, and Withdraw', async () => {
+    // The line says what became of the deal a door named, above a listing the member may take up again. Once they have (a deal
+    // of their own held or asked for on it), the box of that deal is the page and the old line goes (review on #2588).
+    it("a door that named a deal over, the listing since taken up again: the new deal's box, and no line on the old one", async () => {
+        await open(listing({ title: 'Lawn mower', status: 'pending', pendingTransactionId: 'tx-n' }), [
+            deal({ id: 'tx-c', status: 'cancelled', createdAt: '2026-10-20T10:00:00.000Z' }),
+            deal({ id: 'tx-n', status: 'pending', createdAt: '2026-10-27T10:00:00.000Z' }),
+        ], { openTxId: 'tx-c' });
+        expect(await screen.findByRole('button', { name: /Release Credits/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Cancel Hold/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('pinned-deal-over')).not.toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it("a door that named a deal over, the member since asked to borrow it again: whom they wait on, Withdraw, and no line on the old deal", async () => {
+        await open(listing({ title: 'Ladder', lendable: true }), [
+            deal({ id: 'tx-c', status: 'cancelled', createdAt: '2026-10-20T10:00:00.000Z' }),
+            deal({ id: 'tx-q', status: 'requested', createdAt: '2026-10-27T10:00:00.000Z' }),
+        ], { openTxId: 'tx-c' });
+        expect(await screen.findByText('You asked to borrow it · nothing is held until Damo says yes')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Withdraw request' })).toBeInTheDocument();
+        expect(screen.queryByTestId('pinned-deal-over')).not.toBeInTheDocument();
+    });
+
+    it('the line is there while the listing waits to be taken up, and goes the moment the member takes it up again', async () => {
+        const over = deal({ id: 'tx-c', status: 'cancelled', createdAt: '2026-10-20T10:00:00.000Z' });
+        const props = { identity, isMember: true, openPostId: 'p', onPostOpened: () => {}, openTxId: 'tx-c' };
+        const mower = listing({ title: 'Lawn mower', repeatable: true });
+        const view = await open(mower, [over], { openTxId: 'tx-c' });
+        expect(await screen.findByTestId('pinned-deal-over')).toHaveTextContent('That deal was cancelled.');
+        expect(screen.getByRole('button', { name: /Accept Offer/ })).toBeInTheDocument();
+        // Taken up again: the app's deals now hold the new one (the take-up refreshes them).
+        view.rerender(<MarketplacePage {...props} transactions={[over, deal({ id: 'tx-n', status: 'pending', createdAt: '2026-10-27T10:00:00.000Z' })]} />);
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(screen.queryByTestId('pinned-deal-over')).not.toBeInTheDocument();
+        noTakeUp();
+    });
+
+    it("a stranger to the deal a link names (a deal that is not theirs): no line on it, and nothing of it", async () => {
+        await open(listing({ title: 'Lawn mower' }), [], { openTxId: 'tx-someone-elses' });
+        expect(await screen.findByRole('button', { name: /Accept Offer/ })).toBeInTheDocument();
+        expect(screen.queryByTestId('pinned-deal-over')).not.toBeInTheDocument();
+    });
+
+    it("a recurring Offer's author opened on one finished deal by its alert, another deal under way: that deal's line stays (their rows are no take-up)", async () => {
+        await open(listing({ title: 'Pottery course', repeatable: true, authorPublicKey: ME, authorCallsign: 'Guest' }), [
+            deal({ id: 'tx-done', status: 'completed', buyerPublicKey: 'marty-pk', buyerCallsign: 'Marty', sellerPublicKey: ME, completedAt: '2026-10-27T10:00:00.000Z' }),
+            deal({ id: 'tx-b', buyerPublicKey: 'kofi-pk', buyerCallsign: 'Kofi', sellerPublicKey: ME, createdAt: '2026-10-26T10:00:00.000Z' }),
+        ], { openTxId: 'tx-done' });
+        expect(await screen.findByTestId('pinned-deal-over')).toHaveTextContent('That deal is done.');
+        expect(await screen.findByTestId('deal-row-tx-b')).toBeInTheDocument();
+    });
+
+    it('one who asked to borrow, opened on their request by its id (Your deals, Home): whom they wait on, and Withdraw', async () => {
         await open(listing({ title: 'Ladder', lendable: true }), [deal({ id: 'tx-q', status: 'requested' })], { openTxId: 'tx-q' });
         expect(await screen.findByText('You asked to borrow it · nothing is held until Damo says yes')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Withdraw request' })).toBeInTheDocument();

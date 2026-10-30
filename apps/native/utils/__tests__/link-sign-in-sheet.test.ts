@@ -43,6 +43,8 @@ const linked = { kind: 'linked', provider: 'google', enrolment: null } as const;
 vi.mock('../join-link', () => ({
     linkSignIn: vi.fn(async () => linked),
     linkedNotice: () => 'Your Google sign-in is added.',
+    // Where the door keeps a copy (the sheet's words follow it, VR2): a community that keeps them.
+    doorCopiesAt: async () => 'community',
 }));
 vi.mock('../one-way-back', () => ({ finishOneWayBack: vi.fn(async () => undefined) }));
 

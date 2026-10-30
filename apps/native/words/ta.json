@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-30",
@@ -833,11 +833,10 @@
   "Search": "தேடுக",
   "Search marketplace...": "சந்தையில் தேடுக...",
   "Search marketplace": "சந்தையில் தேடுக",
-  "My Deals, {n} pending|My Deals, {n} pending": {
-    "one": "என் பரிமாற்றங்கள், {n} நிலுவையில்",
-    "other": "என் பரிமாற்றங்கள், {n} நிலுவையில்"
+  "Your deals, {n} pending|Your deals, {n} pending": {
+    "one": "உங்கள் ஒப்பந்தங்கள், {n} நிலுவையில்",
+    "other": "உங்கள் ஒப்பந்தங்கள், {n} நிலுவையில்"
   },
-  "My Deals": "என் பரிமாற்றங்கள்",
   "Opens your active and pending deals sheet": "உங்கள் செயல்பாட்டில் உள்ள மற்றும் நிலுவையில் உள்ள பரிமாற்றங்களைத் திறக்கும்",
   "Grid view": "கட்டக் காட்சி",
   "Compact view": "சுருக்கக் காட்சி",
@@ -1351,7 +1350,6 @@
   "Groups\u0004talk pane": "குழுக்கள்",
   "People\u0004talk pane": "நபர்கள்",
   "🔓 Release Credits": "🔓 கிரெடிட்களை விடுவி",
-  "📦 Fulfill Order": "📦 ஆர்டரை நிறைவேற்று",
   "⭐ Leave Review": "⭐ மதிப்புரை எழுதுங்கள்",
   "⚡ Action Required": "⚡ நடவடிக்கை தேவை",
   "Transaction": "பரிவர்த்தனை",
@@ -1366,10 +1364,6 @@
   "Review Needed ({n})|Review Needed ({n})": {
     "one": "மதிப்புரை தேவை ({n})",
     "other": "மதிப்புரை தேவை ({n})"
-  },
-  "Fulfill Order ({n})|Fulfill Order ({n})": {
-    "one": "ஆர்டரை நிறைவேற்று ({n})",
-    "other": "ஆர்டரை நிறைவேற்று ({n})"
   },
   "New\u0004conversation": "புதியது",
   "Action Required": "நடவடிக்கை தேவை",
@@ -3415,7 +3409,6 @@
   "TRUST SCORE": "நம்பிக்கை மதிப்பெண்",
   "Your reviews directly impact your **Trust Score**, which is visible on your public profile. Building a high trust score makes it easier to find trading partners!": "உங்கள் மதிப்பாய்வுகள் உங்கள் பொது சுயவிவரத்தில் தெரியும் **நம்பிக்கை மதிப்பெண்ணை** நேரடியாகப் பாதிக்கின்றன. அதிக நம்பிக்கை மதிப்பெண்ணைப் பெறுவது வர்த்தகக் கூட்டாளிகளைக் கண்டறிவதை எளிதாக்குகிறது!",
   "Repeated bad reviews lower your standing with trading partners. Unresolved disputes stuck in escrow over 7 days are arbitrated by administrators via public, signed resolutions (release, refund, or split).": "தொடர்ச்சியான மோசமான மதிப்பாய்வுகள் வர்த்தகக் கூட்டாளர்களுடனான உங்கள் நிலையைத் தாழ்த்தும். 7 நாட்களுக்கு மேல் நம்பக வைப்பில் சிக்கியுள்ள தீர்க்கப்படாத சர்ச்சைகள், கையொப்பமிடப்பட்ட பொது முடிவுகள் (விடுவிப்பு, பணத்தைத் திரும்பப்பெறுதல் அல்லது பிரித்தல்) மூலம் நிர்வாகிகளால் நடுவர் தீர்ப்பு வழங்கப்படுகின்றன.",
-  "My Deals & Trust Hold": "என் ஒப்பந்தங்கள் & நம்பக வைப்பு",
   "🎟️ Network Invites": "🎟️ நெட்வொர்க் அழைப்புகள்",
   "Every BeanPool community is invite-only: a member lets you in. To grow the community safely, we rely on a **Peer Vouching** system.": "ஒவ்வொரு BeanPool சமூகமும் அழைப்பின் மூலம் மட்டுமே இணைய முடியும்: ஒரு உறுப்பினர் உங்களை உள்ளே அனுமதிக்கிறார். சமூகத்தைப் பாதுகாப்பாக வளர்க்க, நாங்கள் **சக உறுப்பினர் உத்தரவாத** அமைப்பை நம்பியுள்ளோம்.",
   "WHO CAN INVITE": "யாரெல்லாம் அழைக்கலாம்",
@@ -6032,7 +6025,6 @@
   "Nothing in it yet": "இதில் இன்னும் எதுவுமில்லை",
   "Nothing in it yet. Put an Offer in from its edit screen, or add your live Offers here.": "இதில் இன்னும் எதுவுமில்லை. ஒரு சலுகையின் திருத்தத் திரையிலிருந்து அதை உள்ளே வையுங்கள், அல்லது உங்கள் நேரலைச் சலுகைகளை இங்கே சேர்க்கவும்.",
   "On the Market": "சந்தையில்",
-  "Open my deals": "என் ஒப்பந்தங்களைத் திற",
   "Open my shop": "என் கடையைத் திற",
   "Open on Instagram": "Instagram-இல் திற",
   "Open your shop": "உங்கள் கடையைத் திறங்கள்",

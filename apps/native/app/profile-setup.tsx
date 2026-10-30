@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
@@ -13,12 +13,12 @@ import { beansOn } from '../utils/node-profile';
 import { howItWorksSubtitle } from '../utils/beans-off';
 import { updateCallsign } from '../utils/identity';
 import { updateMemberProfile, getMemberProfile } from '../utils/db';
-import { getCanonicalAvatar } from '../utils/canonical-profile';
 import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterPublish, type ProfilePublishAvatar } from '../utils/avatar-value';
 import { keepPendingProfileChange, pendingNameAccepted, pendingProfileChange } from '../utils/pending-profile-sync';
 import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
+import { ownRowOf } from '../utils/own-profile-anchor';
 import { palette, type AppColors } from '../constants/colors';
 import { useOnboardingColors } from './ThemeContext';
 import { AreaPicker } from '../components/AreaPicker';
@@ -62,21 +62,23 @@ export default function ProfileSetupScreen() {
     useEffect(() => {
         AsyncStorage.getItem('beanpool_anchor_url').then(setAnchorUrl).catch(() => setAnchorUrl(null));
     }, []);
-    const [callsign, setCallsign] = useState(joinedAs ?? identity?.callsign ?? '');
-    // Three separate things, deliberately not one `avatar` state:
+    // The name the steps start from is this community's own (read from its members row below), never the phone's:
+    // `identity.callsign` is only the join pre-fill, and is whatever name the member last chose in ANY community
+    // (Profile S2). Until the row is read the box is empty, or holds the name the door joined with.
+    const [callsign, setCallsign] = useState(joinedAs ?? '');
+    // What the name steps started from, once read; Done tells a name the member gave here from one the wizard only showed.
+    const nameStartedWith = useRef<string | null>(null);
+    // Two separate things, deliberately not one `avatar` state:
     //  - `pendingAvatar`  the photo picked in THIS session, and the only thing an explicit edit
     //                     may publish;
-    //  - `nodeAvatar`     what the node holds for us, read from the synced `members` row (since
+    //  - `nodeAvatar`     what this community holds for us, read from the synced `members` row (since
     //                     #725 that is the node's own `/api/avatar/<pk>?size=thumb` URL, and
-    //                     null when the node has no photo);
-    //  - `canonicalAvatar` the node-independent copy, written only by a local pick.
-    // Seeding one state from canonical made Re-run Setup PREVIEW the canonical copy as if it
-    // were current and then publish it — so after a photo change on the PWA or a paired device
-    // (where canonical is the PREVIOUS photo) finishing the wizard silently put the old picture
-    // back. Canonical is now shown, and sent, only when the node has no photo of its own.
+    //                     null when the node has no photo).
+    // The phone's copy of the last photo chosen in ANY community is neither shown nor sent here (Profile S2):
+    // it was previewed as if it were this community's and then published, so a picture chosen in one community
+    // became the picture in the next. A fresh community shows no photo until one is chosen, and the wizard asks.
     const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
     const [nodeAvatar, setNodeAvatar] = useState<string | null>(null);
-    const [canonicalAvatar, setCanonicalAvatar] = useState<string | null>(null);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -93,16 +95,24 @@ export default function ProfileSetupScreen() {
         let cancelled = false;
         (async () => {
             if (!identity) { router.back(); return; }
-            let row: string | null = null;
+            let member: any = null;
             try {
-                row = (await getMemberProfile(identity.publicKey))?.avatar_url ?? null;
-            } catch { row = null; }
-            const canonical = await getCanonicalAvatar().catch(() => null);
+                member = (await getMemberProfile(identity.publicKey)) ?? null;
+            } catch { member = null; }
             if (cancelled) return;
+            const row: string | null = member?.avatar_url ?? null;
             setNodeAvatar(row && row !== 'null' && row !== 'undefined' && row.trim() !== '' ? row : null);
-            setCanonicalAvatar(canonical ?? null);
-            const haveAvatar = Boolean(row || canonical);
-            const nameOk = (identity.callsign?.trim().length ?? 0) >= 2;
+            const haveAvatar = Boolean(row);
+            // The name this community holds for the member; only where it holds none yet (no row, or one without a name)
+            // does the phone's pre-fill stand in, as it does on the join form.
+            const communityName = ownRowOf(member)?.callsign?.trim() ?? '';
+            const seed = joinedAs ?? (communityName.length >= 2 ? communityName : (identity.callsign?.trim() ?? ''));
+            if (nameStartedWith.current === null) {
+                nameStartedWith.current = seed;
+                // A name typed while the row was being read is the member's, and stays.
+                setCallsign(typed => (typed.trim() === '' ? seed : typed));
+            }
+            const nameOk = seed.length >= 2;
             if (joinedAs || (nameOk && !haveAvatar)) setStep('avatar');
         })();
         return () => { cancelled = true; };
@@ -112,11 +122,10 @@ export default function ProfileSetupScreen() {
     const stepIndex = stepOrder.indexOf(step);
     const nextStep = () => { setError(null); setStep(stepOrder[stepIndex + 1] ?? 'guide'); };
 
-    // What the wizard SHOWS: this session's pick, else the node's current photo, else — only
-    // when the node has none — the canonical copy. It is also what "do you have an avatar yet?"
-    // means for the Next button, so someone whose photo is already on the node is not forced to
-    // re-pick one to get through a step they only opened to change their name.
-    const displayAvatar = pendingAvatar ?? nodeAvatar ?? canonicalAvatar;
+    // What the wizard SHOWS: this session's pick, else this community's current photo. It is also what
+    // "do you have an avatar yet?" means for the Next button, so someone whose photo is already on the
+    // node is not forced to re-pick one to get through a step they only opened to change their name.
+    const displayAvatar = pendingAvatar ?? nodeAvatar;
 
     // Live per-node availability check while editing the name (debounced). Runs only
     // on the name step. 'unknown' (node unreachable) never blocks — the server still
@@ -158,6 +167,15 @@ export default function ProfileSetupScreen() {
         setLoading(true);
         setError(null);
         const finalCallsign = callsign.trim();
+        // A name goes to the community, and into the phone's pre-fill, only when the member gave it: typed here, or at the
+        // door that sent them. The name the wizard merely showed (this community's own, or the pre-fill where it holds none)
+        // is left alone, so it cannot rename them here, clash, or carry a name chosen in one community into the next.
+        const nameGiven = finalCallsign !== (nameStartedWith.current ?? joinedAs ?? '');
+        const nameKept = nameGiven || joinedAs !== null;
+        // The name this publish carries: the one given here, else one an earlier offline save is still holding for this
+        // community. That save's retry is disarmed by a publish that carries it (retireParkedPickAfterPublish clears the
+        // whole waiting change), so a publish that left it out would lose it.
+        let sentName: string | null = nameGiven ? finalCallsign : null;
         try {
             // 1. Publish to the node FIRST. Committing the name locally before the
             //    server accepts it risks a local/server split if the name was taken
@@ -174,22 +192,22 @@ export default function ProfileSetupScreen() {
                 url = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (url) {
                     const pending = await pendingProfileChange(url, identity.publicKey);
+                    if (!sentName && pending?.callsign) sentName = pending.callsign;
                     // The one shared rule, as in settings Save. `avatar` goes when the member
                     // picked one here, or when an earlier offline save parked a pick that nothing
-                    // has published yet, or — this screen being the "finish your profile" gate —
-                    // when the node holds no photo for us and the canonical copy can therefore
-                    // overwrite nothing. Omitting it is how the node is told "avatar unchanged";
+                    // has published yet, or when this community's row still holds a portable pick
+                    // that never reached it. Omitting it is how the node is told "avatar unchanged";
                     // sending what the wizard merely displayed is what put an older photo back.
                     avatarDecision = await resolveProfilePublishAvatar({
                         sessionPick: pendingAvatar,
                         parked: pending?.avatar,
-                        catchUp: { localRow: nodeAvatar, canonical: canonicalAvatar },
+                        catchUp: { localRow: nodeAvatar },
                     });
                     const publishAvatar = avatarDecision.avatar;
                     const bodyString = JSON.stringify({
                         publicKey: identity.publicKey,
                         ...(publishAvatar ? { avatar: publishAvatar } : {}),
-                        callsign: finalCallsign,
+                        ...(sentName ? { callsign: sentName } : {}),
                     });
                     const headers = await buildSignedHeaders('POST', `${url}/api/profile/update`, bodyString, identity.privateKey, identity.publicKey);
                     const res = await fetch(`${url}/api/profile/update`, { method: 'POST', headers, body: bodyString });
@@ -206,12 +224,18 @@ export default function ProfileSetupScreen() {
 
             // 2. Server accepted (or we're offline): commit the name to the stored
             //    identity and the local SQLite profile.
-            if (finalCallsign !== identity.callsign) {
+            if (nameKept && finalCallsign !== identity.callsign) {
                 const updated = await updateCallsign(finalCallsign);
                 if (updated) setIdentity(updated);
             }
+            // The name this community's row is given back. One that was sent is the community's now. With none sent, the row
+            // keeps the name it holds AT THIS MOMENT: the first members sync of a community just joined can land while the
+            // member is on the other steps (the node may have registered "Rosa 2" for a join clash), after the wizard was
+            // seeded from the pre-fill, and writing the name it merely showed would put the other community's name over it.
+            // Only a community that holds none yet takes the shown name (callsign is NOT NULL); its first sync replaces it.
+            const rowName = sentName ?? ownRowOf(await getMemberProfile(identity.publicKey))?.callsign ?? finalCallsign;
             await updateMemberProfile(identity.publicKey, {
-                callsign: finalCallsign,
+                callsign: rowName,
                 // Only a pick from this session is written back to the members row; `undefined`
                 // is COALESCEd away and leaves the synced value alone.
                 avatar_url: pendingAvatar ?? undefined,
@@ -222,15 +246,15 @@ export default function ProfileSetupScreen() {
                 // photo — the node already holds one, so the rule correctly inferred nothing —
                 // used to clear a parked pick that had reached nothing, and the member's photo
                 // was then lost with no retry armed to resend it.
-                // The name this payload carried is no longer waiting there.
-                await pendingNameAccepted(url);
+                // The name this payload carried is no longer waiting there; one it did not carry still is.
+                if (sentName) await pendingNameAccepted(url);
                 if (avatarDecision) await retireParkedPickAfterPublish(avatarDecision, url);
             } else {
                 // As in the settings Save: kept for this community, never for the phone, with the
                 // name and the pick in it so a members sync overwriting the local row with the
                 // node's before the retry lands cannot silently drop what the member chose here.
                 const offlinePick = explicitEditAvatar(pendingAvatar);
-                await keepPendingProfileChange(url, identity.publicKey, { callsign: finalCallsign, avatar: offlinePick });
+                if (sentName || offlinePick) await keepPendingProfileChange(url, identity.publicKey, { callsign: sentName ?? undefined, avatar: offlinePick });
             }
 
             leaveWizard();

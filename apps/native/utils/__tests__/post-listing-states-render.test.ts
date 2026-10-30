@@ -496,6 +496,49 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
         });
     }
 
+    // The line says what became of the deal the alert named, above a listing the member may take up again. Once they have (a deal
+    // of their own held or asked for on it), the box of that deal is the page and the old line goes (review on #2588).
+    it("a deal's alert for one that is over, the listing since taken up again: the new deal's box, and no line on the old one", async () => {
+        node.mine = [
+            deal({ id: 'tx-c', status: 'cancelled', createdAt: '2026-10-20T10:00:00.000Z' }),
+            deal({ id: 'tx-n', status: 'pending', createdAt: '2026-10-27T10:00:00.000Z' }),
+        ];
+        await open(listing({ title: 'Lawn mower', repeatable: 0, status: 'pending', accepted_by: ME.publicKey }), { txId: 'tx-c' });
+        expect(host.textContent).toContain('❌ Cancel Trust Hold');
+        expect(buttons().some((b) => b.includes('🤝 Accept Offer'))).toBe(false);
+        expect(over()).toBeNull();
+    });
+
+    it("a deal's alert for one that is over, the member since asked to borrow it again: whom they wait on, Withdraw, and no line on the old deal", async () => {
+        node.mine = [
+            deal({ id: 'tx-c', status: 'cancelled', createdAt: '2026-10-20T10:00:00.000Z' }),
+            deal({ id: 'tx-q', status: 'requested', createdAt: '2026-10-27T10:00:00.000Z' }),
+        ];
+        await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0 }), { txId: 'tx-c' });
+        expect(host.textContent).toContain('You asked to borrow it · nothing is held until Damo says yes');
+        expect(buttons().some((b) => b.includes('Withdraw Request'))).toBe(true);
+        expect(over()).toBeNull();
+    });
+
+    it('the line is there while the listing waits to be taken up, and goes the moment the member takes it up again', async () => {
+        node.mine = [deal({ id: 'tx-c', status: 'cancelled', createdAt: '2026-10-20T10:00:00.000Z' })];
+        await open(listing({ title: 'Lawn mower', repeatable: 1 }), { txId: 'tx-c' });
+        expect(over()).toBe('That deal was cancelled.');
+        expect(buttons().some((b) => b.includes('🤝 Accept Offer'))).toBe(true);
+        // Taken up again: the phone's deals now hold the new one, and the app says so (afterDealStep, the sync).
+        node.mine.push(deal({ id: 'tx-n', status: 'pending', createdAt: '2026-10-27T10:00:00.000Z' }));
+        await act(async () => { for (const fn of events.listeners.get('sync_data_updated') ?? []) fn(); });
+        await settle();
+        expect(over()).toBeNull();
+        expect(buttons().some((b) => b.includes('🤝 Accept Offer'))).toBe(false);
+    });
+
+    it("a stranger to the deal a link names (a deal that is not theirs): no line on it, and nothing of it", async () => {
+        await open(listing({ title: 'Lawn mower', repeatable: 1 }), { txId: 'tx-someone-elses' });
+        expect(buttons().some((b) => b.includes('🤝 Accept Offer'))).toBe(true);
+        expect(over()).toBeNull();
+    });
+
     it("a deal's alert while it is open still lands on it: an approved helper sees the Beans held for them, no take-up", async () => {
         node.mine = [deal({ id: 'tx-a', buyerPublicKey: 'kofi-key', buyerCallsign: 'Kofi', sellerPublicKey: ME.publicKey, credits: 20 })];
         await open(listing({ type: 'need', title: 'Stall help', author_pubkey: 'kofi-key', author_callsign: 'Kofi', credits: 20, status: 'pending', accepted_by: ME.publicKey }), { txId: 'tx-a' });
@@ -505,7 +548,7 @@ describe("a finished deal's alert lands on the listing as it is now (review on #
         expect(over()).toBeNull();
     });
 
-    it('one who asked to borrow, opened on their request by its id (My Deals, Home): whom they wait on, and Withdraw', async () => {
+    it('one who asked to borrow, opened on their request by its id (Your deals, Home): whom they wait on, and Withdraw', async () => {
         node.mine = [deal({ id: 'tx-q', status: 'requested' })];
         await open(listing({ title: 'Ladder', lendable: 1, repeatable: 0 }), { txId: 'tx-q' });
         expect(host.textContent).toContain('You asked to borrow it · nothing is held until Damo says yes');

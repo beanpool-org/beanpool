@@ -230,7 +230,7 @@ export default function TabLayout() {
                 setUnread(count);
 
                 // Count active deals — mirror usePendingDealsCount in MyDealsSheet so
-                // the bottom-tab Market badge matches the in-app My Deals pill.
+                // the bottom-tab Market badge matches the in-app Your deals pill.
                 const myTxns = await getMarketplaceTransactions(identity.publicKey);
                 const active = dealsNeedingMe(myTxns, identity.publicKey).length;
                 setDealsCount(active);

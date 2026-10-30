@@ -11,7 +11,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { HomeAnswer, HomeFind } from '../lib/home-cards';
+import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeFind } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
@@ -625,6 +625,40 @@ describe('the card of a request the community no longer holds, and after a Cance
         expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
         // This visit only: the card wrote nothing (the knock is still the one remembered; cancelKnock is mocked here).
         expect(stored().map(k => k.url)).toEqual([BYRON.url]);
+    });
+
+    // LG-L1-W (review of #2573): the line is for the whole Home visit, through the visit's later reads of Home, and gone the next visit.
+    it('a Cancel that worked: the cancelled line and the pin stay through the next read of Home, and the next visit (Home mounted again) draws no card for it', async () => {
+        await askedOf(BYRON);
+        vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        // As the real cancelKnock leaves the browser: the knock stays in the store, marked cancelled.
+        vi.spyOn(knockModule, 'cancelKnock').mockImplementation(async () => {
+            const store = JSON.parse(localStorage.getItem('beanpool_knocks')!);
+            localStorage.setItem('beanpool_knocks', JSON.stringify({ ...store, knocks: store.knocks.map((k: object) => ({ ...k, cancelledAt: new Date().toISOString() })) }));
+            return { ok: true };
+        });
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(within(cardOf(BYRON.url)).getByTestId(`home-waiting-arrived-${BYRON.url}`)).toHaveTextContent('Your request arrived.'));
+        fireEvent.click(screen.getByTestId(`home-cancel-knock-${BYRON.url}`));
+        expect(await screen.findByTestId(`home-waiting-cancelled-${BYRON.url}`)).toHaveTextContent(CANCELLED_LINE);
+
+        // The visit reads Home again (a notice put away rings it).
+        const reads = vi.mocked(api.getHome).mock.calls.length;
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await waitFor(() => expect(vi.mocked(api.getHome).mock.calls.length).toBeGreaterThan(reads));
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByTestId(`home-waiting-cancelled-${BYRON.url}`)).toHaveTextContent(CANCELLED_LINE);
+        expect(within(screen.getByTestId('home-card-find')).queryByTestId('home-card-menu')).toBeNull();
+
+        // Leaving Home and coming back mounts it again: the browser holds the request cancelled, so no card, and no pin past day 30.
+        first.unmount();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(vi.mocked(api.getHome).mock.calls.length).toBeGreaterThan(reads + 1));
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.queryByTestId(`home-waiting-card-${BYRON.url}`)).toBeNull();
+        expect(document.body.textContent).not.toContain(CANCELLED_LINE);
     });
 
     it('a Cancel that failed still shows the error and the button, and no cancelled line', async () => {

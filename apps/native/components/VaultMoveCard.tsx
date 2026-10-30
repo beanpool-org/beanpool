@@ -41,6 +41,17 @@ export const VAULT_MOVE_COPY = {
     removeCancel: word('Keep it'),
     removeFailedTitle: word('Not removed yet'),
     removedFailed: word("Your community didn't answer, so the copy is still there. The app tries again the next time you open Settings."),
+    // The reverse (vault rethink VR2, design §5.2): the community keeps members' copies itself now (its rule `server`).
+    keepTitle: (name: string) => t('Keep your {name} recovery with your community', { name }),
+    keepBody: (name: string) => t("One sign-in. Your community keeps members' copies on its own server now. A new copy of your account for {name} is kept there, and BeanPool's key vault removes its copy.", { name }),
+    keepRemoveTitle: (name: string) => t('Remove your {name} recovery?', { name }),
+    // As removeBody: only the key vault's copy goes, so the words say which ways back close, never that none is left.
+    keepRemoveBody: (name: string, hasWords: boolean) => (hasWords
+        ? t("BeanPool's key vault deletes its copy of your account for {name}, and none is kept on your community's server. {name} won't bring your account back through the key vault or your community until you link it again. Your 12 words work any time.", { name })
+        : t("BeanPool's key vault deletes its copy of your account for {name}, and none is kept on your community's server. {name} won't bring your account back through the key vault or your community until you link it again. This phone has no 12 words: if you lose it after this, nothing brings your account back.", { name })),
+    keepVaultNotYet: word("Your community keeps the new copy. BeanPool's key vault didn't answer, so its copy is still there: remove it from Where your account can be brought back from."),
+    keepVaultFailed: word("BeanPool's key vault didn't answer, so its copy is still there. Try again later from Where your account can be brought back from."),
+    movedElsewhere: word("The new copy wasn't kept where this move meant to keep it, so the old one stays too. See Where your account can be brought back from."),
 } as const;
 
 export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentResult | null) => void }) {
@@ -64,13 +75,16 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
     if (!offer || !identity) return null;
     const name = SSO_PROVIDER_NAMES[offer.provider];
     const move = offer.kind === 'move';
+    const keepHere = offer.kind === 'keep-here';
+    const title = keepHere ? VAULT_MOVE_COPY.keepTitle(name) : move ? VAULT_MOVE_COPY.moveTitle(name) : VAULT_MOVE_COPY.retryTitle(name);
+    const body = keepHere ? VAULT_MOVE_COPY.keepBody(name) : move ? VAULT_MOVE_COPY.moveBody(name) : VAULT_MOVE_COPY.retryBody(name);
 
     return (
         <View style={styles.card} accessibilityRole="summary">
-            <Text style={styles.title} accessibilityRole="header">{move ? VAULT_MOVE_COPY.moveTitle(name) : VAULT_MOVE_COPY.retryTitle(name)}</Text>
-            <Text style={styles.body}>{move ? VAULT_MOVE_COPY.moveBody(name) : VAULT_MOVE_COPY.retryBody(name)}</Text>
+            <Text style={styles.title} accessibilityRole="header">{title}</Text>
+            <Text style={styles.body}>{body}</Text>
             <Pressable style={styles.primary} onPress={() => setSheetOpen(true)} accessibilityRole="button">
-                <Text style={styles.primaryText}>{move ? t(VAULT_MOVE_COPY.moveButton) : t(VAULT_MOVE_COPY.retryButton)}</Text>
+                <Text style={styles.primaryText}>{move || keepHere ? t(VAULT_MOVE_COPY.moveButton) : t(VAULT_MOVE_COPY.retryButton)}</Text>
             </Pressable>
             <Pressable
                 style={styles.secondary}
@@ -107,14 +121,47 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
                     <Text style={styles.secondaryText}>{t(VAULT_MOVE_COPY.removeButton)}</Text>
                 </Pressable>
             )}
+            {/* The reverse's own: the key vault's copy goes, and none is made at the community (vault rethink VR2). */}
+            {keepHere && (
+                <Pressable
+                    style={styles.secondary}
+                    onPress={() => Alert.alert(
+                        VAULT_MOVE_COPY.keepRemoveTitle(name),
+                        VAULT_MOVE_COPY.keepRemoveBody(name, hasMnemonic(identity)),
+                        [
+                            { text: t(VAULT_MOVE_COPY.removeCancel), style: 'cancel' },
+                            {
+                                text: t(VAULT_MOVE_COPY.removeConfirm),
+                                style: 'destructive',
+                                onPress: async () => {
+                                    const gone = await removeInstead(identity, offer);
+                                    setOffer(null);
+                                    if (!gone) Alert.alert(t(VAULT_MOVE_COPY.removeFailedTitle), t(VAULT_MOVE_COPY.keepVaultFailed));
+                                    onMoved?.(null);
+                                },
+                            },
+                        ],
+                    )}
+                    accessibilityRole="button"
+                >
+                    <Text style={styles.secondaryText}>{t(VAULT_MOVE_COPY.removeButton)}</Text>
+                </Pressable>
+            )}
             <SsoEnrolSheet
                 visible={sheetOpen}
                 provider={offer.provider}
+                copiesAt={keepHere ? 'community' : 'vault'}
                 onClose={() => setSheetOpen(false)}
+                // The community's rule moved on since this card was worked out, and nothing was linked: the card no longer
+                // holds. Put away, and Settings reads where copies go again; its next visit works the card out afresh.
+                onCopiesChanged={() => { setOffer(null); onMoved?.(null); }}
                 onEnrolled={async (result) => {
-                    // The vault has it now: the community's copy goes (utils/vault-move.ts `finishMove`).
-                    await finishMove(identity, offer);
+                    // The new copy is kept: the old one goes, once the new one is where the move meant (utils/vault-move.ts
+                    // `finishMove`). Kept elsewhere (a rule changed meanwhile), both stay, and the member is told.
+                    const done = await finishMove(identity, offer, result);
                     setOffer(null);
+                    if (done === 'kept' && offer.kind !== 'retry') Alert.alert(t(VAULT_MOVE_COPY.removeFailedTitle), t(VAULT_MOVE_COPY.movedElsewhere));
+                    if (done === 'not-yet' && keepHere) Alert.alert(t(VAULT_MOVE_COPY.removeFailedTitle), t(VAULT_MOVE_COPY.keepVaultNotYet));
                     onMoved?.(result);
                 }}
             />

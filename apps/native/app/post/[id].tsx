@@ -662,7 +662,7 @@ export default function PostDetailModal() {
                     // The deal a door named stands as the live one only while its Beans are held, as on the web (MarketplacePage
                     // pinnedTx). One that is over (an alert for a request declined, a deal cancelled, released or settled) never
                     // does: it hid Accept, Ask to borrow and Offer to Fulfill from one the node lets take the listing up again.
-                    // Nor does a request (My Deals, Home): it hid the asker's own box and Withdraw. The listing's own read below
+                    // Nor does a request (Your deals, Home): it hid the asker's own box and Withdraw. The listing's own read below
                     // gives what the reader has on it now, and the page says what became of a deal that is over.
                     const pinned: any = singleTxId ? await database.getFirstAsync(`
                         SELECT t.*, m.callsign as buyer_callsign, m.avatar_url as buyer_avatar, s.callsign as seller_callsign, s.avatar_url as seller_avatar
@@ -1452,8 +1452,10 @@ export default function PostDetailModal() {
 
                 {/* Action Buttons */}
 
-                {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now. */}
-                {!!pinnedOver && !!listingDealLines.finished(pinnedOver) && (
+                {/* The deal an alert named, when it is over: what became of it, above the listing as it stands for the reader now.
+                    Not once the reader has taken the listing up again (a deal of their own held or asked for: no take-up left,
+                    and not its own people): that deal's box is the page, as on the web. */}
+                {!!pinnedOver && !!listingDealLines.finished(pinnedOver) && (deals.own || deals.canTakeUp) && (
                     <Text testID="pinned-deal-over" style={{ color: colors.text.secondary, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 12 }}>
                         {listingDealLines.finished(pinnedOver)}
                     </Text>

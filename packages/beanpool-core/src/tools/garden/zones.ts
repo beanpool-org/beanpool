@@ -17,19 +17,19 @@ export interface GardenZone {
     id: GardenZoneId;
     /** Its name in the zone line ("Warm temperate · southern hemisphere"). */
     name: WordKey;
-    /** One line under it in Change. */
+    /** A few words under it in Change (the design's own: one line at 320 dp). */
     line: WordKey;
 }
 
 /** The zones, warmest first: the order of Change and of the climate layer's letters b..h. */
 export const GARDEN_ZONES: readonly GardenZone[] = [
-    { id: 'tropical-wet', name: word('Wet tropical'), line: word('Warm all year, with rain in most months.') },
-    { id: 'tropical-seasonal', name: word('Tropical wet and dry'), line: word('Warm all year, with a wet season and a dry season.') },
-    { id: 'dry', name: word('Dry'), line: word('Little rain: water decides what grows.') },
-    { id: 'warm', name: word('Warm temperate'), line: word('Hot summers and mild winters.') },
-    { id: 'mild', name: word('Mild temperate'), line: word('Mild summers and light frosts.') },
-    { id: 'cold', name: word('Cold temperate'), line: word('Warm summers and hard winters.') },
-    { id: 'short', name: word('Short season'), line: word('Far north or high mountains: a short summer.') },
+    { id: 'tropical-wet', name: word('Wet tropical'), line: word('Rain in most months') },
+    { id: 'tropical-seasonal', name: word('Tropical wet and dry'), line: word('Wet and dry seasons') },
+    { id: 'dry', name: word('Dry'), line: word('Little rain') },
+    { id: 'warm', name: word('Warm temperate'), line: word('Mild winters') },
+    { id: 'mild', name: word('Mild temperate'), line: word('Light frosts') },
+    { id: 'cold', name: word('Cold temperate'), line: word('Hard winters') },
+    { id: 'short', name: word('Short season'), line: word('Far north or mountains') },
 ];
 
 export const GARDEN_ZONE_IDS: readonly GardenZoneId[] = GARDEN_ZONES.map((z) => z.id);

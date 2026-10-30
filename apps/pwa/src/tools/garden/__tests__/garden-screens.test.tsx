@@ -71,7 +71,7 @@ describe('Your garden on the web: the guide', () => {
         home.answer = answer({ lat: -28.55, lng: 153.5 }); // Mullumbimby
         const line = await openGuide();
         expect(line.textContent).toContain('Warm temperate · southern hemisphere');
-        expect(line.textContent).toContain("From your community's place.");
+        expect(screen.getByTestId('garden-zone-source').textContent).toContain("From your community's place.");
         expect(screen.getByTestId('garden-now')).toBeTruthy();
         expect(screen.getByTestId('garden-all').textContent).toContain('Tomatoes');
         expect(document.body.textContent).toContain('Climate map: Beck et al. (2023), CC BY 4.0');
@@ -84,7 +84,7 @@ describe('Your garden on the web: the guide', () => {
         home.answer = answer(null, { lat: 51.5, lng: -0.1 }); // London
         const line = await openGuide();
         expect(line.textContent).toContain('Mild temperate · northern hemisphere');
-        expect(line.textContent).toContain('From your area.');
+        expect(screen.getByTestId('garden-zone-source').textContent).toContain('From your area.');
         cleanup();
         home.answer = null; // the server can't be reached
         draw({ id: 'garden', screen: 'main', key: null });
@@ -100,7 +100,7 @@ describe('Your garden on the web: the guide', () => {
         expect((await screen.findByTestId('garden-zone-found')).textContent).toContain('Warm temperate · southern hemisphere');
         fireEvent.click(screen.getByTestId('garden-zone-mild'));
         await waitFor(() => expect(screen.getByTestId('garden-zone-line').textContent).toContain('Mild temperate · southern hemisphere'));
-        expect(screen.getByTestId('garden-zone-line').textContent).toContain('You chose this.');
+        expect(screen.getByTestId('garden-zone-source').textContent).toContain('You chose this.');
         const kept = await readToolRecord(OWNER, 'garden');
         expect(JSON.parse(kept!.body)).toEqual({ v: 1, settings: { zone: 'mild', hemisphere: 'south' } });
         fireEvent.click(screen.getByTestId('garden-change'));

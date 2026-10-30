@@ -96,7 +96,8 @@ describe('the guide in words', () => {
         const garlic = guideView('mild', 'south', 1).soon.find((s) => s.crop.id === 'garlic');
         expect(garlic?.from).toBe(MAR);
         expect(view.all.length).toBe(growsHere('warm').length);
-        expect(harvestLine(crop('tomato'))).toBe('Harvest in 13 to 17 weeks');
+        expect(harvestLine(crop('tomato'))).toBe('Ready in 13–17 weeks');
+        expect(cropPage(crop('tomato'), 'warm', 'north').weeks).toBe('13 to 17 weeks');
         expect(cropPage(crop('cassava'), 'tropical-wet', 'south').note).toBe('In the tropics the rains decide more than the month does.');
         expect(cropPage(crop('cassava'), 'cold', 'north')).toMatchObject({ sow: null, harvest: null, note: 'Not usually grown outdoors in this climate.' });
         expect(cropPage(crop('tomato'), 'warm', 'south').sow).toBe('Aug – Oct');

@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import {
     GARDEN_ZONES, HEMISPHERE_WORDS, ZONE_ICONS, capitalFirst, climateCreditLine, cropById, cropPage, gardenZoneFix, guideGeneralLine,
-    guideView, harvestLine, soonLine, t, withGardenClimate, zoneLineText, zoneSourceText,
+    guideView, harvestLine, soonLine, t, weeksText, withGardenClimate, zoneLineText, zoneSourceText,
     type GardenScreenProps, type GardenZoneId, type Hemisphere, type ToolPlace,
 } from '@beanpool/core';
 import { ToolButton, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolSection } from '../ui';
@@ -57,7 +57,8 @@ export function Main({ host }: GardenScreenProps) {
     return (
         <div data-testid="garden-main" className="min-w-0">
             <ToolSection>
-                <ToolRow icon={ZONE_ICONS[fix.zone]} title={zoneLineText(fix.zone, fix.hemisphere)} wrap state={zoneSourceText(fix.source)} testId="garden-zone-line" />
+                <ToolRow icon={ZONE_ICONS[fix.zone]} title={zoneLineText(fix.zone, fix.hemisphere)} wrap testId="garden-zone-line" />
+                <ToolNote text={zoneSourceText(fix.source)} testId="garden-zone-source" />
                 <div className={BUTTONS}>
                     <ToolButton onClick={() => host.navigate('zone')} testId="garden-change">{t('Change')}</ToolButton>
                 </div>
@@ -94,7 +95,10 @@ export function Crop({ host, params }: GardenScreenProps) {
     if (!fix) {
         return (
             <div data-testid="garden-crop" className="min-w-0">
-                <ToolSection><ToolRow icon={crop.icon} title={t(crop.name)} wrap state={harvestLine(crop)} testId="garden-crop-name" /></ToolSection>
+                <ToolSection>
+                    <ToolRow icon={crop.icon} title={t(crop.name)} wrap testId="garden-crop-name" />
+                    <ToolField label={t('From sowing to first harvest')}><span data-testid="garden-crop-weeks">{weeksText(crop)}</span></ToolField>
+                </ToolSection>
                 {place !== undefined && (
                     <div className={BUTTONS}><ToolButton kind="primary" onClick={() => host.navigate('zone')} testId="garden-choose">{t('Choose your climate')}</ToolButton></div>
                 )}
@@ -105,10 +109,11 @@ export function Crop({ host, params }: GardenScreenProps) {
     return (
         <div data-testid="garden-crop" className="min-w-0">
             <ToolSection>
-                <ToolRow icon={crop.icon} title={t(crop.name)} wrap state={zoneLineText(fix.zone, fix.hemisphere)} testId="garden-crop-name" />
+                <ToolRow icon={crop.icon} title={t(crop.name)} wrap testId="garden-crop-name" />
+                <ToolField label={t('Your climate')}><span data-testid="garden-crop-zone">{zoneLineText(fix.zone, fix.hemisphere)}</span></ToolField>
                 {page.sow && <ToolField label={t('Sow')}><span data-testid="garden-crop-sow">{page.sow}</span></ToolField>}
                 {page.harvest && <ToolField label={t('First harvest')}><span data-testid="garden-crop-harvest">{page.harvest}</span></ToolField>}
-                <ToolField label={t('From sowing')}><span data-testid="garden-crop-weeks">{page.weeks}</span></ToolField>
+                <ToolField label={t('From sowing to first harvest')}><span data-testid="garden-crop-weeks">{page.weeks}</span></ToolField>
                 {page.note && <ToolNote text={page.note} testId="garden-crop-note" />}
             </ToolSection>
             <Foot />

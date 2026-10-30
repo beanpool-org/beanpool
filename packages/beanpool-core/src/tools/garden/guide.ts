@@ -185,10 +185,16 @@ export function guideView(zone: GardenZoneId, hemisphere: Hemisphere, m: number,
     return { now: cropsByName(sowNow(zone, hemisphere, m, crops)), soon, all: cropsByName(growsHere(zone, crops)) };
 }
 
-/** A crop's row under Sow now: how long to its first harvest. */
+/** A crop's row under Sow now: how long to its first harvest, short enough for a row's one line. */
 export function harvestLine(crop: Crop): string {
     const [from, to] = harvestWeeks(crop);
-    return from === to ? t('Harvest in about {n} weeks', { n: from }) : t('Harvest in {from} to {to} weeks', { from, to });
+    return from === to ? t('Ready in about {n} weeks', { n: from }) : t('Ready in {from}–{to} weeks', { from, to });
+}
+
+/** The same on a crop's page, under "From sowing to first harvest". */
+export function weeksText(crop: Crop): string {
+    const [from, to] = harvestWeeks(crop);
+    return from === to ? t('About {n} weeks', { n: from }) : t('{from} to {to} weeks', { from, to });
 }
 
 /** A crop's row under Soon: the month its window opens. */
@@ -218,7 +224,7 @@ export function cropPage(crop: Crop, zone: GardenZoneId, hemisphere: Hemisphere)
         : zone === 'tropical-wet' || zone === 'tropical-seasonal' ? t('In the tropics the rains decide more than the month does.')
             : zone === 'dry' ? t('In a dry climate, water decides more than the month does.')
                 : null;
-    return { sow: monthsText(w.sow), harvest: monthsText(w.harvest), weeks: harvestLine(crop), note };
+    return { sow: monthsText(w.sow), harvest: monthsText(w.harvest), weeks: weeksText(crop), note };
 }
 
 /** The sentence at the foot of every guide screen (§2.1). */

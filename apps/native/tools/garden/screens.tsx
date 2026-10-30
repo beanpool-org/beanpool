@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import {
     GARDEN_ZONES, HEMISPHERE_WORDS, ZONE_ICONS, capitalFirst, climateCreditLine, cropById, cropPage, gardenZoneFix, guideGeneralLine,
-    guideView, harvestLine, soonLine, t, withGardenClimate, zoneLineText, zoneSourceText,
+    guideView, harvestLine, soonLine, t, weeksText, withGardenClimate, zoneLineText, zoneSourceText,
     type GardenScreenProps, type Hemisphere, type ToolPlace,
 } from '@beanpool/core';
 import { ToolButton, ToolButtons, ToolEmpty, ToolField, ToolChips, ToolNote, ToolRow, ToolScreen, ToolSection } from '../ui';
@@ -55,7 +55,8 @@ export function Main({ host }: GardenScreenProps) {
     return (
         <ToolScreen testID="garden-main">
             <ToolSection>
-                <ToolRow icon={ZONE_ICONS[fix.zone]} title={line} wrap state={zoneSourceText(fix.source)} testID="garden-zone-line" />
+                <ToolRow icon={ZONE_ICONS[fix.zone]} title={line} wrap testID="garden-zone-line" />
+                <ToolNote text={zoneSourceText(fix.source)} testID="garden-zone-source" />
                 <ToolButtons>
                     <ToolButton text={t('Change')} a11y={t('Change your climate')} onPress={() => host.navigate('zone')} testID="garden-change" />
                 </ToolButtons>
@@ -92,7 +93,10 @@ export function Crop({ host, params }: GardenScreenProps) {
     if (!fix) {
         return (
             <ToolScreen testID="garden-crop">
-                <ToolSection><ToolRow icon={crop.icon} title={t(crop.name)} wrap state={harvestLine(crop)} testID="garden-crop-name" /></ToolSection>
+                <ToolSection>
+                    <ToolRow icon={crop.icon} title={t(crop.name)} wrap testID="garden-crop-name" />
+                    <ToolField label={t('From sowing to first harvest')} value={weeksText(crop)} testID="garden-crop-weeks" />
+                </ToolSection>
                 {place !== undefined ? <ToolButtons><ToolButton text={t('Choose your climate')} primary onPress={() => host.navigate('zone')} testID="garden-choose" /></ToolButtons> : null}
             </ToolScreen>
         );
@@ -101,10 +105,11 @@ export function Crop({ host, params }: GardenScreenProps) {
     return (
         <ToolScreen testID="garden-crop">
             <ToolSection>
-                <ToolRow icon={crop.icon} title={t(crop.name)} wrap state={zoneLineText(fix.zone, fix.hemisphere)} testID="garden-crop-name" />
+                <ToolRow icon={crop.icon} title={t(crop.name)} wrap testID="garden-crop-name" />
+                <ToolField label={t('Your climate')} value={zoneLineText(fix.zone, fix.hemisphere)} testID="garden-crop-zone" />
                 {page.sow ? <ToolField label={t('Sow')} value={page.sow} testID="garden-crop-sow" /> : null}
                 {page.harvest ? <ToolField label={t('First harvest')} value={page.harvest} testID="garden-crop-harvest" /> : null}
-                <ToolField label={t('From sowing')} value={page.weeks} testID="garden-crop-weeks" />
+                <ToolField label={t('From sowing to first harvest')} value={page.weeks} testID="garden-crop-weeks" />
                 {page.note ? <ToolNote text={page.note} testID="garden-crop-note" /> : null}
             </ToolSection>
             <Foot />

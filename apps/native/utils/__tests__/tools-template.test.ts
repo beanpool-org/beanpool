@@ -1549,7 +1549,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         await click(byTestId('tool-door-starting'), "I'm starting out");
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Warm temperate · southern hemisphere');
-        expect(byTestId('garden-zone-line')?.textContent).toContain("From your community's place.");
+        expect(byTestId('garden-zone-source')?.textContent).toContain("From your community's place.");
         expect(byTestId('garden-now')).not.toBeNull();
         expect(byTestId('garden-all')?.textContent).toContain('Tomatoes');
         expect(host.textContent).toContain('Climate map: Beck et al. (2023), CC BY 4.0');
@@ -1589,7 +1589,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         await redraw({}, 'en');
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate · southern hemisphere');
-        expect(byTestId('garden-zone-line')?.textContent).toContain('You chose this.');
+        expect(byTestId('garden-zone-source')?.textContent).toContain('You chose this.');
         await redraw({ screen: 'zone' }, 'en');
         await settleUntil(() => !!byTestId('garden-zone-reset'), 8000);
         await click(byTestId('garden-zone-reset'), 'Use my place again');
@@ -1603,7 +1603,7 @@ describe('Your garden (grow-food G0): the guide shows the zone line, and opens f
         await click(byTestId('tool-door-doing'), 'I already do this');
         await settleUntil(() => !!byTestId('garden-zone-line'), 8000);
         expect(byTestId('garden-zone-line')?.textContent).toContain('Mild temperate · northern hemisphere');
-        expect(byTestId('garden-zone-line')?.textContent).toContain('From your area.');
+        expect(byTestId('garden-zone-source')?.textContent).toContain('From your area.');
 
         store.map.delete(homeAnswerStoreKey(ME.publicKey, URL_HERE));
         loc.last = { coords: { latitude: 1.35, longitude: 103.82 } }; // Singapore, but location isn't allowed here

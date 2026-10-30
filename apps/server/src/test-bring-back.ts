@@ -342,9 +342,11 @@ async function runTests() {
         assert(declined.status === 200, `the admin declines a phone that isn't theirs (got ${declined.status})`);
         const viaDeclined = await bindByNumber(adminSession, kim.pubKeyHex, code, t.json.match);
         assert(viaDeclined.status === 409 && (await poll(thief, code)).json.state === 'declined', 'a declined phone\'s number releases nothing');
-        const pasted = await as(adminSession, 'POST', `/api/local/admin/members/${kim.pubKeyHex}/rekey/complete`, { code, newPubkey: thief.pubKeyHex });
-        assert(pasted.status === 409 && pasted.json.error === BRING_BACK_NEEDS_NUMBER && memberRow(kim.pubKeyHex)?.status === 'active' && !memberRow(thief.pubKeyHex),
-            `a pasted key never completes a bring-back, and moves nothing (got ${pasted.status})`);
+        // A fresh key, never declined, so nothing but the bring-back rule stands between it and the account.
+        const pastedKey = makeKeypair();
+        const pasted = await as(adminSession, 'POST', `/api/local/admin/members/${kim.pubKeyHex}/rekey/complete`, { code, newPubkey: pastedKey.pubKeyHex });
+        assert(pasted.status === 409 && pasted.json.error === BRING_BACK_NEEDS_NUMBER && memberRow(kim.pubKeyHex)?.status === 'active' && !memberRow(pastedKey.pubKeyHex),
+            `a pasted key never completes a bring-back, and moves nothing (got ${pasted.status}, member ${memberRow(kim.pubKeyHex)?.status ?? 'moved'})`);
         const unused = [...Array(100).keys()].map(n => String(n).padStart(2, '0')).filter(n => n !== t.json.match);
         for (let i = 0; i < 3; i++) await bindByNumber(adminSession, kim.pubKeyHex, code, unused[i]);
         assert((db.prepare('SELECT status FROM rekey_requests WHERE code = ?').get(code) as any).status === 'expired', 'three wrong numbers stop the code');

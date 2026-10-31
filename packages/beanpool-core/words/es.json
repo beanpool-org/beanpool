@@ -817,5 +817,9 @@
   "Transferring {n} B to {name}": "Transfiriendo {n} B a {name}",
   "That deal is done.": "Ese trato ya terminó.",
   "That request was declined.": "Esa solicitud fue rechazada.",
-  "That deal was cancelled.": "Ese trato se canceló."
+  "That deal was cancelled.": "Ese trato se canceló.",
+  "Eggs\u0004tag": "Huevos",
+  "Fruit\u0004tag": "Fruta",
+  "Lemon\u0004tag": "Limón",
+  "Lime\u0004tag": "Lima"
 }

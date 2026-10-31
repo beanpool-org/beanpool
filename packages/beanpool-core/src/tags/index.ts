@@ -249,15 +249,6 @@ export function buildTagIndex(words?: Translate): TagIndex {
 
 let cached: { words: Words; index: TagIndex } | undefined;
 
-const SEED_TAG_TRANSLATIONS: Readonly<Record<string, Record<string, string>>> = {
-    es: {
-        [`Lemon${CONTEXT_SEPARATOR}tag`]: 'Limón',
-        [`Lime${CONTEXT_SEPARATOR}tag`]: 'Lima',
-        [`Fruit${CONTEXT_SEPARATOR}tag`]: 'Fruta',
-        [`Eggs${CONTEXT_SEPARATOR}tag`]: 'Huevos',
-    },
-};
-
 const langIndices = new Map<string, TagIndex>();
 
 /** The device language's index, built on first use and again after every setLanguage (a language switch, or new words for
@@ -269,10 +260,10 @@ export function tagIndex(langOrWords?: string | Words | Translate): TagIndex {
         return cached.index;
     }
     if (typeof langOrWords === 'string') {
+        if (langOrWords === currentLanguage()) return tagIndex();
         let idx = langIndices.get(langOrWords);
         if (!idx) {
-            const seed = SEED_TAG_TRANSLATIONS[langOrWords];
-            const w = wordsFor(langOrWords as UiLang, seed ? [seed] : []);
+            const w = wordsFor(langOrWords as UiLang);
             idx = buildTagIndex(w);
             langIndices.set(langOrWords, idx);
         }
@@ -369,15 +360,6 @@ export function searchTagsFor(query: string, options: { index?: TagIndex; limit?
     };
 
     if (searchWith(index)) return [...out];
-
-    if (!options.index) {
-        for (const lang of Object.keys(SEED_TAG_TRANSLATIONS)) {
-            if (lang !== index.lang) {
-                const alt = tagIndex(lang);
-                if (searchWith(alt)) return [...out];
-            }
-        }
-    }
 
     return [...out];
 }

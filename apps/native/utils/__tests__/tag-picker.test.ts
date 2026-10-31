@@ -12,7 +12,9 @@ import {
     suggestTags,
     tagIndex,
     searchTagsFor,
+    setLanguage,
 } from '@beanpool/core';
+import { catalogsFor } from '../words-catalogs';
 import { marketSearchMatches, marketSearchToSave } from '../market-filters';
 
 describe('TagPicker logic', () => {
@@ -31,22 +33,29 @@ describe('TagPicker logic', () => {
     });
 
     it('searches from 2 characters in two languages (Spanish and English)', () => {
-        const index = tagIndex('es');
+        try {
+            setLanguage('es', catalogsFor('es'));
+            const index = tagIndex();
 
-        // Less than 2 characters does not search
-        expect('l'.length >= 2).toBe(false);
+            // Less than 2 characters does not search
+            expect('l'.length >= 2).toBe(false);
 
-        // Search from 2 characters in English
-        const enMatches = index.search('le');
-        expect(enMatches.length).toBeGreaterThan(0);
-        expect(enMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
+            // Search from 2 characters in English
+            const enMatches = index.search('le');
+            expect(enMatches.length).toBeGreaterThan(0);
+            expect(enMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
 
-        // Search in Spanish ("lim" or "limón")
-        const esMatches = index.search('lim');
-        expect(esMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
+            // Search in Spanish ("lim" or "limón")
+            const esMatches = index.search('lim');
+            expect(esMatches.length).toBeGreaterThan(0);
+            expect(esMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
 
-        const esFullMatches = index.search('limón');
-        expect(esFullMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
+            const esFullMatches = index.search('limón');
+            expect(esFullMatches.length).toBeGreaterThan(0);
+            expect(esFullMatches.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('returns up to 8 suggested tags from title, description and category', () => {
@@ -131,48 +140,63 @@ describe('Composers sending tags', () => {
 
 describe('Market search sends q AND tags', () => {
     it('resolves typed query words to tag IDs and sends both q and tags', () => {
-        const q = 'limón';
-        const resolved = searchTagsFor(q);
-        expect(resolved).toContain('food.fruit.lemon');
+        try {
+            setLanguage('es', catalogsFor('es'));
+            const q = 'limón';
+            const resolved = searchTagsFor(q);
+            expect(resolved).toContain('food.fruit.lemon');
 
-        // Market search sends both q AND tags (§4.7)
-        const params = new URLSearchParams();
-        params.set('q', q);
-        if (resolved.length > 0) {
-            params.set('tags', resolved.join(','));
+            // Market search sends both q AND tags (§4.7)
+            const params = new URLSearchParams();
+            params.set('q', q);
+            if (resolved.length > 0) {
+                params.set('tags', resolved.join(','));
+            }
+
+            expect(params.get('q')).toBe('limón');
+            expect(params.get('tags')).toContain('food.fruit.lemon');
+        } finally {
+            setLanguage('en');
         }
-
-        expect(params.get('q')).toBe('limón');
-        expect(params.get('tags')).toContain('food.fruit.lemon');
     });
 
     it('cross-language search: typing Spanish "limón" matches listing tagged food.fruit.lemon', () => {
-        const post = {
-            title: 'Homegrown organic citrus',
-            description: 'Pick up from my backyard garden',
-            tags: 'food.fruit.lemon',
-        };
+        try {
+            setLanguage('es', catalogsFor('es'));
+            const post = {
+                title: 'Homegrown organic citrus',
+                description: 'Pick up from my backyard garden',
+                tags: 'food.fruit.lemon',
+            };
 
-        // Query in Spanish
-        const matches = marketSearchMatches(post, 'limón');
-        expect(matches).toBe(true);
+            // Query in Spanish
+            const matches = marketSearchMatches(post, 'limón');
+            expect(matches).toBe(true);
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('saved search stores resolved tag IDs', () => {
-        const filterState = {
-            type: 'all' as const,
-            category: 'food',
-            eventWindow: 'all' as const,
-            trust: 'all' as const,
-            beansOnly: false,
-            radiusKm: null,
-            center: null,
-            groupId: 'all',
-        };
+        try {
+            setLanguage('es', catalogsFor('es'));
+            const filterState = {
+                type: 'all' as const,
+                category: 'food',
+                eventWindow: 'all' as const,
+                trust: 'all' as const,
+                beansOnly: false,
+                radiusKm: null,
+                center: null,
+                groupId: 'all',
+            };
 
-        const saved = marketSearchToSave(filterState, 'limón');
-        expect(saved).not.toBeNull();
-        expect(saved?.q).toBe('limón');
-        expect(saved?.tags).toContain('food.fruit.lemon');
+            const saved = marketSearchToSave(filterState, 'limón');
+            expect(saved).not.toBeNull();
+            expect(saved?.q).toBe('limón');
+            expect(saved?.tags).toContain('food.fruit.lemon');
+        } finally {
+            setLanguage('en');
+        }
     });
 });

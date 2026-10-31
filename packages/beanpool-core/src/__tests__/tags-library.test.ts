@@ -3,10 +3,11 @@
  * synonyms.ts made from it, the label index in English and in a drafted language, and suggestTags on thirty listings.
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { PRICING_CATEGORIES } from '../pricing-catalog.js';
 import { searchTermsFor } from '../search-terms.js';
 import { SYNONYM_MAP } from '../synonyms.js';
-import { CONTEXT_SEPARATOR, setLanguage, wordsFor } from '../words.js';
+import { CONTEXT_SEPARATOR, currentLanguage, setLanguage, wordsFor } from '../words.js';
 import {
     TAG_ID_PATTERN, TAG_LIBRARY, TAG_TOPS, buildTagIndex, isTagId, tagById, tagChildren, tagEnglish, tagIndex, tagParent,
     tagSearchWords, searchTagsFor,
@@ -298,6 +299,24 @@ describe('suggestTags', () => {
     });
 
     describe('searchTagsFor: resolving search queries to tag ids', () => {
+        it('proves with the REAL es catalog that "limón" and "huevos" resolve on a Spanish device', () => {
+            const realEsCatalog = JSON.parse(readFileSync(new URL('../../words/es.json', import.meta.url), 'utf8'));
+            try {
+                setLanguage('es', [realEsCatalog]);
+                expect(currentLanguage()).toBe('es');
+                const index = tagIndex();
+                expect(index.label('food.fruit.lemon')).toBe('Limón');
+                expect(index.label('food.eggs')).toBe('Huevos');
+                expect(searchTagsFor('limón')).toEqual(['food.fruit.lemon']);
+                expect(searchTagsFor('huevos')).toEqual(['food.eggs']);
+                // English also resolves on a Spanish device (§4.7)
+                expect(searchTagsFor('lemon')).toEqual(['food.fruit.lemon']);
+                expect(searchTagsFor('eggs')).toEqual(['food.eggs']);
+            } finally {
+                setLanguage('en');
+            }
+        });
+
         it('resolves a member’s typed word into tag ids in English and another language', () => {
             const es = buildTagIndex(wordsFor('es', [{
                 [`Lemon${CONTEXT_SEPARATOR}tag`]: 'Limón',

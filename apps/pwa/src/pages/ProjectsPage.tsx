@@ -23,7 +23,7 @@ import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
 import { type CommunityInfo } from '../lib/api';
-import { AVATAR_PICTURE, TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, bundledGroupEmblem, type FeatureMode, type WordKey, type StartRowKey } from '@beanpool/core';
+import { AVATAR_PICTURE, TOOLS, TOOL_SHELVES, formatNumber, groupNameShown, t, tn, toolsOnShelf, word, bundledGroupEmblem, type FeatureMode, type WordKey, type StartRowKey } from '@beanpool/core';
 import { TOOL_APPS } from '../tools';
 import { ToolRow } from '../tools/ui';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
@@ -791,7 +791,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         key={g.id}
                                         role="button"
                                         tabIndex={0}
-                                        aria-label={[g.name, role ? named(ROLE_WORDS, role, role) : null, t('Open chat →')].filter(Boolean).join(', ')}
+                                        aria-label={[groupNameShown({ name: g.name, kind: g.groupKind }), role ? named(ROLE_WORDS, role, role) : null, t('Open chat →')].filter(Boolean).join(', ')}
                                         onClick={() => {
                                             if (onNavigate) onNavigate('messages', g.id);
                                             else setSelectedGroupForDetail(fullGroup || {
@@ -832,7 +832,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         <div>
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0 flex-1">
-                                                    <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
+                                                    <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{groupNameShown({ name: g.name, kind: (g as { groupKind?: string; kind?: string }).groupKind ?? (g as { kind?: string }).kind })}</h4>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         {category && (
                                                             <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
@@ -936,7 +936,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     key={g.id}
                                     role="button"
                                     tabIndex={0}
-                                    aria-label={t('View details for group {name}', { name: g.name })}
+                                    aria-label={t('View details for group {name}', { name: groupNameShown(g) })}
                                     onClick={() => setSelectedGroupForDetail(g)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' || e.key === ' ') {
@@ -954,7 +954,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 className="w-10 h-10 rounded-full object-cover shrink-0 border border-nature-200 dark:border-nature-800"
                                             />
                                             <div className="min-w-0 flex-1">
-                                                <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
+                                                <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{groupNameShown({ name: g.name, kind: (g as { groupKind?: string; kind?: string }).groupKind ?? (g as { kind?: string }).kind })}</h4>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
                                                         🏷️ {named(CATEGORY_WORDS, g.category, g.category.replace(/_/g, ' '))}
@@ -1314,6 +1314,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 onClose={() => setSelectedGroupForDetail(null)}
                 myPubkey={identity?.publicKey}
                 onMembershipChanged={() => fetchGroups()}
+                onStartCommunity={() => { setSelectedGroupForDetail(null); setShowStartCommunity(true); }}
                 onPostToGroup={(group) => {
                     setSelectedGroupForDetail(null);
                     onNavigate?.('map-post', group.id);

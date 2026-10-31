@@ -117,6 +117,7 @@ export const SUITES = [
     'test-post-badge-once-a-read',
     'test-distance-search-perf',
     'test-global-directory',
+    'test-place-circles',
     'test-home',
     'test-home-deal-step',
     'test-home-answer-parse-lands',

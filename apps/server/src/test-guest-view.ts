@@ -609,7 +609,7 @@ async function main(): Promise<void> {
         walk(src);
         const KNOWN: Record<string, number> = {
             [path.join('routes', 'marketplace.ts')]: 1, // the listing (POSTS)
-            [path.join('routes', 'global-directory.ts')]: 2, // the communities and the landing card
+            [path.join('routes', 'global-directory.ts')]: 3, // the communities, the landing card and the count of people waiting (test-place-circles.ts differences it)
             [path.join('routes', 'home.ts')]: 1, // Home in one read (/api/home)
             [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
             [path.join('routes', 'events.ts')]: 2, // the event form's pin → its zone (/api/events/zone): members only, answers a zone and no listing

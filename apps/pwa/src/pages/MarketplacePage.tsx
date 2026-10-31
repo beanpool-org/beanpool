@@ -20,6 +20,7 @@ import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isE
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { LocalCommunityAction, LocalCommunityLine } from '../components/LocalCommunityMark';
+import { MarketCircleLine } from '../components/MarketCircleLine';
 import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
@@ -4023,6 +4024,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <p data-testid="market-near-empty" className="m-0 mb-2 px-1 text-sm font-bold text-nature-700 dark:text-nature-300">
                                     {t('Nothing within 250 km yet.')}
                                 </p>
+                                {!isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                 {fillPending ? (
                                     <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
                                 ) : fillSection}
@@ -4047,6 +4049,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <p className="text-sm font-bold text-nature-700 dark:text-nature-300 mb-3">
                                             {nearbyListings ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                         </p>
+                                        {nearbyListings && !isVisitor && <MarketCircleLine onMeet={onNavigate ? () => onNavigate('home') : undefined} />}
                                         {nearbyListings && (
                                             <div className="mb-4">
                                                 <button

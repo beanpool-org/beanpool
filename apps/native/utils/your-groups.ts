@@ -42,6 +42,8 @@ export interface YourChat {
     role: string;
     category?: string;
     joinPolicy?: string;
+    /** 'circle' on a place circle: its name is shown in the member's language. */
+    groupKind?: string;
     eventStartAt?: string | null;
     eventEndAt?: string | null;
     readOnly: boolean;

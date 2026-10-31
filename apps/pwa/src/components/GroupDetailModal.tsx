@@ -14,7 +14,8 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, type GroupPerson } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, groupDescriptionShown, groupNameShown, type GroupPerson } from '@beanpool/core';
+import { PlaceCircleCard } from './PlaceCircleCard';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
 import { AvatarPresetPicker } from './AvatarPresetPicker';
@@ -58,6 +59,8 @@ interface Props {
     myPubkey?: string;
     onMembershipChanged?: () => void;
     onPostToGroup?: (group: Group) => void;
+    /** "Start a community" on a place circle's card. */
+    onStartCommunity?: () => void;
 }
 
 export function GroupDetailModal({
@@ -66,7 +69,8 @@ export function GroupDetailModal({
     onClose,
     myPubkey,
     onMembershipChanged,
-    onPostToGroup
+    onPostToGroup,
+    onStartCommunity,
 }: Props) {
     const [groupData, setGroupData] = useState<Group | null>(group);
     const [members, setMembers] = useState<GroupMember[]>([]);
@@ -352,7 +356,7 @@ export function GroupDetailModal({
                             className="w-10 h-10 rounded-full object-cover border border-nature-300 dark:border-nature-700 shrink-0"
                         />
                         <h2 id="group-detail-title" className="text-lg font-black text-nature-950 dark:text-white truncate">
-                            {groupData.name}
+                            {groupNameShown(groupData)}
                         </h2>
                     </div>
                     <button
@@ -441,9 +445,13 @@ export function GroupDetailModal({
                         </div>
                     )}
 
-                    {groupData.description && (
+                    {groupData.circle && (
+                        <PlaceCircleCard id={groupData.id} circle={groupData.circle} myPubkey={myPubkey} onStart={() => onStartCommunity?.()}
+                            onChange={circle => setGroupData(g => (g ? { ...g, circle } : g))} />
+                    )}
+                    {groupDescriptionShown(groupData) && (
                         <p className="text-sm text-nature-700 dark:text-nature-300 whitespace-pre-wrap leading-relaxed">
-                            {groupData.description}
+                            {groupDescriptionShown(groupData)}
                         </p>
                     )}
 

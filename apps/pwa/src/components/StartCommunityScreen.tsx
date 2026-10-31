@@ -22,9 +22,12 @@ export function StartCommunityScreen({
     onClose,
     onNearYou,
     returnFocus,
+    demandLine,
 }: {
     onClose: () => void;
     onNearYou?: () => void;
+    /** The people already waiting here, from Home's Find card (doors S8): said only from 3. */
+    demandLine?: string | null;
     returnFocus?: () => HTMLElement | null | undefined;
 }) {
     const info = useCommunityInfo();
@@ -67,6 +70,7 @@ export function StartCommunityScreen({
                     <h1 id="start-community-title" className="min-w-0 text-2xl font-extrabold text-nature-900 dark:text-nature-50">{t(COPY.title)}</h1>
                 </div>
                 <p className="mb-5 text-[15px] leading-relaxed text-nature-700 dark:text-nature-200">{t(COPY.intro)}</p>
+                {demandLine && <p className="-mt-3 mb-5 text-[15px] font-bold leading-relaxed text-nature-800 dark:text-nature-100" data-testid="start-demand">{demandLine}</p>}
 
                 <ul className="mb-6 flex flex-col gap-3">
                     {COPY.ways.map((w) => (

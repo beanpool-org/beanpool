@@ -89,7 +89,26 @@ From there you can **Ask to join** that community, **Get the app**, or **Look ar
 ## Nothing near you
 
 - **Tell me when one starts here:** you get a notification when a community starts near where you are. Only the area is kept, about 10 km across, never where you are exactly. You can watch up to 3 places, and stop watching one with **Stop**.
+- **I'd help start one here:** the same watch, saying you would help too. Only the area is kept, the same way, and it counts toward your 3 places. If 3 or more people near you say so, you are put in a place circle together (below).
 - **Start a community:** every community has its own small server, looked after by someone local. It takes a spare computer at home or a few dollars a month, and about half an hour: see "Beans and the global community". The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings. How people can reach you stays off the public directory unless you turn it on there.
+
+## A place circle
+
+A place circle is an ordinary group on the global community for people waiting near the same place. When 3 or more people within about 25 km have tapped **I'd help start one here**, you are put in one together, and you get a notification: **People near you want to start a community.** It is in your groups, and on Home's **Find your community** card.
+
+Only the people in a circle can see it. They see each other's names and pictures, and nothing about where anyone is except that they are within about 25 km. Anyone else sees a count, and only once it is 3 or more: **7 people near you would help start a community.** The count is of a fixed area on the map, so it may leave out someone just over its edge.
+
+Say hello, and meet in a public place first. Its chat works like any group's chat: you can report a message, and block someone. If you leave a circle, you are not put back in, unless you tap **I'd help start one here** again. Someone you have blocked is not put in a circle with you.
+
+The card has three rows:
+
+- **{n} people here:** how many are in the circle. Under 3, it says nothing.
+- **Start a community:** what it takes, and how to begin.
+- **I'm starting one here:** tell the others you are doing it. Everyone else then sees **Someone is starting a community near you.** Tap **I'm not starting one after all** if plans change. After 90 days with no community it goes by itself.
+
+Tap **Join when it starts** and your app remembers it, on your device only. When a community starts near the circle, your app sends your own request to join it.
+
+When a listed community starts within about 25 km, everyone in the circle is told, and the card says **This circle did its job. Its chat stays for 30 days.** After that the circle closes: you can still read it, but nobody can write in it.
 
 ## If you are a member of a local community
 

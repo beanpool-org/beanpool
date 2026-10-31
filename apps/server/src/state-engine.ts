@@ -10746,7 +10746,7 @@ export function createGroup(params: CreateGroupParams): Group {
 /** A place circle, made by the node for `createdBy` and the people near them (engine/place-circles.ts). */
 export function createPlaceCircle(createdBy: string, placeCell: string): string {
     return createGroup({
-        name: PLACE_CIRCLE_WORDS.name, description: PLACE_CIRCLE_WORDS.purpose, category: 'project',
+        name: PLACE_CIRCLE_WORDS.name, description: PLACE_CIRCLE_WORDS.purpose, category: 'working_group',
         // Hidden from everyone outside it, so an outsider's read of it is the 404 of no group at all (the engine's header).
         joinPolicy: 'invite_only', createdBy, kind: GROUP_KIND_CIRCLE, placeCell,
     }).id;

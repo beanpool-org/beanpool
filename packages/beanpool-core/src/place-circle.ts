@@ -57,14 +57,13 @@ export const PLACE_CIRCLE_WORDS = {
     youAreStarting: word("You said you're starting one here."),
     joinWhenStarts: word('Join when it starts'),
     joinWhenStartsOn: word('Your app will ask to join when it starts. Tap to stop.'),
-    meetThem: word('Meet them'),
+    meetThem: word('Meet them ›'),
     /** How a circle ends. */
     startedNear: word('A community has started near you: {name}.'),
     startedNearNoName: word('A community has started near you.'),
     done: word('This circle did its job. Its chat stays for 30 days.'),
-    /** The empty Market. */
-    nothingNear: word('Nothing within 250 km yet.'),
-    seeElsewhere: word('See what people post elsewhere'),
+    /** What a phone's own knock says when a community it was waiting for starts. */
+    knockMessage: word('I asked to be told when a community started here.'),
 } as const;
 
 /** A group's name as a member reads it: a circle's in their language, any other group's as its members wrote it. */

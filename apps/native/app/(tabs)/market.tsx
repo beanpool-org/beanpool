@@ -57,6 +57,7 @@ import { LookAroundCard } from '../../components/LookAroundCard';
 import { openLookDoor } from '../../utils/look-door';
 import { useLookingAround } from '../../utils/use-looking-around';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
+import { MarketCircleLine } from '../../components/MarketCircleLine';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { listingChips, listingChipWords, readsOwnData, t, tn, upperCase, word, elsewhereFill, FILL_BELOW, type WordKey } from '@beanpool/core';
@@ -1827,6 +1828,7 @@ export default function MarketScreen() {
                     {t('Nothing within 250 km yet.')}
                 </Text>
             )}
+            {filteredPosts.length === 0 && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
             {fillRows.length === 0 ? (
                 <ActivityIndicator size="small" color={colors.brand.primary} />
             ) : (
@@ -1950,6 +1952,7 @@ export default function MarketScreen() {
                                 <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text.secondary, marginBottom: 12, textAlign: 'center' }}>
                                     {nodeProfile?.profile === 'global' ? t('Nothing within 250 km yet.') : t('Nothing here yet. Be the first:')}
                                 </Text>
+                                {nodeProfile?.profile === 'global' && !!identity && <MarketCircleLine identity={identity} colors={colors} />}
                                 {nodeProfile?.profile === 'global' && (
                                     <Pressable
                                         accessibilityRole="button"

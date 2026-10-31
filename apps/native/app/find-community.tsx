@@ -24,7 +24,7 @@ import { handScannedInvite, scannedInviteGoesToRoot } from '../utils/scanned-inv
 import type { JoinKey } from '../utils/door-key';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
-import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, t, type AddressResult, PLACE_CIRCLE_WORDS } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { SetUpServerRow } from '../components/SetUpServerRow';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
@@ -274,6 +274,20 @@ export default function FindCommunityScreen() {
         if (r.ok) {
             setWatches(w => [...(w ?? []).filter(x => x.id !== r.value.id), r.value]);
             setWatchNote(t("Done. You'll be told when a community starts near here."));
+        } else {
+            setWatchNote(findLineWords(r.message));
+        }
+    };
+
+    const helpHere = async () => {
+        if (!identity || !point) return;
+        setWatchBusy(true);
+        setWatchNote(null);
+        const r = await watchPlace(identity, point, undefined, { wouldHelp: true });
+        setWatchBusy(false);
+        if (r.ok) {
+            setWatches(w => [...(w ?? []).filter(x => x.id !== r.value.id), r.value]);
+            setWatchNote(t(PLACE_CIRCLE_WORDS.helpDone));
         } else {
             setWatchNote(findLineWords(r.message));
         }
@@ -767,6 +781,12 @@ export default function FindCommunityScreen() {
                     {!!point && (
                         <Pressable style={[styles.secondary, watchBusy && { opacity: 0.6 }]} onPress={watchHere} disabled={watchBusy || !identity} accessibilityRole="button">
                             <Text style={styles.secondaryText}>{watchBusy ? t('Saving…') : t('Tell me')}</Text>
+                        </Pressable>
+                    )}
+                    {!!point && !(watches ?? []).some(w => w.wouldHelp) && (
+                        <Pressable style={[styles.secondary, watchBusy && { opacity: 0.6 }]} onPress={helpHere} disabled={watchBusy || !identity} accessibilityRole="button"
+                            accessibilityLabel={t(PLACE_CIRCLE_WORDS.helpA11y)} testID="find-help">
+                            <Text style={styles.secondaryText}>{t(PLACE_CIRCLE_WORDS.help)}</Text>
                         </Pressable>
                     )}
                     {!!watchNote && <Text style={styles.note}>{watchNote}</Text>}

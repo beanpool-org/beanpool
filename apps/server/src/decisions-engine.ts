@@ -3162,6 +3162,16 @@ function ownerDecisionStands(decision: Decision, tally: DecisionTally): boolean 
 // ── Tick Engine ─────────────────────────────────────────────────────────
 
 /**
+ * Why a vote that met its quorum did not pass, for its record: its share short of the threshold, a tie, or, on a removal
+ * whose share would pass, fewer Yes votes than REMOVAL_MIN_YES (design §5 point 1).
+ */
+function notPassedWhy(tally: DecisionTally): string {
+    const shareWouldPass = tally.totalWeight > 0 && tally.supportRatio >= tally.thresholdRequired && tally.yesWeight > tally.noWeight;
+    if (shareWouldPass && tally.minYes) return `Fewer than ${tally.minYes} Yes votes (${tally.yesWeight})`;
+    return `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
+}
+
+/**
  * Tick-driven close, queue evaluation, and grace expiration.
  * No admin opens or closes rounds (§3.4, §3.7).
  */
@@ -3223,9 +3233,7 @@ export function tickDecisions(asOfTime?: number): {
 
             // A pause never outlives its vote (design §3.2): No, a tie, a missed quorum or no votes at all lift it now.
             if ((r.effect === 'keep_suspension' || pauseVote) && !tally.passed) {
-                const why = !tally.quorumMet
-                    ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`
-                    : `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
+                const why = !tally.quorumMet ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})` : notPassedWhy(tally);
                 closeUnkeptSuspension(getDecision(r.id)!, tally.quorumMet ? 'failed' : 'unresolved', why, now,
                     { actor: COMMUNITY_DECISION_ACTOR, how: 'the suspension not kept' });
                 continue;
@@ -3250,11 +3258,7 @@ export function tickDecisions(asOfTime?: number): {
                         execution_reason = ?,
                         updated_at = ?
                     WHERE id = ?
-                `).run(
-                    `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`,
-                    now,
-                    r.id
-                );
+                `).run(notPassedWhy(tally), now, r.id);
                 announceDecisionUpdated(r.id);
                 continue;
             }

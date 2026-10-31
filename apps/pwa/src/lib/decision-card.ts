@@ -132,6 +132,38 @@ export function replyTakenDownLine(
 }
 
 /**
+ * Under a removal's threshold (removal by vote S6, design §5 point 1): at least this many Yes votes remove anyone, whatever
+ * the share. Null for any other card, and from a node from before (it sends no `minYes`).
+ */
+export function minYesLine(tally: Pick<DecisionTally, 'minYes'> | null | undefined): string | null {
+    if (!tally?.minYes) return null;
+    return t('Removing a member also needs at least {n} Yes votes.', { n: tally.minYes });
+}
+
+/**
+ * The owner's part in a pause's vote too few could vote on (removal by vote S6, design §5 point 3), in the design's words:
+ * while it is open and nobody has decided, that the owner decides when it closes if nobody else votes; once an owner has
+ * decided, what happens at the close unless more members vote, with the owner's public reason; once it closed with the
+ * owner's decision carried out, that the owner decided it. Null for any other card. A vote on someone who holds a server
+ * role says nothing of it: no vote, and no owner, removes them (pauseVoteBody says so).
+ */
+export function ownerDecisionLine(
+    decision: { status: string; params?: { memberName?: string; serverRole?: string } | null; ownerDecidedAt?: string | null; ownerDecidedReason?: string | null; ownerDecisionCarriedAt?: string | null },
+    tally: Pick<DecisionTally, 'tooFewToVote'> | null | undefined,
+    fallbackName: string,
+): string | null {
+    // The node asks every owner's decision for a reason of 10 characters or more (ownerDecisionReasonProblem).
+    const reason = decision.ownerDecidedReason || '';
+    if (decision.ownerDecisionCarriedAt) return t('Decided by the owner: too few members to vote. Their reason: {reason}', { reason });
+    if (decision.status !== 'open' || decision.params?.serverRole) return null;
+    if (decision.ownerDecidedAt) {
+        return t('Too few members can vote, so an owner decided: unless more of them vote, {name} is removed when this vote closes. Their reason: {reason}',
+            { name: decision.params?.memberName || fallbackName, reason });
+    }
+    return tally?.tooFewToVote ? t('Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes.') : null;
+}
+
+/**
  * What each answer does (design §8.2): Yes removes them after the 7-day grace window, No brings them back when the vote
  * closes. No vote removes someone who holds an owner or admin role (§3.8): then the pause ends with the vote, whatever it says.
  */

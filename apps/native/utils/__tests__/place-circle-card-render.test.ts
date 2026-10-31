@@ -52,6 +52,7 @@ import { lightColors, darkColors } from '../../constants/colors';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import { MarketCircleLine } from '../../components/MarketCircleLine';
 import { PlaceCircleCard } from '../../components/PlaceCircleCard';
+import { PLACE_CIRCLE_WORDS, t } from '@beanpool/core';
 import { circleIntents, setCircleIntent } from '../circle-intent';
 import type { GlobalHome } from '../community-directory';
 
@@ -145,6 +146,25 @@ describe('the knock a retired circle owes', () => {
         expect(await circleIntents(me)).toEqual([]);
     });
 
+    it('a community that answers 503 is asked again on the next read, and the card says so until it goes', async () => {
+        await setCircleIntent(me, 'c1', true);
+        sendKnock.mockResolvedValueOnce({ kind: 'refused', status: 503, code: null, message: '' }).mockResolvedValue({ kind: 'waiting', message: '' });
+        const host = await find(noneNear({ circle: retired(true) }));
+        expect(host.querySelector('[data-testid="circle-knock-line"]')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockLater));
+        expect(await circleIntents(me)).toEqual(['c1']);
+        await twoReads(retired(true), retired(true));
+        expect(sendKnock).toHaveBeenCalledTimes(2);
+        expect(await circleIntents(me)).toEqual([]);
+    });
+
+    it('a community that refuses is said on the card', async () => {
+        await setCircleIntent(me, 'c1', true);
+        sendKnock.mockResolvedValue({ kind: 'refused', status: 403, code: 'account_closed', message: '' });
+        const host = await find(noneNear({ circle: retired(true) }));
+        expect(host.querySelector('[data-testid="circle-knock-line"]')?.textContent).toBe(t(PLACE_CIRCLE_WORDS.knockRefused));
+        expect(await circleIntents(me)).toEqual([]);
+    });
+
     it('still lists the request when a read lands while the knock is out', async () => {
         await setCircleIntent(me, 'c1', true);
         let answer: (r: unknown) => void = () => {};
@@ -168,6 +188,13 @@ describe('what a tap does', () => {
         expect(onLeave).toHaveBeenCalledTimes(1);
         expect(push).toHaveBeenCalledWith('/start-community');
         expect(onLeave.mock.invocationCallOrder[0]).toBeLessThan(push.mock.invocationCallOrder[0]);
+    });
+
+    it("I'd help's spoken name is the words on it, so voice control finds it by what it says (WCAG 2.5.3)", async () => {
+        const host = await find(noneNear({}));
+        const button = host.querySelector('[data-testid="home-find-help"]');
+        expect(button?.getAttribute('aria-label')).toBe(t(PLACE_CIRCLE_WORDS.help));
+        expect(button?.textContent).toContain(t(PLACE_CIRCLE_WORDS.help));
     });
 
     it("I'd help sends the rounded cell and the flag, and nothing else", async () => {

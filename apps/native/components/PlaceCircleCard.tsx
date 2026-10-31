@@ -14,13 +14,15 @@ import { HOME_CARD_PADDING_DP, HomeButton } from './home/HomeParts';
  * starts" is this phone's own wish (utils/circle-intent.ts). Once a community has retired the circle: what started, and
  * how long the chat stays.
  */
-export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onLeave, onChange }: {
+export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, knockLine, onLeave, onChange }: {
     id: string;
     circle: CircleCard;
     identity: BeanPoolIdentity | null;
     /** The community the group is on; left out: the one this phone is on. */
     nodeUrl?: string | null;
     colors: AppColors;
+    /** Why "Join when it starts" hasn't gone (core's circleKnockLine), from whoever sends it: Home. */
+    knockLine?: string | null;
     /** Before Start a community opens: a sheet closes itself, or a Modal stays above the screen it opens. */
     onLeave?: () => void;
     onChange?: (card: CircleCard) => void;
@@ -42,6 +44,7 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onLeave
             <View style={s.card} testID="circle-card-done">
                 <Text style={[s.line, s.strong]} testID="circle-started-line">{circleStartedLine(circle.community)}</Text>
                 <Text style={s.sub}>{t(PLACE_CIRCLE_WORDS.done)}</Text>
+                {!!knockLine && <Text style={s.sub} accessibilityLiveRegion="polite" testID="circle-knock-line">{knockLine}</Text>}
             </View>
         );
     }

@@ -25,7 +25,7 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
-import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, groupDescriptionShown, groupNameShown, inCapitalsOf, t, word, bundledGroupEmblem, type GroupPerson, type WordKey } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, groupClosedShown, groupDescriptionShown, groupNameShown, inCapitalsOf, t, word, bundledGroupEmblem, type GroupPerson, type WordKey } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { PlaceCircleCard } from './PlaceCircleCard';
 import { MemberAvatar } from './MemberAvatar';
@@ -727,7 +727,7 @@ export function GroupDetailModal({
                                 <Text style={[styles.pillText, { flexShrink: 1 }]}>{policyWords(groupData.joinPolicy)}</Text>
                             </View>
                             {closed && (
-                                <View style={styles.pill} accessibilityLabel={t("Closed by its members' vote")}>
+                                <View style={styles.pill} accessibilityLabel={groupClosedShown(groupData, t("Closed by its members' vote"))}>
                                     <MaterialCommunityIcons name="lock-outline" size={14} color={colors.text.secondary} />
                                     <Text style={styles.pillText}>{t('Closed', undefined, 'a group')}</Text>
                                 </View>
@@ -790,7 +790,7 @@ export function GroupDetailModal({
                         {closed && (
                             <View style={styles.infoNotice}>
                                 <MaterialCommunityIcons name="lock-outline" size={16} color={colors.text.secondary} />
-                                <Text style={styles.infoNoticeText}>{t(LINES.closed)}</Text>
+                                <Text style={styles.infoNoticeText} testID="group-closed-note">{groupClosedShown(groupData, t(LINES.closed))}</Text>
                             </View>
                         )}
 

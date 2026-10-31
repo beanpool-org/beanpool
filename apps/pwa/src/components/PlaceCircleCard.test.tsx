@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { CircleCard } from '@beanpool/core';
+import { PLACE_CIRCLE_WORDS, circleKnockLine, t, type CircleCard } from '@beanpool/core';
 import { PlaceCircleCard } from './PlaceCircleCard';
 import { MarketCircleLine } from './MarketCircleLine';
 import { circleIntents, knockForCircle, setCircleIntent } from '../lib/circle-intent';
@@ -114,8 +114,8 @@ describe('the knock when a community starts', () => {
         const urls: string[] = [];
         vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => { urls.push(String(input)); return json(201, { knock: { status: 'pending' } }); }));
         setCircleIntent(ME.publicKey, 'c1', true);
-        expect(await knockForCircle(ME, retired)).toBe(true);
-        expect(await knockForCircle(ME, retired)).toBe(false);
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: true, trouble: null });
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: false, trouble: null });
         expect(urls).toEqual(['https://thrissur.beanpool.org/api/join/knock']);
         expect((await rememberedKnocks(ME.publicKey)).map(k => k.url)).toEqual(['https://thrissur.beanpool.org']);
     });
@@ -123,17 +123,53 @@ describe('the knock when a community starts', () => {
     it('goes for nobody who did not ask, and not to a community that takes no requests', async () => {
         const stub = vi.fn();
         vi.stubGlobal('fetch', stub);
-        expect(await knockForCircle(ME, retired)).toBe(false);
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: false, trouble: null });
         setCircleIntent(ME.publicKey, 'c1', true);
-        expect(await knockForCircle(ME, { ...retired, community: { ...THRISSUR, acceptingKnocks: false } })).toBe(false);
+        expect(await knockForCircle(ME, { ...retired, community: { ...THRISSUR, acceptingKnocks: false } })).toEqual({ sent: false, trouble: null });
         expect(stub).not.toHaveBeenCalled();
     });
 
     it('is kept for the next read when the community could not be reached', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
         setCircleIntent(ME.publicKey, 'c1', true);
-        expect(await knockForCircle(ME, retired)).toBe(false);
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: false, trouble: 'later' });
         expect(circleIntents(ME.publicKey)).toEqual(['c1']);
+    });
+
+    it.each([502, 503, 429])('a %i says nothing about this person: the wish is kept, the card can say so, and the next read sends it', async status => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>busy</html>', { status })));
+        setCircleIntent(ME.publicKey, 'c1', true);
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: false, trouble: 'later' });
+        expect(circleIntents(ME.publicKey)).toEqual(['c1']);
+        vi.stubGlobal('fetch', vi.fn(async () => json(201, { knock: { status: 'pending' } })));
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: true, trouble: null });
+        expect(circleIntents(ME.publicKey)).toEqual([]);
+    });
+
+    it('a refusal ends the wish, sends nothing more, and every later read still says so', async () => {
+        const stub = vi.fn(async () => json(403, { error: 'This key’s account in this community was closed.', code: 'account_closed' }));
+        vi.stubGlobal('fetch', stub);
+        setCircleIntent(ME.publicKey, 'c1', true);
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: false, trouble: 'refused' });
+        expect(circleIntents(ME.publicKey)).toEqual([]);
+        expect(await knockForCircle(ME, retired)).toEqual({ sent: false, trouble: 'refused' });
+        expect(stub).toHaveBeenCalledTimes(1);
+    });
+
+    it('a retired card says why the knock has not gone, in a region a screen reader hears', () => {
+        const { rerender } = render(<PlaceCircleCard id="c1" circle={retired} myPubkey={ME.publicKey} />);
+        expect(screen.queryByTestId('circle-knock-line')).toBeNull();
+        const region = screen.getByTestId('circle-card-done').querySelector('[role="status"]');
+        rerender(<PlaceCircleCard id="c1" circle={retired} myPubkey={ME.publicKey} knockLine={circleKnockLine('refused')} />);
+        expect(region).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockRefused));
+    });
+});
+
+describe('a sheet with nowhere to send Start a community', () => {
+    it('draws no row, so nothing on the card is a button that does nothing', () => {
+        render(<PlaceCircleCard id="c1" circle={OPEN} myPubkey={ME.publicKey} />);
+        expect(screen.queryByTestId('circle-start')).toBeNull();
+        expect(screen.getByRole('button', { name: "I'm starting one here" })).toBeTruthy();
     });
 });
 

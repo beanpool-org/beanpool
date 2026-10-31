@@ -14,7 +14,7 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, groupDescriptionShown, groupNameShown, type GroupPerson } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, bundledGroupEmblem, AVATAR_PICTURE, groupClosedShown, groupDescriptionShown, groupNameShown, type GroupPerson } from '@beanpool/core';
 import { PlaceCircleCard } from './PlaceCircleCard';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MemberAvatar } from './MemberAvatar';
@@ -446,7 +446,7 @@ export function GroupDetailModal({
                     )}
 
                     {groupData.circle && (
-                        <PlaceCircleCard id={groupData.id} circle={groupData.circle} myPubkey={myPubkey} onStart={() => onStartCommunity?.()}
+                        <PlaceCircleCard id={groupData.id} circle={groupData.circle} myPubkey={myPubkey} onStart={onStartCommunity}
                             onChange={circle => setGroupData(g => (g ? { ...g, circle } : g))} />
                     )}
                     {groupDescriptionShown(groupData) && (
@@ -457,7 +457,7 @@ export function GroupDetailModal({
 
                     {closed && (
                         <p className="m-0 p-3 rounded-xl border border-nature-300 dark:border-nature-700 text-sm text-nature-800 dark:text-nature-200 break-words" data-testid="group-closed-note">
-                            <span aria-hidden="true">🔒 </span>{t(LINES.closed)}
+                            <span aria-hidden="true">🔒 </span>{groupClosedShown(groupData, t(LINES.closed))}
                         </p>
                     )}
 

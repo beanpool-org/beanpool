@@ -6,7 +6,7 @@ import type { BeanPoolIdentity } from '../../utils/identity';
 import {
     communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
-import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleKnockLine, circleWaitingLine, communityAnswersLine, findCommunityState, formatDate, t, type CircleKnockTrouble } from '@beanpool/core';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { knockForCircle } from '../../utils/circle-intent';
 import { PlaceCircleCard } from '../PlaceCircleCard';
@@ -60,6 +60,8 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     const [helped, setHelped] = useState(false);
     /** The circle as this visit last heard it: "I'm starting one here" answers with the card. */
     const [circle, setCircle] = useState(home.circle ?? null);
+    /** Why "Join when it starts" hasn't gone, as the last look found it. */
+    const [knockTrouble, setKnockTrouble] = useState<CircleKnockTrouble | null>(null);
     const [activeKnocks, setActiveKnocks] = useState<readonly RememberedKnock[]>(knocks);
     /** The list as it is now, for a cancel that finishes after another one did (a press handler's closure is older). */
     const latestKnocks = useRef<readonly RememberedKnock[]>(knocks);
@@ -82,10 +84,11 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     useEffect(() => setCircle(home.circle ?? null), [home.circle]);
 
     // A community retired this phone's circle, and the member asked to join when one started: this phone asks, once. Each
-    // read looks again: one that takes no requests yet, or couldn't be reached, gets it on a later read (knockForCircle).
+    // read looks again: one that takes no requests yet, or couldn't take it now, gets it on a later read (knockForCircle).
     useEffect(() => {
         if (!identity || !home.circle) return;
-        void knockForCircle(identity, home.circle).then(async sent => {
+        void knockForCircle(identity, home.circle).then(async ({ sent, trouble }) => {
+            setKnockTrouble(trouble);
             if (sent) onKnocksChange?.(await rememberedKnocks(identity.publicKey));
         });
     }, [identity?.publicKey, home.circle]);
@@ -211,7 +214,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             ))}
             {!!nearby && <Text style={[s.rowSub, { marginTop: 4 }]} testID="home-find-nearby">{nearby}</Text>}
             {!!demandLine && <Text style={[s.rowLine, { marginTop: 4 }]} testID="home-find-demand">{demandLine}</Text>}
-            {!!circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} nodeUrl={nodeUrl} colors={colors} onChange={card => setCircle({ ...card, id: circle.id })} />}
+            {!!circle && <PlaceCircleCard id={circle.id} circle={circle} identity={identity} nodeUrl={nodeUrl} colors={colors} knockLine={circleKnockLine(knockTrouble)} onChange={card => setCircle({ ...card, id: circle.id })} />}
             {activeKnocks.map(k => {
                 const comm = home.communities.find(c => (k.key && c.key === k.key) || (c.url && communityOrigin(c.url) === k.url));
                 const name = k.name ?? comm?.name ?? k.url.replace(/^https:\/\//, '');
@@ -311,7 +314,7 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                         onPress={() => void tellMe()} testID="home-find-watch" />
                 )}
                 {startFirst && !circle && !helping && (
-                    <HomeButton colors={colors} text={t(PLACE_CIRCLE_WORDS.help)} a11y={t(PLACE_CIRCLE_WORDS.helpA11y)}
+                    <HomeButton colors={colors} text={t(PLACE_CIRCLE_WORDS.help)}
                         onPress={() => void wouldHelp()} testID="home-find-help" />
                 )}
             </FabAware>

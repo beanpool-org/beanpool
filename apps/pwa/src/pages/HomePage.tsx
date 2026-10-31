@@ -96,7 +96,7 @@ import { ToolHomeCard } from '../tools/home-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
 import {
-    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_CIRCLE_WORDS, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
+    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_CIRCLE_WORDS, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, circleDemandLine, circleKnockLine, circleWaitingLine, placeWatchLimitLine, type AddressResult, type AddressSearchWords, type CircleKnockTrouble,
 } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
@@ -1016,6 +1016,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const [helped, setHelped] = useState(false);
     /** "I'm starting one here" answers with the card: it stands until Home is next read. */
     const [circleNow, setCircleNow] = useState<HomeFind['circle']>(null);
+    /** Why "Join when it starts" hasn't gone, as the last look found it. */
+    const [knockTrouble, setKnockTrouble] = useState<CircleKnockTrouble | null>(null);
     const [phoneAppDismissed, setPhoneAppDismissed] = useState(() => publicKey ? isUsePhoneAppDismissed(publicKey) : false);
     useEffect(() => {
         if (publicKey) setPhoneAppDismissed(isUsePhoneAppDismissed(publicKey));
@@ -1116,14 +1118,18 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     }, []);
 
     // A community retired this member's circle, and they asked to join when one started: this browser asks, once. Each
-    // read looks again: one that takes no requests yet, or couldn't be reached, gets it on a later read (knockForCircle).
+    // read looks again: one that takes no requests yet, or couldn't take it now, gets it on a later read (knockForCircle).
     const ownCircle = (answer?.cards?.find as HomeFind | undefined)?.circle ?? null;
     useEffect(() => {
         if (!identity || !ownCircle) return;
-        void knockForCircle(identity, ownCircle).then(async sent => {
+        void knockForCircle(identity, ownCircle).then(async ({ sent, trouble }) => {
+            setKnockTrouble(trouble);
             if (sent) setKnocks(await rememberedKnocks(identity.publicKey));
         });
     }, [identity?.publicKey, ownCircle]);
+
+    // A read says what the circle is now: a card kept from a tap would hide a community that has since retired it.
+    useEffect(() => setCircleNow(null), [ownCircle]);
 
     const currentPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
         const hasOpenKnock = (knocksRef.current ?? knocks).some(k => !k.cancelledAt && knockStillAnswerable(k, at));
@@ -2179,8 +2185,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                     )}
                                     {pending && !cancelled && !circle && !helping && circleWaitingLine(f.demand) && (
                                         <div className="mt-2">
-                                            <button type="button" onClick={() => void wouldHelp()} data-testid={`home-waiting-help-${k.url}`} className={FIND_ACTION}
-                                                aria-label={t(PLACE_CIRCLE_WORDS.helpA11y)}>
+                                            <button type="button" onClick={() => void wouldHelp()} data-testid={`home-waiting-help-${k.url}`} className={FIND_ACTION}>
                                                 {t(PLACE_CIRCLE_WORDS.help)}
                                             </button>
                                         </div>
@@ -2233,8 +2238,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                     </button>
                                 )}
                                 {!circle && !helping && (
-                                    <button type="button" onClick={() => void wouldHelp()} data-testid="home-find-help" className={FIND_ACTION}
-                                        aria-label={t(PLACE_CIRCLE_WORDS.helpA11y)}>
+                                    <button type="button" onClick={() => void wouldHelp()} data-testid="home-find-help" className={FIND_ACTION}>
                                         {t(PLACE_CIRCLE_WORDS.help)}
                                     </button>
                                 )}
@@ -2247,7 +2251,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         </div>
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
                         {demandLine && <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-demand">{demandLine}</p>}
-                        {circle && <PlaceCircleCard id={circle.id} circle={circle} myPubkey={publicKey} onStart={() => setStartOpen(true)} onChange={card => setCircleNow({ ...card, id: circle.id })} />}
+                        {circle && <PlaceCircleCard id={circle.id} circle={circle} myPubkey={publicKey} knockLine={circleKnockLine(knockTrouble)} onStart={() => setStartOpen(true)} onChange={card => setCircleNow({ ...card, id: circle.id })} />}
                         {townName && !townOpen && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-3" data-testid="home-town-picked">
                                 <span className="min-w-0 break-words text-sm font-semibold text-text-primary">{t('Near {town}', { town: townName })}</span>

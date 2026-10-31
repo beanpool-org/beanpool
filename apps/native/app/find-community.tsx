@@ -784,8 +784,7 @@ export default function FindCommunityScreen() {
                         </Pressable>
                     )}
                     {!!point && !(watches ?? []).some(w => w.wouldHelp) && (
-                        <Pressable style={[styles.secondary, watchBusy && { opacity: 0.6 }]} onPress={helpHere} disabled={watchBusy || !identity} accessibilityRole="button"
-                            accessibilityLabel={t(PLACE_CIRCLE_WORDS.helpA11y)} testID="find-help">
+                        <Pressable style={[styles.secondary, watchBusy && { opacity: 0.6 }]} onPress={helpHere} disabled={watchBusy || !identity} accessibilityRole="button" testID="find-help">
                             <Text style={styles.secondaryText}>{t(PLACE_CIRCLE_WORDS.help)}</Text>
                         </Pressable>
                     )}

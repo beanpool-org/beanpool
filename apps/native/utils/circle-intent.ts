@@ -4,20 +4,26 @@
  * signed knock to that community's own node, once, as any knock goes. Nothing moves through global.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { PLACE_CIRCLE_WORDS, circleKnockReady, t, type CircleCard } from '@beanpool/core';
+import { PLACE_CIRCLE_WORDS, circleKnockReady, circleKnockTrouble, t, type CircleCard, type CircleKnockTrouble } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { rememberKnock, sendKnock } from './knock';
 
 const storeKey = (pubkey: string) => `circle-join-intents:${pubkey}`;
+/** The circles whose community refused the knock: the wish is over, and the card goes on saying so. */
+const refusedKey = (pubkey: string) => `circle-join-refused:${pubkey}`;
 
-/** The circles this account asked to join from when one starts. */
-export async function circleIntents(pubkey: string): Promise<string[]> {
+async function readList(key: string): Promise<string[]> {
     try {
-        const held = JSON.parse((await AsyncStorage.getItem(storeKey(pubkey))) ?? '[]');
+        const held = JSON.parse((await AsyncStorage.getItem(key)) ?? '[]');
         return Array.isArray(held) ? held.filter((id): id is string => typeof id === 'string') : [];
     } catch {
         return [];
     }
+}
+
+/** The circles this account asked to join from when one starts. */
+export function circleIntents(pubkey: string): Promise<string[]> {
+    return readList(storeKey(pubkey));
 }
 
 export async function setCircleIntent(pubkey: string, circleId: string, on: boolean): Promise<void> {
@@ -33,22 +39,31 @@ export async function currentNodeUrl(): Promise<string | undefined> {
 /** Those being sent now: a second read of Home while the first knock is out sends nothing. */
 const sending = new Set<string>();
 
+/** What a look at a retired circle came to: whether a knock went, and why not when it should have. */
+export interface CircleKnockResult { sent: boolean; trouble: CircleKnockTrouble | null }
+
 /**
- * Sends the knock this phone owes for a circle a community retired, if it owes one. True when one went. Taken off the
- * list before it goes, so it can't go twice; put back only when the community couldn't be reached, for the next read.
+ * Sends the knock this phone owes for a circle a community retired, if it owes one. Taken off the list before it goes, so
+ * it can't go twice; put back when the answer says nothing about this person, for the next read (core's circleKnockTrouble).
+ * A refusal ends the wish, and each later read says so, so the card can.
  */
-export async function knockForCircle(identity: BeanPoolIdentity, circle: CircleCard & { id: string }): Promise<boolean> {
-    if (!circleKnockReady(circle) || sending.has(circle.id)) return false;
+export async function knockForCircle(identity: BeanPoolIdentity, circle: CircleCard & { id: string }): Promise<CircleKnockResult> {
+    if (!circleKnockReady(circle) || sending.has(circle.id)) return { sent: false, trouble: null };
     sending.add(circle.id);
+    const pubkey = identity.publicKey;
     try {
-        if (!(await circleIntents(identity.publicKey)).includes(circle.id)) return false;
-        await setCircleIntent(identity.publicKey, circle.id, false);
+        if (!(await circleIntents(pubkey)).includes(circle.id)) {
+            return { sent: false, trouble: (await readList(refusedKey(pubkey))).includes(circle.id) ? 'refused' : null };
+        }
+        await setCircleIntent(pubkey, circle.id, false);
         const { url, name, key } = circle.community;
         const sent = await sendKnock(url, identity, { message: t(PLACE_CIRCLE_WORDS.knockMessage), callsign: identity.callsign });
-        if (sent.kind === 'unreachable') await setCircleIntent(identity.publicKey, circle.id, true);
-        if (sent.kind !== 'waiting') return false;
-        await rememberKnock(identity.publicKey, { url, name, key });
-        return true;
+        const trouble = circleKnockTrouble(sent);
+        if (trouble === 'later') await setCircleIntent(pubkey, circle.id, true);
+        if (trouble === 'refused') await AsyncStorage.setItem(refusedKey(pubkey), JSON.stringify([...await readList(refusedKey(pubkey)), circle.id]));
+        if (sent.kind !== 'waiting') return { sent: false, trouble };
+        await rememberKnock(pubkey, { url, name, key });
+        return { sent: true, trouble: null };
     } finally {
         sending.delete(circle.id);
     }

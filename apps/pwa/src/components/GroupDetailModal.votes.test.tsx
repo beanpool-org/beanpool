@@ -23,6 +23,7 @@ vi.mock('../lib/api', () => ({
     proposeGroupSuccession: vi.fn(), voteGroupSuccession: vi.fn(),
     isRouteMissing: () => false,
 }));
+import { PLACE_CIRCLE_WORDS, t } from '@beanpool/core';
 import { GroupDetailModal } from './GroupDetailModal';
 import * as api from '../lib/api';
 
@@ -52,6 +53,17 @@ describe("a closed group's info (#1794 N9, MP6)", () => {
         await open();
         await waitFor(() => expect(api.getGroupSuccession).toHaveBeenCalled());
     });
+    it('a finished circle says it finished: it closed by itself, and no vote did it', async () => {
+        const closedAt = new Date().toISOString();
+        answers.group = { ...base, kind: 'circle', closedAt, viewerStatus: 'active', viewerRole: 'member' };
+        answers.members = roster(me);
+        answers.decisions = { decisions: [], canPropose: false, rollSize: 4, onRoll: true, watching: false, nameable: [], closedAt };
+        render(<GroupDetailModal group={{ ...base, kind: 'circle', closedAt } as any} isOpen onClose={() => {}} myPubkey={ME} />);
+        const note = await screen.findByTestId('group-closed-note');
+        expect(note).toHaveTextContent(t(PLACE_CIRCLE_WORDS.closed));
+        expect(note.textContent).not.toMatch(/vote/i);
+    });
+
     it('closed: no quiet-lead panel, so no succession read', async () => {
         const closedAt = new Date().toISOString();
         answers.group = { ...base, closedAt, viewerStatus: 'active', viewerRole: 'member' };

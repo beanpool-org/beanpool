@@ -31,6 +31,8 @@
  *
  * Anyone with a node key can publish a row (engine/place-watches.ts header), so a row near a circle can retire it. That
  * costs the circle a line on its card and a clock: its chat stands for 30 days and its members can say "I'd help" again.
+ * It also gets a signed knock, with no further tap, from each member who set "Join when it starts": their key and name in
+ * the request, their IP address from the connection, and their later status reads.
  * Retiring takes only what the notices take (firstSightings: listed, placed, not a flood), and a push never carries the
  * row's name or place: the name is on the card of someone already in the circle, as it is on the Find card.
  *
@@ -137,9 +139,12 @@ export function clusterHelpers(helpers: readonly HelperWatch[]): HelperCluster[]
 
 interface OpenCircle { id: string; cell: { lat: number; lng: number }; createdAt: string }
 
-/** The circles no community has retired yet, oldest first. */
+/** Not closed: where an operator has turned votes on, a circle's members can close it, and that sets no circle_done_at. */
+const NOT_CLOSED = 'NOT EXISTS (SELECT 1 FROM group_closures c WHERE c.group_id = g.id)';
+
+/** The circles no community has retired and no vote has closed, oldest first. */
 function openCircles(): OpenCircle[] {
-    const rows = db.prepare(`SELECT id, place_cell, created_at FROM groups WHERE kind = ? AND circle_done_at IS NULL ORDER BY created_at, id`)
+    const rows = db.prepare(`SELECT g.id, g.place_cell, g.created_at FROM groups g WHERE g.kind = ? AND g.circle_done_at IS NULL AND ${NOT_CLOSED} ORDER BY g.created_at, g.id`)
         .all(GROUP_KIND_CIRCLE) as { id: string; place_cell: string | null; created_at: string }[];
     return rows.flatMap(r => {
         const cell = parseCell(r.place_cell);
@@ -191,7 +196,7 @@ function formCircles(cb: CircleCallbacks): Pick<CircleRun, 'formed' | 'joined'> 
     if (helpers.length < 1) return run;
     const open = openCircles();
     const seated = new Set((db.prepare(`SELECT DISTINCT gm.member_pubkey AS pk FROM group_members gm JOIN groups g ON g.id = gm.group_id
-        WHERE g.kind = ? AND g.circle_done_at IS NULL AND gm.status != 'removed'`).all(GROUP_KIND_CIRCLE) as { pk: string }[]).map(r => r.pk));
+        WHERE g.kind = ? AND g.circle_done_at IS NULL AND ${NOT_CLOSED} AND gm.status != 'removed'`).all(GROUP_KIND_CIRCLE) as { pk: string }[]).map(r => r.pk));
 
     // Someone new near a circle that already exists joins it: there is one to join.
     const index = new SightingIndex(open.map(o => ({ c: o.cell, extraKm: 0, circle: o })));
@@ -320,9 +325,21 @@ export function afterLeavingCircle(groupId: string, pubkey: string): void {
     if (row.circle_starter === pubkey) db.prepare('UPDATE groups SET circle_starter = NULL, updated_at = ? WHERE id = ?').run(now, groupId);
 }
 
+/**
+ * A circle was closed (state-engine closeGroupByVote, inside its transaction). A vote closes one with its flags still up, and
+ * the next run would form the same people into a new one: they closed it, so the flags go, as they go when one retires.
+ */
+export function afterClosingCircle(groupId: string): void {
+    const row = db.prepare('SELECT kind, place_cell FROM groups WHERE id = ?').get(groupId) as { kind: string | null; place_cell: string | null } | undefined;
+    const cell = parseCell(row?.place_cell ?? null);
+    if (row?.kind === GROUP_KIND_CIRCLE && cell) clearHelpNear(activeMembers(groupId), cell, new Date().toISOString());
+}
+
 // ── what a member reads ──────────────────────────────────────────────────────────────────────────────────────────
 
 interface CircleRow { id: string; kind: string | null; circle_done_at: string | null; circle_community_key: string | null; circle_starter: string | null; circle_starting_at: string | null }
+
+const isClosed = (groupId: string): boolean => !!db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(groupId);
 
 function isCircleMember(groupId: string, pubkey: string): boolean {
     return !!db.prepare(`SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'`).get(groupId, pubkey);
@@ -362,6 +379,8 @@ export function circleCardFor(groupId: string, viewer: string | undefined): Circ
     if (!viewer) return null;
     const row = db.prepare('SELECT id, kind, circle_done_at, circle_community_key, circle_starter, circle_starting_at FROM groups WHERE id = ?').get(groupId) as CircleRow | undefined;
     if (row?.kind !== GROUP_KIND_CIRCLE || !isCircleMember(groupId, viewer)) return null;
+    // Closed by a vote with no community: nothing here to offer or to say. A retired one keeps its line.
+    if (!row.circle_done_at && isClosed(groupId)) return null;
     return cardOf(row, viewer);
 }
 
@@ -392,7 +411,7 @@ export function setCircleStarting(groupId: string, pubkey: string, starting: boo
     return db.transaction(() => {
         const row = db.prepare('SELECT id, kind, circle_done_at, circle_community_key, circle_starter, circle_starting_at FROM groups WHERE id = ?').get(groupId) as CircleRow | undefined;
         if (row?.kind !== GROUP_KIND_CIRCLE || !isCircleMember(groupId, pubkey)) throw new CircleError(404, CIRCLE_NOT_YOURS);
-        if (row.circle_done_at) throw new CircleError(409, CIRCLE_ENDED);
+        if (row.circle_done_at || isClosed(groupId)) throw new CircleError(409, CIRCLE_ENDED);
         if (starting && isSuspendedAccount(db, pubkey)) throw new CircleError(403, GROUP_START_PAUSED);
         const starter = standingStarter(row);
         if (starter && starter !== pubkey) throw new CircleError(409, CIRCLE_ALREADY_STARTING);

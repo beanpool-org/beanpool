@@ -12,11 +12,14 @@ const CARD = 'my-2 p-3 rounded-xl border border-nature-300 dark:border-nature-70
  * group's sheet. "Join when it starts" is this browser's own wish (lib/circle-intent.ts). Once a community has retired
  * the circle: what started, and how long the chat stays.
  */
-export function PlaceCircleCard({ id, circle, myPubkey, onStart, onChange }: {
+export function PlaceCircleCard({ id, circle, myPubkey, knockLine, onStart, onChange }: {
     id: string;
     circle: CircleCard;
     myPubkey?: string | null;
-    onStart: () => void;
+    /** Why "Join when it starts" hasn't gone (core's circleKnockLine), from whoever sends it: Home. */
+    knockLine?: string | null;
+    /** Opens Start a community. Left out, the row isn't drawn: a button must do something. */
+    onStart?: () => void;
     onChange?: (card: CircleCard) => void;
 }) {
     const [busy, setBusy] = useState(false);
@@ -32,6 +35,10 @@ export function PlaceCircleCard({ id, circle, myPubkey, onStart, onChange }: {
             <div className={CARD} data-testid="circle-card-done">
                 <p dir="auto" className="m-0 text-sm font-bold text-nature-900 dark:text-white break-words" data-testid="circle-started-line">{circleStartedLine(circle.community)}</p>
                 <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words">{t(PLACE_CIRCLE_WORDS.done)}</p>
+                {/* Always in the page, so a screen reader hears the line when it is put in. */}
+                <div role="status">
+                    {knockLine && <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid="circle-knock-line">{knockLine}</p>}
+                </div>
             </div>
         );
     }
@@ -63,7 +70,7 @@ export function PlaceCircleCard({ id, circle, myPubkey, onStart, onChange }: {
             {circle.starting === 'someone' && <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="circle-someone-starting">{t(PLACE_CIRCLE_WORDS.someoneStarting)}</p>}
             {circle.starting === 'you' && <p className="m-0 mb-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="circle-you-starting">{t(PLACE_CIRCLE_WORDS.youAreStarting)}</p>}
             <div className="flex flex-col gap-2">
-                <button type="button" className={ROW} onClick={onStart} data-testid="circle-start">{t(FIND_COMMUNITY_WORDS.start)}</button>
+                {onStart && <button type="button" className={ROW} onClick={onStart} data-testid="circle-start">{t(FIND_COMMUNITY_WORDS.start)}</button>}
                 {circle.starting !== 'someone' && (
                     <button type="button" className={ROW} disabled={busy} onClick={() => void onStarting()} data-testid="circle-starting">
                         {circle.starting === 'you' ? t(PLACE_CIRCLE_WORDS.notStarting) : t(PLACE_CIRCLE_WORDS.starting)}

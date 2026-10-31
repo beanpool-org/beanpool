@@ -29,7 +29,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 import { localFetch } from './keepalive-test-fetch.js';
-import { setMemberPhoto } from '@beanpool/engine';
+import { CIRCLE_WORDS_FIXED, setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -67,7 +67,9 @@ let notGeneric = 0;
 };
 
 const { initTls } = await import('./services/tls.js');
-const { adminPruneUser, initStateEngine, purgeMemberSelf, removeGroupMemberByVote, seedGenesisMember, setNodeRole } = await import('./state-engine.js');
+const { adminPruneUser, closeGroupByVote, initStateEngine, purgeMemberSelf, removeGroupMemberByVote, seedGenesisMember, setNodeRole } = await import('./state-engine.js');
+const { PLACE_CIRCLE_CLOSED_TO_POSTS } = await import('./engine/posts.js');
+const { setSwitchOverride } = await import('./config/node-profile.js');
 const { startHttpsServer } = await import('./https-server.js');
 const { db } = await import('./db/db.js');
 const { putPushTokenRow } = await import('./services/push-token-seal.js');
@@ -324,6 +326,12 @@ async function main(): Promise<void> {
     assert(!!db.prepare('SELECT 1 FROM groups WHERE id = ?').get(circle.id), 'its row stays');
     const shut = await call('GET', ana, `/api/groups/${circle.id}`);
     assert(shut.body?.readOnly === true && !!shut.body?.closedAt, 'and reads as closed');
+    const listed = await call('GET', ana, '/api/messages/conversations');
+    const row = (listed.body?.conversations ?? []).find((c: any) => c.id === circle.id);
+    assert(row?.type === 'group_thread' && row?.groupKind === 'circle', `its Talk row says it is a circle, so an app can show its name in the reader's language (got ${JSON.stringify(row ?? null)})`);
+    const lateOffer = await call('POST', ana, '/api/marketplace/posts', { type: 'offer', category: 'general', title: 'Offer after the close', description: 'An offer posted after the circle closed.',
+        credits: 3, priceType: 'fixed', authorPublicKey: ana.pk, audienceScope: 'group', targetGroupId: circle.id, photos: ['https://example.com/a.jpg'] });
+    assert(lateOffer.status === 400 && lateOffer.body?.error === PLACE_CIRCLE_CLOSED_TO_POSTS, `a post to it hears the circle finished, not that anyone voted (got ${lateOffer.status} ${JSON.stringify(lateOffer.body)})`);
     assert(!(await call('GET', ana, '/api/global/home?lat=10.5&lng=76.2')).body?.circle, 'the Find card lets it go');
     // Retiring and clearing the flags are one write: a circle marked retired is never looked at again, so flags left on it
     // stay for good, and a helper more than 25 km from the community would be formed into a second one.
@@ -407,6 +415,38 @@ async function main(): Promise<void> {
     console.log('── 7b. a circle stays a circle ──');
     assert(await patch(fay, `/api/groups/${mumbaiId}`, { description: 'Buy my stuff' }) >= 400, "a convenor can't turn it into another group");
     assert(await patch(fay, `/api/groups/${mumbaiId}`, { joinPolicy: 'open' }) >= 400, 'or open its door to everyone');
+
+    console.log('── 7c. where an operator has turned votes on ──');
+    const vic = phoned('Vic'), wen = phoned('Wen'), xan = phoned('Xan');
+    for (const id of [vic, wen, xan]) await help(id, -33.4, -70.6);
+    await mirror();
+    const santiago = circleRows().find(c => c.place_cell === '-33.4,-70.6');
+    assert(!!santiago && seated(santiago.id).length === 3, 'three helpers in Santiago are a circle');
+    setSwitchOverride('decisions', true);
+    const proposeHere = (body: Record<string, unknown>) => call('POST', vic, `/api/groups/${santiago.id}/decisions`, { title: 'A vote here', description: 'Because we talked about it', ...body });
+    const openDoor = await proposeHere({ effect: 'set_join_policy', params: { policy: 'open' } });
+    assert(openDoor.status >= 400 && openDoor.body?.error === CIRCLE_WORDS_FIXED, `a vote can't open a circle's door, as its convenor can't (got ${openDoor.status} ${JSON.stringify(openDoor.body)})`);
+    const closeVote = await proposeHere({ effect: 'close_group' });
+    assert(closeVote.status < 300 && !!closeVote.body?.decision?.id, `and that is the only vote refused: its members can still vote to close it (got ${closeVote.status} ${JSON.stringify(closeVote.body)})`);
+    setSwitchOverride('decisions', false);
+    closeGroupByVote(santiago.id, closeVote.body.decision.id);
+    const flagsUp = (ids: Id[]) => (db.prepare(`SELECT COUNT(*) AS n FROM place_watches WHERE would_help = 1 AND pubkey IN (${ids.map(() => '?').join(',')})`).get(...ids.map(i => i.pk)) as any).n;
+    assert(flagsUp([vic, wen, xan]) === 0, "its members' flags go with it, or the next run forms the same three into a new one");
+    assert(circles.circleCardFor(santiago.id, vic.pk) === null, 'its sheet offers no rows: a closed group has nothing to start from');
+    const lateStart = await call('POST', vic, `/api/global/circles/${santiago.id}/starting`, { starting: true });
+    assert(lateStart.status === 409 && lateStart.body?.error === circles.CIRCLE_ENDED, `and "I'm starting one here" is refused (got ${lateStart.status})`);
+    const yan = phoned('Yan'), zoe = phoned('Zoe'), abe = phoned('Abe');
+    for (const id of [yan, zoe, abe]) await help(id, -33.4, -70.6);
+    pushed.length = 0;
+    await mirror();
+    assert(sameSet(seated(santiago.id), [vic.pk, wen.pk, xan.pk]), 'new helpers near it are not seated in the closed group');
+    const after = circleRows().filter(c => c.id !== santiago.id && c.place_cell === '-33.4,-70.6');
+    assert(after.length === 1 && sameSet(seated(after[0]?.id), [yan.pk, zoe.pk, abe.pk]), 'they get a circle of their own, and the three who closed theirs are not in it');
+    const bea = phoned('Bea'), cyd = phoned('Cyd');
+    for (const id of [vic, bea, cyd]) await help(id, -12, -77);
+    await mirror();
+    const lima = circleRows().find(c => c.place_cell === '-12,-77');
+    assert(!!lima && sameSet(seated(lima.id), [vic.pk, bea.pk, cyd.pk]), 'someone from a circle closed by a vote can sit in another');
 
     console.log('── 8. a standby, and the cost ──');
     const wid = crypto.randomUUID();

@@ -23,6 +23,7 @@ vi.mock('../lib/api', () => ({
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: null })),
     watchPlace: vi.fn(),
+    setCircleStarting: vi.fn(),
     getListedCommunityByHost: vi.fn(async () => null),
     // lib/knock's own calls (where a test doesn't stub them): no network here, as a browser offline would say.
     signedFetchAt: vi.fn(async () => { throw new TypeError('Failed to fetch'); }),
@@ -43,6 +44,7 @@ vi.mock('../components/StartCommunityScreen', () => ({
 vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}), onSocketOpen: vi.fn(() => () => {}), onSystemAnnouncement: vi.fn(() => () => {}) }));
 
 import * as api from '../lib/api';
+import { PLACE_CIRCLE_WORDS, t } from '@beanpool/core';
 import { HomePage, WATCH_WORDS } from './HomePage';
 import { rememberKnock } from '../lib/knock';
 import { circleIntents, setCircleIntent } from '../lib/circle-intent';
@@ -117,6 +119,46 @@ describe('the knock a retired circle owes', () => {
     it('tries a community it could not reach again on the next read', async () => {
         expect(await twoReads(retired(true), retired(true))).toBe(1);
         await waitFor(() => expect(circleIntents(ME.publicKey)).toEqual([]));
+    });
+
+    it('a community that refuses is said on the card, and stays said on the next read', async () => {
+        vi.mocked(api.signedFetchAt).mockClear();
+        setCircleIntent(ME.publicKey, 'c1', true);
+        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response(JSON.stringify({ error: 'No.', code: 'account_closed' }), { status: 403 }));
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: retired(true) }, true))).mockResolvedValue(fresh(globalAnswer({ circle: retired(true) }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockRefused));
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(screen.getByTestId('circle-knock-line')).toHaveTextContent(t(PLACE_CIRCLE_WORDS.knockRefused));
+        expect(knocksSent().length).toBe(1);
+    });
+});
+
+describe('"I\'m starting one here" and the next read of Home', () => {
+    const open = { id: 'c1', people: 4, starting: null, doneAt: null, community: null };
+    const done = { ...open, doneAt: '2026-11-01T00:00:00.000Z', community: { key: 'thrissur', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks: true } };
+
+    it('a tap\'s answer stands until the read, and the read says what the circle is now (a community retired it)', async () => {
+        vi.mocked(api.setCircleStarting).mockResolvedValue({ ...open, starting: 'you' });
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: open }, true))).mockResolvedValue(fresh(globalAnswer({ circle: done }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('circle-starting'));
+        expect(await screen.findByTestId('circle-you-starting')).toBeInTheDocument();
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        expect(await screen.findByTestId('circle-card-done')).toBeInTheDocument();
+        expect(screen.queryByTestId('circle-card')).toBeNull();
+    });
+});
+
+describe("the \"I'd help\" button's spoken name", () => {
+    it('is the words on it, so someone using voice control can say what they see (WCAG 2.5.3)', async () => {
+        await memberAtLismore();
+        const button = screen.getByTestId('home-find-help');
+        expect(button).toHaveAccessibleName(t(PLACE_CIRCLE_WORDS.help));
+        expect(button).toHaveTextContent(t(PLACE_CIRCLE_WORDS.help));
     });
 });
 

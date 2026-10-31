@@ -1036,6 +1036,8 @@ export interface Conversation {
      */
     avatarUrl?: string | null;
     category?: string | null;
+    /** A group chat's kind when it has one: a place circle's name is shown in the reader's language (core's groupNameShown). */
+    groupKind?: string | null;
     peerLastReadAt?: string | null;
     readCursors?: { publicKey: string; lastReadAt: string | null }[];
     /** The member's mute on this chat (set on the phone), null when not muted. */

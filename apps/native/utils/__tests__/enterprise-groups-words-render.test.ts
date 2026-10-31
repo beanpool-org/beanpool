@@ -149,7 +149,7 @@ vi.mock('../node-post', () => ({ signedGet: () => new Promise(() => {}), signedP
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)));
 
-import { pseudoLocalise, setLanguage, type ScopedDecisionCard, type ScopedDecisionList, type UiLang } from '@beanpool/core';
+import { GROUP_CLOSED_NOTE, PLACE_CIRCLE_WORDS, pseudoLocalise, setLanguage, type ScopedDecisionCard, type ScopedDecisionList, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import TreasuryDetailScreen from '../../app/treasury-detail';
@@ -490,6 +490,17 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         expect(host.textContent).toContain(xx('No live listings yet.'));
         expect(host.textContent).toContain(xx('No messages yet. Start the conversation!'));
         expect(bypassing(), 'empty').toEqual([]);
+    });
+
+    it('a finished circle says it finished, on its note and its pill: it closed by itself, and no vote did it', async () => {
+        me.identity = { publicKey: IVO, callsign: 'Ivo' };
+        const group = { ...GROUP, viewerRole: null, viewerStatus: null, kind: 'circle', closedAt: iso(now - DAY) };
+        net.answer = groupNode({ fetchGroupDetails: { group, members: [], rosterRefused: true }, getGroupDecisions: null });
+        await again('xx', sheet({ group, myPubkey: IVO }));
+        expect(host.textContent).toContain(xx(PLACE_CIRCLE_WORDS.closed));
+        expect(byLabel(xx(PLACE_CIRCLE_WORDS.closed))).not.toBeNull();
+        expect(host.textContent).not.toContain(xx(GROUP_CLOSED_NOTE));
+        expect(byLabel(xx("Closed by its members' vote"))).toBeNull();
     });
 
     it('in English nothing is bracketed, and the words are as they were', async () => {

@@ -56,7 +56,7 @@ import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS, tell as tellMembers } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
-import { afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
+import { afterClosingCircle, afterLeavingCircle, CIRCLE_CLOSED_BY } from './engine/place-circles.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
@@ -10965,6 +10965,7 @@ export function closeGroupByVote(groupId: string, decisionId: string): ReturnTyp
         .run(groupId, decisionId, now, now, now);
     const cancelled = cancelClosedGroupPosts(groupId);
     db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
+    afterClosingCircle(groupId);
     return cancelled;
 }
 

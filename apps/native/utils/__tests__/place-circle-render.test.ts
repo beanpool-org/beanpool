@@ -45,6 +45,7 @@ describe.each([['light', lightColors], ['dark', darkColors]])('the card in the %
 
     it('no word of a row is wider than the card, so every line wraps', () => {
         const rows = [
+            t(PLACE_CIRCLE_WORDS.knockLater), t(PLACE_CIRCLE_WORDS.knockRefused), t(PLACE_CIRCLE_WORDS.closed),
             t(PLACE_CIRCLE_WORDS.help), t(PLACE_CIRCLE_WORDS.starting), t(PLACE_CIRCLE_WORDS.notStarting), t(PLACE_CIRCLE_WORDS.joinWhenStarts), t(PLACE_CIRCLE_WORDS.joinWhenStartsOn),
             t(PLACE_CIRCLE_WORDS.someoneStarting), t(PLACE_CIRCLE_WORDS.done), t(PLACE_CIRCLE_WORDS.helpDone), circleDemandLine({ waiting: 12, helping: 12 })!, circleWaitingLine({ waiting: 12, helping: null })!, circlePeopleLine(12)!,
         ];
@@ -101,17 +102,17 @@ describe('the knock when a community starts', () => {
         sendKnock.mockResolvedValue({ kind: 'waiting', message: '' });
         await setCircleIntent('a'.repeat(64), 'c1', true);
         const both = await Promise.all([knockForCircle(me, retired), knockForCircle(me, retired)]);
-        expect(both.filter(Boolean).length).toBe(1);
-        expect(await knockForCircle(me, retired)).toBe(false);
+        expect(both.filter(r => r.sent).length).toBe(1);
+        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: null });
         expect(sendKnock).toHaveBeenCalledTimes(1);
         expect(sendKnock.mock.calls[0][0]).toBe('https://thrissur.beanpool.org');
         expect(rememberKnock).toHaveBeenCalledTimes(1);
     });
 
     it('goes for nobody who did not ask, nor to a community that takes no requests', async () => {
-        expect(await knockForCircle(me, retired)).toBe(false);
+        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: null });
         await setCircleIntent('a'.repeat(64), 'c1', true);
-        expect(await knockForCircle(me, { ...retired, community: { ...retired.community, acceptingKnocks: false } })).toBe(false);
+        expect(await knockForCircle(me, { ...retired, community: { ...retired.community, acceptingKnocks: false } })).toEqual({ sent: false, trouble: null });
         expect(sendKnock).not.toHaveBeenCalled();
         expect(await circleIntents('a'.repeat(64))).toEqual(['c1']);
     });
@@ -119,8 +120,26 @@ describe('the knock when a community starts', () => {
     it('is kept for the next read when the community could not be reached', async () => {
         sendKnock.mockResolvedValue({ kind: 'unreachable', message: '' });
         await setCircleIntent('a'.repeat(64), 'c1', true);
-        expect(await knockForCircle(me, retired)).toBe(false);
+        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'later' });
         expect(await circleIntents('a'.repeat(64))).toEqual(['c1']);
+    });
+
+    it.each([502, 503, 429])('a %i says nothing about this person: the wish is kept, and the next read sends it', async status => {
+        sendKnock.mockResolvedValueOnce({ kind: 'refused', status, code: null, message: '' }).mockResolvedValue({ kind: 'waiting', message: '' });
+        await setCircleIntent('a'.repeat(64), 'c1', true);
+        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'later' });
+        expect(await circleIntents('a'.repeat(64))).toEqual(['c1']);
+        expect(await knockForCircle(me, retired)).toEqual({ sent: true, trouble: null });
+        expect(await circleIntents('a'.repeat(64))).toEqual([]);
+    });
+
+    it('a refusal ends the wish, sends nothing more, and every later read still says so', async () => {
+        sendKnock.mockResolvedValue({ kind: 'refused', status: 403, code: 'account_closed', message: '' });
+        await setCircleIntent('a'.repeat(64), 'c1', true);
+        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'refused' });
+        expect(await circleIntents('a'.repeat(64))).toEqual([]);
+        expect(await knockForCircle(me, retired)).toEqual({ sent: false, trouble: 'refused' });
+        expect(sendKnock).toHaveBeenCalledTimes(1);
     });
 });
 

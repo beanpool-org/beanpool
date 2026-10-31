@@ -179,7 +179,7 @@ const hits = new Map<string, number>();
 const hitsOf = (p: string): number => hits.get(p) ?? 0;
 const totalHits = (): number => [...hits.values()].reduce((a, b) => a + b, 0);
 
-interface Images { goodJpg: Buffer; alphaPng: Buffer; smallWebp: Buffer; gif: Buffer }
+interface Images { goodJpg: Buffer; alphaPng: Buffer; smallWebp: Buffer; gif: Buffer; tinyJpg: Buffer }
 
 function startImageServer(img: Images): Promise<http.Server> {
     const server = http.createServer((req, res) => {
@@ -195,6 +195,7 @@ function startImageServer(img: Images): Promise<http.Server> {
             case '/good.jpg': return send('image/jpeg', img.goodJpg);
             case '/alpha.png': return send('image/png', img.alphaPng);
             case '/small.webp': return send('image/webp', img.smallWebp);
+            case '/tiny.jpg': return send('image/jpeg', img.tinyJpg);
             case '/fake.jpg': return send('image/jpeg', Buffer.from('<!doctype html><title>not a photo</title><p>hello</p>'));
             case '/page.jpg': return send('text/html; charset=utf-8', Buffer.from('<!doctype html><title>a page</title>'));
             case '/no-type.jpg': return send(null, img.goodJpg);
@@ -354,11 +355,15 @@ async function main(): Promise<void> {
         .composite([{ input: Buffer.from('<svg width="1200" height="900"><circle cx="600" cy="450" r="300" fill="#c33"/></svg>') }]).png().toBuffer();
     const smallWebp = await sharp({ create: { width: 640, height: 480, channels: 3, background: { r: 40, g: 90, b: 160 } } }).webp({ quality: 80 }).toBuffer();
     const gif = await sharp({ create: { width: 64, height: 64, channels: 3, background: '#888' } }).gif().toBuffer();
+    const tinyJpg = await sharp({ create: { width: 120, height: 90, channels: 3, background: { r: 100, g: 100, b: 100 } } }).jpeg().toBuffer();
+    const tinyB64 = `data:image/jpeg;base64,${tinyJpg.toString('base64')}`;
+    const minJpg = await sharp({ create: { width: 240, height: 200, channels: 3, background: { r: 120, g: 150, b: 180 } } }).jpeg().toBuffer();
+    const minB64 = `data:image/jpeg;base64,${minJpg.toString('base64')}`;
     const sourceFacts = await photoFacts(goodJpg);
     assert(sourceFacts.exif && sourceFacts.mark && sourceFacts.width === 1600, `(the source JPEG carries EXIF with the camera's mark, 1600 px: ${JSON.stringify(sourceFacts)})`);
     const smallB64 = `data:image/jpeg;base64,${(await sharp({ create: { width: 640, height: 480, channels: 3, background: '#a53' } }).jpeg().toBuffer()).toString('base64')}`;
 
-    const imageServer = await startImageServer({ goodJpg, alphaPng, smallWebp, gif });
+    const imageServer = await startImageServer({ goodJpg, alphaPng, smallWebp, gif, tinyJpg });
     PORT_IMG = (imageServer.address() as net.AddressInfo).port;
     __usePhotoFetchResolverForTests(resolver, FETCH_TIMEOUT_MS);
 
@@ -709,6 +714,39 @@ async function main(): Promise<void> {
         assert(stale.status === 201 && swept === 1 && uploadedPhotosWaiting(A.id) === 0 && !fs.existsSync(path.join(uploadsRoot, A.id))
             && afterDay.isError === true && NOT_YOURS.test(errorText(afterDay)),
             `24 hours on, an unused upload is swept, its folder with it, and its id refused (${swept} swept; ${errorText(afterDay).slice(0, 40)})`);
+
+        // ── Minimum photo size: at least 200 px on its shorter side ──────────────────────────────
+        const postsBeforeMin = postsCount();
+        const tooSmallBase64 = await tool(a, 'create_offer', { ...offerArgs, photos: [tinyB64] });
+        assert(tooSmallBase64.isError === true
+            && errorText(tooSmallBase64) === 'Photo 1 is too small: send one at least 200 pixels on its shorter side.'
+            && postsCount() === postsBeforeMin,
+            `a 120×90 base64 photo → refused with "Photo 1 is too small: send one at least 200 pixels on its shorter side.", nothing posted (${errorText(tooSmallBase64)})`);
+
+        const tooSmallUrl = await tool(a, 'create_offer', { ...offerArgs, photo_urls: [img('/tiny.jpg')] });
+        assert(tooSmallUrl.isError === true
+            && errorText(tooSmallUrl) === 'photo_urls #1 is too small: send one at least 200 pixels on its shorter side.'
+            && postsCount() === postsBeforeMin,
+            `a 120×90 photo by address → refused with "photo_urls #1 is too small: send one at least 200 pixels on its shorter side.", nothing posted (${errorText(tooSmallUrl)})`);
+
+        const waitingBeforeMin = uploadedPhotosWaiting(A.id);
+        const tooSmallUpload = await upload(A.token, tinyJpg);
+        assert(tooSmallUpload.status === 400
+            && tooSmallUpload.body?.error === 'The upload is too small: send one at least 200 pixels on its shorter side.'
+            && uploadedPhotosWaiting(A.id) === waitingBeforeMin,
+            `a 120×90 upload → 400 with "The upload is too small: send one at least 200 pixels on its shorter side.", nothing kept (${show(tooSmallUpload)})`);
+
+        const minUpload = await upload(A.token, minJpg);
+        const minId = minUpload.body?.photoId ?? '';
+        assert(minUpload.status === 201 && /^ph_[0-9a-f]{32}$/.test(minId),
+            `exactly 200 on the shorter side accepted by upload (${show(minUpload)})`);
+        const minPost = await tool(a, 'create_offer', { ...offerArgs, title: 'Exactly 200 px upload', photo_ids: [minId] });
+        assert(!minPost.isError && postsCount() === postsBeforeMin + 1 && uploadedPhotosWaiting(A.id) === waitingBeforeMin,
+            `posted with an upload exactly 200 on the shorter side (${errorText(minPost) || structured(minPost)?.postId})`);
+
+        const minBase64Post = await tool(a, 'create_offer', { ...offerArgs, title: 'Exactly 200 px base64', photos: [minB64] });
+        assert(!minBase64Post.isError && postsCount() === postsBeforeMin + 2,
+            `posted with base64 exactly 200 on the shorter side (${errorText(minBase64Post) || structured(minBase64Post)?.postId})`);
 
         const info = structured(await tool(a, 'connection_info', {}));
         const readerClient = await connect(R.token);

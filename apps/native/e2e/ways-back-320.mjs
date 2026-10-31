@@ -24,6 +24,10 @@
  * Account Protection's row (components/CommunityAdminsRow.tsx) offered, turned on just now, on since a date, and kept at a
  * community that no longer offers it.
  *
+ * And the shared placement (vault rethink VR4, §4.3): the row offered, on, and "Not finished"; the list with half a copy
+ * at the vault, half a pair, and a half no community on this phone owns; and Restore your account's four rows
+ * (components/welcome/RestoreMenu.tsx), in welcome.tsx's own styles, read from its file.
+ *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
  * 44dp tall (the panel's own floor); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
  * Not counted: an emoji on its own (drawn in its own colours, whatever the text colour says), and Facebook's own button,
@@ -80,6 +84,7 @@ const STUBS = {
         export const signInCopiesAt = (rule) => (rule === 'none' ? 'none' : rule === 'server' ? 'community' : globalThis.__vault ? 'vault' : 'community');
         export const vaultConfig = () => null;
         export const readVaultConfig = () => null;
+        export const readRecoveryCopiesRule = (v) => v ?? 'vault';
     `,
     // The move card's surroundings (components/VaultMoveCard.tsx, VR2's reverse): the account, the theme's colours, its
     // focus as a mount, the community, the offer the page asks for, the 12 words, and no sheet. Only it imports these.
@@ -109,13 +114,24 @@ const STUBS = {
     'community-copy': `
         const ON = { kept: true, since: '2026-10-29T04:05:06.000Z', offered: true };
         export const COMMUNITY_COPY_TEXT = {};
-        export const offersCommunityCopy = (url, rule) => rule === 'server';
+        export const offersCommunityCopy = (url, rule) => rule === 'server' || (rule === 'vault' && !!globalThis.__vault);
         export const communityCopyStatus = async () => globalThis.__copy;
         export const turnOnCommunityCopy = async () => { globalThis.__copy = ON; return { since: ON.since }; };
         export const removeCommunityCopy = async () => { globalThis.__copy = { kept: false, since: null, offered: true }; };
     `,
 };
-const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet', 'LocalAuth', 'copies-rule', 'community-copy']);
+// The shared placement's side of the row (VR4): how the vault's half stands (the page's query), and nothing sealed or sent.
+STUBS['community-recovery'] = `
+    export const sharedCopySide = async () => globalThis.__side ?? null;
+    export const sharedCopyState = (status, side) => {
+        if (!status) return null;
+        if (status.kept && status.placement === 'shared') return side === 'none' || side === 'differs' ? 'unfinished' : 'on';
+        return !status.kept && !status.unopenable && side === 'differs' ? 'unfinished' : null;
+    };
+    export const turnOnSharedCopy = async () => ({ since: '2026-10-29T04:05:06.000Z' });
+    export const removeSharedCopy = async () => {};
+`;
+const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet', 'LocalAuth', 'copies-rule', 'community-copy', 'community-recovery']);
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
@@ -123,13 +139,23 @@ const stubFor = (spec) => {
     return STUB_BASENAMES.has(name) ? name : null;
 };
 
+/** A one-line entry of welcome.tsx's StyleSheet, as the screen has it, so the restore menu is drawn in the screen's own styles. */
+const welcomeSrc = fs.readFileSync(path.join(NATIVE, 'app/welcome.tsx'), 'utf8');
+const welcomeStyle = (name) => {
+    const m = welcomeSrc.match(new RegExp(`^ {4}${name}: (\\{[^\\n]*\\}),$`, 'm'));
+    if (!m) throw new Error(`welcome.tsx has no one-line style ${name}`);
+    return `${name}: ${m[1]}`;
+};
+const MENU_STYLES = ['ssoRecoverBtn', 'ssoRecoverRow', 'ssoRecoverBtnText', 'ssoRecoverLogos', 'recoverBtn', 'recoverBtnText', 'restoreRowHint'].map(welcomeStyle).join(',\n    ');
+
 const entry = path.join(work, 'entry.tsx');
 fs.writeFileSync(entry, `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { View, Text } from 'react-native';
 import { t } from '@beanpool/core';
-import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { lightColors, darkColors, palette } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { RestoreMenu } from ${JSON.stringify(path.join(NATIVE, 'components/welcome/RestoreMenu'))};
 import { KeeperProtectionPanel } from ${JSON.stringify(path.join(NATIVE, 'components/KeeperProtectionPanel'))};
 import { protectionFrom } from ${JSON.stringify(path.join(NATIVE, 'utils/protection-state'))};
 import { NO_WORDS_VIEW_LINE } from ${JSON.stringify(path.join(NATIVE, 'utils/no-words-copy'))};
@@ -158,7 +184,12 @@ const hasWords = q.get('words') !== 'none';
 globalThis.__offered = q.get('offered') !== 'no';
 // A copy it keeps but can't open (#2626): its key gone (copy=cantopen-key), or another key in its place (copy=cantopen-other).
 const CANT_OPEN = { 'cantopen-key': 'recovery_seal_key_missing', 'cantopen-other': 'recovery_seal_unopenable' }[q.get('copy') || ''];
-globalThis.__copy = q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
+// The shared placement (VR4): offered here, on with both halves, and half a pair ("Not finished").
+const SHARED = { offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), since: null, kept: false, placement: null, copy: null };
+const HALF_HERE = { ...SHARED, kept: true, since: '2026-10-29T04:05:06.000Z', placement: 'shared', copy: 'digest' };
+const shared = { 'shared-off': [SHARED, 'none'], 'shared-on': [HALF_HERE, 'matches'], 'shared-half': [HALF_HERE, 'none'] }[q.get('copy') || ''];
+if (shared) globalThis.__side = shared[1];
+globalThis.__copy = shared ? shared[0] : q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
     : CANT_OPEN ? { kept: false, since: null, offered: globalThis.__offered, unopenable: { since: '2026-10-29T04:05:06.000Z', reason: CANT_OPEN } }
     : { kept: false, since: null, offered: globalThis.__offered };
 const protection = q.get('signin') === 'google' ? covered(['google']) : protectionFrom(null);
@@ -209,6 +240,18 @@ const WAYS = {
         communities: [
             { url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-29T04:05:06.000Z' } } },
             { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
+        ],
+        pending: [],
+    },
+    // Half at the vault, half at the community (VR4): one pair, half a pair, and a half no community here says is its own.
+    shared: {
+        vault: { kind: 'listed', copies: [], communityCopies: [
+            { ref: 'label-1', copy: 'digest-1', since: '2026-10-05', lastReleasedAt: null },
+            { ref: 'label-2', copy: 'digest-2', since: '2026-10-06', lastReleasedAt: null },
+        ] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', vaultRef: 'label-1', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-05T04:05:06.000Z', placement: 'shared', copy: 'digest-1' } } },
+            { url: 'https://bellingen.beanpool.org', name: 'Bellingen', vaultRef: 'label-3', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-07T04:05:06.000Z', placement: 'shared', copy: 'digest-3' } } },
         ],
         pending: [],
     },
@@ -264,9 +307,26 @@ const WaysPage = () => {
     );
 };
 
+/** welcome.tsx's Restore your account: its page and card, its title and line, its four rows. */
+const RestorePage = () => {
+    const { colors: oc, dark } = onboardingColors(scheme);
+    const styles = ((colors, dark) => ({
+    ${MENU_STYLES}
+    }))(oc, dark);
+    return (
+        <View style={{ backgroundColor: oc.surface.page, padding: 24 }}>
+            <View style={{ width: '100%', backgroundColor: oc.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: oc.border.default }}>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: oc.text.heading, marginBottom: 8 }}>{t('🔑 Restore your account')}</Text>
+                <RestoreMenu styles={styles} logos={<View style={{ width: 48, height: 16 }} />} onSocial={noop} onWords={noop} onCommunity={noop} onRekey={noop} />
+            </View>
+        </View>
+    );
+};
+
 const Page = () => {
     const place = q.get('place');
     if (place === 'ways') return <WaysPage />;
+    if (place === 'restore') return <RestorePage />;
     // Settings' menu, where the move card sits (VR2's reverse, "Keep your Google recovery with your community").
     if (place === 'movecard') return (
         <View style={{ backgroundColor: colors.surface.page, padding: 16 }}>
@@ -443,6 +503,7 @@ try {
             ['state=result', 'Ways back, after Remove everything'],
             ['state=adminsonly', "Ways back, only the copy for your community's admins"],
             ['state=cantopen', "Ways back, a copy for your community's admins its server can't open"],
+            ['state=shared', 'Ways back, half at the key vault and half at the community, half a pair, and a stray half'],
         ];
         for (const [query, label] of WAYS_CASES) {
             await open(`place=ways&${query}&scheme=${scheme}`);
@@ -483,6 +544,10 @@ try {
             ['copy=cantopen-key', "Account Protection, your community's admins, kept but its server's key is gone", /The people who run it can put that key back/],
             ['copy=cantopen-other', "Account Protection, your community's admins, kept under another key, offered", /Turn it on again to make a copy it can open/],
             ['copy=cantopen-other&offered=no', "Account Protection, your community's admins, kept under another key, no longer offered", /no longer makes new copies/],
+            // The shared placement (VR4).
+            ['copy=shared-off&offered=no', "Account Protection, your community's admins, half and half, offered", /each keep half of a locked copy/],
+            ['copy=shared-on&offered=no', "Account Protection, your community's admins, half and half, on", /On in Mullumbimby since/],
+            ['copy=shared-half&offered=no', "Account Protection, your community's admins, half and half, not finished", /Not finished: tap to try again/],
         ];
         for (const [query, label, shows] of ADMINS_CASES) {
             await open(`place=admins&${query}&scheme=${scheme}`);
@@ -493,6 +558,12 @@ try {
         await page.getByRole('button', { name: 'Turn on' }).click();
         await page.getByText(/If you lose this phone, go and see one of your admins/).waitFor();
         await measure(`${scheme} · Account Protection, your community's admins, turned on just now`);
+
+        // Restore your account's four rows (VR4).
+        await open(`place=restore&scheme=${scheme}`);
+        await page.getByText('My community can bring me back').first().waitFor();
+        if ((await page.getByRole('button').count()) !== 4) problems.push(`${scheme} · Restore your account: not four rows`);
+        await measure(`${scheme} · Restore your account, four rows`);
     }
     for (const e of errors) problems.push(`page error: ${e}`);
 } finally {

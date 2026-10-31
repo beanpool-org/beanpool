@@ -12,6 +12,7 @@ import {
     HOME_FRAME_LIMITS, HOME_SEARCH_KMS, homeCardType, readSearchSettings,
     type HomeLayoutV2, type HomeSearchKind, type HomeSearchSettings,
 } from './home-frame.js';
+import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { t, tn, word } from './words.js';
 
 /** The Market's search as each app holds it: the words typed, the Offers/Needs tab, a category chip, a distance. */
@@ -23,6 +24,8 @@ export interface MarketSearchNow {
     category?: string | null;
     /** The Market's distance filter in km, or none. */
     radiusKm?: number | null;
+    /** The resolved tag ids to store with the saved search (DESIGN-owner-seeding-tags-fable.md §4.7). */
+    tags?: string[] | null;
 }
 
 /**
@@ -39,11 +42,14 @@ export function searchKmFor(radiusKm: number | null | undefined): HomeSearchSett
  * to 40 characters, an unknown category none). Null when there are no words: a saved search is a search.
  */
 export function searchFromMarket(m: MarketSearchNow): HomeSearchSettings | null {
+    const q = typeof m.q === 'string' ? m.q.split(/\s+/).filter(Boolean).join(' ') : '';
+    const tags = Array.isArray(m.tags) && m.tags.length > 0 ? m.tags.slice(0, POST_TAGS_MAX) : undefined;
     const s = readSearchSettings({
-        q: typeof m.q === 'string' ? m.q.split(/\s+/).filter(Boolean).join(' ') : '',
+        q,
         kind: m.kind,
         category: m.category ?? undefined,
         km: searchKmFor(m.radiusKm),
+        ...(tags ? { tags } : {}),
     });
     return s.q ? s : null;
 }

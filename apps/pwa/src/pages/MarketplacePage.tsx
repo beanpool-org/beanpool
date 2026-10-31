@@ -25,7 +25,9 @@ import {
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
+    editedTagsOver, postTagsOf, searchTagsFor, storedPostTags, tagIndex,
 } from '@beanpool/core';
+import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
 import { marked, readsOwn, treasuriesFallback, useFeatureMode, useReadsOwn } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -113,6 +115,9 @@ interface Props {
     /** Words to put in the search (a saved search's See more on Home); taken once, then `onSearchOpened`. */
     openSearch?: string | null;
     onSearchOpened?: () => void;
+    /** Tag filter to open with (e.g. from post detail chip or home card) */
+    openTag?: string | null;
+    onTagOpened?: () => void;
     /**
      * "Save this search to Home" (Marty, 7 Oct): the search as a saved search's settings; App opens Home, which opens the
      * saved search's own dialog with them filled in. Absent (the lobby), the button isn't drawn.
@@ -303,7 +308,7 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, openTag, onTagOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -316,6 +321,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [beansOnlyPicked, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnlyPicked, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
+    const [selectedTag, setSelectedTag] = useState<string | null>(null);
+    const [editTags, setEditTags] = useState<string[]>([]);
+    // The tags the form opened with, moved on by a reload's: what the save compares with, as on the phone (app/post/[id].tsx).
+    const editTagsFrom = useRef<string[]>([]);
+    const [searchResults, setSearchResults] = useState<MarketplacePost[] | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
+    const searchTimerRef = useRef<any>(null);
     const [groupFilter, setGroupFilter] = useState<string>('all');
     const [userGroups, setUserGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
@@ -563,6 +575,48 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         onSearchOpened?.();
     }, [openSearch, onSearchOpened]);
 
+    // Tag filter from post detail or link (§4.4)
+    useEffect(() => {
+        if (!openTag) return;
+        setSelectedTag(openTag);
+        onTagOpened?.();
+    }, [openTag, onTagOpened]);
+
+    // Debounced server search resolving query words through label index to send q AND tags (§4.7)
+    useEffect(() => {
+        let active = true;
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        const q = searchQuery.trim();
+        if (!q && !selectedTag) {
+            setSearchResults(null);
+            setIsSearching(false);
+            return;
+        }
+        setIsSearching(true);
+        searchTimerRef.current = setTimeout(async () => {
+            try {
+                const filter = feedListFilter(typeFilter, categoryFilter, beansOnlyPicked, groupFilter);
+                const resolvedTags = q ? searchTagsFor(q) : [];
+                const searchTagIds = [...new Set([...(selectedTag ? [selectedTag] : []), ...resolvedTags])].slice(0, 20);
+                const results = await getMarketplacePosts({
+                    ...filter,
+                    ...(q ? { q } : {}),
+                    ...(searchTagIds.length > 0 ? { tags: searchTagIds } : {}),
+                    limit: 50,
+                });
+                if (active) setSearchResults(results);
+            } catch {
+                if (active) setSearchResults(null);
+            } finally {
+                if (active) setIsSearching(false);
+            }
+        }, 300);
+        return () => {
+            active = false;
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
+    }, [searchQuery, selectedTag, typeFilter, categoryFilter, beansOnlyPicked, groupFilter]);
+
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
     // A link that opened nothing says so, in place of the bare market (Marty 15 Oct: "View Post just takes me to the marketplace").
@@ -650,6 +704,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Edit mode
     const [editMode, setEditMode] = useState(false);
+    // A listing read again while its form is open: the picker shows the tags it now has, the member's own changes on top.
+    const selectedPostTags = storedPostTags(postTagsOf(selectedPost?.tags));
+    useEffect(() => {
+        if (!editMode) return;
+        const now = postTagsOf(selectedPostTags);
+        const from = editTagsFrom.current;
+        if (selectedPostTags === storedPostTags(from)) return;
+        editTagsFrom.current = now;
+        setEditTags((edited) => editedTagsOver(from, edited, now));
+    }, [selectedPostTags, editMode]);
     const [editType, setEditType] = useState<'offer' | 'need'>('offer');
     const [editCategory, setEditCategory] = useState('other');
     const [editTitle, setEditTitle] = useState('');
@@ -1186,7 +1250,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         if (searchQuery.trim()) {
             filtered = filtered.filter(p => {
                 if (p.type === 'poll' && typeFilter !== 'poll') return false;
-                return matchesExpandedSearch(searchQuery, p.title, p.description);
+                if (searchResults !== null) return true;
+                return matchesExpandedSearch(searchQuery, p.title, p.description, p.tags);
+            });
+        }
+
+        // Tag filter (§4.4 post detail tap)
+        if (selectedTag) {
+            filtered = filtered.filter(p => {
+                const pTags = postTagsOf(p.tags);
+                return pTags.some(t => t === selectedTag || t.startsWith(selectedTag + '.'));
             });
         }
 
@@ -1783,6 +1856,37 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {selectedPost.description}
                             </p>
                         )}
+
+                        {/* Tags chips (§4.4) */}
+                        {postTagsOf(selectedPost.tags).length > 0 && (() => {
+                            const idx = tagIndex();
+                            const visibleTags = postTagsOf(selectedPost.tags).filter(id => {
+                                try { return !!idx.label(id); } catch { return false; }
+                            });
+                            if (visibleTags.length === 0) return null;
+                            return (
+                                <div className="flex flex-wrap gap-1.5 mb-5" data-testid="post-detail-tags">
+                                    {visibleTags.map(id => {
+                                        const label = idx.label(id);
+                                        if (!label) return null;
+                                        return (
+                                            <button
+                                                key={id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedTag(id);
+                                                    setSelectedPost(null);
+                                                }}
+                                                className="inline-flex items-center min-h-[44px] px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700/60 cursor-pointer transition-colors"
+                                                aria-label={t('Filter marketplace by tag {tag}', { tag: label })}
+                                            >
+                                                #{label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
 
                         {/* Photos */}
                         {selectedPost.photos && selectedPost.photos.length > 0 && (
@@ -2884,6 +2988,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
                                         setEditPhotos(selectedPost.photos || []);
+                                        editTagsFrom.current = postTagsOf(selectedPost.tags);
+                                        setEditTags(editTagsFrom.current);
                                         setEditShop({ kind: 'hidden' });
                                         setEditInShop(false);
                                         const post = selectedPost;
@@ -2974,6 +3080,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <option key={cat.id} value={cat.id}>{t('{emoji} {label}', { emoji: cat.emoji, label: t(cat.label) })}</option>
                                     ))}
                                 </select>
+
+                                {/* TagPicker (§4.4) */}
+                                <div className="mb-3">
+                                    <TagPicker
+                                        tags={editTags}
+                                        onChange={setEditTags}
+                                        category={editCategory}
+                                        title={editTitle}
+                                        description={editDescription}
+                                    />
+                                </div>
 
                                 {/* Title */}
                                 <input
@@ -3129,6 +3246,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             try {
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
+                                                const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
                                                     type: editType,
                                                     category: editCategory,
@@ -3138,6 +3256,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     priceType: editPriceType,
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,
+                                                    ...(tagsChanged ? { tags: editTags } : {}),
                                                     ...(shopId !== undefined ? { shopId } : {}),
                                                 });
                                                 setSelectedPost(result.post);
@@ -3219,7 +3338,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // "Save this search to Home": a member's search, Offers and Needs only (not under Events or Polls).
     const toSave = onSaveSearch && !isVisitor && isMember !== false
-        ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery) : null;
+        ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery, selectedTag || undefined) : null;
     // The category the Category chip names while one is picked.
     const filterCategory = MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter);
 
@@ -3294,6 +3413,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </button>
                     </>)}
                 </div>
+                {selectedTag && (() => {
+                    const label = tagIndex().label(selectedTag);
+                    if (!label) return null;
+                    return (
+                        <div className="flex items-center gap-1.5 mt-2">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                                #{label}
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedTag(null)}
+                                    className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:text-emerald-950 dark:hover:text-white font-bold ml-1 cursor-pointer"
+                                    aria-label={t('Clear tag filter')}
+                                >
+                                    ✕
+                                </button>
+                            </span>
+                        </div>
+                    );
+                })()}
                 {toSave && (
                     <button
                         type="button"
@@ -3544,7 +3682,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {loading ? (
                 <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
             ) : membersOnly ? null : (() => {
-                let filtered = clientFilter(posts);
+                let filtered = clientFilter(searchResults !== null ? searchResults : posts);
 
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {

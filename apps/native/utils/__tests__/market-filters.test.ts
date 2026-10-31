@@ -217,6 +217,7 @@ describe('Save this search to Home: the Market\'s search as a saved search (Mart
     const at = (over: Partial<MarketFilterState>) => ({ ...DEFAULT_MARKET_FILTERS, ...over });
     it('takes the words, Offers or Needs from the pill, the category chip and the distance chip', () => {
         expect(marketSearchToSave(at({ type: 'offers', category: 'food', radiusKm: 5 }), 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5 });
+        expect(marketSearchToSave(at({ type: 'offers', category: 'food', radiusKm: 5 }), 'eggs', 'food.eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5, tags: ['food.eggs'] });
         expect(marketSearchToSave(at({ type: 'needs' }), ' help moving ')).toEqual({ q: 'help moving', kind: 'need' });
         expect(marketSearchToSave(at({ type: 'all', category: 'tools', radiusKm: 3 }), 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 5 });
         expect(marketSearchToSave(at({ type: 'for-you' }), 'eggs')?.kind).toBe('any');

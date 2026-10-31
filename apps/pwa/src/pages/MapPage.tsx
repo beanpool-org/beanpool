@@ -41,6 +41,7 @@ import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS 
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
+import { TagPicker } from '../components/TagPicker';
 import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
 import { TIER_WORDS } from '../lib/trust-tier';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -288,6 +289,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     const pollAuthorArea = useMyArea(showNewPost && newPostType === 'poll' && nearbyLimits !== null);
     const pollPlacelessNote = placelessListingNote(nearbyLimits !== null, pollAuthorArea);
     const [newPostCategory, setNewPostCategory] = useState('general');
+    const [newPostTags, setNewPostTags] = useState<string[]>([]);
+    const [eventTags, setEventTags] = useState<string[]>([]);
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
     const [newPostCredits, setNewPostCredits] = useState('');
@@ -1005,6 +1008,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
         setPostApproximate(false);
         setEventIsCopy(false);
         setEventEdit(null);
+        setEventTags([]);
         setEventOnline(false);
         setEventJoinLink('');
         setEventZone(null);
@@ -1025,7 +1029,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     /** The event form as it stands, in the shape the edit diff compares. */
     function currentEventForm(): EventEditForm {
         return {
-            title: newPostTitle, description: newPostDescription, start: eventStart, end: eventEnd,
+            title: newPostTitle, description: newPostDescription, tags: eventTags, start: eventStart, end: eventEnd,
             placeName: eventPlaceName, lat: eventOnline ? null : postLat, lng: eventOnline ? null : postLng, privateNote: eventNote,
             photos: newPostPhotos, online: eventOnline, link: eventJoinLink, tz: eventFormZone()?.tz ?? null,
             hostLetsIn: eventHostLetsIn, repeat: eventRepeat, repeatUntil: eventRepeatUntil,
@@ -1144,6 +1148,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(!eventOnline && eventPlaceName.trim() ? { eventPlaceName: eventPlaceName.trim() } : {}),
                 ...(eventOnline && eventJoinLink.trim() ? { eventLink: eventJoinLink.trim() } : {}),
                 ...(eventNote.trim() ? { eventPrivateNote: eventNote.trim() } : {}),
+                ...(eventTags.length > 0 ? { tags: eventTags } : {}),
                 // Always the host's choice, never left to the node's default.
                 eventHostLetsIn,
             };
@@ -1300,10 +1305,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 ...(postLat != null && postLng != null ? { lat: postLat, lng: postLng } : {}),
                 photos: newPostPhotos,
                 audienceScope,
+                ...(newPostTags.length > 0 ? { tags: newPostTags } : {}),
                 ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
             });
             setNewPostTitle('');
             setNewPostDescription('');
+            setNewPostTags([]);
             setNewPostCredits('');
             setNewPostPriceType('fixed');
             setNewPostRepeatable(false);
@@ -1848,6 +1855,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             setPostApproximate(false);
             setPinDropMode(false);
             setValidationErrors(new Set());
+            setEventTags(form.tags || []);
             setEventEdit({ id, before: form });
             setEventOnline(form.online === true);
             setEventJoinLink(form.link ?? '');
@@ -2746,6 +2754,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             />
                         </div>
 
+                        {/* TagPicker (§4.4) */}
+                        <div className="mb-3">
+                            <TagPicker
+                                tags={eventTags}
+                                onChange={setEventTags}
+                                category="general"
+                                title={newPostTitle}
+                                description={newPostDescription}
+                            />
+                        </div>
+
                         {renderPhotoPicker(!eventEdit || Boolean(eventEdit.before.photos && eventEdit.before.photos.length > 0))}
 
                         <div>
@@ -2941,6 +2960,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                                 <option key={c.id} value={c.id}>{t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) })}</option>
                             ))}
                         </select>
+
+                        {/* TagPicker (§4.4) */}
+                        <div className="mb-3">
+                            <TagPicker
+                                tags={newPostTags}
+                                onChange={setNewPostTags}
+                                category={newPostCategory}
+                                title={newPostTitle}
+                                description={newPostDescription}
+                            />
+                        </div>
 
                         {renderLocationPicker()}
 

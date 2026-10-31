@@ -103,7 +103,7 @@ async function main(): Promise<void> {
     const emit = https.Server.prototype.emit;
     https.Server.prototype.emit = function (this: unknown, event: string, ...args: any[]) {
         if (event === 'request') requests.push(`${String(args[0]?.method)} ${String(args[0]?.url)}`);
-        return emit.call(this, event, ...args);
+        return (emit as (...sent: unknown[]) => boolean).call(this, event, ...args);
     } as typeof emit;
 
     await initTls();

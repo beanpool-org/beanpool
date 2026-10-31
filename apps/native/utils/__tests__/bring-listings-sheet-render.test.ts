@@ -8,7 +8,7 @@
  * The sheet itself: no answer means no sheet and the offer kept; a yes runs and says what came of it; a later run asks
  * nothing and is quiet until it has something to say; and no state leaves a member on a sheet with no way out.
  */
-import { act, createElement } from 'react';
+import { act, createElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { layOut } from './yoga-dom-layout';
@@ -86,12 +86,12 @@ const LONG_NAME = 'Mullumbimby and the Brunswick Valley Community Exchange';
 let host: HTMLElement;
 let root: Root | null = null;
 
-async function draw(node: ReturnType<typeof createElement>): Promise<void> {
+async function draw(node: ReactNode): Promise<void> {
     host = document.createElement('div');
     document.body.appendChild(host);
     await act(async () => {
         root = createRoot(host);
-        root.render(node);
+        root.render(node as Parameters<Root['render']>[0]);
     });
 }
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
@@ -146,7 +146,7 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the shee
         // 85% of the window at most, and never under the status bar.
         expect(box.height).toBeLessThanOrEqual(HEIGHT * 0.85 + 0.5);
         expect(box.top + box.height).toBeCloseTo(HEIGHT, 0);
-        for (const button of host.querySelectorAll('[role="button"]')) {
+        for (const button of Array.from(host.querySelectorAll('[role="button"]'))) {
             expect(layout.height(button), 'a target of at least 48 dp').toBeGreaterThanOrEqual(48);
             const at = layout.box(button);
             expect(at.left + at.width).toBeLessThanOrEqual(WIDTH);

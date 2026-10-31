@@ -134,4 +134,8 @@ describe('where the card is drawn', () => {
         // "I'd help" goes where "Tell me" goes: with no place known, to the find screen, which asks at its own tap.
         expect(find).not.toMatch(/requestForegroundPermissionsAsync/);
     });
+
+    it('the group sheet closes before Start a community opens: a Modal stays above any screen pushed under it', () => {
+        expect(read('components/GroupDetailModal.tsx')).toMatch(/<PlaceCircleCard[^>]*onLeave=\{onClose\}/);
+    });
 });

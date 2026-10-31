@@ -14,13 +14,15 @@ import { HOME_CARD_PADDING_DP, HomeButton } from './home/HomeParts';
  * starts" is this phone's own wish (utils/circle-intent.ts). Once a community has retired the circle: what started, and
  * how long the chat stays.
  */
-export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChange }: {
+export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onLeave, onChange }: {
     id: string;
     circle: CircleCard;
     identity: BeanPoolIdentity | null;
     /** The community the group is on; left out: the one this phone is on. */
     nodeUrl?: string | null;
     colors: AppColors;
+    /** Before Start a community opens: a sheet closes itself, or a Modal stays above the screen it opens. */
+    onLeave?: () => void;
     onChange?: (card: CircleCard) => void;
 }) {
     const s = useMemo(() => makeStyles(colors), [colors]);
@@ -69,7 +71,7 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChang
             {circle.starting === 'someone' && <Text style={[s.line, s.gap]} testID="circle-someone-starting">{t(PLACE_CIRCLE_WORDS.someoneStarting)}</Text>}
             {circle.starting === 'you' && <Text style={[s.line, s.gap]} testID="circle-you-starting">{t(PLACE_CIRCLE_WORDS.youAreStarting)}</Text>}
             <View style={s.buttons}>
-                <HomeButton colors={colors} text={t(FIND_COMMUNITY_WORDS.start)} onPress={() => router.push('/start-community')} testID="circle-start" />
+                <HomeButton colors={colors} text={t(FIND_COMMUNITY_WORDS.start)} onPress={() => { onLeave?.(); router.push('/start-community'); }} testID="circle-start" />
                 {circle.starting !== 'someone' && (
                     <HomeButton colors={colors} busy={busy} primary={circle.starting === null} text={circle.starting === 'you' ? t(PLACE_CIRCLE_WORDS.notStarting) : t(PLACE_CIRCLE_WORDS.starting)}
                         onPress={() => void onStarting()} testID="circle-starting" />

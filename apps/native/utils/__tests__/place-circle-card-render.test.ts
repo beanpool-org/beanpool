@@ -51,6 +51,7 @@ vi.mock('../community-directory', async (original) => ({ ...(await original<Reco
 import { lightColors, darkColors } from '../../constants/colors';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import { MarketCircleLine } from '../../components/MarketCircleLine';
+import { PlaceCircleCard } from '../../components/PlaceCircleCard';
 import { circleIntents, setCircleIntent } from '../circle-intent';
 import type { GlobalHome } from '../community-directory';
 
@@ -156,6 +157,19 @@ describe('the knock a retired circle owes', () => {
 });
 
 describe('what a tap does', () => {
+    it('Start a community opens the screen, once a sheet it is drawn in has closed', async () => {
+        const home = await mount(createElement(PlaceCircleCard, { id: 'c1', circle: openCircle, identity, colors: lightColors }));
+        await act(async () => { (by(home, 'circle-start') as HTMLElement).click(); });
+        expect(push).toHaveBeenCalledWith('/start-community');
+        push.mockClear();
+        const onLeave = vi.fn();
+        const sheet = await mount(createElement(PlaceCircleCard, { id: 'c1', circle: openCircle, identity, colors: lightColors, onLeave }));
+        await act(async () => { (by(sheet, 'circle-start') as HTMLElement).click(); });
+        expect(onLeave).toHaveBeenCalledTimes(1);
+        expect(push).toHaveBeenCalledWith('/start-community');
+        expect(onLeave.mock.invocationCallOrder[0]).toBeLessThan(push.mock.invocationCallOrder[0]);
+    });
+
     it("I'd help sends the rounded cell and the flag, and nothing else", async () => {
         const host = await find(noneNear({}));
         await act(async () => { (by(host, 'home-find-help') as HTMLElement).click(); });

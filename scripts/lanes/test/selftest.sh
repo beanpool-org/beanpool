@@ -686,6 +686,8 @@ check "the lane's own deciding brief still follows" brief_has claude.prompt-1 "D
 FAKE_EARLY_POSTS=; print 5 > "$FAKE_STATE/comments"
 { review feat/x; } >> "$LOG" 2>&1
 check "an early pass with no comments goes straight on too" eval '[ "$CLEAN:$(fixes):$(reviews)" = 1:1:1 ] && not_logged "left for the deciding pass"'
+check "... and its brief asks for no verdict on comments that do not exist" eval '! brief_has claude.prompt-1 "WEIGH" && ! brief_has claude.prompt-1 "as REAL or NOT REAL"'
+check "... it still checks the earlier findings"  brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
 
 scenario "49. a Claude-built lane: an early comment the deciding pass finds real counts, because it posts it again"
 LANE_BUILD_BACKEND=claude LANE_WT=$T/repo/.claude/worktrees/lane-opus

@@ -486,7 +486,8 @@ review(){ # BRANCH — the early pass(es), then the deciding pass. Sets CLEAN an
   done
   # A clean early pass is corroboration, not proof: the merge is decided by the deciding pass on the strong model.
   opening="Final, DECIDING pass: verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line."
-  [ "$passes" = 1 ] && opening=$(lane_weigh_brief "$PR" "$T")
+  # Only when the pass left something to weigh: with no comments, that brief would ask for a verdict on each of none.
+  [ "$passes" = 1 ] && [ "$B1" -gt "$B0" ] && opening=$(lane_weigh_brief "$PR" "$T")
   decide_review "$PR" "$1" 3 0 "$opening
 
 $LANE_DECIDE_BRIEF"; }

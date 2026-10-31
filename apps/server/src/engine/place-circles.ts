@@ -147,12 +147,14 @@ function openCircles(): OpenCircle[] {
     });
 }
 
-/** Whether a listed community has a place within CIRCLE_RADIUS_KM of here: then there is one to join, and no circle to make. */
+/**
+ * Whether a listed community has a place within CIRCLE_RADIUS_KM of here: then there is one to join, and no circle to make.
+ * Bounded north and south only (a degree of latitude is 111 km): longitudes wrap at ±180°, and a run asks this a few times.
+ */
 function communityNear(cell: { lat: number; lng: number }): boolean {
-    const span = CIRCLE_RADIUS_KM / 110; // A degree of latitude is 111 km: a box a little over the circle north to south…
-    const wide = span / Math.max(0.05, Math.cos(cell.lat * Math.PI / 180)); // …and as wide at this latitude.
-    const rows = db.prepare(`SELECT lat, lng FROM directory_cache WHERE listed = 1 AND lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?`)
-        .all(cell.lat - span, cell.lat + span, cell.lng - wide, cell.lng + wide) as { lat: number; lng: number }[];
+    const span = CIRCLE_RADIUS_KM / 110;
+    const rows = db.prepare('SELECT lat, lng FROM directory_cache WHERE listed = 1 AND lat BETWEEN ? AND ? AND lng IS NOT NULL')
+        .all(cell.lat - span, cell.lat + span) as { lat: number; lng: number }[];
     return rows.some(r => haversineKm(cell.lat, cell.lng, r.lat, r.lng) <= CIRCLE_RADIUS_KM);
 }
 
@@ -209,13 +211,14 @@ function formCircles(cb: CircleCallbacks): Pick<CircleRun, 'formed' | 'joined'> 
         run.joined++;
     }
 
-    for (const cluster of clusterHelpers(helpers.filter(h => !seated.has(h.pubkey)))) {
+    // Only those who may sit: a suspended helper counts toward nobody's three.
+    for (const cluster of clusterHelpers(helpers.filter(h => !seated.has(h.pubkey) && cb.maySit(h.pubkey)))) {
         const cell = { lat: cluster.lat, lng: cluster.lng };
         if (communityNear(cell)) continue;
-        // Earliest first, leaving out anyone who may not sit, and the later of two who have blocked each other.
+        // Earliest first, leaving out the later of two who have blocked each other.
         const seats: string[] = [];
         for (const pk of cluster.members) {
-            if (cb.maySit(pk) && !seats.some(other => hasAnyBlock(pk, other))) seats.push(pk);
+            if (!seats.some(other => hasAnyBlock(pk, other))) seats.push(pk);
         }
         if (seats.length < CIRCLE_MIN_PEOPLE) continue;
         const id = cb.createCircle(seats[0], cellOf(cell.lat, cell.lng));

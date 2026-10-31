@@ -102,7 +102,7 @@ Say hello, and meet in a public place first. Its chat works like any group's cha
 
 The card has three rows:
 
-- **{n} people here:** how many are in the circle. Under 3, it says nothing.
+- **How many people are here**, such as **4 people here**. Under 3, it says nothing.
 - **Start a community:** what it takes, and how to begin.
 - **I'm starting one here:** tell the others you are doing it. Everyone else then sees **Someone is starting a community near you.** Tap **I'm not starting one after all** if plans change. After 90 days with no community it goes by itself.
 

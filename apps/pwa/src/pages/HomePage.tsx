@@ -96,7 +96,7 @@ import { ToolHomeCard } from '../tools/home-card';
 import { toolOfCard } from '../tools/cards';
 import { AddressSearch } from '../components/AddressSearch';
 import {
-    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_CIRCLE_WORDS, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, circleDemandLine, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
+    FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, PLACE_CIRCLE_WORDS, PLACE_WATCH_LIMIT_CODE, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, placeWatchLimitLine, type AddressResult, type AddressSearchWords,
 } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
@@ -2173,6 +2173,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                         <p className="m-0 mt-1 text-xs italic text-nature-600 dark:text-nature-300 break-words" data-testid={`home-waiting-answers-${k.url}`}>
                                             {answersLine}
                                         </p>
+                                    )}
+                                    {pending && !cancelled && !circle && circleWaitingLine(f.demand) && (
+                                        <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-200 break-words" data-testid={`home-waiting-near-${k.url}`}>
+                                            {circleWaitingLine(f.demand)}
+                                        </p>
+                                    )}
+                                    {pending && !cancelled && !circle && !helping && circleWaitingLine(f.demand) && (
+                                        <div className="mt-2">
+                                            <button type="button" onClick={() => void wouldHelp()} data-testid={`home-waiting-help-${k.url}`} className={FIND_ACTION}
+                                                aria-label={t(PLACE_CIRCLE_WORDS.helpA11y)}>
+                                                {t(PLACE_CIRCLE_WORDS.help)}
+                                            </button>
+                                        </div>
                                     )}
                                     {closed && !cancelled && (
                                         <div className="mt-2">

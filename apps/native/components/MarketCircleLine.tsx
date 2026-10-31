@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import type { AppColors } from '../constants/colors';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { fetchGlobalHome, type GlobalHome } from '../utils/community-directory';
+import { currentNodeUrl } from '../utils/circle-intent';
 import { PLACE_CIRCLE_WORDS, circleWaitingLine, t } from '@beanpool/core';
 
 /** The Find card's read, once, for a screen the Find card isn't on: from the account's own area, signed when there is one. */
@@ -12,7 +13,7 @@ export function useFindCardRead(wanted: boolean, identity: BeanPoolIdentity | nu
     useEffect(() => {
         if (!wanted) return;
         let alive = true;
-        void fetchGlobalHome(null, identity).then(r => { if (alive && r.ok) setHome(r.value); });
+        void currentNodeUrl().then(base => fetchGlobalHome(null, identity, base)).then(r => { if (alive && r.ok) setHome(r.value); });
         return () => { alive = false; };
     }, [wanted, identity?.publicKey]);
     return home;

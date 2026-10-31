@@ -6,7 +6,7 @@ import type { BeanPoolIdentity } from '../../utils/identity';
 import {
     communityFacts, communityLabel, communityOrigin, findCardNamed, findCommunityCardCopy, nearbyPostsLine, notAnsweringLine, watchPlace, type DirectoryCommunity, type GlobalHome, type Point,
 } from '../../utils/community-directory';
-import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, TYPE_YOUR_TOWN, circleDemandLine, circleWaitingLine, communityAnswersLine, findCommunityState, formatDate, t } from '@beanpool/core';
 import { KNOCK_MESSAGES, cancelKnock, cardKnockLines, forgetKnock, knockCardState, readKnockStatus, rememberedKnocks, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { knockForCircle } from '../../utils/circle-intent';
 import { PlaceCircleCard } from '../PlaceCircleCard';
@@ -265,6 +265,9 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                                 {answersLine}
                             </Text>
                         )}
+                        {waiting && !cancelled && !circle && !!circleWaitingLine(home.demand) && (
+                            <Text style={[s.rowSub, { marginTop: 4 }]} testID={`home-find-waiting-near-${k.url}`}>{circleWaitingLine(home.demand)}</Text>
+                        )}
                         {closed && !cancelled && (
                             <View style={{ marginTop: 8 }}>
                                 <HomeButton
@@ -273,6 +276,11 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
                                     onPress={() => void onGotIt(k)}
                                     testID={`home-find-gotit-${k.url}`}
                                 />
+                            </View>
+                        )}
+                        {waiting && !cancelled && !circle && !!circleWaitingLine(home.demand) && (
+                            <View style={{ marginTop: 8 }}>
+                                <HomeButton colors={colors} text={t(PLACE_CIRCLE_WORDS.meetThem)} onPress={() => openFind()} testID={`home-find-meet-${k.url}`} />
                             </View>
                         )}
                         {waiting && !cancelled && (

@@ -25,6 +25,11 @@ export async function setCircleIntent(pubkey: string, circleId: string, on: bool
     await AsyncStorage.setItem(storeKey(pubkey), JSON.stringify(on ? [...rest, circleId] : rest));
 }
 
+/** The community this phone is on: a circle is on it, whatever its address (no community needs ours). */
+export async function currentNodeUrl(): Promise<string | undefined> {
+    return (await AsyncStorage.getItem('beanpool_anchor_url')) ?? undefined;
+}
+
 /** Those being sent now: a second read of Home while the first knock is out sends nothing. */
 const sending = new Set<string>();
 

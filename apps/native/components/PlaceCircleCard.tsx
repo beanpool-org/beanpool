@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import type { AppColors } from '../constants/colors';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { setCircleStarting } from '../utils/community-directory';
-import { circleIntents, setCircleIntent } from '../utils/circle-intent';
+import { circleIntents, currentNodeUrl, setCircleIntent } from '../utils/circle-intent';
 import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, circlePeopleLine, circleStartedLine, t, type CircleCard } from '@beanpool/core';
 import { HomeButton, homeStyles } from './home/HomeParts';
 
@@ -18,7 +18,7 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChang
     id: string;
     circle: CircleCard;
     identity: BeanPoolIdentity | null;
-    /** The community the group is on; left out: the global one. */
+    /** The community the group is on; left out: the one this phone is on. */
     nodeUrl?: string | null;
     colors: AppColors;
     onChange?: (card: CircleCard) => void;
@@ -50,7 +50,7 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChang
         if (!identity || busy) return;
         setBusy(true);
         setNote(null);
-        const r = await setCircleStarting(identity, id, circle.starting !== 'you', nodeUrl ?? undefined);
+        const r = await setCircleStarting(identity, id, circle.starting !== 'you', nodeUrl ?? await currentNodeUrl());
         setBusy(false);
         if (r.ok) onChange?.(r.value);
         else setNote(r.message);

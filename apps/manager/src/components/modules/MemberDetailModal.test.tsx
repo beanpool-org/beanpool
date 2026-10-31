@@ -480,9 +480,11 @@ describe('MemberDetailModal', () => {
             />
         );
         await userEvent.click(screen.getByText('⏸️ Suspend'));
+        expect(screen.getByText(/Members then vote for 7 days on removing them; if the vote doesn't pass, the suspension lifts by itself, unless too few members can vote and an owner decides it\.$/))
+            .toBeInTheDocument();
         await userEvent.type(screen.getByLabelText('Reason (members will see this)'), 'threats at the market, twice');
         await userEvent.click(screen.getByRole('button', { name: 'Suspend now' }));
-        expect(await screen.findByText(/^Suspended\. Members now vote until .+ on removing them; if the vote doesn't pass, the suspension lifts by itself\.$/))
+        expect(await screen.findByText(/^Suspended\. Members now vote until .+ on removing them; if the vote doesn't pass, the suspension lifts by itself, unless too few members can vote and an owner decides it\.$/))
             .toBeInTheDocument();
         expect(screen.queryByText(/keeping it/)).toBeNull();
     });

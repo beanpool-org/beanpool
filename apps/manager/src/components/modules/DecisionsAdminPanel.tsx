@@ -101,10 +101,11 @@ function ReplyControl({ d, onTakeDown }: { d: AdminDecisionItem; onTakeDown: (d:
 /**
  * An open pause's vote that too few members can vote on (removal by vote S6, design §5 point 3): fewer than 3 others could
  * vote, so its quorum can't be met, and an owner may decide it. Not a vote on someone who holds a server role: no vote, and
- * no owner's decision, removes an owner or admin.
+ * no owner's decision, removes an owner or admin. Not a vote whose case an admin hid: the node refuses it, since no member
+ * could then read why.
  */
 function ownerMayDecide(d: AdminDecisionItem): boolean {
-    return d.status === 'open' && isPauseVote(d) && d.tally?.tooFewToVote === true && !d.ownerDecidedAt && !d.params?.serverRole;
+    return d.status === 'open' && isPauseVote(d) && d.tally?.tooFewToVote === true && !d.ownerDecidedAt && !d.params?.serverRole && !d.caseHiddenAt;
 }
 
 /**
@@ -530,8 +531,10 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
                             id="owner-decision-reason"
                             value={decideReason}
                             onChange={(e) => setDecideReason(e.target.value)}
+                            // The code box re-sends the words of the press that opened it: they hold still while it shows.
+                            disabled={!!proof.refusal}
                             rows={3}
-                            className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2"
+                            className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2 disabled:opacity-60"
                             placeholder="Why you decide this removal"
                         />
                         <p className={`text-[11px] m-0 ${decideReasonOk ? 'text-nature-500' : 'text-amber-400'}`}>

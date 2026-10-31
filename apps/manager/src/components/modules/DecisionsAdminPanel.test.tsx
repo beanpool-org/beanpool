@@ -415,5 +415,24 @@ describe('DecisionsAdminPanel', () => {
         // The password viewer is asked a current code in the box, and nothing was decided yet.
         expect(await screen.findByTestId('owner-decision-proof-code')).toBeInTheDocument();
         expect(decide).toHaveBeenCalledTimes(1);
+        // The code re-sends the words of the press that opened the box: they hold still while it shows, or a correction made
+        // now would never be sent, and an owner's decision can't be taken back. Cancelling the box frees them.
+        const reasonBox = within(dialog).getByLabelText('Reason (members will see this)');
+        expect(reasonBox).toBeDisabled();
+        fireEvent.click(screen.getByTestId('owner-decision-proof-cancel'));
+        expect(reasonBox).toBeEnabled();
+    });
+
+    it('a case an admin hid: no owner can decide that vote, so Settings neither offers it nor says an owner can', async () => {
+        const hiddenFirst: nodeClient.AdminDecisionItem = {
+            ...pauseVote, id: 'dec-few-hf', caseHiddenAt: '2026-09-21T00:00:00.000Z', caseHiddenReason: 'Shown to be false by a neighbour',
+            tally: { totalVoters: 1, electorate: 2, quorumRequired: 3, quorumMet: false, yesWeight: 1, noWeight: 0, supportRatio: 1, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true },
+        };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([hiddenFirst]);
+        render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }} />);
+        const row = await screen.findByTestId('admin-decision-row');
+        expect(within(row).queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        expect(within(row).queryByTestId('admin-too-few-to-vote')).toBeNull();
+        expect(within(row).getByRole('button', { name: 'Halt this Decision' })).toBeInTheDocument();
     });
 });

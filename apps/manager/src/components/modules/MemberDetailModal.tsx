@@ -212,7 +212,7 @@ export function MemberDetailModal({
                 : res.decision?.params?.serverRole
                     ? `Suspended until ${closes}. Members vote on removing them, but no vote removes an owner or admin: the suspension lifts when the vote closes, whatever it decides.`
                 : res.decision?.effect === 'remove_member'
-                    ? `Suspended. Members now vote until ${closes} on removing them; if the vote doesn't pass, the suspension lifts by itself.`
+                    ? `Suspended. Members now vote until ${closes} on removing them; if the vote doesn't pass, the suspension lifts by itself, unless too few members can vote and an owner decides it.`
                     : `Suspended. Members now vote on keeping it until ${closes}; if they don't, it lifts by itself.`);
             onSuspensionChanged?.();
         } catch (e: unknown) {
@@ -715,7 +715,8 @@ export function MemberDetailModal({
                                     ) : (
                                         <p className="m-0 text-nature-300">
                                             Suspends <strong>{displayName}</strong> now. Members then vote for 7 days on removing them; if the
-                                            vote doesn't pass, the suspension lifts by itself.
+                                            vote doesn't pass, the suspension lifts by itself, unless too few members can vote and an owner
+                                            decides it.
                                         </p>
                                     )}
                                     <label htmlFor="suspend-reason" className="block font-bold text-nature-300">
@@ -725,15 +726,17 @@ export function MemberDetailModal({
                                         id="suspend-reason"
                                         value={suspendReason}
                                         onChange={(e) => setSuspendReason(e.target.value)}
+                                        // The code box re-sends the words of the press that opened it: they hold still while it shows.
+                                        disabled={!!suspendProof.refusal}
                                         rows={3}
-                                        className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2"
+                                        className="w-full rounded-xl bg-nature-950 border border-nature-700 text-sm text-white p-2 disabled:opacity-60"
                                     />
                                     <p className={`m-0 text-[11px] ${suspendReasonTrimmed.length >= MIN_SUSPEND_REASON ? 'text-nature-500' : 'text-amber-400'}`}>
                                         At least {MIN_SUSPEND_REASON} characters ({suspendReasonTrimmed.length} so far)
                                     </p>
                                     <div className="flex flex-wrap justify-end gap-2">
                                         <button
-                                            onClick={() => { setShowSuspend(false); setSuspendReason(''); setSuspendError(null); }}
+                                            onClick={() => { setShowSuspend(false); setSuspendReason(''); setSuspendError(null); suspendProof.close(); }}
                                             disabled={suspendBusy}
                                             className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-semibold text-[11px]"
                                         >

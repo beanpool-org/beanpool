@@ -1502,7 +1502,6 @@ async function main(): Promise<void> {
             'POST /mcp/photos', 'GET /mcp/photos',
             // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
             'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
-            // "Remove its posts" (MCP owner S2, #2643): an owner's fresh proof only, never a token or a guest.
             'POST /api/local/admin/agent/grants/:id/remove-made',
             // "Assistant posts a day" (#2629): an owner's fresh proof only, never a token or a guest.
             'POST /api/local/admin/agent/posts-per-day',

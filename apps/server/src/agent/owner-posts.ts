@@ -1277,7 +1277,7 @@ export const OWNER_TEND_TOOLS: AgentTool[] = [
         name: 'update_post',
         title: 'Edit a post this assistant made',
         reads: `nothing: it changes the title, description, category, price, tags or photos of a live post THIS assistant made, as the app's edit does, `
-            + `at most ${AGENT_EDITS_PER_DAY} edits a day; any other post is refused; ${TAGS_WORDS}; tags it does not name stay`,
+            + `at most ${AGENT_EDITS_PER_DAY} edits a day; any other post is refused; ${TAGS_WORDS}; tags or free_tags sent is the whole new list of that kind, left out it stays`,
         never: "anything but the post's id and its link, or another member's data; it never moves Beans",
         ownerOnly: true,
         posts: true,

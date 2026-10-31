@@ -164,6 +164,9 @@ async function main(): Promise<void> {
             'the fields say it: library ids from tags_search first, free tags only for what the library lacks');
         assert(taking.every((t) => /library/.test(t?.description ?? '') && /free_tags/.test(t?.description ?? '')), 'and so does each tool\'s description');
         assert(taking.every((t) => /never .*tags/i.test(propsOf(t).description?.description ?? '')), `the description field says tags never go in it (${propsOf(taking[0]).description?.description})`);
+        // A list replaces: an assistant told otherwise would send the one tag to add, and lose the rest.
+        const updateWords = tools.find((t) => t.name === 'update_post')?.description ?? '';
+        assert(/whole new list/.test(updateWords) && !/does not name stay/.test(updateWords), `update_post's description says a list it sends replaces the old one (${updateWords.match(/[^.;]*(?:whole new list|does not name)[^.;]*/)?.[0]})`);
         const welcome = seeder.getInstructions() ?? '';
         assert(/library/.test(welcome) && /tags_search/.test(welcome) && /free_tags/.test(welcome) && /never .*description/i.test(welcome), 'the welcome says it too, where it says how to give photos');
         const search = tools.find((t) => t.name === 'tags_search');
@@ -201,6 +204,10 @@ async function main(): Promise<void> {
         assert(PRICING_CATEGORIES.every((c) => tops.has(c.id)), 'every Market category is a top of the library, so `category` narrows every one');
         const none = structured(await call('tags_search', { q: 'zzqx' }));
         assert(none?.returned === 0 && /free_tags/.test(none?.note ?? ''), `nothing found says so, and that free_tags is for that (${none?.note})`);
+        // The library has it, only not there: told "nothing matches", an assistant would type a free twin of a library tag.
+        const elsewhere = structured(await call('tags_search', { q: 'lemon', category: 'tools' }));
+        assert(elsewhere?.returned === 0 && /without category/.test(elsewhere?.note ?? '') && !/free_tags/.test(elsewhere?.note ?? ''),
+            `a tag outside the category asked: the note says so, and never sends it to free_tags (${elsewhere?.note})`);
         const shortQ = await call('tags_search', { q: 'a' });
         const noQ = await call('tags_search', {});
         const badCategory = await call('tags_search', { q: 'lemon', category: 'weapons' });

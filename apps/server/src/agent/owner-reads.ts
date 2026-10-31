@@ -93,13 +93,15 @@ function tagsSearch(args: Record<string, unknown>): ToolResult {
     if (category !== undefined && !PRICING_CATEGORIES.some((c) => c.id === category)) {
         return { ok: false, error: `category must be one of ${PRICING_CATEGORIES.map((c) => c.id).join(', ')}, or left out.` };
     }
-    const ids = libraryTagsFor(q).filter((id) => category === undefined || id.startsWith(`${category as string}.`)).slice(0, clampLimit(args.limit, 10));
+    const found = libraryTagsFor(q);
+    const ids = found.filter((id) => category === undefined || id.startsWith(`${category as string}.`)).slice(0, clampLimit(args.limit, 10));
+    // A tag outside the category asked is still in the library: told "nothing", an assistant would type a free twin of it.
+    const note = found.length
+        ? `Nothing under ${category as string}, but the library has it under another category: ask again without category. A listing's tag need not be under its category.`
+        : 'Nothing in the library matches. Try another word; if the library lacks it, that is what free_tags is for.';
     return {
         ok: true, rows: ids.length,
-        result: {
-            q, returned: ids.length, tags: ids.map(tagView),
-            ...(ids.length ? {} : { note: 'Nothing in the library matches. Try another word; if the library lacks it, that is what free_tags is for.' }),
-        },
+        result: { q, returned: ids.length, tags: ids.map(tagView), ...(ids.length ? {} : { note }) },
     };
 }
 

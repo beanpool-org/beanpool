@@ -427,7 +427,7 @@ describe('DecideSection: a fair vote on removing a member', () => {
         const tally = { ...decisionCard('x', '1m1v', null).tally, electorate: 2, quorumRatio: 0.25, quorumRequired: 3, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true };
         const first = renderAs('viewer', [pauseCard({ tally })]);
         expect(document.body.textContent).not.toMatch(/Yes removes|No brings/);
-        expect(screen.getByTestId('pause-vote-box').textContent).toContain('An admin paused Dave on 22 Oct 2026.');
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('Ada, an admin, paused Dave on 22 Oct 2026.');
         first.unmount();
 
         const decided = pauseCard({ tally, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Both who could vote saw the shed emptied' });

@@ -252,7 +252,7 @@ describe('the Decide section in the pseudo-locale', () => {
     it('a removal a reinstatement cancelled, in the history', async () => {
         await showIn('xx');
         const tally = { ...decision('t').tally, quorumMet: true, minYes: 3, yesWeight: 3, noWeight: 0, totalWeight: 3, supportRatio: 1, passed: true };
-        drawDecide([decision('k', { status: 'failed', effect: 'remove_member', tally })], { view: 'history' });
+        drawDecide([decision('a', { status: 'failed', effect: 'remove_member', tally })], { view: 'history' });
         expect(screen.getByText(xx('Not executed: a reinstatement vote cancelled it'))).toBeInTheDocument();
         expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
     });

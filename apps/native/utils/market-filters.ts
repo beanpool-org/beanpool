@@ -16,7 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { foldApostrophes, HOME_SEARCH_MAX_CHARS, readSearchSettings, searchFromMarket, searchTermsFor, t, tierIndexForCredit, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, readSearchSettings, searchFromMarket, searchTermsFor, postTagsOf, searchTagsFor, t, tierIndexForCredit, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -57,11 +57,12 @@ export function marketSearchFromLink(value: string | string[] | undefined): stri
  * the pill (All and For You are both); the category only while its chip is on screen, as it filters; the Distance chip's
  * radius as the card's smallest distance that holds it.
  */
-export function marketSearchToSave(state: Pick<MarketFilterState, 'type' | 'category' | 'radiusKm'>, search: string): HomeSearchSettings | null {
+export function marketSearchToSave(state: Pick<MarketFilterState, 'type' | 'category' | 'radiusKm'>, search: string, tag?: string | null): HomeSearchSettings | null {
     if (state.type === 'events' || state.type === 'polls') return null;
     const row = marketSecondRow(state.type);
     const category = row.kind === 'filters' && row.category && state.category !== 'all' ? state.category : null;
-    return searchFromMarket({ q: search, kind: state.type === 'offers' ? 'offer' : state.type === 'needs' ? 'need' : 'any', category, radiusKm: state.radiusKm });
+    const tags = tag ? [tag] : undefined;
+    return searchFromMarket({ q: search, kind: state.type === 'offers' ? 'offer' : state.type === 'needs' ? 'need' : 'any', category, radiusKm: state.radiusKm, tags });
 }
 
 /** The search Save to Home hands to Home, as Home's route param (`/(tabs)?saveSearch=…`) carries it. */
@@ -91,9 +92,15 @@ export function marketSearchQuery(search: string): string {
  * Whether a listing's title or description holds one of the search's terms: the Market's own filter, for a node without FTS.
  * The apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
  */
-export function marketSearchMatches(p: { title?: string | null; description?: string | null }, search: string): boolean {
+export function marketSearchMatches(p: { title?: string | null; description?: string | null; tags?: unknown }, search: string): boolean {
     const text = foldApostrophes(`${(p.title ?? '').toLowerCase()} ${(p.description ?? '').toLowerCase()}`);
-    return searchTermsFor(search).some(term => text.includes(foldApostrophes(term)));
+    if (searchTermsFor(search).some(term => text.includes(foldApostrophes(term)))) return true;
+    const resolved = searchTagsFor(search);
+    if (resolved.length > 0) {
+        const postTags = postTagsOf(p.tags);
+        if (resolved.some(r => postTags.some(t => t === r || t.startsWith(`${r}.`)))) return true;
+    }
+    return false;
 }
 
 export type MarketExtraFilter = 'distance' | 'trust' | 'beans';

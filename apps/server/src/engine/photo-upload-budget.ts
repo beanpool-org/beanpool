@@ -7,7 +7,8 @@
  * Refusal:
  * - When over PHOTO_BYTES_PER_MEMBER_PER_DAY: HTTP 429, Retry-After header, and
  *   "You've shared a lot of photos today. Try again tomorrow."
- * - When free disk space falls below PHOTO_MIN_FREE_DISK_MB (for disk store only):
+ * - When free disk space falls below PHOTO_MIN_FREE_DISK_MB (for disk store only; on any store for what waits on this
+ *   server's own disk, assertFolderFloorSpace):
  *   HTTP 507 Insufficient Storage and "This community's storage is nearly full. Tell its owner."
  *   Owners and admins are not exempt from the floor.
  */
@@ -79,7 +80,7 @@ export function setSimulatedFreeDiskBytesForTests(bytes: number | null): void {
 }
 
 /**
- * Check free disk space on the filesystem hosting the disk image store.
+ * Check free disk space on the filesystem hosting `dir`, by default the disk image store.
  */
 export function getFreeDiskBytes(dir = imagesDir()): number {
     if (simulatedFreeDiskBytes !== null) return simulatedFreeDiskBytes;
@@ -102,10 +103,18 @@ export function getFreeDiskBytes(dir = imagesDir()): number {
  */
 export function assertDiskFloorSpace(): void {
     if (configuredImageStoreKind() === 's3') return;
+    assertFolderFloorSpace(imagesDir());
+}
+
+/**
+ * The same floor on the disk holding `dir`, whichever store keeps the photos: for what this server writes to its own disk
+ * on IMAGE_STORE=s3 too (an assistant's uploads wait there, agent/owner-photos.ts).
+ */
+export function assertFolderFloorSpace(dir: string): void {
     const floorMb = photoMinFreeDiskMb();
     if (floorMb <= 0) return;
     const floorBytes = floorMb * 1024 * 1024;
-    const freeBytes = getFreeDiskBytes();
+    const freeBytes = getFreeDiskBytes(dir);
     if (freeBytes < floorBytes) {
         throw new StorageNearlyFullError();
     }

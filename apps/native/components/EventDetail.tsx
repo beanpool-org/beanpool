@@ -26,6 +26,7 @@ import { t, tn, placeShownRoughly, PLACE_WORDS, seriesMovedFromLine } from '@bea
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
+import { PostTagChips } from './PostTagChips';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
@@ -397,6 +398,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 ) : null}
 
                 {!!p.description && <Text style={styles.description}>{p.description}</Text>}
+                <PostTagChips tags={p.tags} />
 
                 <Text style={styles.hostLine} numberOfLines={2}>
                     {isGroupOnly && groupName

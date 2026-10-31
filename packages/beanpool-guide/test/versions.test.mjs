@@ -481,6 +481,8 @@ test('a branch whose tip merged origin/main, checked out with no origin/main out
             const r = ciCheck(dir, event);
             assert.equal(r.status, 0, `${event}: ${said(r)}`);
             assert.match(r.stdout, /Versions not compared: no origin\/main/);
+            // The line test-all.sh reports a skip by: passing, this check compared nothing, and must not read as a pass.
+            assert.match(r.stdout, /^⚪ SKIP: /m);
         }
         // With origin/main, it is compared, and passes: x publishes nothing.
         git(dir, 'fetch', '-q', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main');

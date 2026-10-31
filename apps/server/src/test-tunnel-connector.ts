@@ -256,6 +256,13 @@ async function main(): Promise<void> {
             assert(rows.filter((l) => l.message.includes('no such host')).length === 1, `20 identical errors → one line (${rows.filter((l) => l.message.includes('no such host')).length})`);
             assert(!tunnelLogs().some((l) => l.message.includes('SECRET-HEADER')), 'a debug line is never forwarded');
             assert(!tunnelLogs().some((l) => l.message.includes(T1)) && rows.some((l) => l.message.includes('[tunnel token]')), 'the token is never logged');
+            // A failed request's address, which may be a photo link's (agent/owner-photos.ts): a secret in its path.
+            fake.say({ level: 'error', message: 'Request failed', error: 'Get "https://node.example/mcp/photos/u/LINK-SECRET-88": EOF' });
+            await until(() => tunnelLogs().some((l) => l.message.includes('Request failed')), 3_000);
+            await sleep(150);
+            assert(!tunnelLogs().some((l) => l.message.includes('LINK-SECRET-88')) && !(getTunnelStatus().reason ?? '').includes('LINK-SECRET-88')
+                && tunnelLogs().some((l) => l.message.includes('/mcp/photos/u/…')), `a photo link's secret is in no line, nor in the status Settings shows (${getTunnelStatus().reason})`);
+            fake.say('Provided Tunnel token is not valid.');
             await sleep(150);
             const st = getTunnelStatus();
             assert(st.state === 'retrying' && st.reason === 'Provided Tunnel token is not valid.', `not connected yet, and why: the error, not the pointer to help after it (${st.state}: ${st.reason})`);

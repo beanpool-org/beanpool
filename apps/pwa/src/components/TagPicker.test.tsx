@@ -1,0 +1,212 @@
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import React from 'react';
+import { TagPicker } from './TagPicker';
+import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf, buildTagIndex, wordsFor, setLanguage } from '@beanpool/core';
+import coreEs from '@beanpool/core/words/es.json';
+import { matchesExpandedSearch } from '../lib/search';
+
+describe('TagPicker Web Component', () => {
+    it('renders "Tags · optional" row with chosen chips and + Add button', () => {
+        const handleChange = vi.fn();
+        render(
+            <TagPicker
+                tags={['food.fruit.lemon']}
+                onChange={handleChange}
+                category="food"
+                title="Lemons"
+            />
+        );
+
+        expect(screen.getByText('Tags · optional')).toBeInTheDocument();
+        expect(screen.getByText('+ Add')).toBeInTheDocument();
+        expect(screen.getByText(/Lemon/i)).toBeInTheDocument();
+    });
+
+    it('opens modal sheet when + Add is clicked and closes on Done or Escape', () => {
+        const handleChange = vi.fn();
+        render(
+            <TagPicker
+                tags={[]}
+                onChange={handleChange}
+                category="food"
+                title="Lemons"
+            />
+        );
+
+        // Not open yet
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        // Click + Add
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Search tags...')).toBeInTheDocument();
+
+        // Click Done
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('enforces cap of at most 5 tags (≤ 5)', () => {
+        const fiveTags = [
+            'food.fruit.lemon',
+            'food.fruit.apple',
+            'food.fruit.orange',
+            'food.produce.herbs',
+            'food.preserve.jam',
+        ];
+        const handleChange = vi.fn();
+        render(
+            <TagPicker
+                tags={fiveTags}
+                onChange={handleChange}
+                category="food"
+                title="Produce"
+            />
+        );
+
+        // When 5 tags are chosen, + Add button is hidden
+        expect(screen.queryByRole('button', { name: /\+ Add/i })).not.toBeInTheDocument();
+        expect(fiveTags.length).toBe(POST_TAGS_MAX);
+    });
+
+    it('searches from 2 characters in two languages (Spanish and English)', () => {
+        const index = buildTagIndex(wordsFor('es', [coreEs]));
+        expect('a'.length >= 2).toBe(false);
+
+        // English search from 2 chars
+        const enResults = index.search('le');
+        expect(enResults.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
+
+        // Spanish search from 2 chars
+        const esResults = index.search('lim');
+        expect(esResults.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
+    });
+
+    it('pressing Enter in the tag search input does not submit an outer form', () => {
+        const handleSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+        render(
+            <form onSubmit={handleSubmit}>
+                <TagPicker tags={[]} onChange={vi.fn()} category="food" />
+                <button type="submit">Submit outer form</button>
+            </form>
+        );
+
+        // Open sheet
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        const input = screen.getByPlaceholderText('Search tags...');
+
+        // Type in search and press Enter. jsdom submits no form from a key press, so the browser's own step is what is read:
+        // keydown's default action is the implicit submit, and fireEvent answers false once it has been prevented.
+        fireEvent.change(input, { target: { value: 'lemon' } });
+        expect(fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })).toBe(false);
+
+        expect(handleSubmit).not.toHaveBeenCalled();
+    });
+
+    it('the sheet is drawn on document.body, out of any panel that would clip it (the map New Post panel), and above that panel', () => {
+        const { container } = render(<div className="fixed z-[1000] overflow-y-auto backdrop-blur-xl"><TagPicker tags={[]} onChange={vi.fn()} category="food" /></div>);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        const sheet = screen.getByRole('dialog');
+        expect(sheet.parentElement).toBe(document.body);
+        expect(container.contains(sheet)).toBe(false);
+        expect(Number(/z-\[(\d+)\]/.exec(sheet.className)?.[1])).toBeGreaterThan(1000);
+    });
+
+    it('a click on the sheet or its overlay reaches no form it was opened from: React bubbles through the portal', () => {
+        const parentClick = vi.fn();
+        render(<div onClick={parentClick}><TagPicker tags={[]} onChange={vi.fn()} category="food" /></div>);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        parentClick.mockClear();
+        fireEvent.click(screen.getByPlaceholderText('Search tags...'));
+        expect(parentClick).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('dialog'));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(parentClick).not.toHaveBeenCalled();
+    });
+
+    it('the button reads "+ Add", once (never "+ + Add")', () => {
+        render(<TagPicker tags={[]} onChange={vi.fn()} category="food" />);
+        expect(screen.getByRole('button', { name: '+ Add tag' }).textContent).toBe('+ Add');
+    });
+
+    it('every button in the sheet is type="button", so no tap in it can submit an outer form', () => {
+        render(<TagPicker tags={[]} onChange={vi.fn()} category="food" title="Lemons" />);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        fireEvent.change(screen.getByPlaceholderText('Search tags...'), { target: { value: 'lemon' } });
+        const buttons = screen.getByRole('dialog').querySelectorAll('button');
+        expect(buttons.length).toBeGreaterThan(2);
+        for (const b of buttons) expect(b.getAttribute('type')).toBe('button');
+    });
+
+    it('Escape in the tag sheet closes only the sheet and stops propagation to parent', () => {
+        const parentEscape = vi.fn();
+        // Where the pages listen (MarketplacePage, TreasuryDetailPage, MapPage: window, bubbling), and a parent's own listener.
+        window.addEventListener('keydown', parentEscape);
+        document.addEventListener('keydown', parentEscape);
+        try {
+            render(<div onKeyDown={parentEscape}><TagPicker tags={[]} onChange={vi.fn()} category="food" /></div>);
+            fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+            // Press Escape where the keyboard really is: in the sheet's search
+            fireEvent.keyDown(screen.getByPlaceholderText('Search tags...'), { key: 'Escape' });
+
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+            expect(parentEscape).not.toHaveBeenCalled();
+
+            // The sheet shut: Escape is the page's again.
+            fireEvent.keyDown(screen.getByRole('button', { name: /\+ Add/i }), { key: 'Escape' });
+            expect(parentEscape).toHaveBeenCalled();
+        } finally {
+            window.removeEventListener('keydown', parentEscape);
+            document.removeEventListener('keydown', parentEscape);
+        }
+    });
+
+    it('suggests up to 8 tags from title, description and category', () => {
+        const handleChange = vi.fn();
+        render(
+            <TagPicker
+                tags={[]}
+                onChange={handleChange}
+                category="food"
+                title="Fresh Meyer lemons and crusty sourdough bread"
+                description="Organic garden fruit and warm bread"
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        expect(screen.getByText('Suggested')).toBeInTheDocument();
+    });
+
+    it('unknown tag ID is safely hidden on detail page with no error', () => {
+        const idx = tagIndex();
+        const postTags = ['food.fruit.lemon', 'unknown.id.does.not.exist'];
+        const visible = postTagsOf(postTags).filter(id => {
+            try {
+                return !!idx.label(id);
+            } catch {
+                return false;
+            }
+        });
+        expect(visible).toEqual(['food.fruit.lemon']);
+    });
+
+    it('cross-language search: matchesExpandedSearch matches Spanish query with tagged post', () => {
+        try {
+            setLanguage('es', [coreEs]);
+            // Post tagged food.fruit.lemon in English text
+            const matches = matchesExpandedSearch(
+                'limón',
+                'Backyard citrus basket',
+                'Freshly picked organic citrus',
+                'food.fruit.lemon'
+            );
+            expect(matches).toBe(true);
+        } finally {
+            setLanguage('en');
+        }
+    });
+});

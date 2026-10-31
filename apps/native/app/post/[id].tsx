@@ -1103,10 +1103,12 @@ export default function PostDetailModal() {
             // Its shop: in, out (a Need never stays in one), or left as it is; a shop the member has none of yet is opened first.
             const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
             const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
+            const originalTags = postTagsOf(post.tags);
+            const tagsChanged = editTags.join(' ') !== originalTags.join(' ');
             await updatePost(post.id, {
                 type: editType,
                 category: editCategory,
-                tags: editTags,
+                ...(tagsChanged ? { tags: editTags } : {}),
                 title: editTitle.trim(),
                 description: editDescription.trim(),
                 credits: price?.ok ? price.value : 0,

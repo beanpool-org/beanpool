@@ -745,7 +745,22 @@ ${TOOL_DOCS_TABLE}
         // polls; NULL where it says nothing). The split by answer travels inside poll_options.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
         // #2631/#2637 tag library: posts.tags space-separated tag ids (DESIGN-owner-seeding-tags-fable.md §4.5)
-        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN tags TEXT NOT NULL DEFAULT '';`); } catch (e) {}
+        if (!(await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).some(c => c.name === 'tags')) {
+            newCopyGeneration();
+            try {
+                const file = dbFileOf.get(database);
+                const { syncCursorKeysOf } = await import('../services/pillar-sync');
+                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
+            } catch (e) {
+                console.warn('[SQLite] Could not forget the sync cursors of a copy from before tags:', e);
+            }
+            try { await database.execAsync(`ALTER TABLE posts ADD COLUMN tags TEXT NOT NULL DEFAULT '';`); } catch (e) {}
+            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
+            try {
+                const { requestSync } = require('../services/pillar-sync');
+                requestSync().catch(() => {});
+            } catch (e) {}
+        }
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -1142,7 +1157,7 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     }
     const p = posts[0];
     const before = await database.getFirstAsync<any>(
-        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable FROM posts WHERE id = ?', [id]
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags FROM posts WHERE id = ?', [id]
     );
     await acquireSyncLock();
     try {
@@ -1163,7 +1178,8 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
         (before.completed_at || null) !== (p.completed_at || p.completedAt || null) ||
         (before.updated_at || null) !== (p.updated_at || p.updatedAt || null) ||
         (before.lendable ? 1 : 0) !== (p.lendable ? 1 : 0) ||
-        (before.photos ?? null) !== syncedPhotosColumn(p);
+        (before.photos ?? null) !== syncedPhotosColumn(p) ||
+        (before.tags ?? '') !== syncedTagsColumn(p);
     if (changed) {
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');

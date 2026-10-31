@@ -58,4 +58,14 @@ describe("the Settings card's picture follows the community the phone is on", ()
         expect(loader()).toContain('const edited = editedRef.current;');
         expect(loader()).not.toMatch(/(?<!if \(!edited\.avatar\) )setAvatar\(/);
     });
+
+    it("bio and contact fall back to this community's row only — never the phone-wide canonical copy (Profile S2-W)", () => {
+        const body = loader();
+        expect(body).not.toContain('canonical?.bio');
+        expect(body).not.toContain('canonical.bio');
+        expect(body).not.toContain('canonical?.contactValue');
+        expect(body).not.toContain('canonical.contactValue');
+        expect(body).not.toContain('canonical?.contactVisibility');
+        expect(body).not.toContain('canonical.contactVisibility');
+    });
 });

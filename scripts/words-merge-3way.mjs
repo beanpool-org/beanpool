@@ -17,9 +17,10 @@
  * _meta per field the same way, except draftedBy (main's, then the PR's appended note) and updated (the later date).
  * Order: main's keys in main's order, each key the PR added after its nearest earlier key that is there.
  *
- * VERIFY. Every file in --resolve and --verify is then read back from the working tree and checked: it parses; every key
- * either side added is in it; every key either side removed is not; every other value is main's or the PR's. Any problem
- * exits 1 and names it. --verify alone checks files git merged by itself.
+ * VERIFY. Every file in --resolve and --verify is then read back from the working tree and checked: it parses; it is
+ * exactly JSON.stringify(parsed, null, 2) + '\n' (so no key is written twice); every key either side added is in it; every
+ * key either side removed is not; every other value is main's or the PR's. Any problem exits 1 and names it. --verify alone
+ * checks files git merged by itself.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -105,12 +106,38 @@ export function mergeCatalog(file, b, m, p) {
     return out;
 }
 
+/** Keys written twice in one object of a catalog's text, as "key" or "_meta.field" (2-space JSON: keys at 2, _meta's at 4). */
+export function duplicateKeys(text) {
+    const seen = new Set(), twice = new Set();
+    let inMeta = false;
+    for (const line of text.split('\n')) {
+        const hit = /^( +)"((?:[^"\\]|\\.)*)"\s*:/.exec(line);
+        if (!hit) continue;
+        const depth = hit[1].length;
+        if (depth === 2) inMeta = hit[2] === '_meta';
+        const name = depth === 2 ? hit[2] : inMeta ? `_meta.${hit[2]}` : null;
+        if (name === null) continue;
+        if (seen.has(name)) twice.add(name);
+        seen.add(name);
+    }
+    return [...twice];
+}
+
 /** Problems with the merged file as it stands in the working tree; [] when it is right. */
 export function verifyCatalog(file, b, m, p, text) {
     let out;
     try { out = JSON.parse(text); } catch (e) { return [`${file}: not JSON after the merge (${e.message})`]; }
     b = b || {}; m = m || {}; p = p || {};
     const problems = [];
+    // JSON.parse keeps the last of a key written twice, so a merge git made cleanly with both sides adding one key a few
+    // lines apart reads as the PR's word alone. Every catalog is written as JSON.stringify(_, null, 2) + '\n': anything else
+    // (a key twice, or text the merger would not write) is refused.
+    if (text !== JSON.stringify(out, null, 2) + '\n') {
+        const twice = duplicateKeys(text);
+        problems.push(twice.length
+            ? `${file}: ${twice.map((k) => `"${short(k)}"`).join(', ')} written twice after the merge`
+            : `${file}: not written as the catalogs are (2-space JSON, one newline at the end) after the merge`);
+    }
     for (const [side, s] of [['main', m], ['the PR', p]]) {
         for (const k of Object.keys(s)) if (!(k in b) && !(k in out)) problems.push(`${file}: lost "${short(k)}", added by ${side}`);
         for (const k of Object.keys(b)) if (!(k in s) && k in out) problems.push(`${file}: kept "${short(k)}", removed by ${side}`);

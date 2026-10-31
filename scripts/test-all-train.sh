@@ -14,9 +14,11 @@
 #           checked to give the tested tree, and pushed.
 #   red   → the load recheck (scratch/lanes/bin/test-all-recheck.sh, or $TEST_ALL_RECHECK; set it empty for none) runs on
 #           the same tree. Load only: green. A real failure: the failing server suites, vitest files and test packages run
-#           alone on main + each PR. The PR they fail with is named with its log; the innocents (two or more of them run the
-#           same parts together once more) are merged. A failure the train cannot run alone (lint, typecheck, a browser
-#           check) merges nothing, and says so.
+#           alone on main + each PR (a part a PR's tree does not have, because another PR adds it, is not run for that PR,
+#           and the train says so). The PR they fail with is named with its log; the innocents (two or more of them run the
+#           same parts together once more) are merged, each with a waiver line in <git common dir>/test-all-queue/journal.log
+#           as the recheck writes. A failure the train cannot run alone (lint, typecheck, a browser check, fail_summary)
+#           merges nothing, and says so.
 #
 # Who rides: at most 4. A PR labelled tier-A, or touching ledger or money paths ($MONEY_PATHS, or a changed line that calls
 # conservingTransaction or writes accounts SET balance, in any case), rides alone: in a train of two or more PRs still riding
@@ -71,6 +73,11 @@ RECHECK="${TEST_ALL_RECHECK-$(dirname "$COMMON")/scratch/lanes/bin/test-all-rech
 LOGS="$COMMON/test-all-train/$(date +%Y%m%d-%H%M%S)-$$"
 mkdir -p "$LOGS" || exit 1
 short() { echo "$1" | cut -c1-9; }
+# journal <PR> <text>: a line in the queue's journal, in the load recheck's (v2) format; the director reads it. A red run
+# whose innocents merge after the bisect is a waiver, and each one merged gets a line.
+JOURNAL="$COMMON/test-all-queue/journal.log"
+WAIVER=""
+journal() { mkdir -p "$(dirname "$JOURNAL")" && printf '%s pr=%s %s\n' "$(date '+%F %T')" "$1" "$2" >> "$JOURNAL"; }
 
 # Per PR, by index: number, head, branch, from a fork, and its fate ("" while it rides).
 NUM=(); HEAD=(); BRANCH=(); CROSS=(); FATE=(); STEP=()
@@ -184,7 +191,8 @@ prepare() {
 # "suite <name>", "vitest <package> <file>", "package <package>" (its test task, when no vitest file is named), or
 # "stage <check>" for a check that cannot be run alone. The same reading as the load recheck (v2): a check with no .rc was
 # killed or never finished, and a vitest package whose failed files are not all listed, or that has an unhandled error, is
-# run whole, never on the listed files alone.
+# run whole, never on the listed files alone. Every other red check is a stage, fail_summary included: it is a check of its
+# own (test-failing-tests-summary.sh), not the run's report.
 failing_parts() {
   local L=$1 x r s names pkgs files p nfail nlisted
   for x in "$L"/*.log "$L"/*.dur; do
@@ -197,7 +205,6 @@ failing_parts() {
     [ -f "$r" ] && [ "$(cat "$r")" != 0 ] || continue
     s=$(basename "$r" .rc)
     case "$s" in
-      fail_summary) ;;
       server_suites)
         names=$(grep -E 'Server suites failed:' "$L/server_suites.log" | tail -1 | sed -E 's/.*Server suites failed: //; s/\([^)]*\)//g' | tr ' ' '\n' | sed '/^$/d' | sort -u)
         if [ -n "$names" ]; then echo "$names" | sed 's/^/suite /'; else echo "stage server_suites"; fi ;;
@@ -219,25 +226,39 @@ failing_parts() {
   done
 }
 
-# run_parts <parts file> <log>: runs those parts alone on the current tree. 0 when every one passes.
+pkg_dir() { for p in apps/*/package.json packages/*/package.json; do [ "$(node -p "require('./$p').name" 2>/dev/null)" = "$1" ] && dirname "$p"; done | head -1; }
+
+# run_parts <parts file> <log>: runs those parts alone on the current tree. 0 when every one passes. A part that is not on
+# this tree (a server suite with no apps/server/src/<suite>.ts, a test file or a package that is not here: another PR in the
+# train adds it) is not run, and is not a failure: it will not be on main either when this tree lands. Each one is said on
+# the train's output and in <log>. Each part that was here is added to $LOGS/parts-here.txt.
 run_parts() {
-  local parts=$1 log=$2 rc=0 names kind a b dir
+  local parts=$1 log=$2 rc=0 names="" kind a b dir
   prepare >> "$log" 2>&1 || { echo "(install or build failed: see $log)" >> "$log"; return 1; }
-  names=$(sed -n 's/^suite //p' "$parts" | tr '\n' ' ')
-  if [ -n "${names// /}" ]; then
-    echo "── server suites alone: $names" >> "$log"
-    TEST_ALL_JOBS=1 SERVER_SUITES_ONLY="${names% }" node scripts/run-server-suites.mjs >> "$log" 2>&1 || rc=1
+  while read -r kind a b; do
+    case "$kind" in
+      suite)
+        if [ -f "apps/server/src/$a.ts" ]; then names="$names $a"; echo "suite $a" >> "$LOGS/parts-here.txt"
+        else echo "   not on this tree, so not run (not a failure): suite $a" | tee -a "$log"; fi ;;
+    esac
+  done < "$parts"
+  if [ -n "$names" ]; then
+    echo "── server suites alone:$names" >> "$log"
+    TEST_ALL_JOBS=1 SERVER_SUITES_ONLY="${names# }" node scripts/run-server-suites.mjs >> "$log" 2>&1 || rc=1
   fi
   while read -r kind a b; do
     case "$kind" in
       vitest)
-        dir=$(for p in apps/*/package.json packages/*/package.json; do [ "$(node -p "require('./$p').name" 2>/dev/null)" = "$a" ] && dirname "$p"; done | head -1)
+        dir=$(pkg_dir "$a")
+        if [ -z "$dir" ] || [ ! -f "$dir/$b" ]; then echo "   not on this tree, so not run (not a failure): vitest $a $b" | tee -a "$log"; continue; fi
+        echo "vitest $a $b" >> "$LOGS/parts-here.txt"
         echo "── vitest alone: $a $b" >> "$log"
-        if [ -z "$dir" ]; then echo "no package $a here" >> "$log"; rc=1; continue; fi
-        ( cd "$dir" && TEST_ALL_TIMEOUT_MS=60000 pnpm exec vitest run --maxWorkers=1 "$b" ) >> "$log" 2>&1 || rc=1 ;;
+        ( cd "$dir" && TEST_ALL_TIMEOUT_MS=60000 pnpm exec vitest run --maxWorkers=1 "$b" ) < /dev/null >> "$log" 2>&1 || rc=1 ;;
       package)
+        if [ -z "$(pkg_dir "$a")" ]; then echo "   not on this tree, so not run (not a failure): package $a" | tee -a "$log"; continue; fi
+        echo "package $a" >> "$LOGS/parts-here.txt"
         echo "── test task alone: $a" >> "$log"
-        pnpm turbo run test --filter="$a" >> "$log" 2>&1 || rc=1 ;;
+        pnpm turbo run test --filter="$a" < /dev/null >> "$log" 2>&1 || rc=1 ;;
     esac
   done < "$parts"
   return $rc
@@ -333,6 +354,7 @@ if [ "$RC" -ne 0 ]; then
   fi
   # Each PR alone with main, the failing parts only.
   INNOCENT=(); CULPRIT=()
+  : > "$LOGS/parts-here.txt"
   for i in "${TRAIN[@]}"; do
     alone="$LOGS/alone-pr${NUM[$i]}.log"
     echo "── #${NUM[$i]} alone with origin/$BASE: the failing parts ($alone)"
@@ -343,6 +365,13 @@ if [ "$RC" -ne 0 ]; then
     if run_parts "$LOGS/parts.txt" "$alone"; then echo "   #${NUM[$i]}: passes them"; INNOCENT+=("$i")
     else CULPRIT+=("$i"); fate "$i" "RED: it fails $(cut -d' ' -f2- "$LOGS/parts.txt" | tr '\n' ';' | sed 's/;$//; s/;/; /g') with main alone ($alone)"; fi
   done
+  # Every failing part was on the full run's tree, so main or one PR has it. A part on no PR's tree was read wrong here (or
+  # is in a PR that would not merge alone): it ran nowhere, so passing without it proves nothing.
+  NOWHERE=$(comm -23 <(sort -u "$LOGS/parts.txt") <(sort -u "$LOGS/parts-here.txt") | tr '\n' ';' | sed 's/;$//; s/;/; /g')
+  if [ -n "$NOWHERE" ]; then
+    for i in "${INNOCENT[@]}"; do fate "$i" "NOT MERGED: $NOWHERE is on no PR's tree alone with main, so it ran nowhere; test the PRs one at a time ($RUNLOGS)"; done
+    summary 1
+  fi
   if [ ${#CULPRIT[@]} -eq 0 ]; then
     for i in "${INNOCENT[@]}"; do fate "$i" "NOT MERGED: every PR passes the failing parts alone, so the failure needs two of them together, or main; test them one at a time ($RUNLOGS)"; done
     summary 1
@@ -362,6 +391,7 @@ if [ "$RC" -ne 0 ]; then
     fi
   fi
   echo "Merging the innocents: $(nums "${LAND[@]}") (tree $(short "$TESTED"): main + them; every other check passed on main + the whole train)"
+  WAIVER="$(tr '\n' ';' < "$LOGS/parts.txt" | sed 's/;$//; s/;/; /g') (red in the train's full run of $(nums "${TRAIN[@]}"); fails them alone: $(nums "${CULPRIT[@]}"); passes them alone$([ ${#LAND[@]} -gt 1 ] && echo ", and $(nums "${LAND[@]}") together"); logs $LOGS)"
 fi
 
 if [ $MERGE -eq 0 ]; then
@@ -417,6 +447,7 @@ for i in "${LAND[@]}"; do
   if ! out=$(gh pr merge "$n" --squash --admin --match-head-commit "$land" 2>&1); then
     fate "$i" "NOT MERGED: gh pr merge failed: $(echo "$out" | tail -1)"; summary 3
   fi
+  [ -z "$WAIVER" ] || journal "$n" "GREEN-BY-BISECT waived: $WAIVER"
   git fetch --quiet origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
   if [ -n "$(git diff --name-only "${STEP[$i]}" "origin/$BASE")" ]; then
     FATE[$i]="MERGED, BUT origin/$BASE is not the tree the train tested up to it"

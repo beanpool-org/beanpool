@@ -348,8 +348,10 @@ cd "$W" || exit 1
 # ── test-all-train.sh: the merge train ─────────────────────────────────────────────────────────────────────────────
 # Its own bare origin and clone. The clone's test-all.sh is a stub that sources the real test-all-lib.sh: a committed
 # FAIL-<suite> file fails it the way server_suites fails (an .rc and a "Server suites failed:" line in a kept log dir),
-# an UNFINISHED-<check> file leaves that check's log with no .rc (killed part-way), and its run-server-suites.mjs fails
-# SERVER_SUITES_ONLY's suites that have a FAIL-<suite> file. gh is the stub above; a PR's branch on origin is its head.
+# an UNFINISHED-<check> file leaves that check's log with no .rc (killed part-way), a SUMMARY-RED file fails fail_summary
+# beside it, and its run-server-suites.mjs fails SERVER_SUITES_ONLY's suites that have a FAIL-<suite> file. Like the real
+# runner, a name with no apps/server/src/<name>.ts is no suite, and when no name is one it exits 2 ("matched no run").
+# gh is the stub above; a PR's branch on origin is its head.
 # TEST_ALL_RECHECK names a stub recheck: real red (exit 1) or load (exit 0).
 git init -q --bare "$T/torigin.git"
 git clone -q "$T/torigin.git" "$T/train" 2>/dev/null
@@ -365,6 +367,7 @@ fail=$(ls FAIL-* 2>/dev/null | sed 's/^FAIL-//' | tr '\n' ' ')
 if [ -n "$fail" ]; then
   L=$(mktemp -d); echo 0 > "$L/build.rc"; echo 1 > "$L/server_suites.rc"
   for u in $(ls UNFINISHED-* 2>/dev/null | sed 's/^UNFINISHED-//'); do echo "started" > "$L/$u.log"; done
+  [ -f SUMMARY-RED ] && { echo 1 > "$L/fail_summary.rc"; echo "summary self-test: FAIL" > "$L/fail_summary.log"; }
   echo "❌ Server suites failed: $fail" > "$L/server_suites.log"
   echo "stub test-all: FAIL"; echo "Full logs of every check kept in $L"; exit 1
 fi
@@ -374,7 +377,9 @@ exit 0
 STUB
 cat > scripts/run-server-suites.mjs <<'STUB'
 import { existsSync } from 'node:fs';
-const names = (process.env.SERVER_SUITES_ONLY || '').split(/\s+/).filter(Boolean);
+const only = (process.env.SERVER_SUITES_ONLY || '').split(/\s+/).filter(Boolean);
+const names = only.filter((n) => existsSync(`apps/server/src/${n}.ts`));
+if (only.length && !names.length) { console.log(`❌ SERVER_SUITES_ONLY matched no run: ${only.join(' ')}`); process.exit(2); }
 const failed = names.filter((n) => existsSync(`FAIL-${n}`));
 if (failed.length) { console.log(`Server suites failed: ${failed.join(' ')}`); process.exit(1); }
 console.log(`Server suites: ${names.length}/${names.length} passed`);
@@ -387,7 +392,9 @@ catalog() {
 }
 catalog apps/pwa/words/fr.json "base" "2026-10-01" "Hello=Bonjour" "Bye=Au revoir"
 echo "line one" > notes.txt
+mkdir -p apps/server/src && for s in test-x test-u test-load; do echo "// $s" > "apps/server/src/$s.ts"; done
 git add scripts apps notes.txt && git commit -q -m t0 && git push -q origin main 2>/dev/null
+TJ="$(git rev-parse --path-format=absolute --git-common-dir)/test-all-queue/journal.log"
 export GH_STUB_ORIGIN="$T/torigin.git"
 TRAIN="$REPO_ROOT/scripts/test-all-train.sh"
 REAL_RED="$T/recheck-real.sh"; echo 'echo "recheck stub: real red"; exit 1' > "$REAL_RED"
@@ -439,6 +446,29 @@ LOG27=$(sed -nE 's/.*#27: RED: .*\((.*alone-pr27\.log)\).*/\1/p' <<<"$OUT" | hea
 grep -qF "Server suites failed: test-x" "$LOG27" 2>/dev/null && ok "train: ...and that log is the suite failing" || bad "train: the named log ($LOG27) does not show the failure"
 grep -qF "train: #26 #28 merged" <<<"$OUT" && [ "$(merges)" = "26 28" ] && ok "train: ...while the innocents #26 and #28 are merged" || bad "train: merged \"$(merges)\""
 [ -z "$(on_main FAIL-test-x)" ] && [ "$(on_main d.txt)$(on_main e.txt)" = "de" ] && ok "train: ...and main has theirs and not the culprit's" || bad "train: main's files are wrong after a red member"
+# Merging the innocents of a red run is a waiver: one line each in the queue's journal, as the recheck (v2) writes them.
+# The green trains before this wrote none.
+JL=$(grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} pr=(26|28) GREEN-BY-BISECT waived: suite test-x \(red in the train.s full run of #26 #27 #28; fails them alone: #27; passes them alone, and #26 #28 together; logs ' "$TJ" 2>/dev/null)
+[ "$JL" = 2 ] && [ "$(wc -l < "$TJ" | tr -d ' ')" = 2 ] && ok "train: ...each innocent merged after the bisect is journalled as a waiver, and nothing else is" || { bad "train: the journal after a bisect merge ($TJ):"; cat "$TJ" 2>/dev/null | sed 's/^/      /'; }
+
+# A failing suite that one PR adds is not on main + the other PR: that PR is not run on it (the real runner exits 2 on a
+# name that is no suite), is not named RED for it, and merges.
+: > "$GH_STUB_DIR/merges"
+branch 50 t-newsuite "" -- sh -c 'echo "// test-new" > apps/server/src/test-new.ts; echo red > FAIL-test-new'
+branch 51 t-n1 "" -- add n1.txt n1
+OUT=$(bash "$TRAIN" 50 51 2>&1)
+grep -qF "not on this tree, so not run (not a failure): suite test-new" <<<"$OUT" && ok "train: a failing suite one PR adds: the other PR's tree has none, and the train says it is not run there" || { bad "train: no line for the suite missing from #51's tree"; echo "$OUT" | tail -15 | sed 's/^/      /'; }
+grep -qE '#50: RED: it fails test-new with main alone' <<<"$OUT" && grep -qF "train: #51 merged" <<<"$OUT" && [ "$(merges)" = "51" ] && ok "train: ...#50 is named RED and #51 merges" || { bad "train: merged \"$(merges)\" with a suite only #50 has"; echo "$OUT" | tail -15 | sed 's/^/      /'; }
+grep -qE ' pr=51 GREEN-BY-BISECT waived: suite test-new ' "$TJ" && ok "train: ...journalled as a waiver" || bad "train: no waiver line for #51"
+
+# A red fail_summary (a self-test of its own, not the run's report) beside a red suite: the bisect cannot run it alone,
+# so nothing merges, not even the PRs that pass the suite.
+branch 52 t-sumred "" -- add SUMMARY-RED x
+branch 53 t-red2 "" -- add FAIL-test-x red
+branch 54 t-p2 "" -- add p2.txt p2
+OUT=$(bash "$TRAIN" 52 53 54 --no-merge 2>&1); RC=$?
+[ $RC = 1 ] && grep -qF "red in fail_summary, which the train cannot run alone" <<<"$OUT" && ! grep -qF "WOULD MERGE" <<<"$OUT" \
+  && ok "train: a red fail_summary beside a red suite: nothing merges" || { bad "train: a red fail_summary let a PR through (exit $RC)"; echo "$OUT" | tail -15 | sed 's/^/      /'; }
 
 # Both PRs add a key after "Hello" and append a note to _meta.draftedBy: the lines clash, the keys do not. #30 then
 # conflicts with main once #29 has landed, so the train merges main into #30's branch per key and pushes that first.
@@ -467,6 +497,19 @@ GOTK=$(M="$REPO_ROOT/scripts/words-merge-3way.mjs" node --input-type=module -e '
   const b = { Hello: "Bonjour", Bye: "Au revoir" }, m = { Hello: "Bonjour" };
   console.log(JSON.stringify(mergeCatalog("fr.json", b, m, b)), JSON.stringify(mergeCatalog("fr.json", b, b, m)));' 2>&1)
 [ "$GOTK" = '{"Hello":"Bonjour"} {"Hello":"Bonjour"}' ] && ok "words-merge-3way: a key one side removed and the other left alone stays removed" || bad "words-merge-3way: removed-and-unchanged gave $GOTK"
+# Two PRs add the same key with different words, three lines apart: git merges that with no conflict, and the file holds
+# the key twice (JSON.parse would keep the PR's word alone). The second PR is dropped.
+: > "$GH_STUB_DIR/merges"
+branch 55 t-de "" -- catalog apps/pwa/words/de.json "base" "2026-10-01" "Hello=Hallo" "One=Eins" "Two=Zwei" "Three=Drei" "Bye=Tschuess"
+expect 0 "train: a new catalog merges (for the next check)" "train: #55 merged" -- bash "$TRAIN" 55
+branch 56 t-katze "" -- catalog apps/pwa/words/de.json "base" "2026-10-01" "Hello=Hallo" "Cat=Katze" "One=Eins" "Two=Zwei" "Three=Drei" "Bye=Tschuess"
+branch 57 t-mieze "" -- catalog apps/pwa/words/de.json "base" "2026-10-01" "Hello=Hallo" "One=Eins" "Two=Zwei" "Three=Drei" "Bye=Tschuess" "Cat=Mieze"
+git merge-tree --write-tree t-katze t-mieze >/dev/null 2>&1 && ok "train: two PRs adding \"Cat\" apart merge with no conflict in git" || bad "train: the two \"Cat\" catalogs conflict, so this tests nothing"
+expect 1 "train: ...the same key twice in a catalog git merged: the second PR is dropped" "#57: DROPPED: it does not merge with main and the PRs before it (word catalogs that cannot be merged per key: apps/pwa/words/de.json: \"Cat\" written twice after the merge" -- bash "$TRAIN" 56 57 --no-merge
+GOTV=$(M="$REPO_ROOT/scripts/words-merge-3way.mjs" node --input-type=module -e 'const { verifyCatalog } = await import(process.env.M);
+  const b = { Hello: "Hallo" }, o = { _meta: { updated: "x" }, ...b };
+  console.log(verifyCatalog("de.json", o, o, o, JSON.stringify(o, null, 2) + "\n").length, verifyCatalog("de.json", o, o, o, JSON.stringify(o, null, 4) + "\n").join(""));' 2>&1)
+[ "$GOTV" = "0 de.json: not written as the catalogs are (2-space JSON, one newline at the end) after the merge" ] && ok "words-merge-3way: --verify passes a catalog as the repo writes it, and refuses one written any other way" || bad "words-merge-3way: verify gave $GOTV"
 
 : > "$GH_STUB_DIR/merges"
 branch 31 t-tier "tier-A,security" -- add f.txt f
@@ -525,6 +568,26 @@ sed -n '/^failing_parts() {/,/^}/p' "$TRAIN" > "$T/failing_parts.sh"
 GOTP=$(bash -c '. "$1" && failing_parts "$2"' _ "$T/failing_parts.sh" "$P" | tr '\n' ';')
 [ "$GOTP" = "stage pwa_wide_pages;vitest a src/a.test.ts;package b;package c;package guide;" ] \
   && ok "train: a red run's parts: an unfinished check, one vitest file, and three packages run whole" || bad "train: parts read as: $GOTP"
+P2="$T/parts2"; mkdir -p "$P2"
+echo 1 > "$P2/fail_summary.rc"; echo 1 > "$P2/server_suites.rc"; echo "❌ Server suites failed: test-x" > "$P2/server_suites.log"
+GOTP=$(bash -c '. "$1" && failing_parts "$2"' _ "$T/failing_parts.sh" "$P2" | tr '\n' ';')
+[ "$GOTP" = "stage fail_summary;suite test-x;" ] && ok "train: a red fail_summary is a stage of its own, beside the red suite" || bad "train: parts with fail_summary red read as: $GOTP"
+
+# run_parts on a tree without some parts: a test file or a package another PR adds is not run and not a failure; a file
+# that is here runs. The pnpm stub fails as vitest does on a file that is not there, and as turbo does on no such package.
+R="$T/rp"; mkdir -p "$R/apps/pwa/src" "$R/bin"
+echo '{"name":"@beanpool/pwa"}' > "$R/apps/pwa/package.json"; echo "// old" > "$R/apps/pwa/src/old.test.ts"
+printf '%s\n' 'vitest @beanpool/pwa src/old.test.ts' 'vitest @beanpool/pwa src/new.test.ts' 'package @beanpool/new' 'vitest @beanpool/new src/n.test.ts' > "$R/parts.txt"
+printf '%s\n' '#!/bin/bash' 'echo "stub pnpm: $*"; for last; do :; done' \
+  'case "$*" in "exec vitest run"*) [ -f "$last" ] || { echo "No test files found, exiting with code 1"; exit 1; } ;; "turbo run test"*) echo "No package found with name ${last#--filter=}"; exit 1 ;; esac' > "$R/bin/pnpm"
+chmod +x "$R/bin/pnpm"
+sed -n -e '/^install_deps() {/p' -e '/^prepare() {/,/^}/p' -e '/^pkg_dir() {/p' -e '/^run_parts() {/,/^}/p' "$TRAIN" > "$T/run_parts.sh"
+GOTR=$(cd "$R" && env PATH="$R/bin:$PATH" LOGS="$R" bash -c '. "$1" && run_parts parts.txt "$2"' _ "$T/run_parts.sh" "$R/alone.log" 2>&1); RCR=$?
+NOTRUN=$(grep -c "not on this tree, so not run (not a failure): " <<<"$GOTR")
+[ $RCR = 0 ] && [ "$NOTRUN" = 3 ] && grep -qF "stub pnpm: exec vitest run --maxWorkers=1 src/old.test.ts" "$R/alone.log" \
+  && [ "$(cat "$R/parts-here.txt" 2>/dev/null)" = "vitest @beanpool/pwa src/old.test.ts" ] \
+  && ok "train: run_parts runs the test file that is here, and not (and does not fail) the file and package that are not" \
+  || { bad "train: run_parts on a tree without some parts: exit $RCR, $NOTRUN said not run"; echo "$GOTR"; sed 's/^/      /' "$R/alone.log"; }
 
 # Last: #36 leaves its FAIL file on main, so every train after it would be red.
 : > "$GH_STUB_DIR/merges"

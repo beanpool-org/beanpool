@@ -594,7 +594,7 @@ export type VaultVoucherCheck = { ok: true; voucher: VaultVoucher; holdId: strin
 export function checkVaultVoucher(voucher: unknown, opts: { now: number; key: string }): VaultVoucherCheck {
     const parsed = parseVaultVoucher(voucher);
     if (!parsed) return { ok: false, reason: 'malformed' };
-    let valid = false;
+    let valid: boolean;
     try {
         valid = ed25519.verify(parsed.signature, utf8ToBytes(`${VAULT_VOUCHER_TAG}\n${parsed.payloadB64}`), hexToBytes(parsed.payload.community), { zip215: false });
     } catch {

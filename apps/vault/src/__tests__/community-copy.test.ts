@@ -11,12 +11,14 @@ import {
     sealVaultDepositBox,
     sealSeedToCopyKey,
     splitCopyKey,
+    vaultB64,
     vaultCommunityRef,
     vaultCopyDigest,
     vaultVoucherToSign,
     VAULT_COMMUNITY_PROVIDER,
     type VaultVoucher,
 } from '@beanpool/core';
+import { VaultDb } from '../api/db.js';
 import { LIMITS, MAX_COMMUNITY_COPIES_PER_KEY } from '../api/server.js';
 import { noticeFor } from '../api/push.js';
 import { deposit, doGenesis, newMember, scan, signed, startVault, type Genesis, type Member, type VaultUnderTest } from './harness.js';
@@ -373,6 +375,21 @@ describe('what the vault keeps of a community copy', () => {
         expect(JSON.stringify(status.body)).not.toContain(node.key);
         expect(JSON.stringify(status.body)).not.toContain(made.vaultHalf);
         expect((await signed(v, '/v1/copies/status', {}, newMember().seed)).body.copies).toEqual([]);
+    });
+
+    it('the node key goes no further than the index: it is not in the envelope, which even an open vault could read', async () => {
+        const member = newMember();
+        const node = newNode();
+        const { made } = await depositCommunity(member, node);
+        const db = VaultDb.open(v.dataDir);
+        const [row] = db.copiesAfter('', 10);
+        db.close();
+        const kh = v.keyholder() as unknown as { keys: unknown; unwrapEnvelope(keys: unknown, row: unknown): { contents: Record<string, any> } };
+        const { contents } = kh.unwrapEnvelope(kh.keys, {
+            id: row.id, subIndex: vaultB64(row.sub_index), pkIndex: vaultB64(row.pk_index), envelope: vaultB64(row.envelope),
+        });
+        expect(contents.community).toEqual({ half: made.vaultHalf, ref: made.ref });
+        expect(JSON.stringify(contents)).not.toContain(node.key);
     });
 
     it('one copy per member per community: a new deposit replaces it, in another community it is another copy, and a sign-in\'s is untouched', async () => {

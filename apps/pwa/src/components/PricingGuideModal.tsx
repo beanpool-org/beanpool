@@ -85,8 +85,12 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [reportSuccess, setReportSuccess] = useState(false);
     const reportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Bumped whenever the report form is opened, closed, or the modal closes or goes: a submit that comes back after
+    // that touches nothing (no state, no timer).
+    const reportRunRef = useRef(0);
 
     const handleCloseReport = () => {
+        reportRunRef.current++;
         if (reportTimerRef.current) {
             clearTimeout(reportTimerRef.current);
             reportTimerRef.current = null;
@@ -99,6 +103,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     };
 
     const handleOpenReport = (item: PricingGuideItem) => {
+        reportRunRef.current++;
         if (reportTimerRef.current) {
             clearTimeout(reportTimerRef.current);
             reportTimerRef.current = null;
@@ -113,6 +118,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     // Clear reporting timer and reset reporting state when modal closes or unmounts
     useEffect(() => {
         if (!isOpen) {
+            reportRunRef.current++;
             if (reportTimerRef.current) {
                 clearTimeout(reportTimerRef.current);
                 reportTimerRef.current = null;
@@ -124,6 +130,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
             setReportSubmitting(false);
         }
         return () => {
+            reportRunRef.current++;
             if (reportTimerRef.current) {
                 clearTimeout(reportTimerRef.current);
                 reportTimerRef.current = null;
@@ -191,9 +198,11 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
         e.preventDefault();
         if (!reportingItem) return;
 
+        const run = reportRunRef.current;
         setReportSubmitting(true);
         try {
             await submitPricingReportApi(reportingItem.id, reportType, reportComment.trim() || undefined, reporterPubkey);
+            if (run !== reportRunRef.current) return;
             setReportSuccess(true);
             if (reportTimerRef.current) clearTimeout(reportTimerRef.current);
             reportTimerRef.current = setTimeout(() => {
@@ -206,7 +215,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
         } catch (err) {
             console.error('[PricingGuide] Failed to submit report:', err);
         } finally {
-            setReportSubmitting(false);
+            if (run === reportRunRef.current) setReportSubmitting(false);
         }
     }
 

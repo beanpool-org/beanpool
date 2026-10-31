@@ -33,20 +33,47 @@ describe('PricingGuideModal Component', () => {
         expect(allItemsBtn.className).toContain('focus-visible:ring-2');
     });
 
-    it('clears reporting timeout on unmount', async () => {
+    // The 1.2 s "Feedback Submitted" timer, by its delay: the testing library's own timers use other delays.
+    const reportTimers = (spy: { mock: { calls: unknown[][]; results: { value: unknown }[] } }) =>
+        spy.mock.calls.flatMap((c, i) => (c[1] === 1200 ? [spy.mock.results[i].value] : []));
+
+    it('clears the pending feedback timer itself on unmount', async () => {
+        const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
         const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
-        const { unmount } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
-        const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
-        await userEvent.click(reportBtns[0]);
+        try {
+            const { unmount } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+            const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+            await userEvent.click(reportBtns[0]);
+            await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+            expect(await screen.findByRole('heading', { name: /Feedback Submitted/i })).toBeInTheDocument();
 
-        const submitBtn = screen.getByRole('button', { name: 'Submit' });
-        await userEvent.click(submitBtn);
+            const [timer] = reportTimers(setTimeoutSpy);
+            expect(timer).toBeDefined();
+            unmount();
+            expect(clearTimeoutSpy.mock.calls.some(c => c[0] === timer)).toBe(true);
+        } finally {
+            setTimeoutSpy.mockRestore();
+            clearTimeoutSpy.mockRestore();
+        }
+    });
 
-        expect(await screen.findByRole('heading', { name: /Feedback Submitted/i })).toBeInTheDocument();
-
-        unmount();
-        expect(clearTimeoutSpy).toHaveBeenCalled();
-        clearTimeoutSpy.mockRestore();
+    it('a submit still out when the modal goes starts no timer and sets no state after it', async () => {
+        const api = await import('../lib/api');
+        let answer!: (v: { success: boolean }) => void;
+        vi.mocked(api.submitPricingReportApi).mockImplementationOnce(() => new Promise(r => { answer = r; }) as any);
+        const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+        try {
+            const { unmount } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+            const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+            await userEvent.click(reportBtns[0]);
+            await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+            unmount();
+            answer({ success: true });
+            await new Promise(r => setTimeout(r, 0));
+            expect(reportTimers(setTimeoutSpy)).toEqual([]);
+        } finally {
+            setTimeoutSpy.mockRestore();
+        }
     });
 
     it('resets reporting feedback state when modal closes and reopens', async () => {

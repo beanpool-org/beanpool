@@ -10,7 +10,9 @@ import type { AppColors } from '../constants/colors';
 import { copyListsCommunities, setCopyListsCommunities } from '../utils/copy-communities';
 
 /** The tick's words, marked for the catalogs. */
-export const COPY_COMMUNITIES_TICK = word('Also keep my list of communities in the copy, locked the same way, so a new phone knows where to go.');
+export const COPY_COMMUNITIES_WORDS = {
+    tick: word('Also keep my list of communities in the copy, locked the same way, so a new phone knows where to go.'),
+};
 
 export function CopyCommunitiesTick({ publicKey, colors }: { publicKey: string; colors: AppColors }): React.JSX.Element {
     const [on, setOn] = useState(true);
@@ -31,13 +33,13 @@ export function CopyCommunitiesTick({ publicKey, colors }: { publicKey: string; 
             onPress={toggle}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: on }}
-            accessibilityLabel={t(COPY_COMMUNITIES_TICK)}
+            accessibilityLabel={t(COPY_COMMUNITIES_WORDS.tick)}
             testID="copy-communities-tick"
         >
             <View style={[s.box, on && s.boxOn]}>
                 {on && <Text style={s.boxMark} accessibilityElementsHidden importantForAccessibility="no">✓</Text>}
             </View>
-            <Text style={s.tickText}>{t(COPY_COMMUNITIES_TICK)}</Text>
+            <Text style={s.tickText}>{t(COPY_COMMUNITIES_WORDS.tick)}</Text>
         </Pressable>
     );
 }

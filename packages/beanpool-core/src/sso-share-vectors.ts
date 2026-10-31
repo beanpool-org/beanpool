@@ -97,6 +97,47 @@ export const SSO_SHARE_VECTORS: readonly SsoShareVector[] = [
     },
 ];
 
+/** The member's list of communities a list vector carries (vault rethink VR5). Test addresses, never a real member's list. */
+export const SSO_SHARE_LIST_VECTOR_COMMUNITIES: readonly { name: string; url: string }[] = [
+    { name: 'Mullumbimby', url: 'https://mullum.beanpool.org' },
+    { name: 'Castlemaine', url: 'https://castlemaine.beanpool.org' },
+    { name: 'Global community', url: 'https://global.beanpool.org' },
+];
+
+/**
+ * Copies that carry {@link SSO_SHARE_LIST_VECTOR_COMMUNITIES} in their `kdfParams.communities` box (vault rethink VR5),
+ * made by core's `sealSeedToSso` under the same seeded source. Kept apart from {@link SSO_SHARE_VECTORS}: a client asked
+ * for no list must still make those bytes exactly, and only a client given this list makes these. Never regenerated.
+ */
+export const SSO_SHARE_LIST_VECTORS: readonly SsoShareVector[] = [
+    {
+        name: 'google, with the words and the communities',
+        provider: 'google',
+        sub: '104857600000000000001',
+        withWords: true,
+        shares: [{
+            holderType: 'sso', holderRef: 'google', shareIndex: 1,
+            encryptedShare: 'JDRmG9uccl8bV9pPX8f5Dz4TAtJgR9mjc/Nz84a7Yws=',
+            shareIv: '1g4R6qgWz5I7X3pjFc/mC+dDXqCdXcdc',
+            shareTag: '+PIr1zsnm0MyFzTvqrYYPg==',
+            kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"gJuBF73cODpHcI1Sy507PE7rCvrF5EmbI2IZEFkDwlc=","N":16384,"r":8,"p":1,"words":{"alg":"bip39-bits-xc20p-v1","iv":"1HrsD8YC0B6yAq2cIQyyKKTbl3wRzwNh","ct":"rA45JKx5/cN2/Aangm4rqPM=","tag":"Ikll74XpICFB/QT//Da/fw=="},"communities":{"alg":"communities-json-xc20p-v1","iv":"cjv8EBnAu8I+S8j0eDerOG+iLGaAXn6j","ct":"LAqYctWwm21JwSDi7b8WLK1R+hk1MIm1mkYDcRAYJtVy1h+IiJnj2VBJIGKnc1q7Qd0Z/+1EgSPpdg57qa15k91etIA/+Lnx8pw7ICD5nKj9ED0SoD9JW+fWn5d889DnxO/NbM8160bVpQxvLjYDv/5iKAtcpqrrWAkWqO+0IM8PePi9WYm0pNhqBbLeA39amd46OeI=","tag":"TgG9Tqm4zVeenseFe3hpPA=="}}',
+        }],
+    },
+    {
+        name: 'apple, a key without its words, with the communities',
+        provider: 'apple',
+        sub: '001234.0123456789abcdef0123456789abcdef.1234',
+        withWords: false,
+        shares: [{
+            holderType: 'sso', holderRef: 'apple', shareIndex: 1,
+            encryptedShare: 'OoBQbdtvrQt1cj0HMU1qNvKWGhk8ocda7/n0aWawW8A=',
+            shareIv: 'fbG06WI4lXQIJwxxHz1T8d2n/uwRBppV',
+            shareTag: 'XC4N8inPGy9xoaOWQMgVaQ==',
+            kdfParams: '{"alg":"scrypt-xc20p-single-v1","salt":"GL0cp9Wts/qEvgpEo/DdwHGEPsTu2+qyIDBPiNmHPT4=","N":16384,"r":8,"p":1,"communities":{"alg":"communities-json-xc20p-v1","iv":"LK5Gci8ccLVVHfLMI+wV9/M3vgaHvLV5","ct":"J87wHFaSOQ1lfIEXvVdXgpTP7IhSUcGNQkVT1pxIMom54UF1AIjn6grEwAAW3XZZv7ePYlI72ts97FYvA80Z970haemHGY7AgRBFruMIx6m6KblXJ5h+WciiyKtjbE/HAda+Dc50WOKajrQ0aaKVE7wGdRRq30eYVWJbu0eVntRwQsEgm/3OTYnae5ugMj0+eZpQdWs=","tag":"X5enrxt0O0JXslF3O1IO9w=="}}',
+        }],
+    },
+];
+
 /**
  * A stand-in for `crypto.getRandomValues` that hands out a fixed stream: SHA-256(label ‖ counter), block after
  * block, in the order it is asked. Fresh for each copy made, so the same label gives the same copy.

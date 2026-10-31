@@ -85,7 +85,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 
 ## Removing a member
 
-- In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. For now one thing still does without a vote: an owner can remove a member together with everyone they invited, and everyone those people invited.
+- In a community that votes, a member is removed only by the community's vote. The vote opens when an admin suspends them, and nobody proposes it. An admin can't remove anyone outright. Two things still do without that vote: where too few members can vote, an owner may decide it (see "A small community"); and, for now, an owner can remove a member together with everyone they invited, and everyone those people invited.
 - If a removal passes, the member is suspended and their credit frozen at once.
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.

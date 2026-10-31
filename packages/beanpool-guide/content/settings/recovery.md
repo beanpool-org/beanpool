@@ -54,7 +54,7 @@ One linked sign-in account covers all your communities: you don't link it again 
 
 If you joined the global community with 12 words, use **Add a sign-in**, near the top of **Account Protection**, instead. It is a way back too, and it also lifts the limits on a new 12-words account. See "Your 12 words".
 
-**Also keep my list of communities in the copy**, under the sign-in buttons, is ticked unless you untick it: the copy you link next also lists your communities (their names and addresses, no more than 20), locked the same way, and a new phone restored with that sign-in offers them and keeps them.
+**Also keep my list of communities in the copy**, under the sign-in buttons, is ticked unless you untick it: a copy you make with **Protect with** or **Connect again** also lists your communities (their names and addresses, no more than 20), locked the same way, and a new phone restored with that sign-in offers them and keeps them.
 
 If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 

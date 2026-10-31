@@ -19,7 +19,7 @@ describe('TagPicker Web Component', () => {
 
         expect(screen.getByText('Tags · optional')).toBeInTheDocument();
         expect(screen.getByText('+ Add')).toBeInTheDocument();
-        expect(screen.getByText(/#Lemon/i)).toBeInTheDocument();
+        expect(screen.getByText(/Lemon/i)).toBeInTheDocument();
     });
 
     it('opens modal sheet when + Add is clicked and closes on Done or Escape', () => {

@@ -161,7 +161,8 @@ has "skip: reported as skipped, with its reason" "$S/out" "⚪ SKIPPED  no origi
 has "skip: ...counted as skipped, and the other check as passed" "$S/out" "Total: 1 passed, 0 failed, 1 skipped"
 has "skip: ...a warning on the run's page" "$S/out" "::warning title=test-all skipped deploy_preserve::no origin/main to compare with"
 if grep -E "deploy_preserve +✅" "$S/out" >/dev/null; then bad "skip: it still reads as a pass"; else ok "skip: not a plain PASS"; fi
-env TEST_ALL_ONLY="deploy_preserve" PATH="$S/bin:$PATH" bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1
+# -u: this suite runs on GitHub too, where the run below would inherit GITHUB_ACTIONS and be on GitHub after all.
+env -u GITHUB_ACTIONS TEST_ALL_ONLY="deploy_preserve" PATH="$S/bin:$PATH" bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1
 if grep -qF "::warning" "$S/out"; then bad "skip: an annotation outside GitHub Actions"; else ok "skip: no annotation off GitHub"; fi
 
 # The check itself, in a checkout with no origin/main (a real git, this script's own copy): it says SKIP, and test-all reports that.

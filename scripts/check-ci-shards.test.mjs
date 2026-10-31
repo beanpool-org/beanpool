@@ -20,14 +20,14 @@ const TEST_ALL = readFileSync(join(ROOT, 'scripts/test-all.sh'), 'utf8');
 export const REQUIRED_CHECK = 'Run BeanPool Test-All Pipeline';
 
 /** test-all.sh's checks: the name on every `run_check "<name>"` and `skip_check "<name>"` line. */
-const checkNames = (text) => [...new Set([...text.matchAll(/^ *(?:run|skip)_check "([a-z_]+)"/gm)].map((m) => m[1]))];
+const checkNames = (text) => [...new Set([...text.matchAll(/^ *(?:run|skip)_check "([a-z0-9_]+)"/gm)].map((m) => m[1]))];
 
 /** check -> the check it waits for (`wait_for_check <dep>` inside the function its run_check line runs). */
 function waits(text) {
     const out = {};
     for (const [, fn, body] of text.matchAll(/^(\w+)\(\) \{\n((?:.*\n)*?)\}$/gm)) {
         const dep = /wait_for_check (\w+)/.exec(body)?.[1];
-        const name = dep && new RegExp(`^run_check "([a-z_]+)" +${fn}\\s*$`, 'm').exec(text)?.[1];
+        const name = dep && new RegExp(`^run_check "([a-z0-9_]+)" +${fn}\\s*$`, 'm').exec(text)?.[1];
         if (name) out[name] = dep;
     }
     return out;
@@ -198,6 +198,8 @@ test('each edit the check exists to catch fails it', () => {
     assert.match(shardProblems(CI.replace('name: checks, checks: "build ', 'name: checks, checks: "build server_suites '), TEST_ALL).join('\n'), /server_suites is in 7 shards/);
     // A new check in test-all.sh that no shard names.
     assert.match(shardProblems(CI, `${TEST_ALL}\nrun_check "brand_new" true\n`).join('\n'), /brand_new is in no shard/);
+    // ... and one with a digit in its name (a [a-z_]+ pattern would never see it, so no shard would be asked for it).
+    assert.match(shardProblems(CI, `${TEST_ALL}\nrun_check "pwa_e2e2" true\n`).join('\n'), /pwa_e2e2 is in no shard/);
     // A misspelt name in a shard.
     assert.match(shardProblems(CI.replace('website_lang"', 'website_langs"'), TEST_ALL).join('\n'), /website_langs, which is no check/);
     // A server shard removed: the others no longer count to K.

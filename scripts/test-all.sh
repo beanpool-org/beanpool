@@ -57,7 +57,7 @@ if [ $ALL_REQUESTED -eq 1 ] && [ -z "$TEST_ALL_ONLY" ]; then
   done
 fi
 if [ -n "$TEST_ALL_ONLY" ]; then
-  ALL_CHECKS=" $(sed -nE 's/^ *(run|skip)_check "([a-z_]+)".*/\2/p' "$SCRIPT_DIR/test-all.sh" | sort -u | tr '\n' ' ')"
+  ALL_CHECKS=" $(sed -nE 's/^ *(run|skip)_check "([a-z0-9_]+)".*/\2/p' "$SCRIPT_DIR/test-all.sh" | sort -u | tr '\n' ' ')"
   for name in $TEST_ALL_ONLY; do
     case "$ALL_CHECKS" in
       *" $name "*) ;;

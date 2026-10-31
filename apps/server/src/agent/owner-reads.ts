@@ -9,19 +9,21 @@
  * - listings_search reads through the Market's own read (getPosts with the owner as its viewer), so it sees what the owner's
  *   Market sees and no more: a group's post outside their groups, a direct post between others, a post hidden by reports, or
  *   another member's paused one is not there, as on their phone.
+ * - tags_search (Tags T4) reads the library in core, the one the apps' pickers read, by the same index (owner-posts.ts
+ *   libraryTagsFor): ids go on a listing, words do not. It holds no member's words: tags members typed are never in it.
  * - community_area is the community's area as a member's app reads it (config/community-place.ts, to two decimals), the
  *   rounding a listing's pin gets (3 decimals), and the place names of this community's own events of the last 90 days,
  *   each at its pin rounded the same, fenced: never a member's area or pin, never an address a member typed beyond an
  *   event's place name on its public card.
  */
-import { approximateLocation, PRICING_CATEGORIES } from '@beanpool/core';
+import { approximateLocation, PRICING_CATEGORIES, tagById, tagEnglish } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeConfig, getPosts } from '../state-engine.js';
 import { placeAs } from '../config/community-place.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import { AGENT_LIST_MAX } from './limits.js';
-import { enterpriseRef, OWNER_TEND_TOOLS } from './owner-posts.js';
+import { enterpriseRef, libraryTagsFor, OWNER_TEND_TOOLS } from './owner-posts.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 const NOT_TICKED = 'This assistant was connected without "May post for me": it reads what the other tools read, and nothing for seeding.';
@@ -75,6 +77,30 @@ function listingsSearch(grant: AgentGrant, args: Record<string, unknown>, bounda
     };
     if (withText) result._notice = MEMBER_TEXT_NOTICE;
     return { ok: true, rows: posts.length, result };
+}
+
+/** One tag as tags_search answers it: its id, its English label, and the labels above it. */
+function tagView(id: string): Record<string, string> {
+    const parts = id.split('.');
+    const chain = parts.flatMap((_, i) => tagById(parts.slice(0, i + 1).join('.')) ?? []);
+    return { id, label: chain.length ? tagEnglish(chain[chain.length - 1]) : '', path: chain.map(tagEnglish).join(' > ') };
+}
+
+function tagsSearch(args: Record<string, unknown>): ToolResult {
+    const q = typeof args.q === 'string' ? args.q.trim().slice(0, 100) : '';
+    if (q.length < 2) return { ok: false, error: 'q is what to look for, at least 2 characters: a word such as lemon, in English.' };
+    const category = args.category ?? undefined;
+    if (category !== undefined && !PRICING_CATEGORIES.some((c) => c.id === category)) {
+        return { ok: false, error: `category must be one of ${PRICING_CATEGORIES.map((c) => c.id).join(', ')}, or left out.` };
+    }
+    const ids = libraryTagsFor(q).filter((id) => category === undefined || id.startsWith(`${category as string}.`)).slice(0, clampLimit(args.limit, 10));
+    return {
+        ok: true, rows: ids.length,
+        result: {
+            q, returned: ids.length, tags: ids.map(tagView),
+            ...(ids.length ? {} : { note: 'Nothing in the library matches. Try another word; if the library lacks it, that is what free_tags is for.' }),
+        },
+    };
 }
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -137,6 +163,35 @@ export const OWNER_READ_TOOLS: AgentTool[] = [
                     kinds: ['offer', 'need', 'event'], priceTypes: ['fixed', 'hourly'], beans: getProfileSwitches().beans === true,
                 },
             };
+        },
+    },
+    {
+        name: 'tags_search',
+        title: 'Find tags in the library',
+        reads: `the library of tags, the list the apps' tag picker offers, the same on every community: the tags matching q, in English, by their label or `
+            + `a word they are found by, nearest first, at most ${AGENT_LIST_MAX}: each one's id, English label and path. Their ids are what the tags field of a `
+            + 'post takes. Look here first: free_tags is only for what the library lacks',
+        never: 'any member data, or tags members typed',
+        ownerOnly: true,
+        posts: true,
+        inputSchema: {
+            type: 'object',
+            properties: {
+                q: { type: 'string', minLength: 2, description: 'what the listing is, in a word or two of English, e.g. lemons or sourdough bread' },
+                category: { type: 'string', enum: PRICING_CATEGORIES.map((c) => c.id), description: 'only the tags under this Market category' },
+                limit: { type: 'integer', minimum: 1, maximum: AGENT_LIST_MAX, description: 'how many: 10 unless asked' },
+            },
+            required: ['q'],
+            additionalProperties: false,
+        },
+        outputSchema: {
+            type: 'object',
+            properties: { q: { type: 'string' }, returned: { type: 'number' }, tags: { type: 'array' }, note: { type: 'string', description: 'said when nothing matches' } },
+            required: ['q', 'returned', 'tags'],
+        },
+        run: (grant, args) => {
+            const refused = readGate(grant);
+            return refused ? { ok: false, error: refused } : tagsSearch(args);
         },
     },
     {

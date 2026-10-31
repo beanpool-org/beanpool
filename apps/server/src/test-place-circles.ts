@@ -358,7 +358,8 @@ async function main(): Promise<void> {
         ? { pubkey: `p${i}`, lat: -60 + (i % 1200) * 0.1, lng: -170 + (i % 3000) * 0.1 }
         : { pubkey: `p${i}`, lat: Number((10 + (i % 40) * 0.1).toFixed(1)), lng: Number((70 + (i % 30) * 0.1).toFixed(1)) });
     // CPU time, as test-member-words measures its budget: this call is synchronous, so it is the compare's own work, and a busy
-    // runner's wall clock can't fail it (75.3 ms wall on CI, 1 Nov, against 7.7 here).
+    // runner's wall clock can't fail it (75.3 ms wall on CI, 1 Nov, against 7.7 here). The fastest of three, because the first
+    // also pays to compile it; a compare that went quadratic fails all three.
     const cpuMs = (work: () => void) => {
         const c0 = process.cpuUsage();
         work();
@@ -366,7 +367,7 @@ async function main(): Promise<void> {
         return (c.user + c.system) / 1000;
     };
     let clusters: any[] = [];
-    const runMs = cpuMs(() => { clusters = circles?.clusterHelpers?.(helpers) ?? []; });
+    const runMs = Math.min(...[1, 2, 3].map(() => cpuMs(() => { clusters = circles?.clusterHelpers?.(helpers) ?? []; })));
     assert(clusters.length > 0 && runMs < 50, `10,000 watches compare in ${runMs.toFixed(1)} ms CPU (under 50)`);
     assert(new Set(clusters.flatMap((c: any) => c.members)).size === clusters.flatMap((c: any) => c.members).length, 'and nobody is in two');
     const insert = db.prepare('INSERT OR IGNORE INTO place_watches (id, pubkey, lat, lng, radius_km, would_help) VALUES (?, ?, ?, ?, 50, 1)');

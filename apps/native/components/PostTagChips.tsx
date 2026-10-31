@@ -38,8 +38,9 @@ export function PostTagChips({ tags, freeTags, inset = 0 }: { tags: unknown; fre
                 <Pressable
                     key={`#${tag}`}
                     style={[styles.chip, { backgroundColor: colors.surface.app, borderColor: colors.border.default }]}
-                    // dismissTo for the same reason as above.
-                    onPress={() => router.dismissTo({ pathname: '/(tabs)/market', params: { free: tag } })}
+                    // dismissTo for the same reason as above. Encoded once more than the router does: useLocalSearchParams
+                    // decodes what the router already has, and a tag can spell an escape ("a%20b" would arrive as "a b").
+                    onPress={() => router.dismissTo({ pathname: '/(tabs)/market', params: { free: encodeURIComponent(tag) } })}
                     accessibilityRole="button"
                     accessibilityLabel={t('Filter marketplace by tag {tag}', { tag: `#${tag}` })}
                 >

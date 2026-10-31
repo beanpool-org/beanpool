@@ -8,6 +8,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { resolveHref } from 'expo-router/build/link/href';
+import { parseQueryParams } from 'expo-router/build/fork/getStateFromPath-forks';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -59,6 +61,11 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 const event = { id: 'ev-1', type: 'event', title: 'Working bee', description: 'Bring gloves', author_pubkey: 'host'.repeat(16), eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), photos: [] };
 const draw = async (tags: unknown, more: Record<string, unknown> = {}) => { await act(async () => { root.render(createElement(EventDetail, { post: { ...event, tags, ...more } }) as any); }); };
 const row = () => host.querySelector('[data-testid="detail-tags-row"]');
+/** What the Market's `params.free` reads after a chip's dismissTo: the router's own href and query parser, then useLocalSearchParams, which decodes once more (expo-router build/hooks.js). */
+const arrivesAs = (to: { pathname: string; params: Record<string, string> }) => {
+    const free = parseQueryParams(resolveHref(to), {} as never)?.free as string;
+    try { return decodeURIComponent(free); } catch { return free; }
+};
 
 describe('an event\'s tags on the phone', () => {
     it('as the phone keeps them (space-separated): the chips, each opening the Market on that tag', async () => {
@@ -79,9 +86,21 @@ describe('an event\'s tags on the phone', () => {
             expect(chip.textContent).toBe('#2nd hand');
             expect(chip.getAttribute('aria-label')).toBe('Filter marketplace by tag #2nd hand');
             await act(async () => { chip.click(); });
-            expect(dismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { free: '2nd hand' } });
+            expect(dismissTo).toHaveBeenCalledTimes(1);
+            expect(dismissTo.mock.calls[0][0].pathname).toBe('/(tabs)/market');
+            expect(arrivesAs(dismissTo.mock.calls[0][0])).toBe('2nd hand');
         }
         expect(push).not.toHaveBeenCalled();
+    });
+
+    it('a typed tag reaches the Market letter for letter, whatever it spells: through the router itself, not a copy of it', async () => {
+        // "a%20b" is a tag the rule lets through. Sent as it stands it arrives as "a b", a tag nobody typed, and the Market is empty.
+        for (const tag of ['a%20b', '5%20 off', '50%25', '100% wool', 'r&b', '24/7', 'what?', 'limón', '二手 笔记本']) {
+            dismissTo.mockClear();
+            await draw('', { freeTags: [tag] });
+            await act(async () => { (row()!.querySelector('[role=button]') as HTMLElement).click(); });
+            expect(arrivesAs(dismissTo.mock.calls[0][0])).toBe(tag);
+        }
     });
 
     it('no tags, or only ones it can\'t label: no row', async () => {

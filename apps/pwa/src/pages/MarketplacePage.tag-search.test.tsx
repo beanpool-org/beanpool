@@ -204,6 +204,18 @@ describe('a search stays true as the list moves', () => {
         expect(cards()).toEqual(['Lemon marmalade']);
     });
 
+    it('a read of the list landing mid-typing asks nothing: half a word never goes to the node', async () => {
+        await openMarket();
+        fireEvent.change(screen.getByPlaceholderText('Search marketplace...'), { target: { value: 'lem' } });
+        const now = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(now + 5000);
+        await act(async () => { await doorbell.ring?.(); });
+        await wait(40);
+        expect(searches()).toEqual([]);
+        await wait(320);
+        expect(searches()).toHaveLength(1);
+    });
+
     it('a read still out is left to land: list reads quicker than the node answers don\'t throw it away', async () => {
         let land: (rows: unknown[]) => void = () => {};
         node.answer = () => new Promise<unknown[]>(resolve => { land = resolve; });

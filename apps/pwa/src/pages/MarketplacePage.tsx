@@ -621,8 +621,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 out = false;
             }
         };
-        searchAgainRef.current = read;
-        searchTimerRef.current = setTimeout(read, 300);
+        // From the first read on: a read of the list landing mid-typing is no reason to ask with half a word.
+        searchTimerRef.current = setTimeout(() => {
+            searchAgainRef.current = read;
+            read();
+        }, 300);
         return () => {
             active = false;
             searchAgainRef.current = null;

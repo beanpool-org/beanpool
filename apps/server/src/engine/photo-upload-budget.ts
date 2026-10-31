@@ -102,10 +102,18 @@ export function getFreeDiskBytes(dir = imagesDir()): number {
  */
 export function assertDiskFloorSpace(): void {
     if (configuredImageStoreKind() === 's3') return;
+    assertFolderFloorSpace(imagesDir());
+}
+
+/**
+ * The same floor on the disk holding `dir`, whichever store keeps the photos: for what this server writes to its own disk
+ * on IMAGE_STORE=s3 too (an assistant's uploads wait there, agent/owner-photos.ts).
+ */
+export function assertFolderFloorSpace(dir: string): void {
     const floorMb = photoMinFreeDiskMb();
     if (floorMb <= 0) return;
     const floorBytes = floorMb * 1024 * 1024;
-    const freeBytes = getFreeDiskBytes();
+    const freeBytes = getFreeDiskBytes(dir);
     if (freeBytes < floorBytes) {
         throw new StorageNearlyFullError();
     }

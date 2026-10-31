@@ -17,9 +17,10 @@
  *      step 6 counts it as a photo: then its day is the photos' own (returnAgentDayCall);
  *   5. a server another took over takes nothing (503), as the posting tools;
  *   6. a Content-Type of image/jpeg, image/png or image/webp (415), and a Content-Length over 5 MB refused before a byte is
- *      read (413); none while the disk is at the floor every stored photo keeps to (507: a photo waits here up to 24 hours, and
- *      the day's number can be 4,000); at most PHOTO_UPLOADS_AT_ONCE bodies read at once on this server (503, Retry-After);
- *      then the grant's photos for the day, shared by both doors and photo_urls (limits.ts agentPhotosPerDay: 429);
+ *      read (413); none while the disk is at the floor every stored photo keeps to, the disk store's and, on IMAGE_STORE=s3
+ *      too, the disk uploads wait on (507: a photo waits here up to 24 hours, and the day's number can be 4,000); at most
+ *      PHOTO_UPLOADS_AT_ONCE bodies read at once on this server (503, Retry-After); then the grant's photos for the day,
+ *      shared by both doors and photo_urls (limits.ts agentPhotosPerDay: 429);
  *   7. the body read with a hard limit (413 the moment it passes 5 MB, nothing kept) and a deadline (408);
  *   8. the photo made what the apps send (owner-posts.ts storableImage: sniffed whatever the Content-Type said, at most
  *      2,048 px a side, at least 200 px on its shorter side, made 800 px with no metadata, a PNG as a JPEG; else 400 in words);
@@ -30,7 +31,8 @@
  * its grant). A link answers no-referrer and no-store whatever it answers (https-server.ts, for every method and every refusal
  * in front of this route), and adds no CORS. A refusal before the grant is known writes the door's "Assistant refused" line
  * (mcp-route.ts logRefusal); after it, an AGENT line with the grant. An upload kept writes an AGENT line with the grant and the
- * photo's id. Nothing here writes a link's token: a line names its route PHOTO_LINK_LOG_PATH.
+ * photo's id. Nothing here writes a link's token: a line names its route PHOTO_LINK_LOG_PATH. A refusal that leaves a body
+ * unread keeps the connection open while the sender finishes, so that it reads the words (dropRestOfBody).
  */
 import Router from '@koa/router';
 import type { IncomingMessage } from 'node:http';
@@ -38,14 +40,14 @@ import { noteAutomationTokenUse } from '../automation-tokens.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { logAddressTag } from '../log-address.js';
 import { logger } from '../logger.js';
-import { assertDiskFloorSpace, STORAGE_NEARLY_FULL_MESSAGE } from '../engine/photo-upload-budget.js';
+import { assertDiskFloorSpace, assertFolderFloorSpace, STORAGE_NEARLY_FULL_MESSAGE } from '../engine/photo-upload-budget.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { admitAgentCall, admitAgentPhoto, agentPhotosPerDay, agentPhotosToday, returnAgentDayCall } from './limits.js';
 import { agentGrantFrom, aiAssistantsAllowed, logRefusal, ownOrigin } from './mcp-route.js';
 import { noteOAuthGrantUse } from './oauth.js';
 import {
     dropPhotoLink, keepUploadedPhoto, photoDayFull, photoLinkOf, PHOTO_LINK_LOG_PATH, PHOTO_LINK_PATH, PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES,
-    PHOTO_UPLOAD_PATH, startSweepingUploadedPhotos,
+    PHOTO_UPLOAD_PATH, startSweepingUploadedPhotos, uploadsRoot,
 } from './owner-photos.js';
 import { grantMayStillPost, noUploadWords, sourceImageWords, storableImage } from './owner-posts.js';
 import { grantPosts, type AgentGrant } from './tools.js';
@@ -55,6 +57,9 @@ export { PHOTO_UPLOAD_PATH };
 export const PHOTO_UPLOADS_AT_ONCE = 2;
 /** How long a body may take to arrive. */
 export const PHOTO_UPLOAD_READ_MS = 60_000;
+/** What is read of a refused body after the refusal, and for how long, before its connection is cut (dropRestOfBody). */
+export const REFUSED_BODY_DROP_BYTES = 16 * 1024 * 1024;
+export const REFUSED_BODY_DROP_MS = 5_000;
 const MAX_WORDS = `${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB`;
 /** The one answer to a link that is no use: never was, replaced, past its hour, or its grant may no longer post. */
 const PHOTO_LINK_DEAD = 'This upload link is no longer good: ask for a new one with photo_upload_link.';
@@ -65,8 +70,8 @@ class BodyTooBig extends Error {}
 class BodyTooSlow extends Error {}
 
 /**
- * The body, at most `max` bytes, within `ms`: refused the moment it passes `max` (what came is dropped, and the rest never
- * read: the answer closes the connection), or when it is not all there in time.
+ * The body, at most `max` bytes, within `ms`: refused the moment it passes `max`, or when it is not all there in time. What
+ * came is dropped, and the request left paused: the refusal's dropRestOfBody reads the rest.
  */
 function readImageBody(req: IncomingMessage, max: number, ms: number): Promise<Buffer> {
     // A request that closed before its body is asked for (its client went while the JSON reader in front of every route had
@@ -107,13 +112,35 @@ function readImageBody(req: IncomingMessage, max: number, ms: number): Promise<B
     });
 }
 
-/** An answer in words. A refusal that leaves a body unread closes the connection, so the rest of it is never read. */
-function say(ctx: any, status: number, error: string, opts: { close?: boolean; retryAfter?: number } = {}): void {
+/**
+ * What is left of a refused body, read and dropped. A sender still writing when its connection closes fails its next write
+ * and never reads the answer (curl: "Broken pipe", no words), so the connection stays open; at most REFUSED_BODY_DROP_BYTES
+ * are read, within REFUSED_BODY_DROP_MS, then it is cut, so a slow or endless sender holds nothing. Started with the refusal,
+ * not when the answer has gone: a request nothing is reading by then goes to Node's own dump, which drops any amount for
+ * as long as its sender lasts, unseen. Once the answer has gone Node says nothing of the connection closing: the deadline
+ * ends the timer then.
+ */
+function dropRestOfBody(req: IncomingMessage): void {
+    if (req.readableEnded || req.destroyed) return;
+    let left = REFUSED_BODY_DROP_BYTES;
+    const cut = (): void => { req.socket.destroy(); };
+    const timer = setTimeout(cut, REFUSED_BODY_DROP_MS);
+    timer.unref?.();
+    req.once('end', () => clearTimeout(timer));
+    req.on('data', (chunk: Buffer) => {
+        left -= chunk.length;
+        if (left < 0) cut();
+    });
+    req.resume();
+}
+
+/** An answer in words, and what the sender hasn't sent yet dropped as it comes. */
+function say(ctx: any, status: number, error: string, opts: { retryAfter?: number } = {}): void {
     ctx.status = status;
     ctx.set('Cache-Control', 'no-store');
     if (opts.retryAfter) ctx.set('Retry-After', String(opts.retryAfter));
-    if (opts.close) ctx.set('Connection', 'close');
     ctx.body = { error };
+    dropRestOfBody(ctx.req);
 }
 
 /** Step 1, both doors': the switch, the Origin rule and the method. False once the answer is set. */
@@ -121,16 +148,17 @@ function doorOpen(ctx: any, methods: readonly string[]): boolean {
     if (!aiAssistantsAllowed()) {
         ctx.status = 404;
         ctx.body = 'Not Found';
+        dropRestOfBody(ctx.req);
         return false;
     }
     const origin = ctx.get('origin');
     if (origin && origin !== ownOrigin()) {
-        say(ctx, 403, 'This endpoint does not answer web pages from other sites', { close: true });
+        say(ctx, 403, 'This endpoint does not answer web pages from other sites');
         return false;
     }
     if (!methods.includes(ctx.method)) {
         ctx.set('Allow', methods.join(', '));
-        say(ctx, 405, 'Method not allowed: send the photo with POST', { close: true });
+        say(ctx, 405, 'Method not allowed: send the photo with POST');
         return false;
     }
     return true;
@@ -142,15 +170,15 @@ async function takePhoto(ctx: any, grant: AgentGrant, route: string): Promise<vo
     const admitted = admitAgentCall(grant.id);
     if (!admitted.ok) {
         logRefusal('Assistant refused: over its limit', { grant: grant.id, route }, '429');
-        return say(ctx, 429, admitted.error, { close: true, retryAfter: admitted.retryAfterSeconds });
+        return say(ctx, 429, admitted.error, { retryAfter: admitted.retryAfterSeconds });
     }
     if (grant.via === 'oauth') noteOAuthGrantUse(grant.id);
     else noteAutomationTokenUse(grant.id, `${ctx.method} ${route}`);
     // 5. A server another took over.
     const replaced = getReplacedInfo();
-    if (replaced) return say(ctx, 503, `${replaced.message} This server takes no new photos; use the one that took over.`, { close: true });
+    if (replaced) return say(ctx, 503, `${replaced.message} This server takes no new photos; use the one that took over.`);
     // 6. One image, of a size the server takes, when there is room to read it.
-    const refuse = (status: number, refused: string, error: string, opts: { close?: boolean; retryAfter?: number } = { close: true }): void => {
+    const refuse = (status: number, refused: string, error: string, opts: { retryAfter?: number } = {}): void => {
         logger.info('AGENT', 'Assistant photo upload refused', { grant: grant.id, refused });
         say(ctx, status, error, opts);
     };
@@ -163,11 +191,12 @@ async function takePhoto(ctx: any, grant: AgentGrant, route: string): Promise<vo
     if (Number.isFinite(declared) && declared > PHOTO_SOURCE_MAX_BYTES) {
         return refuse(413, 'too big', `The photo is too big: at most ${MAX_WORDS}. Send a smaller copy.`);
     }
-    try { assertDiskFloorSpace(); } catch { return refuse(507, 'disk nearly full', STORAGE_NEARLY_FULL_MESSAGE); }
+    // The floor the store keeps to, and the one the disk this upload waits on keeps to, whichever store it is.
+    try { assertDiskFloorSpace(); assertFolderFloorSpace(uploadsRoot()); } catch { return refuse(507, 'disk nearly full', STORAGE_NEARLY_FULL_MESSAGE); }
     if (reading >= PHOTO_UPLOADS_AT_ONCE) {
-        return refuse(503, 'busy', 'This server is taking other photos now: send it again in a few seconds.', { close: true, retryAfter: 5 });
+        return refuse(503, 'busy', 'This server is taking other photos now: send it again in a few seconds.', { retryAfter: 5 });
     }
-    if (!admitAgentPhoto(grant.id)) return refuse(429, 'day full', photoDayFull(grant.id), { close: true, retryAfter: secondsToUtcMidnight() });
+    if (!admitAgentPhoto(grant.id)) return refuse(429, 'day full', photoDayFull(grant.id), { retryAfter: secondsToUtcMidnight() });
     returnAgentDayCall(grant.id);
     // 7. The body, counted in `reading` until it is made 800 px (step 8), so at most PHOTO_UPLOADS_AT_ONCE are held at once.
     reading++;
@@ -186,7 +215,7 @@ async function takePhoto(ctx: any, grant: AgentGrant, route: string): Promise<vo
     } finally {
         reading--;
     }
-    if (!made.ok) return refuse(400, 'not an image', made.error, {});
+    if (!made.ok) return refuse(400, 'not an image', made.error);
     // 9. Kept, only while the grant may still post: disconnected, unticked or switched off during the upload keeps nothing.
     if (!grantMayStillPost(grant)) return refuse(401, 'stopped meanwhile', 'This assistant was disconnected, or may no longer post, while the photo arrived: it was not kept.');
     const kept = keepUploadedPhoto(grant.id, made.value);
@@ -211,13 +240,13 @@ export function createPhotoUploadRoutes(): Router {
             const from = logAddressTag(clientLimiterKey(ctx));
             if (check.status === 401 && check.grantId) logRefusal('Assistant refused: its member is no longer an owner or admin', { grant: check.grantId, from, route: PHOTO_UPLOAD_PATH }, 'demoted');
             else logRefusal('Assistant refused a request', { status: check.status, from, route: PHOTO_UPLOAD_PATH, ...(check.grantId ? { grant: check.grantId } : {}) }, check.status === 403 ? '403' : '401');
-            return say(ctx, check.status, check.error, { close: true });
+            return say(ctx, check.status, check.error);
         }
         const grant = check.grant;
         // 3. A grant that posts.
         if (!grantPosts(grant)) {
             logRefusal('Assistant refused: an upload from an assistant that does not post', { grant: grant.id, route: PHOTO_UPLOAD_PATH }, '403');
-            return say(ctx, 403, noUploadWords(grant), { close: true });
+            return say(ctx, 403, noUploadWords(grant));
         }
         return takePhoto(ctx, grant, PHOTO_UPLOAD_PATH);
     };
@@ -233,7 +262,7 @@ export function createPhotoUploadRoutes(): Router {
             logRefusal('Assistant refused a request', {
                 status: 401, from: logAddressTag(clientLimiterKey(ctx)), route: PHOTO_LINK_LOG_PATH, ...(link ? { grant: link.grant.id } : {}),
             }, '401');
-            return say(ctx, 401, PHOTO_LINK_DEAD, { close: true });
+            return say(ctx, 401, PHOTO_LINK_DEAD);
         }
         return takePhoto(ctx, link.grant, PHOTO_LINK_LOG_PATH);
     };

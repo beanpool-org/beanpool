@@ -182,7 +182,8 @@ const PHOTO_ID = /^ph_([0-9a-f]{32})$/;
 const GRANT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const EXT = { jpeg: 'jpg', webp: 'webp' } as const;
 
-function uploadsRoot(): string {
+/** Where uploads wait: this server's own disk, whichever store keeps the photos. */
+export function uploadsRoot(): string {
     return path.join(process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'), 'assistant-photos');
 }
 

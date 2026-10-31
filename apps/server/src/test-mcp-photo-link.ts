@@ -13,7 +13,9 @@
  *   3. Upload only: a GET, HEAD, DELETE or PATCH reads nothing and says nothing about the token; the web app is never served
  *      there; a wrong token is answered as a dead link, to the byte; a wrong case of the route is 404.
  *   4. Through the same path as /mcp/photos: too small, not an image, a wrong type, JSON, over 5 MB (declared, while 10 bytes
- *      of it were sent; and streamed), another site's page, a disk at its floor: refused, nothing kept.
+ *      of it were sent; and streamed), another site's page, a disk at its floor, on IMAGE_STORE=s3 too: refused, nothing kept.
+ *      A refusal reaches curl while it is still sending, by either door (a dead link and over 1 MB; 6 MB declared and streamed);
+ *      what is left of the body is read and dropped, and a slow or an endless sender is cut.
  *   5. It dies: past its hour, a grant's days ending first, revoked (a token's, during an upload, and an OAuth grant's), unticked,
  *      a demoted owner, the owners' switch, and a fourth link replaces the oldest. Each stays dead when what killed it is undone.
  *   6. Photos a day are 4 × the owners' setting, read through its function: 2 → 8, the 9th refused by every door in words that
@@ -35,6 +37,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
+import tls from 'node:tls';
 import { promisify } from 'node:util';
 import sharp from 'sharp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -48,7 +51,7 @@ import { resetAutomationTokenUseThrottle } from './automation-tokens.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
-import { setSimulatedFreeDiskBytesForTests, STORAGE_NEARLY_FULL_MESSAGE } from './engine/photo-upload-budget.js';
+import { photoMinFreeDiskMb, setSimulatedFreeDiskBytesForTests, STORAGE_NEARLY_FULL_MESSAGE } from './engine/photo-upload-budget.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import {
     admitAgentCall, admitAgentPhoto, agentCallsToday, agentPhotosPerDay, agentPhotosToday, AGENT_CALLS_PER_DAY, setAgentPostsPerDay,
@@ -234,6 +237,63 @@ function stillSending(p: string): { leave: () => void } {
     return { leave: () => req.destroy() };
 }
 
+/**
+ * The manual's curl line, `times` times one after another, with any more headers: what each printed and how it ended. curl
+ * can read a refusal before its next write fails, so one run proves nothing. Never a sync call: the server is in this process.
+ */
+async function curlLine(times: number, url: string, file: string, ...headers: string[]): Promise<Array<{ code: number; out: string }>> {
+    const args = ['-sk', '--max-time', '30', '--data-binary', `@${file}`, '-H', 'Content-Type: image/jpeg', ...headers.flatMap(h => ['-H', h]), url];
+    const runs: Array<{ code: number; out: string }> = [];
+    for (let i = 0; i < times; i++) {
+        try {
+            runs.push({ code: 0, out: (await promisify(execFile)('curl', args)).stdout });
+        } catch (e: any) {
+            runs.push({ code: Number(e.code) || -1, out: String(e.stdout ?? '') });
+        }
+    }
+    return runs;
+}
+
+/**
+ * A sender that never looks at its answer, unlike curl, which stops at a refusal: its headers, then `total` bytes as fast as
+ * the socket takes them (after a Content-Length of `declared`, else chunked), then the body's end and its own close
+ * (`andEnd`), or 1 KB every `trickleMs` until it is cut. What came back, what it got to send, and when the server cut it
+ * (null: not within `giveUpMs`).
+ */
+function rawSender(p: string, o: { declared?: number; total: number; andEnd?: boolean; trickleMs?: number; giveUpMs: number }): Promise<{ answer: string; sent: number; cutMs: number | null }> {
+    return new Promise((resolve) => {
+        const started = Date.now();
+        const chunk = Buffer.alloc(64 * 1024, 0x5a);
+        const framed = (b: Buffer): Buffer => (o.declared !== undefined ? b : Buffer.concat([Buffer.from(`${b.length.toString(16)}\r\n`), b, Buffer.from('\r\n')]));
+        const length = o.declared !== undefined ? `Content-Length: ${o.declared}` : 'Transfer-Encoding: chunked';
+        let answer = '', sent = 0;
+        let trickle: NodeJS.Timeout | undefined;
+        const socket = tls.connect({ host: 'localhost', port: PORT, rejectUnauthorized: false }, () => {
+            socket.write(`POST ${p} HTTP/1.1\r\nHost: localhost:${PORT}\r\nContent-Type: image/jpeg\r\n${length}\r\n\r\n`);
+            const pump = (): void => {
+                while (sent < o.total) {
+                    if (socket.destroyed) return;
+                    sent += chunk.length;
+                    if (!socket.write(framed(chunk))) { socket.once('drain', pump); return; }
+                }
+                if (o.andEnd) socket.end('0\r\n\r\n');
+                else if (o.trickleMs) trickle = setInterval(() => socket.write(framed(chunk.subarray(0, 1024))), o.trickleMs);
+            };
+            pump();
+        });
+        const end = (cutMs: number | null): void => {
+            clearInterval(trickle);
+            clearTimeout(giveUp);
+            socket.destroy();
+            resolve({ answer, sent, cutMs });
+        };
+        const giveUp = setTimeout(() => end(null), o.giveUpMs);
+        socket.on('data', (d) => { answer += d; });
+        socket.on('error', () => { /* cut by the server */ });
+        socket.on('close', () => end(Date.now() - started));
+    });
+}
+
 /** Every file under `dir`. */
 function filesUnder(dir: string): string[] {
     const out: string[] = [];
@@ -288,7 +348,7 @@ async function main(): Promise<void> {
     const { startHttpsServer, isAdminSurfacePath } = await import('./https-server.js');
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
-    const { PHOTO_UPLOADS_AT_ONCE } = await import('./agent/photo-upload-route.js');
+    const { PHOTO_UPLOADS_AT_ONCE, REFUSED_BODY_DROP_BYTES, REFUSED_BODY_DROP_MS } = await import('./agent/photo-upload-route.js');
     const { endAgentRefusalLogMinute } = await import('./agent/mcp-route.js');
 
     try {
@@ -440,6 +500,48 @@ async function main(): Promise<void> {
         setSimulatedFreeDiskBytesForTests(null);
         assert(atFloor.status === 507 && atFloor.body?.error === STORAGE_NEARLY_FULL_MESSAGE && atFloorDoor.status === 507 && agentPhotosToday(L.id) === photosBeforeFloor && uploadedPhotosWaiting(L.id) === 0,
             `a disk at the floor every stored photo keeps to → 507 in words by either door, nothing counted or kept (${show(atFloor)})`);
+        // A node on S3 keeps its photos elsewhere, and its uploads still wait on this disk until a post takes them.
+        process.env.IMAGE_STORE = 's3';
+        setSimulatedFreeDiskBytesForTests(1);
+        const atFloorS3 = await post(refusals.path, goodJpg);
+        const atFloorDoorS3 = await call('POST', '/mcp/photos', { raw: goodJpg, type: 'image/jpeg', headers: bearer(L.token) });
+        const keptAtFloorS3 = uploadedPhotosWaiting(L.id);
+        setSimulatedFreeDiskBytesForTests((photoMinFreeDiskMb() + 1) * MB);
+        const roomOnS3 = await post(refusals.path, goodJpg);
+        setSimulatedFreeDiskBytesForTests(null);
+        delete process.env.IMAGE_STORE;
+        assert(atFloorS3.status === 507 && atFloorS3.body?.error === STORAGE_NEARLY_FULL_MESSAGE && atFloorDoorS3.status === 507 && keptAtFloorS3 === 0
+            && roomOnS3.status === 201 && uploadedPhotosWaiting(L.id) === 1,
+            `on IMAGE_STORE=s3 too → 507 in words by either door, nothing kept; with room on this disk the photo waits here (${atFloorS3.status}, ${atFloorDoorS3.status}, ${roomOnS3.status})`);
+
+        // Refused with the body still coming: curl is writing as the answer comes, and has the words only if the connection lasts.
+        const sixMb = path.join(webRoot, 'six-megabytes.jpg');
+        fs.writeFileSync(sixMb, Buffer.alloc(6 * MB, 0x5a));
+        const exits = (runs: Array<{ code: number }>) => runs.map(r => r.code).join(' ');
+        const deadCurl = await curlLine(5, `${BASE}${wrongToken}`, photoFile);
+        assert(deadCurl.every(r => r.code === 0 && r.out === wrong.text),
+            `the manual's curl line with ${Math.round(noisy.length / MB * 10) / 10} MB to a dead link → its words every time (exits ${exits(deadCurl)})`);
+        const noBearer = await call('POST', '/mcp/photos', { raw: goodJpg, type: 'image/jpeg', headers: bearer('not-a-token') });
+        const doorCurl = await curlLine(5, `${BASE}/mcp/photos`, photoFile, 'Authorization: Bearer not-a-token');
+        assert(noBearer.status === 401 && doorCurl.every(r => r.code === 0 && r.out === noBearer.text),
+            `and to /mcp/photos, with a bearer it doesn't know → its words every time (exits ${exits(doorCurl)})`);
+        const declaredCurl = await curlLine(5, refusals.url, sixMb);
+        const streamedCurl = await curlLine(5, refusals.url, sixMb, 'Transfer-Encoding: chunked');
+        assert([...declaredCurl, ...streamedCurl].every(r => r.code === 0 && /too big: at most 5 MB/.test(r.out)),
+            `6 MB by curl → 413 in words every time, declared (exits ${exits(declaredCurl)}) and streamed (exits ${exits(streamedCurl)})`);
+
+        // What is left is read, so a sender that writes on regardless gets to the end of it; and neither a slow one nor an endless one lasts.
+        const keepsHeaders = (raw: string) => !/^connection: close/im.test(raw) && /^referrer-policy: no-referrer/im.test(raw) && /^cache-control: no-store/im.test(raw);
+        const firstLine = (raw: string) => raw.split('\r\n')[0];
+        const writesOn = await rawSender(refusals.path, { total: 17 * MB, andEnd: true, giveUpMs: 20_000 });
+        assert(/^HTTP\/1\.1 413 /.test(writesOn.answer) && /too big: at most 5 MB/.test(writesOn.answer) && keepsHeaders(writesOn.answer) && writesOn.sent >= 17 * MB,
+            `streamed past 5 MB and writing on regardless: refused, and the rest read to its end, ${Math.round(writesOn.sent / MB)} of 17 MB; no-referrer, no-store, the connection left open (${firstLine(writesOn.answer)})`);
+        const slowly = await rawSender(wrongToken, { declared: 5 * MB, total: 64 * 1024, trickleMs: 200, giveUpMs: REFUSED_BODY_DROP_MS + 5000 });
+        assert(/^HTTP\/1\.1 401 /.test(slowly.answer) && slowly.answer.endsWith(wrong.text) && keepsHeaders(slowly.answer) && slowly.cutMs !== null && slowly.cutMs >= REFUSED_BODY_DROP_MS - 100,
+            `a slow sender has its words at once, and is cut at the ${REFUSED_BODY_DROP_MS / 1000} seconds however it trickles (after ${slowly.cutMs} ms)`);
+        const endless = await rawSender(wrongToken, { declared: 1024 * MB, total: 4 * REFUSED_BODY_DROP_BYTES, giveUpMs: 20_000 });
+        assert(/^HTTP\/1\.1 401 /.test(endless.answer) && endless.cutMs !== null && endless.sent < 2 * REFUSED_BODY_DROP_BYTES,
+            `an endless sender has its words, and is cut near the ${REFUSED_BODY_DROP_BYTES / MB} MB, ${Math.round(endless.sent / MB)} MB in (after ${endless.cutMs} ms)`);
         assert(await revoke(L.id) === 200, 'the refusals check is disconnected');
 
         // ── 5. It dies ───────────────────────────────────────────────────────────────────────────

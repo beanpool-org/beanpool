@@ -26,7 +26,9 @@
  *      gone; used again → refused; another grant's → refused in the same words, and still the uploader's; twice in one call →
  *      refused; a create refused after the id was taken leaves it usable; 24 hours on, swept and refused; a PNG upload is
  *      stored as a JPEG; revoked, a grant's unused uploads and their folder are gone; bodies still arriving fill the server's
- *      places (one more → 503, uncounted), and their clients going frees them at once. connection_info says the two ways.
+ *      places (one more → 503, uncounted), and their clients going frees them at once; so does a client gone while the JSON
+ *      reader in front of every route had its body (the route meets a request already closed). connection_info says the two
+ *      ways.
  *   5. Beans: create_enterprise_listing asks a price above 0 where Beans are on (0 and absent refused in words). Where they are
  *      off its schema asks none and neither 0 nor absent is refused for its price; the call is still refused, because Beans
  *      off turns enterprises off (config/node-profile.ts lockToLedger), so with Beans off nothing is made.
@@ -312,6 +314,22 @@ function stillSending(token: string): { leave: () => void } {
     req.on('error', () => { /* its client went, and the connection with it */ });
     req.write(Buffer.alloc(10, 1));
     return { leave: () => req.destroy() };
+}
+
+/**
+ * A raw POST to /mcp/photos whose Content-Type names json, so the JSON reader in front of every route (https-server.ts)
+ * starts on its body: it declares 1,000 bytes, sends 10, and its client goes. That reader stops on the closed request and
+ * passes it on, so the upload route meets a request that has already closed and will emit nothing more.
+ */
+function goneWhileTheJsonReaderHadIt(token: string): Promise<void> {
+    return new Promise((resolve) => {
+        const req = https.request({
+            host: 'localhost', port: PORT, path: '/mcp/photos', method: 'POST', rejectUnauthorized: false,
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg; profile=json', 'Content-Length': '1000' },
+        }, (res) => res.resume());
+        req.on('error', () => { /* its client went, and the connection with it */ });
+        req.write(Buffer.alloc(10, 1), () => setTimeout(() => { req.destroy(); resolve(); }, 200));
+    });
 }
 
 async function main(): Promise<void> {
@@ -707,6 +725,25 @@ async function main(): Promise<void> {
         assert(afterLeft?.status === 201 && freedMs < 5_000,
             `their clients gone before the bodies ended → an upload is read ${freedMs} ms later, not at the ${PHOTO_UPLOAD_READ_MS / 1000} s deadline (${afterLeft ? show(afterLeft) : 'no answer'})`);
         assert(await revoke(S.id) === 200 && uploadedPhotosWaiting(S.id) === 0, 'the slow line\'s check is disconnected, its upload gone');
+
+        // A client gone while a reader in front of the route had its body: the route meets a request that has already closed
+        // and will emit nothing more. Each is refused at once (counted, as any upload that got as far as its body), and holds
+        // no place until the read deadline.
+        const L = await makeToken(owner, 'Olive\'s dropped line');
+        const leftBefore = agentPhotosToday(L.id);
+        await Promise.all(Array.from({ length: PHOTO_UPLOADS_AT_ONCE }, () => goneWhileTheJsonReaderHadIt(L.token)));
+        for (let i = 0; i < 20 && agentPhotosToday(L.id) - leftBefore < PHOTO_UPLOADS_AT_ONCE; i++) await new Promise(r => setTimeout(r, 100));
+        const reachedRead = agentPhotosToday(L.id) - leftBefore;
+        const dropped = Date.now();
+        let afterDropped: Reply | null = null;
+        for (let i = 0; i < 16 && afterDropped?.status !== 201; i++) {
+            if (i > 0) await new Promise(r => setTimeout(r, 250));
+            afterDropped = await upload(L.token, smallWebp, 'image/webp');
+        }
+        const droppedFreedMs = Date.now() - dropped;
+        assert(reachedRead === PHOTO_UPLOADS_AT_ONCE && afterDropped?.status === 201 && droppedFreedMs < 5_000,
+            `${PHOTO_UPLOADS_AT_ONCE} clients gone while the JSON reader had their bodies (${reachedRead} reached the read) → an upload is read ${droppedFreedMs} ms later, not at the ${PHOTO_UPLOAD_READ_MS / 1000} s deadline (${afterDropped ? show(afterDropped) : 'no answer'})`);
+        assert(await revoke(L.id) === 200 && uploadedPhotosWaiting(L.id) === 0, 'the dropped line\'s check is disconnected, its upload gone');
 
         const off = await call('POST', '/api/local/admin/agent/switch', { headers: asSession(ownerS), body: { allowed: false } });
         const whileOff = await upload(A.token, goodJpg);

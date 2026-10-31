@@ -54,6 +54,9 @@ class BodyTooSlow extends Error {}
  * read: the answer closes the connection), or when it is not all there in time.
  */
 function readImageBody(req: IncomingMessage, max: number, ms: number): Promise<Buffer> {
+    // A request that closed before its body is asked for (its client went while the JSON reader in front of every route had
+    // it, https-server.ts) emits nothing more, not even 'close': refused now, or it would hold its place until the deadline.
+    if (req.destroyed) return Promise.reject(new Error('closed'));
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         let total = 0;

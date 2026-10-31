@@ -213,15 +213,15 @@ describe('TagPicker Web Component', () => {
 
 describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)', () => {
     const held = { tags: [] as string[], freeTags: [] as string[] };
-    function Composer({ tags = [], freeTags = [] }: { tags?: string[]; freeTags?: string[] }) {
+    function Composer({ tags = [], freeTags = [], title = '' }: { tags?: string[]; freeTags?: string[]; title?: string }) {
         const [nowTags, setTags] = useState(tags);
         const [nowFree, setFree] = useState(freeTags);
         held.tags = nowTags;
         held.freeTags = nowFree;
-        return <TagPicker tags={nowTags} onChange={setTags} freeTags={nowFree} onFreeTagsChange={setFree} category="food" />;
+        return <TagPicker tags={nowTags} onChange={setTags} freeTags={nowFree} onFreeTagsChange={setFree} category="food" title={title} />;
     }
-    const open = (tags?: string[], freeTags?: string[]) => {
-        render(<Composer tags={tags} freeTags={freeTags} />);
+    const open = (tags?: string[], freeTags?: string[], title?: string) => {
+        render(<Composer tags={tags} freeTags={freeTags} title={title} />);
         fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
     };
     const field = () => screen.getByPlaceholderText('Search tags...') as HTMLInputElement;
@@ -292,6 +292,35 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
         expect(held.freeTags).toHaveLength(5);
     });
 
+    it('a tag taken off ends the words that stopped the last one: the sheet never says "at most" beside an Add row', () => {
+        open([], ['aa', 'bb', 'cc', 'dd', 'ee']);
+        type('ff');
+        enter();
+        expect(screen.getByRole('alert').textContent).toBe('Five tags at most');
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove #aa' })[0]);
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(addRow()?.textContent).toContain('#ff');
+    });
+
+    const fiveFromTheLibrary = ['food.fruit.lemon', 'food.fruit.apple', 'food.fruit.orange', 'food.produce.herbs', 'food.preserve.jam'];
+
+    it('a library tag taken off ends them too', () => {
+        open(fiveFromTheLibrary, [], 'Fresh limes');
+        fireEvent.click(screen.getByRole('button', { name: 'Lime' }));
+        expect(screen.getByRole('alert').textContent).toBe('Five tags at most');
+        fireEvent.click(screen.getAllByRole('button', { name: 'Remove Lemon' })[0]);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('backspace on an empty field ends them too', () => {
+        open(fiveFromTheLibrary, [], 'Fresh limes');
+        fireEvent.click(screen.getByRole('button', { name: 'Lime' }));
+        expect(screen.getByRole('alert').textContent).toBe('Five tags at most');
+        fireEvent.keyDown(field(), { key: 'Backspace' });
+        expect(held.tags).toHaveLength(4);
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
     it('five of a kind leave the + Add for the other kind; ten leave none', () => {
         const library = ['food.fruit.apple', 'food.fruit.orange', 'food.produce.herbs', 'food.preserve.jam', 'food.bakery.bread'];
         const { unmount } = render(<Composer tags={library} />);
@@ -344,6 +373,18 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
         fireEvent.keyDown(field(), { key: 'Enter', isComposing: true });
         expect(held.freeTags).toEqual([]);
         fireEvent.compositionEnd(field());
+        expect(held.freeTags).toEqual(['二手']);
+    });
+
+    it("Safari ends the composition before its Enter: that Enter, key code 229, only confirms the word", () => {
+        open();
+        fireEvent.compositionStart(field());
+        fireEvent.input(field(), { target: { value: '二手' }, isComposing: true });
+        fireEvent.compositionEnd(field());
+        fireEvent.keyDown(field(), { key: 'Enter', keyCode: 229, isComposing: false });
+        expect(held.freeTags).toEqual([]);
+        expect(field().value).toBe('二手');
+        enter();
         expect(held.freeTags).toEqual(['二手']);
     });
 

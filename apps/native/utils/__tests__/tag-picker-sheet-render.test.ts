@@ -182,15 +182,15 @@ describe('the tag sheet on the phone', () => {
 
 describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)', () => {
     const held = { tags: [] as string[], freeTags: [] as string[] };
-    function Composer({ tags, freeTags }: { tags: string[]; freeTags: string[] }) {
+    function Composer({ tags, freeTags, title }: { tags: string[]; freeTags: string[]; title?: string }) {
         const [nowTags, setTags] = useState(tags);
         const [nowFree, setFree] = useState(freeTags);
         held.tags = nowTags;
         held.freeTags = nowFree;
-        return createElement(TagPicker, { value: nowTags, onChange: setTags, freeTags: nowFree, onFreeTagsChange: setFree, category: 'food' });
+        return createElement(TagPicker, { value: nowTags, onChange: setTags, freeTags: nowFree, onFreeTagsChange: setFree, category: 'food', title });
     }
-    async function compose(tags: string[] = [], freeTags: string[] = []) {
-        await act(async () => { root.render(createElement(Composer, { tags, freeTags }) as any); });
+    async function compose(tags: string[] = [], freeTags: string[] = [], title?: string) {
+        await act(async () => { root.render(createElement(Composer, { tags, freeTags, title }) as any); });
         await press(addButton(), '+ Add');
     }
     const key = (name: string) => act(async () => { search()!.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
@@ -258,6 +258,36 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
         expect(sheet()!.textContent).toContain('Five tags at most');
         await key('Enter');
         expect(held.freeTags).toHaveLength(5);
+    });
+
+    it('a tag taken off ends the words that stopped the last one: the sheet never says "at most" beside an Add row', async () => {
+        await compose([], ['aa', 'bb', 'cc', 'dd', 'ee']);
+        await typeInSearch('ff');
+        await key('Enter');
+        expect(sheet()!.textContent).toContain('Five tags at most');
+        await press(host.querySelector('[aria-label="Remove #aa"]'), 'Remove #aa');
+        expect(sheet()!.textContent).not.toContain('Five tags at most');
+        expect(addRow()!.textContent).toContain('#ff');
+    });
+
+    const fiveFromTheLibrary = ['food.fruit.lemon', 'food.fruit.apple', 'food.fruit.orange', 'food.produce.herbs', 'food.preserve.jam'];
+    const tapLime = () => press(Array.from(sheet()!.querySelectorAll('[role=button]')).find((b) => b.textContent === 'Lime') ?? null, 'Lime');
+
+    it('a library tag taken off ends them too', async () => {
+        await compose(fiveFromTheLibrary, [], 'Fresh limes');
+        await tapLime();
+        expect(sheet()!.textContent).toContain('Five tags at most');
+        await press(host.querySelector('[aria-label="Remove Lemon"]'), 'Remove Lemon');
+        expect(sheet()!.textContent).not.toContain('Five tags at most');
+    });
+
+    it('backspace on an empty field ends them too', async () => {
+        await compose(fiveFromTheLibrary, [], 'Fresh limes');
+        await tapLime();
+        expect(sheet()!.textContent).toContain('Five tags at most');
+        await key('Backspace');
+        expect(held.tags).toHaveLength(4);
+        expect(sheet()!.textContent).not.toContain('Five tags at most');
     });
 
     it('five of a kind leave the + Add for the other kind; ten leave none', async () => {

@@ -54,14 +54,22 @@ export function TagPicker({
 
     const toggleTag = (id: string) => {
         if (selectedTags.includes(id)) {
+            setRefused(null);
             onChange(selectedTags.filter((t) => t !== id));
         } else {
             if (selectedTags.length >= POST_TAGS_MAX) {
                 setRefused(TOO_MANY_TAGS);
                 return;
             }
+            setRefused(null);
             onChange([...selectedTags, id]);
         }
+    };
+
+    // A tag off makes room: what stopped the last one no longer stands.
+    const takeOffFree = (tag: string) => {
+        setRefused(null);
+        onFreeTagsChange?.(freeTags.filter((other) => other !== tag));
     };
 
     const canType = !!onFreeTagsChange;
@@ -94,6 +102,7 @@ export function TagPicker({
     const backspaceOnEmpty = () => {
         if (!canType || searchQuery.length > 0) return;
         const off = lastTagOff(held);
+        setRefused(null);
         if (off.freeTags.length !== freeTags.length) onFreeTagsChange?.(off.freeTags);
         else if (off.tags.length !== selectedTags.length) onChange(off.tags);
     };
@@ -157,7 +166,7 @@ export function TagPicker({
                 <button
                     key={`#${tag}`}
                     type="button"
-                    onClick={() => onFreeTagsChange?.(freeTags.filter((other) => other !== tag))}
+                    onClick={() => takeOffFree(tag)}
                     className="min-h-[44px] max-w-full break-words px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover"
                     aria-label={t('Remove {name}', { name: `#${tag}` })}
                 >
@@ -234,7 +243,8 @@ export function TagPicker({
                                     onChange={(e) => typeInField(e.target.value, (e.nativeEvent as InputEvent).isComposing === true)}
                                     onCompositionEnd={(e) => typeInField(e.currentTarget.value, false)}
                                     onKeyDown={(e) => {
-                                        const composing = e.nativeEvent.isComposing;
+                                        // Safari ends the composition before the Enter that confirms it: that key says 229.
+                                        const composing = e.nativeEvent.isComposing || e.keyCode === 229;
                                         if (e.key === 'Enter') {
                                             e.preventDefault();
                                             if (canType && !composing) enter(searchQuery, true);

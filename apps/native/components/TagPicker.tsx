@@ -283,6 +283,7 @@ export function TagPicker({
     const toggleTag = (id: string) => {
         if (selectedTags.includes(id)) {
             hapticTick();
+            setRefused(null);
             onChange(selectedTags.filter((t) => t !== id));
         } else {
             if (selectedTags.length >= POST_TAGS_MAX) {
@@ -291,8 +292,16 @@ export function TagPicker({
                 return;
             }
             hapticTick();
+            setRefused(null);
             onChange([...selectedTags, id]);
         }
+    };
+
+    // A tag off makes room: what stopped the last one no longer stands.
+    const takeOffFree = (tag: string) => {
+        hapticTick();
+        setRefused(null);
+        onFreeTagsChange?.(freeTags.filter((other) => other !== tag));
     };
 
     const canType = !!onFreeTagsChange;
@@ -330,6 +339,7 @@ export function TagPicker({
         if (off.freeTags.length !== freeTags.length) onFreeTagsChange?.(off.freeTags);
         else if (off.tags.length !== selectedTags.length) onChange(off.tags);
         else return;
+        setRefused(null);
         hapticTick();
     };
 
@@ -401,10 +411,7 @@ export function TagPicker({
                 <Pressable
                     key={`#${tag}`}
                     style={[styles.chip, styles.chipSelected]}
-                    onPress={() => {
-                        hapticTick();
-                        onFreeTagsChange?.(freeTags.filter((other) => other !== tag));
-                    }}
+                    onPress={() => takeOffFree(tag)}
                     accessibilityRole="button"
                     accessibilityLabel={t('Remove {name}', { name: `#${tag}` })}
                 >

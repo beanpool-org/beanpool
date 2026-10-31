@@ -6,6 +6,7 @@ import {
     isPauseVote,
     keepSuspensionHeadline,
     minYesLine,
+    notExecutedLine,
     ownerDecisionLine,
     pauseVoteBody,
     pauseVoteHeadline,
@@ -140,5 +141,46 @@ describe('Decision card wording (native)', () => {
         expect(ownerDecisionLine({ ...carried, ownerDecidedReason: null }, { tooFewToVote: true }, 'abc')).toBe('Decided by the owner: too few members to vote.');
         // No vote, and no owner, removes someone holding a server role: nothing about the owner on that card.
         expect(ownerDecisionLine({ status: 'open', params: { ...params, serverRole: 'admin' } }, { tooFewToVote: true }, 'abc')).toBeNull();
+    });
+
+    // The deciding review of #2668: a card too few can vote on says nothing of what Yes or No does. Its quorum can't be met, so
+    // no number of Yes removes anyone, and an owner's decision stands against every No cast.
+    it('too few to vote, the card says nothing of what each answer does; a server role\'s sentence stands', () => {
+        const params = { memberName: 'Sam', rule: 2 };
+        expect(pauseVoteBody(params, 'abc', { tooFewToVote: true })).toBeNull();
+        expect(pauseVoteBody(params, 'abc', { tooFewToVote: false })).toBe('Yes removes Sam after 7 days. No brings Sam back as soon as the vote closes.');
+        expect(pauseVoteBody(params, 'abc', null)).toBe('Yes removes Sam after 7 days. No brings Sam back as soon as the vote closes.');
+        expect(pauseVoteBody({ ...params, serverRole: 'admin' }, 'abc', { tooFewToVote: true }))
+            .toBe("Sam holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, Sam is back when it closes.");
+    });
+
+    it('a quiet member\'s vote ends the too-few state: this vote decides, not that the member is removed, and the owner\'s reason stays', () => {
+        const decided = { status: 'open', params: { memberName: 'Xia', rule: 2 }, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Xia threatened one of them' };
+        expect(ownerDecisionLine(decided, { tooFewToVote: false }, 'abc'))
+            .toBe('An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: Xia threatened one of them');
+        expect(ownerDecisionLine({ ...decided, ownerDecidedReason: null }, { tooFewToVote: false }, 'abc'))
+            .toBe('An owner decided when too few members could vote, but enough can now, so this vote decides.');
+        // Should it fall back to too few, the owner's decision stands again, and the line says so.
+        expect(ownerDecisionLine(decided, { tooFewToVote: true }, 'abc')).toContain('Xia is removed when this vote closes');
+    });
+
+    it('a case an admin hid: too few to vote, no owner can decide, so the line says what happens instead', () => {
+        const hidden = { status: 'open', params: { memberName: 'Joy', rule: 2 }, caseHiddenAt: '2026-10-29T10:00:00.000Z' };
+        expect(ownerDecisionLine(hidden, { tooFewToVote: true }, 'abc')).toBe('Too few members can vote, so unless more of them vote, Joy is back when this vote closes.');
+        expect(ownerDecisionLine(hidden, { tooFewToVote: false }, 'abc')).toBeNull();
+        // An owner decided before it was hidden: that stands, without their reason.
+        expect(ownerDecisionLine({ ...hidden, ownerDecidedAt: '2026-10-28T10:00:00.000Z', ownerDecidedReason: null }, { tooFewToVote: true }, 'abc'))
+            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Joy is removed when this vote closes.');
+    });
+
+    it('why a failed vote did nothing: a removal that passed and was then cancelled says so, not the Yes floor beside its 3 Yes', () => {
+        const base = { quorumMet: true, passed: false, minYes: 3, yesWeight: 2, noWeight: 1, supportRatio: 2 / 3, thresholdRequired: 0.66 };
+        expect(notExecutedLine({ ...base, quorumMet: false })).toBe('Not executed: Quorum not reached');
+        expect(notExecutedLine(base)).toBe('Not executed: fewer than 3 Yes votes');
+        expect(notExecutedLine({ ...base, yesWeight: 3, noWeight: 2, supportRatio: 0.6 })).toBe('Not executed: Threshold not met');
+        expect(notExecutedLine({ ...base, yesWeight: 3, noWeight: 0, supportRatio: 1, passed: true })).toBe('Not executed: a reinstatement vote cancelled it');
+        // Not a removal: no floor, and these words only.
+        expect(notExecutedLine({ ...base, minYes: undefined })).toBe('Not executed: Threshold not met');
+        expect(notExecutedLine({ ...base, minYes: undefined, passed: true })).toBe('Not executed: Threshold not met');
     });
 });

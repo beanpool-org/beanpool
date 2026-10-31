@@ -299,12 +299,21 @@ const OPEN = [
     // An owner's second pause within 30 days of a vote that said No (removal by vote S4): the card says so.
     decision('26262626', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Pia', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()),
         secondPause: { after: 'no', endedAt: iso(new Date(2026, 9, 15, 12).getTime()) } } }),
+    // Removal by vote S6, the deciding review of #2668: an owner decided and enough can vote now; too few, with its case hidden.
+    decision('27272727', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Xia', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) },
+        tally: tally({ minYes: 3, tooFewToVote: false }), ownerDecidedAt: iso(Date.now() - DAY), ownerDecidedReason: 'Xia threatened one of them' }),
+    decision('28282828', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Joy', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) },
+        tally: tally({ minYes: 3, tooFewToVote: true }), caseHiddenAt: iso(Date.now() - DAY), caseHiddenReason: 'Two witnesses showed it false',
+        description: 'An admin hid the case for this vote, as one shown to be false. Their reason: Two witnesses showed it false' }),
 ];
 const PAST = [
     decision('77777777', { status: 'executed', effect: 'freeze_credit', executionReason: 'Credit floor set to 0', tally: tally({ quorumMet: true, passed: true }) }),
     decision('88888888', { status: 'executed', effect: 'grant_voucher' }),
     decision('99999999', { status: 'failed', effect: 'unfreeze_credit', tally: tally({ quorumMet: true }) }),
     decision('10101010', { status: 'failed', effect: 'revoke_voucher' }),
+    // A removal that passed, then a reinstatement cancelled it in its grace window.
+    decision('29292929', { status: 'failed', effect: 'remove_member', executionReason: 'Cancelled by member reinstatement decision',
+        tally: tally({ quorumMet: true, passed: true, minYes: 3, yesWeight: 3, noWeight: 0, totalWeight: 3, supportRatio: 1 }) }),
     decision('12121212', { status: 'admin_halted', effect: 'grant_hardship', adminHaltReason: 'Duplicate of last week' }),
     decision('13131313', { status: 'execution_pending_grace', effect: 'remove_member', gracePeriodEndsAt: iso(new Date(2026, 9, 25, 12).getTime()) }),
     decision('14141414', { status: 'execution_void', effect: 'write_off_deficit' }),
@@ -320,7 +329,7 @@ const OTHERS = [
     ...[...OPEN, ...PAST].flatMap((d) => [d.title, d.description]),
     'Dave', 'Mia', 'Kofi', 'Ana', 'Ola', 'Abe', 'Zed', 'Credit floor set to 0', 'Duplicate of last week', 'Reach The Moon', 'sky', 'PAUSED BY STORM', 'system:decision:',
     'Uma', 'Ada', 'Ivy', 'Lou', 'Tia', 'I refunded the deposit the same day.', 'Two witnesses showed it false', 'It was a misunderstanding.',
-    'Rex', "It gave a neighbour's address", 'Pia',
+    'Rex', "It gave a neighbour's address", 'Pia', 'Xia', 'Joy', 'Xia threatened one of them',
     'Example Valley', ...SAMPLE_COMMUNITY.decisions.flatMap((d) => [d.question, (d as { body?: string }).body ?? '']),
     ...sampleDecisions().flatMap((d) => [d.title, d.description]), ...sampleEnterprises().flatMap((e) => [e.name ?? '', e.purpose ?? '']),
 ].filter(Boolean).sort((a, b) => b.length - a.length);
@@ -521,6 +530,8 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(host.textContent).toContain(pseudoLocalise("{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.").split('{name}').join('Abe'));
         expect(host.querySelector('[data-testid="second-pause-line"]')?.textContent).toBe(pseudoLocalise('Second pause in 30 days. The last vote said No.'));
         expect(host.querySelector('[data-testid="own-removal-note"]')?.textContent).toBe(pseudoLocalise("This vote is about you, so you can't vote on it."));
+        expect(host.textContent).toContain(pseudoLocalise('An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}').replace('{reason}', 'Xia threatened one of them'));
+        expect(host.textContent).toContain(pseudoLocalise('Too few members can vote, so unless more of them vote, {name} is back when this vote closes.').replace('{name}', 'Joy'));
         expect(bypassing(), 'open').toEqual([]);
         await click(byLabel(pseudoLocalise('Increase votes')), 'Increase votes');
         await click(button('Vote YES'), 'Vote YES');
@@ -631,6 +642,7 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(host.textContent).toContain('PAUSED BY STORM');
         expect(host.textContent).toContain(pseudoLocalise('Not executed: Threshold not met'));
         expect(host.textContent).toContain(pseudoLocalise('Not executed: Quorum not reached'));
+        expect(host.textContent).toContain(pseudoLocalise('Not executed: a reinstatement vote cancelled it'));
         expect(host.textContent).toContain(pseudoLocalise('Expired unresolved: Quorum not reached'));
         expect(host.textContent).toContain(pseudoLocalise('Executed successfully'));
         expect(bypassing(), 'all').toEqual([]);
@@ -714,7 +726,9 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
             'Ada, an admin, paused Uma on 22 Oct 2026.', "Uma's reply", 'I refunded the deposit the same day.',
             "An owner paused Ivy on 22 Oct 2026, signed in with the server's password.",
             'An admin hid the case for this vote, as one shown to be false. Their reason: Two witnesses showed it false', 'Proposed by Tia.',
-            'Reply to this case', 'Report this case as false', 'An owner paused Pia on 22 Oct 2026.', 'Second pause in 30 days. The last vote said No.']) {
+            'Reply to this case', 'Report this case as false', 'An owner paused Pia on 22 Oct 2026.', 'Second pause in 30 days. The last vote said No.',
+            'An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: Xia threatened one of them',
+            'Too few members can vote, so unless more of them vote, Joy is back when this vote closes.']) {
             expect(host.textContent, english).toContain(english);
         }
         expect(host.textContent).not.toContain('An admin paused Mia');
@@ -723,7 +737,8 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         await click(byLabel('Decisions History'), 'History');
         for (const english of ['EXECUTION PENDING GRACE', 'In 7-day Grace Period: Scheduled for removal on 25 Oct 2026', 'Turnout: 4 of 6 votes needed (Unmet)',
             'Yes: 3 (75%) · No: 1', 'Halted by an admin — Reason: Duplicate of last week', 'Provenance: system:decision:77777777 · Credit floor set to 0',
-            'Authorised by: Community Vote (system:decision:77777777)', 'Void: Subject does not exist or was pruned', 'AUTHORISATION & PROVENANCE']) {
+            'Authorised by: Community Vote (system:decision:77777777)', 'Void: Subject does not exist or was pruned', 'AUTHORISATION & PROVENANCE',
+            'Not executed: a reinstatement vote cancelled it']) {
             expect(host.textContent, english).toContain(english);
         }
     });

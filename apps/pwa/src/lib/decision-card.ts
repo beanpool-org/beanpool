@@ -157,13 +157,15 @@ export function minYesLine(tally: Pick<DecisionTally, 'minYes'> | null | undefin
 /**
  * The owner's part in a pause's vote too few could vote on (removal by vote S6, design §5 point 3), in the design's words:
  * while it is open and nobody has decided, that the owner decides when it closes if nobody else votes; once an owner has
- * decided, what happens at the close unless more members vote, with the owner's public reason; once it closed with the
- * owner's decision carried out, that the owner decided it. Null for any other card. A vote on someone who holds a server
- * role says nothing of it: no vote, and no owner, removes them (pauseVoteBody says so). Once an admin has hidden the case
- * the node leaves the owner's reason off, since it may repeat the accusation, and the line says the rest without it.
+ * decided, what happens at the close unless more members vote, with the owner's public reason, and once more can vote, that
+ * the vote decides (the owner's decision would stand again only if too few could vote at the close, when this line says so
+ * again); once it closed with the owner's decision carried out, that the owner decided it. Null for any other card. A vote
+ * on someone who holds a server role says nothing of it: no vote, and no owner, removes them (pauseVoteBody says so). Once an
+ * admin has hidden the case the node leaves the owner's reason off, since it may repeat the accusation, and the line says the
+ * rest without it; and no owner can decide after that, so left too few the member is back when the vote closes.
  */
 export function ownerDecisionLine(
-    decision: { status: string; params?: { memberName?: string; serverRole?: string } | null; ownerDecidedAt?: string | null; ownerDecidedReason?: string | null; ownerDecisionCarriedAt?: string | null },
+    decision: { status: string; params?: { memberName?: string; serverRole?: string } | null; caseHiddenAt?: string | null; ownerDecidedAt?: string | null; ownerDecidedReason?: string | null; ownerDecisionCarriedAt?: string | null },
     tally: Pick<DecisionTally, 'tooFewToVote'> | null | undefined,
     fallbackName: string,
 ): string | null {
@@ -174,24 +176,57 @@ export function ownerDecisionLine(
             : t('Decided by the owner: too few members to vote.');
     }
     if (decision.status !== 'open' || decision.params?.serverRole) return null;
+    const name = decision.params?.memberName || fallbackName;
+    if (!tally?.tooFewToVote) {
+        if (!decision.ownerDecidedAt) return null;
+        return reason
+            ? t('An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}', { reason })
+            : t('An owner decided when too few members could vote, but enough can now, so this vote decides.');
+    }
     if (decision.ownerDecidedAt) {
-        const name = decision.params?.memberName || fallbackName;
         return reason
             ? t('Too few members can vote, so an owner decided: unless more of them vote, {name} is removed when this vote closes. Their reason: {reason}', { name, reason })
             : t('Too few members can vote, so an owner decided: unless more of them vote, {name} is removed when this vote closes.', { name });
     }
-    return tally?.tooFewToVote ? t('Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes.') : null;
+    return decision.caseHiddenAt
+        ? t('Too few members can vote, so unless more of them vote, {name} is back when this vote closes.', { name })
+        : t('Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes.');
 }
 
 /**
  * What each answer does (design §8.2): Yes removes them after the 7-day grace window, No brings them back when the vote
  * closes. No vote removes someone who holds an owner or admin role (§3.8): then the pause ends with the vote, whatever it says.
+ * While too few can vote neither answer does that: the quorum can't be met, and an owner's decision would stand against
+ * every vote cast. So the card says nothing of the answers then, and ownerDecisionLine says what happens.
  */
-export function pauseVoteBody(params: { memberName?: string; serverRole?: string } | null | undefined, fallbackName: string): string {
+export function pauseVoteBody(
+    params: { memberName?: string; serverRole?: string } | null | undefined,
+    fallbackName: string,
+    tally?: Pick<DecisionTally, 'tooFewToVote'> | null,
+): string | null {
     const name = params?.memberName || fallbackName;
-    return params?.serverRole
-        ? t("{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.", { name })
-        : t('Yes removes {name} after 7 days. No brings {name} back as soon as the vote closes.', { name });
+    if (params?.serverRole) {
+        return t("{name} holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, {name} is back when it closes.", { name });
+    }
+    return tally?.tooFewToVote ? null : t('Yes removes {name} after 7 days. No brings {name} back as soon as the vote closes.', { name });
+}
+
+/**
+ * Why a vote that closed as failed did nothing, beside its numbers: too few voted, or its share fell short, or on a removal
+ * (the node's `minYes`) only the Yes floor stopped it (design §5 point 1). A removal that passed and was then cancelled in
+ * its grace window by a vote to reinstate the member failed too, and says so: its numbers still show a vote that passed.
+ */
+export function notExecutedLine(
+    tally: Pick<DecisionTally, 'quorumMet' | 'passed' | 'minYes' | 'yesWeight' | 'noWeight' | 'supportRatio' | 'thresholdRequired'>,
+): string {
+    if (!tally.quorumMet) return t('Not executed: Quorum not reached');
+    if (tally.minYes) {
+        if (tally.passed) return t('Not executed: a reinstatement vote cancelled it');
+        if (tally.yesWeight < tally.minYes && tally.supportRatio >= tally.thresholdRequired && tally.yesWeight > tally.noWeight) {
+            return t('Not executed: fewer than {n} Yes votes', { n: tally.minYes });
+        }
+    }
+    return t('Not executed: Threshold not met');
 }
 
 /**

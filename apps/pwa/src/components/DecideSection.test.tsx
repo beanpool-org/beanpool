@@ -421,6 +421,59 @@ describe('DecideSection: a fair vote on removing a member', () => {
         expect(screen.getByText('Not executed: fewer than 3 Yes votes')).toBeInTheDocument();
     });
 
+    // The deciding review of #2668: a card too few can vote on says nothing of what Yes or No does. Its quorum can't be met, so
+    // no number of Yes removes anyone, and an owner's decision stands against every No cast.
+    it('too few to vote, nothing on the card says what Yes or No does, before an owner decides or after', () => {
+        const tally = { ...decisionCard('x', '1m1v', null).tally, electorate: 2, quorumRatio: 0.25, quorumRequired: 3, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true };
+        const first = renderAs('viewer', [pauseCard({ tally })]);
+        expect(document.body.textContent).not.toMatch(/Yes removes|No brings/);
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('An admin paused Dave on 22 Oct 2026.');
+        first.unmount();
+
+        const decided = pauseCard({ tally, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Both who could vote saw the shed emptied' });
+        const second = renderAs('viewer', [decided]);
+        expect(document.body.textContent).not.toMatch(/Yes removes|No brings/);
+        expect(screen.getByTestId('owner-decision-line').textContent).toContain('Dave is removed when this vote closes');
+        second.unmount();
+
+        // Someone who holds a server role: no vote and no owner removes them, too few or not, and that sentence stands.
+        renderAs('viewer', [pauseCard({ tally, params: { ...decided.params, serverRole: 'admin' } })]);
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('whatever this vote decides, Dave is back when it closes.');
+        expect(screen.queryByTestId('owner-decision-line')).toBeNull();
+    });
+
+    it('a quiet member\'s vote ends the too-few state: the card says this vote decides, not that the member is removed, and keeps the owner\'s reason', () => {
+        const tally = { ...decisionCard('x', '1m1v', null).tally, electorate: 3, quorumRatio: 0.25, quorumRequired: 3, thresholdRequired: 0.66, minYes: 3, tooFewToVote: false };
+        const decided = pauseCard({ tally, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Both who could vote saw the shed emptied' });
+        const first = renderAs('viewer', [decided]);
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe(
+            'An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: Both who could vote saw the shed emptied');
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('Yes removes Dave after 7 days. No brings Dave back as soon as the vote closes.');
+        expect(document.body.textContent).not.toContain('is removed when this vote closes');
+        first.unmount();
+        // The case hidden since: the node leaves the owner's reason off.
+        renderAs('viewer', [{ ...decided, ownerDecidedReason: null }]);
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe('An owner decided when too few members could vote, but enough can now, so this vote decides.');
+    });
+
+    it('a case an admin hid: too few to vote, the card no longer says an owner decides, since none can; it says what happens', () => {
+        const tally = { ...decisionCard('x', '1m1v', null).tally, electorate: 2, quorumRatio: 0.25, quorumRequired: 3, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true };
+        renderAs('viewer', [pauseCard({ tally, caseHiddenAt: '2026-10-29T10:00:00.000Z', caseHiddenReason: 'Two witnesses showed it false' })]);
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe('Too few members can vote, so unless more of them vote, Dave is back when this vote closes.');
+        expect(document.body.textContent).not.toMatch(/the owner decides|Yes removes|No brings/);
+    });
+
+    it('a removal that passed and was then cancelled by a reinstatement says so, not "fewer than 3 Yes votes" beside its 3 Yes', () => {
+        const tally = {
+            ...decisionCard('x', '1m1v', null).tally, electorate: 6, quorumRatio: 0.25, quorumRequired: 3, thresholdRequired: 0.66, minYes: 3, tooFewToVote: false,
+            totalVoters: 3, quorumMet: true, yesWeight: 3, noWeight: 0, totalWeight: 3, supportRatio: 1, passed: true,
+        };
+        renderAs('viewer', [pauseCard({ tally, status: 'failed', executionReason: 'Cancelled by member reinstatement decision' })], 'history');
+        expect(screen.getByText('Yes: 3 (100%) · No: 0')).toBeInTheDocument();
+        expect(screen.getByText('Not executed: a reinstatement vote cancelled it')).toBeInTheDocument();
+        expect(document.body.textContent).not.toMatch(/fewer than 3 Yes votes|Threshold not met/);
+    });
+
     it("a reply an admin took down: their reason in its place, open and in the history; the member can't write another", () => {
         const takenDown = pauseCard({ subjectReply: null, replyHiddenAt: '2026-10-25T10:00:00.000Z', replyHiddenReason: "It gave a neighbour's address" });
         const first = renderAs('viewer', [takenDown]);

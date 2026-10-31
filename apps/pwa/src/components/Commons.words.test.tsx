@@ -234,6 +234,29 @@ describe('the Decide section in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
     });
 
+    // Removal by vote S6, the deciding review of #2668: the owner's line once enough can vote, and with the case hidden.
+    it("a pause's vote once enough can vote, and one too few can vote on with its case hidden", async () => {
+        await showIn('xx');
+        const pause = { authorPubkey: 'SYSTEM', effect: 'remove_member' };
+        const base = decision('t').tally;
+        drawDecide([
+            decision('i', { ...pause, params: { memberName: 'Xia', rule: 2 }, tally: { ...base, minYes: 3, tooFewToVote: false }, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Xia threatened one of them' }),
+            decision('j', { ...pause, params: { memberName: 'Joy', rule: 2 }, tally: { ...base, minYes: 3, tooFewToVote: true }, caseHiddenAt: '2026-10-29T10:00:00.000Z', caseHiddenReason: 'Two witnesses' }),
+        ]);
+        const lines = screen.getAllByTestId('owner-decision-line').map((l) => l.textContent);
+        expect(lines[0]).toBe(xx('An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: {reason}').replace('{reason}', 'Xia threatened one of them'));
+        expect(lines[1]).toBe(xx('Too few members can vote, so unless more of them vote, {name} is back when this vote closes.').replace('{name}', 'Joy'));
+        expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
+    });
+
+    it('a removal a reinstatement cancelled, in the history', async () => {
+        await showIn('xx');
+        const tally = { ...decision('t').tally, quorumMet: true, minYes: 3, yesWeight: 3, noWeight: 0, totalWeight: 3, supportRatio: 1, passed: true };
+        drawDecide([decision('k', { status: 'failed', effect: 'remove_member', tally })], { view: 'history' });
+        expect(screen.getByText(xx('Not executed: a reinstatement vote cancelled it'))).toBeInTheDocument();
+        expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
+    });
+
     it('who may propose, the empty list, a money vote someone with no trade cannot cast, and each refusal', async () => {
         await showIn('xx');
         drawDecide([], { canPropose: false });

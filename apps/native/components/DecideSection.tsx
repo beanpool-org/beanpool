@@ -21,7 +21,7 @@ import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/de
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
     DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, minYesLine,
-    ownerDecisionLine, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine,
+    notExecutedLine, ownerDecisionLine, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine,
     voiceCreditsLine,
 } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
@@ -981,9 +981,11 @@ export function DecideSection({
                                             {secondPauseLine(item.params) && (
                                                 <Text style={styles.keepHeadline} testID="second-pause-line">{secondPauseLine(item.params)}</Text>
                                             )}
-                                            <Text style={styles.keepBody}>
-                                                {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
-                                            </Text>
+                                            {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'), tally) && (
+                                                <Text style={styles.keepBody}>
+                                                    {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'), tally)}
+                                                </Text>
+                                            )}
                                             {/* Too few can vote: the owner decides when it closes (removal by vote S6) */}
                                             {ownerDecisionLine(item, tally, item.subject?.slice(0, 8) || t('a member')) && (
                                                 <Text style={styles.keepHeadline} testID="owner-decision-line">
@@ -1290,10 +1292,7 @@ export function DecideSection({
                                         )}
                                         {item.status === 'failed' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                {!tally.quorumMet ? t('Not executed: Quorum not reached')
-                                                    : tally.minYes && tally.supportRatio >= tally.thresholdRequired && tally.yesWeight > tally.noWeight
-                                                        ? t('Not executed: fewer than {n} Yes votes', { n: tally.minYes })
-                                                        : t('Not executed: Threshold not met')}
+                                                {notExecutedLine(tally)}
                                             </Text>
                                         )}
                                         {item.status === 'unresolved' && (

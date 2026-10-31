@@ -514,6 +514,21 @@ async function main() {
         `nobody decides: the vote ends as too few voted, and Zoe is back (${row(zoeVote).status}: ${row(zoeVote).execution_reason})`);
     gone([zoe]);
 
+    // On a standby: refused at the door with its JSON answer, before the proof, so no code is spent, and nothing is written.
+    const gia = seed('GiaGrant');
+    const giaVote = pauseOf(gia);
+    const ottoNow = ottoPhone();
+    setNodeRole('backup');
+    try {
+        r = await decide(ottoNow, giaVote, 'Deciding on a standby, which must not be');
+    } finally {
+        setNodeRole('primary');
+    }
+    assert(r.status === 409 && r.body?.code === STANDBY_CODE && typeof r.body?.error === 'string' && !row(giaVote).owner_decided_at,
+        `on a standby it answers the standby's JSON refusal, and nothing is written (${r.status} ${r.text.slice(0, 90)})`);
+    closeNow(giaVote);
+    gone([gia]);
+
     // A vote on someone who holds a server role: no vote removes them, so no owner's decision does.
     const abe = seed('AdminAbe');
     grantNodeRole(abe.pubKeyHex, 'admin', gen.pubKeyHex);
@@ -536,21 +551,6 @@ async function main() {
     r = await decide(ottoPhone(), kaiVote, 'Deciding a vote that has already closed');
     assert(r.status === 409 && r.body?.error === de.OWNER_DECISION_CLOSED, `a closed vote can't be decided (${r.status} ${r.body?.error})`);
     gone([...crowd, kai]);
-
-    // On a standby: refused at the door with its JSON answer, before the proof, so no code is spent, and nothing is written.
-    const gia = seed('GiaGrant');
-    const giaVote = pauseOf(gia);
-    const ottoNow = ottoPhone();
-    setNodeRole('backup');
-    try {
-        r = await decide(ottoNow, giaVote, 'Deciding on a standby, which must not be');
-    } finally {
-        setNodeRole('primary');
-    }
-    assert(r.status === 409 && r.body?.code === STANDBY_CODE && typeof r.body?.error === 'string' && !row(giaVote).owner_decided_at,
-        `on a standby it answers the standby's JSON refusal, and nothing is written (${r.status} ${r.text.slice(0, 90)})`);
-    closeNow(giaVote);
-    gone([gia]);
 
     // Votes off: no owner's decision either.
     const lea = seed('LeaLong');

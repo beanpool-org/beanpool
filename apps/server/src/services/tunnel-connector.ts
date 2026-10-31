@@ -36,6 +36,7 @@ import { settleUnansweredClaims, turnedAwayList } from '../config/turned-away-na
 import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
 import { logger } from '../logger.js';
+import { redactPhotoLinks } from '../sanitize-message.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
@@ -163,8 +164,9 @@ function wantedToken(): string | null {
 
 const recent = new Map<string, { level: 'warn' | 'error'; firstAt: number; more: number }>();
 
+/** What cloudflared said, for a log line and the status Settings shows: a request's address in it may be a photo link's. */
 function scrub(text: string): string {
-    let out = text;
+    let out = redactPhotoLinks(text);
     for (const t of [running?.token, savedTunnelAddress()?.tunnelToken]) {
         if (typeof t === 'string' && t.length >= 8) out = out.split(t).join('[tunnel token]');
     }

@@ -17,6 +17,16 @@
  * (door `open`, the global community): the bring-back rests on an admin who has checked the person in person. A copy
  * made before the rule moved stays the member's until they remove it (design §5.3), and still brings them back.
  *
+ * ## The shared placement (vault rethink VR4)
+ *
+ * Where the community's rule is the default, BeanPool's key vault, the row holds this server's HALF of the key that opens the
+ * copy, and the member's phone gives the copy and the other half to the vault. So this server, and the people who run it,
+ * can't open it alone, and nor can the vault: the two halves together, after the vault's day, give the member their key.
+ * This server never calls the vault. The half is locked as a copy is, under the holder type `community-half`, with the
+ * digest of the copy it belongs to (core `vaultCopyDigest`), so its status and its voucher can say which copy that is. The
+ * same table and the same removals: one row per member, a whole copy or a half, never both. A web member sees it, and
+ * this server treats it, as the phone made it; the web app makes none yet (no key vault client: design VR6).
+ *
  * One row per member, replaced by a new turn-on. Removed by the member, by deleting their account
  * (state-engine.ts purgeMemberSelf) and by a re-key (engine/member-wizards.ts completeRekey), which replaces the key the
  * copy holds. A plain table: a standby holds the wrapped rows, and a deletion reaches it as a tombstone.
@@ -26,8 +36,9 @@ import { db, deletePlainRows } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { recoveryCopies } from '../config/recovery-copies.js';
 import { getDoor } from '../config/door.js';
-import { KEEPER_ALG_COPY_KEY, isKeySealedCopy, word } from '@beanpool/core';
+import { KEEPER_ALG_COPY_HALF, KEEPER_ALG_COPY_KEY, isCopyKeyHalf, isKeySealedCopy, word } from '@beanpool/core';
 import {
+    communityRowHolder,
     openRecoveryFields,
     RecoverySealKeyMissing,
     RecoverySealUnopenable,
@@ -38,6 +49,8 @@ import {
 
 /** The holder type the wrap's AAD names: a community copy can never be opened as a sign-in copy's row, or the reverse. */
 const HOLDER = 'community';
+/** The same for this server's half of a shared copy: it never opens as a whole copy's row, or the reverse. */
+export const HALF_HOLDER = 'community-half';
 
 /** A community copy as the app sends it, and as a bring-back hands it out. */
 export interface CommunityCopy {
@@ -45,6 +58,18 @@ export interface CommunityCopy {
     /** The 32 bytes that open {@link copy}, base64. */
     copyKey: string;
 }
+
+/** This server's half of a shared copy, as the app sends it and a bring-back hands it out. */
+export interface CommunityHalf {
+    /** One half of the key that opens the copy the vault keeps, base64. Says nothing of that key by itself. */
+    half: string;
+    /** core `vaultCopyDigest` of the copy this half belongs to. */
+    copy: string;
+}
+
+/** What this server keeps for a member: the copy and its key (`whole`), or its half of a copy the vault keeps (`shared`). */
+export type CommunityCopyPlacement = 'whole' | 'shared';
+export type StoredCommunityCopy = ({ placement: 'whole' } & CommunityCopy) | ({ placement: 'shared' } & CommunityHalf);
 
 export class CommunityCopyRefusal extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -55,6 +80,7 @@ export class CommunityCopyRefusal extends Error {
 /** Where the community path is not offered: a rule other than "this server", or a door anyone can walk through. */
 export const COMMUNITY_COPY_NOT_OFFERED = word("This community doesn't keep copies for its admins to bring members back, so nothing was kept.");
 const BAD_COPY = 'That is not a community copy this server can keep.';
+const BAD_HALF = 'That is not a half of a copy this server can keep.';
 
 /**
  * Whether this community offers its members the community path now: it keeps copies itself (`server`), and its door is
@@ -62,6 +88,14 @@ const BAD_COPY = 'That is not a community copy this server can keep.';
  */
 export function communityCopiesOffered(): boolean {
     return recoveryCopies() === 'server' && getDoor() !== 'open';
+}
+
+/**
+ * Whether this community offers the shared placement now (vault rethink VR4): its rule is the key vault, and its door is
+ * not open to anyone. Never where anyone can walk in, for the same reason as {@link communityCopiesOffered}.
+ */
+export function communityHalvesOffered(): boolean {
+    return recoveryCopies() === 'vault' && getDoor() !== 'open';
 }
 
 function b64Bytes(v: unknown, bytes: number | null, max = 4096): string | null {
@@ -85,6 +119,26 @@ export function parseCommunityCopy(raw: unknown): CommunityCopy {
     return { copy: { encryptedShare, shareIv, shareTag, kdfParams }, copyKey };
 }
 
+/** The app's half, checked for shape. */
+export function parseCommunityHalf(raw: unknown): CommunityHalf {
+    const body = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    if (!isCopyKeyHalf(body.half) || typeof body.copy !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(body.copy)) {
+        throw new CommunityCopyRefusal(400, 'bad_half', BAD_HALF);
+    }
+    return { half: body.half, copy: body.copy };
+}
+
+function storeRow(ownerPubkey: string, wrapped: ReturnType<typeof sealRecoveryFields>, now: number): { since: string } {
+    const at = new Date(now).toISOString();
+    db.prepare(`
+        INSERT INTO community_copies (owner_pubkey, copy_ct, copy_iv, copy_tag, kdf_params, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(owner_pubkey) DO UPDATE SET copy_ct = excluded.copy_ct, copy_iv = excluded.copy_iv,
+            copy_tag = excluded.copy_tag, kdf_params = excluded.kdf_params, created_at = excluded.created_at
+    `).run(ownerPubkey, wrapped.encryptedShare, wrapped.shareIv, wrapped.shareTag, wrapped.kdfParams, at);
+    return { since: at };
+}
+
 /**
  * Keep the member's community copy, replacing any earlier one. Refused unless the community offers the path
  * ({@link communityCopiesOffered}), and refused, with nothing stored, when this server has no seal key to lock it with
@@ -102,14 +156,25 @@ export function putCommunityCopy(ownerPubkey: string, input: CommunityCopy, now 
         shareTag: input.copy.shareTag,
         kdfParams: JSON.stringify({ alg: KEEPER_ALG_COPY_KEY, copy: input.copy.kdfParams, key: input.copyKey }),
     }, shareRowAad(ownerPubkey, HOLDER));
-    const at = new Date(now).toISOString();
-    db.prepare(`
-        INSERT INTO community_copies (owner_pubkey, copy_ct, copy_iv, copy_tag, kdf_params, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(owner_pubkey) DO UPDATE SET copy_ct = excluded.copy_ct, copy_iv = excluded.copy_iv,
-            copy_tag = excluded.copy_tag, kdf_params = excluded.kdf_params, created_at = excluded.created_at
-    `).run(ownerPubkey, wrapped.encryptedShare, wrapped.shareIv, wrapped.shareTag, wrapped.kdfParams, at);
-    return { since: at };
+    return storeRow(ownerPubkey, wrapped, now);
+}
+
+/**
+ * Keep this server's half of the member's shared copy (vault rethink VR4), replacing any earlier row of theirs. Refused
+ * unless the community offers it ({@link communityHalvesOffered}), and with nothing stored when this server has no seal
+ * key. Returns since when it is kept. Locked as a copy is: a half is no secret alone, but it is one half of one.
+ */
+export function putCommunityHalf(ownerPubkey: string, input: CommunityHalf, now = Date.now()): { since: string } {
+    if (!communityHalvesOffered()) throw new CommunityCopyRefusal(409, 'not_offered', COMMUNITY_COPY_NOT_OFFERED);
+    assertPlainTablesWritable();
+    requireRecoverySealKey();
+    const wrapped = sealRecoveryFields({
+        encryptedShare: input.half,
+        shareIv: '',
+        shareTag: '',
+        kdfParams: JSON.stringify({ alg: KEEPER_ALG_COPY_HALF, copy: input.copy }),
+    }, shareRowAad(ownerPubkey, HALF_HOLDER));
+    return storeRow(ownerPubkey, wrapped, now);
 }
 
 /**
@@ -127,6 +192,10 @@ export interface CommunityCopyStatus {
     since: string | null;
     /** It keeps a copy it can't open now: since when, and why. Null otherwise. Never counted as a way back. */
     unopenable: { since: string; reason: CommunityCopyUnopenableReason } | null;
+    /** What it keeps, when `kept`: the copy and its key, or its half of a copy the key vault keeps (vault rethink VR4). */
+    placement: CommunityCopyPlacement | null;
+    /** The digest of the copy a half belongs to, when it keeps one: the member's phone holds it against the vault's. */
+    copy: string | null;
 }
 
 /**
@@ -137,20 +206,24 @@ export interface CommunityCopyStatus {
  */
 export function communityCopyStatus(ownerPubkey: string): CommunityCopyStatus {
     const row = db.prepare('SELECT created_at FROM community_copies WHERE owner_pubkey = ?').get(ownerPubkey) as { created_at: string } | undefined;
-    if (!row) return { kept: false, since: null, unopenable: null };
+    if (!row) return { kept: false, since: null, unopenable: null, placement: null, copy: null };
+    let stored: StoredCommunityCopy | null;
     try {
-        openCommunityCopy(ownerPubkey);
+        stored = openCommunityCopy(ownerPubkey);
     } catch (e) {
         if (e instanceof RecoverySealKeyMissing || e instanceof RecoverySealUnopenable) {
-            return { kept: false, since: null, unopenable: { since: row.created_at, reason: e.code } };
+            return { kept: false, since: null, unopenable: { since: row.created_at, reason: e.code }, placement: null, copy: null };
         }
         // Opened, but not a copy (it can only have been written so by a fault): never "kept"; making it again replaces it.
         if (e instanceof CommunityCopyRefusal || e instanceof SyntaxError) {
-            return { kept: false, since: null, unopenable: { since: row.created_at, reason: 'recovery_seal_unopenable' } };
+            return { kept: false, since: null, unopenable: { since: row.created_at, reason: 'recovery_seal_unopenable' }, placement: null, copy: null };
         }
         throw e;
     }
-    return { kept: true, since: row.created_at, unopenable: null };
+    return {
+        kept: true, since: row.created_at, unopenable: null,
+        placement: stored?.placement ?? 'whole', copy: stored?.placement === 'shared' ? stored.copy : null,
+    };
 }
 
 export function hasCommunityCopy(ownerPubkey: string): boolean {
@@ -158,23 +231,34 @@ export function hasCommunityCopy(ownerPubkey: string): boolean {
 }
 
 /**
- * The member's copy and its key, opened from the seal: for a bring-back's release only (engine/bring-back.ts), which
- * seals them to the new phone at once. Null when there is none. Throws RecoverySealKeyMissing or
- * RecoverySealUnopenable when this server cannot open it.
+ * What this server keeps for the member, opened from the seal: the copy and its key, or its half of a shared copy. For a
+ * bring-back's release only (engine/bring-back.ts), which seals it to the new phone at once. Null when there is none.
+ * Throws RecoverySealKeyMissing or RecoverySealUnopenable when this server cannot open it.
  */
-export function openCommunityCopy(ownerPubkey: string): CommunityCopy | null {
+export function openCommunityCopy(ownerPubkey: string): StoredCommunityCopy | null {
     const row = db.prepare('SELECT copy_ct, copy_iv, copy_tag, kdf_params FROM community_copies WHERE owner_pubkey = ?')
         .get(ownerPubkey) as { copy_ct: string; copy_iv: string; copy_tag: string; kdf_params: string } | undefined;
     if (!row) return null;
+    const holder = communityRowHolder(row.kdf_params);
     const f = openRecoveryFields(
         { encryptedShare: row.copy_ct, shareIv: row.copy_iv, shareTag: row.copy_tag, kdfParams: row.kdf_params },
-        shareRowAad(ownerPubkey, HOLDER),
+        shareRowAad(ownerPubkey, holder),
     );
     const inner = JSON.parse(f.kdfParams ?? '{}') as { alg?: unknown; copy?: unknown; key?: unknown };
+    if (holder === HALF_HOLDER) {
+        if (inner.alg !== KEEPER_ALG_COPY_HALF || typeof inner.copy !== 'string' || !isCopyKeyHalf(f.encryptedShare)) {
+            throw new CommunityCopyRefusal(500, 'bad_half', BAD_HALF);
+        }
+        return { placement: 'shared', half: f.encryptedShare, copy: inner.copy };
+    }
     if (inner.alg !== KEEPER_ALG_COPY_KEY || typeof inner.copy !== 'string' || typeof inner.key !== 'string') {
         throw new CommunityCopyRefusal(500, 'bad_copy', BAD_COPY);
     }
-    return { copy: { encryptedShare: f.encryptedShare, shareIv: f.shareIv, shareTag: f.shareTag, kdfParams: inner.copy }, copyKey: inner.key };
+    return {
+        placement: 'whole',
+        copy: { encryptedShare: f.encryptedShare, shareIv: f.shareIv, shareTag: f.shareTag, kdfParams: inner.copy },
+        copyKey: inner.key,
+    };
 }
 
 /** Remove the member's community copy (with a tombstone, so a standby drops it too). Returns how many went: 0 or 1. */

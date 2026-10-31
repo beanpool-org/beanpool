@@ -59,10 +59,14 @@ import {
     CommunityCopyRefusal,
     communityCopiesOffered,
     communityCopyStatus,
+    communityHalvesOffered,
     deleteCommunityCopy,
     parseCommunityCopy,
+    parseCommunityHalf,
     putCommunityCopy,
+    putCommunityHalf,
 } from '../engine/community-copy.js';
+import { nodeKeyHex } from '../services/node-voucher.js';
 import { assertPlainTablesWritable, StandbyLedgerError } from '../config/node-role.js';
 import {
     issueNonce,
@@ -594,15 +598,39 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
     });
 
     /**
+     * The shared placement (vault rethink VR4): `{ half, copy }`, this server's half of the copy the member's phone has
+     * just given the key vault, and that copy's digest. Only where the community's rule is the key vault and anyone can't
+     * walk in (communityHalvesOffered); refused with nothing stored when this server can't lock it.
+     */
+    router.post('/api/recovery/community-copy/half', async (ctx) => {
+        const owner = activeSigner(ctx);
+        if (!owner) return unauthenticated(ctx);
+        if (keepsNoCopies()) return noCopiesHere(ctx);
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
+        try {
+            const { since } = putCommunityHalf(owner, parseCommunityHalf((ctx as any).requestBody));
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.status = 200;
+            ctx.body = { kept: true, since };
+        } catch (e) {
+            if (copyRefused(ctx, e)) return;
+            throw e;
+        }
+    });
+
+    /**
      * Whether this server keeps the member's community copy, since when, and whether the community offers it now. `kept`
      * only for a copy it can open; one it keeps but can't is `unopenable: { since, reason }` (engine/community-copy.ts).
+     * `offered` is the whole copy, which the web app can make too; `sharedOffered` the shared placement, which needs a phone
+     * with a key vault (VR4), so nothing changes for an app from before it. `nodeKey` is the key this server's vouchers
+     * are signed with, which the member's phone names in its deposit at the vault: public, and only asked for at turn-on.
      */
     router.post('/api/recovery/community-copy/status', async (ctx) => {
         const owner = activeSigner(ctx);
         if (!owner) return unauthenticated(ctx);
         ctx.set('Cache-Control', 'private, no-store');
         ctx.status = 200;
-        ctx.body = { ...communityCopyStatus(owner), offered: communityCopiesOffered() };
+        ctx.body = { ...communityCopyStatus(owner), offered: communityCopiesOffered(), sharedOffered: communityHalvesOffered(), nodeKey: nodeKeyHex() };
     });
 
     /** Turn it off: the copy and its key are deleted here (a standby drops them by the tombstone). Under every rule. */
@@ -669,7 +697,7 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             generation: getCurrentGeneration(owner),
             keepers,
             enrolledSso,
-            communityCopy: copy.kept ? { since: copy.since } : null,
+            communityCopy: copy.kept ? { since: copy.since, placement: copy.placement } : null,
             communityCopyUnopenable: copy.unopenable,
             total,
             threshold,

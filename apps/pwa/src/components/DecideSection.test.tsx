@@ -382,6 +382,35 @@ describe('DecideSection: a fair vote on removing a member', () => {
         expect(screen.getByTestId('removal-case-hidden').textContent).toContain('Their reason: Wu confirmed every repair');
     });
 
+    // Removal by vote S6 (design §5): at least 3 Yes; too few to vote, the owner decides when it closes.
+    it('a removal says the 3-Yes floor; too few to vote, the card says the owner decides, then shows their reason, and the history says the owner decided it', () => {
+        const tally = { ...decisionCard('x', '1m1v', null).tally, electorate: 2, quorumRatio: 0.25, quorumRequired: 3, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true };
+        const first = renderAs('viewer', [pauseCard({ tally })]);
+        expect(screen.getByTestId('min-yes-line').textContent).toBe('Removing a member also needs at least 3 Yes votes.');
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe('Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes.');
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('the owner decides when it closes');
+        first.unmount();
+
+        const decided = pauseCard({ tally, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Both who could vote saw the shed emptied' });
+        const second = renderAs('viewer', [decided]);
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe(
+            'Too few members can vote, so an owner decided: unless more of them vote, Dave is removed when this vote closes. Their reason: Both who could vote saw the shed emptied');
+        second.unmount();
+
+        const third = renderAs('viewer', [{ ...decided, status: 'executed', ownerDecisionCarriedAt: '2026-11-06T10:00:00.000Z', executionReason: 'Pruned automatically after 7-day grace window' }], 'history');
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe('Decided by the owner: too few members to vote. Their reason: Both who could vote saw the shed emptied');
+        expect(screen.queryByText(/Authorised by: Community Vote/)).toBeNull();
+        third.unmount();
+
+        // A vote enough members can vote on says nothing of an owner; one stopped only by the floor says so in the history.
+        const plain = { ...tally, electorate: 6, tooFewToVote: false, totalVoters: 3, quorumMet: true, yesWeight: 2, noWeight: 1, totalWeight: 3, supportRatio: 2 / 3 };
+        const fourth = renderAs('viewer', [pauseCard({ tally: plain })]);
+        expect(screen.queryByTestId('owner-decision-line')).toBeNull();
+        fourth.unmount();
+        renderAs('viewer', [pauseCard({ tally: plain, status: 'failed' })], 'history');
+        expect(screen.getByText('Not executed: fewer than 3 Yes votes')).toBeInTheDocument();
+    });
+
     it("a reply an admin took down: their reason in its place, open and in the history; the member can't write another", () => {
         const takenDown = pauseCard({ subjectReply: null, replyHiddenAt: '2026-10-25T10:00:00.000Z', replyHiddenReason: "It gave a neighbour's address" });
         const first = renderAs('viewer', [takenDown]);

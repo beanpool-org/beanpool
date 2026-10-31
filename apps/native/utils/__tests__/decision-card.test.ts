@@ -5,6 +5,8 @@ import {
     electorateLine,
     isPauseVote,
     keepSuspensionHeadline,
+    minYesLine,
+    ownerDecisionLine,
     pauseVoteBody,
     pauseVoteHeadline,
     poolVoteBlocker,
@@ -102,5 +104,29 @@ describe('Decision card wording (native)', () => {
         expect(replyTakenDownLine(params, 'abc', false, null)).toBe("An admin took down Dave's reply.");
         expect(replyTakenDownLine(params, 'abc', true, 'It gave an address')).toBe('An admin took down your reply. Their reason: It gave an address');
         expect(replyTakenDownLine(params, 'abc', true, null)).toBe('An admin took down your reply.');
+    });
+
+    // Removal by vote S6 (design §5): at least 3 Yes; too few to vote, the owner decides when it closes.
+    it('says the 3-Yes floor on a removal, and nothing on another Decision or from a node from before', () => {
+        expect(minYesLine({ minYes: 3 })).toBe('Removing a member also needs at least 3 Yes votes.');
+        expect(minYesLine({})).toBeNull();
+        expect(minYesLine(null)).toBeNull();
+    });
+
+    it('says when too few can vote, what an owner decided while it is open, and that the owner decided it once carried out', () => {
+        const params = { memberName: 'Sam', rule: 2 };
+        const open = { status: 'open', params };
+        expect(ownerDecisionLine(open, { tooFewToVote: true }, 'abc')).toBe('Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes.');
+        expect(ownerDecisionLine(open, { tooFewToVote: false }, 'abc')).toBeNull();
+        expect(ownerDecisionLine(open, null, 'abc')).toBeNull();
+        const decided = { ...open, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it' };
+        expect(ownerDecisionLine(decided, { tooFewToVote: true }, 'abc'))
+            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Sam is removed when this vote closes. Their reason: Both who could vote saw it');
+        const carried = { ...decided, status: 'executed', ownerDecisionCarriedAt: '2026-11-06T10:00:00.000Z' };
+        expect(ownerDecisionLine(carried, { tooFewToVote: true }, 'abc')).toBe('Decided by the owner: too few members to vote. Their reason: Both who could vote saw it');
+        // Decided, but enough members voted by the close: the vote ended as any vote does, and the closed card says nothing of it.
+        expect(ownerDecisionLine({ ...decided, status: 'unresolved' }, { tooFewToVote: false }, 'abc')).toBeNull();
+        // No vote, and no owner, removes someone holding a server role: nothing about the owner on that card.
+        expect(ownerDecisionLine({ status: 'open', params: { ...params, serverRole: 'admin' } }, { tooFewToVote: true }, 'abc')).toBeNull();
     });
 });

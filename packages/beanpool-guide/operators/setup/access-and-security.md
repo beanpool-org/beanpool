@@ -140,6 +140,7 @@ A few changes are rare, and are the kind a stolen sign-in would make in its firs
 
 - make, remove or demote an owner or admin, enrol an owner's or admin's key, or re-key one;
 - remove or suspend an owner;
+- suspend someone while five of your own suspensions are still being voted on;
 - replace the recovery code;
 - make a break-glass code, or turn break-glass mode on or off;
 - retire the admin password;

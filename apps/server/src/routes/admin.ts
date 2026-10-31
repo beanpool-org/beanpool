@@ -32,7 +32,7 @@ import {
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, pushServiceRefusals,
     hideBurst, undoBurst,
-    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseCoolDown,
+    removalVoteRefusal, branchRemovalRefusal, REMOVAL_IS_THE_VOTE_CODE, reportPauseRefusal,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
@@ -42,8 +42,9 @@ import {
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
 import {
-    decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply, removalCoolDownRefusal, REMOVAL_COOL_DOWN_CODE,
-    type OwnerOnlyAdminAction,
+    decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply,
+    emergencySuspendRefusal, pauseChainRefusal, OPEN_PAUSES_PROOF_CODE, PAUSE_REFUSAL_CODES,
+    type OwnerOnlyAdminAction, type PauseRefusal,
 } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
@@ -557,7 +558,9 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
 
 /**
  * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
- * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
+ * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, pausing a member again within 30
+ * days of a vote on removing them that ended without removing them (decisions-engine repauseNeedsOwner, by the suspend
+ * route or through a report), lifting or halting what gives back
  * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) an owner or
  * admin, cancelling their re-key code or declining a phone on it (making or using the code asks more: rekeyProof; removing
  * or suspending an owner asks more: ownerRemovalProof). From the phone's Manage hand-off it asks for its unlock again
@@ -584,6 +587,23 @@ async function ownerRemovalProof(ctx: any, action: OwnerOnlyAdminAction, target:
     if (!adminActionRemovesOwner(action, target, asActor)) return stepUpIfOwnerOnly(ctx, action, target, actor);
     const code = (ctx as any).requestBody?.code ?? ctx.get('x-fresh-proof');
     return roleChangeProof(ctx, code, 'remove or suspend an owner');
+}
+
+/**
+ * The pause tripwire's proof (removal by vote S4, design §3.4; decisions-engine.ts pauseChainRefusal): an admin with
+ * OPEN_PAUSES_BEFORE_PROOF pauses whose votes are still open makes another only with an owner's fresh proof, the one the
+ * owner-only routes ask (requireFreshProof). An owner, or the password, gives it; it stands for the proof pausing an owner
+ * asks too (ownerRemovalProof), so a code is never asked twice. An admin who is no owner can't give it, and is refused in
+ * the engine's words. Asked only once nothing else refuses the pause. Answers and returns false when refused.
+ */
+async function openPausesProof(ctx: any, refusal: PauseRefusal): Promise<boolean> {
+    if (ctx.state?.adminRole !== 'owner') {
+        ctx.status = refusal.status;
+        ctx.body = { error: refusal.error, code: refusal.code };
+        return false;
+    }
+    const code = (ctx as any).requestBody?.code ?? ctx.get('x-fresh-proof');
+    return requireFreshProof(ctx, code, 'pause someone while five of your pauses still wait on their votes');
 }
 
 /**
@@ -1799,11 +1819,23 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     // The reason before the proof: a code is spent when it is checked, so a short reason must not cost it (#2018 NB1).
     const reasonProblem = suspendReasonProblem(reason);
     if (reasonProblem) { ctx.status = 400; ctx.body = { error: reasonProblem }; return; }
-    // The cool-down before the proof too (removal by vote, Amendment A point 5): a pause it refuses must not spend a code.
-    const coolDown = removalCoolDownRefusal(ctx.params.pubkey, actor);
-    if (coolDown) { ctx.status = 403; ctx.body = { error: coolDown, code: REMOVAL_COOL_DOWN_CODE }; return; }
-    if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
-    const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
+    // The chain rules before the proof too (removal by vote: Amendment A point 5's cool-down, S4's third pause and re-pause,
+    // decisions-engine.ts pauseChainRefusal): a pause they refuse must not spend a code.
+    const reasonText = typeof reason === 'string' ? reason : '';
+    const chain = pauseChainRefusal(ctx.params.pubkey, actor, reasonText.trim());
+    let freshProof = false;
+    if (chain?.code === OPEN_PAUSES_PROOF_CODE) {
+        // The tripwire asks the owner's fresh proof, and only for a pause nothing else refuses.
+        const other = emergencySuspendRefusal(ctx.params.pubkey, actor, reasonText, { freshProof: true });
+        if (other) { ctx.status = other.status; ctx.body = other.code ? { error: other.error, code: other.code } : { error: other.error }; return; }
+        if (!(await openPausesProof(ctx, chain))) return;
+        freshProof = true;
+    } else if (chain) {
+        ctx.status = chain.status;
+        ctx.body = { error: chain.error, code: chain.code };
+        return;
+    } else if (!(await ownerRemovalProof(ctx, 'suspend', ctx.params.pubkey))) return;
+    const result = adminEmergencySuspend(ctx.params.pubkey, actor, reasonText, { freshProof });
     if (!result.success) {
         ctx.status = result.status || 400;
         ctx.body = result.code ? { error: result.error, code: result.code } : { error: result.error };
@@ -2095,14 +2127,20 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: reasonProblem };
             return;
         }
-        // The cool-down before the proof too (removal by vote, Amendment A point 5); actionReport refuses it again.
-        const coolDown = suspendUser ? reportPauseCoolDown(ctx.params.id, actor) : null;
-        if (coolDown) {
-            ctx.status = 403;
-            ctx.body = { success: false, error: coolDown, code: REMOVAL_COOL_DOWN_CODE };
+        // The chain rules before the proof too (removal by vote: Amendment A point 5's cool-down, S4's); actionReport and
+        // pauseMember refuse them again. The tripwire asks the owner's fresh proof in place of the one below.
+        const chain = suspendUser
+            ? reportPauseRefusal(ctx.params.id, actor, pauseReason !== null ? String(pauseReason).trim() : null, { reasonCategory })
+            : null;
+        let freshProof = false;
+        if (chain?.code === OPEN_PAUSES_PROOF_CODE) {
+            if (!(await openPausesProof(ctx, chain))) return;
+            freshProof = true;
+        } else if (chain) {
+            ctx.status = chain.status;
+            ctx.body = { success: false, error: chain.error, code: chain.code };
             return;
-        }
-        if (suspendUser && !(await ownerRemovalProof(ctx, 'report-suspend', ctx.params.id))) return;
+        } else if (suspendUser && !(await ownerRemovalProof(ctx, 'report-suspend', ctx.params.id))) return;
         const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
@@ -2129,6 +2167,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             onRefundShortfall: s => refundShortfalls.push(s),
             actor,
             reason: pauseReason,
+            freshProof,
         });
         if (!ok) {
             ctx.status = 404;
@@ -2156,7 +2195,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     } catch (e: any) {
         if (answerPotPaused(ctx, e)) return;
         ctx.status = e?.status || 500;
-        ctx.body = e?.code === REMOVAL_COOL_DOWN_CODE
+        ctx.body = PAUSE_REFUSAL_CODES.has(e?.code)
             ? { success: false, error: e.message, code: e.code }
             : { success: false, error: e?.message || 'Failed to action report' };
     }

@@ -84,6 +84,19 @@ export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: stri
 }
 
 /**
+ * A pause made again within 30 days of a vote that ended without removing the member (removal by vote S4, design §3.4:
+ * only an owner may, with a new reason): the node records how that vote ended (`params.secondPause`), and the card says so.
+ * Null for any other card.
+ */
+export function secondPauseLine(params: { secondPause?: { after?: string } | null } | null | undefined): string | null {
+    const after = params?.secondPause?.after;
+    if (after === 'no') return t('Second pause in 30 days. The last vote said No.');
+    if (after === 'too_few') return t('Second pause in 30 days. Too few members voted on the last one.');
+    if (after === 'stopped') return t('Second pause in 30 days. The last vote was stopped before it closed.');
+    return null;
+}
+
+/**
  * Who proposed a removal a member proposed, before proposing one closed (Amendment A point 3), or null for any other card:
  * a pause's own vote names its admin in its headline instead.
  */

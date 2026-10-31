@@ -198,7 +198,8 @@ export default function MarketScreen() {
         iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
         dealsIconBtn: {
             // Capped, so Your deals in a longer language never squeezes the search field to nothing: its words shrink instead.
-            paddingHorizontal: 14, height: 38, borderRadius: 19, maxWidth: 120,
+            // Uses minHeight + paddingVertical so it grows at 1.3 font scale without clipping the label (~49 dp), while keeping 38 dp at 1.0.
+            paddingHorizontal: 14, minHeight: 38, paddingVertical: 4, borderRadius: 19, maxWidth: 120,
             backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
             borderWidth: 1,
             borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber300,
@@ -1116,6 +1117,8 @@ export default function MarketScreen() {
                     accessibilityRole="button"
                     accessibilityLabel={pendingCount > 0 ? tn(pendingCount, 'Your deals, {n} pending', 'Your deals, {n} pending') : t('Your deals')}
                     accessibilityHint={t('Opens your active and pending deals sheet')}
+                    hitSlop={{ top: 3, bottom: 3, left: 3, right: 3 }}
+                    testID="market-deals-pill"
                 >
                     <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
                     {/* Capped (dealsIconBtn maxWidth): a longer name in another language shrinks to fit, never squeezing the search. */}
@@ -1131,6 +1134,8 @@ export default function MarketScreen() {
                     style={styles.iconBtn}
                     accessibilityRole="button"
                     accessibilityLabel={viewMode === 'list' ? t('Grid view') : (viewMode === 'grid' ? t('Compact view') : t('List view'))}
+                    hitSlop={{ top: 3, bottom: 3, left: 3, right: 3 }}
+                    testID="market-view-mode-toggle"
                 >
                     <MaterialCommunityIcons
                         name={viewMode === 'list' ? 'view-grid-outline' : (viewMode === 'grid' ? 'view-headline' : 'view-list-outline')} 
@@ -1237,6 +1242,7 @@ export default function MarketScreen() {
                             style={[styles.chip, groupFilter === 'all' && styles.chipActive]}
                             accessibilityRole="button"
                             accessibilityState={{ selected: groupFilter === 'all' }}
+                            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                         >
                             <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextOnAccent]}>
                                 {t('👥 All Groups & Public')}
@@ -1254,6 +1260,7 @@ export default function MarketScreen() {
                                     ]}
                                     accessibilityRole="button"
                                     accessibilityState={{ selected: isSelected }}
+                                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                                 >
                                     <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
                                         👥 {g.name}

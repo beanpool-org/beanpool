@@ -31,6 +31,9 @@
  * 2026-09-30), as everything did on main: so one keeper who spends a shop's day blocks only themselves, and every other
  * keeper keeps their own allowance for it. The `enterprise…` numbers are the shop's 10x on top.
  *
+ * An owner's or admin's own posts, groups, enterprises, invites and Pulse links by hand are the owners' setting in place of
+ * these numbers (engine/owner-admin-limit.ts; Marty, 31 Oct).
+ *
  * The money limits (W-money, design §7 row 5) are MONEY_LIMITS below, read by engine/money-limits.ts.
  */
 export const WRITER_LIMITS = {

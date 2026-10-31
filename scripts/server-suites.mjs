@@ -333,6 +333,7 @@ export const SUITES = [
     'test-request-binding',
     'test-nonce-store',
     'test-nonce-store-cap',
+    'test-nonce-pressure',
     'test-loopback-audience',
     'test-address-offers',
     'test-staff-seen-prune',

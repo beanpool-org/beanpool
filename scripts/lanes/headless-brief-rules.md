@@ -30,3 +30,5 @@ RULES FOR THIS HEADLESS RUN
   bug, say so explicitly instead of changing it.
 - FINAL REPORT: real `git status`, `git log --oneline origin/main..HEAD`, the PR as `gh pr list --head <branch>`
   shows it, test output before/after where relevant, and anything unfinished stated plainly.
+- **While a full run holds the heavy-test lock, wait before ANY install, tsc, vitest, node test suite, build or browser run** (Marty): `while [ -d /Users/marty/.cache/heavy-test.lock ]; do sleep 30; done; <your command>` in the SAME shell. It only waits; never take or remove the lock. Reading, editing, commits, pushes and git/gh calls do not wait.
+PRE-FLIGHT (Marty, 1 Nov): before you push, run lint and the type check for every package you changed (`pnpm --filter <package> lint`, and its tsc), plus scripts/words/words.mjs lint and check if any words changed. Fix what they find, then push. These take minutes and cost a full test run when skipped (#2667 lint, #2643 route list). A new or renamed route also goes through test-guest-view, as NEW ROUTES says.

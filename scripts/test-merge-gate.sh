@@ -2,7 +2,7 @@
 # test-merge-gate.sh — tests the local merge gate's scripts against a throwaway repository. No GitHub, no network.
 #
 # Covers scripts/test-all-merge-check.sh, scripts/test-all-pr.sh, scripts/test-all-train.sh (the merge train, with
-# scripts/words-merge-3way.mjs), the green record in scripts/test-all-lib.sh
+# scripts/words-merge-3way.mjs and its --shadow, with scripts/test-all-shadow.sh), the green record in scripts/test-all-lib.sh
 # (green_run_start / record_green_run), scripts/check-deps-installed.mjs, and the real test-all.sh's --all and what it
 # keeps when it is stopped part-way (CI's timeout, or Ctrl-C). The repository is a bare "origin" and a
 # clone of it in a temp dir; `gh` is a stub on PATH that answers `pr view` from files, logs `api` calls (answering
@@ -151,6 +151,25 @@ if [ "$ONLY_RC" = 1 ]; then ok "shard run: ends (exit 1: two checks failed), no 
 has "shard run: the three checks named ran" "$S/out" "Total: 1 passed, 2 failed, 0 skipped"
 if grep -qE "settings_phone|server_suites|secrets_guard" "$S/out"; then bad "shard run: reports a check it was not given"; else ok "shard run: reports no other check"; fi
 
+# A check that passes having compared nothing prints "⚪ SKIP: <why>". On GitHub migration_steps read as a pass in 0 s on every
+# pull request: the report says skipped, with the reason, and the run's page gets a warning. Under turbo the line has a prefix.
+echo 'echo "@beanpool/guide:test: ⚪ SKIP: no origin/main to compare with"' > "$S/scripts/test-deploy-preserve.sh"
+echo 'echo "fine"; echo "stub deploy_preserve: ran"' > "$S/scripts/test-deploy-health.sh"
+env TEST_ALL_ONLY="deploy_preserve deploy_health" GITHUB_ACTIONS=true PATH="$S/bin:$PATH" bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1; SKIP_RC=$?
+[ "$SKIP_RC" = 0 ] && ok "skip: a check with nothing to compare fails nothing" || bad "skip: exit $SKIP_RC, wanted 0"
+has "skip: reported as skipped, with its reason" "$S/out" "⚪ SKIPPED  no origin/main to compare with"
+has "skip: ...counted as skipped, and the other check as passed" "$S/out" "Total: 1 passed, 0 failed, 1 skipped"
+has "skip: ...a warning on the run's page" "$S/out" "::warning title=test-all skipped deploy_preserve::no origin/main to compare with"
+if grep -E "deploy_preserve +✅" "$S/out" >/dev/null; then bad "skip: it still reads as a pass"; else ok "skip: not a plain PASS"; fi
+# -u: this suite runs on GitHub too, where the run below would inherit GITHUB_ACTIONS and be on GitHub after all.
+env -u GITHUB_ACTIONS TEST_ALL_ONLY="deploy_preserve" PATH="$S/bin:$PATH" bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1
+if grep -qF "::warning" "$S/out"; then bad "skip: an annotation outside GitHub Actions"; else ok "skip: no annotation off GitHub"; fi
+
+# The check itself, in a checkout with no origin/main (a real git, this script's own copy): it says SKIP, and test-all reports that.
+MG="$T/migcheck"; mkdir -p "$MG/scripts"; cp "$REPO_ROOT/scripts/check-migrations-unchanged.sh" "$MG/scripts/"
+( cd "$MG" && git init -q && git -c user.name=t -c user.email=t@t.invalid commit -q --allow-empty -m one )
+expect 0 "migration check: no origin/main is a SKIP line, not a pass" "⚪ SKIP: no origin/main here" -- bash "$MG/scripts/check-migrations-unchanged.sh"
+
 # ── The real test-all.sh: --continue runs every package, and the report marks only what failed ────
 expect 0 "test-all --continue: every package runs to its own result" "" -- bash "$REPO_ROOT/scripts/test-all-continue.sh"
 
@@ -191,7 +210,12 @@ GREEN="$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
 # check-runs call prints $GH_STUB_DIR/ci-<sha> (the conclusions). `pr merge <n> --match-head-commit <sha>` squashes the
 # branch onto $GH_STUB_ORIGIN's main, refused when the branch is not at <sha> or does not merge; $GH_STUB_DIR/merges
 # lists the PRs merged, in order. A file $GH_STUB_DIR/sneak makes the next merge land a commit of its own on main first
-# (another merge landing in the same moment), and is removed.
+# (another merge landing in the same moment), and is removed. `workflow run` appends its arguments to $GH_STUB_DIR/attempts,
+# fails while $GH_STUB_DIR/dispatch-fails exists, hangs while dispatch-hangs does, and otherwise appends the arguments to
+# dispatches and "<branch> <run id>" to runs. `run list` answers from runs; `run view <id>` prints run-<id> (the
+# conclusion), or "pending" when there is none. $GH_STUB_DIR/view-appends, when it exists, is a line a run view adds to
+# shadow.log: a train ending while the reader reads. $GH_STUB_DIR/view-rewrites, when it exists, replaces shadow.log the same
+# way: another reader finishing first.
 export GH_STUB_DIR="$T/gh"; mkdir -p "$GH_STUB_DIR" "$T/bin"
 cat > "$T/bin/gh" <<'STUB'
 #!/bin/bash
@@ -229,6 +253,27 @@ fi
 if [ "$1" = "api" ]; then
   shift; echo "$*" >> "$GH_STUB_DIR/api"
   case "$1" in */check-runs*) sha=$(echo "$1" | sed -E 's|.*/commits/([0-9a-f]+)/check-runs.*|\1|'); cat "$GH_STUB_DIR/ci-$sha" 2>/dev/null ;; esac
+  exit 0
+fi
+if [ "$1 $2" = "workflow run" ]; then
+  echo "$*" >> "$GH_STUB_DIR/attempts"
+  [ -f "$GH_STUB_DIR/dispatch-hangs" ] && exec sleep 30
+  [ -f "$GH_STUB_DIR/dispatch-fails" ] && { echo "HTTP 403: Resource not accessible by integration" >&2; exit 1; }
+  echo "$*" >> "$GH_STUB_DIR/dispatches"
+  ref=""; prev=""; for a in "$@"; do [ "$prev" = "--ref" ] && ref="$a"; prev="$a"; done
+  echo "$ref $((9000 + $(wc -l < "$GH_STUB_DIR/dispatches")))" >> "$GH_STUB_DIR/runs"
+  exit 0
+fi
+if [ "$1 $2" = "run list" ]; then
+  ref=""; prev=""; for a in "$@"; do [ "$prev" = "--branch" ] && ref="$a"; prev="$a"; done
+  [ -f "$GH_STUB_DIR/runs" ] && sed -n "s|^$ref ||p" "$GH_STUB_DIR/runs" | tail -1
+  exit 0
+fi
+if [ "$1 $2" = "run view" ]; then
+  echo "$3" >> "$GH_STUB_DIR/views"
+  if [ -f "$GH_STUB_DIR/view-appends" ]; then cat "$GH_STUB_DIR/view-appends" >> "$GH_STUB_SHADOW_LOG"; rm -f "$GH_STUB_DIR/view-appends"; fi
+  if [ -f "$GH_STUB_DIR/view-rewrites" ]; then cat "$GH_STUB_DIR/view-rewrites" > "$GH_STUB_SHADOW_LOG"; rm -f "$GH_STUB_DIR/view-rewrites"; fi
+  if [ -f "$GH_STUB_DIR/run-$3" ]; then cat "$GH_STUB_DIR/run-$3"; else echo pending; fi
   exit 0
 fi
 echo "gh stub: unexpected: $*" >&2; exit 1
@@ -591,6 +636,176 @@ NOTRUN=$(grep -c "not on this tree, so not run (not a failure): " <<<"$GOTR")
   && [ "$(cat "$R/parts-here.txt" 2>/dev/null)" = "vitest @beanpool/pwa src/old.test.ts" ] \
   && ok "train: run_parts runs the test file that is here, and not (and does not fail) the file and package that are not" \
   || { bad "train: run_parts on a tree without some parts: exit $RCR, $NOTRUN said not run"; echo "$GOTR"; sed 's/^/      /' "$R/alone.log"; }
+
+# ── test-all-train.sh --shadow ───────────────────────────────────────────────────────────────────────────────────────
+# The tested tree on a train/* branch of the origin, and ci.yml started on it. No train above asked for one. Whatever happens
+# to the shadow, the train's exit and merges are what they would be without it. A hook on the origin refuses a train/* push
+# while $GH_STUB_DIR/push-fails exists.
+TCOMMON="$(git rev-parse --path-format=absolute --git-common-dir)"
+SL="$TCOMMON/test-all-queue/shadow.log"
+export GH_STUB_SHADOW_LOG="$SL"
+train_refs() { git --git-dir="$T/torigin.git" for-each-ref --format='%(refname:short)' 'refs/heads/train/'; }
+attempts() { [ -f "$GH_STUB_DIR/attempts" ] && wc -l < "$GH_STUB_DIR/attempts" | tr -d ' ' || echo 0; }
+lines() { [ -f "$SL" ] && wc -l < "$SL" | tr -d ' ' || echo 0; }
+cat > "$T/torigin.git/hooks/pre-receive" <<'HOOK'
+#!/bin/bash
+[ -f "$GH_STUB_DIR/push-fails" ] || exit 0
+while read -r _ _ ref; do case "$ref" in refs/heads/train/*) echo "refused"; exit 1 ;; esac; done
+HOOK
+chmod +x "$T/torigin.git/hooks/pre-receive"
+
+[ "$(attempts)" = 0 ] && [ -z "$(train_refs)" ] && [ ! -e "$SL" ] && ok "shadow: every train above ran without --shadow: nothing pushed, nothing started, no line" \
+  || { bad "shadow: a train not asked for one made one"; train_refs; cat "$SL" 2>/dev/null; }
+
+: > "$GH_STUB_DIR/merges"
+branch 60 t-sh1 "" -- add sh1.txt sh1
+branch 61 t-sh2 "" -- add sh2.txt sh2
+OUT=$(bash "$TRAIN" 60 61 --shadow 2>&1); RC=$?
+BR=$(train_refs); SHA=$(git --git-dir="$T/torigin.git" rev-parse "refs/heads/$BR" 2>/dev/null); LINE=$(tail -1 "$SL" 2>/dev/null)
+[ $RC = 0 ] && [ "$(merges)" = "60 61" ] && ok "shadow: a green train with --shadow merges as any other" || { bad "shadow: exit $RC, merged \"$(merges)\""; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+case "$BR" in train/*) ok "shadow: the tree is pushed to a train/* branch" ;; *) bad "shadow: branches on origin: $BR" ;; esac
+[ "$(tail -1 "$TCOMMON/test-all-green" | cut -d' ' -f2)" = "$SHA" ] && [ -z "$(git --git-dir="$T/torigin.git" diff --name-only "$SHA" refs/heads/main)" ] \
+  && ok "shadow: ...and that is the commit the local run tested, main + both PRs" || bad "shadow: $SHA is not the tested tree"
+[ "$(tail -1 "$GH_STUB_DIR/dispatches" 2>/dev/null)" = "workflow run ci.yml --repo owner/repo --ref $BR" ] && ok "shadow: ci.yml is started on that branch" || bad "shadow: dispatched: $(tail -1 "$GH_STUB_DIR/dispatches" 2>/dev/null)"
+grep -qE "^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} prs=60,61 sha=$SHA run=9001 local=green branch=$BR\$" <<<"$LINE" \
+  && ok "shadow: one line: time, PRs, tested sha, run id, local verdict" || bad "shadow: the line is: $LINE"
+
+branch 62 t-shred "" -- add FAIL-test-x red
+expect 1 "shadow: a red run" "RED: it fails test-x" -- bash "$TRAIN" 62 --shadow --no-merge
+grep -qE " prs=62 .* local=red " <<<"$(tail -1 "$SL")" && ok "shadow: ...local=red" || bad "shadow: red run's line: $(tail -1 "$SL")"
+expect 0 "shadow: a red run the load recheck passes" "load recheck: every failure passed alone" -- env TEST_ALL_RECHECK="$LOAD" bash "$TRAIN" 62 --shadow --no-merge
+grep -qE " prs=62 .* local=green-by-recheck " <<<"$(tail -1 "$SL")" && ok "shadow: ...local=green-by-recheck" || bad "shadow: recheck's line: $(tail -1 "$SL")"
+branch 63 t-shinno "" -- add shinno.txt i
+expect 1 "shadow: a red train whose innocent would merge" "#63: WOULD MERGE" -- bash "$TRAIN" 63 62 --shadow --no-merge
+RL=$(tail -1 "$SL"); RS=$(sed -n 's/.* sha=\([0-9a-f]*\) .*/\1/p' <<<"$RL")
+grep -qE " prs=63,62 .* local=red " <<<"$RL" && git cat-file -e "$RS:FAIL-test-x" 2>/dev/null \
+  && ok "shadow: ...the line is the whole train's tree and verdict, not the innocents' after the bisect" || bad "shadow: bisect's line: $RL"
+
+branch 64 t-fork "" -- add fork.txt fork
+echo "t-fork true OPEN " > "$GH_STUB_DIR/prx-64"
+branch 65 t-shp "" -- add shp.txt shp
+A0=$(attempts); L0=$(lines); R0=$(train_refs | wc -l)
+OUT=$(bash "$TRAIN" 64 65 --shadow --no-merge 2>&1); RC=$?
+grep -qF "Shadow: left out: #64 comes from a fork" <<<"$OUT" && ok "shadow: a train with a PR from a fork has none, and says so in a line" || { bad "shadow: no line for the fork"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+[ "$(attempts)" = "$A0" ] && [ "$(train_refs | wc -l)" = "$R0" ] && [ "$(lines)" = "$L0" ] && ok "shadow: ...nothing pushed, nothing started, no line" || bad "shadow: a fork's code was pushed or started"
+[ $RC = 0 ] && grep -qF "#64: WOULD MERGE" <<<"$OUT" && grep -qF "#65: WOULD MERGE" <<<"$OUT" && ok "shadow: ...and the train is as it would be" || bad "shadow: a fork changed the train (exit $RC)"
+
+: > "$GH_STUB_DIR/merges"
+branch 66 t-pf1 "" -- add pf1.txt x
+branch 67 t-pf2 "" -- add pf2.txt x
+touch "$GH_STUB_DIR/push-fails"; A0=$(attempts)
+OUT=$(bash "$TRAIN" 66 67 --shadow 2>&1); RC=$?
+rm -f "$GH_STUB_DIR/push-fails"
+[ $RC = 0 ] && grep -qF "train: #66 #67 merged" <<<"$OUT" && [ "$(merges)" = "66 67" ] && ok "shadow: a push that fails: the train exits and merges as it would" || { bad "shadow: a failed push changed the train (exit $RC, merged \"$(merges)\")"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+grep -qF "Shadow: could not push" <<<"$OUT" && [ "$(attempts)" = "$A0" ] && grep -qE " prs=66,67 .* run=none local=green " <<<"$(tail -1 "$SL")" \
+  && ok "shadow: ...it says so, starts nothing, and the line reads run=none" || { bad "shadow: after a failed push: $(tail -1 "$SL")"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+
+: > "$GH_STUB_DIR/merges"
+branch 68 t-df1 "" -- add df1.txt x
+branch 69 t-df2 "" -- add df2.txt x
+touch "$GH_STUB_DIR/dispatch-fails"; A0=$(attempts)
+OUT=$(SHADOW_RETRY_SECS=0 bash "$TRAIN" 68 69 --shadow 2>&1); RC=$?
+rm -f "$GH_STUB_DIR/dispatch-fails"
+[ $RC = 0 ] && grep -qF "train: #68 #69 merged" <<<"$OUT" && [ "$(merges)" = "68 69" ] && ok "shadow: a start that fails: the train exits and merges as it would" || { bad "shadow: a failed dispatch changed the train (exit $RC, merged \"$(merges)\")"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+grep -qF "Shadow: could not start ci.yml" <<<"$OUT" && [ "$(attempts)" = $((A0 + 2)) ] && grep -qE " prs=68,69 .* run=none local=green " <<<"$(tail -1 "$SL")" \
+  && ok "shadow: ...it says so after a second try, and the line reads run=none" || { bad "shadow: after a failed dispatch ($(attempts) attempts): $(tail -1 "$SL")"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+
+# A start that hangs is stopped at its limit: a shadow never holds the train (the stub would sleep 30 s, twice).
+: > "$GH_STUB_DIR/merges"
+branch 90 t-hang "" -- add hang.txt x
+touch "$GH_STUB_DIR/dispatch-hangs"
+START=$SECONDS
+OUT=$(SHADOW_LIMIT_SECS=1 SHADOW_RETRY_SECS=0 bash "$TRAIN" 90 --shadow 2>&1); RC=$?
+rm -f "$GH_STUB_DIR/dispatch-hangs"
+[ $RC = 0 ] && [ "$(merges)" = "90" ] && [ $((SECONDS - START)) -lt 25 ] && ok "shadow: a start that hangs is stopped, and the train goes on" || { bad "shadow: a hang held the train ($((SECONDS - START)) s, exit $RC, merged \"$(merges)\")"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+
+# scripts/test-all-shadow.sh against a log and branches of each kind. It fills in results, lists disagreements, and deletes
+# only train/* branches whose run is finished or never started.
+SHADOWS="$REPO_ROOT/scripts/test-all-shadow.sh"
+for b in $(train_refs); do git --git-dir="$T/torigin.git" update-ref -d "refs/heads/$b"; done
+OTHERS=$(git --git-dir="$T/torigin.git" for-each-ref --format='%(objectname) %(refname)' | grep -v ' refs/heads/train/')
+: > "$SL"
+expect 0 "shadow report: an empty log" "No shadows yet" -- bash "$SHADOWS"
+M=$(origin_main)
+for b in a b c d e f g orphan-done orphan-running orphan-norun; do git --git-dir="$T/torigin.git" update-ref "refs/heads/train/$b" "$M"; done
+cat > "$SL" <<EOF
+2026-11-01 01:00:00 prs=70,71 sha=$M run=9101 local=green branch=train/a
+2026-11-01 01:10:00 prs=72 sha=$M run=9102 local=red branch=train/b
+2026-11-01 01:20:00 prs=73 sha=$M run=9103 local=green branch=train/c
+2026-11-01 01:30:00 prs=74 sha=$M run=9104 local=green branch=train/d
+2026-11-01 01:40:00 prs=75 sha=$M run=none local=green branch=train/e
+2026-11-01 01:50:00 prs=76 sha=$M run=unknown local=green-by-recheck branch=train/f
+2026-11-01 02:00:00 prs=77 sha=$M run=9107 local=none branch=train/g
+EOF
+printf '%s\n' "train/f 9106" "train/orphan-done 9108" "train/orphan-running 9109" >> "$GH_STUB_DIR/runs"
+echo failure > "$GH_STUB_DIR/run-9101"; echo success > "$GH_STUB_DIR/run-9102"; echo success > "$GH_STUB_DIR/run-9103"
+echo success > "$GH_STUB_DIR/run-9106"; echo cancelled > "$GH_STUB_DIR/run-9107"; echo success > "$GH_STUB_DIR/run-9108"
+echo "2026-11-01 02:10:00 prs=78 sha=$M run=9110 local=green branch=train/late" > "$GH_STUB_DIR/view-appends"
+OUT=$(bash "$SHADOWS" 2>&1); RC=$?
+[ $RC = 0 ] && ok "shadow report: runs (a disagreement is a finding, not a failure)" || { bad "shadow report: exit $RC"; echo "$OUT" | tail -12 | sed 's/^/      /'; }
+DIS=$(sed -n '/^Disagreements:/,/^$/p' <<<"$OUT")
+grep -qF "#70 #71 ${M:0:9} run 9101: Mac green, GitHub failure" <<<"$DIS" && grep -qF "#72 ${M:0:9} run 9102: Mac red, GitHub success" <<<"$DIS" \
+  && [ "$(wc -l <<<"$DIS" | tr -d ' ')" = 3 ] && ok "shadow report: lists both disagreements, and nothing else as one" || bad "shadow report: disagreements: $DIS"
+grep -q "local=green branch=train/a github=failure$" "$SL" && grep -q "local=red branch=train/b github=success$" "$SL" && grep -q "branch=train/e github=none$" "$SL" \
+  && grep -q "branch=train/g github=cancelled$" "$SL" && grep -q "branch=train/d$" "$SL" && ok "shadow report: fills in each finished run's result, and leaves a pending one" || { bad "shadow report: the log:"; sed 's/^/      /' "$SL"; }
+grep -q " run=9106 local=green-by-recheck branch=train/f github=success$" "$SL" && ok "shadow report: finds a run the train could not name, by its branch" || bad "shadow report: run=unknown not filled in"
+grep -q "branch=train/late$" "$SL" && [ "$(wc -l < "$SL" | tr -d ' ')" = 8 ] && ok "shadow report: a line a train adds while it reads is kept" || bad "shadow report: a train's line was lost"
+[ "$(train_refs | sort | tr '\n' ' ')" = "train/d train/orphan-norun train/orphan-running " ] && ok "shadow report: deletes finished and never-started branches; keeps a running one, and one with no line and no finished run" || bad "shadow report: left: $(train_refs | tr '\n' ' ')"
+[ "$(git --git-dir="$T/torigin.git" for-each-ref --format='%(objectname) %(refname)' | grep -v ' refs/heads/train/')" = "$OTHERS" ] && ok "shadow report: every other ref is as it was" || bad "shadow report: a ref that is no train branch changed"
+: > "$GH_STUB_DIR/views"; cp "$SL" "$T/shadow.before"
+bash "$SHADOWS" > /dev/null 2>&1
+cmp -s "$SL" "$T/shadow.before" && ! grep -qE '^(9101|9102|9103)$' "$GH_STUB_DIR/views" && ok "shadow report: a second read changes nothing, and does not ask GitHub again about a finished run" || bad "shadow report: second read: views $(tr '\n' ' ' < "$GH_STUB_DIR/views")"
+
+# shadow.log's lock. The reader's swap and a train's line each hold it, so a line cannot go with the old file; a second
+# reader's rewrite cannot leave half a line; and a lock left behind holds up neither. The mv stub notes each swap of the log.
+cat > "$T/bin/mv" <<STUB
+#!/bin/bash
+case "\$2" in */shadow.log) if [ -d "\$2.lock" ]; then echo locked; else echo unlocked; fi >> "$GH_STUB_DIR/swaps" ;; esac
+exec "$(command -v mv)" "\$@"
+STUB
+chmod +x "$T/bin/mv"
+M=$(origin_main)
+shadow_line() { echo "2026-11-01 03:00:00 prs=$1 sha=$M run=$1 local=green branch=train/lk$1"; }
+echo success > "$GH_STUB_DIR/run-9201"; echo success > "$GH_STUB_DIR/run-9202"
+shadow_line 9201 > "$SL"
+bash "$SHADOWS" > /dev/null 2>&1
+[ "$(cat "$GH_STUB_DIR/swaps" 2>/dev/null)" = locked ] && grep -q "branch=train/lk9201 github=success$" "$SL" && [ ! -e "$SL.lock" ] \
+  && ok "shadow lock: the reader swaps the log holding the lock, and gives it back" || bad "shadow lock: swaps \"$(cat "$GH_STUB_DIR/swaps" 2>/dev/null)\", lock left: $(ls -d "$SL.lock" 2>/dev/null)"
+
+shadow_line 9202 > "$SL"; cp "$SL" "$T/shadow.before"; mkdir "$SL.lock"
+OUT=$(SHADOW_LOCK_SECS=0 bash "$SHADOWS" 2>&1); RC=$?
+[ $RC = 0 ] && cmp -s "$SL" "$T/shadow.before" && grep -qF "results not written: $SL.lock is held" <<<"$OUT" && [ -d "$SL.lock" ] \
+  && ok "shadow lock: a lock it cannot take: the log is left as it was, it says so, and the lock is not its to remove" || { bad "shadow lock: a held lock: exit $RC"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+( sleep 1; rmdir "$SL.lock" ) & FREE=$!
+bash "$SHADOWS" > /dev/null 2>&1
+wait $FREE
+grep -q "branch=train/lk9202 github=success$" "$SL" && ok "shadow lock: ...and it waits for a lock that is given back" || { bad "shadow lock: the log after waiting:"; sed 's/^/      /' "$SL"; }
+
+{ shadow_line 9201; shadow_line 9202; } > "$SL"
+{ echo "$(shadow_line 9201) github=failure"; echo "$(shadow_line 9202) github=failure"; } > "$T/shadow.other"
+cp "$T/shadow.other" "$GH_STUB_DIR/view-rewrites"
+OUT=$(bash "$SHADOWS" 2>&1)
+cmp -s "$SL" "$T/shadow.other" && grep -qF "another reader rewrote shadow.log" <<<"$OUT" \
+  && ok "shadow lock: another reader's rewrite during this read stands whole, and it says so" || { bad "shadow lock: after another reader's rewrite:"; sed 's/^/      /' "$SL"; }
+
+branch 91 t-lock "" -- add lock.txt x
+: > "$SL"; mkdir "$SL.lock"
+SHADOW_LOCK_SECS=60 bash "$TRAIN" 91 --shadow --no-merge > "$T/lock.out" 2>&1 & TP=$!
+for _ in $(seq 300); do grep -q '^train: ' "$T/lock.out" && break; sleep 0.2; done
+sleep 1
+HELD=$(lines)
+rmdir "$SL.lock"
+wait $TP; RC=$?
+[ "$HELD" = 0 ] && [ $RC = 0 ] && grep -q " prs=91 " "$SL" && [ ! -e "$SL.lock" ] \
+  && ok "shadow lock: a train's line waits for the lock, and goes in once it is free" || { bad "shadow lock: $HELD line(s) while held, exit $RC"; tail -8 "$T/lock.out" | sed 's/^/      /'; }
+
+branch 92 t-stale "" -- add stale.txt x
+: > "$SL"; mkdir "$SL.lock"
+OUT=$(SHADOW_LOCK_SECS=0 bash "$TRAIN" 92 --shadow --no-merge 2>&1); RC=$?
+LG=$(sed -n 's/^train: .*(logs: \(.*\))$/\1/p' <<<"$OUT" | tail -1)
+[ $RC = 0 ] && grep -q " prs=92 " "$SL" && grep -qF "was held past the wait" "$LG/shadow.out" && [ -d "$SL.lock" ] && grep -q '^train: ' <<<"$(tail -1 <<<"$OUT")" \
+  && ok "shadow lock: a lock left behind holds no train: the line goes in, the note in shadow.out, and the summary stays last" || { bad "shadow lock: a stale lock: exit $RC"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+rmdir "$SL.lock"; rm -f "$T/bin/mv"
 
 # Last: #36 leaves its FAIL file on main, so every train after it would be red.
 : > "$GH_STUB_DIR/merges"

@@ -25,13 +25,19 @@
  * own don't). The money routes have their own limits (engine/money-limits.ts).
  *
  * A post an owner's AI assistant made for them (posts.created_via 'assistant:<grant id>', agent/owner-posts.ts) is not
- * one of the member's own 100: it is held to the owners' "Assistant posts a day" instead (1 to 1,000; the director,
- * 30 Oct, from Marty's "make it 1000 per day … serious seeding on the global node"), so it never uses up what the
- * member posts from the apps. An enterprise's post an assistant made still counts against the enterprise as any keeper's.
+ * one of the member's own 100: it is held to the owners' "Owner and admin limit" instead, on its own count (1 to 1,000;
+ * the director, 30 Oct, from Marty's "make it 1000 per day … serious seeding on the global node"), so it never uses up
+ * what the member posts from the apps. An enterprise's post an assistant made still counts against the enterprise as any
+ * keeper's.
+ *
+ * An owner or admin (their role now) is held to that same setting in place of a member's posts a day, groups a day,
+ * enterprises a day and running, invites a day and unused, and Pulse links by hand a day (engine/owner-admin-limit.ts;
+ * Marty, 31 Oct), and its refusals name it.
  */
 import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
 import { getNodeRole } from '../config/node-role.js';
+import { ownerAdminLimit, OWNER_ADMIN_LIMIT_NAME } from './owner-admin-limit.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -89,9 +95,13 @@ function assertUnderDaily(times: readonly string[], limit: number, now: number, 
 const column = (rows: unknown[]) => (rows as { t: string }[]).map((r) => r.t);
 const since = (now: number) => iso(now - DAY_MS);
 
+/** An owner's or admin's refusal: the owners' number for them, and the setting that holds it. */
+const ownersAllow = (what: string) =>
+    `This community's owners allow ${what} for owners and admins ("${OWNER_ADMIN_LIMIT_NAME}" in Settings).`;
+
 // ── Posts ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** A post an owner's AI assistant did not make (its own limit is the owners' "Assistant posts a day"). */
+/** A post an owner's AI assistant did not make (its own count is held to the owners' "Owner and admin limit"). */
 const NOT_BY_ASSISTANT = `(p.created_via IS NULL OR p.created_via NOT LIKE 'assistant:%')`;
 
 /**
@@ -112,9 +122,11 @@ function postTimes(account: string, now: number, memberOwn = false): string[] {
 
 /** A member's own posts limit, in their words, with `note` after when it is a post for an enterprise whose day is spent. */
 function assertOwnPostsToday(member: string, now: number, note = ''): void {
-    const limit = WRITER_LIMITS.postsPerDay;
-    assertUnderDaily(postTimes(member, now, true), limit, now, 'posts_per_day',
-        (when) => `You can put up ${limit} new posts in any 24 hours. You can post again ${when}.${note}`);
+    const owners = ownerAdminLimit(member);
+    const limit = owners ?? WRITER_LIMITS.postsPerDay;
+    assertUnderDaily(postTimes(member, now, true), limit, now, 'posts_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} new posts in any 24 hours`)} You can post again ${when}.${note}`
+        : (when) => `You can put up ${limit} new posts in any 24 hours. You can post again ${when}.${note}`);
 }
 
 /** Before a new post by `member` for themselves. */
@@ -172,10 +184,12 @@ export function enterprisePostLimit(enterprise: string, keeper: string): { befor
 
 /** Before a new group by `member`. */
 export function assertMayStartGroupToday(member: string, now = Date.now()): void {
-    const limit = WRITER_LIMITS.groupsPerDay;
+    const owners = ownerAdminLimit(member);
+    const limit = owners ?? WRITER_LIMITS.groupsPerDay;
     const times = column(db.prepare('SELECT created_at AS t FROM groups WHERE created_by = ? AND created_at > ?').all(member, since(now)));
-    assertUnderDaily(times, limit, now, 'groups_per_day',
-        (when) => `You can start ${limit} groups in any 24 hours. You can start another ${when}.`);
+    assertUnderDaily(times, limit, now, 'groups_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} new groups in any 24 hours`)} You can start another ${when}.`
+        : (when) => `You can start ${limit} groups in any 24 hours. You can start another ${when}.`);
 }
 
 // ── Friends ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -207,18 +221,23 @@ const STARTED_BY = `SELECT c.created_at AS t, m.status AS status FROM conversati
                       JOIN members m ON m.public_key = c.id AND m.is_treasury = 1
                      WHERE c.type = 'enterprise_thread' AND c.created_by = ?`;
 
-/** Before a new enterprise by `member`: 3 a day, and 20 of theirs still running (not wound up). */
+/** Before a new enterprise by `member`: 3 a day, and 20 of theirs still running (not wound up); an owner's or admin's, the owners' setting for each. */
 export function assertMayStartEnterprise(member: string, now = Date.now()): void {
+    const owners = ownerAdminLimit(member);
     const started = db.prepare(STARTED_BY).all(member) as { t: string; status: string | null }[];
     const running = started.filter((r) => r.status !== 'completed' && r.status !== 'pruned').length;
-    if (running >= WRITER_LIMITS.enterprisesLive) {
-        throw new WriterLimitError('enterprises_live',
-            `You have started ${WRITER_LIMITS.enterprisesLive} enterprises that are still running, the most one member can have. Wind one up before you start another.`);
+    const live = owners ?? WRITER_LIMITS.enterprisesLive;
+    if (running >= live) {
+        throw new WriterLimitError('enterprises_live', owners !== null
+            // The count, not the number: owners may have set it below what is running.
+            ? `You have started ${running.toLocaleString('en')} enterprises that are still running. ${ownersAllow(`${live.toLocaleString('en')} at a time`)} Wind one up before you start another.`
+            : `You have started ${live} enterprises that are still running, the most one member can have. Wind one up before you start another.`);
     }
-    const limit = WRITER_LIMITS.enterprisesPerDay;
+    const limit = owners ?? WRITER_LIMITS.enterprisesPerDay;
     const today = started.map((r) => r.t).filter((t) => typeof t === 'string' && t > since(now));
-    assertUnderDaily(today, limit, now, 'enterprises_per_day',
-        (when) => `You can start ${limit} enterprises in any 24 hours. You can start another ${when}.`);
+    assertUnderDaily(today, limit, now, 'enterprises_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} new enterprises in any 24 hours`)} You can start another ${when}.`
+        : (when) => `You can start ${limit} enterprises in any 24 hours. You can start another ${when}.`);
 }
 
 // ── Invites ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -242,28 +261,37 @@ function inviteTimes(member: string, now: number): string[] {
 const invitesPerDayWords = (limit: number) => (when: string) =>
     `You can make ${limit} invites in any 24 hours. You can make more ${when}.`;
 
-/** Before a new invite code by `member`: 20 a day, and 50 of theirs unused and still working (Settings' own aside). */
+/** Before a new invite code by `member`: 20 a day, and 50 of theirs unused and still working (Settings' own aside); an owner's or admin's, the owners' setting for each. */
 export function assertMayMakeInvite(member: string, now = Date.now()): void {
+    const owners = ownerAdminLimit(member);
     const unused = (db.prepare(`SELECT COUNT(*) AS n FROM invite_codes
                                  WHERE created_by = ? AND code LIKE 'INV-%' AND issued_by IS NULL AND used_by IS NULL AND created_at > ?`)
         .get(member, iso(now - INVITE_LIFE_DAYS * DAY_MS)) as { n: number }).n;
-    if (unused >= WRITER_LIMITS.invitesUnused) {
-        throw new WriterLimitError('invites_unused',
-            `You have ${WRITER_LIMITS.invitesUnused} invites nobody has used yet, the most one member can hold. You can make more as they are used, or as they lapse ${INVITE_LIFE_DAYS} days after you made them.`);
+    const held = owners ?? WRITER_LIMITS.invitesUnused;
+    if (unused >= held) {
+        const more = `You can make more as they are used, or as they lapse ${INVITE_LIFE_DAYS} days after you made them.`;
+        throw new WriterLimitError('invites_unused', owners !== null
+            // The count, not the number: owners may have set it below what is held.
+            ? `You have ${unused.toLocaleString('en')} invites nobody has used yet. ${ownersAllow(`${held.toLocaleString('en')} at a time`)} ${more}`
+            : `You have ${held} invites nobody has used yet, the most one member can hold. ${more}`);
     }
-    assertUnderDaily(inviteTimes(member, now), WRITER_LIMITS.invitesPerDay, now, 'invites_per_day', invitesPerDayWords(WRITER_LIMITS.invitesPerDay));
+    const limit = owners ?? WRITER_LIMITS.invitesPerDay;
+    assertUnderDaily(inviteTimes(member, now), limit, now, 'invites_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} new invites in any 24 hours`)} You can make more ${when}.`
+        : invitesPerDayWords(limit));
 }
 
 /**
  * Before someone joins with an offline ticket `inviter` signed: the ticket is an invite made now (inviteTimes), so it
- * counts against the same 20 a day, and past it the join is refused with nothing written and the ticket still unused.
- * The words go to the person joining.
+ * counts against the same 20 a day (an owner's or admin's, the owners' setting), and past it the join is refused with
+ * nothing written and the ticket still unused. The words go to the person joining, who has no Settings: so the number
+ * and not the setting's name, for every maker.
  */
 export function ticketJoinRefusal(inviter: string, now = Date.now()): string | null {
-    const limit = WRITER_LIMITS.invitesPerDay;
+    const limit = ownerAdminLimit(inviter) ?? WRITER_LIMITS.invitesPerDay;
     try {
         assertUnderDaily(inviteTimes(inviter, now), limit, now, 'invites_per_day',
-            (when) => `The member whose invite this is has brought ${limit} people in today, the most in 24 hours. Try this invite again ${when}.`);
+            (when) => `The member whose invite this is has brought ${limit.toLocaleString('en')} people in today, the most in 24 hours. Try this invite again ${when}.`);
         return null;
     } catch (e) {
         if (e instanceof WriterLimitError) return e.message;
@@ -357,11 +385,13 @@ export function pulseItemsToday(member: string, source: 'manual' | 'oauth' | 'au
         .all(member, source, since(now)));
 }
 
-/** Before a new Pulse item by hand (a resubmitted link that is already there, or comes back, is not new). */
+/** Before a new Pulse item by hand (a resubmitted link that is already there, or comes back, is not new); an owner's or admin's, the owners' setting. */
 export function assertMaySubmitToPulse(member: string, now = Date.now()): void {
-    const limit = WRITER_LIMITS.pulseSubmissionsPerDay;
-    assertUnderDaily(pulseItemsToday(member, 'manual', now), limit, now, 'pulse_per_day',
-        (when) => `You can add ${limit} links to the Pulse in any 24 hours. You can add more ${when}.`);
+    const owners = ownerAdminLimit(member);
+    const limit = owners ?? WRITER_LIMITS.pulseSubmissionsPerDay;
+    assertUnderDaily(pulseItemsToday(member, 'manual', now), limit, now, 'pulse_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} new links to the Pulse in any 24 hours`)} You can add more ${when}.`
+        : (when) => `You can add ${limit} links to the Pulse in any 24 hours. You can add more ${when}.`);
 }
 
 /** How many new items a sync from `member`'s connected accounts may still add today. */

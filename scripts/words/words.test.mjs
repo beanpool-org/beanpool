@@ -235,7 +235,10 @@ test('the committed baseline has no rise over main\'s that lacks a recorded reas
     assert.ok(!base.broken, base.why);
     const main = base.ref ? baselineAt(base.ref) : null;
     if (!main) {
-        t.skip(base.ref ? `main has no words baseline yet (${base.why}: ${base.ref.slice(0, 8)})` : base.why);
+        const why = base.ref ? `main has no words baseline yet (${base.why}: ${base.ref.slice(0, 8)})` : base.why;
+        // A skipped test is still a pass to node --test: this line is what test-all.sh reports the check as skipped by.
+        console.log(`⚪ SKIP: the words baseline not compared: ${why}`);
+        t.skip(why);
         return;
     }
     const doc = JSON.parse(fs.readFileSync(path.join(ROOT, BASELINE), 'utf8'));

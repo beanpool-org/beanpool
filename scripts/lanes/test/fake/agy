@@ -20,6 +20,8 @@ n=$(( $(cat "$S/agy.runs" 2>/dev/null || print 0) + 1 )); print $n > "$S/agy.run
 rules=no; [[ "$prompt" == *"RULES — READ FIRST"* ]] && rules=yes
 wtint=no; [[ "$prompt" == *WT_INT=* ]] && wtint=yes
 print -r -- "run $n model=$model timeout=$timeout format=$fmt cwd=$PWD rules=$rules wtint=$wtint" >> "$S/agy.calls"
+print -r -- "$prompt" > "$S/agy.prompt-$n"
+[[ "$prompt" == *"STAGE FIX-CI"* ]] && [ -s "$S/pushes" ] && { sed -n 1p "$S/pushes" > "$S/head"; sed -i '' 1d "$S/pushes"; }
 print -r -- "{\"event\":\"init\",\"init\":{\"model\":\"$model\",\"cwd\":\"$PWD\",\"tools\":\"$(printf '%0600d' 0)\"}}"
 # The report deliberately DISCUSSES rate limiting and 429s: that must not read as a failure banner.
 ok='{"event":"result","result":{"status":"SUCCESS","response":"Done and pushed. Notes: the handler now maps HTTP 429 and rate limit exceeded responses to a retry."}}'

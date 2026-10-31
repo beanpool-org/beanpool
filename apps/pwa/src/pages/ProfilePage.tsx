@@ -42,9 +42,11 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
     const [loading, setLoading] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
+    const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     useEffect(() => {
         loadProfile();
+        return () => clearTimeout(savedTimer.current);
     }, []);
 
     async function loadProfile() {
@@ -90,7 +92,8 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 }
             }
             setSaved(true);
-            setTimeout(() => setSaved(false), 2000);
+            clearTimeout(savedTimer.current);
+            savedTimer.current = setTimeout(() => setSaved(false), 2000);
         } catch (err: any) {
             alert(err.message || t('Failed to save profile'));
         } finally {

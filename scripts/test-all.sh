@@ -415,7 +415,8 @@ run_check "undeclared_imports" node scripts/check-undeclared-imports.mjs
 run_check "balance_writes" node scripts/check-balance-writes.mjs
 
 # A migration file that is on origin/main has run on the live registrar and will never run there again, so an edit
-# to it reaches only new databases. New numbered files only. Instant; skipped where there is no origin/main.
+# to it reaches only new databases. New numbered files only. Instant; with no origin/main it reports as skipped, not as a
+# pass, and CI's shard fetches origin/main for it (.github/workflows/ci.yml, "Fetch origin/main").
 run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 
 # The public directory (front doors S13): the directory-register Edge Function rules (supabase/functions/directory-register/
@@ -539,7 +540,16 @@ for i in "${!PIDS[@]}"; do
     read -r RC < "$LOGDIR/$NAME.rc"
   fi
   if [ "$RC" = "0" ]; then
-    PASS=$((PASS + 1))
+    # A check with nothing to compare exits 0, so PASS would hide it: run on GitHub with no origin/main, migration_steps
+    # read as a pass in 0 s on every pull request. It prints "⚪ SKIP: <why>" (turbo and node --test may put a prefix before
+    # it), and is then reported as skipped, with the reason, and a run with one records no green.
+    SKIP_WHY=$(grep -aF -m1 '⚪ SKIP: ' "$LOGDIR/$NAME.log" | sed 's/.*⚪ SKIP: //' | cut -c1-160)
+    if [ -n "$SKIP_WHY" ]; then
+      echo "$SKIP_WHY" > "$LOGDIR/$NAME.skip"
+      SKIPPED_NAMES+=("$NAME")
+    else
+      PASS=$((PASS + 1))
+    fi
   else
     FAIL=$((FAIL + 1))
     FAILED_NAMES+=("$NAME")
@@ -554,6 +564,7 @@ echo "╠═══════════════════════�
 
 for i in "${!NAMES[@]}"; do
   NAME="${NAMES[$i]}"
+  [ -f "$LOGDIR/$NAME.skip" ] && continue
   STATUS="✅ PASS"
   RC=1
   if [ -f "$LOGDIR/$NAME.rc" ]; then
@@ -575,7 +586,10 @@ for i in "${!NAMES[@]}"; do
 done
 
 for sn in "${SKIPPED_NAMES[@]}"; do
-  printf "║  %-16s ⚪ SKIPPED\n" "$sn"
+  SKIP_WHY=$(cat "$LOGDIR/$sn.skip" 2>/dev/null)
+  printf "║  %-16s ⚪ SKIPPED  %s\n" "$sn" "$SKIP_WHY"
+  # On the run's page too: a green shard with a skip inside is a warning there, not a tick and nothing else.
+  [ -z "${GITHUB_ACTIONS:-}" ] || [ -z "$SKIP_WHY" ] || echo "::warning title=test-all skipped $sn::$SKIP_WHY"
 done
 
 WALL=$(($(date +%s) - RUN_START))

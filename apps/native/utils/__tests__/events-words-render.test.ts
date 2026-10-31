@@ -64,7 +64,8 @@ vi.mock('expo-image', async () => {
     return { Image: (p: { accessibilityLabel?: string }) => h('img', p.accessibilityLabel ? { 'aria-label': p.accessibilityLabel } : {}) };
 });
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '1.2.70' } } }));
-vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/', writeAsStringAsync: async () => {}, EncodingType: { UTF8: 'utf8' } }));
+vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/', writeAsStringAsync: async () => {}, EncodingType: { UTF8: 'utf8' }, getContentUriAsync: async (p: string) => `content://${p}` }));
+vi.mock('expo-intent-launcher', () => ({ startActivityAsync: async () => {} }));
 vi.mock('expo-sharing', () => ({ shareAsync: async () => {} }));
 const store = vi.hoisted(() => ({ map: new Map<string, string>() }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -280,6 +281,7 @@ describe('an event\'s page in the pseudo-locale: every word came through t() (wo
         store.map.set('beanpool_anchor_url', 'https://mullum.example');
         links.fail = true;
         await click(byLabel(xx('Add this event to your calendar')), 'Calendar');
+        await click(byLabel(xx('Google Calendar')), 'Google Calendar');
         expect(said()).toEqual([xx('No calendar app'), xx('Nothing on this phone could open a calendar entry.')]);
         alerts.said.length = 0;
         await click(byLabel(xx('Show {place} on a map').replace('{place}', 'Bangalow Hall')), 'Show on map');

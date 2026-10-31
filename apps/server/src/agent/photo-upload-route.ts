@@ -83,7 +83,9 @@ function readImageBody(req: IncomingMessage, max: number, ms: number): Promise<B
         });
         req.on('end', () => finish(null));
         req.on('error', (e) => finish(e));
+        // A client gone before its body ended frees its place at once, not at the deadline ('close' after 'end' does nothing).
         req.on('aborted', () => finish(new Error('aborted')));
+        req.on('close', () => finish(new Error('closed')));
     });
 }
 

@@ -214,7 +214,7 @@ const POSTS = [
 ];
 
 const GROUPS = [
-    { id: 'g1', name: 'Bike Co-op', members: 5 },
+    { id: 'g1', name: 'Bike Co-op', members: 5, viewerStatus: 'active' },
 ];
 
 function effectiveTouchHeight(el: HTMLElement, baseHeight: number): number {
@@ -293,6 +293,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
 
     it('2. header pills reach ≥ 44 dp touch targets without changing the look at 1.0', async () => {
         await act(async () => { root.render(createElement(MarketScreen) as any); });
+        await act(async () => { await Promise.resolve(); });
 
         // Deals pill touch target
         const dealsPill = host.querySelector('[data-testid="market-deals-pill"]') as HTMLElement;
@@ -380,7 +381,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
         const darkDeals = host.querySelector('[data-testid="market-deals-pill"]') as HTMLElement;
         const darkStyle = JSON.parse(darkDeals.getAttribute('data-style') || '{}');
         // In dark mode: colors.feedback.warning.bg and border
-        expect(darkStyle.backgroundColor).toBe('rgba(245, 158, 11, 0.15)');
-        expect(darkStyle.borderColor).toBe('#f59e0b');
+        expect(darkStyle.backgroundColor).toBe('#451a03'); // palette.amber950 / feedback.warning.bg
+        expect(darkStyle.borderColor).toBe('#78350f'); // palette.amber900 / feedback.warning.border
     });
 });

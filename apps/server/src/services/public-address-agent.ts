@@ -108,8 +108,7 @@ export type OwnAddressResult =
 /**
  * Whether an own address (`host`, of `kind`) is stored as the community's address (`replace`), or is that already
  * (`same`). Never over a BeanPool name, nor over the name the server is given (CF_RECORD_NAME, which resolvePublicNodeUrl
- * falls back to with nothing stored): taking its place would make it another community's to this node, and every
- * member's app signing for it would be refused (421; S2 review 4305409688). Never an IP over a domain.
+ * falls back to with nothing stored): it would move where the directory and newcomers are sent. Never an IP over a domain.
  */
 function asCommunityAddress(host: string, kind: 'ip' | 'own'): { same: boolean; replace: boolean } {
     const config = getNodeConfig();

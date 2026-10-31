@@ -32,6 +32,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer, registrarNames, registrarHostOf } from '../engine/registrar-names.js';
+import { claimReplacesAddress, tellMembersOfNewAddress } from './address-notice.js';
 import { settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
@@ -431,12 +432,16 @@ async function poll(): Promise<void> {
 /**
  * Save a registrar answer as the node's address and run what it says. The record of names (engine/registrar-names.ts) is
  * written first, so a name stored until now is kept as a former one when the answer names another. `claim`: the node's
- * own claim answered.
+ * own claim answered, so the address it replaces stays this community's (services/address-notice.ts). A name that goes
+ * live here is told to the members if a claim left that due.
  */
 export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Promise<TunnelStatus> {
+    const claimed = use === 'claim' ? registrarHostOf(pa) : null;
+    if (claimed) claimReplacesAddress(claimed);
     recordRegistrarAnswer(pa, use);
     const prev = (getNodeConfig() as any).publicAddress;
     updateNodeConfig({ publicAddress: withKeptOrigin(withKeptTunnelToken(pa, prev), prev) } as any);
+    tellMembersOfNewAddress();
     return syncTunnel();
 }
 

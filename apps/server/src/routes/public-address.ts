@@ -27,10 +27,11 @@ import { wordsFor } from '@beanpool/core';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex, askNameHolder, isPublicIpv4 } from '../services/registrar-client.js';
 import { syncTunnel, restartTunnel, persistAddress, persistAddressIfUnchanged, answersAboutAnotherName, noteUnansweredClaim, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration, adminBroadcastAnnouncement, isOwnPublicAddress } from '../state-engine.js';
-import { recordRegistrarAnswer, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
+import { recordRegistrarAnswer, registrarHostOf, registrarNames, REGISTRAR_ZONE } from '../engine/registrar-names.js';
 import { dropAddressRequest, nameAskedFor, replacesLiveOwnAddress, storeOwnAddress } from '../services/public-address-agent.js';
+import { claimReplacesAddress, forgetAddressNotice, tellMembersOfNewAddress } from '../services/address-notice.js';
 import { isPublicIpv4Host, normalizeAddress, ownAddressProblem } from '../engine/host-kinds.js';
-import { primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
+import { dropReleasedAddress, primaryAddress, publishedAddresses, publishedBesides } from '../engine/own-addresses.js';
 import { noteTurnedAway, settleUnansweredClaims, turnedAwayList } from '../config/turned-away-names.js';
 import { isAddressLabel } from '../address-request.js';
 import { requireAdminRole, requireFreshProof } from '../admin-auth.js';
@@ -367,11 +368,13 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // without one nothing is asked of the registrar, which would refuse it.
         const publicIp = b.publicIp ?? b.public_ip;
         if (mode === 'direct' && !isPublicIpv4(publicIp)) { ctx.status = 400; ctx.body = { error: 'Direct mode needs this server\'s public IPv4 address. Without one, use Tunnel.' }; return; }
-        // Claiming over a different live name changes the community's address: the fresh proof (design case 18, B3, as the
-        // director narrowed it). A first claim, or the same name again, stays plain, so setting up has no hard gate.
+        // A claim beside any address this community already publishes changes where it lives: the fresh proof (design case 18,
+        // B3; rename design §6). A first claim, or the same name again, stays plain, so setting up has no hard gate.
         const live = (getNodeConfig() as any).publicAddress;
-        if (live?.name && live.status === 'live' && foldName(live.name) !== foldName(name)
-            && !(await requireFreshProof(ctx, b.code, 'replace this community\'s live address'))) return;
+        const claimed = `${foldName(name)}.${REGISTRAR_ZONE}`;
+        const movesOffLive = !!live?.name && live.status === 'live' && foldName(live.name) !== foldName(name);
+        if ((movesOffLive || (foldName(live?.name) !== foldName(name) && publishedBesides(claimed)))
+            && !(await requireFreshProof(ctx, b.code, 'change this community\'s main address'))) return;
         // Keyed as release-name keys them (case, trailing dot), so "name." waits for a release of "name" (#1583 review r4176138168).
         const inFlight = foldName(name);
         if (releasesInFlight.has(inFlight)) { ctx.status = 409; ctx.body = { error: `${inFlight}.${REGISTRAR_ZONE} is being released right now; try again in a moment.` }; return; }
@@ -385,6 +388,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             const result = await claimAddress(name, mode, LOOPBACK_ORIGIN, b.contact, communityName, mode === 'direct' ? publicIp : undefined);
             addProbeLog('1/4', `✅ Registrar granted claim for ${result.hostname}`, 'success');
 
+            // Before the stored address changes: where the community lives until now stays one of its addresses. A live
+            // tunnel name goes dark, as this server runs one connector until slice S2, so it gets its own words below.
+            const tunnelGoesDark = movesOffLive && live.mode !== 'direct';
+            const replaced = claimReplacesAddress(claimed, tunnelGoesDark);
             // Recorded before the stored address changes: a name held until now is kept, as former.
             recordRegistrarAnswer({ name, hostname: result.hostname, status: result.status, reason: result.reason }, 'claim');
             updateNodeConfig({ publicAddress: {
@@ -394,6 +401,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             } } as any);
             dropAddressRequest(`the owner claimed "${name}" in Settings`);   // the owner's choice ends what `beanpool claim` asked for at install
             settleUnansweredClaims(name);   // and replaces any claim of another name that got no answer here
+            tellMembersOfNewAddress();
             if (result.tunnelToken) addProbeLog('2/4', `⚡ Starting the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
             if (result.tunnelToken) {
@@ -404,8 +412,10 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                     console.warn('[PublicAddr] Edge status probe error:', err?.message || err);
                 });
             }
-            // A live address replaced by another: the owners are told, and every member's app is told to follow it (§7).
-            if (live?.name && live.status === 'live' && foldName(live.name) !== foldName(name)) addressChangedByOwner(ctx, 'changed', true);
+            // Where the community lives changed: the owners are told. Every member's app is told to follow it when the live
+            // address goes dark, or nothing was kept of it (§7); otherwise they hear of the new name once it is live
+            // (services/address-notice.ts).
+            if (movesOffLive || replaced) addressChangedByOwner(ctx, 'changed', tunnelGoesDark || !replaced);
             ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
@@ -550,6 +560,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 ctx.body = { error: `Not released: the address service did not release ${host} (it answered ${said}).` };
                 return;
             }
+            dropReleasedAddress(host);
             console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result.status})`);
             noteSecurityEvent({ key: 'sec.address', detail: OWNER_ALERT_WORDS.nameReleased, ...actingAs(ctx.state) });
             ctx.body = { success: true, name, status: result.status, addressUnchanged: publicAddressGeneration() === since };
@@ -650,6 +661,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 const origin = prev.origin && (!result.name || !prev.name || result.name === prev.name) ? { origin: prev.origin } : {};
                 const { origin: _dropped, ...kept } = prev;
                 updateNodeConfig({ publicAddress: { ...kept, ...origin, ...result } } as any);
+                tellMembersOfNewAddress();
                 await syncTunnel();
                 ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result), ...serverSide() };
                 return;
@@ -783,6 +795,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // Recorded before the stored address goes.
             recordRegistrarAnswer(result, 'released');
             updateNodeConfig({ publicAddress: null } as any);
+            dropReleasedAddress(registrarHostOf(prevConfig));
+            forgetAddressNotice();
             dropAddressRequest('the owner took the address offline in Settings');   // a release never brings back the name asked for at install
             settleUnansweredClaims();   // nor a claim that got no answer here
             noteTurnedAway(prevConfig?.name, 'taken-offline');
@@ -808,11 +822,12 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
 /**
  * The address taken offline or changed by an owner: the owners' alert (sec.address, high; never sec.name, the hijack's row:
- * #2033 B1) and, when the address the members used was live, their critical announcement in words for how it went (N4).
+ * #2033 B1) and, when the address the members used stops working (`gone`), their critical announcement in words for how
+ * it went (N4).
  */
-function addressChangedByOwner(ctx: any, how: 'offline' | 'changed', wasLive: boolean): void {
+function addressChangedByOwner(ctx: any, how: 'offline' | 'changed', gone: boolean): void {
     noteSecurityEvent({ key: 'sec.address', detail: how === 'offline' ? OWNER_ALERT_WORDS.addressOffline : OWNER_ALERT_WORDS.addressChanged, high: true, priority: 4, ...actingAs(ctx.state) });
-    if (!wasLive) return;
+    if (!gone) return;
     const words = how === 'offline' ? OWNER_ALERT_WORDS.membersAddressOffline : OWNER_ALERT_WORDS.membersAddressChanged;
     try {
         adminBroadcastAnnouncement(words.title, words.body, 'critical');

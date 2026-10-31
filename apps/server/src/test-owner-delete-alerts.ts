@@ -296,7 +296,7 @@ async function main(): Promise<void> {
     console.log('\n— 2. sec.address —');
     const notices = () => (db.prepare(`SELECT title, body FROM push_notices WHERE kind = 'community.notice' ORDER BY rowid`).all() as Array<{ title: string; body: string }>);
     let n0 = notices().length;
-    updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);
+    updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'tunnel', hostname: null, status: 'live' } } as any);
     const claimed = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'tunnel' });
     let n = lines('sec.address');
     const told2a = notices().slice(n0);
@@ -305,6 +305,29 @@ async function main(): Promise<void> {
     assert(lines('sec.name').length === 0, `2a. not on sec.name, the hijack's row (${lines('sec.name').length})`);
     assert(told2a.length === 1 && told2a[0].body === "This community's address changed. Open the app to follow it.",
         `2c. the members get the critical announcement "This community's address changed. Open the app to follow it." (${JSON.stringify(told2a)})`);
+    fresh();
+    // A live direct name replaced keeps working (rename S1, services/address-notice.ts): the softer words, and the owners
+    // told as before. test-rename-main-name has the rest.
+    n0 = notices().length;
+    updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' }, registrarNames: [] } as any);
+    const claimedDirect = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'tunnel' });
+    const told2aDirect = notices().slice(n0);
+    const nDirect = lines('sec.address');
+    assert(claimedDirect.status === 200 && nDirect.length === 1 && /address was changed, by an owner/.test(nDirect[0].detail) && (nDirect[0].high === true || nDirect[0].priority >= 4),
+        `2c. a live direct name replaced: sec.address told once, high (${claimedDirect.status} ${JSON.stringify(nDirect.map((e) => e.detail))})`);
+    assert(told2aDirect.length === 1 && told2aDirect[0].body === 'This community is also at newvale.beanpool.org. The old address keeps working.',
+        `2c. and the members get the softer notice (${JSON.stringify(told2aDirect)})`);
+    fresh();
+    // A live name the record of names no longer calls live (written on it by a status answer) is no address to keep. The
+    // members are not left with nothing: the critical words, as for a name that goes dark.
+    n0 = notices().length;
+    updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' }, ownerAddresses: [], registrarNames: [{
+        address: 'oldvale.beanpool.org', role: 'current', status: 'revoked', reason: null, since: new Date().toISOString(), formerSince: null, heldUntil: null, releasedByUsAt: null, renamedByUsAt: null, lost: null,
+    }] } as any);
+    const claimedOverDead = await call('/api/local/admin/public-address/claim', ownerPhone(), { name: 'newvale', mode: 'tunnel' });
+    const told2aDead = notices().slice(n0);
+    assert(claimedOverDead.status === 200 && told2aDead.length === 1 && told2aDead[0].body === "This community's address changed. Open the app to follow it.",
+        `2c. a live name with nothing kept: the members get the critical announcement, not silence (${claimedOverDead.status} ${JSON.stringify(told2aDead)})`);
     fresh();
     n0 = notices().length;
     updateNodeConfig({ publicAddress: { name: 'oldvale', mode: 'direct', hostname: null, status: 'live' } } as any);

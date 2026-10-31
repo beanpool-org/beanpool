@@ -54,7 +54,10 @@ describe('Start a community (web)', () => {
             expect(screen.getByTestId(id)).toHaveAttribute('target', '_blank');
             expect(screen.getByTestId(id)).toHaveAttribute('rel', 'noopener noreferrer');
         }
-        fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+        const backBtn = screen.getByRole('button', { name: 'Back' });
+        expect(backBtn).toHaveClass('min-w-[44px]');
+        expect(backBtn).toHaveClass('min-h-[44px]');
+        fireEvent.click(backBtn);
         expect(onClose).toHaveBeenCalled();
         expect(calls).toEqual([{ path: '/api/community/info', method: 'GET' }]);
     });

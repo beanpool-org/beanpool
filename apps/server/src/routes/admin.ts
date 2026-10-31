@@ -43,7 +43,7 @@ import {
 } from '../engine/burst-cleanup.js';
 import {
     decisionsOn, adminActionNeedsOwner, adminActionRemovesOwner, suspendReasonProblem, adminHideCase, adminHideReply,
-    emergencySuspendRefusal, pauseChainRefusal, OPEN_PAUSES_PROOF_CODE, PAUSE_REFUSAL_CODES,
+    emergencySuspendRefusal, pauseChainRefusal, OPEN_PAUSES_PROOF_CODE, PAUSE_REFUSAL_CODES, ownerDecideTooFew, ownerDecisionRefusal,
     type OwnerOnlyAdminAction, type PauseRefusal,
 } from '../decisions-engine.js';
 import {
@@ -2410,6 +2410,34 @@ router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
+    ctx.body = { success: true };
+});
+
+// Owner: decide a vote on removing a member that too few members can vote on (removal by vote S6, design §5 point 3;
+// decisions-engine ownerDecideTooFew): an owner only, never an admin, with the fresh proof every time (requireFreshProof: the
+// phone's Manage hand-off, or the password with a current code; never an automation token) and a public reason members read
+// on the card. Recorded now; carried out when the vote closes, if it is still too few then. Every refusal, the reason's
+// included, is answered before the proof, so a code is spent only on a decision that is then made.
+router.post('/api/local/admin/decisions/:id/owner-decision', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const actor = resolveAdminActor(ctx);
+    if (!actor) return;
+    const { reason } = (ctx as any).requestBody || {};
+    const refusal = ownerDecisionRefusal(ctx.params.id, actor, reason);
+    if (refusal) {
+        ctx.status = refusal.status;
+        ctx.body = { error: refusal.error };
+        return;
+    }
+    const code = (ctx as any).requestBody?.code ?? ctx.get('x-fresh-proof');
+    if (!(await requireFreshProof(ctx, code, 'decide a vote too few members could vote on'))) return;
+    const result = ownerDecideTooFew(ctx.params.id, actor, reason);
+    if (!result.success) {
+        ctx.status = result.status;
+        ctx.body = { error: result.error };
+        return;
+    }
+    logger.info('ADMIN', `Removal vote ${ctx.params.id} decided by ${actor.substring(0, 12)}: too few members could vote on it`);
     ctx.body = { success: true };
 });
 

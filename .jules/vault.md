@@ -119,3 +119,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Vulnerability:** [What was found]\n**Learnin
 **Vulnerability:** `deleteNodePost` omitted `credentials: "same-origin"` from `fetch` options, causing cookie-authenticated moderator sessions to fail with 401 Unauthorized when attempting to delete posts.
 **Learning:** Key-session authenticated endpoints rely on ambient HTTP cookies; omitting `credentials: "same-origin"` prevents the browser from attaching session cookies on fetch requests.
 **Prevention:** Always include `credentials: "same-origin"` on fetch calls to admin or moderator endpoints that support cookie authentication.
+
+## 2026-11-01 - Unvalidated Outbound Link Scheme in Address Notices
+**Vulnerability:** `AddressNotices` in `PublicAddressPanel.tsx` rendered `n.link` in an `<a>` tag with truthiness check only, allowing non-HTTP schemes (such as `javascript:`) to render as clickable links.
+**Learning:** External links returned by backend endpoints or services should always be validated against an `http(s)` scheme allowlist before being passed to anchor `href` attributes.
+**Prevention:** Verify `typeof link === 'string' && /^https?:\/\//i.test(link.trim())` before rendering outbound anchor tags.

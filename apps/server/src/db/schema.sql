@@ -2374,6 +2374,13 @@ CREATE TABLE IF NOT EXISTS decisions (
     reply_hidden_at      DATETIME,
     reply_hidden_by      TEXT,
     reply_hidden_reason  TEXT,
+    -- A pause's own vote too few members could vote on, which an owner decided (removal by vote S6, design §5 point 3):
+    -- when, which owner, the public reason, and when the tick carried it out as the vote closed (decisions-engine.ts
+    -- ownerDecideTooFew). NULL on every other Decision. db.ts adds them to a table from before (REMOVAL_CASE_COLUMNS).
+    owner_decided_at          DATETIME,
+    owner_decided_by          TEXT,
+    owner_decided_reason      TEXT,
+    owner_decision_carried_at DATETIME,
     CHECK ((scope_kind = 'community') = (scope_id IS NULL)),
     CHECK ((scope_kind = 'community') = (touches != 'scope'))
 );

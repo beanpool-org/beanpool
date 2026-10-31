@@ -162,7 +162,7 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                 <button type="button" data-testid="event-share" onClick={share} className={`flex-1 min-w-[8rem] ${BUTTON}`}>
                     <span aria-hidden="true">🔗 </span>{t('Share')}
                 </button>
-                <div className="relative flex-1 min-w-[8rem]">
+                <div className="flex-1 min-w-[8rem]">
                     <button
                         ref={calendarButtonRef}
                         type="button"
@@ -174,37 +174,38 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                     >
                         <span aria-hidden="true">📅 </span>{t('Add to calendar')}
                     </button>
-                    {calendarMenuOpen && (
-                        <div
-                            ref={calendarMenuRef}
-                            role="menu"
-                            aria-label={t('Add to calendar')}
-                            onKeyDown={onCalendarKeyDown}
-                            className="absolute right-0 left-auto top-full mt-1 z-30 min-w-[14rem] max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800"
-                        >
-                            <button
-                                type="button"
-                                role="menuitem"
-                                data-testid="event-add-calendar-file"
-                                onClick={downloadIcs}
-                                className="w-full min-h-[48px] px-3 py-2 text-left bg-transparent border-0 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800 rounded-lg flex flex-col justify-center"
-                            >
-                                <span className="text-sm font-semibold text-nature-900 dark:text-nature-100">{t('Calendar file (.ics)')}</span>
-                                <span className="text-xs text-nature-600 dark:text-nature-300">{t('For any calendar app')}</span>
-                            </button>
-                            <button
-                                type="button"
-                                role="menuitem"
-                                data-testid="event-add-google-calendar"
-                                onClick={openGoogleCalendar}
-                                className="w-full min-h-[48px] px-3 py-2 text-left bg-transparent border-0 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800 rounded-lg flex flex-col justify-center"
-                            >
-                                <span className="text-sm font-semibold text-nature-900 dark:text-nature-100">{t('Google Calendar')}</span>
-                            </button>
-                        </div>
-                    )}
                 </div>
             </div>
+            {/* In the page's flow, not floating: the event's card is overflow-hidden and would cut a floating menu off. */}
+                {calendarMenuOpen && (
+                    <div
+                        ref={calendarMenuRef}
+                        role="menu"
+                        aria-label={t('Add to calendar')}
+                        onKeyDown={onCalendarKeyDown}
+                        className="w-full py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800"
+                    >
+                        <button
+                            type="button"
+                            role="menuitem"
+                            data-testid="event-add-calendar-file"
+                            onClick={downloadIcs}
+                            className="w-full min-h-[48px] px-3 py-2 text-left bg-transparent border-0 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800 rounded-lg flex flex-col justify-center"
+                        >
+                            <span className="text-sm font-semibold text-nature-900 dark:text-nature-100">{t('Calendar file (.ics)')}</span>
+                            <span className="text-xs text-nature-600 dark:text-nature-300">{t('For any calendar app')}</span>
+                        </button>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            data-testid="event-add-google-calendar"
+                            onClick={openGoogleCalendar}
+                            className="w-full min-h-[48px] px-3 py-2 text-left bg-transparent border-0 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800 rounded-lg flex flex-col justify-center"
+                        >
+                            <span className="text-sm font-semibold text-nature-900 dark:text-nature-100">{t('Google Calendar')}</span>
+                        </button>
+                    </div>
+                )}
             {note && <p role="status" data-testid="event-share-note" className="m-0 text-xs text-nature-600 dark:text-nature-400">{note}</p>}
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />

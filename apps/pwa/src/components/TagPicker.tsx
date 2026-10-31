@@ -165,7 +165,7 @@ export function TagPicker({
                                     <button
                                         type="button"
                                         onClick={() => setSearchQuery('')}
-                                        className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-nature-400 hover:text-nature-600"
+                                        className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-nature-400 hover:text-nature-600 dark:hover:text-nature-200"
                                         aria-label={t('Clear search')}
                                     >
                                         ✕
@@ -178,7 +178,7 @@ export function TagPicker({
                         <div className="overflow-y-auto flex-1 pr-1 space-y-4 max-h-[60vh]">
                             {searchQuery.trim().length >= 2 ? (
                                 <div>
-                                    <div className="text-xs font-bold text-nature-500 uppercase tracking-wider mb-2">
+                                    <div className="text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-2">
                                         {t('Search results')}
                                     </div>
                                     {searchResults.length === 0 ? (
@@ -215,7 +215,7 @@ export function TagPicker({
                                     {/* Suggestions */}
                                     {suggestions.length > 0 && (
                                         <div>
-                                            <div className="text-xs font-bold text-nature-500 uppercase tracking-wider mb-2">
+                                            <div className="text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-2">
                                                 {t('Suggested')}
                                             </div>
                                             <div className="flex flex-wrap gap-2">
@@ -246,7 +246,7 @@ export function TagPicker({
                                     {/* Category groups */}
                                     {groups.length > 0 && (
                                         <div>
-                                            <div className="text-xs font-bold text-nature-500 uppercase tracking-wider mb-2">
+                                            <div className="text-xs font-bold text-nature-600 dark:text-nature-400 uppercase tracking-wider mb-2">
                                                 {t('Categories')}
                                             </div>
                                             <div className="divide-y divide-nature-100 dark:divide-nature-800">

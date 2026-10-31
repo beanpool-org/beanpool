@@ -49,6 +49,7 @@ vi.mock('react-native-maps', () => ({
 vi.mock('expo-location', () => ({ getForegroundPermissionsAsync: async () => ({ status: 'denied', canAskAgain: false }), getLastKnownPositionAsync: async () => null }));
 vi.mock('expo-image-picker', () => ({}));
 vi.mock('expo-image-manipulator', () => ({}));
+vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'uuid' }));
 vi.mock('expo-image', () => ({ Image: () => null }));
 vi.mock('../../app/ThemeContext', async () => {

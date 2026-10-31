@@ -342,6 +342,10 @@ export default function SettingsScreen() {
     /** Set before an SSO flow leaves the app, so the return trip does not reset the section. */
     const skipNextFocusResetRef = React.useRef(false);
     const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
+    /** What the tick beside Protect with shows (KeeperProtectionPanel `listShown`), vault rethink VR5. */
+    const [listTickShown, setListTickShown] = useState(false);
+    /** The tick was on when Protect with or Connect again was tapped: the copy carries the list of communities. */
+    const [ssoListCommunities, setSsoListCommunities] = useState(false);
     const [revealWords, setRevealWords] = useState(false);
     const [revealLoading, setRevealLoading] = useState(false);
     const [mnemonicWords, setMnemonicWords] = useState<string | null>(null);
@@ -1815,12 +1819,16 @@ export default function SettingsScreen() {
             hasWords={hasMnemonic(identity)}
             waysBack={waysBack}
             copiesAt={copiesAt}
-            onProtectSso={Platform.OS !== 'web' ? (prov) => {
+            onProtectSso={Platform.OS !== 'web' ? (prov, listCommunities) => {
                 if (prov) setSsoEnrolProvider(prov);
+                setSsoListCommunities(listCommunities);
                 skipNextFocusResetRef.current = true;
                 setShowSsoSheet(true);
             } : undefined}
             onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
+            listCommunitiesFor={identity?.publicKey}
+            listShown={listTickShown}
+            onListShown={setListTickShown}
         />
     );
 
@@ -2498,6 +2506,7 @@ export default function SettingsScreen() {
                 visible={showSsoSheet}
                 provider={ssoEnrolProvider}
                 copiesAt={copiesAt}
+                listCommunities={ssoListCommunities}
                 onClose={() => setShowSsoSheet(false)}
                 // The community's rule moved on since this screen read it, and nothing was linked: read it again, words and all.
                 onCopiesChanged={() => { void fetchProtectionStatus(); }}

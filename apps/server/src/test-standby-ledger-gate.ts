@@ -45,6 +45,7 @@ const protectedPaths = [
     '/api/local/admin/decisions/123/accelerate',
     '/api/local/admin/decisions/123/hide-case',
     '/api/local/admin/decisions/123/hide-reply',
+    '/api/local/admin/decisions/123/owner-decision',
     '/api/member/purge',
     '/api/member/re-enroll',
     '/api/local/admin/members/m1/offboard',

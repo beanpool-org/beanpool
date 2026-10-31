@@ -504,6 +504,7 @@ export const SUITES = [
     'test-removal-doors',
     'test-removal-fairness',
     'test-removal-chain',
+    'test-removal-small',
     'test-viewer-helpers',
     'test-visitors-cant-act',
     'test-doors-key-case',

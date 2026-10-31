@@ -20,8 +20,9 @@ import { beansOn, type NodeFeatures } from '../utils/node-profile';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/decision-own-vote';
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
-    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
-    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine, voiceCreditsLine,
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, minYesLine,
+    ownerDecisionLine, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine,
+    voiceCreditsLine,
 } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
@@ -983,6 +984,12 @@ export function DecideSection({
                                             <Text style={styles.keepBody}>
                                                 {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                             </Text>
+                                            {/* Too few can vote: the owner decides when it closes (removal by vote S6) */}
+                                            {ownerDecisionLine(item, tally, item.subject?.slice(0, 8) || t('a member')) && (
+                                                <Text style={styles.keepHeadline} testID="owner-decision-line">
+                                                    {ownerDecisionLine(item, tally, item.subject?.slice(0, 8) || t('a member'))}
+                                                </Text>
+                                            )}
                                         </View>
                                     )}
 
@@ -1049,6 +1056,7 @@ export function DecideSection({
                                                     ]}
                                                 />
                                             </View>
+                                            {minYesLine(tally) && <Text style={styles.electorateText} testID="min-yes-line">{minYesLine(tally)}</Text>}
                                         </View>
                                     </View>
 
@@ -1247,11 +1255,19 @@ export function DecideSection({
                                     {/* Who Authorised Each Executed Effect (§3.7, §3.8) */}
                                     <View style={styles.historyProvenanceBox}>
                                         <Text style={styles.historyProvenanceLabel}>{inCapitalsOf(t('Authorisation & Provenance'))}</Text>
+                                        {/* Too few could vote, and an owner decided it (removal by vote S6): not the community's vote */}
+                                        {item.ownerDecisionCarriedAt && (
+                                            <Text style={styles.historyProvenanceText} testID="owner-decision-line">
+                                                {ownerDecisionLine(item, tally, item.subject?.slice(0, 8) || t('a member'))}
+                                            </Text>
+                                        )}
                                         {item.status === 'executed' && (
                                             <>
-                                                <Text style={styles.historyProvenanceText}>
-                                                    {t('Authorised by: Community Vote ({ref})', { ref: `system:decision:${item.id.slice(0, 8)}` })}
-                                                </Text>
+                                                {!item.ownerDecisionCarriedAt && (
+                                                    <Text style={styles.historyProvenanceText}>
+                                                        {t('Authorised by: Community Vote ({ref})', { ref: `system:decision:${item.id.slice(0, 8)}` })}
+                                                    </Text>
+                                                )}
                                                 <Text style={{ fontSize: 11, color: colors.text.muted, marginTop: 2 }}>
                                                     {t('Provenance: {ref} · {reason}', { ref: `system:decision:${item.id}`, reason: item.executionReason || t('Executed successfully') })}
                                                 </Text>
@@ -1274,7 +1290,10 @@ export function DecideSection({
                                         )}
                                         {item.status === 'failed' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                {tally.quorumMet ? t('Not executed: Threshold not met') : t('Not executed: Quorum not reached')}
+                                                {!tally.quorumMet ? t('Not executed: Quorum not reached')
+                                                    : tally.minYes && tally.supportRatio >= tally.thresholdRequired && tally.yesWeight > tally.noWeight
+                                                        ? t('Not executed: fewer than {n} Yes votes', { n: tally.minYes })
+                                                        : t('Not executed: Threshold not met')}
                                             </Text>
                                         )}
                                         {item.status === 'unresolved' && (

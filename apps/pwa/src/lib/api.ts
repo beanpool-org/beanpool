@@ -2336,6 +2336,14 @@ export interface Decision {
     /** A vote on removing a member whose reply an admin took down: when, and their public reason (the reply itself is gone). */
     replyHiddenAt?: string | null;
     replyHiddenReason?: string | null;
+    /**
+     * A pause's own vote too few members could vote on, which an owner decided (removal by vote S6): when, the owner's public
+     * reason (null once an admin has hidden the case: it may repeat the accusation), and when the vote closed with it carried
+     * out (null if enough members voted by then, and they decided).
+     */
+    ownerDecidedAt?: string | null;
+    ownerDecidedReason?: string | null;
+    ownerDecisionCarriedAt?: string | null;
     /** A vote on removing a member: who brought it, by name (absent from a node from before). */
     proposer?: RemovalProposer;
 }
@@ -2366,6 +2374,10 @@ export interface DecisionTally {
     supportRatio: number;
     thresholdRequired: number;
     passed: boolean;
+    /** A vote on removing a member: the fewest Yes votes that remove them, whatever the share (3; absent from a node from before). */
+    minYes?: number;
+    /** A pause's own vote fewer than 3 members could vote on, so its quorum can't be met: an owner may decide it. */
+    tooFewToVote?: boolean;
 }
 
 export interface DecisionWithTally extends Decision {

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import * as nodeClient from '../../lib/node-client';
+import { FreshProofRequiredError } from '../../lib/fresh-proof';
 
 const node: NodeProfile = { id: 'test-node', name: 'Test Node', url: 'https://test-node.local', adminPassword: 'pw' };
 
@@ -336,5 +337,83 @@ describe('DecisionsAdminPanel', () => {
         fireEvent.change(screen.getByLabelText('Reason (members will see this)'), { target: { value: 'A long enough reason' } });
         fireEvent.click(within(screen.getByRole('dialog', { name: 'Take down reply' })).getByRole('button', { name: 'Take down reply' }));
         expect(await screen.findByText('This reply is already taken down')).toBeInTheDocument();
+    });
+
+    it('an admin reads that too few can vote, and only owner level is offered an owner\'s decision', async () => {
+        const tooFew: nodeClient.AdminDecisionItem = {
+            ...pauseVote, id: 'dec-few-v',
+            tally: { totalVoters: 1, electorate: 2, quorumRequired: 3, quorumMet: false, yesWeight: 1, noWeight: 0, supportRatio: 1, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true },
+        };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([tooFew]);
+        const asAdmin = render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }} />);
+        expect(within(await screen.findByTestId('admin-decision-row')).getByTestId('admin-too-few-to-vote')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        asAdmin.unmount();
+        const asModerator = render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'm'.repeat(64), role: 'moderator' }} />);
+        await screen.findByTestId('admin-decision-row');
+        expect(screen.queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        asModerator.unmount();
+        const asOwner = render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }} />);
+        expect(await screen.findByRole('button', { name: 'Decide as owner' })).toBeInTheDocument();
+        asOwner.unmount();
+        render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'password' }} />);
+        expect(await screen.findByRole('button', { name: 'Decide as owner' })).toBeInTheDocument();
+    });
+
+    it('a hidden case takes the owner\'s reason from what members read, and the list says so and keeps it', async () => {
+        const hidden: nodeClient.AdminDecisionItem = {
+            ...pauseVote, id: 'dec-few-h', caseHiddenAt: '2026-09-21T00:00:00.000Z', caseHiddenReason: 'Shown to be false by a neighbour',
+            ownerDecidedAt: '2026-09-20T00:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it',
+        };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([hidden]);
+        const open = render(<DecisionsAdminPanel activeNode={node} />);
+        expect(await screen.findByTestId('admin-owner-decided')).toHaveTextContent('Hidden from members with the case: “Both who could vote saw it”');
+        open.unmount();
+
+        // A closed vote says so too, with the reason: a removal an owner decided does not read as the community's. One decided
+        // but not carried out (enough members voted by the close) ended as any vote does, and says nothing of the owner.
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([]);
+        vi.spyOn(nodeClient, 'fetchPastRemovalVotes').mockResolvedValue([
+            { ...hidden, id: 'dec-few-p1', status: 'executed', ownerDecisionCarriedAt: '2026-09-27T00:00:00.000Z' },
+            { ...pauseVote, id: 'dec-few-p2', status: 'unresolved', ownerDecidedAt: '2026-09-20T00:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it' },
+        ]);
+        render(<DecisionsAdminPanel activeNode={node} />);
+        const [carried, lapsed] = await screen.findAllByTestId('past-removal-row');
+        expect(within(carried).getByTestId('admin-owner-decided')).toHaveTextContent('Decided by the owner: too few members to vote. Hidden from members with the case: “Both who could vote saw it”');
+        expect(within(lapsed).queryByTestId('admin-owner-decided')).toBeNull();
+    });
+
+    it('a pause vote too few can vote on: the line says so, an owner decides with a reason, and the fresh proof box opens when the node asks', async () => {
+        // Removal by vote S6: fewer than 3 members could vote, so the node serves tooFewToVote.
+        const tooFew: nodeClient.AdminDecisionItem = {
+            ...pauseVote, id: 'dec-few-1',
+            tally: { totalVoters: 1, electorate: 2, quorumRequired: 3, quorumMet: false, yesWeight: 1, noWeight: 0, supportRatio: 1, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true },
+        };
+        const decided: nodeClient.AdminDecisionItem = { ...tooFew, id: 'dec-few-2', ownerDecidedAt: '2026-09-21T00:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it' };
+        const serverRole: nodeClient.AdminDecisionItem = { ...tooFew, id: 'dec-few-3', params: { ...tooFew.params, serverRole: 'admin' } };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([tooFew, decided, serverRole, pauseVote]);
+        const decide = vi.spyOn(nodeClient, 'ownerDecideRemoval')
+            .mockRejectedValueOnce(new FreshProofRequiredError({ kind: 'code', error: 'A current code is required to decide a vote too few members could vote on' }, 401))
+            .mockResolvedValueOnce({ success: true });
+        render(<DecisionsAdminPanel activeNode={node} />);
+        const [fewRow, decidedRow, roleRow, plainRow] = await screen.findAllByTestId('admin-decision-row');
+        expect(within(fewRow).getByTestId('admin-too-few-to-vote')).toHaveTextContent('Fewer than 3 members could vote. If nobody else votes, an owner decides');
+        expect(within(decidedRow).getByTestId('admin-owner-decided')).toHaveTextContent('An owner decided: carried out when the vote closes, if still fewer than 3 could vote. Members read: “Both who could vote saw it”');
+        expect(within(decidedRow).queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        expect(within(roleRow).queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        expect(within(plainRow).queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        expect(within(plainRow).queryByTestId('admin-too-few-to-vote')).toBeNull();
+
+        fireEvent.click(within(fewRow).getByRole('button', { name: 'Decide as owner' }));
+        const dialog = screen.getByRole('dialog', { name: 'Decide as owner' });
+        expect(dialog).toHaveTextContent('Decide the vote on removing Troll?');
+        const confirm = within(dialog).getByRole('button', { name: 'Decide: remove if still too few' });
+        expect(confirm).toBeDisabled();
+        fireEvent.change(within(dialog).getByLabelText('Reason (members will see this)'), { target: { value: '  Only Tia and Uma could vote; both saw it  ' } });
+        fireEvent.click(confirm);
+        await waitFor(() => expect(decide).toHaveBeenCalledWith('https://test-node.local', 'dec-few-1', 'Only Tia and Uma could vote; both saw it', 'pw', undefined, undefined));
+        // The password viewer is asked a current code in the box, and nothing was decided yet.
+        expect(await screen.findByTestId('owner-decision-proof-code')).toBeInTheDocument();
+        expect(decide).toHaveBeenCalledTimes(1);
     });
 });

@@ -1247,7 +1247,8 @@ function moveShopKindsToCategories(): void {
 
 /**
  * The columns a vote on removing a member carries for removal by vote's Amendment A (schema.sql `decisions`): the member's
- * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down.
+ * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down; and for slice S6, an
+ * owner's decision on a vote too few members could vote on.
  */
 export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['subject_reply', 'TEXT'],
@@ -1258,6 +1259,11 @@ export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['reply_hidden_at', 'DATETIME'],
     ['reply_hidden_by', 'TEXT'],
     ['reply_hidden_reason', 'TEXT'],
+    // Removal by vote S6: an owner decided a vote too few members could vote on (decisions-engine.ts ownerDecideTooFew).
+    ['owner_decided_at', 'DATETIME'],
+    ['owner_decided_by', 'TEXT'],
+    ['owner_decided_reason', 'TEXT'],
+    ['owner_decision_carried_at', 'DATETIME'],
 ];
 
 /**

@@ -85,6 +85,14 @@ export const OWNER_ALERT_WORDS = {
         one: `A member was paused in the last day, ${how}.`,
         many: `{n} members were paused in the last day, ${how}.`,
     }),
+    /**
+     * A vote on removing a member too few could vote on, decided by an owner (decisions-engine.ts ownerDecideTooFew; removal
+     * by vote S6, design §5 point 3), `how` who acted: "by an owner", "by the admin password".
+     */
+    removalsDecidedByOwner: (how: string) => ({
+        one: `A vote on removing a member, which too few members could vote on, was decided in the last day, ${how}.`,
+        many: `{n} votes on removing a member, which too few members could vote on, were decided in the last day, ${how}.`,
+    }),
     /** A re-key of an account with no owner or admin role (engine/node-roles.ts accountMovedAlert), `how` who acted: "by an admin". */
     accountsMoved: (how: string) => ({
         one: `A member's account was moved to a new phone in the last day, ${how}.`,

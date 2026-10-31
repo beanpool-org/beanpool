@@ -2908,6 +2908,13 @@ export interface AdminDecisionItem {
     subjectReply?: string | null;
     replyHiddenAt?: string | null;
     replyHiddenReason?: string | null;
+    /**
+     * A pause's own vote too few members could vote on, which an owner decided (removal by vote S6): when, the owner's public
+     * reason, and when the vote closed with it carried out. Absent from a node from before.
+     */
+    ownerDecidedAt?: string | null;
+    ownerDecidedReason?: string | null;
+    ownerDecisionCarriedAt?: string | null;
     /** Totals only — the node never serves who voted how. */
     tally: {
         totalVoters: number;
@@ -2918,6 +2925,10 @@ export interface AdminDecisionItem {
         noWeight: number;
         supportRatio: number;
         thresholdRequired: number;
+        /** A removal: the fewest Yes votes that remove anyone (3). Absent from a node from before. */
+        minYes?: number;
+        /** A pause's own vote fewer than 3 members could vote on: an owner may decide it (ownerDecideRemoval). */
+        tooFewToVote?: boolean;
     };
 }
 
@@ -3017,6 +3028,18 @@ export async function fetchNodePrivatePreview(nodeUrl: string): Promise<boolean 
     } catch {
         return null;
     }
+}
+
+/**
+ * An owner decides a vote on removing a member that too few members can vote on (removal by vote S6): the reason (10+
+ * characters) is public on the vote, and it is carried out when the vote closes if still too few could vote. An owner
+ * only, with the fresh proof every time (server requireFreshProof): `code` carries it; a refusal that asks for it throws
+ * FreshProofRequiredError.
+ */
+export async function ownerDecideRemoval(
+    nodeUrl: string, decisionId: string, reason: string, adminPassword?: string, tfaToken?: string, code?: string,
+): Promise<{ success: boolean }> {
+    return postAdmin(nodeUrl, `/api/local/admin/decisions/${encodeURIComponent(decisionId)}/owner-decision`, { reason, ...proofField(code) }, adminPassword, tfaToken);
 }
 
 /** The admin brake. The written reason (10+ characters) is public on the Decision. */

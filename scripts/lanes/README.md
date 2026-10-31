@@ -38,7 +38,7 @@ LANE_BUILD_BACKEND=claude            # high-risk build: headless Opus 5. Omit fo
 log "lane S7 — keeper succession"
 item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 1 early pass → GitHub green → deciding pass
 [ "$CLEAN" = 1 ] && land "$PR"          # CI green, then HELD unless LANE_MERGE=1
-log "LANE S7 DONE (clean=$CLEAN merged=$MERGED)"
+log "LANE S7 DONE (clean=$CLEAN pr=$PR) — HELD for the director"   # watch.sh wakes on this line
 ```
 
 The director launches both of these with the Bash tool's `run_in_background: true`, in the foreground form shown:

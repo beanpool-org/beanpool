@@ -302,6 +302,14 @@ async function main(): Promise<void> {
         `taken offline, a name the list also held is not published or main (${offline.status}, ${show(publishedAddresses())}, ${primaryAddress()})`);
     assert(primaryAddress() === NEW, `the community falls back to the name it still holds (${primaryAddress()})`);
 
+    // The way back (design §6): Take offline on the new name, and the fleet name is main again.
+    scene({ cf: MULLUM });
+    await claim('byron');
+    const undone = await post('/api/local/admin/public-address/offline', phone(), {});
+    assert(undone.status === 200 && primaryAddress() === MULLUM && !publishedAddresses().includes(BYRON),
+        `the new name taken offline: the old one is main again, the new one unpublished (${undone.status}, ${primaryAddress()}, ${show(publishedAddresses())})`);
+    assert((await signedFor(BYRON)).status === 200, 'and a signature for the new name is accepted through its hold');
+
     scene({ config: { publicAddress: { name: 'waitvale', mode: 'tunnel', status: 'pending' } } });
     await claim('nextvale');
     assert(!ownerConfirmedAddresses().includes('waitvale.beanpool.org') && !publishedAddresses().includes('waitvale.beanpool.org'),
@@ -397,6 +405,8 @@ async function main(): Promise<void> {
         await statusRead();
         await reconcile();
         assert(notices().length === n0, `nothing is said while the new name waits (${show(notices().slice(n0))})`);
+        await claim('byron', computer());
+        assert(notes.filter((n) => n.key === 'sec.address').length === 1, `claiming the waiting name again changes nothing: the owners are told once (${show(notes.map((n) => n.detail))})`);
         approve('byron');
         await reconcile();
         const told = notices().slice(n0);

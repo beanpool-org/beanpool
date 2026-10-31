@@ -372,8 +372,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         // B3; rename design §6). A first claim, or the same name again, stays plain, so setting up has no hard gate.
         const live = (getNodeConfig() as any).publicAddress;
         const claimed = `${foldName(name)}.${REGISTRAR_ZONE}`;
-        const movesOffLive = !!live?.name && live.status === 'live' && foldName(live.name) !== foldName(name);
-        if ((movesOffLive || (foldName(live?.name) !== foldName(name) && publishedBesides(claimed)))
+        const otherName = foldName(live?.name) !== foldName(name);
+        const movesOffLive = otherName && !!live?.name && live.status === 'live';
+        if (otherName && (movesOffLive || publishedBesides(claimed))
             && !(await requireFreshProof(ctx, b.code, 'change this community\'s main address'))) return;
         // Keyed as release-name keys them (case, trailing dot), so "name." waits for a release of "name" (#1583 review r4176138168).
         const inFlight = foldName(name);
@@ -415,7 +416,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // Where the community lives changed: the owners are told. Every member's app is told to follow it when the live
             // address goes dark, or nothing was kept of it (§7); otherwise they hear of the new name once it is live
             // (services/address-notice.ts).
-            if (movesOffLive || replaced) addressChangedByOwner(ctx, 'changed', tunnelGoesDark || !replaced);
+            if (movesOffLive || (otherName && replaced)) addressChangedByOwner(ctx, 'changed', tunnelGoesDark || !replaced);
             ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');

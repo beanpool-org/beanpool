@@ -539,7 +539,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'pa
                         </p>
                         <FreshProofBox proof={proof} testId="owner-decision-proof" />
                         {decideError && <div className="p-2 rounded-lg bg-red-950/60 border border-red-800 text-xs text-red-300">{decideError}</div>}
-                        <div className="flex justify-end gap-2 pt-1">
+                        <div className="flex flex-wrap justify-end gap-2 pt-1">
                             <button onClick={closeDecide} disabled={deciding} className="px-3 py-2 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-semibold text-white">
                                 Cancel
                             </button>

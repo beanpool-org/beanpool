@@ -71,8 +71,8 @@ const HIDDEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b\u200e\u200f\
 
 // A web address: a scheme, or a name and a dot before Latin letters ("example.com", "t.me/x", and "node.js" with them).
 // Not digits after the dot ("3.5mm"), a single letter ("a.k.a"), or other scripts, whose abbreviations are written with a
-// dot and no space ("г.москва", "ดร.สมชาย").
-const WEB_ADDRESS = /:\/\/|[^\s.]\.[a-z]{2,}/;
+// dot and no space ("г.москва", "ดร.สมชาย"). Either case: NFKC gives capitals back from letters that have no lower case ("𝐂𝐎𝐌").
+const WEB_ADDRESS = /:\/\/|[^\s.]\.[a-z]{2,}/i;
 // The full stops a browser reads as a dot in a host name that NFKC leaves alone: "example。com" opens example.com.
 const IDEOGRAPHIC_STOPS = /[\u3002\uff61]/g;
 // What shows as nothing, so a contact is read past it ("0412\u200c345678" looks like the number it is): U+200C and U+200D,

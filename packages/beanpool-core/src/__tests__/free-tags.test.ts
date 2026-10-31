@@ -60,7 +60,7 @@ describe('what a free tag may not be', () => {
     it('refuses a contact in every shape, its full-width forms too', () => {
         for (const tag of ['@handle', 'me@example.com', 'hello @ you', 'a＠b', '0412 345 678', '0412345678', '+61 412 345 678', '(04) 1234 5678', '04-12-34-56-78',
             '04 12 34 56 78', '1234567', 'call 0412 345 678', '0412/345/678', '０４１２／３４５／６７８', '02/9876/543', '０４１２３４５６７８', '٠٤١٢٣٤٥٦٧٨', 'http://x', 'https://example.com/a', 'www.example.com', 'example.com',
-            'bit.ly/abc', 't.me/someone', 'wa.me', 'ＥＸＡＭＰＬＥ．ＣＯＭ', 'example。com', 'example｡com', 'wa。me/chat', 't。me/someone', 'bit｡ly/abc', '0412。345。678']) {
+            'bit.ly/abc', 't.me/someone', 'wa.me', 'ＥＸＡＭＰＬＥ．ＣＯＭ', 'example。com', 'example｡com', 'wa。me/chat', 't。me/someone', 'bit｡ly/abc', '0412。345。678', 'example.\u{1d402}\u{1d40e}\u{1d40c}', 'example.\u2102\u{1d546}\u{1d544}', 'example.\u{1f132}\u{1f13e}\u{1f13c}']) {
             expect(freeTagRefusal(tag), tag).toBe(FREE_TAG_NOT_A_CONTACT);
         }
     });

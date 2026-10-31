@@ -51,6 +51,7 @@ import {
     emergencySuspendMember,
     haltDecision,
     takeDownDecisionReply,
+    ownerDecideRemoval,
     liftMemberSuspension,
     acknowledgeShutdownStatus,
     fetchDiskHealth,
@@ -70,6 +71,7 @@ import {
     forgetStandby,
     passwordNeeds2faError,
 } from './node-client';
+import { FreshProofRequiredError } from './fresh-proof';
 
 /** An Offer's photo as the Manager sends it: the node refuses a new Offer with none. */
 const PHOTO = 'data:image/jpeg;base64,cmVzaXplZA==';
@@ -654,6 +656,18 @@ describe('node admin decisions and suspensions', () => {
         expect(init.method).toBe('POST');
         expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
         expect(JSON.parse(init.body)).toEqual({ reason: "It gave a member's address", password: 'adminpw' });
+    });
+
+    it('ownerDecideRemoval sends POST with the reason and the code, and turns a refusal asking the phone into the fresh proof error', async () => {
+        await ownerDecideRemoval('https://node.test', 'dec-790', 'Only two could vote and both saw it', 'adminpw', 'tfa-1', '123456');
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(url).toContain('/api/local/admin/decisions/dec-790/owner-decision');
+        expect(init.method).toBe('POST');
+        expect(init.headers['X-Admin-2FA-Session']).toBe('tfa-1');
+        expect(JSON.parse(init.body)).toEqual({ reason: 'Only two could vote and both saw it', code: '123456', password: 'adminpw' });
+
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({ error: 'Do this from your phone', code: 'phone_required', phoneRequired: true }) });
+        await expect(ownerDecideRemoval('https://node.test', 'dec-790', 'Only two could vote and both saw it')).rejects.toBeInstanceOf(FreshProofRequiredError);
     });
 
     it('liftMemberSuspension sends POST to reactivate member', async () => {

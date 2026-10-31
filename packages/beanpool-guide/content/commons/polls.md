@@ -28,7 +28,7 @@ While a poll is open it says nothing about this. If it did, someone checking the
 
 In the web app the type is **🗳️ Poll**, the notes are **Background / Context**, the option button is **+ Add option** and the last button is **🗳️ Create Poll**. On the web Map, tap the round **+**.
 
-You can have one poll open at a time, and a community can have 5 open at once. You need credit that is not frozen to start or answer a poll.
+You can have one poll open at a time, and a community can have 5 open at once. You need credit that is not frozen to start or answer a poll. An owner or admin can have as many open as the owners' **Owner and admin limit** allows (100 unless an owner changes it), within the community's 5.
 
 ## Finding and answering polls
 

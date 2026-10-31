@@ -12,8 +12,10 @@ export const AGENT_BACKUPS_PER_DAY = 2;
 export const AGENT_LIST_MAX = 50;
 /**
  * Offers, Needs, events and enterprise listings one owner's assistant may make in a UTC day (on top of the calls above): an
- * owners' setting, "Assistant posts a day" (Marty, 30 Oct: 100 by default, up to 1,000 for seeding a community), kept in
- * this server's local config, read on every post, so a change takes effect at once.
+ * owners' setting, first "Assistant posts a day" (Marty, 30 Oct: 100 by default, up to 1,000 for seeding a community), kept in
+ * this server's local config, read on every post, so a change takes effect at once. Since 31 Oct (Marty: "make it the same
+ * as the posts limits setting") it is the "Owner and admin limit": owners' and admins' own content limits in the apps too
+ * (engine/owner-admin-limit.ts), each on its own count. The stored key stays `agentPostsPerDay`.
  */
 export const AGENT_POSTS_PER_DAY_DEFAULT = 100;
 export const AGENT_POSTS_PER_DAY_MIN = 1;
@@ -34,14 +36,14 @@ export function isAgentPostsPerDay(v: unknown): v is number {
     return typeof v === 'number' && Number.isInteger(v) && v >= AGENT_POSTS_PER_DAY_MIN && v <= AGENT_POSTS_PER_DAY_MAX;
 }
 
-/** The owners' "Assistant posts a day" now (a stored value out of range reads as the default). */
+/** The owners' "Owner and admin limit" now (a stored value out of range reads as the default). */
 export function agentPostsPerDay(): number {
     const v = getLocalConfig().agentPostsPerDay;
     return isAgentPostsPerDay(v) ? v : AGENT_POSTS_PER_DAY_DEFAULT;
 }
 
 export function setAgentPostsPerDay(n: number): void {
-    if (!isAgentPostsPerDay(n)) throw new Error(`Assistant posts a day is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX}`);
+    if (!isAgentPostsPerDay(n)) throw new Error(`The owner and admin limit is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX}`);
     updateLocalConfig({ agentPostsPerDay: n });
 }
 

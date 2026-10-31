@@ -27,7 +27,8 @@ const ANCHOR = 'https://valley.example.org';
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn(async () => adapter) }));
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
-        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? ANCHOR : null)),
+        // The one-off bp_trust_sync_v3 read is behind this phone: it asks for a sync of its own on open.
+        getItem: vi.fn(async (k: string) => (k === 'beanpool_anchor_url' ? ANCHOR : k === 'bp_trust_sync_v3' ? 'true' : null)),
         setItem: vi.fn(async () => {}),
         removeItem: vi.fn(async () => {}),
         getAllKeys: vi.fn(async () => []),

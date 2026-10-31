@@ -168,11 +168,11 @@ const EGGS = {
 };
 
 /** The node and the phone's copy: getPost answers the listing as it now is, and an edit saved changes it. */
-function answers(keeperOf: string[], listing: () => Record<string, unknown> = () => EGGS) {
+function answers(keeperOf: string[], row: () => Record<string, unknown> = () => ({})) {
     let post: Record<string, unknown> = { ...EGGS };
     const database = { getFirstAsync: async () => null, getAllAsync: async () => [] };
     return (name: string, args: unknown[]) => {
-        if (name === 'getPost') return Promise.resolve({ ...post, ...listing() });
+        if (name === 'getPost') return Promise.resolve({ ...post, ...row() });
         if (name === 'updatePost') {
             const u = args[1] as Record<string, unknown>;
             post = { ...post, title: u.title, description: u.description, photos: u.photos };
@@ -215,8 +215,8 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
-async function open(keeperOf: string[], listing?: () => Record<string, unknown>) {
-    net.answer = answers(keeperOf, listing);
+async function open(keeperOf: string[], row?: () => Record<string, unknown>) {
+    net.answer = answers(keeperOf, row);
     params.now = { id: EGGS.id };
     await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(PostDetailScreen)) as any); });
     await settle();
@@ -292,8 +292,8 @@ describe("a keeper editing their enterprise's Offer", () => {
 describe('its tags on the edit form', () => {
     const LEMON = 'food.fruit.lemon';
     const ORANGE = 'food.fruit.orange';
-    /** The row a phone holds: `tags` as the phone's copy has them now. */
-    const row = (tags: string) => () => ({ ...EGGS, tags });
+    /** The phone's copy of the listing has these tags. */
+    const row = (tags: string) => () => ({ tags });
     /** What the page was asked to send as the edit. */
     const sent = () => (net.args.get('updatePost') as [string, Record<string, unknown>])[1];
     const reload = async () => {
@@ -314,7 +314,7 @@ describe('its tags on the edit form', () => {
 
     it('a copy from before the tags column: the real ones land after the form opened, show in the picker, and Save still sends none', async () => {
         let tags = '';
-        await open([ENT], () => ({ ...EGGS, tags }));
+        await open([ENT], () => ({ tags }));
         await click(button('✏️ Edit Post'), 'Edit Post');
         expect(chip('Lemon')).toBeNull();
 
@@ -331,7 +331,7 @@ describe('its tags on the edit form', () => {
 
     it('one taken off before such a reload stays off, and the save names the rest', async () => {
         let tags = LEMON;
-        await open([ENT], () => ({ ...EGGS, tags }));
+        await open([ENT], () => ({ tags }));
         await click(button('✏️ Edit Post'), 'Edit Post');
         await click(chip('Lemon'), 'Remove Lemon');
         tags = `${LEMON} ${ORANGE}`;

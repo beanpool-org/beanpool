@@ -145,6 +145,10 @@ describe('key-lines.ts: the whole sentences it knows', () => {
         for (const line of NAMES_LIST_INLINE) expect(writtenIn('utils/names-list.ts', line), line).toBe(true);
     });
 
+    it('the node\'s refusal of a removed member\'s bring-back is the sentence both apps translate: it arrives in English', () => {
+        for (const file of ['../server/src/engine/rekey-redeem.ts', '../pwa/src/lib/web-rekey.ts']) expect(writtenIn(file, REKEY_TEXT.accountGone), file).toBe(true);
+    });
+
     it('a line it doesn\'t know, a node\'s own, is shown as it came, in any language', () => {
         expect(inXx(() => keyLineWords('Riverbend is closed for the winter.'))).toBe('Riverbend is closed for the winter.');
     });

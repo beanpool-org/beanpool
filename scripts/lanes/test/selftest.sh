@@ -580,14 +580,17 @@ check "shards running is a wait, not a reason to sync" eval 'not_logged "syncing
 check "no run at all still syncs, then the gate holds the sync's review" eval 'logged "syncing with main" && logged "LEFT FOR THE DIRECTOR" && logged "leaving it open"'
 
 scenario "45. watch.sh wakes on a PR left for the director; a lane waiting for GitHub is not stuck on quota"
-print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "⚠ PR #42 LEFT FOR THE DIRECTOR, no deciding pass: still red on aaa3 after 2 fix stage(s)"' 'sleep 600' > "$T/run-selftestgate.sh"
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "⚠ PR #42 LEFT FOR THE DIRECTOR, no deciding pass: still red on aaa3 after 2 fix stage(s)"' > "$T/run-selftestgate.sh"
+print -l '#!/bin/zsh' 'sleep 600' > "$T/run-selftestother.sh"
 print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "waiting for GitHub on #43, head aaa1: pending (poll 1 of 70)"' 'sleep 600' > "$T/run-selftestwait.sh"
+# The lane logs the hold and exits at once, as a run script does, while another lane keeps running.
+zsh "${HERE:h}/start.sh" "$T/run-selftestother.sh" > /dev/null 2>&1 &
 zsh "${HERE:h}/start.sh" "$T/run-selftestgate.sh" > /dev/null 2>&1 &
 sleep 2
 LANE_WATCH_SECS=1 zsh "${HERE:h}/watch.sh" >> "$LOG" 2>&1 &
 w4=$!
 for i in {1..5}; do kill -0 $w4 2>/dev/null || break; sleep 1; done
-{ zsh "${HERE:h}/stop.sh" selftestgate; } >> "$LOG" 2>&1
+{ zsh "${HERE:h}/stop.sh" selftestother; } >> "$LOG" 2>&1
 for i in {1..5}; do kill -0 $w4 2>/dev/null || break; sleep 1; done
 zsh "${HERE:h}/start.sh" "$T/run-selftestwait.sh" > /dev/null 2>&1 &
 sleep 2

@@ -11,7 +11,8 @@
  *      its keeper's role (an owner keeper 7, a member keeper 5); a group's pool at an owner's 7, after which a member posting
  *      there is refused (the pool is full past a member's 5); a moderator keeps a member's 5.
  *   3. Polls: a member's 2nd active poll is refused as before; an owner's 4th at a setting of 3, naming it; the node-wide 5
- *      active polls holds for an owner at 7, unchanged.
+ *      active polls holds for an owner at 7, unchanged. Resume is held to the same three (a member's, an owner's past the
+ *      setting, the node's 5), a poll past its closing time no longer counts, and with room a poll comes back up.
  *   4. Groups a day: a member's 6th is refused as before; an owner's 6th and 7th go and the 8th is refused, naming 7.
  *   5. Enterprises: a member's 4th in a day, and 21st running, refused as before; an owner's 4th to 7th in a day go and the
  *      8th is refused, naming 7; an owner with 7 running from before is refused the 8th, naming 7 at a time.
@@ -38,7 +39,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
 import { db, makeActivePollIndexPlain } from './db/db.js';
-import { initStateEngine, createPost, createTreasury, adminAssignTreasuryOperator, generateInvite } from './state-engine.js';
+import { initStateEngine, createPost, createTreasury, adminAssignTreasuryOperator, generateInvite, pausePost, resumePost } from './state-engine.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import {
     assertMayMakeInvite, assertMayPostToday, assertMayStartEnterprise, assertMayStartGroupToday, assertMaySubmitToPulse,
@@ -106,7 +107,7 @@ function eventsUntil(author: string, max: number, extra: Record<string, unknown>
 }
 
 const newPoll = (author: string) => createPost('poll', 'community', `Which day ${++n}?`, '', 0, 'fixed', author, undefined, undefined, undefined, false, undefined, false,
-    { pollOptions: [{ id: '1', text: 'Saturday' }, { id: '2', text: 'Sunday' }] });
+    { pollOptions: [{ id: '1', text: 'Saturday' }, { id: '2', text: 'Sunday' }] })!;
 function pollsUntil(author: string, max: number): { made: number; refused: string } {
     let made = 0;
     for (let i = 0; i < max; i++) {
@@ -254,6 +255,33 @@ async function main(): Promise<void> {
         `at 7, the community's 5 active polls still holds for an owner, unchanged (${ownPollsAt7.made}; ${ownPollsAt7.refused})`);
     const admAtNodeCap = refusal(() => newPoll(adm));
     assert(/Node limit of 5 active polls/.test(admAtNodeCap), `and for everyone else then (${admAtNodeCap})`);
+    closeAllPolls();
+
+    // A poll goes active by resume too: the same limits there (deciding review, 1802573c: a plain member reached 7).
+    const pollStatus = (id: string) => (db.prepare('SELECT status FROM posts WHERE id = ?').get(id) as { status: string }).status;
+    const memFirst = newPoll(mem);
+    assert(pausePost(memFirst.id, mem) && resumePost(memFirst.id, mem) && pollStatus(memFirst.id) === 'active', 'a member with room: their paused poll comes back up');
+    pausePost(memFirst.id, mem);
+    newPoll(mem);
+    const memResume = refusal(() => resumePost(memFirst.id, mem));
+    assert(/Rate limit: You can only have 1 active poll at a time/.test(memResume) && pollStatus(memFirst.id) === 'paused',
+        `a member: pause, a new poll, resume is refused, the poll stays paused (${memResume})`);
+    db.prepare(`UPDATE posts SET poll_closes_at = ? WHERE author_pubkey = ? AND type = 'poll' AND status = 'active'`).run(new Date(Date.now() - HOUR).toISOString(), mem);
+    assert(resumePost(memFirst.id, mem) && pollStatus(memFirst.id) === 'active', 'a poll past its closing time no longer counts: the paused one comes back up');
+    closeAllPolls();
+    setAgentPostsPerDay(3);
+    const ownOpen = [newPoll(own), newPoll(own), newPoll(own)];
+    pausePost(ownOpen[0].id, own);
+    newPoll(own);
+    const ownResume = refusal(() => resumePost(ownOpen[0].id, own));
+    assert(/owners allow 3 active polls at a time/.test(ownResume) && pollStatus(ownOpen[0].id) === 'paused', `an owner past the setting of 3 on resume, naming it (${ownResume})`);
+    closeAllPolls();
+    setAgentPostsPerDay(7);
+    const fiveOpen = [newPoll(own), newPoll(own), newPoll(own), newPoll(own), newPoll(own)];
+    pausePost(fiveOpen[0].id, own);
+    newPoll(adm);
+    const nodeResume = refusal(() => resumePost(fiveOpen[0].id, own));
+    assert(/Node limit of 5 active polls/.test(nodeResume) && pollStatus(fiveOpen[0].id) === 'paused', `any resume past the community's 5 is refused (${nodeResume})`);
     closeAllPolls();
 
     // ── 4. Groups a day ─────────────────────────────────────────────────────────────────────────

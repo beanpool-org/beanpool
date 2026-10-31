@@ -1212,7 +1212,7 @@ export function addHealthAccessLogToken(d: Database.Database): boolean {
 /**
  * A member's one active poll was also a UNIQUE index on posts(author_pubkey) for active polls. Owners and admins may now
  * have as many as the owners' "Owner and admin limit" (Marty, 31 Oct; engine/owner-admin-limit.ts), so the number is
- * engine/posts.ts createPost's check alone (in the same transaction as the insert) and the index, under the SAME name, is
+ * engine/posts.ts assertActivePollRoom alone (createPost's and resumePost's) and the index, under the SAME name, is
  * a plain one: an older image booted back on this data runs `CREATE UNIQUE INDEX IF NOT EXISTS` with that name, finds it,
  * and so never fails its schema on an owner's second open poll. At every boot, before the schema.sql exec, which makes
  * the plain one on a fresh install (no posts table here yet: nothing to do). Returns whether it replaced a unique one.

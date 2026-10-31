@@ -2437,7 +2437,7 @@ router.post('/api/local/admin/decisions/:id/owner-decision', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
-    logger.info('ADMIN', `An owner decided removal vote ${ctx.params.id}: too few members could vote on it`);
+    logger.info('ADMIN', `Removal vote ${ctx.params.id} decided by ${actor.substring(0, 12)}: too few members could vote on it`);
     ctx.body = { success: true };
 });
 

@@ -27,7 +27,9 @@
  *     another with its current code.
  *  4. When the owner's decision does not stand: enough members voted by the close (a dormant member's vote made it 3),
  *     the owner who decided lost the role, no decision at all, a vote on someone holding a server role, a vote with enough
- *     voters, votes off.
+ *     voters, a standby (refused at the door, before the proof), votes off. Two that keep it standing: an owner who moves
+ *     to a new phone before the close (their decision moves with the key), and an admin hiding the case as false (the
+ *     owner's reason goes from what members read with it, since it may repeat the accusation, and admins keep it).
  *  5. Reinstatement keeps no Yes floor: 2 Yes to 1 No passes.
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
@@ -158,6 +160,8 @@ async function main() {
     const { mintHandshakeToken, consumeHandshakeToken, backdateAdminSessionForTests, STEP_UP_REQUIRED_CODE } = await import('./admin-key-auth.js');
     const { issueAutomationToken } = await import('./automation-tokens.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
+    const { completeRekey, issueRekeyCode } = await import('./engine/member-wizards.js');
+    const { setNodeRole, STANDBY_CODE } = await import('./config/node-role.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { setSimulatedDiskUsageForTesting } = await import('./engine/storage-health.js');
     const alerts = await import('./services/alerts.js');
@@ -450,6 +454,48 @@ async function main() {
     grantNodeRole(otto.pubKeyHex, 'owner', gen.pubKeyHex);
     gone([yan]);
 
+    // The owner who decided moves to a new phone before the close (as engine/key-move.ts moves every key of theirs): their
+    // decision moves with them, and still stands. It would otherwise name a key that is no owner, and the pause would lift.
+    const ned = seed('OwnerNed', false);
+    grantNodeRole(ned.pubKeyHex, 'owner', gen.pubKeyHex);
+    quiet.push(ned);
+    const fox = seed('FoxFord');
+    const foxVote = pauseOf(fox);
+    r = await decide(ownerPhoneSessionHeaders(ned.pubKeyHex), foxVote, 'Only two could vote and Fox emptied the shared shed');
+    assert(r.status === 200 && row(foxVote).owner_decided_by === ned.pubKeyHex, `Ned, an owner, decides Fox's vote (${r.status})`);
+    const nedNew = keypair(ned.callsign);
+    completeRekey(ned.pubKeyHex, nedNew.pubKeyHex, issueRekeyCode(ned.pubKeyHex, 'owner:password').code, 'owner:password');
+    quiet.push(nedNew);
+    assert(row(foxVote).owner_decided_by === nedNew.pubKeyHex, `Ned moves to a new phone: the decision names his new key (${String(row(foxVote).owner_decided_by).slice(0, 8)})`);
+    closeNow(foxVote);
+    assert(row(foxVote).status === 'execution_pending_grace' && !!row(foxVote).owner_decision_carried_at && statusOf(fox) === 'disabled',
+        `and it is carried out at the close: the grace window opens, Fox stays paused (${row(foxVote).status}, ${statusOf(fox)})`);
+    gone([fox]);
+
+    // An admin hides the case as one shown to be false: the owner's reason goes from what members read with it, since it may
+    // repeat the accusation, open or closed. It changes nothing else (adminHideCase), and the admins keep the reason.
+    const hal = seed('HalHart');
+    const halVote = pauseOf(hal);
+    const HAL_REASON = 'Only two could vote, and Hal sold stolen eggs at the market';
+    r = await decide(ottoPhone(), halVote, HAL_REASON);
+    fresh();
+    const hid = await admin(`/api/local/admin/decisions/${halVote}/hide-case`, adaSession, { reason: 'The eggs were his own, as his neighbour showed' });
+    seen = await cardFor(tia, halVote);
+    assert(r.status === 200 && hid.status === 200 && !!seen.card?.ownerDecidedAt && seen.card.ownerDecidedReason === null && !seen.text.includes(HAL_REASON),
+        `the case hidden as false: the card says an owner decided, and no longer says their reason (${JSON.stringify(seen.card?.ownerDecidedReason ?? null)})`);
+    closeNow(halVote);
+    seen = await cardFor(tia, halVote);
+    assert(row(halVote).status === 'execution_pending_grace' && !!seen.card?.ownerDecisionCarriedAt && seen.card.ownerDecidedReason === null && !seen.text.includes(HAL_REASON),
+        `hiding words changes nothing else: it is carried out at the close, and the closed card holds no reason either (${row(halVote).status})`);
+    const halSees = await cardFor(hal, halVote);
+    assert(halSees.card?.ownerDecidedReason === null && !halSees.text.includes(HAL_REASON), 'Hal reads none of it either');
+    fresh();
+    const adminList = await admin('/api/local/admin/decisions', adaSession);
+    const adminRow = (adminList.body?.decisions ?? []).find((d: any) => d.id === halVote);
+    assert(adminRow?.ownerDecidedReason === HAL_REASON && row(halVote).owner_decided_reason === HAL_REASON,
+        `the admins' list keeps the owner's reason (${String(adminRow?.ownerDecidedReason).slice(0, 40)})`);
+    gone([hal]);
+
     // Decided, but the member deleted their own account before the close: nothing to carry out, and nothing says it was.
     const ivo = seed('IvoIrwin');
     const ivoVote = pauseOf(ivo);
@@ -490,6 +536,21 @@ async function main() {
     r = await decide(ottoPhone(), kaiVote, 'Deciding a vote that has already closed');
     assert(r.status === 409 && r.body?.error === de.OWNER_DECISION_CLOSED, `a closed vote can't be decided (${r.status} ${r.body?.error})`);
     gone([...crowd, kai]);
+
+    // On a standby: refused at the door with its JSON answer, before the proof, so no code is spent, and nothing is written.
+    const gia = seed('GiaGrant');
+    const giaVote = pauseOf(gia);
+    const ottoNow = ottoPhone();
+    setNodeRole('backup');
+    try {
+        r = await decide(ottoNow, giaVote, 'Deciding on a standby, which must not be');
+    } finally {
+        setNodeRole('primary');
+    }
+    assert(r.status === 409 && r.body?.code === STANDBY_CODE && typeof r.body?.error === 'string' && !row(giaVote).owner_decided_at,
+        `on a standby it answers the standby's JSON refusal, and nothing is written (${r.status} ${r.text.slice(0, 90)})`);
+    closeNow(giaVote);
+    gone([gia]);
 
     // Votes off: no owner's decision either.
     const lea = seed('LeaLong');

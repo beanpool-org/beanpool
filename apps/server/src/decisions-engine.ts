@@ -394,8 +394,9 @@ function carriesMemberBalance(params: unknown): params is Record<string, unknown
  *
  * A vote on removing a member also says who brought it (`proposer`, Amendment A point 3): the admin who paused them by
  * name, never by key. Once an admin has hidden its case (adminHideCase), the case is gone from what members read (the
- * description, the reason in its params, a member's own title) and the admin's public reason stands in its place. A reply
- * an admin took down (adminHideReply) is gone from the row itself; members read the admin's reason (replyHiddenReason).
+ * description, the reason in its params, a member's own title, an owner's reason for deciding it) and the admin's public
+ * reason stands in its place. A reply an admin took down (adminHideReply) is gone from the row itself; members read the
+ * admin's reason (replyHiddenReason).
  */
 export function publicDecision(decision: Decision): PublicDecision {
     const { adminHaltedBy: _haltedBy, caseHiddenBy: _hiddenBy, replyHiddenBy: _replyHiddenBy, ownerDecidedBy: _decidedBy, ...kept } = decision;
@@ -447,8 +448,9 @@ function removalProposer(decision: Decision): RemovalProposer | null {
 /**
  * A vote on removing a member, as members read it once an admin has hidden its case (adminHideCase): the title the node
  * gives a removal ("Remove {name}?", so a member's own title, which may carry the accusation, goes too), the admin's
- * public reason in place of the description, and no reason in its params. The member's reply, who brought it and the
- * tally stay.
+ * public reason in place of the description, and no reason in its params. An owner's reason for deciding it goes too (it
+ * may repeat the accusation): the card says an owner decided, without it, and the admins' list keeps it. The member's
+ * reply, who brought it and the tally stay.
  */
 function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecision {
     const name = (typeof decision.params?.memberName === 'string' && decision.params.memberName) || (decision.subject || '').slice(0, 8);
@@ -462,6 +464,7 @@ function withCaseHidden(decision: Decision, shown: PublicDecision): PublicDecisi
         title: tr('Remove {name}?', { name }),
         description: tr('An admin hid the case for this vote, as one shown to be false. Their reason: {reason}', { reason: decision.caseHiddenReason ?? '' }),
         params,
+        ownerDecidedReason: null,
     };
 }
 

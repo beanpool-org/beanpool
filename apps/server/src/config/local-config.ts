@@ -107,8 +107,9 @@ export interface LocalConfig {
     /** AI assistants connected through OAuth with the phone's approval (agent/oauth.ts): this server's own, never in a backup. */
     agentOAuthGrants?: AgentOAuthGrantRecord[];
     /**
-     * "Assistant posts a day" (agent/limits.ts agentPostsPerDay): the most posts one owner's assistant ticked "May post for me"
-     * makes in a UTC day, 1–1,000, an owners' setting. Left out: 100. This server's own, never copied to a standby.
+     * "Owner and admin limit", first "Assistant posts a day" (agent/limits.ts agentPostsPerDay): the most posts one owner's
+     * assistant ticked "May post for me" makes in a UTC day, and owners' and admins' own content limits in the apps
+     * (engine/owner-admin-limit.ts), 1–1,000, an owners' setting. Left out: 100. This server's own, never copied to a standby.
      */
     agentPostsPerDay?: number;
     // Backup side: the plaintext token this backup presents to its primary.

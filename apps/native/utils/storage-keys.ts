@@ -292,6 +292,15 @@ export function wordsWrittenDownStoreKey(publicKey: string): string {
     return `beanpool_words_written_down:${publicKey.toLowerCase()}`;
 }
 
+/**
+ * One account's choice whether a sign-in copy made here also carries its list of communities ('1' or '0'; absent = on,
+ * Marty's pick 9 of 27 Oct), from the tick beside Protect with (utils/copy-communities.ts, vault rethink VR5). A flag
+ * only, nothing of the list. Kept when the account leaves the phone: it is the member's say, not the phone's.
+ */
+export function copyListsCommunitiesStoreKey(publicKey: string): string {
+    return `beanpool_copy_lists_communities:${publicKey.toLowerCase()}`;
+}
+
 /** The last time the "one way back" card asked the global community about this account, and its answer (one-way-back.ts). */
 export function oneWayBackAskedStoreKey(publicKey: string): string {
     return `beanpool_one_way_back_asked:${publicKey.toLowerCase()}`;

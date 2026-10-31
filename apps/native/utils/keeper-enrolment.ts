@@ -26,9 +26,11 @@
  */
 
 import {
+    packCopyCommunities,
     recoveryWordsMatchSeed,
     sealSeedToSso,
     toEd25519Seed,
+    type CopyCommunity,
     type SealedShare,
 } from '@beanpool/core';
 import { anchorUrl, signedPost, signedDelete } from './node-post';
@@ -85,6 +87,12 @@ export interface KeeperEnrolmentResult {
      * one is where the move meant it to go (utils/vault-move.ts).
      */
     keptAt?: 'vault' | 'community';
+    /**
+     * How many communities the copy lists (vault rethink VR5, utils/copy-communities.ts), and how many of this phone's
+     * did not fit (past 20, or past the size a copy can hold). Absent: the copy carries no list.
+     */
+    communitiesListed?: number;
+    communitiesLeftOut?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +146,8 @@ export interface VaultEnrolmentInput {
     sub: string;
     idToken: string;
     ticket: string;
+    /** The member's communities, when their tick says the copy carries them (utils/copy-communities.ts). */
+    communities?: readonly CopyCommunity[] | null;
 }
 
 /**
@@ -151,6 +161,8 @@ export interface CommunityEnrolmentInput {
     sub: string;
     idToken: string;
     nonce: string;
+    /** The member's communities, when their tick says the copy carries them (utils/copy-communities.ts). */
+    communities?: readonly CopyCommunity[] | null;
 }
 
 export type SsoEnrolmentInput = VaultEnrolmentInput | CommunityEnrolmentInput;
@@ -182,7 +194,7 @@ async function enrolAtVault(input: VaultEnrolmentInput): Promise<KeeperEnrolment
     // most needs a connected sign-in. Such a phone deposits the seed alone.
     let sealed: SealedSsoShares;
     try {
-        sealed = await sealSsoShares(identity, provider, sub);
+        sealed = await sealSsoShares(identity, provider, sub, { communities: input.communities });
     } catch (e) {
         return nothing(`Your account couldn't be locked to this sign-in (${(e as Error).message}). Nothing was linked.`);
     }
@@ -197,7 +209,9 @@ async function enrolAtVault(input: VaultEnrolmentInput): Promise<KeeperEnrolment
             wordsSealed: sealed.wordsSealed,
         });
         console.log(`[KEEPER] ${provider}: deposited at the key vault${deposit.replaced ? ' (replaced another account\'s copy)' : ''}`);
-        return enrolmentFromVault([provider], { wordsSealed: deposit.wordsSealed, replaced: deposit.replaced, keptAt: 'vault' });
+        return enrolmentFromVault([provider], {
+            wordsSealed: deposit.wordsSealed, replaced: deposit.replaced, keptAt: 'vault', ...listedIn(sealed),
+        });
     } catch (e) {
         if (e instanceof VaultError) return nothing(e.message, e.reason);
         return nothing((e as Error).message || 'The sign-in could not be linked.');
@@ -226,7 +240,7 @@ async function enrolAtCommunity(input: CommunityEnrolmentInput): Promise<KeeperE
 
     let sealed: SealedSsoShares;
     try {
-        sealed = await sealSsoShares(identity, provider, sub);
+        sealed = await sealSsoShares(identity, provider, sub, { communities: input.communities });
     } catch (e) {
         return nothing((e as Error).message);
     }
@@ -256,6 +270,7 @@ async function enrolAtCommunity(input: CommunityEnrolmentInput): Promise<KeeperE
             isSingleBlob: true,
             wordsSealed,
             keptAt: 'community',
+            ...listedIn(sealed),
         };
     } catch (e) {
         return nothing(`could not reach the node: ${(e as Error).message}`);
@@ -267,6 +282,16 @@ export interface SealedSsoShares {
     shares: Array<SealedShare & { holderType: 'sso'; holderRef: SsoProvider; shareIndex: 1 }>;
     /** Whether the 12 words travel with the seed, so a sign-in restore gives them back. */
     wordsSealed: boolean;
+    /** The communities the copy lists, and how many did not fit; both 0 for a copy with no list. */
+    communitiesListed: number;
+    communitiesLeftOut: number;
+}
+
+/** What a result says about the copy's list: nothing for a copy without one. */
+function listedIn(sealed: SealedSsoShares): Pick<KeeperEnrolmentResult, 'communitiesListed' | 'communitiesLeftOut'> {
+    return sealed.communitiesListed || sealed.communitiesLeftOut
+        ? { communitiesListed: sealed.communitiesListed, communitiesLeftOut: sealed.communitiesLeftOut }
+        : {};
 }
 
 /**
@@ -277,7 +302,10 @@ export interface SealedSsoShares {
  * door (utils/global-join.ts), whose one sign-in both joins and protects. Throws with a reason for a log, never words
  * or keys.
  */
-export async function sealSsoShares(identity: BeanPoolIdentity, provider: SsoProvider, sub: string): Promise<SealedSsoShares> {
+export async function sealSsoShares(
+    identity: BeanPoolIdentity, provider: SsoProvider, sub: string,
+    options: { communities?: readonly CopyCommunity[] | null } = {},
+): Promise<SealedSsoShares> {
     // The identity's privateKey is either a raw 32-byte Ed25519 seed or a
     // 48-byte PKCS8 envelope (as created by the PWA), hex-encoded.
     let seed: Uint8Array;
@@ -296,10 +324,14 @@ export async function sealSsoShares(identity: BeanPoolIdentity, provider: SsoPro
         console.log(`[KEEPER] ${provider}: this phone's 12 words do not make its key; sealing the key alone`);
     }
 
+    // The member's communities, only when they chose it (vault rethink VR5): packed here to know what fits, sealed by
+    // core inside the copy, never beside it. None given: no list box, the copy exactly as before lists.
+    const list = packCopyCommunities(options.communities ?? []);
+
     // Seal the entire 32-byte Ed25519 seed to the SSO provider under scrypt(provider:sub).
     let ssoSealed: SealedShare;
     try {
-        ssoSealed = await sealSeedToSso(seed, provider, sub, { words: sealWords });
+        ssoSealed = await sealSeedToSso(seed, provider, sub, { words: sealWords, communities: list.kept });
     } catch (e) {
         throw new Error(`could not seal the SSO fragment: ${(e as Error).message}`);
     }
@@ -307,6 +339,8 @@ export async function sealSsoShares(identity: BeanPoolIdentity, provider: SsoPro
     return {
         shares: [{ holderType: 'sso', holderRef: provider, shareIndex: 1, ...ssoSealed }],
         wordsSealed: !!sealWords,
+        communitiesListed: list.kept.length,
+        communitiesLeftOut: list.leftOut,
     };
 }
 

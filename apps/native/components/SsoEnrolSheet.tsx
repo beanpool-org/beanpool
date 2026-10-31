@@ -14,6 +14,7 @@ import { authenticateUser } from '../utils/LocalAuth';
 import { signInOnOpen } from '../utils/sso-sheet-opening';
 import { useIdentity } from '../app/IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
+import { communitiesForCopy } from '../utils/copy-communities';
 
 export function SsoEnrolSheet({
     visible,
@@ -25,6 +26,7 @@ export function SsoEnrolSheet({
     copyAt,
     copiesAt,
     onCopiesChanged,
+    listCommunities = false,
 }: {
     visible: boolean;
     onClose: () => void;
@@ -57,6 +59,13 @@ export function SsoEnrolSheet({
      * before the member links one, and to offer no sign-in where the community keeps none.
      */
     onCopiesChanged?: () => void;
+    /**
+     * The member chose, in the flow that opened the sheet, to keep their list of communities in the copy (vault rethink
+     * VR5): true only from Account Protection's Protect with or Connect again, with the tick beside them on screen and left
+     * on (components/KeeperProtectionPanel.tsx). Absent or false: no list, whatever the stored tick says, so an opener that
+     * draws no tick (Settings' move card, welcome's claim-flow Add a sign-in) never sends one.
+     */
+    listCommunities?: boolean;
 }): React.JSX.Element | null {
     const { colors } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -126,10 +135,14 @@ export function SsoEnrolSheet({
                 setStep('error');
                 return;
             }
+            // The member's communities ride inside the copy only when the opener says the member left the tick on there
+            // (vault rethink VR5), never from the stored tick alone.
+            const communities = await communitiesForCopy(listCommunities);
             const result = await connectAndDeposit({
                 provider,
                 url,
                 identity,
+                communities,
                 ...(copyAt ? { copyAt } : {}),
                 // Where the screen said the copy goes: it is made only there.
                 ...(copiesAt ? { shownAt: copiesAt } : {}),
@@ -155,8 +168,9 @@ export function SsoEnrolSheet({
                 setEnrolResult(result);
                 setStep('success');
                 if (timerRef.current) clearTimeout(timerRef.current);
-                // A copy that replaced another account's stays up until Done: that line has to be read.
-                if (result.replaced) return;
+                // A copy that replaced another account's, or whose list left communities out, stays up until Done: that
+                // line has to be read.
+                if (result.replaced || result.communitiesLeftOut) return;
                 timerRef.current = setTimeout(() => {
                     onEnrolled(result);
                     onClose();
@@ -259,6 +273,14 @@ export function SsoEnrolSheet({
                             </Text>
                             {enrolResult?.replaced && (
                                 <Text style={styles.body}>{signInReplacedWords(PROVIDER_NAME)}</Text>
+                            )}
+                            {/* More communities than a copy holds (vault rethink VR5): said, never dropped silently. */}
+                            {!!enrolResult?.communitiesLeftOut && (
+                                <Text style={styles.body}>
+                                    {t('The copy lists your first {listed} communities. {left} more did not fit.', {
+                                        listed: String(enrolResult.communitiesListed ?? 0), left: String(enrolResult.communitiesLeftOut),
+                                    })}
+                                </Text>
                             )}
                             <TouchableOpacity
                                 style={styles.primaryButton}

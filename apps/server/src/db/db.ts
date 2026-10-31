@@ -1210,6 +1210,25 @@ export function addHealthAccessLogToken(d: Database.Database): boolean {
 }
 
 /**
+ * A member's one active poll was also a UNIQUE index on posts(author_pubkey) for active polls. Owners and admins may now
+ * have as many as the owners' "Owner and admin limit" (Marty, 31 Oct; engine/owner-admin-limit.ts), so the number is
+ * engine/posts.ts assertActivePollRoom alone (createPost's and resumePost's) and the index, under the SAME name, is
+ * a plain one: an older image booted back on this data runs `CREATE UNIQUE INDEX IF NOT EXISTS` with that name, finds it,
+ * and so never fails its schema on an owner's second open poll. At every boot, before the schema.sql exec, which makes
+ * the plain one on a fresh install (no posts table here yet: nothing to do). Returns whether it replaced a unique one.
+ */
+export function makeActivePollIndexPlain(d: Database.Database = db): boolean {
+    if (!d.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'posts'`).get()) return false;
+    const idx = d.prepare(`SELECT "unique" AS u FROM pragma_index_list('posts') WHERE name = 'idx_posts_author_active_poll'`).get() as { u: number } | undefined;
+    const wasUnique = idx?.u === 1;
+    d.transaction(() => {
+        if (wasUnique) d.exec(`DROP INDEX idx_posts_author_active_poll`);
+        d.exec(`CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
+    })();
+    return wasUnique;
+}
+
+/**
  * A shop picks one of the Market's categories (Marty, 25 Oct 2026). On a node made before, the shops table's `kind`
  * becomes `category` (schema.sql: RENAME COLUMN keeps its place and its CHECK, which then names `category`, as a fresh
  * install has it), and every shop moves to the category its kind became (@beanpool/core SHOP_CATEGORY_KINDS): a kind
@@ -1622,7 +1641,7 @@ export function initSchema() {
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
     // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
     try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
-    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
+    try { if (makeActivePollIndexPlain()) console.log('[DB] The one-active-poll index is a plain one now (owners and admins may have more)'); } catch (e) { console.warn('[DB] Could not make the active-poll index plain:', (e as Error)?.message || e); }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_at DATETIME`).run(); } catch { }

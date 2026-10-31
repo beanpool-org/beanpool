@@ -19,6 +19,7 @@ import { hasVault, type SignInCopies } from '../utils/vault-config';
 import { t, tn, word } from '@beanpool/core';
 import { welcomeLineWords } from './welcome/welcome-lines';
 import { WhoCanOpen } from './WhoCanOpen';
+import { CopyCommunitiesTick } from './CopyCommunitiesTick';
 
 /**
  * Under a connected sign-in, in a build without a key vault (utils/vault.ts `signInCopiesAt`): who can open the copy
@@ -125,6 +126,9 @@ export function KeeperProtectionPanel({
     hasWords,
     waysBack = false,
     colors = lightColors,
+    listCommunitiesFor,
+    listShown = false,
+    onListShown,
 }: {
     protection: Protection;
     /**
@@ -157,8 +161,23 @@ export function KeeperProtectionPanel({
      * as before the rule.
      */
     copiesAt?: SignInCopies;
-    onProtectSso?: (provider: SsoProvider) => void;
+    /**
+     * Protect with, or Connect again. `listCommunities`: the tick beside them is on screen and on, so the copy carries the
+     * member's list of communities (SsoEnrolSheet `listCommunities`); false without the tick (`listCommunitiesFor` absent).
+     */
+    onProtectSso?: (provider: SsoProvider, listCommunities: boolean) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
+    /**
+     * The account's public key: the panel shows the tick for whether a copy made here also carries the account's list of
+     * communities (vault rethink VR5, components/CopyCommunitiesTick.tsx), beside Protect with. Absent: no tick.
+     */
+    listCommunitiesFor?: string;
+    /**
+     * What the tick shows, kept by the screen (the panel holds no state): it reports each change through `onListShown`
+     * (CopyCommunitiesTick `onChange`), and Protect with and Connect again hand it back as `listCommunities`.
+     */
+    listShown?: boolean;
+    onListShown?: (on: boolean) => void;
 }): React.JSX.Element {
     const styles = stylesFor(colors);
     const enrolledSso = protection.enrolledSso ?? [];
@@ -204,6 +223,8 @@ export function KeeperProtectionPanel({
 
     const renderSsoProviders = () => {
         if (Platform.OS === 'web' || !onProtectSso) return null;
+        // The list rides only with the tick drawn here and left on (vault rethink VR5).
+        const protect = (prov: SsoProvider) => onProtectSso(prov, !!listCommunitiesFor && listShown);
 
         return (
             <View style={[styles.ssoGroup, rowOnly && styles.ssoGroupFirst]}>
@@ -268,7 +289,7 @@ export function KeeperProtectionPanel({
                                     {hasWords && (
                                         <TouchableOpacity
                                             style={styles.reconnectBtn}
-                                            onPress={() => onProtectSso(prov)}
+                                            onPress={() => protect(prov)}
                                             accessibilityRole="button"
                                             accessibilityLabel={t('Connect {provider} again, to include your 12 words', { provider: PROVIDER_NAMES[prov] })}
                                         >
@@ -295,7 +316,7 @@ export function KeeperProtectionPanel({
                             <AppleButton
                                 key="apple"
                                 title={t('Protect with Apple')}
-                                onPress={() => onProtectSso('apple')}
+                                onPress={() => protect('apple')}
                                 style={{ marginTop: 8 }}
                             />
                         );
@@ -305,7 +326,7 @@ export function KeeperProtectionPanel({
                             <GoogleButton
                                 key="google"
                                 title={t('Protect with Google')}
-                                onPress={() => onProtectSso('google')}
+                                onPress={() => protect('google')}
                                 style={{ marginTop: 8 }}
                             />
                         );
@@ -314,7 +335,7 @@ export function KeeperProtectionPanel({
                         <FacebookButton
                             key="facebook"
                             title={t('Protect with Facebook')}
-                            onPress={() => onProtectSso('facebook')}
+                            onPress={() => protect('facebook')}
                             style={{ marginTop: 8 }}
                         />
                     );
@@ -322,6 +343,17 @@ export function KeeperProtectionPanel({
                 {/* With a key vault: one tap away, before a sign-in is linked as well as after (VR0: said where the
                     copy is made). Without one: every enrolled sign-in, not just the ones this phone lists: Apple
                     connected on an iPhone has no row on Android, and its copy is on the server all the same. */}
+                {/* Said before Protect with or Connect again is tapped: it applies to the next copy made (VR5). Under a
+                    sign-in already connected it says so, since that copy was made before; a phone without the 12 words has
+                    no Connect again, so there it applies only to a sign-in connected from now on. */}
+                {listCommunitiesFor && (
+                    <CopyCommunitiesTick
+                        publicKey={listCommunitiesFor}
+                        colors={colors}
+                        onChange={onListShown}
+                        connected={enrolledSso.length > 0 ? (hasWords ? 'words' : 'noWords') : undefined}
+                    />
+                )}
                 {atVault ? (
                     <WhoCanOpen label={t(SIGN_IN_ROW.whoCanOpenButton)} colors={colors}>{openersLine}</WhoCanOpen>
                 ) : enrolledSso.length > 0 && openersLine}

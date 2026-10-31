@@ -10,7 +10,7 @@ const search = (id: string, settings: Record<string, unknown>) => ({ id, type: '
 
 describe('Save to Home: the Market\'s search as a saved search', () => {
     it('takes the words, Offers or Needs, the category and the distance', () => {
-        expect(searchFromMarket({ q: 'eggs', kind: 'offer', category: 'food', radiusKm: 5 })).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5 });
+        expect(searchFromMarket({ q: 'eggs', kind: 'offer', category: 'food', radiusKm: 5 })).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5, tags: ['food.eggs'] });
         expect(searchFromMarket({ q: 'help moving', kind: 'need' })).toEqual({ q: 'help moving', kind: 'need' });
     });
 

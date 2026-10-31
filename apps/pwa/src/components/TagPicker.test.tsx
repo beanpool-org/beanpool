@@ -113,8 +113,7 @@ describe('TagPicker Web Component', () => {
             expect(screen.getByRole('dialog')).toBeInTheDocument();
 
             // Press Escape
-            const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
-            window.dispatchEvent(event);
+            fireEvent.keyDown(window, { key: 'Escape' });
 
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
             expect(parentEscape).not.toHaveBeenCalled();

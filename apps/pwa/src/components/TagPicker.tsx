@@ -94,7 +94,7 @@ export function TagPicker({
                             key={id}
                             type="button"
                             onClick={() => toggleTag(id)}
-                            className="min-h-[44px] px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors bg-terra-600 text-white hover:opacity-90 dark:bg-terra-500"
+                            className="min-h-[44px] px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover"
                             aria-label={t('Remove {name}', { name: label })}
                         >
                             <span>{label}</span>
@@ -197,7 +197,7 @@ export function TagPicker({
                                                         onClick={() => toggleTag(id)}
                                                         className={`min-h-[44px] px-3.5 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
                                                             selected
-                                                                ? 'bg-terra-600 text-white dark:bg-terra-500'
+                                                                ? 'bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover'
                                                                 : 'bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700'
                                                         }`}
                                                         aria-pressed={selected}
@@ -229,7 +229,7 @@ export function TagPicker({
                                                             onClick={() => toggleTag(id)}
                                                             className={`min-h-[44px] px-3.5 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
                                                                 selected
-                                                                    ? 'bg-terra-600 text-white dark:bg-terra-500'
+                                                                    ? 'bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover'
                                                                     : 'bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700'
                                                             }`}
                                                             aria-pressed={selected}
@@ -283,7 +283,7 @@ export function TagPicker({
                                                                                         onClick={() => toggleTag(item.id)}
                                                                                         className={`min-h-[44px] px-3.5 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
                                                                                             selected
-                                                                                                ? 'bg-terra-600 text-white dark:bg-terra-500'
+                                                                                                ? 'bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover'
                                                                                                 : 'bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700'
                                                          }`}
                                                                                         aria-pressed={selected}
@@ -299,7 +299,7 @@ export function TagPicker({
                                                                                 onClick={() => toggleTag(group.id)}
                                                                                 className={`min-h-[44px] px-3.5 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors ${
                                                                                     selectedTags.includes(group.id)
-                                                                                        ? 'bg-terra-600 text-white dark:bg-terra-500'
+                                                                                        ? 'bg-bp-cta-fill text-bp-cta-on hover:bg-bp-cta-hover'
                                                                                         : 'bg-nature-100 dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700'
                                                                                 }`}
                                                                                 aria-pressed={selectedTags.includes(group.id)}

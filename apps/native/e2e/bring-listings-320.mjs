@@ -58,6 +58,7 @@ const STUBS = {
         import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
         const dark = new URLSearchParams(location.search).get('scheme') === 'dark';
         export const useStyles = (make) => make({ theme: dark ? 'dark' : 'light', colors: dark ? darkColors : lightColors });
+        export const useTheme = () => ({ theme: dark ? 'dark' : 'light', colors: dark ? darkColors : lightColors });
     `,
 };
 

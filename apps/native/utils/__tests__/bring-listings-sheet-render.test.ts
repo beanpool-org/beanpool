@@ -43,14 +43,17 @@ vi.mock('react-native', () => {
     };
     return {
         Platform: { OS: 'android' }, StyleSheet: { create: <T,>(s: T) => s, hairlineWidth: 1 },
-        View: el('div'), Text: el('span'), Pressable: el('div'), ActivityIndicator: el('i'), ScrollView, Modal,
+        View: el('div'), Text: el('span'), Pressable: el('div'), ActivityIndicator: ({ color }: { color?: string }) => createElement('i', { 'data-style': '{}', 'data-testid': 'bring-listings-spinner', 'data-color': color }), ScrollView, Modal,
         DeviceEventEmitter: { addListener: () => ({ remove() {} }), emit() {} },
         useWindowDimensions: () => ({ width: WIDTH, height: HEIGHT, scale: 1.5, fontScale: 1.3 }),
     };
 });
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }) }));
 const theme = vi.hoisted(() => ({ colors: null as any, scheme: 'light' }));
-vi.mock('../../app/ThemeContext', () => ({ useStyles: (make: (t: unknown) => unknown) => make({ theme: theme.scheme, colors: theme.colors }) }));
+vi.mock('../../app/ThemeContext', () => ({
+    useStyles: (make: (t: unknown) => unknown) => make({ theme: theme.scheme, colors: theme.colors }),
+    useTheme: () => ({ theme: theme.scheme, colors: theme.colors }),
+}));
 const world = vi.hoisted(() => ({
     identity: { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32) } as any,
     focus: null as null | (() => void | (() => void)),
@@ -155,6 +158,13 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the shee
         // The words give way, never the buttons: what is under the words fits in the sheet.
         expect(layout.height(scroll)).toBeLessThanOrEqual(box.height);
         expect(layout.height(scroll)).toBeGreaterThan(0);
+    });
+
+    it('the run\'s spinner is the theme\'s, not the platform\'s', async () => {
+        theme.colors = colors;
+        theme.scheme = scheme;
+        await draw(createElement(BringListingsSheetView, { view: STATES[1][1], onBring() {}, onNotNow() {}, onClose() {} }));
+        expect(byId('bring-listings-spinner')!.getAttribute('data-color')).toBe(colors.brand.primary);
     });
 });
 

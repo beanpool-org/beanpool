@@ -12,7 +12,7 @@ import React from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t } from '@beanpool/core';
-import { useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
 import { BRING_WORDS, bringLineWords, type BringLine } from '../utils/bring-listings';
 
@@ -28,6 +28,7 @@ export function BringListingsSheetView({ view, onBring, onNotNow, onClose }: {
     onClose: () => void;
 }) {
     const styles = useStyles(makeStyles);
+    const { colors } = useTheme();
     const { height } = useWindowDimensions();
     const layout = bottomSheetLayout(height, useSafeAreaInsets());
     // Back does what the sheet's own way out does.
@@ -47,7 +48,7 @@ export function BringListingsSheetView({ view, onBring, onNotNow, onClose }: {
                         )}
                         {view.step === 'bringing' && (
                             <View style={styles.running}>
-                                <ActivityIndicator />
+                                <ActivityIndicator color={colors.brand.primary} />
                                 <Text style={styles.line} accessibilityLiveRegion="polite">{BRING_WORDS.bringing(view.done, view.total)}</Text>
                             </View>
                         )}

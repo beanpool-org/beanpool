@@ -117,6 +117,16 @@ function redactEnvironmentSecrets(text: string): string {
 }
 
 /**
+ * A photo link's address carries its secret in the path (agent/photo-upload-route.ts): whatever writes a request's path or a
+ * link down, the line says `/mcp/photos/u/…`. The query that may follow is left, and case is ignored, as the router ignores it.
+ */
+const PHOTO_LINK_TOKEN = /\/mcp\/photos\/u\/[^\s"'<>?#\\]*/gi;
+
+export function redactPhotoLinks(text: string): string {
+    return text.replace(PHOTO_LINK_TOKEN, '/mcp/photos/u/…');
+}
+
+/**
  * Sanitizes input message by redacting sensitive items (private keys, passwords, mnemonics, internet addresses).
  */
 export function sanitizeMessage(msg: string): string {
@@ -146,6 +156,9 @@ export function sanitizeMessage(msg: string): string {
 
     // 6. Re-key and invite codes, wherever they sit in the text (`redactCodes`).
     sanitized = redactCodes(sanitized);
+
+    // 7. A photo link's token, in the address that carries it (`redactPhotoLinks`).
+    sanitized = redactPhotoLinks(sanitized);
 
     return sanitized;
 }

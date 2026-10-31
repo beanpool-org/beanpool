@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { treasuryPostOffer, treasuryPostNeed } from '../utils/db';
 import { CategoryPickerSheet } from '../components/CategoryPickerSheet';
 import { PostPhotoRow } from '../components/PostPhotoRow';
+import { TagPicker } from '../components/TagPicker';
 import { categoryEmoji, categoryLabel } from '../constants/categories';
 import { useTheme, useStyles } from './ThemeContext';
 import { amountRefusalWords, ANY_DECIMALS, formatNumber, inCapitalsOf, isAmbiguousAmount, isShopCategory, parseAmount, t, word, type WordKey } from '@beanpool/core';
@@ -75,6 +76,7 @@ export default function TreasuryPostScreen() {
 
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState(!isNeed && isShopCategory(shopCategory) ? shopCategory : '');
+    const [tags, setTags] = useState<string[]>([]);
     const [credits, setCredits] = useState('');
     const [priceType, setPriceType] = useState<string>('fixed');
     const [footerHeight, setFooterHeight] = useState(0);
@@ -137,6 +139,7 @@ export default function TreasuryPostScreen() {
             priceType,
             repeatable,
             ...(photos.length > 0 ? { photos } : {}),
+            ...(tags.length > 0 ? { tags } : {}),
         };
         try {
             if (isNeed) {
@@ -226,6 +229,17 @@ export default function TreasuryPostScreen() {
                             )}
                             <MaterialCommunityIcons name="chevron-down" size={22} color={colors.text.muted} />
                         </Pressable>
+                    </View>
+
+                    {/* Tags */}
+                    <View style={styles.field}>
+                        <TagPicker
+                            value={tags}
+                            onChange={setTags}
+                            category={category}
+                            title={title}
+                            description={description}
+                        />
                     </View>
 
                     {/* Price */}

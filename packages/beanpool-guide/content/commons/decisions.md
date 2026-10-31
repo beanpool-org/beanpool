@@ -25,7 +25,7 @@ Each Decision shows:
 - **Turnout:** how many votes it needs, and whether it has them yet;
 - **Tally:** the Yes and No so far, and how much Yes it needs.
 
-A vote on removing a member also shows who brought the case (the admin who suspended them), and the member's own reply, beside the case, once they have written one. If an admin hid the case because it was shown to be false, you read the admin's reason in its place. If an admin took down the reply because it harmed someone, you read their reason in the reply's place. When a vote on removing a member opens, everyone who can vote on it gets an alert on their phone. See "Rules and how decisions work".
+A vote on removing a member also shows who brought the case (the admin who suspended them), and the member's own reply, beside the case, once they have written one. If an admin hid the case because it was shown to be false, you read the admin's reason in its place. If an admin took down the reply because it harmed someone, you read their reason in the reply's place. When a vote on removing a member opens, everyone who can vote on it gets an alert on their phone. Where fewer than 3 members can vote on it, the vote says so: if nobody else votes, an owner decides when it closes, and once one has, you read their reason beside the case. See "Rules and how decisions work".
 
 If the vote is about you, the card says you can't vote on it, and offers **Reply to this case** while it is open, and **Report this case as false**.
 

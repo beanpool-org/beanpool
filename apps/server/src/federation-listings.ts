@@ -18,7 +18,8 @@ import type { Libp2p } from 'libp2p';
 import { db } from './db/db.js';
 import {
     reachAdmitsPeer, parseReachPeers, isSyntheticAccount, cutToLimit, fitsTextLimit, replaceLoneSurrogates,
-    LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, copiedPostTags, postTagsOf, storedPostTags,
+    LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, copiedFreeTags, copiedPostTags, freeTagsOf, postTagsOf,
+    storedFreeTags, storedPostTags,
 } from '@beanpool/core';
 import { postSearchKeywords } from './engine/search-keywords.js';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
@@ -59,6 +60,12 @@ export interface RemoteListing {
      * as before; one newer shows a chip its members' apps can label.
      */
     tags?: string[];
+    /**
+     * The tags its author typed (DESIGN-tags-free-entry-fable.md §2), public with the listing. Absent when it has none. A
+     * peer older than them neither sends nor reads it, and shows the listing as before. On a peer's listing they are text
+     * from another node: held to the rule here, shown on that listing, found with it, never offered to this node's members.
+     */
+    freeTags?: string[];
 }
 
 /** How many listings one pull may carry. A bound, so a large community cannot flood a small peer. */
@@ -87,7 +94,7 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
 
     const rows = db.prepare(`
         SELECT p.id, p.type, p.category, p.title, p.description, p.credits, p.price_type,
-               p.author_pubkey, p.created_at, p.updated_at, p.reach, p.reach_peers, p.tags,
+               p.author_pubkey, p.created_at, p.updated_at, p.reach, p.reach_peers, p.tags, p.free_tags,
                m.callsign AS author_callsign
         FROM posts p
         JOIN members m ON m.public_key = p.author_pubkey
@@ -116,6 +123,7 @@ export function listingsForPeer(peerId: string, limit = LISTINGS_PER_PULL): Remo
             createdAt: row.created_at,
             updatedAt: row.updated_at ?? null,
             ...(row.tags ? { tags: postTagsOf(row.tags) } : {}),
+            ...(freeTagsOf(row.free_tags).length > 0 ? { freeTags: freeTagsOf(row.free_tags) } : {}),
         });
         if (admitted.length >= limit) break;
     }
@@ -165,7 +173,7 @@ export function cacheRemoteListings(
     // as well as any listings currently tied to this originNode (so a new peer identity at this address
     // never inherits a previous peer's listings). An exact prefix compare, not LIKE: LIKE ignores case, and peer ids do not.
     const heldForPeer = db.prepare(`SELECT id, type, category, title, description, credits, price_type, author_pubkey, created_at,
-        updated_at, active, status, reach, origin_node, tags FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ? ORDER BY id`);
+        updated_at, active, status, reach, origin_node, tags, free_tags FROM posts WHERE substr(id, 1, ?) = ? OR origin_node = ? ORDER BY id`);
     let changed = false;
     db.transaction(() => {
         const before = JSON.stringify(heldForPeer.all(peerPrefix.length, peerPrefix, originNode));
@@ -218,16 +226,18 @@ export function cacheRemoteListings(
                 // A peer's listing is a copy this node shows and never edits, held to the limits a member's is (#1493):
                 // a title or description past its limit is kept cut to it, ending "…", and a category past its limit
                 // is no category this node knows. Its tags as the peer holds them (copiedPostTags: well-formed ids, at
-                // most five, one from a newer library kept), and its search words made here, its tags' included, so
-                // a member finds it by them at once rather than after this server's next boot.
+                // most five, one from a newer library kept), the tags its author typed held to the rule (copiedFreeTags),
+                // and its search words made here, both kinds' included, so a member finds it by them at once rather than
+                // after this server's next boot.
                 const category = typeof l.category === 'string' && l.category && fitsTextLimit(l.category, LISTING_CATEGORY_LIMIT) ? replaceLoneSurrogates(l.category) : 'other';
                 const title = cutToLimit(l.title, LISTING_TITLE_LIMIT);
                 const description = typeof l.description === 'string' ? cutToLimit(l.description, LISTING_DESCRIPTION_LIMIT) : '';
                 const tags = copiedPostTags(l.tags);
+                const freeTags = copiedFreeTags(l.freeTags);
                 db.prepare(`INSERT INTO posts (
                     id, type, category, title, description, credits, price_type, author_pubkey, created_at,
-                    active, status, repeatable, updated_at, search_keywords, origin_node, reach, tags
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', 0, ?, ?, ?, 'local', ?)`).run(
+                    active, status, repeatable, updated_at, search_keywords, origin_node, reach, tags, free_tags
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', 0, ?, ?, ?, 'local', ?, ?)`).run(
                     localId,
                     l.type,
                     category,
@@ -238,9 +248,10 @@ export function cacheRemoteListings(
                     l.authorPublicKey,
                     typeof l.createdAt === 'string' ? l.createdAt : new Date(0).toISOString(),
                     typeof l.updatedAt === 'string' ? l.updatedAt : null,
-                    postSearchKeywords(title, description, category, tags),
+                    postSearchKeywords(title, description, category, tags, freeTags),
                     originNode,
                     storedPostTags(tags),
+                    storedFreeTags(freeTags),
                 );
                 cached++;
             } catch (e: any) {

@@ -213,10 +213,11 @@ export const TABLES: Record<string, TableEntry> = {
     // import sets the tables' touch triggers aside while it writes them (engine/sync.ts IMPORT_KEEPS_STAMPS, G1, G1b).
     // `search_keywords` is the main server's too; one it holds empty (a linked community's listing cached before tags
     // slice T2, which now writes them as it caches) is filled by each server's boot backfill alike, from the same words
-    // (state-engine.ts backfillSearchKeywords). `tags` is the main server's verbatim (engine/sync.ts postTags).
+    // (state-engine.ts backfillSearchKeywords). `tags` and `free_tags` are the main server's verbatim (engine/sync.ts postTags,
+    // postFreeTags).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_host_lets_in event_state event_start_local event_end_local event_tz event_online event_link event_repeat event_repeat_until event_repeat_skips hidden_by_reports_at removed_by_moderator_at lendable lend_max_days lend_terms replacement_value shop_id featured_at created_via tags free_tags'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -399,7 +400,7 @@ export const TABLES: Record<string, TableEntry> = {
     deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
     // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
     // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
-    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason'),
+    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id subject_reply subject_replied_at case_hidden_at case_hidden_by case_hidden_reason reply_hidden_at reply_hidden_by reply_hidden_reason owner_decided_at owner_decided_by owner_decided_reason owner_decision_carried_at'),
     decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
     // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
     decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),

@@ -15,6 +15,9 @@ export interface SuggestTagsOptions {
     readonly limit?: number;
 }
 
+/** The maximum number of suggested tags shown in composer TagPicker sheets (§4.4). */
+export const SUGGESTED_TAGS_MAX = 8;
+
 const ORDER = new Map(TAG_LIBRARY.map((tag, i) => [tag.id, i]));
 const depth = (id: string) => id.split('.').length;
 

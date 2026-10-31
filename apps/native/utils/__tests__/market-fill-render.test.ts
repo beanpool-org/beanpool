@@ -212,6 +212,26 @@ const fill = () => host.querySelector('[data-testid="market-fill"]');
 const tick = async () => { await act(async () => { DeviceEventEmitter.emit('sync_data_updated'); }); await settle(); };
 const count = (title: string) => (text().match(new RegExp(`${title}(?!\\d)`, 'g')) ?? []).length;
 
+describe('a tag filter on a short nearby list (review of #2663)', () => {
+    const LEMON = 'food.fruit.lemon';
+    const lemon = (id: string, title: string) => listing(id, title, { tags: LEMON });
+
+    it('only listings with the tag: the tag\'s own read goes everywhere, and nothing untagged comes beneath', async () => {
+        holds([lemon('near-lemon', 'Near lemons'), listing('near-kettle', 'Near kettle')]);
+        node.rows = [...farOf(2), { ...farOf(1)[0], id: 'far-lemon', title: 'Far lemons', tags: [LEMON] }];
+        params.now = { tag: LEMON };
+        await render();
+        await act(async () => { await new Promise(r => setTimeout(r, 320)); });
+        await settle();
+        expect(node.asked.at(-1)).toContain(`tags=${encodeURIComponent(LEMON)}`);
+        expect(text()).toContain('Far lemons');
+        expect(count('Far 0')).toBe(0);
+        expect(count('Far 1')).toBe(0);
+        expect(text()).not.toContain('Near kettle');
+        expect(fill()).toBeNull();
+    });
+});
+
 describe('a short nearby list is filled with the newest from elsewhere', () => {
     it('nothing near: the newest from elsewhere fill in at once, with the short line above and no tap', async () => {
         node.rows = farOf(3);

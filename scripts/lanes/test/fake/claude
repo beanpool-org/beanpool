@@ -12,12 +12,15 @@ done
 if [[ "$prompt" == *PROBE-OK* ]]; then
   n=$(( $(cat "$S/claude.probes" 2>/dev/null || print 0) + 1 )); print $n > "$S/claude.probes"
   print -r -- "probe $n model=$model" >> "$S/claude.calls"
+  [ -f "$S/probe-push" ] && mv "$S/probe-push" "$S/head"   # someone pushes while the lane queues for the deciding slot
   if (( n > ${FAKE_CLAUDE_PROBE_FAILS:-0} )); then print PROBE-OK; else print -u2 "API Error: 429 rate limit"; exit 1; fi
   exit 0
 fi
 n=$(( $(cat "$S/claude.runs" 2>/dev/null || print 0) + 1 )); print $n > "$S/claude.runs"
 rules=no; [[ "$prompt" == *"RULES FOR THIS HEADLESS RUN"* ]] && rules=yes
 print -r -- "run $n model=$model worktree=$wt perm=$perm format=$fmt verbose=$verbose cwd=$PWD rules=$rules" >> "$S/claude.calls"
+print -r -- "$prompt" > "$S/claude.prompt-$n"
+[[ "$prompt" == *"STAGE FIX-CI"* ]] && [ -s "$S/pushes" ] && { sed -n 1p "$S/pushes" > "$S/head"; sed -i '' 1d "$S/pushes"; }
 if [ "$wt" != none ]; then mkdir -p ".claude/worktrees/$wt" && cd ".claude/worktrees/$wt"; fi
 print -r -- "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"$PWD\"}"
 result(){ print -r -- "{\"type\":\"result\",\"subtype\":\"$1\",\"is_error\":$2,\"result\":\"$3\"}"; }

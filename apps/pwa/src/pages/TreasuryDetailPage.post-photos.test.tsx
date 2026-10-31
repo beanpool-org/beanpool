@@ -90,6 +90,31 @@ describe("an enterprise's Offer or Need, with photos while posting it, on the we
         expect(post).toHaveBeenCalledWith(ENT, expect.objectContaining({ title: 'Mend the fence', credits: 15, photos: [RESIZED[1]] }));
     });
 
+    it("the tag sheet inside the form: Enter in its search posts nothing, and Escape leaves the keeper's form open", async () => {
+        const post = vi.spyOn(api, 'treasuryPostOffer').mockResolvedValue({ success: true, post: { id: 'p2' } });
+        const form = await openForm('Post Offer');
+        await addPhoto(form, 'hens.jpg');
+        await waitFor(() => expect(shown(form)).toEqual([RESIZED[0]]));
+        fireEvent.change(within(form).getByPlaceholderText('e.g. Dozen fresh eggs'), { target: { value: 'Duck eggs' } });
+        fireEvent.change(within(form).getByPlaceholderText('20'), { target: { value: '8' } });
+        // Filled in: a submit here would post it.
+        expect((within(form).getByRole('button', { name: 'Publish Listing' }) as HTMLButtonElement).disabled).toBe(false);
+
+        fireEvent.click(within(form).getByRole('button', { name: '+ Add tag' }));
+        // On document.body, out of the form (components/TagPicker.tsx): the input has no form to submit, and Enter is held anyway.
+        const search = screen.getByPlaceholderText('Search tags...') as HTMLInputElement;
+        expect(search.form).toBeNull();
+        fireEvent.change(search, { target: { value: 'lemon' } });
+        // keydown's default action is the browser's implicit submit (jsdom has none): prevented, so it never comes.
+        expect(fireEvent.keyDown(search, { key: 'Enter', code: 'Enter' })).toBe(false);
+        expect(post).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(search, { key: 'Escape' });
+        expect(screen.queryByPlaceholderText('Search tags...')).toBeNull();
+        expect(screen.getByRole('dialog')).toBe(form);
+        expect((within(form).getByPlaceholderText('e.g. Dozen fresh eggs') as HTMLInputElement).value).toBe('Duck eggs');
+    });
+
     it('none picked: Submit stays disabled with "📷 Add a photo" until one is picked', async () => {
         const post = vi.spyOn(api, 'treasuryPostOffer').mockResolvedValue({ success: true, post: { id: 'p3' } });
         const form = await openForm('Post Offer');

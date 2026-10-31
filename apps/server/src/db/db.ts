@@ -1266,7 +1266,8 @@ function moveShopKindsToCategories(): void {
 
 /**
  * The columns a vote on removing a member carries for removal by vote's Amendment A (schema.sql `decisions`): the member's
- * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down.
+ * own reply to its case, a case an admin hid as shown to be false, and a reply an admin took down; and for slice S6, an
+ * owner's decision on a vote too few members could vote on.
  */
 export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['subject_reply', 'TEXT'],
@@ -1277,6 +1278,11 @@ export const REMOVAL_CASE_COLUMNS: ReadonlyArray<readonly [string, string]> = [
     ['reply_hidden_at', 'DATETIME'],
     ['reply_hidden_by', 'TEXT'],
     ['reply_hidden_reason', 'TEXT'],
+    // Removal by vote S6: an owner decided a vote too few members could vote on (decisions-engine.ts ownerDecideTooFew).
+    ['owner_decided_at', 'DATETIME'],
+    ['owner_decided_by', 'TEXT'],
+    ['owner_decided_reason', 'TEXT'],
+    ['owner_decision_carried_at', 'DATETIME'],
 ];
 
 /**
@@ -1688,6 +1694,9 @@ export function initSchema() {
     // Its tags (schema.sql; DESIGN-owner-seeding-tags-fable.md §4.5). '' on every existing row: nothing is tagged until its
     // author tags it. Their words reach search_keywords through state-engine's once-only keywordsWithTagsOnce.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
+    // The tags its author typed (schema.sql; DESIGN-tags-free-entry-fable.md §2). '' on every existing row, so no boot pass
+    // and no row rewritten. An older image booted on this file names its columns in every INSERT, and the default applies.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN free_tags TEXT NOT NULL DEFAULT ''`).run(); } catch { }
     // A shop's banner, its reference (schema.sql shops.photo_ref; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row
     // 4). NULL on every existing row: no shop has a photo until its owner or a keeper puts one up. A database from before
     // shops has no table to alter, and the schema.sql exec makes it with the column.

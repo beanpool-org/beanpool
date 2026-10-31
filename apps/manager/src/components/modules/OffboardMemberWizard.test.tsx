@@ -439,6 +439,24 @@ describe('OffboardMemberWizard', () => {
         expect(line.textContent).toMatch(/^The community voted to remove @dave\. Offboarding settles their Beans and completes the removal now, before its grace window ends on .+\.$/);
     });
 
+    // Removal by vote S6: too few could vote, so no vote passed, and the wizard doesn't say the community voted for it.
+    it('names the removal it settles as an owner\'s, where too few could vote', async () => {
+        vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
+            member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'disabled', joinedAt: '2026-01-01' },
+            balance: 20,
+            commonsBalance: 500,
+            costToCommunity: 0,
+            projectedCommonsBalance: 520,
+            pendingEscrowsCount: 0,
+            isSoleOwner: false,
+            activeMembers: [{ publicKey: 'b'.repeat(64), callsign: 'bob' }],
+            settlesRemoval: { decisionId: 'dec-grace', gracePeriodEndsAt: '2026-11-04T00:00:00.000Z', decidedByOwner: true },
+        });
+        render(<OffboardMemberWizard member={mockMember} nodeUrl="http://localhost:3000" onClose={() => {}} />);
+        const line = await screen.findByTestId('offboard-settles-removal');
+        expect(line.textContent).toMatch(/^Too few members could vote, so an owner decided to remove @dave\. Offboarding settles their Beans and completes the removal now, before its grace window ends on .+\.$/);
+    });
+
     it('says nothing of a removal where the community has no vote', async () => {
         vi.spyOn(nodeClient, 'fetchOffboardPreviewApi').mockResolvedValue({
             member: { publicKey: mockMember.publicKey, callsign: 'dave', status: 'active', joinedAt: '2026-01-01' },

@@ -10,8 +10,9 @@ import {
 import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import {
-    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
-    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine, voiceCreditsLine,
+    DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, minYesLine,
+    notExecutedLine, ownerDecisionLine, pauseVoteBody, pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine,
+    voiceCreditsLine,
 } from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
@@ -482,9 +483,17 @@ export function DecideSection({
                                                         {secondPauseLine(item.params)}
                                                     </div>
                                                 )}
-                                                <div className="text-xs text-nature-300">
-                                                    {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
-                                                </div>
+                                                {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'), tally) && (
+                                                    <div className="text-xs text-nature-300">
+                                                        {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'), tally)}
+                                                    </div>
+                                                )}
+                                                {/* Too few can vote: the owner decides when it closes (removal by vote S6) */}
+                                                {ownerDecisionLine(item, tally, item.subject?.slice(0, 8) || t('a member')) && (
+                                                    <div className="text-sm font-bold text-amber-200 break-words" data-testid="owner-decision-line">
+                                                        {ownerDecisionLine(item, tally, item.subject?.slice(0, 8) || t('a member'))}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -533,7 +542,7 @@ export function DecideSection({
                                                         style={{ width: `${quorumPct}%` }}
                                                     />
                                                 </div>
-                                                <div className="text-[11px] text-nature-500 mt-1">{electorateLine(tally)}</div>
+                                                <div className="text-xs text-nature-300 mt-1">{electorateLine(tally)}</div>
                                             </div>
 
                                             {/* Tally & Support */}
@@ -559,6 +568,7 @@ export function DecideSection({
                                                         style={{ width: `${supportPct}%` }}
                                                     />
                                                 </div>
+                                                {minYesLine(tally) && <div className="text-xs text-nature-300 mt-1" data-testid="min-yes-line">{minYesLine(tally)}</div>}
                                             </div>
                                         </div>
 
@@ -758,11 +768,19 @@ export function DecideSection({
                                             <div className="text-xs font-bold uppercase tracking-wider text-nature-400">
                                                 {t('Authorisation & Provenance')}
                                             </div>
+                                            {/* Too few could vote, and an owner decided it (removal by vote S6): not the community's vote */}
+                                            {item.ownerDecisionCarriedAt && (
+                                                <div className="text-amber-300 font-semibold break-words" data-testid="owner-decision-line">
+                                                    {ownerDecisionLine(item, tally, item.subject?.slice(0, 8) || t('a member'))}
+                                                </div>
+                                            )}
                                             {item.status === 'executed' && (
                                                 <>
-                                                    <div className="text-emerald-300 font-semibold">
-                                                        {t('Authorised by: Community Vote ({ref})', { ref: `system:decision:${item.id.slice(0, 8)}` })}
-                                                    </div>
+                                                    {!item.ownerDecisionCarriedAt && (
+                                                        <div className="text-emerald-300 font-semibold">
+                                                            {t('Authorised by: Community Vote ({ref})', { ref: `system:decision:${item.id.slice(0, 8)}` })}
+                                                        </div>
+                                                    )}
                                                     <div className="text-nature-400 font-mono text-[11px]">
                                                         {t('Provenance: {ref} · {reason}', { ref: `system:decision:${item.id}`, reason: item.executionReason || t('Executed successfully') })}
                                                     </div>
@@ -785,7 +803,7 @@ export function DecideSection({
                                             )}
                                             {item.status === 'failed' && (
                                                 <div className="text-red-300">
-                                                    {tally.quorumMet ? t('Not executed: Threshold not met') : t('Not executed: Quorum not reached')}
+                                                    {notExecutedLine(tally, item)}
                                                 </div>
                                             )}
                                             {item.status === 'unresolved' && (

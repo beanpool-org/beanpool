@@ -30,6 +30,7 @@ export * from './search-terms.js';
 export * from './tags/index.js';
 export * from './tags/suggest.js';
 export * from './tags/post-tags.js';
+export * from './tags/free-tags.js';
 export * from './channels.js';
 export * from './groups.js';
 export * from './text-limits.js';

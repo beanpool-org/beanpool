@@ -65,6 +65,14 @@ describe('what a free tag may not be', () => {
         }
     });
 
+    it('reads every dash between the digits of a number as a dash, a minus sign among them', () => {
+        const dashes = Array.from({ length: 0x10000 }, (_, unit) => String.fromCharCode(unit)).filter((unit) => /^\p{Pd}$/u.test(unit));
+        for (const dash of [...dashes, '\u2212', '\u207b', '\u208b', '\u02d7', '\u2043', '\u2053', '\u2796', '\u30fc', '\uff70']) {
+            expect(freeTagRefusal(`0412${dash}345${dash}678`), dash).toBe(FREE_TAG_NOT_A_CONTACT);
+        }
+        expect(freeTagRefusal('+61\u2212412\u2212345\u2212678')).toBe(FREE_TAG_NOT_A_CONTACT);
+    });
+
     it('reads a contact past what shows as nothing, and keeps those characters in a tag that is none', () => {
         for (const tag of ['0412\u200c345678', '0412\u200d345\u200d678', 'example.\u200ccom', 'exam\u200dple.\u200dcom', 'ht\u200dtps:/\u200c/x', 'me\u200c@example',
             '0412\ufe0f345678', 'example.\ufe0fcom', '0412\u034f345678', 'example.\u034fcom', '0412\u3164345678', '0412\u17b4345678', 'example.\u180bcom', '0412\uffa0345678',
@@ -110,6 +118,7 @@ describe('on an old Android engine, with no Unicode property escapes', () => {
                 expect(old.freeTagRefusal(tag), tag).toBe(old.FREE_TAG_NOT_A_CONTACT);
             }
             expect(old.freeTagRefusal('0412/345/678')).toBe(old.FREE_TAG_NOT_A_CONTACT);
+            expect(old.freeTagRefusal('0412\u2212345\u2212678')).toBe(old.FREE_TAG_NOT_A_CONTACT);
             for (const digit of digits) expect(old.freeTagRefusal(digit.repeat(7)), digit).toBe(old.FREE_TAG_NOT_A_CONTACT);
             for (const unit of showNothing) {
                 expect([old.FREE_TAG_NOT_A_CONTACT, old.FREE_TAG_HIDDEN_CHARACTER], unit).toContain(old.freeTagRefusal(`0412${unit}345678`));

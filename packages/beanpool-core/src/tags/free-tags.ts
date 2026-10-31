@@ -55,9 +55,10 @@ const DIGITS = '0-9\\u0660-\\u0669\\u06f0-\\u06f9\\u07c0-\\u07c9\\u0966-\\u096f\
     + '\\uff10-\\uff19';
 /**
  * What may stand between the digits of a phone number: spaces, dots, brackets, a plus, slashes and dashes. A slash counts
- * as the rest do, so a date or a size in seven digits or more ("01/02/2024") is held as it is with dots or dashes.
+ * as the rest do, so a date or a size in seven digits or more ("01/02/2024") is held as it is with dots or dashes. A dash
+ * is every script's, a minus sign, and the bar a Japanese keyboard types for one: NFKC folds only the compatibility forms.
  */
-const DIGIT_JOINS = '[\\s().+/\\u2010-\\u2015-]*';
+const DIGIT_JOINS = '[\\s().+/\\u02d7\\u058a\\u05be\\u1400\\u1806\\u2010-\\u2015\\u2043\\u2053\\u2212\\u2796\\u2e17\\u2e1a\\u2e3a\\u2e3b\\u2e40\\u2e5d\\u301c\\u3030\\u30a0\\u30fc-]*';
 const DIGIT = byProperty('\\p{Nd}', new RegExp(`[${DIGITS}]`, 'g'));
 const DIGIT_RUN = byProperty(`\\p{Nd}(?:${DIGIT_JOINS}\\p{Nd})*`, new RegExp(`[${DIGITS}](?:${DIGIT_JOINS}[${DIGITS}])*`, 'g'));
 const PHONE_DIGITS = 7;

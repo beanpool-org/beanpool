@@ -218,6 +218,7 @@ async function main(): Promise<void> {
         ['a phone number', ['0412 345 678'], /not a contact/],
         ['a phone number with a code', ['+61 412 345 678'], /not a contact/],
         ['a phone number in slashes', ['0412/345/678'], /not a contact/],
+        ['a phone number in minus signs', ['0412\u2212345\u2212678'], /not a contact/],
         ['seven digits', ['1234567'], /not a contact/],
         ['a web address', ['https://example.com'], /not a contact/],
         ['a bare domain', ['example.com'], /not a contact/],

@@ -44,6 +44,10 @@
  *   postsSql {q, p?}            one statement on the node's database, as a fixture (a conversation, a block)
  *   epoch                       a take-over: the node's identity epoch one higher, as the take-over's role step leaves it
  *   profileSwitch {name, value} a profile switch's override in node_config (`true`/`false`), as an operator sets one
+ * For apps/native/utils/__tests__/bring-listings-e2e.test.ts (Lounge L7):
+ *   archive                     the node's own retention run (archiveStaleListings), as its hourly tick makes it
+ *   requests                    every request this node has received, `METHOD /path?query`, in order: what a test holds
+ *                               against the requests the phone made, so a call from another node would show
  *   quit                        exit
  */
 
@@ -91,6 +95,16 @@ async function main(): Promise<void> {
     const { NODE_PROFILE_KEY, getProfileSwitches } = await import('./config/node-profile.js');
     const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
     const { initClaimCode } = await import('./claim-code.js');
+    const { archiveStaleListings } = await import('./engine/posts.js');
+
+    // Counted at the door, before any route: a request nothing routes is a request all the same.
+    const requests: string[] = [];
+    const https = await import('node:https');
+    const emit = https.Server.prototype.emit;
+    https.Server.prototype.emit = function (this: unknown, event: string, ...args: any[]) {
+        if (event === 'request') requests.push(`${String(args[0]?.method)} ${String(args[0]?.url)}`);
+        return emit.call(this, event, ...args);
+    } as typeof emit;
 
     await initTls();
     initStateEngine();
@@ -255,6 +269,8 @@ async function main(): Promise<void> {
                 .run(`${NODE_PROFILE_KEY}.${String(name)}`, String(value));
             return true;
         },
+        archive: () => archiveStaleListings(broadcast),
+        requests: () => requests,
         quit: () => process.exit(0),
     };
 

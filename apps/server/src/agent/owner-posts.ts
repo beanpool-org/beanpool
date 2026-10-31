@@ -86,6 +86,8 @@ import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 export const AGENT_POST_PHOTOS_MIN = 1;
 export const AGENT_POST_PHOTOS_MAX = 4;
+/** The shortest side a photo may arrive with: at least 200 px on its shorter side. */
+export const AGENT_PHOTO_MIN_SIDE = 200;
 /** The longest side a photo may arrive with: the node's decoder ceiling (storage/photo-thumbnails.ts), resized from there. */
 export const AGENT_PHOTO_MAX_INPUT_SIDE = 2048;
 
@@ -301,6 +303,9 @@ export async function storableImage(bytes: Buffer, words: ImageWords): Promise<S
     const size = imageSize(bytes);
     if (!size) return { ok: false, error: words.format };
     if (Math.max(size.width, size.height) > AGENT_PHOTO_MAX_INPUT_SIDE) return { ok: false, error: words.tooWide(size) };
+    if (Math.min(size.width, size.height) < AGENT_PHOTO_MIN_SIDE) {
+        return { ok: false, error: `${words.which} is too small: send one at least ${AGENT_PHOTO_MIN_SIDE} pixels on its shorter side.` };
+    }
     // A PNG is stored as a JPEG, as the apps send one.
     const format = kind === 'image/webp' ? 'webp' : 'jpeg';
     const resized = await resizeToStoredPhoto(bytes, format);

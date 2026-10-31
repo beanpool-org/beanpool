@@ -42,8 +42,7 @@ describe('PricingGuideModal Component', () => {
         const fired = new Set<unknown>();
         const realSetTimeout = window.setTimeout.bind(window);
         const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((fn: (...a: unknown[]) => void, ms?: number, ...args: unknown[]) => {
-            let id: unknown;
-            id = realSetTimeout(() => { fired.add(id); fn(...args); }, ms);
+            const id: unknown = realSetTimeout(() => { fired.add(id); fn(...args); }, ms);
             return id;
         }) as typeof window.setTimeout);
         const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');

@@ -17,6 +17,8 @@
  *      8th is refused, naming 7; an owner with 7 running from before is refused the 8th, naming 7 at a time.
  *   6. Demotion: an admin made a member again is held to a member's numbers at once (posts, events, groups, enterprises,
  *      polls); made admin again, the setting at once.
+ *   7. The one-active-poll index (db.ts makeActivePollIndexPlain): a plain index after boot; a node's old UNIQUE one is
+ *      replaced once; an older image's `CREATE UNIQUE INDEX IF NOT EXISTS` on it is a no-op with an owner's 2 open polls.
  *
  * Local only: nothing leaves the box.
  *
@@ -28,7 +30,7 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
-import { db } from './db/db.js';
+import { db, makeActivePollIndexPlain } from './db/db.js';
 import { initStateEngine, createPost, createTreasury, adminAssignTreasuryOperator } from './state-engine.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
 import { assertMayPostToday, assertMayStartGroupToday, assertMayStartEnterprise, WriterLimitError } from './engine/writer-bounds.js';
@@ -103,7 +105,7 @@ function pollsUntil(author: string, max: number): { made: number; refused: strin
     }
     return { made, refused: '' };
 }
-const closeAllPolls = () => db.prepare(`UPDATE posts SET status = 'closed' WHERE type = 'poll'`).run();
+const closeAllPolls = () => db.prepare(`UPDATE posts SET status = 'completed' WHERE type = 'poll'`).run();
 
 /** A group `member` started `hoursAgo` (the rows assertMayStartGroupToday reads, as the groups route writes them). */
 function seedGroup(member: string, hoursAgo = 1): void {
@@ -230,9 +232,12 @@ async function main(): Promise<void> {
         `a member with 3 today: the 4th refused as before (${memEnt})`);
     assert(refusal(() => assertMayStartEnterprise(own)) === '', 'an owner with 3 today may start a 4th');
     for (let i = 0; i < 4; i++) seedEnterprise(own);
+    assert(codeOf(() => assertMayStartEnterprise(own)) === 'enterprises_live', 'with 7 started today and all 7 running, the running count (the same setting) refuses first');
+    db.prepare(`UPDATE members SET status = 'completed' WHERE public_key IN
+                (SELECT id FROM conversations WHERE type = 'enterprise_thread' AND created_by = ? LIMIT 2)`).run(own);
     const ownEnt = refusal(() => assertMayStartEnterprise(own));
     assert(codeOf(() => assertMayStartEnterprise(own)) === 'enterprises_per_day' && /^This community's owners allow 7 new enterprises in any 24 hours for owners and admins/.test(ownEnt),
-        `with 7 today, the owner's 8th refused naming 7 (${ownEnt})`);
+        `with 7 today and 2 of them wound up, the owner's 8th today is refused naming 7 (${ownEnt})`);
     const kim = makeMember('Kim');
     for (let i = 0; i < 20; i++) seedEnterprise(kim, 48);
     assert(codeOf(() => assertMayStartEnterprise(kim)) === 'enterprises_live', 'a member with 20 running from before: the 21st refused as before (enterprises_live)');
@@ -269,6 +274,21 @@ async function main(): Promise<void> {
     const repromoted = { post: refusal(() => ownPost(adm)), group: refusal(() => assertMayStartGroupToday(adm)) };
     assert(repromoted.post === '' && repromoted.group === '', `made admin again with the setting at 120, the setting at once (${Object.values(repromoted).join(' | ')})`);
     setAgentPostsPerDay(AGENT_POSTS_PER_DAY_DEFAULT);
+
+    // ── 7. The one-active-poll index ────────────────────────────────────────────────────────────
+    // It was UNIQUE, which held every author to 1 whatever the engine allowed. Now a plain index under the same name.
+    console.log('\n--- 7. The active-poll index ---');
+    closeAllPolls();
+    const uniqueOf = () => (db.prepare(`SELECT "unique" AS u FROM pragma_index_list('posts') WHERE name = 'idx_posts_author_active_poll'`).get() as { u: number } | undefined)?.u;
+    assert(uniqueOf() === 0, `the boot leaves the active-poll index a plain one (unique: ${uniqueOf()})`);
+    db.exec(`DROP INDEX idx_posts_author_active_poll`);
+    db.exec(`CREATE UNIQUE INDEX idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
+    const replaced = makeActivePollIndexPlain();
+    assert(replaced === true && uniqueOf() === 0 && makeActivePollIndexPlain() === false, 'a node from before: its unique index is replaced by the plain one, once');
+    newPoll(own); newPoll(own);
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
+    assert(uniqueOf() === 0, 'an older image\'s schema line, run on it with an owner\'s 2 open polls, finds the name and does nothing (no failed boot)');
+    closeAllPolls();
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

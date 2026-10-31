@@ -100,7 +100,7 @@ const ownersAllow = (what: string) =>
 
 // ── Posts ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** A post an owner's AI assistant did not make (its own limit is the owners' "Assistant posts a day"). */
+/** A post an owner's AI assistant did not make (its own count is held to the owners' "Owner and admin limit"). */
 const NOT_BY_ASSISTANT = `(p.created_via IS NULL OR p.created_via NOT LIKE 'assistant:%')`;
 
 /**

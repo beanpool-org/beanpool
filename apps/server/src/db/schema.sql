@@ -379,7 +379,9 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
+-- A plain index, under the name the unique one had (db.ts makeActivePollIndexPlain): how many active polls an author may
+-- have is engine/posts.ts createPost's check (1, or the owners' "Owner and admin limit" for an owner or admin).
+CREATE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';
 
 -- Event RSVPs (docs/events-on-the-map.md §2.1). "Not going" is a delete, not a third value, and travels
 -- to a replica as an `event_rsvps` tombstone. updated_at rather than created_at because an RSVP changes,

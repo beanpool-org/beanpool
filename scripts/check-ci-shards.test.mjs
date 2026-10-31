@@ -5,11 +5,14 @@
 // Run by test-all.sh (the `workflows` check): node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { SUITES, VARIANTS, SERIAL } from './server-suites.mjs';
 import { readSnapshot, splitIntoShards, parseShard } from './server-suite-shards.mjs';
+import { baselineBase } from './words/words.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WORKFLOWS = join(ROOT, '.github/workflows');
@@ -136,6 +139,80 @@ export function requiredCheckProblems(ciText, otherWorkflowTexts = []) {
 
 const otherWorkflows = () => readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/.test(f) && f !== 'ci.yml').map((f) => readFileSync(join(WORKFLOWS, f), 'utf8'));
 
+/** The checks that compare with main, by name. The guide's is inside the `test` check: see reachesGuide. */
+const COMPARES_WITH_MAIN = ['migration_steps', 'words'];
+/** Whether a vitest slice runs @beanpool/guide's test task (scripts/build.mjs --check): named, or a remainder not excluding it. */
+const reachesGuide = (slice = '') => slice.includes('--filter=@beanpool/guide') || (slice !== '' && !/--filter=[^!]/.test(slice) && !slice.includes('--filter=!@beanpool/guide'));
+
+/** The text of one step of the shard job: its `- name:` line and the lines under it. */
+const stepText = (ciText, name) => new RegExp(`^ {6}- name: ${name}\\n(?:(?: {8}.*)?\\n)*`, 'm').exec(ciText)?.[0] ?? '';
+/** The shell in a step's `run: |` block. */
+const stepScript = (step) => (/^ {8}run: \|\n((?: {10}.*\n)+)/m.exec(step)?.[1] ?? '').replace(/^ {10}/gm, '');
+
+/**
+ * Every way the shards that compare with main can lose origin/main: they would pass having compared nothing (on GitHub
+ * migration_steps was a pass in 0 s on every pull request). And, the fetch costing seconds, any shard that has it for nothing.
+ */
+export function compareMainProblems(ciText) {
+    const problems = [];
+    for (const s of shardsOf(ciText)) {
+        const why = s.checks.filter((c) => COMPARES_WITH_MAIN.includes(c)).concat(reachesGuide(s.test_slice) ? ['the guide check'] : []);
+        if (why.length && s.compare_main !== 'true') problems.push(`shard ${s.name} runs ${why.join(' and ')}, which compare${why.length > 1 ? '' : 's'} with main, but has no compare_main: true`);
+        if (!why.length && s.compare_main) problems.push(`shard ${s.name} has compare_main but runs nothing that compares with main: a fetch for nothing`);
+    }
+    const step = stepText(ciText, 'Fetch origin/main');
+    if (!step) return [...problems, 'ci.yml has no step "Fetch origin/main": on a pull request or a branch there is no origin/main to compare with'];
+    if (!/^ {8}if: matrix\.compare_main\b/m.test(step)) problems.push('the step "Fetch origin/main" is not conditional on matrix.compare_main');
+    const script = stepScript(step);
+    if (!script.includes('+refs/heads/main:refs/remotes/origin/main')) problems.push('the step "Fetch origin/main" does not write refs/remotes/origin/main');
+    if (!/fetch\b.*--depth=\d+/.test(script)) problems.push('the step "Fetch origin/main" does not fetch a depth: a merge base needs history on both sides');
+    if (ciText.indexOf('- name: Fetch origin/main') > ciText.indexOf('- name: Run test-all checks')) problems.push('the step "Fetch origin/main" comes after the checks');
+    return problems;
+}
+
+/** A workflow's triggers: { <event>: [its lines] }, read as lines like the rest of this file. */
+function triggersOf(text) {
+    const block = /^on:\s*\n((?:(?: +.*|\s*)\n)*)/m.exec(text)?.[1] ?? '';
+    const out = {};
+    let event = null;
+    for (const line of block.split('\n')) {
+        if (/^\s*(#.*)?$/.test(line)) continue;
+        const key = /^ {2}(\w+):/.exec(line);
+        if (key) (out[(event = key[1])] = []).push(line);
+        else if (event) out[event].push(line);
+    }
+    return out;
+}
+
+/**
+ * What a train's shadow (scripts/test-all-train.sh --shadow) rests on. ci.yml runs the whole matrix on a dispatch of any
+ * branch and can deploy nothing, and no workflow starts on the push of a train/* branch by itself.
+ */
+export function trainBranchProblems(ciText, otherWorkflowTexts = []) {
+    const problems = [];
+    const dispatch = triggersOf(ciText).workflow_dispatch;
+    if (!dispatch) problems.push('ci.yml has no workflow_dispatch: a train branch could not be started');
+    else if (dispatch.length > 1) problems.push('ci.yml\'s workflow_dispatch takes inputs: a train\'s dispatch passes none');
+    const shard = jobText(ciText, 'shard');
+    if (/^ {4}if:/m.test(shard)) problems.push('jobs.shard has an `if:`: the whole matrix must run on a dispatch of a train branch');
+    if (/^\s*environment:/m.test(ciText)) problems.push('ci.yml names an environment: a dispatch of a train branch must reach no deploy');
+    if (/\bsecrets\./.test(ciText)) problems.push('ci.yml reads a secret: a dispatch of a train branch must reach no deploy');
+    if (!/^permissions:\n {2}contents: read\s*$/m.test(ciText)) problems.push('ci.yml\'s token is not read-only');
+    for (const text of [ciText, ...otherWorkflowTexts]) {
+        const name = /^name: (.*)$/m.exec(text)?.[1] ?? 'a workflow';
+        const on = triggersOf(text);
+        for (const event of Object.keys(on)) {
+            if (!['workflow_dispatch', 'push', 'pull_request'].includes(event)) problems.push(`${name} starts on ${event}, which a push of a train/* branch may fire: check it and add it here`);
+        }
+        if (on.push) {
+            const branches = on.push.find((l) => /^ {4}branches:/.test(l));
+            const tags = on.push.some((l) => /^ {4}tags:/.test(l));
+            if (branches ? !/^ {4}branches: \[main\]\s*$/.test(branches) : !tags) problems.push(`${name}: push is not limited to main, so a train/* branch would start it`);
+        }
+    }
+    return problems;
+}
+
 test('every test-all check runs in exactly one CI shard', () => {
     assert.ok(checkNames(TEST_ALL).length >= 30, `found ${checkNames(TEST_ALL).length} checks in test-all.sh`);
     assert.ok(shardsOf(CI).length >= 10, `found ${shardsOf(CI).length} shards in ci.yml`);
@@ -185,6 +262,133 @@ test('the durations snapshot lists only runs the manifest has', () => {
     const stale = Object.keys(readSnapshot()).filter((id) => !ids.has(id));
     assert.ok(existsSync(join(ROOT, 'scripts/server-suite-durations.json')));
     assert.deepEqual(stale, [], 'refresh it with scripts/server-suite-durations-snapshot.mjs');
+});
+
+test('every shard that compares with main fetches it, and only those do', () => {
+    assert.deepEqual(compareMainProblems(CI), []);
+    assert.deepEqual(shardsOf(CI).filter((s) => s.compare_main).map((s) => s.name).sort(), ['checks', 'vitest-rest']);
+});
+
+test('the fetch of origin/main taken away, or a shard losing it, fails', () => {
+    const noStep = CI.replace(stepText(CI, 'Fetch origin/main'), '');
+    assert.notEqual(noStep, CI);
+    assert.match(compareMainProblems(noStep).join('\n'), /no step "Fetch origin\/main"/);
+    const without = (name) => CI.replace(new RegExp(`^( {10}- \\{ name: ${name},.*), compare_main: true \\}$`, 'm'), '$1 }');
+    assert.notEqual(without('checks'), CI);
+    assert.match(compareMainProblems(without('checks')).join('\n'), /shard checks runs migration_steps and words, which compare with main, but has no compare_main/);
+    assert.match(compareMainProblems(without('vitest-rest')).join('\n'), /shard vitest-rest runs the guide check/);
+    assert.match(compareMainProblems(CI.replace('if: matrix.compare_main', 'if: false')).join('\n'), /not conditional on matrix\.compare_main/);
+    assert.match(compareMainProblems(CI.replace('main=+refs/heads/main:refs/remotes/origin/main', 'main=+refs/heads/main:refs/remotes/origin/x')).join('\n'), /does not write refs\/remotes\/origin\/main/);
+    assert.match(compareMainProblems(CI.replace('--depth=50 ', '')).join('\n'), /does not fetch a depth/);
+    // A check moved into a shard with no fetch.
+    const moved = CI.replace(' migration_steps ', ' ').replace('name: settings-phone, checks: settings_phone', 'name: settings-phone, checks: "settings_phone migration_steps"');
+    assert.match(compareMainProblems(moved).join('\n'), /shard settings-phone runs migration_steps/);
+    // A shard that compares with nothing, paying for the fetch.
+    const idle = CI.replace(/^( {10}- \{ name: server-1,.*) \}$/m, '$1, compare_main: true }');
+    assert.match(compareMainProblems(idle).join('\n'), /shard server-1 has compare_main but runs nothing/);
+});
+
+test('a dispatch of a train branch runs the whole matrix and reaches no deploy, and a train branch starts no workflow by itself', () => {
+    assert.deepEqual(trainBranchProblems(CI, otherWorkflows()), []);
+    assert.match(trainBranchProblems(CI.replace('  workflow_dispatch:\n', '')).join('\n'), /no workflow_dispatch/);
+    assert.match(trainBranchProblems(CI.replace('  workflow_dispatch:\n', '  workflow_dispatch:\n    inputs:\n      x:\n        type: string\n')).join('\n'), /takes inputs/);
+    assert.match(trainBranchProblems(CI.replace("    name: Test-All shard ${{ matrix.name }}\n", "    name: Test-All shard ${{ matrix.name }}\n    if: github.event_name != 'workflow_dispatch'\n")).join('\n'), /jobs\.shard has an `if:`/);
+    assert.match(trainBranchProblems(CI.replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    environment: production\n')).join('\n'), /names an environment/);
+    assert.match(trainBranchProblems(`${CI}\n# ${'$'}{{ secrets.DEPLOY_TOKEN }}\n`).join('\n'), /reads a secret/);
+    assert.match(trainBranchProblems(CI.replace('  contents: read\n', '  contents: write\n')).join('\n'), /token is not read-only/);
+    const other = (on) => `name: x\non:\n${on}\npermissions: {}\n`;
+    assert.match(trainBranchProblems(CI, [other('  push:\n    branches: ["**"]')]).join('\n'), /x: push is not limited to main/);
+    assert.match(trainBranchProblems(CI, [other('  push:')]).join('\n'), /x: push is not limited to main/);
+    assert.match(trainBranchProblems(CI, [other('  create:')]).join('\n'), /x starts on create/);
+    assert.deepEqual(trainBranchProblems(CI, [other("  push:\n    tags: ['v[0-9]*']")]), [], 'tags alone: no branch starts it');
+});
+
+test('the fetch step, run on a pull request\'s merge commit and on a train branch, gives the checks a merge base', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ci-fetch-'));
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t.invalid' };
+    const git = (cwd, ...args) => execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    try {
+        const src = join(dir, 'src');
+        mkdirSync(join(src, 'scripts'), { recursive: true });
+        mkdirSync(join(src, 'apps/registrar/migrations'), { recursive: true });
+        git(src, 'init', '-q', '-b', 'main');
+        git(src, 'config', 'uploadpack.allowAnySHA1InWant', 'true');
+        copyFileSync(join(ROOT, 'scripts/check-migrations-unchanged.sh'), join(src, 'scripts/check-migrations-unchanged.sh'));
+        const MIGRATION = 'apps/registrar/migrations/0001.sql';
+        const commit = (msg, file, text) => {
+            if (file) { writeFileSync(join(src, file), text); git(src, 'add', file); }
+            git(src, 'commit', '-q', '--allow-empty', '-m', msg);
+            return git(src, 'rev-parse', 'HEAD');
+        };
+        git(src, 'add', 'scripts');
+        commit('shipped', MIGRATION, 'create table a;\n');
+        const pr = (branch, file, text) => { git(src, 'checkout', '-q', '-b', branch, 'main'); commit(branch, file, text); git(src, 'checkout', '-q', 'main'); };
+        pr('edits', MIGRATION, 'create table a; -- edited\n');
+        for (const n of [2, 3, 4, 5]) pr(`adds-${n}`, `apps/registrar/migrations/000${n}.sql`, `create table t${n};\n`);
+        const mainAtMerge = commit('main moves on');
+        const merged = (name, ...branches) => {
+            git(src, 'checkout', '-q', '-b', name, 'main');
+            for (const b of branches) git(src, 'merge', '-q', '--no-ff', '-m', `merge ${b}`, b);
+            const tip = git(src, 'rev-parse', 'HEAD');
+            git(src, 'checkout', '-q', 'main');
+            return tip;
+        };
+        const prMerge = merged('pull-merge', 'edits');                                      // refs/pull/N/merge: main's tip first
+        const train = merged('train/bad', 'edits', 'adds-2', 'adds-3', 'adds-4');           // four merges: main is four back
+        const cleanTrain = merged('train/clean', 'adds-2', 'adds-3', 'adds-4', 'adds-5');
+        commit('main moves on while the run waits');
+
+        // What actions/checkout leaves with fetch-depth 2: no origin/main, on a pull request or a branch.
+        const checkout = (name, sha, ref) => {
+            const c = join(dir, name);
+            mkdirSync(c);
+            git(c, 'init', '-q');
+            git(c, 'remote', 'add', 'origin', `file://${src}`);
+            git(c, 'fetch', '-q', '--no-tags', '--depth=2', 'origin', `+${sha}:${ref}`);
+            git(c, 'checkout', '-q', '--detach', sha);
+            return c;
+        };
+        const migrations = (c) => spawnSync('bash', ['scripts/check-migrations-unchanged.sh'], { cwd: c, env, encoding: 'utf8' });
+        const script = stepScript(stepText(CI, 'Fetch origin/main'));
+        const fetchStep = (c) => {
+            const r = spawnSync('bash', ['-e', '-c', script], { cwd: c, env, encoding: 'utf8' });
+            assert.equal(r.status, 0, r.stderr);
+        };
+        const proves = (name, sha, ref, want) => {
+            const c = checkout(name, sha, ref);
+            const before = migrations(c);
+            assert.equal(before.status, 0, `${name}: with no fetch it passes`);
+            assert.match(before.stdout, /⚪ SKIP: no origin\/main here/, `${name}: having compared nothing`);
+            fetchStep(c);
+            const after = migrations(c);
+            assert.equal(after.status, want.status, `${name}: ${after.stdout}`);
+            assert.match(after.stdout, want.says, name);
+            assert.doesNotMatch(after.stdout, /SKIP/, name);
+            return c;
+        };
+        const FAILS = { status: 1, says: /Shipped migration step\(s\) changed[^]*0001\.sql/ };
+        const PR_EVENT = { GITHUB_EVENT_NAME: 'pull_request' };
+        const onPr = proves('pr', prMerge, 'refs/remotes/pull/7/merge', FAILS);
+        assert.equal(baselineBase({ cwd: onPr, env: PR_EVENT }).ref, mainAtMerge, 'the words baseline: main when the merge was made');
+        const onTrain = proves('train', train, 'refs/remotes/origin/train/bad', FAILS);
+        const DISPATCH = { GITHUB_EVENT_NAME: 'workflow_dispatch' };
+        assert.equal(baselineBase({ cwd: onTrain, env: DISPATCH }).ref, mainAtMerge, 'the words baseline, on a train: main under the first merge');
+        assert.equal(baselineBase({ cwd: checkout('no-fetch', train, 'refs/remotes/origin/train/bad'), env: DISPATCH }).ref, null, 'with no fetch it compares nothing');
+        proves('clean', cleanTrain, 'refs/remotes/origin/train/clean', { status: 0, says: /✓ no shipped migration step changed/ });
+
+        // A re-run days later: main has moved past the depth, so the step goes on to the whole history.
+        for (let i = 0; i < 60; i++) commit(`main ${i}`);
+        proves('stale', prMerge, 'refs/remotes/pull/7/merge', FAILS);
+
+        // A push to main: checkout writes origin/main at HEAD, so main is compared with main before the push.
+        const onMain = checkout('main-push', git(src, 'rev-parse', 'main'), 'refs/remotes/origin/main');
+        assert.match(migrations(onMain).stdout, /✓ no shipped migration step changed/);
+        const landed = commit('a shipped step edited on main', MIGRATION, 'create table a; -- edited on main\n');
+        const pushed = checkout('main-edit', landed, 'refs/remotes/origin/main');
+        assert.equal(migrations(pushed).status, 1, 'an edit that reached main is red on the push');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test('each edit the check exists to catch fails it', () => {

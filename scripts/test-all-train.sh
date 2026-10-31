@@ -2,7 +2,7 @@
 # test-all-train.sh — tests up to four cleared PRs in ONE full local run and merges them in order (Fable's test-throughput
 # design S2; Marty, 31 Oct 2026: "let's go with all of Fable's recommendations").
 #
-#   bash scripts/test-all-train.sh <PR> [<PR>…] [--no-merge] [--keep]
+#   bash scripts/test-all-train.sh <PR> [<PR>…] [--no-merge] [--keep] [--shadow]
 #
 # Makes a scratch worktree at origin/main and merges each PR head into it in the order given. A conflict only in word
 # catalogs (apps/*/words/*.json, packages/*/words/*.json) is merged per key by scripts/words-merge-3way.mjs and verified;
@@ -28,6 +28,13 @@
 #
 #   --no-merge   test, bisect and report, but merge and push nothing
 #   --keep       leave the scratch worktree in place
+#   --shadow     also push the tested tree to a temporary branch train/<stamp> and start ci.yml on it with workflow_dispatch,
+#                to compare GitHub with this Mac (Marty, 1 Nov 2026: "compare for a week"). The Mac still decides: this
+#                changes nothing about the run, a merge or the exit, and a push or start that fails or hangs is a line. A train
+#                with a PR from a fork has no shadow, and says so: a fork's code is never pushed to a branch here, and a tree
+#                without it is not the tree the Mac tested. Each shadow is one line in
+#                <git common dir>/test-all-queue/shadow.log: time, PRs, tested sha, GitHub run id, local verdict.
+#                scripts/test-all-shadow.sh fills in GitHub's results, lists disagreements and deletes finished branches.
 #
 # Exit: 0 every PR given merged (--no-merge: would merge); 1 the train ran and some PR did not merge (the last line says
 # which and why); 2 usage; 3 stopped with main not as tested, or part-way through merging: read the lines above.
@@ -51,12 +58,13 @@ CATALOG_RE='^(apps|packages)/[^/]+/words/[^/]+\.json$'
 # list whole: a changed line there (or anywhere) that calls conservingTransaction or writes a balance counts instead.
 MONEY_PATHS='^(packages/beanpool-core/src/ledger|apps/server/src/(state-engine|decisions-engine|federation-settlement-exchange|srv20-ledger-reset)\.ts$|apps/server/src/engine/(escrow|money-requests|unfunded-pledges|stranded-pledges|names-debts|key-move|audit|sync)\.ts$|apps/server/src/routes/treasury|scripts/(check-balance-writes|audit-conservation)\.mjs$)'
 
-usage() { echo "usage: $0 <PR> [<PR>…] (at most $CAP) [--no-merge] [--keep]" >&2; exit 2; }
-PRS=(); MERGE=1; KEEP=0
+usage() { echo "usage: $0 <PR> [<PR>…] (at most $CAP) [--no-merge] [--keep] [--shadow]" >&2; exit 2; }
+PRS=(); MERGE=1; KEEP=0; SHADOW=0
 for arg in "$@"; do
   case "$arg" in
     --no-merge) MERGE=0 ;;
     --keep) KEEP=1 ;;
+    --shadow) SHADOW=1 ;;
     -*) usage ;;
     *) n="${arg%/}"; n="${n##*/}"
        case "$n" in ''|*[!0-9]*) usage ;; esac
@@ -264,6 +272,61 @@ run_parts() {
   return $rc
 }
 
+# with_limit <seconds> <command…>: the command, stopped at the limit: a network that hangs must not hold the train. TERM,
+# not alarm: gh is a Go program, and Go ignores a SIGALRM nobody asked for.
+with_limit() {
+  local limit=$1 pid watcher rc; shift
+  "$@" & pid=$!
+  ( sleep "$limit"; kill "$pid" ) > /dev/null 2>&1 & watcher=$!
+  wait "$pid"; rc=$?
+  kill "$watcher" 2>/dev/null
+  return $rc
+}
+
+SHADOW_LOG="$COMMON/test-all-queue/shadow.log"
+SHADOW_BRANCH=""; SHADOW_STARTED=0; VERDICT=none
+# shadow_start: the tested tree on GitHub, beside the local run. Nothing here reaches the run, a fate or the exit: every
+# failure is a line. The tree is a merge commit the train made (merge_in's --no-ff), or main, left out below; so the run's
+# checks land on a commit no gate reads, as ci_state reads a PR's head.
+shadow_start() {
+  local i forks="" try
+  for i in "${TRAIN[@]}"; do [ "${CROSS[$i]}" = true ] && forks="$forks #${NUM[$i]}"; done
+  if [ -n "$forks" ]; then
+    echo "Shadow: left out: ${forks# } comes from a fork, and a fork's code is never pushed to a branch here"
+    return 0
+  fi
+  if [ "$TESTED" = "$MAIN_SHA" ]; then echo "Shadow: left out: the tree is origin/$BASE itself"; return 0; fi
+  SHADOW_BRANCH="train/$(basename "$LOGS")"
+  SHADOW_AT=$(date '+%F %T')
+  if ! with_limit "${SHADOW_LIMIT_SECS:-120}" git push --quiet --no-verify origin "$TESTED:refs/heads/$SHADOW_BRANCH" > "$LOGS/shadow.out" 2>&1; then
+    echo "Shadow: could not push $SHADOW_BRANCH, so no run on GitHub; the train carries on ($LOGS/shadow.out)"
+    return 0
+  fi
+  # Twice: a dispatch can reach GitHub before the branch it names does.
+  for try in 1 2; do
+    if with_limit "${SHADOW_LIMIT_SECS:-60}" gh workflow run ci.yml --repo "$REPO" --ref "$SHADOW_BRANCH" >> "$LOGS/shadow.out" 2>&1; then
+      SHADOW_STARTED=1
+      echo "Shadow: ci.yml started on $SHADOW_BRANCH at $(short "$TESTED"); it decides nothing here"
+      return 0
+    fi
+    [ "$try" = 2 ] || sleep "${SHADOW_RETRY_SECS:-3}"
+  done
+  echo "Shadow: could not start ci.yml on $SHADOW_BRANCH; the train carries on ($LOGS/shadow.out)"
+}
+
+# shadow_record: the shadow's one line, once the local verdict is known or the train is ending without one. From the EXIT
+# trap, so every way out of the train writes it. No run id if none came back in time: the reader finds it by the branch.
+shadow_record() {
+  local run=none i prs=""
+  [ -n "$SHADOW_BRANCH" ] || return 0
+  if [ "$SHADOW_STARTED" = 1 ]; then
+    run=$(with_limit "${SHADOW_LIMIT_SECS:-30}" gh run list --repo "$REPO" --workflow ci.yml --branch "$SHADOW_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null)
+    [ -n "$run" ] || run=unknown
+  fi
+  for i in "${SHADOW_TRAIN[@]}"; do prs="$prs,${NUM[$i]}"; done
+  mkdir -p "$(dirname "$SHADOW_LOG")" && printf '%s prs=%s sha=%s run=%s local=%s branch=%s\n' "$SHADOW_AT" "${prs#,}" "$SHADOW_SHA" "$run" "$VERDICT" "$SHADOW_BRANCH" >> "$SHADOW_LOG"
+}
+
 # ── Who is in the train ──────────────────────────────────────────────────────────────────────────────────────────
 echo "Train: ${PRS[*]/#/#} (logs: $LOGS)"
 BASE=""; REPO=""
@@ -306,6 +369,7 @@ TRAIN=($(riding))
 ORIG_DIR=$(pwd)
 WT=$(mktemp -d "${TMPDIR:-/tmp}/test-all-train.XXXXXX") || exit 1
 cleanup() {
+  shadow_record
   cd "$ORIG_DIR" || return
   if [ $KEEP -eq 1 ]; then echo "Scratch worktree kept: $WT"
   else git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WT"; git worktree prune >/dev/null 2>&1; fi
@@ -320,6 +384,9 @@ TRAIN=($(riding))
 [ ${#TRAIN[@]} -gt 0 ] || summary 1
 TESTED=$(git rev-parse HEAD)
 echo "Testing $(short "$TESTED"): origin/$BASE $(short "$MAIN_SHA") + $(nums "${TRAIN[@]}"), in $WT"
+# The tree and PRs this run tests. A bisect below moves TESTED and TRAIN to the innocents, and the verdict stays this tree's.
+SHADOW_SHA=$TESTED; SHADOW_TRAIN=("${TRAIN[@]}")
+[ $SHADOW -eq 0 ] || shadow_start
 install_deps || { echo "❌ pnpm install failed in the scratch worktree"; summary 1; }
 
 bash scripts/test-all.sh --all 2>&1 | tee "$LOGS/test-all.log"
@@ -334,8 +401,11 @@ if [ "$RC" -ne 0 ]; then
   if [ -n "$RECHECK" ] && [ -f "$RECHECK" ] && [ -n "$RUNLOGS" ] && bash "$RECHECK" "$RUNLOGS" "$WT" 2>&1 | tee "$LOGS/recheck.log" && [ "${PIPESTATUS[0]}" = 0 ]; then
     echo "✅ load recheck: every failure passed alone on the same tree, so the run counts as green ($LOGS/recheck.log)"
     RC=0
+    VERDICT=green-by-recheck
   fi
 fi
+# For shadow.log, and read nowhere else. 130 and 143 are a stopped run (test-all.sh's stop_run), which is no verdict.
+if [ "$VERDICT" = none ]; then case "$RC" in 0) VERDICT=green ;; 130|143) ;; *) VERDICT=red ;; esac; fi
 
 if [ "$RC" -ne 0 ]; then
   [ -n "$RUNLOGS" ] && failing_parts "$RUNLOGS" > "$LOGS/parts.txt"

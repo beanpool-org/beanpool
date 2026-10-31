@@ -278,7 +278,7 @@ async function main(): Promise<void> {
         assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'categories', 'community_area', 'community_totals', 'connection_info',
             'create_enterprise_listing', 'create_event', 'create_need', 'create_offer', 'knocks_list', 'listings_search', 'my_enterprises', 'my_posts',
             'node_overview', 'photo_upload_link', 'remove_all_i_made', 'remove_post', 'report_get', 'reports_list', 'safety_settings', 'server_health',
-            'suggest_action', 'take_backup', 'update_post']),
+            'suggest_action', 'tags_search', 'take_backup', 'update_post']),
         `an owner's assistant has the ten S1 tools, S4's suggest_action, the owner's posts (MCP-OWNER-POSTS), S2's reads and undo, and the upload link (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
         assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,listings_search,my_enterprises,my_posts,report_get,reports_list',
@@ -319,6 +319,7 @@ async function main(): Promise<void> {
             // suggest_action (S4) files one card on r1: swept like every answer; it changes no report. remove_all_i_made (S2),
             // said out loud, answers that it removed nothing: this assistant made nothing.
             const args: Record<string, unknown> = t.name === 'report_get' ? { report_id: r1!.id }
+                : t.name === 'tags_search' ? { q: 'lemon' }
                 : t.name === 'suggest_action' ? { kind: 'dismiss_report', report_id: r1!.id, reason: 'Swept: the reporter may be mistaken.' }
                 : t.name === 'remove_all_i_made' ? { confirm: REMOVE_ALL_CONFIRM }
                 : ['reports_list', 'knocks_list'].includes(t.name) ? { include_text: true, ...(t.name === 'reports_list' ? { status: 'all' } : {}) } : {};

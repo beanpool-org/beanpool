@@ -11,7 +11,8 @@
  *
  * Slice S1: reads, and `take_backup` for owner grants. Slice S4: `suggest_action`, which changes nothing: it files a card the
  * member approves on their phone (agent/suggestions.ts). MCP-OWNER-POSTS: an owner's grant also posts Offers, Needs, events and
- * enterprise listings for them, photos required, 50 a day (agent/owner-posts.ts).
+ * enterprise listings for them, photos required, 50 a day (agent/owner-posts.ts). Tags T4: every create and update_post takes
+ * library tags and free tags, and tags_search finds the library's (agent/owner-reads.ts).
  */
 import os from 'node:os';
 import { db } from '../db/db.js';

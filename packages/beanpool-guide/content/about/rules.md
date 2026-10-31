@@ -110,7 +110,7 @@ On the global community there is no vote. The suspension lasts 7 days and then l
 
 - **At least 3 Yes votes.** Removing a member needs at least 3 Yes votes, however few vote No. In a community of 7 active members, 3 of the 6 others must say Yes; in a family of four, all three others.
 - **Too few to vote.** When fewer than 3 members, not counting the one suspended, can vote, the vote can never reach its turnout. It still runs its 7 days, and it says "Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes."
-- **The owner decides.** While that vote is open, an owner of your community's server, never an admin, may decide it, with a reason members read beside the case. The member is told, and can reply to it.
+- **The owner decides.** While that vote is open, an owner of your community's server, never an admin, may decide it, with a reason members read beside the case. The member is told, and can reply to it. If an admin hides the case as shown to be false, the owner's reason is hidden with it.
 - **When it closes,** if still fewer than 3 members could vote, the owner's decision is carried out: the member stays suspended for the 7 days of a removal's wait, and is then removed. The vote says "Decided by the owner: too few members to vote". An admin can still stop it in those 7 days, with a reason everyone can read.
 - If more members could vote by then, they decide, not the owner. If no owner decided, the suspension lifts when the vote closes, as with any vote too few people voted on. The owners hear of every decision an owner makes this way.
 

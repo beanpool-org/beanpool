@@ -126,6 +126,10 @@ describe('Decision card wording (native)', () => {
         expect(ownerDecisionLine(carried, { tooFewToVote: true }, 'abc')).toBe('Decided by the owner: too few members to vote. Their reason: Both who could vote saw it');
         // Decided, but enough members voted by the close: the vote ended as any vote does, and the closed card says nothing of it.
         expect(ownerDecisionLine({ ...decided, status: 'unresolved' }, { tooFewToVote: false }, 'abc')).toBeNull();
+        // An admin hid the case: the node leaves the owner's reason off, as it may repeat the accusation, and the line says the rest.
+        expect(ownerDecisionLine({ ...decided, ownerDecidedReason: null }, { tooFewToVote: true }, 'abc'))
+            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Sam is removed when this vote closes.');
+        expect(ownerDecisionLine({ ...carried, ownerDecidedReason: null }, { tooFewToVote: true }, 'abc')).toBe('Decided by the owner: too few members to vote.');
         // No vote, and no owner, removes someone holding a server role: nothing about the owner on that card.
         expect(ownerDecisionLine({ status: 'open', params: { ...params, serverRole: 'admin' } }, { tooFewToVote: true }, 'abc')).toBeNull();
     });

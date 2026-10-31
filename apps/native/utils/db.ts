@@ -3406,7 +3406,8 @@ export interface Decision {
     replyHiddenReason?: string | null;
     /**
      * A pause's own vote too few members could vote on, which an owner decided (removal by vote S6): when, the owner's public
-     * reason, and when the vote closed with it carried out (null if enough members voted by then, and they decided).
+     * reason (null once an admin has hidden the case: it may repeat the accusation), and when the vote closed with it carried
+     * out (null if enough members voted by then, and they decided).
      */
     ownerDecidedAt?: string | null;
     ownerDecidedReason?: string | null;

@@ -7,10 +7,13 @@ import {
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { nodeCredential } from '../../lib/profiles';
+import type { RolesViewer } from './NodeRolesPanel';
 
 interface DecisionsAdminPanelProps {
     activeNode: NodeProfile;
     tfaToken?: string;
+    /** Who is looking: owner level alone is offered an owner's decision (the node refuses anyone else). */
+    viewer?: RolesViewer;
 }
 
 /** The node demands at least this many characters; the reason is public on the Decision. */
@@ -104,18 +107,22 @@ function ownerMayDecide(d: AdminDecisionItem): boolean {
     return d.status === 'open' && isPauseVote(d) && d.tally?.tooFewToVote === true && !d.ownerDecidedAt && !d.params?.serverRole;
 }
 
-/** An owner's decision on a vote too few could vote on, as members read it, or the button that makes one (owners only). */
-function OwnerDecisionControl({ d, onDecide }: { d: AdminDecisionItem; onDecide: (d: AdminDecisionItem) => void }) {
+/**
+ * An owner's decision on a vote too few could vote on, as members read it, or the button that makes one (owners only). A
+ * hidden case takes the owner's reason from what members read (it may repeat the accusation); this list keeps it.
+ */
+function OwnerDecisionControl({ d, isOwner, onDecide }: { d: AdminDecisionItem; isOwner: boolean; onDecide: (d: AdminDecisionItem) => void }) {
     if (d.ownerDecidedAt) {
+        const reason = d.caseHiddenAt ? `Hidden from members with the case: “${d.ownerDecidedReason}”` : `Members read: “${d.ownerDecidedReason}”`;
         return (
             <p className="text-xs text-amber-300 m-0 break-words" data-testid="admin-owner-decided">
                 {d.ownerDecisionCarriedAt
-                    ? `Decided by the owner: too few members to vote. Members read: “${d.ownerDecidedReason}”`
-                    : `An owner decided: carried out when the vote closes, if still fewer than 3 could vote. Members read: “${d.ownerDecidedReason}”`}
+                    ? `Decided by the owner: too few members to vote. ${reason}`
+                    : `An owner decided: carried out when the vote closes, if still fewer than 3 could vote. ${reason}`}
             </p>
         );
     }
-    if (!ownerMayDecide(d)) return null;
+    if (!isOwner || !ownerMayDecide(d)) return null;
     return (
         <button
             onClick={() => onDecide(d)}
@@ -135,7 +142,8 @@ function OwnerDecisionControl({ d, onDecide }: { d: AdminDecisionItem; onDecide:
  * reply taken down when it harms someone else, the same way. A pause's vote too few members can vote on can be decided by an
  * owner, with the fresh proof and a reason members read (removal by vote S6).
  */
-export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPanelProps) {
+export function DecisionsAdminPanel({ activeNode, tfaToken, viewer = { kind: 'password' } }: DecisionsAdminPanelProps) {
+    const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
     const [decisions, setDecisions] = useState<AdminDecisionItem[]>([]);
     const [decisionsOn, setDecisionsOn] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -380,7 +388,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             <div className="flex flex-wrap items-center justify-end gap-2">
                                 {hasCase(d, decisionsOn) && <CaseControl d={d} onHide={openHide} />}
                                 {hasCase(d, decisionsOn) && <ReplyControl d={d} onTakeDown={openTakeDown} />}
-                                {hasCase(d, decisionsOn) && <OwnerDecisionControl d={d} onDecide={openDecide} />}
+                                {hasCase(d, decisionsOn) && <OwnerDecisionControl d={d} isOwner={isOwner} onDecide={openDecide} />}
                                 <button
                                     onClick={() => { setHaltTarget(d); setReason(''); setHaltError(null); }}
                                     className="px-3 py-2 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-xs font-bold text-bp-chip-danger-ink border border-red-800"

@@ -402,6 +402,14 @@ describe('DecideSection: a fair vote on removing a member', () => {
         expect(screen.queryByText(/Authorised by: Community Vote/)).toBeNull();
         third.unmount();
 
+        // An admin hid the case: the node leaves the owner's reason off, as it may repeat the accusation, and the card says the rest.
+        const noReason = renderAs('viewer', [{ ...decided, ownerDecidedReason: null }]);
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe('Too few members can vote, so an owner decided: unless more of them vote, Dave is removed when this vote closes.');
+        noReason.unmount();
+        const noReasonClosed = renderAs('viewer', [{ ...decided, ownerDecidedReason: null, status: 'executed', ownerDecisionCarriedAt: '2026-11-06T10:00:00.000Z' }], 'history');
+        expect(screen.getByTestId('owner-decision-line').textContent).toBe('Decided by the owner: too few members to vote.');
+        noReasonClosed.unmount();
+
         // A vote enough members can vote on says nothing of an owner; one stopped only by the floor says so in the history.
         const plain = { ...tally, electorate: 6, tooFewToVote: false, totalVoters: 3, quorumMet: true, yesWeight: 2, noWeight: 1, totalWeight: 3, supportRatio: 2 / 3 };
         const fourth = renderAs('viewer', [pauseCard({ tally: plain })]);

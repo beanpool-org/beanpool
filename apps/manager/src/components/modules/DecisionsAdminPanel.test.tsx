@@ -339,6 +339,37 @@ describe('DecisionsAdminPanel', () => {
         expect(await screen.findByText('This reply is already taken down')).toBeInTheDocument();
     });
 
+    it('an admin reads that too few can vote, and only owner level is offered an owner\'s decision', async () => {
+        const tooFew: nodeClient.AdminDecisionItem = {
+            ...pauseVote, id: 'dec-few-v',
+            tally: { totalVoters: 1, electorate: 2, quorumRequired: 3, quorumMet: false, yesWeight: 1, noWeight: 0, supportRatio: 1, thresholdRequired: 0.66, minYes: 3, tooFewToVote: true },
+        };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([tooFew]);
+        const asAdmin = render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }} />);
+        expect(within(await screen.findByTestId('admin-decision-row')).getByTestId('admin-too-few-to-vote')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        asAdmin.unmount();
+        const asModerator = render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'm'.repeat(64), role: 'moderator' }} />);
+        await screen.findByTestId('admin-decision-row');
+        expect(screen.queryByRole('button', { name: 'Decide as owner' })).toBeNull();
+        asModerator.unmount();
+        const asOwner = render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }} />);
+        expect(await screen.findByRole('button', { name: 'Decide as owner' })).toBeInTheDocument();
+        asOwner.unmount();
+        render(<DecisionsAdminPanel activeNode={node} viewer={{ kind: 'password' }} />);
+        expect(await screen.findByRole('button', { name: 'Decide as owner' })).toBeInTheDocument();
+    });
+
+    it('a hidden case takes the owner\'s reason from what members read, and the list says so and keeps it', async () => {
+        const hidden: nodeClient.AdminDecisionItem = {
+            ...pauseVote, id: 'dec-few-h', caseHiddenAt: '2026-09-21T00:00:00.000Z', caseHiddenReason: 'Shown to be false by a neighbour',
+            ownerDecidedAt: '2026-09-20T00:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it',
+        };
+        vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([hidden]);
+        render(<DecisionsAdminPanel activeNode={node} />);
+        expect(await screen.findByTestId('admin-owner-decided')).toHaveTextContent('Hidden from members with the case: “Both who could vote saw it”');
+    });
+
     it('a pause vote too few can vote on: the line says so, an owner decides with a reason, and the fresh proof box opens when the node asks', async () => {
         // Removal by vote S6: fewer than 3 members could vote, so the node serves tooFewToVote.
         const tooFew: nodeClient.AdminDecisionItem = {

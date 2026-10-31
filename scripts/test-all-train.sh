@@ -316,15 +316,20 @@ shadow_start() {
 
 # shadow_record: the shadow's one line, once the local verdict is known or the train is ending without one. From the EXIT
 # trap, so every way out of the train writes it. No run id if none came back in time: the reader finds it by the branch.
+# Under the log's lock, so the reader's swap cannot take the line with it. A lock left behind stops the reader swapping
+# too, so the line is safe without it; that goes in shadow.out, as the train's last line is the summary callers read.
 shadow_record() {
-  local run=none i prs=""
+  local run=none i prs="" locked=0
   [ -n "$SHADOW_BRANCH" ] || return 0
   if [ "$SHADOW_STARTED" = 1 ]; then
     run=$(with_limit "${SHADOW_LIMIT_SECS:-30}" gh run list --repo "$REPO" --workflow ci.yml --branch "$SHADOW_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null)
     [ -n "$run" ] || run=unknown
   fi
   for i in "${SHADOW_TRAIN[@]}"; do prs="$prs,${NUM[$i]}"; done
-  mkdir -p "$(dirname "$SHADOW_LOG")" && printf '%s prs=%s sha=%s run=%s local=%s branch=%s\n' "$SHADOW_AT" "${prs#,}" "$SHADOW_SHA" "$run" "$VERDICT" "$SHADOW_BRANCH" >> "$SHADOW_LOG"
+  mkdir -p "$(dirname "$SHADOW_LOG")" || return 0
+  if shadow_lock "$SHADOW_LOG"; then locked=1; else echo "$SHADOW_LOG.lock was held past the wait; the line went in without it" >> "$LOGS/shadow.out"; fi
+  printf '%s prs=%s sha=%s run=%s local=%s branch=%s\n' "$SHADOW_AT" "${prs#,}" "$SHADOW_SHA" "$run" "$VERDICT" "$SHADOW_BRANCH" >> "$SHADOW_LOG"
+  [ $locked -eq 0 ] || shadow_unlock "$SHADOW_LOG"
 }
 
 # ── Who is in the train ──────────────────────────────────────────────────────────────────────────────────────────

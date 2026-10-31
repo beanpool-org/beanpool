@@ -214,7 +214,8 @@ GREEN="$(git rev-parse --path-format=absolute --git-common-dir)/test-all-green"
 # fails while $GH_STUB_DIR/dispatch-fails exists, hangs while dispatch-hangs does, and otherwise appends the arguments to
 # dispatches and "<branch> <run id>" to runs. `run list` answers from runs; `run view <id>` prints run-<id> (the
 # conclusion), or "pending" when there is none. $GH_STUB_DIR/view-appends, when it exists, is a line a run view adds to
-# shadow.log: a train ending while the reader reads.
+# shadow.log: a train ending while the reader reads. $GH_STUB_DIR/view-rewrites, when it exists, replaces shadow.log the same
+# way: another reader finishing first.
 export GH_STUB_DIR="$T/gh"; mkdir -p "$GH_STUB_DIR" "$T/bin"
 cat > "$T/bin/gh" <<'STUB'
 #!/bin/bash
@@ -271,6 +272,7 @@ fi
 if [ "$1 $2" = "run view" ]; then
   echo "$3" >> "$GH_STUB_DIR/views"
   if [ -f "$GH_STUB_DIR/view-appends" ]; then cat "$GH_STUB_DIR/view-appends" >> "$GH_STUB_SHADOW_LOG"; rm -f "$GH_STUB_DIR/view-appends"; fi
+  if [ -f "$GH_STUB_DIR/view-rewrites" ]; then cat "$GH_STUB_DIR/view-rewrites" > "$GH_STUB_SHADOW_LOG"; rm -f "$GH_STUB_DIR/view-rewrites"; fi
   if [ -f "$GH_STUB_DIR/run-$3" ]; then cat "$GH_STUB_DIR/run-$3"; else echo pending; fi
   exit 0
 fi
@@ -753,6 +755,57 @@ grep -q "branch=train/late$" "$SL" && [ "$(wc -l < "$SL" | tr -d ' ')" = 8 ] && 
 : > "$GH_STUB_DIR/views"; cp "$SL" "$T/shadow.before"
 bash "$SHADOWS" > /dev/null 2>&1
 cmp -s "$SL" "$T/shadow.before" && ! grep -qE '^(9101|9102|9103)$' "$GH_STUB_DIR/views" && ok "shadow report: a second read changes nothing, and does not ask GitHub again about a finished run" || bad "shadow report: second read: views $(tr '\n' ' ' < "$GH_STUB_DIR/views")"
+
+# shadow.log's lock. The reader's swap and a train's line each hold it, so a line cannot go with the old file; a second
+# reader's rewrite cannot leave half a line; and a lock left behind holds up neither. The mv stub notes each swap of the log.
+cat > "$T/bin/mv" <<STUB
+#!/bin/bash
+case "\$2" in */shadow.log) if [ -d "\$2.lock" ]; then echo locked; else echo unlocked; fi >> "$GH_STUB_DIR/swaps" ;; esac
+exec "$(command -v mv)" "\$@"
+STUB
+chmod +x "$T/bin/mv"
+M=$(origin_main)
+shadow_line() { echo "2026-11-01 03:00:00 prs=$1 sha=$M run=$1 local=green branch=train/lk$1"; }
+echo success > "$GH_STUB_DIR/run-9201"; echo success > "$GH_STUB_DIR/run-9202"
+shadow_line 9201 > "$SL"
+bash "$SHADOWS" > /dev/null 2>&1
+[ "$(cat "$GH_STUB_DIR/swaps" 2>/dev/null)" = locked ] && grep -q "branch=train/lk9201 github=success$" "$SL" && [ ! -e "$SL.lock" ] \
+  && ok "shadow lock: the reader swaps the log holding the lock, and gives it back" || bad "shadow lock: swaps \"$(cat "$GH_STUB_DIR/swaps" 2>/dev/null)\", lock left: $(ls -d "$SL.lock" 2>/dev/null)"
+
+shadow_line 9202 > "$SL"; cp "$SL" "$T/shadow.before"; mkdir "$SL.lock"
+OUT=$(SHADOW_LOCK_SECS=0 bash "$SHADOWS" 2>&1); RC=$?
+[ $RC = 0 ] && cmp -s "$SL" "$T/shadow.before" && grep -qF "results not written: $SL.lock is held" <<<"$OUT" && [ -d "$SL.lock" ] \
+  && ok "shadow lock: a lock it cannot take: the log is left as it was, it says so, and the lock is not its to remove" || { bad "shadow lock: a held lock: exit $RC"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+( sleep 1; rmdir "$SL.lock" ) & FREE=$!
+bash "$SHADOWS" > /dev/null 2>&1
+wait $FREE
+grep -q "branch=train/lk9202 github=success$" "$SL" && ok "shadow lock: ...and it waits for a lock that is given back" || { bad "shadow lock: the log after waiting:"; sed 's/^/      /' "$SL"; }
+
+{ shadow_line 9201; shadow_line 9202; } > "$SL"
+{ echo "$(shadow_line 9201) github=failure"; echo "$(shadow_line 9202) github=failure"; } > "$T/shadow.other"
+cp "$T/shadow.other" "$GH_STUB_DIR/view-rewrites"
+OUT=$(bash "$SHADOWS" 2>&1)
+cmp -s "$SL" "$T/shadow.other" && grep -qF "another reader rewrote shadow.log" <<<"$OUT" \
+  && ok "shadow lock: another reader's rewrite during this read stands whole, and it says so" || { bad "shadow lock: after another reader's rewrite:"; sed 's/^/      /' "$SL"; }
+
+branch 91 t-lock "" -- add lock.txt x
+: > "$SL"; mkdir "$SL.lock"
+SHADOW_LOCK_SECS=60 bash "$TRAIN" 91 --shadow --no-merge > "$T/lock.out" 2>&1 & TP=$!
+for _ in $(seq 300); do grep -q '^train: ' "$T/lock.out" && break; sleep 0.2; done
+sleep 1
+HELD=$(lines)
+rmdir "$SL.lock"
+wait $TP; RC=$?
+[ "$HELD" = 0 ] && [ $RC = 0 ] && grep -q " prs=91 " "$SL" && [ ! -e "$SL.lock" ] \
+  && ok "shadow lock: a train's line waits for the lock, and goes in once it is free" || { bad "shadow lock: $HELD line(s) while held, exit $RC"; tail -8 "$T/lock.out" | sed 's/^/      /'; }
+
+branch 92 t-stale "" -- add stale.txt x
+: > "$SL"; mkdir "$SL.lock"
+OUT=$(SHADOW_LOCK_SECS=0 bash "$TRAIN" 92 --shadow --no-merge 2>&1); RC=$?
+LG=$(sed -n 's/^train: .*(logs: \(.*\))$/\1/p' <<<"$OUT" | tail -1)
+[ $RC = 0 ] && grep -q " prs=92 " "$SL" && grep -qF "was held past the wait" "$LG/shadow.out" && [ -d "$SL.lock" ] && grep -q '^train: ' <<<"$(tail -1 <<<"$OUT")" \
+  && ok "shadow lock: a lock left behind holds no train: the line goes in, the note in shadow.out, and the summary stays last" || { bad "shadow lock: a stale lock: exit $RC"; echo "$OUT" | tail -8 | sed 's/^/      /'; }
+rmdir "$SL.lock"; rm -f "$T/bin/mv"
 
 # Last: #36 leaves its FAIL file on main, so every train after it would be red.
 : > "$GH_STUB_DIR/merges"

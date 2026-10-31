@@ -164,6 +164,24 @@ scrub_test_env() {
   done
 }
 
+# ── shadow.log's lock ─────────────────────────────────────────────────────────────────────────────────────────────
+#
+# test-all-train.sh --shadow appends to shadow.log, and test-all-shadow.sh swaps in a rewritten copy: a line appended after
+# the reader copied the tail and before its mv would go with the old file. So each holds <log>.lock for its write. Both
+# writes take an instant, so a lock that outlasts the wait was left by a process killed outright: neither side removes it,
+# and neither hangs on it.
+#
+# shadow_lock <log>     takes it, waiting up to $SHADOW_LOCK_SECS (default 5). Returns 1 when it could not.
+# shadow_unlock <log>   gives it back. Only after shadow_lock returned 0.
+shadow_lock() {
+  local tries=$(( ${SHADOW_LOCK_SECS:-5} * 10 ))
+  until mkdir "$1.lock" 2>/dev/null; do
+    [ "$tries" -gt 0 ] || return 1
+    tries=$((tries - 1)); sleep 0.1
+  done
+}
+shadow_unlock() { rmdir "$1.lock" 2>/dev/null; }
+
 # ── The merge gate's green record ─────────────────────────────────────────────────────────────────────────────────
 #
 # Merges into main rest on a local `test-all.sh --all` (Marty, 2026-09-30), so a green run leaves a record the gate can

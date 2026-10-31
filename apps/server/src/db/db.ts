@@ -2038,6 +2038,14 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN verified_handle TEXT`).run(); } catch { }
     // The listing promise in the mirrored directory (mothership A2, engine/directory-cache.ts). No table yet on a database
     // from before G5: schema.sql makes it with them.
+    // The place circle (engine/place-circles.ts): the flag on a watch, and what makes a group a circle. Plain ADD COLUMNs.
+    try { db.prepare(`ALTER TABLE place_watches ADD COLUMN would_help INTEGER NOT NULL DEFAULT 0 CHECK (would_help IN (0, 1))`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN kind TEXT CHECK (kind IS NULL OR kind = 'circle')`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN place_cell TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_done_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_community_key TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_starter TEXT REFERENCES members(public_key)`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN circle_starting_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN promise TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN accepting_knocks INTEGER CHECK (accepting_knocks IS NULL OR accepting_knocks IN (0, 1))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE directory_cache ADD COLUMN closing_on TEXT`).run(); } catch { }

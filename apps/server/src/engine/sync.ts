@@ -2806,8 +2806,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // The description as the main node holds it (#1493, groupDescriptionAsCopied): the limit is on a member's
                 // new words, so one stored before it, longer, is copied unchanged and its row is never dropped.
                 const importGroup = db.prepare(`INSERT INTO groups
-                    (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at,
+                     kind, place_cell, circle_done_at, circle_community_key, circle_starter, circle_starting_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
                         slug = excluded.slug,
@@ -2815,7 +2816,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         category = excluded.category,
                         lead_pubkey = COALESCE(excluded.lead_pubkey, groups.lead_pubkey),
                         join_policy = excluded.join_policy,
-                        updated_at = excluded.updated_at
+                        updated_at = excluded.updated_at,
+                        kind = excluded.kind,
+                        place_cell = excluded.place_cell,
+                        circle_done_at = excluded.circle_done_at,
+                        circle_community_key = excluded.circle_community_key,
+                        circle_starter = excluded.circle_starter,
+                        circle_starting_at = excluded.circle_starting_at
                     WHERE excluded.updated_at IS NOT NULL
                       AND (groups.updated_at IS NULL OR excluded.updated_at > groups.updated_at)`);
                 for (const g of remote.groups) {
@@ -2823,6 +2830,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     const res = importGroup.run(
                         g.id, g.name, g.slug, groupDescriptionAsCopied(g.description), g.category || 'general',
                         g.createdBy, g.leadPubkey ?? null, g.joinPolicy || 'open', g.createdAt, g.updatedAt || g.createdAt,
+                        g.kind === 'circle' ? 'circle' : null, g.placeCell ?? null, g.circleDoneAt ?? null, g.circleCommunityKey ?? null,
+                        g.circleStarter ?? null, g.circleStartingAt ?? null,
                     );
                     if (res.changes > 0) {
                         importGroupPicture(g.id, g.avatarUrl ?? null);

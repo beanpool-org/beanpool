@@ -501,7 +501,7 @@ async function main(): Promise<void> {
             `PUBLIC_READ_PATTERNS ${re} has an example in this sweep (a new public pattern must be listed here)`);
     }
     /** The other reads that take a point (2b), each read with one as well. */
-    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/home', '/api/shops']);
+    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/global/demand', '/api/home', '/api/shops']);
     const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads
         : withPoint.has(p) ? [p, `${p}?lat=-28.55&lng=153.51`, `${p}?lat=${LONE_AT.lat}&lng=${LONE_AT.lng}`]
             : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
@@ -564,6 +564,7 @@ async function main(): Promise<void> {
         [POSTS]: "section 7: each place, distance, order, radius and page is its area's",
         '/api/global/home': "section 7b: the nearby count is of the listings whose area is within 50 km, and the bisection finds the area",
         '/api/global/communities': "section 7c: each distance and the order are from the place each community shows (the public directory's)",
+        '/api/global/demand': "the count is of the people in a fixed tile (engine/place-circles.ts), nothing below 3, and no listing is near it: test-place-circles.ts differences it",
         '/api/home': "section 7d: the find card is the landing card's own body (7b), and each listing's and event's distance the listing's visitors' read (7)",
         '/api/shops': "section 7e: the shops, their order and each distance are those of the listings' own visitors' read (7) at that point",
     };
@@ -1316,8 +1317,8 @@ async function main(): Promise<void> {
             'GET /api/federation/reachable-peers',
             'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',
             'POST /api/funnel-event',
-            'GET /api/global/communities', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
-            'DELETE /api/global/watches/:id',
+            'GET /api/global/communities', 'GET /api/global/demand', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
+            'DELETE /api/global/watches/:id', 'POST /api/global/circles/:id/starting',
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/chat/report', 'POST /api/groups/:id/join',
             'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/former', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',

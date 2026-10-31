@@ -328,7 +328,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     groups: {
         kind: 'replicated-except', payload: 'groups', watermark: 'updated_at',
-        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at'),
+        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at kind place_cell circle_done_at circle_community_key circle_starter circle_starting_at'),
         except: {
             lead_pubkey: { reason: "the import keeps the lead it has over the main server's null (COALESCE): a group whose last convenor left has no lead there and keeps the old one on the standby (not in the design; found by this net)", gap: 'G1b' },
         },
@@ -356,7 +356,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     place_watches: {
         kind: 'replicated', payload: 'placeWatches', watermark: 'updated_at',
-        columns: cols('id pubkey lat lng radius_km created_at last_notified_at updated_at'),
+        columns: cols('id pubkey lat lng radius_km created_at last_notified_at updated_at would_help'),
     },
     directory_cache: {
         kind: 'replicated', payload: 'directoryCache', watermark: 'updated_at',

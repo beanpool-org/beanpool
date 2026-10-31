@@ -1166,7 +1166,7 @@ export default function MarketScreen() {
                     <View style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        backgroundColor: colors.accent.soft,
+                        backgroundColor: colors.accent.tint,
                         borderColor: colors.accent.border,
                         borderWidth: 1,
                         borderRadius: 16,
@@ -1175,7 +1175,7 @@ export default function MarketScreen() {
                         paddingRight: 6,
                         minHeight: 28,
                     }}>
-                        <Text style={{ fontSize: 13, color: colors.text.primary, fontWeight: '500', marginRight: 4 }} maxFontSizeMultiplier={1.3}>
+                        <Text style={{ fontSize: 13, color: colors.text.body, fontWeight: '500', marginRight: 4 }} maxFontSizeMultiplier={1.3}>
                             #{tagIndex().label(selectedTag)}
                         </Text>
                         <Pressable

@@ -53,7 +53,7 @@ describe('TagPicker logic', () => {
         const suggestions = suggestTags(
             'Fresh lemons and sourdough bread',
             'Homegrown organic Meyer lemons and warm country bread',
-            'food'
+            { category: 'food' }
         );
         expect(suggestions.length).toBeGreaterThan(0);
         expect(suggestions.length).toBeLessThanOrEqual(SUGGESTED_TAGS_MAX);

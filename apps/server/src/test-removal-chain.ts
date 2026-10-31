@@ -333,7 +333,7 @@ async function main() {
     assert(p2.status === 200 && !!vote2 && statusOf(dave) === 'disabled', `Otto, with a new reason, pauses Dave again (${p2.status} ${p2.text.slice(0, 160)})`);
     assert(row(vote2).params.secondPause?.after === 'no' && row(vote2).params.secondPause?.endedAt === new Date(ended1).toISOString(),
         `its record says it is a second pause, after a No (${JSON.stringify(row(vote2).params.secondPause)})`);
-    assert(row(vote2).description.startsWith('Second pause in 30 days. The last vote said No. An admin paused DaveDoe'),
+    assert(row(vote2).description.startsWith('Second pause in 30 days. The last vote said No. An owner paused DaveDoe'),
         `its record opens with the design's sentence (${row(vote2).description.slice(0, 90)})`);
     const card2 = await cardFor(vi, vote2);
     assert(card2?.params?.secondPause?.after === 'no' && card2?.description?.startsWith('Second pause in 30 days. The last vote said No.'),
@@ -390,7 +390,7 @@ async function main() {
     console.log('\n2. A third pause within 90 days of the first is refused to everyone');
     voteAndClose(vote2, false);
     assert(row(vote2).status === 'failed' && statusOf(dave) === 'active', `the community says No again (${row(vote2).status})`);
-    const THIRD = 'The community has decided on DaveDoe twice in 90 days. Ask them to propose a Decision.';
+    const THIRD = 'DaveDoe has been paused twice in 90 days already. A third time needs the community: propose a Decision.';
     before = removalsOf(dave);
     const gwenThird = await pause(gwenPhone(), dave, 'A third case about the deposits, from the market');
     assert(gwenThird.status === 403 && gwenThird.body?.code === de.THIRD_PAUSE_CODE && gwenThird.body?.error === THIRD,

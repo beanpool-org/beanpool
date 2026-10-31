@@ -66,10 +66,24 @@ export function isOwnRemoval(decision: { effect: string; subject?: string | null
  * named (removal by vote, Amendment A point 3: the node sends `proposer`); an owner who paused with the server's password
  * is named as an owner, since the password names nobody; a node from before names no one, as before.
  */
-export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: string } | null | undefined, fallbackName: string, proposer?: RemovalProposer | null): string {
+export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: string; secondPause?: unknown } | null | undefined, fallbackName: string, proposer?: RemovalProposer | null): string {
     const name = params?.memberName || fallbackName;
     const at = params?.pausedAt ? Date.parse(params.pausedAt) : NaN;
     const date = Number.isFinite(at) ? formatDate(new Date(at), 'day-month-year') : null;
+    const isOwner = Boolean(params?.secondPause || proposer?.kind === 'owner');
+    if (isOwner) {
+        if (proposer?.name) {
+            return date
+                ? t('{admin}, an owner, paused {name} on {date}.', { admin: proposer.name, name, date })
+                : t('{admin}, an owner, paused {name}.', { admin: proposer.name, name });
+        }
+        if (proposer?.kind === 'password') {
+            return date
+                ? t("An owner paused {name} on {date}, signed in with the server's password.", { name, date })
+                : t("An owner paused {name}, signed in with the server's password.", { name });
+        }
+        return date ? t('An owner paused {name} on {date}.', { name, date }) : t('An owner paused {name}.', { name });
+    }
     if (proposer?.kind === 'admin' && proposer.name) {
         return date
             ? t('{admin}, an admin, paused {name} on {date}.', { admin: proposer.name, name, date })

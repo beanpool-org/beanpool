@@ -3,13 +3,14 @@
  * synonyms.ts made from it, the label index in English and in a drafted language, and suggestTags on thirty listings.
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { PRICING_CATEGORIES } from '../pricing-catalog.js';
 import { searchTermsFor } from '../search-terms.js';
 import { SYNONYM_MAP } from '../synonyms.js';
-import { CONTEXT_SEPARATOR, setLanguage, wordsFor } from '../words.js';
+import { CONTEXT_SEPARATOR, currentLanguage, setLanguage, wordsFor } from '../words.js';
 import {
     TAG_ID_PATTERN, TAG_LIBRARY, TAG_TOPS, buildTagIndex, isTagId, tagById, tagChildren, tagEnglish, tagIndex, tagParent,
-    tagSearchWords,
+    tagSearchWords, searchTagsFor,
 } from '../tags/index.js';
 import { suggestTags } from '../tags/suggest.js';
 import before from './fixtures/synonym-map-before-tags.json';
@@ -296,4 +297,65 @@ describe('suggestTags', () => {
         // A spaced script is never read inside a word: "lemonade" is not looked through for "lemon".
         expect(buildTagIndex(wordsFor('en')).inside('lemonade')).toEqual([]);
     });
+
+    describe('searchTagsFor: resolving search queries to tag ids', () => {
+        it('proves with the REAL es catalog that "limón" and "huevos" resolve on a Spanish device', () => {
+            const realEsCatalog = JSON.parse(readFileSync(new URL('../../words/es.json', import.meta.url), 'utf8'));
+            try {
+                setLanguage('es', [realEsCatalog]);
+                expect(currentLanguage()).toBe('es');
+                const index = tagIndex();
+                expect(index.label('food.fruit.lemon')).toBe('Limón');
+                expect(index.label('food.eggs')).toBe('Huevos');
+                expect(searchTagsFor('limón')).toEqual(['food.fruit.lemon']);
+                expect(searchTagsFor('huevos')).toEqual(['food.eggs']);
+                // English also resolves on a Spanish device (§4.7)
+                expect(searchTagsFor('lemon')).toEqual(['food.fruit.lemon']);
+                expect(searchTagsFor('eggs')).toEqual(['food.eggs']);
+            } finally {
+                setLanguage('en');
+            }
+        });
+
+        it('resolves a member’s typed word into tag ids in English and another language', () => {
+            const es = buildTagIndex(wordsFor('es', [{
+                [`Lemon${CONTEXT_SEPARATOR}tag`]: 'Limón',
+                [`Lime${CONTEXT_SEPARATOR}tag`]: 'Lima',
+                [`Eggs${CONTEXT_SEPARATOR}tag`]: 'Huevos',
+            }]));
+            expect(searchTagsFor('limón', { index: es })).toEqual(['food.fruit.lemon']);
+            expect(searchTagsFor('lemon', { index: es })).toEqual(['food.fruit.lemon']);
+            expect(searchTagsFor('huevos', { index: es })).toEqual(['food.eggs']);
+            expect(searchTagsFor('eggs', { index: es })).toEqual(['food.eggs']);
+        });
+
+        it('resolves an alias into the tags under it', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            expect(searchTagsFor('citrus', { index: en })).toEqual(expect.arrayContaining(['food.fruit.lemon', 'food.fruit.lime', 'food.fruit.orange']));
+        });
+
+        it('resolves multiple words in a query, excluding top categories', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            const res = searchTagsFor('fresh lemons and limes', { index: en });
+            expect(res).toContain('food.fruit.lemon');
+            expect(res).toContain('food.fruit.lime');
+            // Tops (category level) are never returned
+            for (const id of res) expect(id).toContain('.');
+        });
+
+        it('respects the limit option and ignores whitespace', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            expect(searchTagsFor('   ', { index: en })).toEqual([]);
+            expect(searchTagsFor('citrus', { index: en, limit: 2 })).toHaveLength(2);
+        });
+
+        it('does not throw when searching punctuation or symbols', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            expect(searchTagsFor('???', { index: en })).toEqual([]);
+            expect(searchTagsFor('!#--', { index: en })).toEqual([]);
+            expect(searchTagsFor('...', { index: en })).toEqual([]);
+            expect(searchTagsFor('###', { index: en })).toEqual([]);
+        });
+    });
 });
+

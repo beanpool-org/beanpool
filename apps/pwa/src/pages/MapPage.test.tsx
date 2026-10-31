@@ -2481,6 +2481,22 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         expect(create).not.toHaveBeenCalled();
     });
 
+    it('a tag picked for one post never rides into a tool\'s draft: the draft starts with none, as on the phone', async () => {
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost openDraft={draft} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        fireEvent.click(within(panel).getByRole('button', { name: '+ Add tag' }));
+        fireEvent.change(await view!.findByRole('textbox', { name: 'Search tags...' }), { target: { value: 'lemon' } });
+        fireEvent.click(await view!.findByRole('button', { name: 'Lemon' }));
+        fireEvent.click(view!.getByRole('button', { name: 'Done' }));
+        expect(await within(panel).findByRole('button', { name: 'Remove Lemon' })).toBeInTheDocument();
+
+        await act(async () => { view!.rerender(<MapPage identity={mockIdentity} openNewPost openDraft={{ ...draft, title: 'Tomato seed' }} />); });
+        const next = await view!.findByTestId('map-new-post-panel');
+        expect(within(next).getByPlaceholderText('What do you need/offer?')).toHaveValue('Tomato seed');
+        expect(within(next).queryByRole('button', { name: 'Remove Lemon' })).toBeNull();
+    });
+
     it("the profile check still holds: a member with no photo is asked for one, and the composer doesn't open", async () => {
         vi.mocked(getProfileStatus).mockResolvedValueOnce({ complete: false, missingName: false, missingAvatar: true } as any);
         vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} } as any);

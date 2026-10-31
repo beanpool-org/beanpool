@@ -103,7 +103,8 @@ export function freeTagStored(text: string): string {
 /** Why no listing may carry this tag, in words, or null when one may. Reads it as it would be stored. */
 export function freeTagRefusal(text: string): WordKey | null {
     const tag = freeTagStored(text);
-    if (HIDDEN.test(tag)) return FREE_TAG_HIDDEN_CHARACTER;
+    // U+FEFF is hidden as well, but `\s` reads it as a space, so it is gone from the stored form.
+    if (HIDDEN.test(tag) || text.includes('\ufeff')) return FREE_TAG_HIDDEN_CHARACTER;
     if (looksLikeContact(tag)) return FREE_TAG_NOT_A_CONTACT;
     if (tag.includes(',')) return FREE_TAG_HOLDS_A_COMMA;
     const chars = Array.from(tag).length;

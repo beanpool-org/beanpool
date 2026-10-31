@@ -230,6 +230,7 @@ async function main(): Promise<void> {
         ['a control character', ['ab\u0007cd'], /hidden characters/],
         ['a NUL', ['ab\u0000cd'], /hidden characters/],
         ['a text-direction override', ['ab\u202ecd'], /hidden characters/],
+        ['a byte-order mark', ['example\ufeff.com'], /hidden characters/],
         ['a comma', ['wood, fire'], /a comma parts two tags/],
         ['a number in the list', [7], /must be a list of words/],
         ['text that is no list', ['2nd hand'][0], /must be a list of words/],

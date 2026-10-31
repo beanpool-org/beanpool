@@ -83,7 +83,7 @@ describe('what a free tag may not be', () => {
     });
 
     it('refuses control and hidden characters', () => {
-        for (const tag of ['ab\u0000cd', 'ab\u0007cd', 'ab\u007fcd', 'ab\u0085cd', 'ab\u00adcd', 'ab\u200bcd', 'ab\u202ecd', 'ab\u2066cd']) {
+        for (const tag of ['ab\u0000cd', 'ab\u0007cd', 'ab\u007fcd', 'ab\u0085cd', 'ab\u00adcd', 'ab\u200bcd', 'ab\u202ecd', 'ab\u2066cd', 'ab\ufeffcd', 'example\ufeff.com', 'example.\ufeffcom', '0412\ufeff345678', '\ufefflimón']) {
             expect(freeTagRefusal(tag), JSON.stringify(tag)).toBe(FREE_TAG_HIDDEN_CHARACTER);
         }
     });

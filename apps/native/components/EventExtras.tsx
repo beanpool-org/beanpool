@@ -159,13 +159,14 @@ export function EventShareAndCalendar({ post }: { post: any }) {
                 onRequestClose={() => setChoiceOpen(false)}
                 statusBarTranslucent
             >
-                <Pressable
-                    style={styles.sheetBackdrop}
-                    onPress={() => setChoiceOpen(false)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('Close calendar choices')}
-                >
-                    <Pressable style={styles.sheetCard} onPress={() => {}} accessible={false}>
+                <View style={styles.sheetBackdrop}>
+                    <Pressable
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setChoiceOpen(false)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Close calendar choices')}
+                    />
+                    <View style={styles.sheetCard}>
                         <Text style={styles.sheetTitle} accessibilityRole="header">{t('Add to calendar')}</Text>
                         <Pressable
                             onPress={addCalendarFile}
@@ -195,8 +196,8 @@ export function EventShareAndCalendar({ post }: { post: any }) {
                         >
                             <Text style={styles.sheetCancelText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Cancel')}</Text>
                         </Pressable>
-                    </Pressable>
-                </Pressable>
+                    </View>
+                </View>
             </Modal>
         </View>
     );

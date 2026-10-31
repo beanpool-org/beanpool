@@ -53,6 +53,30 @@ vi.mock('react-native', () => {
     };
 });
 
+vi.mock('expo', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+}));
+
+vi.mock('expo-modules-core', () => ({
+    requireNativeModule: vi.fn(() => ({})),
+    requireOptionalNativeModule: vi.fn(() => null),
+    EventEmitter: vi.fn(() => ({ addListener: vi.fn(), removeListener: vi.fn() })),
+    NativeModulesProxy: {},
+    ProxyNativeModule: {},
+}));
+
+vi.mock('expo-router', () => ({
+    router: { canGoBack: () => true, back: () => {}, replace: () => {}, push: () => {} },
+    useFocusEffect: () => {},
+    ErrorBoundary: () => null,
+}));
+
+vi.mock('expo-image', () => ({
+    Image: ({ source, accessibilityLabel }: { source?: { uri?: string }; accessibilityLabel?: string }) =>
+        createElement('img', { src: source?.uri, 'aria-label': accessibilityLabel }),
+}));
+
 vi.mock('expo-intent-launcher', () => ({
     startActivityAsync: async (action: string, options: any) => {
         intentCalls.calls.push({ action, options });
@@ -87,7 +111,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 
-const currentTheme = { theme: 'light', colors: null as any };
+const currentTheme = vi.hoisted(() => ({ theme: 'light', colors: null as any }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors, darkColors } = await import('../../constants/colors');
     currentTheme.colors = lightColors;
@@ -120,14 +144,14 @@ const POST = {
 let root: Root;
 let host: HTMLElement;
 
-async function renderComponent(colors = lightColors, isDark = false) {
+async function renderComponent(colors: any = lightColors, isDark = false) {
     currentTheme.theme = isDark ? 'dark' : 'light';
     currentTheme.colors = colors;
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
     await act(async () => {
-        root.render(createElement(EventShareAndCalendar, { post: POST }));
+        root.render(createElement(EventShareAndCalendar, { post: POST }) as any);
     });
 }
 

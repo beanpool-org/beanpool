@@ -186,7 +186,7 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                                 className="w-full min-h-[48px] px-3 py-2 text-left bg-transparent border-0 hover:bg-nature-100 dark:hover:bg-nature-800 cursor-pointer focus-visible:outline-none focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800 rounded-lg flex flex-col justify-center"
                             >
                                 <span className="text-sm font-semibold text-nature-900 dark:text-nature-100">{t('Calendar file (.ics)')}</span>
-                                <span className="text-xs text-nature-600 dark:text-nature-400">{t('For any calendar app')}</span>
+                                <span className="text-xs text-nature-600 dark:text-nature-300">{t('For any calendar app')}</span>
                             </button>
                             <button
                                 type="button"

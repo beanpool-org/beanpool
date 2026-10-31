@@ -263,7 +263,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                     <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💻</Text></View>
                     <View style={{ flex: 1 }}>
                         <Text style={styles.menuText}>{computerLabel}</Text>
-                        <Text style={styles.menuSub}>{t('Scan the code on its Settings page · your key stays on this phone')}</Text>
+                        <Text style={styles.menuSub}>{t('Scan the code on its Settings page or connect an AI assistant · your key stays on this phone')}</Text>
                     </View>
                     <Text style={styles.menuChevron}>›</Text>
                 </Pressable>

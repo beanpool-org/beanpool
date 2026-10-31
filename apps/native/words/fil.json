@@ -2233,7 +2233,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "Nagtatanong muna, pagkatapos ay tatapusin ang iyong mga pag-sign in sa Mga Setting ng {name} sa bawat computer at telepono. Nananatili ang iyong susi sa teleponong ito",
   "Ends your Settings sign-ins on every computer and phone": "Tinatapos ang iyong mga sign-in sa Mga Setting sa bawat computer at telepono",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "I-scan ang code sa page ng Mga Setting ng {name} sa browser ng computer upang i-sign in ito bilang ikaw. Nananatili ang iyong susi sa teleponong ito",
-  "Scan the code on its Settings page · your key stays on this phone": "I-scan ang code sa page ng Mga Setting nito · nananatili ang iyong susi sa teleponong ito",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "I-scan ang code sa page ng Mga Setting nito o ikonekta ang isang AI assistant · nananatili ang iyong susi sa teleponong ito",
   "Check your 12 words": "Suriin ang iyong 12 salita",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "Hindi nasuri ang iyong 12 salita. Kung mawala mo ang teleponong ito, hindi mo mapapamahalaan ang server o mabubuksan ang backup.",
   "Take over or restore with this phone": "Pamahalaan o ibalik gamit ang teleponong ito",

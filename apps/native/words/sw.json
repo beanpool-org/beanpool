@@ -2233,7 +2233,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "Inauliza kwanza, kisha inakatiza kuingia kwako kwenye Mipangilio ya {name} kwenye kila kompyuta na simu. Ufunguo wako unabaki kwenye simu hii",
   "Ends your Settings sign-ins on every computer and phone": "Inakatiza kuingia kwako kwa Mipangilio kwenye kila kompyuta na simu",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "Changanua msimbo kwenye ukurasa wa Mipangilio wa {name} kwenye kivinjari cha kompyuta ili uingie kama wewe. Ufunguo wako unabaki kwenye simu hii",
-  "Scan the code on its Settings page · your key stays on this phone": "Changanua msimbo kwenye ukurasa wake wa Mipangilio · ufunguo wako unabaki kwenye simu hii",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "Changanua msimbo kwenye ukurasa wake wa Mipangilio au unganisha msaidizi wa AI · ufunguo wako unabaki kwenye simu hii",
   "Check your 12 words": "Kagua maneno yako 12",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "Maneno yako 12 hayajakaguliwa. Ukipoteza simu hii hautaweza kuchukua usimamizi wa seva au kufungua nakala rudufu.",
   "Take over or restore with this phone": "Chukua usimamizi au urejeshe ukitumia simu hii",

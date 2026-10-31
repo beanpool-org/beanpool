@@ -2415,7 +2415,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "Спочатку запитує підтвердження, потім завершує сеанси в налаштуваннях {name} на всіх комп'ютерах і телефонах. Ваш ключ залишається на цьому телефоні",
   "Ends your Settings sign-ins on every computer and phone": "Завершує ваші сеанси в налаштуваннях на всіх комп'ютерах і телефонах",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "Відскануйте код на сторінці налаштувань {name} у браузері комп'ютера, щоб увійти від вашого імені. Ваш ключ залишається на цьому телефоні",
-  "Scan the code on its Settings page · your key stays on this phone": "Відскануйте код на сторінці налаштувань · ваш ключ залишається на цьому телефоні",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "Відскануйте код на сторінці налаштувань або підключіть ШІ-асистента · ваш ключ залишається на цьому телефоні",
   "Check your 12 words": "Перевірте свої 12 слів",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "Ваші 12 слів не перевірено. Якщо ви втратите цей телефон, ви не зможете перейняти керування сервером або відкрити резервну копію.",
   "Take over or restore with this phone": "Перейняти керування або відновити за допомогою цього телефона",

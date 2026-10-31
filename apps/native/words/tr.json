@@ -2235,7 +2235,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "Önce onay ister, ardından her bilgisayar ve telefonda {name} Ayarları oturumlarınızı sonlandırır. Anahtarınız bu telefonda kalır",
   "Ends your Settings sign-ins on every computer and phone": "Her bilgisayar ve telefonda Ayarlar oturumlarınızı sonlandırır",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "Kendiniz olarak giriş yapmak için bir bilgisayarın tarayıcısında {name} Ayarları sayfasındaki kodu tarayın. Anahtarınız bu telefonda kalır",
-  "Scan the code on its Settings page · your key stays on this phone": "Ayarlar sayfasındaki kodu tarayın · anahtarınız bu telefonda kalır",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "Ayarlar sayfasındaki kodu tarayın veya bir yapay zeka asistanı bağlayın · anahtarınız bu telefonda kalır",
   "Check your 12 words": "12 kelimenizi kontrol edin",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "12 kelimeniz kontrol edilmedi. Bu telefonu kaybederseniz sunucuyu devralamaz veya bir yedeği açamazsınız.",
   "Take over or restore with this phone": "Bu telefonla devralın veya geri yükleyin",

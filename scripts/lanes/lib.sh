@@ -99,6 +99,9 @@ LANE_CAPACITY_RE='No capacity available|UNAVAILABLE \(code 503\)'
 # A headless Claude run exits when the model stops replying. If its last words promise a later report, there is
 # no later — whatever it backgrounded is killed below and the gates judge what actually landed.
 LANE_PROMISE_RE="(I'll|I will|will) (send|post|report|update|share)|still running|when it finishes|once it finishes|in the background"
+# One push per fix round (Marty, 1 Nov 2026). ci.yml's concurrency group cancels a branch's run on every new push: 80 of 165 PR
+# runs were cancelled that way, and four runs at 14 jobs each want 56 against GitHub's 20. Every fix brief says this, in these words.
+LANE_ONE_PUSH="ONE PUSH THIS ROUND: commit locally as you go and push once, when this round's findings are done and the local checks pass, because each push cancels and restarts GitHub's run. A long first build may still push early so work is not lost, and a run about to end must push what it has."
 
 typeset -ga LANE_HELD_LOCKS
 typeset -gA LANE_SEEN_PIDS
@@ -459,7 +462,7 @@ lane_weigh_brief(){ # PR SINCE → how a deciding brief opens when no FIX stage 
 In your summary issue comment (gh pr comment), after its first line, list every early comment as REAL or NOT REAL with one line why. Beyond them, post only what is still broken or new, with file and line."; }
 
 cont(){ # NAME BRANCH BRIEF-FILE — finish whatever an earlier stage on this brief left undone
-  stage "$1-CONTINUE" "$LANE_BUILD_TIMEOUT" "CONTINUE STAGE for branch $2 (fetch it and check it out in the lane worktree). A previous run worked on this brief and may have hit its time limit or been stopped. Start from git status, git diff and git log origin/$LANE_BASE..HEAD, and FINISH whatever is not yet done; if it is already complete, say ALREADY COMPLETE and stop. Commit and push per step.
+  stage "$1-CONTINUE" "$LANE_BUILD_TIMEOUT" "CONTINUE STAGE for branch $2 (fetch it and check it out in the lane worktree). A previous run worked on this brief and may have hit its time limit or been stopped. Start from git status, git diff and git log origin/$LANE_BASE..HEAD, and FINISH whatever is not yet done; if it is already complete, say ALREADY COMPLETE and stop. $LANE_ONE_PUSH
 
 $(cat "$(lane_brief_path "$3")")" build; }
 
@@ -479,7 +482,7 @@ review(){ # BRANCH — the early pass(es), then the deciding pass. Sets CLEAN an
     { lane_is_count "$B0" && lane_is_count "$B1"; } || { log "comment count unavailable (GitHub API) — NOT clean"; CLEAN=0; return; }
     [ "$B1" -le "$B0" ] && break
     if [ "$passes" = 1 ]; then log "$((B1-B0)) early comment(s) left for the deciding pass to weigh — no FIX stage on a Claude-built lane"; break; fi
-    stage "FIX-$1-$i" "$LANE_BUILD_TIMEOUT" "STAGE FIX — PR #$PR (branch $1; fetch and check it out in the lane worktree). Read the inline review comments created after $T: gh api repos/$LANE_GH_REPO/pulls/$PR/comments --paginate. Fix the BLOCKING ones (correctness, security, money, authorization, data loss). For OPTIONAL suggestions, reply briefly and leave them for a human — do not implement them. If a finding needs a DESIGN decision not in the docs, reply that it is parked for the maintainer. Never delete or weaken a test assertion. Commit and push per fix; run the suites you touched." build
+    stage "FIX-$1-$i" "$LANE_BUILD_TIMEOUT" "STAGE FIX — PR #$PR (branch $1; fetch and check it out in the lane worktree). Read the inline review comments created after $T: gh api repos/$LANE_GH_REPO/pulls/$PR/comments --paginate. Fix the BLOCKING ones (correctness, security, money, authorization, data loss). For OPTIONAL suggestions, reply briefly and leave them for a human — do not implement them. If a finding needs a DESIGN decision not in the docs, reply that it is parked for the maintainer. Never delete or weaken a test assertion. Commit each fix and run the suites you touched. $LANE_ONE_PUSH" build
   done
   # A clean early pass is corroboration, not proof: the merge is decided by the deciding pass on the strong model.
   opening="Final, DECIDING pass: verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line."
@@ -492,7 +495,7 @@ item(){ # NAME BRANCH BRIEF-FILE [BRIEF-FILE-2] — build, continue, open the PR
   [ "$LANE_BUILD_BACKEND" = agy ] && lane_fresh
   if exists "$2"; then log "branch $2 exists — resuming"; cont "$1" "$2" "$3"
   else stage "$1" "$LANE_BUILD_TIMEOUT" "$(cat "$(lane_brief_path "$3")")" build; cont "$1" "$2" "$3"; fi
-  [ -n "$4" ] && stage "$1-b" "$LANE_BUILD_TIMEOUT" "CONTINUE on branch $2 (fetch and check it out in the lane worktree): now do the SECOND brief below; skip what is already done. Commit and push per step.
+  [ -n "$4" ] && stage "$1-b" "$LANE_BUILD_TIMEOUT" "CONTINUE on branch $2 (fetch and check it out in the lane worktree): now do the SECOND brief below; skip what is already done. $LANE_ONE_PUSH
 
 $(cat "$(lane_brief_path "$4")")" build
   [ -n "$(prnum "$2")" ] || stage "$1-PR" "$LANE_BUILD_TIMEOUT" "Branch $2 exists on origin (fetch and check it out in the lane worktree). If its work is complete per the brief(s) $(lane_brief_path "$3")${4:+ and $(lane_brief_path "$4")}, open the PR now: gh pr create -R $LANE_GH_REPO --base $LANE_BASE --head $2 with a full description. Otherwise finish it first, commit, push, then open the PR." build

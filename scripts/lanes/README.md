@@ -57,6 +57,10 @@ The building blocks are `stage NAME TIMEOUT BRIEF [ROLE]`, `cont`, `item`, `revi
 `deploy_main NODE SYMBOL [LABEL]`, `count`, `prnum`, `pr_head`, `ci_head_state SHA` and `gh_try`. The comment above each
 function describes its contract.
 
+A fix round pushes once. The FIX, FIX-CI and CONTINUE briefs and both rule files tell a stage to commit locally and push when
+the round's findings are done and its local checks pass, because each push cancels and restarts GitHub's run. A long first
+build may still push early so work is not lost, and a run about to end must push what it has.
+
 ## Backends and models
 
 There are three roles. `build` covers builds, CONTINUE, FIX and SYNC stages. `review` covers the early CCR passes.

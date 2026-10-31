@@ -2,8 +2,11 @@
 - Work ONLY in the worktree named by WT_INT below. Never use the maintainer's own checkout.
 - Branch: the one named in the task above, and no other. If the task does not name a branch, STOP and say so
   rather than guessing or pushing to one you found checked out.
-- Push to origin after EVERY logical step, not at the end — several earlier runs burned their whole budget
-  waiting on tests and committed nothing.
+- On a first build, push to origin after EVERY logical step, not at the end — several earlier runs burned their whole
+  budget waiting on tests and committed nothing.
+- ONE PUSH PER FIX ROUND (Marty, 1 Nov): in a FIX, FIX-CI or CONTINUE stage, commit locally and push once, when the round's
+  findings are done and the local checks pass, because each push cancels and restarts GitHub's run. Exception: a build stage
+  on a long first build may still push early so work is not lost, and a run about to end must push what it has.
 - Every task starts from CURRENT origin/main: `git fetch origin && git checkout --detach origin/main`, then
   `git checkout -b <branch>` (or check out the existing branch for a CONTINUE/FIX/SYNC stage).
 - If node_modules is missing, run `pnpm install --frozen-lockfile` at the repo root, then build @beanpool/core and
@@ -13,7 +16,8 @@
   with `manage_task` (Action: status) until Status: DONE, then read its output. NEVER end your turn while a task is
   RUNNING, and never say you are "waiting for" something: poll instead. The CLI kills every background task ~5 s after
   you stop replying, and four runs in a row ended with nothing because of it.
-- Order: read → edit → commit → push → run the suites you touched → push → STOP. Do NOT run scripts/test-all.sh or
+- Order on a first build: read → edit → commit → push → run the suites you touched → push → STOP. In a fix round: read →
+  edit → commit → run the suites you touched → push once → STOP. Do NOT run scripts/test-all.sh or
   the whole server suite set: CI runs the full suite on the PR, and this Mac is shared with another project (a full
   run here pushed the load to 46 on 20 Oct). Any run bigger than a few named suites only under the machine-wide lock,
   taken and released in ONE command:

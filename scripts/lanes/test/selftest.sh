@@ -697,6 +697,31 @@ FAKE_EARLY_POSTS=; print 5 > "$FAKE_STATE/comments"
 { review feat/x; } >> "$LOG" 2>&1
 check "a first pass with no comments still ends the early passes" eval '[ "$CLEAN:$(fixes):$(reviews)" = 1:1:1 ] && not_logged "CCR-feat/x-2"'
 
+scenario "51. a fix round pushes once: the FIX, FIX-CI and CONTINUE briefs and both rule files say so, with the two exceptions"
+one_push="push once, when this round's findings are done and the local checks pass"
+says_once(){ grep -qF -- "$one_push" "$1" && ! grep -qE "[Cc]ommit and push per|push per fix" "$1"; }
+FAKE_GH_PR=42 FAKE_EARLY_POSTS=2; print 5 > "$FAKE_STATE/comments"
+{ review feat/x; } >> "$LOG" 2>&1
+check "the FIX brief"                            says_once "$FAKE_STATE/agy.prompt-2"
+FAKE_EARLY_POSTS=; rm -f "$FAKE_STATE/agy.calls" "$FAKE_STATE/agy.runs"
+head_is aaa1; ci aaa1 failure; print aaa2 > "$FAKE_STATE/pushes"
+{ decide_review 42 feat/x 3 1; } >> "$LOG" 2>&1
+check "the FIX-CI brief"                         says_once "$FAKE_STATE/agy.prompt-1"
+check "... and it still says what the review waits for" brief_has agy.prompt-1 "the review runs once that push is green"
+( stage(){ print -r -- "$3" > "$FAKE_STATE/brief-$1"; STAGE_OK=1; STAGE_IDLEKILL=0; return 0; }
+  review(){ :; }
+  item NOPR feat/nopr "$T/briefs/nopr.md" "$T/briefs/nopr.md" ) >> "$LOG" 2>&1
+check "the CONTINUE brief"                       says_once "$FAKE_STATE/brief-NOPR-CONTINUE"
+check "the second brief's CONTINUE"              says_once "$FAKE_STATE/brief-NOPR-b"
+check "a long first build may push early"        brief_has brief-NOPR-CONTINUE "first build may still push early"
+check "a run about to end pushes what it has"    brief_has brief-NOPR-CONTINUE "a run about to end must push what it has"
+for r in "$LANE_AGY_RULES" "$LANE_CLAUDE_RULES"; do
+  check "${r:t} sets the rule and its reason"    eval 'grep -qF "ONE PUSH PER FIX ROUND" "$r" && grep -qF "each push cancels and restarts" "$r"'
+  check "${r:t} gives both exceptions"           eval 'grep -qF "first build may still push early" "$r" && grep -qF "a run about to end must push what it has" "$r"'
+  check "${r:t} no longer says push every step without saying when" eval '! grep -qE "^- Push to origin after EVERY|\\. Push after each logical step\\.$" "$r"'
+done
+show
+
 print
 print "selftest: $PASS passed, $FAILS failed"
 if [ "$KEEP" = 1 ]; then print "kept $T"; else

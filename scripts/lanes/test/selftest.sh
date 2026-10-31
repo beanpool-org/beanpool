@@ -669,6 +669,7 @@ check "the brief tells it to weigh them, and from when" eval 'brief_has claude.p
 check "... a real one is posted as a new comment, whatever the brief below says about repeating" eval 'brief_has claude.prompt-1 "post it as your own new inline comment" && brief_has claude.prompt-1 "overrides any line below"'
 check "... a false one gets no reply, which would read as a defect" brief_has claude.prompt-1 "not even a reply"
 check "... the summary says which are real"      brief_has claude.prompt-1 "as REAL or NOT REAL"
+check "... and a -fix lane's pass still checks the verdict before it was acted on" brief_has claude.prompt-1 "verify earlier findings are genuinely fixed"
 check "the lane's own deciding brief still follows" brief_has claude.prompt-1 "DECIDING pass — the code merges"
 : > "$LOG"; rm -f "$FAKE_STATE/claude.calls" "$FAKE_STATE/claude.runs" "$FAKE_STATE/agy.calls" "$FAKE_STATE/agy.runs"
 FAKE_EARLY_POSTS=; print 5 > "$FAKE_STATE/comments"

@@ -459,7 +459,7 @@ lane_weigh_brief(){ # PR SINCE → how a deciding brief opens when no FIX stage 
   print -r -- "Final, DECIDING pass. An early fast-model pass ran and NO fix stage followed it, so its inline comments, those created after $2 (gh api repos/$LANE_GH_REPO/pulls/$1/comments --paginate), are unanswered. WEIGH each one on the code.
 - REAL and still broken: post it as your own new inline comment, with file and line. This overrides any line below that says not to repeat existing comments: the gate counts inline comments and this pass reads as clean only if it adds none, so a real finding you do not post stays open behind a clean verdict.
 - NOT real, or already fixed: post nothing inline, not even a reply, which would read as a new defect. Never edit or delete a comment.
-In your summary issue comment (gh pr comment), after its first line, list every early comment as REAL or NOT REAL with one line why. Beyond them, post only what is still broken or new, with file and line."; }
+In your summary issue comment (gh pr comment), after its first line, list every early comment as REAL or NOT REAL with one line why. Beyond them, verify earlier findings are genuinely fixed; post only what is still broken or new, with file and line."; }
 
 cont(){ # NAME BRANCH BRIEF-FILE — finish whatever an earlier stage on this brief left undone
   stage "$1-CONTINUE" "$LANE_BUILD_TIMEOUT" "CONTINUE STAGE for branch $2 (fetch it and check it out in the lane worktree). A previous run worked on this brief and may have hit its time limit or been stopped. Start from git status, git diff and git log origin/$LANE_BASE..HEAD, and FINISH whatever is not yet done; if it is already complete, say ALREADY COMPLETE and stop. $LANE_ONE_PUSH

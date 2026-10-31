@@ -94,6 +94,7 @@ export interface OwnListing {
     lat?: number | null;
     lng?: number | null;
     photos?: string[];
+    tags?: string[];
     originNode?: string;
     audienceScope?: string;
     hiddenByReportsAt?: string | null;
@@ -323,6 +324,8 @@ function postBody(post: OwnListing, id: string, publicKey: string, photos: strin
         photos,
         repeatable: post.repeatable === true,
         cashAlsoNeeded: post.cashAlsoNeeded === true,
+        // As the composers send them: none is no field. A tag this community's library doesn't know yet is refused in its words.
+        ...(post.tags?.length ? { tags: post.tags } : {}),
         ...(post.lendable === true ? { lendable: true, lendMaxDays: post.lendMaxDays, lendTerms: post.lendTerms, replacementValue: post.replacementValue } : {}),
     };
 }

@@ -233,6 +233,14 @@ describe('what a run sends', () => {
         expect(vi.mocked(deps.fetchPhoto).mock.calls.map((c) => c[0])).toEqual([`${GLOBAL}${photoUrl('a', 0)}`, `${GLOBAL}${photoUrl('a', 1)}`]);
     });
 
+    it('a listing keeps its tags, and one with none sends none, as the composers do', async () => {
+        const { deps, posted } = fakes([]);
+        await runBring(OFFER, { bring: [listing('a', { tags: ['food.fruit.lemon'] }), listing('b'), listing('c', { tags: [] })], gone: [] }, identity, undefined, deps);
+        expect(posted[0].tags).toEqual(['food.fruit.lemon']);
+        expect('tags' in posted[1]).toBe(false);
+        expect('tags' in posted[2]).toBe(false);
+    });
+
     it('a lent Offer keeps its terms', async () => {
         const post = listing('a', { lendable: true, lendMaxDays: 7, lendTerms: 'Clean it', replacementValue: 'A new one', priceType: 'daily' });
         const { deps, posted } = fakes([]);

@@ -188,6 +188,8 @@ beforeEach(async () => {
     loseAnswerOfPost = null;
     postsToLocal = 0;
     await Promise.all([global_.control('limiters'), local.control('limiters')]);
+    // The fixtures list more in a day than a new account may (engine/probation.ts); the limits themselves aren't under test here.
+    await global_.control('profileSwitch', { name: 'probation', value: 'false' });
 });
 
 /** A member of both: joined to the community's rules, with the profile photo a community with Beans asks for. */

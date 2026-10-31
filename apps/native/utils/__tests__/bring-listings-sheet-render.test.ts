@@ -60,8 +60,8 @@ const world = vi.hoisted(() => ({
 }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: world.identity }) }));
 vi.mock('expo-router', () => ({ useFocusEffect: (cb: () => void) => { world.focus = cb; } }));
-vi.mock('../node-post', () => ({ anchorUrl: async () => world.anchor }));
-vi.mock('../node-profile', () => ({ beansOn: (f: { beans?: boolean } | undefined) => f?.beans !== false, getCachedNodeProfile: async () => ({ features: { beans: world.beans } }) }));
+vi.mock('../node-post', () => ({ anchorUrl: async () => world.anchor, signedGet: vi.fn(), signedPost: vi.fn() }));
+vi.mock('../node-profile', () => ({ GLOBAL_NODE_URL: 'https://global.beanpool.org', beansOn: (f: { beans?: boolean } | undefined) => f?.beans !== false, getCachedNodeProfile: async () => ({ features: { beans: world.beans } }) }));
 vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => { world.sync++; } }));
 const calls = vi.hoisted(() => ({
     pending: vi.fn(), plan: vi.fn(), run: vi.fn(), settle: vi.fn(async () => {}), close: vi.fn(async () => {}), putOff: vi.fn(async () => {}),

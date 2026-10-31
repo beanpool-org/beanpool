@@ -374,9 +374,13 @@ describe('through the door with the key on the phone', () => {
         if (answer.kind !== 'joined') throw new Error('expected joined');
         const deps = enterDeps();
         expect(await finishJoinFromAccount(answer, key, 'Sam', { deps, stillWanted: () => false })).toBeNull();
+        expect(mem.async.get(ANCHOR)).toBe(COMMUNITY);
+        expect(deps.closeDB).not.toHaveBeenCalled();
+        await accountUntouched();
     });
 
     it('a local community\'s own door is a first local join: the offer to bring the member\'s listings is noted, and never holds the join up', async () => {
+        await seedPhone();
         globalAnswers();
         const key = (await accountKeyForDoor())!;
         const answer = await submitJoin(GLOBAL, key.identity, 'Sam', await signIn(key.identity));
@@ -391,6 +395,7 @@ describe('through the door with the key on the phone', () => {
     });
 
     it('the global community\'s own door notes no offer', async () => {
+        await seedPhone();
         globalAnswers();
         const key = (await accountKeyForDoor())!;
         const answer = await submitJoin(GLOBAL, key.identity, 'Sam', await signIn(key.identity));
@@ -399,8 +404,6 @@ describe('through the door with the key on the phone', () => {
         deps.noteBringOffer = vi.fn(async () => true);
         await finishJoinFromAccount(answer, key, 'Sam', { deps });
         expect(deps.noteBringOffer).not.toHaveBeenCalled();
-        expect(mem.async.get(ANCHOR)).toBe(COMMUNITY);
-        expect(deps.closeDB).not.toHaveBeenCalled();
-        await accountUntouched();
+        expect(mem.async.get(ANCHOR)).toBe(GLOBAL);
     });
 });

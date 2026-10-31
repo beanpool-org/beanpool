@@ -360,9 +360,9 @@ describe('what the new community answers', () => {
     it('a run again posts nothing twice, a post whose answer was lost included', async () => {
         const local: OwnListing[] = [];
         const rows = [listing('a'), listing('b'), listing('c')];
-        const { deps, posted } = fakes(rows, local, (body, n) => {
+        const { deps, posted } = fakes(rows, local, (body) => {
             local.push(listing(body.id));
-            if (n === 1) throw new TypeError('the answer never came');
+            if (body.id === broughtId('b', LOCAL)) throw new TypeError('the answer never came');
             return answer(200, { success: true });
         });
         const first = await runBring(OFFER, await planBring(OFFER, identity, deps) as BringPlan, identity, undefined, deps);

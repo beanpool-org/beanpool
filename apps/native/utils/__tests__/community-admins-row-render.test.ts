@@ -360,6 +360,26 @@ describe('the shared placement: half at the key vault, half at the community (va
             expect(store.has(`beanpool_community_copy_on_${MULLUM}`), 'nothing began, so there is nothing to finish').toBe(false);
         });
 
+        it('a shared turn-on that failed after it began is remembered, so the row still asks here once the rule has moved', async () => {
+            fx.answers[MULLUM] = OFFER;
+            fx.side = 'none';
+            fx.sharedFails = 'Couldn’t reach your community, so nothing changed. Try again in a moment.';
+            await mount();
+            // The vault took its half, and the community's was what failed.
+            fx.side = 'differs';
+            await click('community-admins-turn-on');
+            expect(store.get(`beanpool_community_copy_on_${MULLUM}`)).toBe('1');
+
+            // The community's rule moved off the key vault, and half of a copy is still kept here.
+            fx.rules[MULLUM] = 'none';
+            fx.answers[MULLUM] = { ...OFFER, sharedOffered: false, kept: true, placement: 'shared', since: '2026-10-05T00:00:00.000Z', copy: 'digest' };
+            fx.side = 'none';
+            fx.asked.length = 0;
+            await refocus();
+            expect(fx.asked).toEqual([MULLUM]);
+            expect(byTestId('community-admins-unfinished')).toBeTruthy();
+        });
+
         it('a community that can\'t be asked just now never turns an On off: what it last said stands', async () => {
             fx.answers[MULLUM] = SHARED;
             fx.side = 'matches';
@@ -560,6 +580,16 @@ describe('CommunityAdminsRow: Turn on is offered on the server\'s own word', () 
         await click('community-admins-turn-on');
         expect(fx.turnedOn).toEqual([]);
         expect(fx.turnedOnShared).toEqual([MULLUM]);
+    });
+
+    it('no answer under "this server", and then the rule as the phone reads it moves off that: Turn on goes with it', async () => {
+        fx.answers[MULLUM] = null;
+        await mount();
+        expect(byTestId('community-admins-turn-on')).toBeTruthy();
+        fx.rules[MULLUM] = 'none';
+        await refocus();
+        expect(byTestId('community-admins-turn-on')).toBeNull();
+        expect(byTestId('community-admins-row')).toBeNull();
     });
 
     it('asked at the tap, the server offers neither any more: nothing is sent, nothing is said to be on, and the row goes', async () => {

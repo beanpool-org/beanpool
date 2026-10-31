@@ -254,6 +254,25 @@ describe('Home\'s sheet', () => {
         expect(shown()).toBe(false);
     });
 
+    it('the run can be left: it goes on behind the sheet, and says what came of it when it ends', async () => {
+        let finish: (r: BringResult) => void = () => {};
+        calls.run.mockImplementation(async (_o: unknown, _p: unknown, _i: unknown, onStep: (d: number, t: number) => void) => {
+            onStep(1, 2);
+            return new Promise<BringResult>((resolve) => { finish = resolve; });
+        });
+        await draw(createElement(BringListingsSheet));
+        await focus();
+        await press('bring-listings-yes');
+        expect(host.textContent).toContain('Bringing 1 of 2…');
+        await press('bring-listings-hide');
+        expect(shown()).toBe(false);
+        expect(calls.settle).not.toHaveBeenCalled();
+        await act(async () => { finish({ brought: 2, lines: [], kept: false, held: false }); });
+        await flush();
+        expect(calls.settle).toHaveBeenCalled();
+        expect(host.textContent).toContain('2 listings are now in Mullumbimby.');
+    });
+
     it('a run that leaves something for later says so', async () => {
         calls.run.mockResolvedValue({ brought: 1, lines: [], kept: true, held: false });
         await draw(createElement(BringListingsSheet));

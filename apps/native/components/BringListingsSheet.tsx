@@ -2,7 +2,8 @@
  * Home's Bring my listings sheet (utils/bring-listings.ts): looks for this key's offer each time Home comes to the front,
  * so it comes after the join's profile step, and draws nothing until the listings have been read: a community that
  * can't be reached means no sheet yet, and the offer is kept for a later visit. Once the member has said yes, what is
- * left is tried again here with no sheet at all until there is something to say.
+ * left is tried again here with no sheet at all until there is something to say. The run can be closed: it goes on, and
+ * says what came of it when it ends.
  *
  * Drawn by components/BringListingsSheetView.tsx.
  */
@@ -25,13 +26,16 @@ export function BringListingsSheet() {
     const [view, setView] = useState<BringStep | null>(null);
     const asked = useRef<{ offer: BringOffer; plan: BringPlan } | null>(null);
     const busy = useRef(false);
+    const closed = useRef(false);
     const lastLook = useRef(0);
 
     const run = useCallback(async (offer: BringOffer, plan: BringPlan, shown: boolean) => {
         if (!identity) return;
         busy.current = true;
+        closed.current = false;
         try {
-            const result = await runBring(offer, plan, identity, shown ? (done, total) => setView({ step: 'bringing', done, total }) : undefined);
+            const onStep = (done: number, total: number) => { if (!closed.current) setView({ step: 'bringing', done, total }); };
+            const result = await runBring(offer, plan, identity, shown ? onStep : undefined);
             await settleBringOffer(offer, result);
             if (result.brought > 0) (await import('../services/pillar-sync')).requestSync().catch(() => {});
             const quiet = !shown && (result.kept || (result.brought === 0 && result.lines.length === 0));
@@ -99,7 +103,7 @@ export function BringListingsSheet() {
                 setView(null);
                 if (now) void putOffBringOffer(now.offer).catch(() => {});
             }}
-            onClose={() => setView(null)}
+            onClose={() => { closed.current = true; setView(null); }}
         />
     );
 }

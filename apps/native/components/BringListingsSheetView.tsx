@@ -5,7 +5,8 @@
  *
  * One column at 320 dp and 1.3× text. The words scroll and the buttons sit in a footer outside them, above the system
  * bars (utils/bottom-sheet-layout.ts): a long list of lines never pushes the way out off the screen. A tap on the dimmed
- * part closes nothing: "Not now" is a choice, and Back makes the same one.
+ * part closes nothing: "Not now" is a choice, and Back makes the same one. Every state has a way out, the run too: twenty
+ * listings on a poor connection can take many minutes, and the run goes on behind it.
  */
 import React from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -29,8 +30,8 @@ export function BringListingsSheetView({ view, onBring, onNotNow, onClose }: {
     const styles = useStyles(makeStyles);
     const { height } = useWindowDimensions();
     const layout = bottomSheetLayout(height, useSafeAreaInsets());
-    // Back does what the sheet's own way out does. During the run there is none: it is a few seconds, and it is theirs.
-    const back = view.step === 'offer' ? onNotNow : view.step === 'done' ? onClose : () => {};
+    // Back does what the sheet's own way out does.
+    const back = view.step === 'offer' ? onNotNow : onClose;
 
     return (
         <Modal visible transparent animationType="fade" onRequestClose={back}>
@@ -60,26 +61,28 @@ export function BringListingsSheetView({ view, onBring, onNotNow, onClose }: {
                             </>
                         )}
                     </ScrollView>
-                    {view.step !== 'bringing' && (
-                        <View style={[styles.footer, { paddingBottom: layout.footerPaddingBottom }]}>
-                            {view.step === 'offer' && (
-                                <>
-                                    <Pressable style={styles.primary} accessibilityRole="button" onPress={onBring} testID="bring-listings-yes">
-                                        <Text style={styles.primaryText}>{BRING_WORDS.bring(view.count)}</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.secondary} accessibilityRole="button" onPress={onNotNow} testID="bring-listings-not-now">
-                                        <Text style={styles.secondaryText}>{t('Not now')}</Text>
-                                    </Pressable>
-                                </>
-                            )}
-                            {view.step === 'done' && (
-                                <Pressable style={styles.primary} accessibilityRole="button" onPress={onClose} testID="bring-listings-done">
-                                    <Text style={styles.primaryText}>{t('OK')}</Text>
+                    <View style={[styles.footer, { paddingBottom: layout.footerPaddingBottom }]}>
+                        {view.step === 'offer' && (
+                            <>
+                                <Pressable style={styles.primary} accessibilityRole="button" onPress={onBring} testID="bring-listings-yes">
+                                    <Text style={styles.primaryText}>{BRING_WORDS.bring(view.count)}</Text>
                                 </Pressable>
-                            )}
-                        </View>
-                    )}
-                    {view.step === 'bringing' && <View style={{ height: layout.footerPaddingBottom }} />}
+                                <Pressable style={styles.secondary} accessibilityRole="button" onPress={onNotNow} testID="bring-listings-not-now">
+                                    <Text style={styles.secondaryText}>{t('Not now')}</Text>
+                                </Pressable>
+                            </>
+                        )}
+                        {view.step === 'bringing' && (
+                            <Pressable style={styles.secondary} accessibilityRole="button" onPress={onClose} testID="bring-listings-hide">
+                                <Text style={styles.secondaryText}>{t('Close')}</Text>
+                            </Pressable>
+                        )}
+                        {view.step === 'done' && (
+                            <Pressable style={styles.primary} accessibilityRole="button" onPress={onClose} testID="bring-listings-done">
+                                <Text style={styles.primaryText}>{t('OK')}</Text>
+                            </Pressable>
+                        )}
+                    </View>
                 </View>
             </View>
         </Modal>

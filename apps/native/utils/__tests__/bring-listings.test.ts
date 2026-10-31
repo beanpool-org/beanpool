@@ -345,6 +345,43 @@ describe('a photo that fails to fetch', () => {
         expect(result).toMatchObject({ brought: 1, kept: true });
     });
 
+    describe('with a Need behind it, on a community that takes a Need only after an Offer', () => {
+        let offered = false;
+        beforeEach(() => { offered = false; });
+        const offerFirst = (body: any) => {
+            if (body.type === 'offer') offered = true;
+            return body.type === 'need' && !offered
+                ? answer(400, { error: 'CONTRIBUTION_REQUIRED: list at least one Offer before you can post Needs or accept Offers.' })
+                : answer(200, { success: true });
+        };
+        const need = listing('n', { type: 'need', title: 'A ladder' });
+
+        it('the Need waits too: its refusal would say it stayed behind, when it is coming', async () => {
+            const { deps } = fakes([], [], offerFirst);
+            deps.fetchPhoto = vi.fn(async (url: string) => (url.includes('/o/') ? { failed: 'later' as const } : { photo: PHOTO }));
+            const result = await runBring(OFFER, { bring: [listing('o'), need], gone: [] }, identity, undefined, deps);
+            expect(deps.post).not.toHaveBeenCalled();
+            expect(deps.fetchPhoto).toHaveBeenCalledTimes(1);
+            expect(result).toEqual({ brought: 0, lines: [], kept: true, held: false });
+        });
+
+        it('another Offer landed: the Need goes, and only the one Offer waits', async () => {
+            const { deps, posted } = fakes([], [], offerFirst);
+            deps.fetchPhoto = vi.fn(async (url: string) => (url.includes('/o1/') ? { failed: 'later' as const } : { photo: PHOTO }));
+            const result = await runBring(OFFER, { bring: [listing('o1'), listing('o2'), need], gone: [] }, identity, undefined, deps);
+            expect(posted.map((p) => p.id)).toEqual([broughtId('o2', LOCAL), broughtId('n', LOCAL)]);
+            expect(result).toEqual({ brought: 2, lines: [], kept: true, held: false });
+        });
+
+        it('on the last try nothing waits, and the Need has its answer from the community', async () => {
+            const { deps } = fakes([], [], (body) => (body.photos.length === 0 ? answer(400, { error: 'Add a photo first' }) : offerFirst(body)));
+            deps.fetchPhoto = vi.fn(async (url: string) => (url.includes('/o/') ? { failed: 'later' as const } : { photo: PHOTO }));
+            const result = await runBring({ ...OFFER, tries: BRING_MOST_TRIES - 1 }, { bring: [listing('o', { title: 'Seedlings' }), need], gone: [] }, identity, undefined, deps);
+            expect(deps.post).toHaveBeenCalledTimes(2);
+            expect(result).toMatchObject({ brought: 0, kept: false, lines: [{ kind: 'photos-failed', title: 'Seedlings' }, { kind: 'refused', title: 'A ladder' }] });
+        });
+    });
+
     it('on the last try it stops waiting: the node\'s rule answers, so a lost photo can\'t hold the offer open for ever', async () => {
         const { deps } = fakes([], [], refusesNoPhoto);
         deps.fetchPhoto = vi.fn(async () => ({ failed: 'later' as const }));

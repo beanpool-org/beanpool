@@ -148,6 +148,8 @@ const phoneToGlobal: string[] = [];
 const elsewhere: string[] = [];
 /** Paths that answer 404 to the phone, as a photo gone from the store does. */
 const failing = new Set<string>();
+/** Paths global can't serve just now: a 503, a photo that may yet come. */
+const overloaded = new Set<string>();
 let globalDown = false;
 /** The n-th POST of a listing to the community reaches it, and its answer is lost. */
 let loseAnswerOfPost: number | null = null;
@@ -166,6 +168,7 @@ beforeAll(async () => {
         }
         if (toGlobal && globalDown) throw new TypeError('Network request failed');
         if (failing.has(url.pathname)) return new Response('{}', { status: 404 });
+        if (overloaded.has(url.pathname)) return new Response('{}', { status: 503 });
         if (toGlobal) phoneToGlobal.push(`${String(init?.method ?? 'GET')} ${url.pathname}${url.search}`);
         const res = await realFetch(input, init);
         if (toLocal && init?.method === 'POST' && url.pathname === '/api/marketplace/posts' && ++postsToLocal === loseAnswerOfPost) {
@@ -184,6 +187,7 @@ afterAll(async () => {
 beforeEach(async () => {
     mem.async.clear();
     failing.clear();
+    overloaded.clear();
     globalDown = false;
     loseAnswerOfPost = null;
     postsToLocal = 0;
@@ -320,6 +324,24 @@ describe('bringing listings to a first local community (the phone against two re
         const result = await runBring(offer, await planBring(offer, me) as BringPlan, me);
         expect(result).toMatchObject({ brought: 0, kept: false, lines: [{ kind: 'refused', title: 'A spade' }] });
         expect(await rowsOn(local, me.publicKey)).toEqual([]);
+    }, START_MS);
+
+    it('an Offer whose photo may yet come: its Need waits with it, says nothing, and both arrive on the next run', async () => {
+        const me = await memberOfBoth('Wren');
+        const seedlings = await listOnGlobal(me, 'offer', 'Seedlings', 1);
+        await listOnGlobal(me, 'need', 'A ladder', 1);
+        const offer = await offerFor(me);
+        overloaded.add(`/api/marketplace/posts/${seedlings}/photos/0`);
+        const first = await runBring(offer, await planBring(offer, me) as BringPlan, me);
+        expect(first).toEqual({ brought: 0, lines: [], kept: true, held: false });
+        await settleBringOffer(offer, first);
+        expect(await rowsOn(local, me.publicKey)).toEqual([]);
+
+        overloaded.clear();
+        const kept = (await pendingBringOffer(me.publicKey, local.url))!;
+        const second = await runBring(kept, await planBring(kept, me) as BringPlan, me);
+        expect(second).toEqual({ brought: 2, lines: [], kept: false, held: false });
+        expect((await rowsOn(local, me.publicKey)).map((p) => [p.type, p.title])).toEqual([['offer', 'Seedlings'], ['need', 'A ladder']]);
     }, START_MS);
 
     it('a run cut off halfway, its answer lost, posts nothing twice when it runs again', async () => {

@@ -368,12 +368,20 @@ export async function runBring(
     const result: BringResult = { brought: 0, lines: plan.gone.map((title) => ({ kind: 'gone', title })), kept: false, held: false };
     const lastTry = (offer.tries ?? 0) + 1 >= BRING_MOST_TRIES;
     let healed = false;
+    let offerWaits = false;
     for (const [i, post] of plan.bring.entries()) {
         onStep?.(i, plan.bring.length);
+        // Offers come first, so here no Offer has landed. A community with Beans would refuse this Need for want of one, and
+        // the sheet would say it stayed behind when it is coming: it waits too. Nothing waits on the last try.
+        if (post.type === 'need' && offerWaits && result.brought === 0) {
+            result.kept = true;
+            continue;
+        }
         const { photos, missed, later } = await photosOf(post, offer.from, deps);
         // No photo came, and one might yet: this one waits, and the rest still go.
         if (photos.length === 0 && later && !lastTry) {
             result.kept = true;
+            offerWaits = offerWaits || post.type === 'offer';
             continue;
         }
         const body = postBody(post, broughtId(post.id, offer.to), identity.publicKey, photos);

@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-31",
+    "updated": "2026-11-01",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "پھلیاں",
@@ -6132,5 +6132,27 @@
   "{community}, from your copy, is filled in. To open your account in another community, pick it above or type its name or address. Your name and picture come back from it.": "آپ کی کاپی سے {community} درج ہے۔ اپنا اکاؤنٹ کسی اور کمیونٹی میں کھولنے کے لیے، اوپر سے اسے چنیں یا اس کا نام یا پتہ ٹائپ کریں۔ آپ کا نام اور تصویر اس سے واپس آ جائیں گی۔",
   "{community}, from your copy, is filled in. Enter your community's name, like mullum, or its full address": "آپ کی کاپی سے {community} درج ہے۔ اپنی کمیونٹی کا نام لکھیں، جیسے mullum، یا اس کا پورا پتہ",
   "Type your community's name or address, or pick one above. Your name and picture come back from it.": "اپنی کمیونٹی کا نام یا پتہ ٹائپ کریں، یا اوپر سے کوئی ایک چنیں۔ آپ کا نام اور تصویر اس سے واپس آ جائیں گی۔",
-  "Enter your community's name, like mullum, or its full address": "اپنی کمیونٹی کا نام لکھیں، جیسے mullum، یا اس کا پورا پتہ"
+  "Enter your community's name, like mullum, or its full address": "اپنی کمیونٹی کا نام لکھیں، جیسے mullum، یا اس کا پورا پتہ",
+  "Bring my listings to {name}?": "میرے اشتہارات {name} میں لے جائیں؟",
+  "Your {n} listing on the global community will be posted there too, by you.|Your {n} listings on the global community will be posted there too, by you.": {
+    "one": "عالمی کمیونٹی پر آپ کا {n} اشتہار وہاں بھی آپ کی طرف سے پوسٹ کیا جائے گا۔",
+    "other": "عالمی کمیونٹی پر آپ کے {n} اشتہارات وہاں بھی آپ کی طرف سے پوسٹ کیے جائیں گے۔"
+  },
+  "They arrive with no price. You can set one on each listing.": "یہ بغیر قیمت کے پہنچیں گے۔ آپ ہر اشتہار پر قیمت مقرر کر سکتے ہیں۔",
+  "Bring it|Bring them": {
+    "one": "اسے لے جائیں",
+    "other": "انہیں لے جائیں"
+  },
+  "Bringing {done} of {total}…": "{total} میں سے {done} لے جا رہے ہیں…",
+  "None of your listings came across.": "آپ کا کوئی اشتہار نہیں پہنچا۔",
+  "{n} listing is now in {name}.|{n} listings are now in {name}.": {
+    "one": "{n} اشتہار اب {name} میں ہے۔",
+    "other": "{n} اشتہارات اب {name} میں ہیں۔"
+  },
+  "A community could not be reached. The rest will be tried again next time you open Home.": "ایک کمیونٹی سے رابطہ نہیں ہو سکا۔ باقی اگلی بار ہوم کھولنے پر دوبارہ آزمائے جائیں گے۔",
+  "\"{title}\" is no longer up on the global community, so it stayed behind.": "\"{title}\" اب عالمی کمیونٹی پر موجود نہیں، اس لیے یہ پیچھے رہ گیا۔",
+  "\"{title}\" came across without some of its photos: they could not be fetched.": "\"{title}\" اپنی کچھ تصاویر کے بغیر پہنچا: وہ حاصل نہیں کی جا سکیں۔",
+  "\"{title}\" stayed behind: its photos could not be fetched, and {name} needs at least one.": "\"{title}\" پیچھے رہ گیا: اس کی تصاویر حاصل نہیں کی جا سکیں، اور {name} کو کم از کم ایک درکار ہے۔",
+  "\"{title}\" stayed behind: it has no photo, and {name} needs at least one.": "\"{title}\" پیچھے رہ گیا: اس کی کوئی تصویر نہیں، اور {name} کو کم از کم ایک درکار ہے۔",
+  "\"{title}\" stayed behind: {reason}": "\"{title}\" پیچھے رہ گیا: {reason}"
 }

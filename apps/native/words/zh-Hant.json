@@ -2,10 +2,10 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct); claude-opus-5-5 (machine draft, front doors S12, 28 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); claude-opus-5-5 (machine draft, the assistant approval line: an owner's assistant takes a backup and posts with no approval, #2629, 30 Oct; meaning-check due); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct); claude-opus-5-5 (machine draft, vault VR5 community list in the copy, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, vault VR5 fix round 1: the tick says it is for the next copy, the restore field names what it holds, 31 Oct; meaning-check due); claude-opus-5-5 (machine draft, Lounge L7 bring my listings, 1 Nov)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-31",
+    "updated": "2026-11-01",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "豆子",
@@ -5896,5 +5896,24 @@
   "{community}, from your copy, is filled in. To open your account in another community, pick it above or type its name or address. Your name and picture come back from it.": "已從你的副本填入 {community}。如要在其他社群開啟帳戶，請在上方選擇，或輸入其名稱或位址。你的姓名和大頭貼將從中還原。",
   "{community}, from your copy, is filled in. Enter your community's name, like mullum, or its full address": "已從你的副本填入 {community}。請輸入你的社群名稱（例如 mullum）或其完整位址",
   "Type your community's name or address, or pick one above. Your name and picture come back from it.": "請輸入你的社群名稱或位址，或在上方選擇一個。你的姓名和大頭貼將從中還原。",
-  "Enter your community's name, like mullum, or its full address": "請輸入你的社群名稱（例如 mullum）或其完整位址"
+  "Enter your community's name, like mullum, or its full address": "請輸入你的社群名稱（例如 mullum）或其完整位址",
+  "Bring my listings to {name}?": "要把我的刊登帶到 {name} 嗎？",
+  "Your {n} listing on the global community will be posted there too, by you.|Your {n} listings on the global community will be posted there too, by you.": {
+    "other": "你在全球社群的 {n} 則刊登也會以你的名義發布到那裡。"
+  },
+  "They arrive with no price. You can set one on each listing.": "它們抵達時沒有價格。你可以為每則刊登設定價格。",
+  "Bring it|Bring them": {
+    "other": "帶過去"
+  },
+  "Bringing {done} of {total}…": "正在帶過去 {done}/{total}…",
+  "None of your listings came across.": "你的刊登都沒有帶過去。",
+  "{n} listing is now in {name}.|{n} listings are now in {name}.": {
+    "other": "{n} 則刊登現在已在 {name}。"
+  },
+  "A community could not be reached. The rest will be tried again next time you open Home.": "無法連線到某個社群。下次開啟首頁時會重試其餘部分。",
+  "\"{title}\" is no longer up on the global community, so it stayed behind.": "\"{title}\" 已不在全球社群上架，因此留在原處。",
+  "\"{title}\" came across without some of its photos: they could not be fetched.": "\"{title}\" 已帶過去，但缺少部分相片：無法取得這些相片。",
+  "\"{title}\" stayed behind: its photos could not be fetched, and {name} needs at least one.": "\"{title}\" 留在原處：無法取得其相片，而 {name} 至少需要一張。",
+  "\"{title}\" stayed behind: it has no photo, and {name} needs at least one.": "\"{title}\" 留在原處：它沒有相片，而 {name} 至少需要一張。",
+  "\"{title}\" stayed behind: {reason}": "\"{title}\" 留在原處：{reason}"
 }

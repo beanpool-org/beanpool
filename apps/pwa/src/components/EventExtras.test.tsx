@@ -291,4 +291,20 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         expect(screen.getByTestId('event-share')).toBeInTheDocument();
         expect(screen.getByTestId('event-add-to-calendar')).toBeInTheDocument();
     });
+
+    it('closes menu on outside click and safely handles non-Node targets', () => {
+        render(<EventDetail post={event} identity={identity} />);
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        expect(screen.getByTestId('event-add-calendar-file')).toBeInTheDocument();
+
+        // Non-Node event target does not throw error
+        const nonNodeEvent = new MouseEvent('mousedown', { bubbles: true });
+        Object.defineProperty(nonNodeEvent, 'target', { value: window });
+        document.dispatchEvent(nonNodeEvent);
+        expect(screen.getByTestId('event-add-calendar-file')).toBeInTheDocument();
+
+        // Outside click on body closes the menu
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByTestId('event-add-calendar-file')).toBeNull();
+    });
 });

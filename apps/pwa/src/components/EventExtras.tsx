@@ -119,8 +119,8 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
         if (!calendarMenuOpen) return;
         calendarMenuRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
         const onDown = (e: MouseEvent | TouchEvent) => {
-            const target = e.target as Node | null;
-            if (target && !calendarMenuRef.current?.contains(target) && !calendarButtonRef.current?.contains(target)) {
+            const target = e.target;
+            if (target instanceof Node && !calendarMenuRef.current?.contains(target) && !calendarButtonRef.current?.contains(target)) {
                 setCalendarMenuOpen(false);
             }
         };

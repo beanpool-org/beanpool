@@ -9,11 +9,13 @@
  *
  * **Nothing leaves on a guess.** The rule as this phone read it only says whom to ask. What the row offers is the server's
  * own answer to the status call signed by the member's key: until it has answered, the row offers nothing, and with no
- * answer under the key vault's rule it stays that way. And what Turn on sends is that answer asked again at the tap
- * ({@link offerIn}): the copy and its whole key go only where the server says it keeps whole copies. A server that refuses
- * them has already been handed the key, which under the key vault's rule ends "the node alone opens nothing". Where
- * the rule reads "this server" and the server gave no answer, Turn on stays, as it always has, to try again: it asks
- * first, and with still no answer it says so and nothing has left the phone.
+ * answer under the key vault's rule it stays that way. And Turn on asks that again at the tap ({@link offerIn}), and
+ * sends what the row's words said a tap makes, or nothing: asking again can only narrow what goes. If the answer has
+ * moved, the row redraws with its words and the member decides having read them, so a member who read "half each" never
+ * sends the whole key. The copy and its whole key go only where the server says it keeps whole copies: a server that
+ * refuses them has already been handed the key, which under the key vault's rule ends "the node alone opens nothing".
+ * Where the rule reads "this server" and the server gave no answer, Turn on stays, as it always has, to try again: it
+ * asks first, and with still no answer it says so and nothing has left the phone.
  *
  * Says who can open the copy, plainly: the community's server, so the people who run it; nobody else. Never a false
  * success: On only once the server answered that it keeps the copy and can open it. A copy it keeps but can't open
@@ -189,9 +191,12 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
     // Not offered and nothing kept here: nothing to show (the global community, a build with no vault, "Nowhere").
     if (!offered && !kept && !unopenable && !unfinished) return null;
     const place = placeOf(url, communityName);
+    // What the row's words say a tap makes: a tap sends that or nothing (`turnOn`). Half a pair kept where the rule has moved
+    // to "this server" has only Remove: its words are half and half, and the offer is the whole key.
+    const promised = shared ? 'shared' : 'whole';
     // Turning it on again makes a copy the server can open, where it has its key and offers it; with its key gone, it
     // can't keep one (the server refuses), so only Remove is offered.
-    const canTurnOn = offered && !kept && unopenable?.reason !== 'recovery_seal_key_missing';
+    const canTurnOn = offered && !kept && unopenable?.reason !== 'recovery_seal_key_missing' && (!status || offer === promised);
 
     const turnOn = async () => {
         setError(null);
@@ -200,19 +205,17 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
         setBusy(true);
         let sharedBegun = false;
         try {
-            // What goes, if anything, is the server's own answer now: a rule read earlier, or an answer from before the
-            // screen was left open, is a guess, and a whole key sent on one can't be taken back.
+            // What goes must be what the server offers now and what the member read: a rule read earlier, or an answer from
+            // before the screen was left open, is a guess, and a whole key sent on one can't be taken back. If the two
+            // differ nothing is sent, and the read below draws what it says now, for the member to read.
             const now = await communityCopyStatus(url, identity);
             if (!now) throw new Error(COMMUNITY_COPY_TEXT.unreachable);
-            const nowOffer = offerIn(now);
-            if (nowOffer === 'shared' && now.nodeKey) {
-                sharedBegun = true;
-                await turnOnSharedCopy(url, identity, now.nodeKey);
-            } else if (nowOffer === 'whole') {
+            if (offerIn(now) !== promised) throw new Error(COMMUNITY_COPY_TEXT.notKept);
+            if (promised === 'whole') {
                 await turnOnCommunityCopy(url, identity);
             } else {
-                // It offers neither now: nothing was sent, and the read below draws what it did say.
-                return;
+                sharedBegun = true;
+                await turnOnSharedCopy(url, identity, now.nodeKey as string);
             }
             await AsyncStorage.setItem(turnedOnKey(url), '1').catch(() => {});
             setJustOn(true);

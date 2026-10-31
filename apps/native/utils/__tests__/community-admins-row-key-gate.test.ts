@@ -170,8 +170,7 @@ describe('the copy and its whole key leave the phone only on the server\'s own w
     }
 
     for (const vault of [true, false]) {
-        const then = vault ? 'the shared path is taken' : 'nothing is sent, in a build with no vault';
-        it(`where the phone read "this server" and the server, asked at the tap, is on the key vault's rule: the key stays on the phone, and ${then}`, async () => {
+        it(`where the phone read "this server" and the server, asked at the tap, is on the key vault's rule${vault ? '' : ', in a build with no vault'}: nothing leaves`, async () => {
             net.rule = 'server';
             net.vault = vault;
             net.status = async () => { throw new Error('offline'); };
@@ -180,10 +179,10 @@ describe('the copy and its whole key leave the phone only on the server\'s own w
             await act(async () => { turnOn()!.click(); });
             await settle();
             expect(keyLeft()).toEqual([]);
-            expect(net.sharedTurnOns).toBe(vault ? 1 : 0);
+            expect(net.sharedTurnOns).toBe(0);
         });
 
-        it(`the row showed an offer, and the rule moved while the screen stayed open: the key stays on the phone, and ${then}`, async () => {
+        it(`the row showed a whole copy's offer, and the rule moved while the screen stayed open${vault ? '' : ', in a build with no vault'}: nothing leaves`, async () => {
             net.rule = 'server';
             net.vault = vault;
             net.status = ok(OFFERED);
@@ -193,7 +192,23 @@ describe('the copy and its whole key leave the phone only on the server\'s own w
             await act(async () => { turnOn()!.click(); });
             await settle();
             expect(keyLeft()).toEqual([]);
-            expect(net.sharedTurnOns).toBe(vault ? 1 : 0);
+            expect(net.sharedTurnOns).toBe(0);
         });
     }
+
+    it('the row said half and half, and the server, asked at the tap, says it keeps whole copies: the key stays until the member has read what that means', async () => {
+        net.status = ok(KEY_VAULT_RULE);
+        await mount();
+        expect(host!.textContent).toContain('each keep half of a locked copy');
+        net.status = ok(OFFERED);
+        await act(async () => { turnOn()!.click(); });
+        await settle();
+        expect(keyLeft(), 'a tap never sends more than the row said it would').toEqual([]);
+        expect(net.sharedTurnOns).toBe(0);
+        // The row now says what a tap makes, and the same tap, made having read it, is the member's to make.
+        expect(host!.textContent).toContain('The people who run it can open it; nobody else.');
+        await act(async () => { turnOn()!.click(); });
+        await settle();
+        expect(keyLeft()).toHaveLength(1);
+    });
 });

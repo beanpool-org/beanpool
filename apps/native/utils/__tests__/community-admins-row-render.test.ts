@@ -258,6 +258,15 @@ describe('the shared placement: half at the key vault, half at the community (va
         expect(fx.asked).toEqual([]);
     });
 
+    it('a build with no vault that does ask, having turned it on there, and hears the shared placement offered: nothing to turn on', async () => {
+        fx.vault = false;
+        store.set(`beanpool_community_copy_on_${MULLUM}`, '1');
+        fx.answers[MULLUM] = OFFER;
+        await mount();
+        expect(fx.asked).toEqual([MULLUM]);
+        expect(byTestId('community-admins-turn-on')).toBeNull();
+    });
+
     it('a server that doesn\'t say its node key offers nothing to deposit against', async () => {
         fx.answers[MULLUM] = { ...OFFER, nodeKey: null };
         fx.side = 'unknown';
@@ -559,27 +568,48 @@ describe('CommunityAdminsRow: Turn on is offered on the server\'s own word', () 
         expect(fx.turnedOn).toEqual([MULLUM]);
     });
 
-    it('the phone read "this server", and the server, asked at the tap, is on the key vault\'s rule now: half a copy goes, never the whole key', async () => {
+    const KEY_VAULT_NOW = { kept: false, since: null, offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), placement: null, copy: null };
+
+    it('the phone read "this server", and the server, asked at the tap, is on the key vault\'s rule now: nothing goes until the member has read what the row now says', async () => {
         fx.vault = true;
         fx.answers[MULLUM] = null;
         await mount();
-        fx.answers[MULLUM] = { kept: false, since: null, offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), placement: null, copy: null };
+        fx.answers[MULLUM] = KEY_VAULT_NOW;
         fx.side = 'none';
+        await click('community-admins-turn-on');
+        expect(fx.turnedOn).toEqual([]);
+        expect(fx.turnedOnShared).toEqual([]);
+        expect(host!.textContent).toContain('each keep half of a locked copy');
+        expect(host!.textContent).toContain('Your community didn’t keep the copy, so this isn’t on yet. Try again.');
         await click('community-admins-turn-on');
         expect(fx.turnedOn).toEqual([]);
         expect(fx.turnedOnShared).toEqual([MULLUM]);
     });
 
-    it('an offer the screen read earlier is not what decides: the rule moved since, so the tap sends what the server says now', async () => {
+    it('an offer the screen read earlier is not what decides: the rule moved since, so nothing goes until the member has read what the row now says', async () => {
         fx.vault = true;
         fx.answers[MULLUM] = { kept: false, since: null, offered: true, unopenable: null };
         await mount();
         expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on');
-        fx.answers[MULLUM] = { kept: false, since: null, offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), placement: null, copy: null };
+        fx.answers[MULLUM] = KEY_VAULT_NOW;
         fx.side = 'none';
         await click('community-admins-turn-on');
         expect(fx.turnedOn).toEqual([]);
+        expect(fx.turnedOnShared).toEqual([]);
+        await click('community-admins-turn-on');
         expect(fx.turnedOnShared).toEqual([MULLUM]);
+    });
+
+    it('half a pair kept, and the rule moved to "this server": no Turn on, since its words say half and the offer is the whole key; Remove stays', async () => {
+        fx.vault = true;
+        fx.rules[MULLUM] = 'server';
+        fx.answers[MULLUM] = { ...KEY_VAULT_NOW, offered: true, sharedOffered: false, kept: true, since: '2026-10-05T00:00:00.000Z', placement: 'shared', copy: 'digest' };
+        fx.side = 'none';
+        await mount();
+        expect(byTestId('community-admins-unfinished')).toBeTruthy();
+        expect(host!.textContent).toContain('each keep half of a locked copy');
+        expect(byTestId('community-admins-turn-on')).toBeNull();
+        expect(byTestId('community-admins-remove')).toBeTruthy();
     });
 
     it('no answer under "this server", and then the rule as the phone reads it moves off that: Turn on goes with it', async () => {

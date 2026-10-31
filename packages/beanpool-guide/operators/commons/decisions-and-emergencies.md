@@ -11,7 +11,7 @@ The community governs itself through Decisions. Members propose and vote in the 
 
 - Voting is open for **7 days**. When it closes, the server counts the votes within a minute and, if it passed, carries it out by itself. No admin has to press anything.
 - Enough people must vote: at least 3, and at least 30% of members active in the last 30 days (25% for removing someone).
-- It passes with 60% yes. Removing someone needs 66%; restoring someone needs just over half. A tie fails.
+- It passes with 60% yes. Removing someone needs 66% and at least 3 yes votes, whatever the share; restoring someone needs just over half. A tie fails.
 - Votes are secret: members and admins see only the totals. See Privacy and what your server can see, for what the server itself keeps.
 - Each member can have one open Decision at a time. Frozen and suspended members cannot propose, and cannot vote, with one exception: someone suspended in an emergency still votes on every other Decision while the community votes on removing them, and counts in its turnout. Nobody votes on a Decision to remove them.
 
@@ -34,8 +34,8 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - They are suspended at once and their role, if any, is set aside.
 - While it lasts, their listings are off the Market and the map, and they bring nobody in: no invite, no answer to a request to join, and an invite or paper ticket they made earlier admits nobody. They can still answer in their chats with one person (not in a group's, an event's or an enterprise's chat) and finish or cancel the deals they have open. Their listings and invites come back as they were when it ends.
 - A suspension made when acting on a report is the same suspension, and the same vote opens, with the reason given, or that a report about them was upheld.
-- A 7-day vote opens on removing them: "Remove …?". It is decided as any removal is: one member, one vote, 25% turnout, 66% to remove. They cannot vote on it, and still vote on every other Decision, so suspending someone cannot swing another vote.
-- If it does not pass, or too few vote, the suspension lifts when the vote closes and their role comes back.
+- A 7-day vote opens on removing them: "Remove …?". It is decided as any removal is: one member, one vote, 25% turnout, 66% and at least 3 yes votes to remove. They cannot vote on it, and still vote on every other Decision, so suspending someone cannot swing another vote.
+- If it does not pass, or too few vote, the suspension lifts when the vote closes and their role comes back. Where fewer than 3 members could vote at all, an owner may decide it (see Too few to vote).
 - If it passes, they stay suspended through a removal's 7 days' grace, and are then removed (see Removing someone).
 - No vote removes an owner or admin: on one of them, the suspension ends when the vote closes, whatever it decides, and their role comes back.
 - A "Keep the suspension?" vote opened before this version runs to its end as it did.
@@ -79,6 +79,16 @@ Only the community removes a member, by a Decision, and that vote opens only whe
 Two exceptions. An owner can still remove a member together with everyone they invited (**Prune Branch**, see Members and invites), until a branch can be put to one vote. And where community votes are switched off, the admins remove members themselves (**Prune Account** and **Offboard**).
 
 No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it, not even by the vote that opens when one of them is suspended (above). If an admin must go, an owner takes the role away first; after that they are a member like any other.
+
+## Too few to vote
+
+In a small community a removal needs at least 3 yes votes, so two neighbours can't remove a third: with 7 active members, 3 of the other 6 must vote yes; in a family of four, all three others. When fewer than 3 members, not counting the person suspended, could vote at all, the vote can never reach its turnout, and left alone the suspension lifts when it closes, whatever they think. The vote still runs its 7 days, and its card tells members: "Fewer than 3 members could vote. If nobody else votes, the owner decides when it closes."
+
+- **An owner decides.** In Settings, Decisions, the vote says so and has **Decide as owner**. Write a reason of at least 10 characters: every member reads it on the vote, beside the case. It asks an owner's fresh proof every time: press Manage on the phone, or with the server's password, a current code. An admin can't decide it, nor can an automation token, and a computer's session is told to do it from the phone. A short reason, or a vote enough members can vote on, is refused before the proof is asked.
+- The suspended person is told at once, and can reply to it. The owners are told on their alert channel: how many in the day, by an owner or the admin password, never who or why.
+- **When the vote closes,** if still fewer than 3 could vote, the decision is carried out: the removal's 7 days' grace begins, recorded on the vote as "Decided by the owner: too few members to vote". Any admin can still halt it in that time, with a public reason.
+- If more members could vote by the close (a quiet member voting counts them in), they decide, and it ends as any vote does. Nor is it carried out if whoever decided is no longer an owner by then. An owner decides a vote once; to undo it before the close, lift the suspension or halt the vote.
+- No vote removes an owner or admin, and an owner's decision doesn't either: Settings offers none on one of them.
 
 ## Halting a Decision
 

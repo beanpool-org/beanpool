@@ -60,7 +60,16 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
 
     if (mode === 'compact') {
         return (
-            <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: t("View {name}'s profile", { name: callsign }) } : {})} style={styles.compactContainer}>
+            <Wrapper
+                {...(canOpen ? {
+                    onPress: handlePress,
+                    accessibilityRole: 'button' as const,
+                    accessibilityLabel: t("View {name}'s profile", { name: callsign }),
+                    hitSlop: { top: 13, bottom: 13, left: 8, right: 8 },
+                    testID: 'author-chip',
+                } : {})}
+                style={styles.compactContainer}
+            >
                 {/* Avatar */}
                 <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={18} />
                 {/* Tier badge */}
@@ -87,7 +96,16 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
 
     // Full mode (list cards)
     return (
-        <Wrapper {...(canOpen ? { onPress: handlePress, accessibilityRole: 'button' as const, accessibilityLabel: t("View {name}'s profile", { name: callsign }) } : {})} style={styles.fullContainer}>
+        <Wrapper
+            {...(canOpen ? {
+                onPress: handlePress,
+                accessibilityRole: 'button' as const,
+                accessibilityLabel: t("View {name}'s profile", { name: callsign }),
+                hitSlop: { top: 10, bottom: 10, left: 8, right: 8 },
+                testID: 'author-chip',
+            } : {})}
+            style={styles.fullContainer}
+        >
             {/* Avatar */}
             <MemberAvatar avatarUrl={avatarUrl} pubkey={pubkey} callsign={callsign} size={24} />
             {/* Tier badge with label */}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Pressable, Text, StyleSheet, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
+import { View, ScrollView, Pressable, Text, StyleSheet, useWindowDimensions, type LayoutChangeEvent, type StyleProp, type ViewStyle, type Insets } from 'react-native';
 import { t } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { longestWordLength, tilePanelColumns, TILE_GAP, TILE_PANEL_PADDING, type FilterChip } from '../utils/filter-chips';
@@ -24,6 +24,7 @@ interface FilterChipButtonProps {
     accessibilityLabel?: string;
     style?: StyleProp<ViewStyle>;
     onLayout?: (e: LayoutChangeEvent) => void;
+    hitSlop?: Insets | number;
 }
 
 /**
@@ -34,7 +35,7 @@ interface FilterChipButtonProps {
  * from the pill above.
  */
 export function FilterChipButton({
-    label, active, activeColor, activeTextColor, onPress, variant = 'floating', expanded, selected, accessibilityLabel, style, onLayout,
+    label, active, activeColor, activeTextColor, onPress, variant = 'floating', expanded, selected, accessibilityLabel, style, onLayout, hitSlop,
 }: FilterChipButtonProps) {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         floating: {
@@ -56,6 +57,7 @@ export function FilterChipButton({
             style={[flat ? styles.flat : styles.floating, active && { backgroundColor: activeColor }, style]}
             onPress={onPress}
             onLayout={onLayout}
+            hitSlop={hitSlop ?? { top: 4, bottom: 4, left: 2, right: 2 }}
         >
             <Text style={[flat ? styles.flatText : styles.floatingText, active && styles.textActive, active && activeTextColor ? { color: activeTextColor } : null]} numberOfLines={1}>{label}</Text>
         </Pressable>

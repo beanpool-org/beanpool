@@ -46,9 +46,17 @@ function byProperty(source: string, fallback: RegExp): RegExp {
 
 const LETTER_OR_DIGIT = byProperty('[\\p{L}\\p{N}]',
     /[0-9A-Za-z\u00aa\u00b5\u00ba\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u02ff\u0370-\u1fff\u2c00-\u2dff\u3040-\ud7ff\uf900-\ufdff\ufe70-\ufefc\uff66-\uffdc]/g);
-const DIGIT = byProperty('\\p{Nd}', /[0-9]/g);
-/** A run of digits a phone number could be: only spaces, dots, brackets, a plus and dashes between them. */
-const DIGIT_RUN = byProperty('\\p{Nd}(?:[\\s().+\\u2010-\\u2015-]*\\p{Nd})*', /[0-9](?:[\s().+\u2010-\u2015-]*[0-9])*/g);
+// Every script's decimal digits in one UTF-16 unit, for the fallbacks: NFKC folds only the compatibility forms to 0-9, so a
+// number in \u0660 \u06f0 \u0966 \u0e50 reaches them as typed. `\p{Nd}` is the same class and those past U+FFFF too.
+const DIGITS = '0-9\\u0660-\\u0669\\u06f0-\\u06f9\\u07c0-\\u07c9\\u0966-\\u096f\\u09e6-\\u09ef\\u0a66-\\u0a6f\\u0ae6-\\u0aef\\u0b66-\\u0b6f'
+    + '\\u0be6-\\u0bef\\u0c66-\\u0c6f\\u0ce6-\\u0cef\\u0d66-\\u0d6f\\u0de6-\\u0def\\u0e50-\\u0e59\\u0ed0-\\u0ed9\\u0f20-\\u0f29\\u1040-\\u1049'
+    + '\\u1090-\\u1099\\u17e0-\\u17e9\\u1810-\\u1819\\u1946-\\u194f\\u19d0-\\u19d9\\u1a80-\\u1a89\\u1a90-\\u1a99\\u1b50-\\u1b59\\u1bb0-\\u1bb9'
+    + '\\u1c40-\\u1c49\\u1c50-\\u1c59\\ua620-\\ua629\\ua8d0-\\ua8d9\\ua900-\\ua909\\ua9d0-\\ua9d9\\ua9f0-\\ua9f9\\uaa50-\\uaa59\\uabf0-\\uabf9'
+    + '\\uff10-\\uff19';
+/** What may stand between the digits of a phone number: spaces, dots, brackets, a plus and dashes. */
+const DIGIT_JOINS = '[\\s().+\\u2010-\\u2015-]*';
+const DIGIT = byProperty('\\p{Nd}', new RegExp(`[${DIGITS}]`, 'g'));
+const DIGIT_RUN = byProperty(`\\p{Nd}(?:${DIGIT_JOINS}\\p{Nd})*`, new RegExp(`[${DIGITS}](?:${DIGIT_JOINS}[${DIGITS}])*`, 'g'));
 const PHONE_DIGITS = 7;
 
 // Control characters, and the format characters that change what a tag looks like without showing: a soft hyphen, zero-width

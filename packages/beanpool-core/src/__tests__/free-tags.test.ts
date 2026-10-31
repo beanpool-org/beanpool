@@ -77,6 +77,8 @@ describe('what a free tag may not be', () => {
 
 describe('on an old Android engine, with no Unicode property escapes', () => {
     it('loads, and holds the rule by the fallbacks', async () => {
+        // Every digit the real class finds in one UTF-16 unit, which is every one a fallback's class can hold.
+        const digits = Array.from({ length: 0x10000 }, (_, unit) => String.fromCharCode(unit)).filter((unit) => /^\p{Nd}$/u.test(unit));
         const Real = RegExp;
         vi.stubGlobal('RegExp', class extends Real {
             constructor(source: string | RegExp, flags?: string) {
@@ -92,6 +94,10 @@ describe('on an old Android engine, with no Unicode property escapes', () => {
             for (const tag of ['2nd hand', 'Limón 🍋 fresco', '二手 笔记本', 'яйца', 'ไข่ไก่']) expect(old.freeTagRefusal(tag), tag).toBeNull();
             expect(old.freeTagRefusal('0412 345 678')).toBe(old.FREE_TAG_NOT_A_CONTACT);
             expect(old.freeTagRefusal('０４１２３４５６７８')).toBe(old.FREE_TAG_NOT_A_CONTACT);
+            for (const tag of ['٠٤١٢٣٤٥٦٧٨', '٠٤١٢ ٣٤٥ ٦٧٨', '۰۴۱۲-۳۴۵-۶۷۸', '०४१२ ३४५ ६७८', '๐๔๑๒.๓๔๕.๖๗๘']) {
+                expect(old.freeTagRefusal(tag), tag).toBe(old.FREE_TAG_NOT_A_CONTACT);
+            }
+            for (const digit of digits) expect(old.freeTagRefusal(digit.repeat(7)), digit).toBe(old.FREE_TAG_NOT_A_CONTACT);
         } finally {
             vi.unstubAllGlobals();
             vi.resetModules();

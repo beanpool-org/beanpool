@@ -253,6 +253,13 @@ function retireCircles(cb: CircleCallbacks, now: string): number {
     if (sightings.length === 0) return 0;
     const index = new SightingIndex(sightings);
     const retire = db.prepare('UPDATE groups SET circle_done_at = ?, circle_community_key = ?, updated_at = ? WHERE id = ? AND circle_done_at IS NULL');
+    // One write: no run looks at a retired circle again, so flags left on it would stay for good and could form it anew.
+    const retireOne = db.transaction((circle: OpenCircle, key: string): string[] | null => {
+        if (retire.run(now, key, now, circle.id).changes === 0) return null;
+        const members = activeMembers(circle.id);
+        clearHelpNear(members, circle.cell, now);
+        return members;
+    });
     let retired = 0;
     for (const circle of open) {
         let found: { key: string; km: number } | null = null;
@@ -263,10 +270,9 @@ function retireCircles(cb: CircleCallbacks, now: string): number {
             if (km <= CIRCLE_RADIUS_KM && (!found || km < found.km)) found = { key: c.key, km };
         });
         const nearest = found as { key: string; km: number } | null;
-        if (!nearest || retire.run(now, nearest.key, now, circle.id).changes === 0) continue;
+        const members = nearest && retireOne(circle, nearest.key);
+        if (!members) continue;
         retired++;
-        const members = activeMembers(circle.id);
-        clearHelpNear(members, circle.cell, now);
         // The watches' own notice this run told most of them; the rest (invited with no watch, in their quiet day) hear here.
         const told = new Set((db.prepare('SELECT DISTINCT pubkey FROM place_watches WHERE last_notified_at = ?').all(now) as { pubkey: string }[]).map(r => r.pubkey));
         const { title, body } = pushNoticeWords('community.near');

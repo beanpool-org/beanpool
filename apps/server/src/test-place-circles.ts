@@ -14,7 +14,7 @@
  *      member isn't seated, and a place with a listed community gets no circle
  *   6. retire and close: the first community near retires it once and tells its members with no name, a second changes
  *      nothing, a flood retires nothing, its flags go so no run forms it again, and its chat stays open 30 days; then the
- *      group closes, read-only, its row kept
+ *      group closes, read-only, its row kept; a run stopped between retiring and clearing the flags did neither
  *   7. "I'm starting one here": members only, one at a time, only its maker takes it back, the others told once in a day
  *   8. a standby holds the flag and the circle; the 10,000-watch run and read each fit in 50 ms
  *
@@ -324,6 +324,21 @@ async function main(): Promise<void> {
     const shut = await call('GET', ana, `/api/groups/${circle.id}`);
     assert(shut.body?.readOnly === true && !!shut.body?.closedAt, 'and reads as closed');
     assert(!(await call('GET', ana, '/api/global/home?lat=10.5&lng=76.2')).body?.circle, 'the Find card lets it go');
+    // Retiring and clearing the flags are one write: a circle marked retired is never looked at again, so flags left on it
+    // stay for good, and a helper more than 25 km from the community would be formed into a second one.
+    const [vic, wes, xan] = [phoned('Vic'), phoned('Wes'), phoned('Xan')];
+    await help(vic, -12.4, 130.8); await help(wes, -12.4, 130.8); await help(xan, -12.4, 130.8);
+    await mirror();
+    const darwinId = circleRows().find(c => c.place_cell === '-12.4,130.8')?.id as string;
+    const darwinRow = () => db.prepare('SELECT circle_done_at, circle_community_key FROM groups WHERE id = ?').get(darwinId) as any;
+    const flagsAt = () => (db.prepare(`SELECT COUNT(*) AS n FROM place_watches WHERE pubkey IN (?, ?, ?) AND would_help = 1`).get(vic.pk, wes.pk, xan.pk) as any).n;
+    db.exec(`CREATE TEMP TRIGGER test_flags_stuck BEFORE UPDATE OF would_help ON place_watches BEGIN SELECT RAISE(ABORT, 'stopped here'); END`);
+    rows = [...rows, community('darwin', -12.41, 130.81)];
+    await mirror();
+    db.exec('DROP TRIGGER test_flags_stuck');
+    assert(!darwinRow()?.circle_done_at && flagsAt() === 3, 'a run stopped before the flags are cleared retires nothing');
+    await mirror();
+    assert(darwinRow()?.circle_community_key === 'darwin' && flagsAt() === 0, 'and the next run does both');
 
     console.log("── 7. I'm starting one here ──");
     const mumbaiId = mumbai?.id as string;

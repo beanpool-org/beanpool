@@ -38,6 +38,7 @@ vi.mock('react-native', () => {
         Alert: { alert: vi.fn() }, Linking: { openURL: vi.fn(), openSettings: vi.fn() }, Keyboard: { dismiss: vi.fn() },
     };
 });
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: any) => createElement('div', null, children) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('@react-native-community/datetimepicker', () => ({ default: () => null }));

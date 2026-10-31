@@ -25,6 +25,7 @@ vi.mock('react-native', async () => {
     const native = (await import('./profile-events-words-harness')).nativeMock(alerts);
     return { ...native, Linking: { ...native.Linking, openURL: async () => { if (links.fail) throw new Error('no app'); }, openSettings: async () => {} } };
 });
+vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 vi.mock('react-native-keyboard-controller', async () => {
     const { createElement: h } = await import('react');
     return { KeyboardAvoidingView: ({ children }: { children?: unknown }) => h('div', null, children as any) };

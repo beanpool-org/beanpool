@@ -4,8 +4,10 @@
 
 import type Database from 'better-sqlite3';
 import {
+    copiedFreeTags,
     elidedWord,
     foldApostrophes,
+    freeTagsOf,
     joinCompounds,
     knownSearchTags,
     parseReachPeers,
@@ -245,6 +247,11 @@ export interface MarketplacePost {
      */
     tags?: string[];
     /**
+     * The tags its author typed (DESIGN-tags-free-entry-fable.md §2): their own words in their stored form, at most five,
+     * in a column of their own, never mixed with `tags`. Public with the listing, as `tags` are. Absent when it has none.
+     */
+    freeTags?: string[];
+    /**
      * Great-circle km from the point the reader gave (`PostFilter.near`), to 0.1 km; null for a post with no place.
      * Absent when no point was given (G4).
      */
@@ -283,6 +290,11 @@ export interface PostFilter {
      * the Market sends the member's words and the ids they resolved to, so a listing tagged lemon is found from "limón".
      */
     tags?: string[];
+    /**
+     * Listings carrying exactly one of these typed tags: the list route's `free=`, what tapping a `#tag` opens
+     * (DESIGN-tags-free-entry-fable.md §4). With `query` or `tags`, a listing any of them finds is read.
+     */
+    free?: string[];
     authorPubkey?: string;
     viewerPubkey?: string;
     /**
@@ -670,8 +682,12 @@ export function validatePostPhotos(photos: string[] | undefined): void {
  * → wifi, as the synonyms are keyed), every other punctuation mark a space. The ASCII strip it replaces deleted every
  * other letter outright, so a Russian or Spanish word vanished and the words either side of it, or of a comma, ran
  * together: "Тыква, pumpkin" read as one "pumpkin", "eggs,milk" as "eggsmilk" (neither found), "café" as "caf".
+ *
+ * A tag its author typed (`freeTags`, DESIGN-tags-free-entry-fable.md §4) adds its own words and each compound joined, so
+ * it is found by `q=` exactly as a title word is, and "wifi" finds "wi-fi router". It has no synonyms: only the library
+ * crosses languages.
  */
-export function generateSearchKeywords(title: string, description: string, category: string, synonymMap?: Record<string, string[]>, tags?: readonly string[]): string {
+export function generateSearchKeywords(title: string, description: string, category: string, synonymMap?: Record<string, string[]>, tags?: readonly string[], freeTags?: readonly string[]): string {
     const expanded = new Set<string>();
     expanded.add(category);
     for (const id of tags ?? []) {
@@ -680,6 +696,10 @@ export function generateSearchKeywords(title: string, description: string, categ
         for (const part of id.split('.')) for (const w of plainWords(part)) expanded.add(w);
         for (const w of tagSearchWords(id)) expanded.add(w);
         for (const key of tag.synonymKeys ?? []) expanded.add(key.toLowerCase());
+    }
+    for (const typed of freeTags ?? []) {
+        for (const w of plainWords(typed)) expanded.add(w);
+        for (const w of joinCompounds(typed).split(' ')) if (w) expanded.add(w);
     }
 
     if (!synonymMap) return [...expanded].join(' ');
@@ -735,6 +755,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
     // Every member reads the card, so it carries the tier's threshold, never the figure itself (r4178445225). The figure
     // leaves out the known grant (the admins' confirmation stays private; Marty, 21 Oct). The apps only ever turn it into
     // the badge (tierForCredit), which the threshold gives exactly.
+    const freeTags = freeTagsOf(row.free_tags);
     let trustPoints = 0;
     if (!forGuest) {
         const known = tierByAuthor?.get(row.author_pubkey);
@@ -770,6 +791,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         ...(typeof row.shop_id === 'string' && row.shop_id ? { shopId: row.shop_id } : {}),
         ...(typeof row.featured_at === 'string' && row.featured_at ? { featuredAt: row.featured_at } : {}),
         ...(typeof row.tags === 'string' && row.tags ? { tags: postTagsOf(row.tags) } : {}),
+        ...(freeTags.length > 0 ? { freeTags } : {}),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -1312,7 +1334,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     eventOnline: null,
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
-    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, tags: null, authorPubkey: null, asKeeper: null, sync: null, beansOnly: null,
+    id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, tags: null, free: null, authorPubkey: null, asKeeper: null, sync: null, beansOnly: null,
     lendable: null, shopId: null, inShop: null, nearestPerShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
@@ -1543,8 +1565,9 @@ function searchCondition(query: string | undefined): { sql: string; params: stri
     const params = [terms.map(t => `"${t}"*`).join(' OR ')];
     for (const t of [...new Set(terms.filter(t => UNSPACED_SCRIPT.test(t)))].slice(0, UNSPACED_LIKE_MAX)) {
         const anywhere = `%${t.replace(/[\\%_]/g, c => `\\${c}`)}%`;
-        sql += ` OR p.title LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\'`;
-        params.push(anywhere, anywhere);
+        // The keywords too: a tag typed in such a script is one run there, so "笔记本" finds "二手笔记本" as it does in a title.
+        sql += ` OR p.title LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\' OR p.search_keywords LIKE ? ESCAPE '\\'`;
+        params.push(anywhere, anywhere, anywhere);
     }
     return { sql: `(${sql})`, params };
 }
@@ -1561,6 +1584,20 @@ function tagCondition(tags: readonly unknown[] | undefined): { sql: string; para
     if (ids.length === 0) return { sql: '0', params: [] };
     const sql = ids.map(() => `(' ' || p.tags || ' ') LIKE ? OR (' ' || p.tags || ' ') LIKE ?`).join(' OR ');
     return { sql: `(${sql})`, params: ids.flatMap(id => [`% ${id} %`, `% ${id}.%`]) };
+}
+
+/**
+ * The typed-tag filter (PostFilter.free), as one condition on `p` and its parameters; null when none was asked. An exact
+ * match on the stored form, held to the rule as a copy is (nothing that is not a tag reaches the read). The CASE is not
+ * tidiness: `json_each('')` throws "malformed JSON", and '' is every listing without typed tags, so a plain
+ * `json_each(p.free_tags)` fails the whole read (measured).
+ */
+function freeTagCondition(free: readonly unknown[] | undefined): { sql: string; params: string[] } | null {
+    if (!free || free.length === 0) return null;
+    const asked = copiedFreeTags(free);
+    if (asked.length === 0) return { sql: '0', params: [] };
+    const sql = `EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(p.free_tags) THEN p.free_tags END) WHERE value IN (${asked.map(() => '?').join(', ')}))`;
+    return { sql, params: asked };
 }
 
 export function getPosts(db: Db, filter?: PostFilter): MarketplacePost[] {
@@ -1995,12 +2032,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         }
     }
 
-    // The words and the tags (PostFilter.tags), a listing either finds read: one condition, held to a search's rules below.
-    const words = searchCondition(filter?.query);
-    const tagged = tagCondition(filter?.tags);
-    const search = words && tagged
-        ? { sql: `(${words.sql} OR ${tagged.sql})`, params: [...words.params, ...tagged.params] }
-        : words ?? tagged;
+    // The words, the tags (PostFilter.tags) and the typed tags (PostFilter.free), a listing any of them finds read: one
+    // condition, held to a search's rules below.
+    const asked = [searchCondition(filter?.query), tagCondition(filter?.tags), freeTagCondition(filter?.free)].filter(c => c !== null);
+    const search = asked.length > 1
+        ? { sql: `(${asked.map(c => c.sql).join(' OR ')})`, params: asked.flatMap(c => c.params) }
+        : asked[0];
     if (search) {
         where += ` AND ${search.sql}`;
         params.push(...search.params);
@@ -2402,8 +2439,9 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // (DESIGN-shops-and-tools-fable.md §4, §9.4; apps/server routes/shops.ts). So the id links the listings its owner
     // put in the one front window, as the shop card does, and no others: their listings outside it stay apart.
     shopId: 'keep',
-    // Public with the listing, as its category is (DESIGN-owner-seeding-tags-fable.md §4.9).
-    tags: 'keep',
+    // Public with the listing, as its category is (DESIGN-owner-seeding-tags-fable.md §4.9;
+    // DESIGN-tags-free-entry-fable.md §5, which refuses a contact in a typed tag for this reason).
+    tags: 'keep', freeTags: 'keep',
     // Which of a shop's Offers its keepers featured, and when: the shopfront's, a members' page (round 3 §5), so not a
     // visitor's. The listing itself stays.
     featuredAt: 'drop',

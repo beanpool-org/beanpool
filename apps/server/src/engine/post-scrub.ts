@@ -56,7 +56,7 @@ export function scrubPostsOf(publicKey: string, at: string): string[] {
     // Stamped, so a standby's delta carries it: the touch trigger restamps a row whose stamp this leaves as it was.
     const wipe = db.prepare(`
         UPDATE posts
-           SET title = ?, description = '', search_keywords = ?, tags = '',
+           SET title = ?, description = '', search_keywords = ?, tags = '', free_tags = '',
                lat = NULL, lng = NULL, event_place_name = NULL, event_private_note = NULL, event_link = NULL,
                lend_terms = NULL, replacement_value = NULL, lend_max_days = NULL,
                updated_at = ?

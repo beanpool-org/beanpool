@@ -533,6 +533,9 @@ async function main() {
     // So would `tags=` (tags slice T2): the rows kept to the tags, the set and its hash the whole neighbourhood (PR #2637 review).
     const withTags = await get(`${SYNC}&nearby=1&tags=food.fruit`, ana);
     assert(withTags.status === 400, `nearby=1 with tags= is a 400 (${withTags.status})`);
+    // And `free=` (tags slice F1), for the same reason.
+    const withFree = await get(`${SYNC}&nearby=1&free=second%20hand`, ana);
+    assert(withFree.status === 400, `nearby=1 with free= is a 400 (${withFree.status})`);
     // Only unknown types: nothing matches, in the set's own shape.
     const unknownOnly = await get('/api/marketplace/posts?limit=200&sync=true&types=nonsense&nearby=1', ana);
     const unknownBody = (() => { try { return JSON.parse(unknownOnly.text); } catch { return null; } })();

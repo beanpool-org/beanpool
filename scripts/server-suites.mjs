@@ -109,6 +109,7 @@ export const SUITES = [
     'test-member-area',
     'test-distance-search',
     'test-tags-search',
+    'test-free-tags',
     'test-distance-query-parsing',
     'test-guest-view',
     'test-private-preview',

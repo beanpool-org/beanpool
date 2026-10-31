@@ -37,7 +37,7 @@ describe('a free tag\'s stored form', () => {
 describe('what a free tag may not be', () => {
     it('passes the shapes members type', () => {
         for (const tag of ['2nd hand', 'wi-fi router', 'Limón 🍋 fresco', '二手 笔记本', 'segunda mano', 'don\'t panic', '3.5mm jack', 'a.k.a', '24/7', '1/4 inch', '50/50', '120/240v',
-            'г.москва', 'ดร.สมชาย', '二手。笔记本', 'iphone 15 pro', '1984', 'rtx4090 ti 2024', 'میوه\u200cفروشی', 'ab']) {
+            'г.москва', 'ดร.สมชาย', '二手。笔记本', 'iphone 15 pro', '1984', 'rtx4090 ti 2024', 'میوه\u200cفروشی', 'ab', '👩\u200d🌾 farmer', '❤\ufe0f vintage']) {
             expect(freeTagRefusal(tag), tag).toBeNull();
         }
     });
@@ -65,6 +65,15 @@ describe('what a free tag may not be', () => {
         }
     });
 
+    it('reads a contact past what shows as nothing, and keeps those characters in a tag that is none', () => {
+        for (const tag of ['0412\u200c345678', '0412\u200d345\u200d678', 'example.\u200ccom', 'exam\u200dple.\u200dcom', 'ht\u200dtps:/\u200c/x', 'me\u200c@example',
+            '0412\ufe0f345678', 'example.\ufe0fcom', '0412\u034f345678', 'example.\u034fcom', '0412\u3164345678', '0412\u17b4345678', 'example.\u180bcom', '0412\uffa0345678',
+            '0412\u2800345678', '0412\u{e0100}345678', '0412\u{e0041}345678']) {
+            expect(freeTagRefusal(tag), JSON.stringify(tag)).toBe(FREE_TAG_NOT_A_CONTACT);
+        }
+        expect(freeTagStored('میوه\u200cفروشی')).toBe('میوه\u200cفروشی');
+    });
+
     it('refuses control and hidden characters', () => {
         for (const tag of ['ab\u0000cd', 'ab\u0007cd', 'ab\u007fcd', 'ab\u0085cd', 'ab\u00adcd', 'ab\u200bcd', 'ab\u202ecd', 'ab\u2066cd']) {
             expect(freeTagRefusal(tag), JSON.stringify(tag)).toBe(FREE_TAG_HIDDEN_CHARACTER);
@@ -79,7 +88,9 @@ describe('what a free tag may not be', () => {
 describe('on an old Android engine, with no Unicode property escapes', () => {
     it('loads, and holds the rule by the fallbacks', async () => {
         // Every digit the real class finds in one UTF-16 unit, which is every one a fallback's class can hold.
-        const digits = Array.from({ length: 0x10000 }, (_, unit) => String.fromCharCode(unit)).filter((unit) => /^\p{Nd}$/u.test(unit));
+        const units = Array.from({ length: 0x10000 }, (_, unit) => String.fromCharCode(unit));
+        const digits = units.filter((unit) => /^\p{Nd}$/u.test(unit));
+        const showNothing = units.filter((unit) => /^[\p{DI}\u2800]$/u.test(unit));
         const Real = RegExp;
         vi.stubGlobal('RegExp', class extends Real {
             constructor(source: string | RegExp, flags?: string) {
@@ -100,6 +111,10 @@ describe('on an old Android engine, with no Unicode property escapes', () => {
             }
             expect(old.freeTagRefusal('0412/345/678')).toBe(old.FREE_TAG_NOT_A_CONTACT);
             for (const digit of digits) expect(old.freeTagRefusal(digit.repeat(7)), digit).toBe(old.FREE_TAG_NOT_A_CONTACT);
+            for (const unit of showNothing) {
+                expect([old.FREE_TAG_NOT_A_CONTACT, old.FREE_TAG_HIDDEN_CHARACTER], unit).toContain(old.freeTagRefusal(`0412${unit}345678`));
+                expect([old.FREE_TAG_NOT_A_CONTACT, old.FREE_TAG_HIDDEN_CHARACTER], unit).toContain(old.freeTagRefusal(`example.${unit}com`));
+            }
         } finally {
             vi.unstubAllGlobals();
             vi.resetModules();

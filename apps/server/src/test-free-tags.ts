@@ -224,6 +224,8 @@ async function main(): Promise<void> {
         ['www', ['www.example.org'], /not a contact/],
         ['a domain with an ideographic stop', ['example。com'], /not a contact/],
         ['full-width digits', ['０４１２３４５６７８'], /not a contact/],
+        ['a phone number split by a zero-width joiner', ['0412\u200c345678'], /not a contact/],
+        ['a domain split by a zero-width joiner', ['example.\u200dcom'], /not a contact/],
         ['a control character', ['ab\u0007cd'], /hidden characters/],
         ['a NUL', ['ab\u0000cd'], /hidden characters/],
         ['a text-direction override', ['ab\u202ecd'], /hidden characters/],

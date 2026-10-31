@@ -25,7 +25,8 @@
  *      { photoId, expiresAt, photosToday, photosPerDay }, kept at 800 px with no metadata, posted by photo_ids, its file then
  *      gone; used again → refused; another grant's → refused in the same words, and still the uploader's; twice in one call →
  *      refused; a create refused after the id was taken leaves it usable; 24 hours on, swept and refused; a PNG upload is
- *      stored as a JPEG; revoked, a grant's unused uploads and their folder are gone. connection_info says the two ways.
+ *      stored as a JPEG; revoked, a grant's unused uploads and their folder are gone; bodies still arriving fill the server's
+ *      places (one more → 503, uncounted), and their clients going frees them at once. connection_info says the two ways.
  *   5. Beans: create_enterprise_listing asks a price above 0 where Beans are on (0 and absent refused in words). Where they are
  *      off its schema asks none and neither 0 nor absent is refused for its price; the call is still refused, because Beans
  *      off turns enterprises off (config/node-profile.ts lockToLedger), so with Beans off nothing is made.
@@ -302,6 +303,17 @@ function streamedNoLength(token: string, total: number): Promise<{ status: numbe
     });
 }
 
+/** A raw POST to /mcp/photos that declares 1 MB and sends 10 bytes of it: its body is still arriving until `leave()`. */
+function stillSending(token: string): { leave: () => void } {
+    const req = https.request({
+        host: 'localhost', port: PORT, path: '/mcp/photos', method: 'POST', rejectUnauthorized: false,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'image/jpeg', 'Content-Length': String(MB) },
+    }, (res) => res.resume());
+    req.on('error', () => { /* its client went, and the connection with it */ });
+    req.write(Buffer.alloc(10, 1));
+    return { leave: () => req.destroy() };
+}
+
 async function main(): Promise<void> {
     console.log('\n=== An owner\'s assistant\'s photos by address and by upload; an enterprise listing\'s price (MCP owner S4) ===\n');
     const tmp = path.resolve(os.tmpdir());
@@ -364,6 +376,8 @@ async function main(): Promise<void> {
     const { startHttpsServer } = await import('./https-server.js');
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+    // The upload route's own numbers, from the module the server loaded.
+    const { PHOTO_UPLOAD_READ_MS, PHOTO_UPLOADS_AT_ONCE } = await import('./agent/photo-upload-route.js');
     const auditBefore = runLedgerAudit();
     const postsCount = (): number => (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
 
@@ -666,6 +680,33 @@ async function main(): Promise<void> {
             `revoked, a grant's 2 unused uploads and their folder are gone (${waitingBefore} → ${uploadedPhotosWaiting(D.id)})`);
         const afterRevoke = await upload(D.token, goodJpg);
         assert(afterRevoke.status === 401, `a revoked grant's upload → 401 (${afterRevoke.status})`);
+
+        // Bodies still arriving fill the server's places: one more is told to wait, uncounted. Their clients go before the
+        // bodies end, and the places are free at once, not at the read deadline.
+        const S = await makeToken(owner, 'Olive\'s slow line');
+        const stillArriving = Array.from({ length: PHOTO_UPLOADS_AT_ONCE }, () => stillSending(S.token));
+        let busy: Reply | null = null;
+        let busyCounted = true;
+        for (let i = 0; i < 20 && busy?.status !== 503; i++) {
+            await new Promise(r => setTimeout(r, 150));
+            const before = agentPhotosToday(S.id);
+            busy = await upload(S.token, smallWebp, 'image/webp');
+            busyCounted = agentPhotosToday(S.id) !== before;
+        }
+        assert(busy?.status === 503 && busy.headers.get('retry-after') === '5' && !busyCounted
+            && busy.body?.error === 'This server is taking other photos now: send it again in a few seconds.',
+            `${PHOTO_UPLOADS_AT_ONCE} bodies still arriving → one more upload 503 with Retry-After 5, in words, not counted (${busy ? show(busy) : 'no answer'})`);
+        const left = Date.now();
+        stillArriving.forEach(s => s.leave());
+        let afterLeft: Reply | null = null;
+        for (let i = 0; i < 16 && afterLeft?.status !== 201; i++) {
+            await new Promise(r => setTimeout(r, 250));
+            afterLeft = await upload(S.token, smallWebp, 'image/webp');
+        }
+        const freedMs = Date.now() - left;
+        assert(afterLeft?.status === 201 && freedMs < 5_000,
+            `their clients gone before the bodies ended → an upload is read ${freedMs} ms later, not at the ${PHOTO_UPLOAD_READ_MS / 1000} s deadline (${afterLeft ? show(afterLeft) : 'no answer'})`);
+        assert(await revoke(S.id) === 200 && uploadedPhotosWaiting(S.id) === 0, 'the slow line\'s check is disconnected, its upload gone');
 
         const off = await call('POST', '/api/local/admin/agent/switch', { headers: asSession(ownerS), body: { allowed: false } });
         const whileOff = await upload(A.token, goodJpg);

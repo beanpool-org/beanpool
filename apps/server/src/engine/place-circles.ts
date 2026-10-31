@@ -38,7 +38,7 @@
  * on a main server with `directoryMirror` on. A standby gets the rows with the rest of the group.
  */
 import { db } from '../db/db.js';
-import { haversineKm, isNodeMember, isSuspendedAccount } from '@beanpool/engine';
+import { GROUP_START_PAUSED, haversineKm, isNodeMember, isSuspendedAccount } from '@beanpool/engine';
 import { CIRCLE_MIN_PEOPLE, GROUP_KIND_CIRCLE, pushNoticeWords, word, type CircleCard, type CircleCommunity, type CircleDemand } from '@beanpool/core';
 import { firstSightings } from './directory-cache.js';
 import { hasBlocked } from './member-blocks.js';
@@ -385,13 +385,15 @@ export class CircleError extends Error {
 /**
  * "I'm starting one here", on or off, by a member of the circle. One at a time (a circle is a few people, and the
  * others can talk), and only the person who said it can take it back. Returns who to tell: the others, the first time
- * in CIRCLE_STARTING_QUIET_MS, so a tap on and off can't ring everyone's phone.
+ * in CIRCLE_STARTING_QUIET_MS, so a tap on and off can't ring everyone's phone. A suspended member can't say it: the card
+ * would show nobody (standingStarter), after ringing everyone and spending the quiet day. They can still take theirs back.
  */
 export function setCircleStarting(groupId: string, pubkey: string, starting: boolean, nowMs: number = Date.now()): { card: CircleCard; tell: string[] } {
     return db.transaction(() => {
         const row = db.prepare('SELECT id, kind, circle_done_at, circle_community_key, circle_starter, circle_starting_at FROM groups WHERE id = ?').get(groupId) as CircleRow | undefined;
         if (row?.kind !== GROUP_KIND_CIRCLE || !isCircleMember(groupId, pubkey)) throw new CircleError(404, CIRCLE_NOT_YOURS);
         if (row.circle_done_at) throw new CircleError(409, CIRCLE_ENDED);
+        if (starting && isSuspendedAccount(db, pubkey)) throw new CircleError(403, GROUP_START_PAUSED);
         const starter = standingStarter(row);
         if (starter && starter !== pubkey) throw new CircleError(409, CIRCLE_ALREADY_STARTING);
         const now = new Date(nowMs).toISOString();

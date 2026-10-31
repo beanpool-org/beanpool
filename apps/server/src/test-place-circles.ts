@@ -16,7 +16,7 @@
  *      nothing, a flood retires nothing, its flags go so no run forms it again, and its chat stays open 30 days; then the
  *      group closes, read-only, its row kept; a run stopped between retiring and clearing the flags did neither
  *   7. "I'm starting one here": members only, one at a time, only its maker takes it back, the others told once in a day;
- *      someone removed, deleted or suspended holds it for nobody
+ *      someone removed, deleted or suspended holds it for nobody, and someone suspended can't say it (they can take it back)
  *   8. a standby holds the flag and the circle; the 10,000-watch run and read each fit in 50 ms
  *
  * Run: SERVER_SUITES_ONLY=test-place-circles TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
@@ -382,6 +382,27 @@ async function main(): Promise<void> {
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(fin.pk);
     assert(await avaReads() === null, 'a suspended member is not starting one while it lasts');
     assert((await startingIn(ava)).status === 200 && await avaReads() === 'you', 'and someone else can say so');
+    // A suspended member says nothing new: the row would ring the others and spend the quiet day, for a card showing nobody.
+    const [nell, odo, pim] = [phoned('Nell'), phoned('Odo'), phoned('Pim')];
+    for (const id of [nell, odo, pim]) await help(id, -1.3, 36.8);
+    await mirror();
+    const nairobiId = circleRows().find(c => c.place_cell === '-1.3,36.8')?.id as string;
+    const startingAt = () => (db.prepare('SELECT circle_starter, circle_starting_at FROM groups WHERE id = ?').get(nairobiId) as any);
+    const sayInNairobi = (id: Id, starting: boolean) => call('POST', id, `/api/global/circles/${nairobiId}/starting`, { starting });
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(nell.pk);
+    pushed.length = 0;
+    const refused = await sayInNairobi(nell, true);
+    await settle();
+    assert(refused.status === 403 && /suspended/i.test(refused.body?.error ?? ''), 'a suspended member cannot say so, and is told why');
+    assert(pushed.filter(p => p.kind === 'community.circle').length === 0, 'and rings nobody');
+    assert(startingAt().circle_starter === null && startingAt().circle_starting_at === null, 'and nothing is written: no phantom starter, no quiet day spent');
+    pushed.length = 0;
+    assert((await sayInNairobi(odo, true)).status === 200, 'someone in good standing can');
+    await settle();
+    assert(pushed.some(p => p.kind === 'community.circle' && p.to === pushToken(pim)), 'and is heard: the refused try spent no quiet day');
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(odo.pk);
+    assert((await sayInNairobi(odo, true)).status === 403, 'one suspended since cannot say it again either');
+    assert((await sayInNairobi(odo, false)).status === 200 && startingAt().circle_starter === null, 'but can take theirs back');
 
     console.log('── 7b. a circle stays a circle ──');
     assert(await patch(fay, `/api/groups/${mumbaiId}`, { description: 'Buy my stuff' }) >= 400, "a convenor can't turn it into another group");

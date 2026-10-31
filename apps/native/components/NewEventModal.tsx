@@ -891,7 +891,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                             <TagPicker
                                 value={tags}
                                 onChange={setTags}
-                                category="community"
+                                category="general"
                                 title={title}
                                 description={description}
                             />

@@ -127,7 +127,7 @@ export const RECOVERY_COPIES_CHOICES: ReadonlyArray<{ rule: RecoveryCopies; name
     {
         rule: 'vault',
         name: "BeanPool's key vault",
-        words: "Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Where a member lets your admins bring them back, your server keeps half of that copy and the vault the other half, and neither can open it alone. Nothing on your server needs the vault.",
+        words: "Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Where a member lets your admins bring them back, your server keeps half of a locked copy and the vault the other half, and neither can open it alone. Nothing on your server needs the vault.",
     },
     {
         rule: 'server',

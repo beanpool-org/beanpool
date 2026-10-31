@@ -321,18 +321,14 @@ export function buildVariantList(
   categories: any[],
 ): CaptureRequest[] {
   const seen = new Set<string>();
-  const result: CaptureRequest[] = [];
+  // The event pin first, and before any event has come: a pin captured after the map is ready is not drawn until something
+  // else redraws the map, so a community's first event, reaching an open map, would be left on the fallback.
+  const result: CaptureRequest[] = posts.length > 0 ? [EVENT_PIN] : [];
   const categoriesMap = new Map((categories || []).map((c: any) => [c.id, c]));
 
   for (const post of posts) {
-    // Every event shares the one event pin: no category emoji, no elder ring.
-    if ((post.type || '').toLowerCase() === 'event') {
-      if (!seen.has(EVENT_PIN.key)) {
-        seen.add(EVENT_PIN.key);
-        result.push(EVENT_PIN);
-      }
-      continue;
-    }
+    // Every event wears that one pin: no category emoji, no elder ring.
+    if ((post.type || '').toLowerCase() === 'event') continue;
     const isOffer = (post.type || '').toLowerCase() === 'offer';
     const bgColor = isOffer ? '#10b981' : '#ea580c';
     const catObj = categoriesMap.get(post.category);

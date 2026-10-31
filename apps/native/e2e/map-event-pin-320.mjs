@@ -45,10 +45,12 @@ const dark = new URLSearchParams(location.search).get('scheme') === 'dark';
 const ground = dark ? '#242f3e' : '#e8eaed';
 const ink = dark ? '#f3f4f6' : '#1c1d1a';
 // The three pins as the map's variant list makes them: an Offer of food, a Need for tools, an event.
-const [offer, need, event] = buildVariantList(
+const variants = buildVariantList(
     [{ type: 'offer', category: 'food' }, { type: 'need', category: 'tools' }, { type: 'event', category: 'community' }],
     POST_CATEGORIES,
 );
+const [offer, need] = variants.filter((v) => !v.glyph);
+const event = variants.find((v) => v.glyph);
 const pins = [['Offer', offer], ['Need', need], ['Event', event]];
 const Row = ({ scale }) => (
     <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12 }}>

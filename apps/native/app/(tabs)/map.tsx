@@ -316,8 +316,8 @@ export default function MapScreen() {
     const [markersReady, setMarkersReady] = useState(false);
     const [clustersReady, setClustersReady] = useState(false);
 
-    // Pre-compute unique marker variants for off-screen capture. Events are in it: they wear the one event pin
-    // (EVENT_PIN), captured with the listings' pins so it is ready before any pin shows.
+    // Pre-compute unique marker variants for off-screen capture. The list holds the one event pin (EVENT_PIN) too,
+    // captured with the listings' pins so it is ready before any pin shows.
     const markerVariants = useMemo(
         () => buildVariantList(posts, CATEGORIES),
         [posts]

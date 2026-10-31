@@ -8,26 +8,35 @@
  * a date on: events round 2, B7). app/(tabs)/map.tsx draws an event through the same marker as a listing: the captured
  * image, and no `cluster={false}`, so react-native-map-clustering folds it into the bubbles and counts it.
  *
- * map.tsx and UnifiedMapPin.tsx are drawn for real (react-dom in jsdom; React Native's host components as plain tags that
- * keep their refs and report a layout, so the off-screen capture runs). The capture itself (react-native-view-shot), the
- * map (components/Map) and the SVG are stand-ins, and the clustering is supercluster fed the way the library feeds it.
- * What a phone's Google Maps does with the image is the device test this PR waits for.
+ * map.tsx, UnifiedMapPin.tsx and the clustering are the real thing: the screen is drawn by react-dom in jsdom, with React
+ * Native's host components as plain tags that keep their refs and report a layout, so the off-screen capture runs, and the
+ * map is react-native-map-clustering's own ClusteredMapView as patches/ leaves it, with its own supercluster. The capture
+ * itself (react-native-view-shot), react-native-maps under the library and the SVG are stand-ins. What a phone's Google
+ * Maps does with the image is the device test this PR waits for.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { act, Children, createElement, forwardRef, isValidElement, useEffect, useImperativeHandle, type ReactElement } from 'react';
+import { act, createElement, forwardRef, useEffect, useImperativeHandle } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 // @ts-expect-error -- supercluster (react-native-map-clustering's own clusterer) ships no type declarations.
 import Supercluster from 'supercluster';
+import ts from 'typescript';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const os = vi.hoisted(() => ({ now: 'ios' as 'ios' | 'android' }));
 const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => unknown }> }));
-/** What the stand-in map was handed and drew. */
-const seen = vi.hoisted(() => ({ children: [] as unknown[], markers: [] as Array<Record<string, any>> }));
+/** The stand-in under the library: every marker drawn, the fits asked of it, and the way to tell the library the map moved. */
+const maps = vi.hoisted(() => ({
+    markers: [] as Array<Record<string, any>>,
+    fits: [] as Array<Array<{ latitude: number; longitude: number }>>,
+    regionChanged: (_region: Record<string, number>) => {},
+}));
+/** The map's own `sync_data_updated` listener. */
+const sync = vi.hoisted(() => ({ fire: () => {} }));
 /** Every off-screen capture: the slot's own element, and the file it "wrote". */
 const shots = vi.hoisted(() => ({ taken: [] as Array<{ el: Element; uri: string }> }));
 const posts = vi.hoisted(() => ({ now: [] as unknown[] }));
@@ -47,6 +56,8 @@ vi.mock('react-native', async () => {
     return {
         ...native, View, Image,
         Platform: { get OS() { return os.now; }, select: (o: Record<string, unknown>) => o[os.now] ?? o.default },
+        LayoutAnimation: { Presets: { spring: {} } }, // read by the library's default props
+        DeviceEventEmitter: { addListener: (name: string, listener: () => void) => { if (name === 'sync_data_updated') sync.fire = listener; return { remove() {} }; }, emit() {} },
     };
 });
 vi.mock('react-native-svg', () => {
@@ -60,21 +71,42 @@ vi.mock('react-native-view-shot', () => ({
         return uri;
     },
 }));
+// The library as patches/react-native-map-clustering@4.0.0.patch leaves it, over a stand-in for react-native-maps. Its files
+// are JSX in plain .js, which vitest does not transform under node_modules, so they are transpiled here.
 vi.mock('../../components/Map', async () => {
-    const MapView = forwardRef((props: Record<string, any>, ref) => {
-        useImperativeHandle(ref, () => ({ animateToRegion() {}, fitToCoordinates() {} }));
-        seen.children = Children.toArray(props.children);
+    const NativeMap = forwardRef((props: Record<string, any>, ref) => {
+        useImperativeHandle(ref, () => ({ animateToRegion() {}, fitToCoordinates(coords: typeof maps.fits[number]) { maps.fits.push(coords); } }));
+        maps.regionChanged = props.onRegionChangeComplete;
         return createElement('div', { 'data-testid': 'map' }, props.children);
     });
     const Marker = (props: Record<string, any>) => {
-        seen.markers.push(props);
+        maps.markers.push(props);
         return createElement('button', {
             'data-marker': `${props.coordinate.latitude},${props.coordinate.longitude}`,
             'data-image': props.image?.uri ?? '',
+            'data-opacity': String(props.opacity ?? 1),
             onClick: (e: { stopPropagation(): void }) => { e.stopPropagation(); props.onPress?.({ stopPropagation() {} }); },
         }, props.children);
     };
-    return { default: MapView, Marker, Circle: () => null, Callout: () => null, PROVIDER_DEFAULT: 'default' };
+    const nodeRequire = createRequire(__filename);
+    const modules: Record<string, unknown> = {
+        react: nodeRequire('react'),
+        'react-native': await import('react-native'),
+        'react-native-maps': { __esModule: true, default: NativeMap, Marker, Polyline: () => null },
+        supercluster: Supercluster,
+        '@mapbox/geo-viewport': nodeRequire('@mapbox/geo-viewport'),
+    };
+    const lib = join(__dirname, '..', '..', '..', '..', 'node_modules', 'react-native-map-clustering', 'lib');
+    const load = (file: string): Record<string, any> => {
+        const { outputText } = ts.transpileModule(readFileSync(join(lib, `${file}.js`), 'utf8'), {
+            fileName: `${file}.jsx`,
+            compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+        });
+        const mod = { exports: {} };
+        new Function('require', 'module', 'exports', outputText)((id: string) => modules[id] ?? load(id.replace('./', '')), mod, mod.exports);
+        return mod.exports;
+    };
+    return { default: load('ClusteredMapView').default, Marker, Circle: () => null, Callout: () => null, PROVIDER_DEFAULT: 'default' };
 });
 vi.mock('expo-router', async () => {
     const { useEffect: effect } = await import('react');
@@ -117,18 +149,22 @@ const DAY = 24 * 60 * 60 * 1000;
 const iso = (ms: number) => new Date(ms).toISOString();
 const now = Date.now();
 
-/** An Elder's Offer and a Need near the hall, two upcoming events (one hosted by the Elder), one cancelled, one over. */
-const OFFER = { id: 'p-eggs', type: 'offer', status: 'active', title: 'Duck eggs', category: 'food', author_energy_cycled: 12000, lat: -28.65, lng: 153.6 };
-const NEED = { id: 'p-ladder', type: 'need', status: 'active', title: 'A ladder', category: 'tools', author_energy_cycled: 0, lat: -28.6503, lng: 153.6004 };
+/**
+ * Inside the map's first region: an Elder's Offer, a Need and two upcoming events (one hosted by the Elder) metres apart at
+ * the hall; a third event away from them; one cancelled and one over.
+ */
+const OFFER = { id: 'p-eggs', type: 'offer', status: 'active', title: 'Duck eggs', category: 'food', author_energy_cycled: 12000, lat: -28.54, lng: 153.5 };
+const NEED = { id: 'p-ladder', type: 'need', status: 'active', title: 'A ladder', category: 'tools', author_energy_cycled: 0, lat: -28.5403, lng: 153.5004 };
 const ev = (id: string, over: Record<string, unknown> = {}) => ({
     id, type: 'event', status: 'active', title: `Event ${id}`, category: 'community', author_energy_cycled: 0, event_state: 'scheduled',
-    event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 2 * 60 * 60 * 1000), lat: -28.6501, lng: 153.6001, ...over,
+    event_start_at: iso(now + 2 * DAY), event_end_at: iso(now + 2 * DAY + 2 * 60 * 60 * 1000), ...over,
 });
-const CAFE = ev('ev-cafe', { author_energy_cycled: 12000 });
-const BEE = ev('ev-bee', { lat: -28.70, lng: 153.65 });
-const CALLED_OFF = ev('ev-off', { event_state: 'cancelled', lat: -28.71, lng: 153.66 });
-const OVER = ev('ev-over', { event_start_at: iso(now - 2 * DAY), event_end_at: iso(now - 2 * DAY + 60 * 60 * 1000), lat: -28.72, lng: 153.67 });
-const ALL = [OFFER, NEED, CAFE, BEE, CALLED_OFF, OVER];
+const CAFE = ev('ev-cafe', { author_energy_cycled: 12000, lat: -28.5401, lng: 153.5001 });
+const PARTY = ev('ev-party', { lat: -28.5402, lng: 153.5002 });
+const BEE = ev('ev-bee', { lat: -28.56, lng: 153.53 });
+const CALLED_OFF = ev('ev-off', { event_state: 'cancelled', lat: -28.57, lng: 153.54 });
+const OVER = ev('ev-over', { event_start_at: iso(now - 2 * DAY), event_end_at: iso(now - 2 * DAY + 60 * 60 * 1000), lat: -28.58, lng: 153.55 });
+const ALL = [OFFER, NEED, CAFE, PARTY, BEE, CALLED_OFF, OVER];
 
 let host: HTMLDivElement;
 let root: Root;
@@ -136,25 +172,35 @@ beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    seen.children = [];
-    seen.markers = [];
+    maps.markers = [];
+    maps.fits = [];
     posts.now = ALL;
     os.now = 'ios';
+    vi.spyOn(console, 'log').mockImplementation(() => {}); // the capture's own progress lines, a hundred a draw
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); });
+afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 
 const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 /** The map drawn, every pin and cluster image captured (the capture waits 200 ms after a slot's layout). */
-async function drawMap() {
-    await act(async () => { root.render(createElement(MapScreen)); });
+async function drawMap(Screen: typeof MapScreen = MapScreen) {
+    await act(async () => { root.render(createElement(Screen)); });
     await settle();
     await act(async () => { await new Promise((r) => setTimeout(r, 260)); });
     await settle();
 }
 /** The capture that holds the event pin: the slot drawn with the calendar, not an emoji. */
-const eventShot = () => shots.taken.find((s) => s.el.querySelector('svg path')?.getAttribute('data-fill') === EVENT_PIN.bgColor);
-const childFor = (id: string) => (seen.children as ReactElement<any>[]).find((c) => isValidElement(c) && (c.props as any).post?.id === id);
-const lastMarkerAt = (p: { lat: number; lng: number }) => [...seen.markers].reverse().find((m) => m.coordinate.latitude === p.lat && m.coordinate.longitude === p.lng);
+const eventShot = () => [...shots.taken].reverse().find((s) => s.el.querySelector('svg path')?.getAttribute('data-fill') === EVENT_PIN.bgColor);
+const lastMarkerAt = (p: { lat: number; lng: number }) => [...maps.markers].reverse().find((m) => m.coordinate.latitude === p.lat && m.coordinate.longitude === p.lng);
+/** The marker on the map now, at a post's spot. */
+const markerAt = (p: { lat: number; lng: number }) => host.querySelector<HTMLElement>(`[data-marker="${p.lat},${p.lng}"]`);
+const opacityAt = (p: { lat: number; lng: number }) => markerAt(p)?.getAttribute('data-opacity');
+/** The image a marker wears: the `image` prop on iOS, the Image inside it on Android. */
+const imageOn = (marker: Element) => marker.getAttribute('data-image') || marker.querySelector('img')?.getAttribute('data-uri') || '';
+/** The bubbles on the map, each with the number on the image it wears, read from that image's own capture. */
+const bubbles = () => Array.from(host.querySelectorAll<HTMLElement>('[data-marker]')).flatMap((el) => {
+    const label = shots.taken.find((s) => s.uri === imageOn(el))?.el.textContent ?? '';
+    return /^\d+$/.test(label) ? [{ el, count: Number(label) }] : [];
+});
 
 describe('the event pin in the variant list (UnifiedMapPin)', () => {
     it('holds exactly one event pin, whatever the events: violet, a calendar, no emoji, no elder ring, a key of its own', () => {
@@ -180,8 +226,11 @@ describe('the event pin in the variant list (UnifiedMapPin)', () => {
         ]);
     });
 
-    it('has no event pin to capture where there are no events', () => {
-        expect(buildVariantList([OFFER, NEED], POST_CATEGORIES).some((v) => v.glyph !== undefined)).toBe(false);
+    it('holds it before any event has come, first in the list, and an empty map captures nothing', () => {
+        // First, so a new category's pin joining the list never moves its slot (a slot that moves is laid out and counted again).
+        expect(buildVariantList([OFFER, NEED], POST_CATEGORIES)[0]).toEqual(EVENT_PIN);
+        expect(buildVariantList([CAFE], POST_CATEGORIES)).toEqual([EVENT_PIN]);
+        expect(buildVariantList([], POST_CATEGORIES)).toEqual([]);
     });
 });
 
@@ -198,33 +247,7 @@ describe('an event on the map (app/(tabs)/map.tsx)', () => {
         expect(strokes.filter((s) => s.backgroundColor === EVENT_PIN.bgColor).length).toBeGreaterThanOrEqual(3);
         // Each listing pin was captured too, with its emoji.
         const listingShots = shots.taken.filter((s) => ['#10b981', '#ea580c'].includes(s.el.querySelector('svg path')?.getAttribute('data-fill') ?? ''));
-        expect(listingShots.map((s) => s.el.textContent).sort()).toEqual([categoryEmoji('food'), categoryEmoji('tools')].sort());
-    });
-
-    it('is drawn by the listings\' marker with no cluster={false}, so the clustering counts it', async () => {
-        await drawMap();
-        const offer = childFor(OFFER.id);
-        const cafe = childFor(CAFE.id);
-        expect(offer && cafe, 'both pins are children of the map').toBeTruthy();
-        expect(cafe!.type).toBe(offer!.type);
-        // react-native-map-clustering clusters a child that has a coordinate and no cluster={false}: its rule, below.
-        const helpers = readFileSync(join(NATIVE, '..', '..', 'node_modules', 'react-native-map-clustering', 'lib', 'helpers.js'), 'utf8');
-        expect(helpers).toMatch(/child\.props\.coordinate &&\s*child\.props\.cluster !== false/);
-        const clustered = (seen.children as ReactElement<any>[]).filter((c) => isValidElement(c) && (c.props as any).coordinate && (c.props as any).cluster !== false);
-        expect(clustered.map((c) => (c.props as any).post.id).sort()).toEqual([OFFER.id, NEED.id, CAFE.id, BEE.id].sort());
-        // Fed to supercluster as the library feeds it (map.tsx's radius 15, the library's defaults): the café, the eggs
-        // and the ladder share a bubble of 3; the working bee, away from them, stands alone.
-        const index = new Supercluster({ radius: 15, maxZoom: 20, minZoom: 1, minPoints: 2, extent: 512, nodeSize: 64 });
-        index.load(clustered.map((c, i) => ({
-            type: 'Feature' as const,
-            geometry: { type: 'Point' as const, coordinates: [(c.props as any).coordinate.longitude, (c.props as any).coordinate.latitude] },
-            properties: { point_count: 0, index: i, id: (c.props as any).post.id },
-        })));
-        const atTown = index.getClusters([153.4, -28.9, 153.9, -28.4], 13);
-        const bubble = atTown.find((f: any) => f.properties.cluster);
-        expect(bubble?.properties.point_count).toBe(3);
-        expect(index.getLeaves(bubble!.properties.cluster_id as number, Infinity).map((l: any) => l.properties.id).sort()).toEqual([OFFER.id, NEED.id, CAFE.id].sort());
-        expect(atTown.filter((f: any) => !f.properties.cluster).map((f: any) => f.properties.id)).toEqual([BEE.id]);
+        expect(new Set(listingShots.map((s) => s.el.textContent))).toEqual(new Set([categoryEmoji('food'), categoryEmoji('tools')]));
     });
 
     it('wears its captured image on iOS, at the listings\' anchor, and its own image, not a listing\'s', async () => {
@@ -243,10 +266,35 @@ describe('an event on the map (app/(tabs)/map.tsx)', () => {
     it('wears its captured image on Android, in the image the listings use there', async () => {
         os.now = 'android';
         await drawMap();
-        const uri = eventShot()!.uri;
-        const marker = host.querySelector(`[data-marker="${CAFE.lat},${CAFE.lng}"]`)!;
-        expect(marker.querySelector('img')?.getAttribute('data-uri')).toBe(uri);
+        expect(markerAt(CAFE)!.querySelector('img')?.getAttribute('data-uri')).toBe(eventShot()!.uri);
         expect(lastMarkerAt(CAFE)!.anchor).toEqual(PIN_ANCHOR);
+        expect(lastMarkerAt(CAFE)!.tracksViewChanges).toBe(lastMarkerAt(OFFER)!.tracksViewChanges);
+    });
+
+    it('wears its pin at once when a community\'s first event reaches a map already open', async () => {
+        // A fresh pin cache, so this event pin can only be one captured here. Captured only once the event had come, it
+        // would stay on the fallback (on Android, the undersized snapshot the capture exists to avoid) until the map next
+        // moved: nothing redraws a marker for a pin captured after the map is ready.
+        vi.resetModules();
+        const fresh = await import('../../app/(tabs)/map');
+        const pins = await import('../../components/UnifiedMapPin');
+        const eventImage = () => pins.getCachedMarkerImage(EVENT_PIN.emoji, EVENT_PIN.bgColor, EVENT_PIN.isElder, EVENT_PIN.glyph);
+        expect(eventImage()).toBeNull();
+
+        posts.now = [OFFER, NEED];
+        await drawMap(fresh.default);
+        posts.now = ALL;
+        await act(async () => { sync.fire(); });
+        await settle();
+        await act(async () => { await new Promise((r) => setTimeout(r, 260)); }); // past any capture the event started
+        await settle();
+
+        expect(eventImage()).toBeTruthy();
+        expect(markerAt(BEE)?.getAttribute('data-image')).toBe(eventImage());
+        // And from its first frame: never the fallback.
+        const frames = maps.markers.filter((m) => m.coordinate.latitude === BEE.lat);
+        expect(frames.length).toBeGreaterThan(0);
+        expect(frames.every((m) => m.image?.uri === eventImage())).toBe(true);
     });
 
     it('never pins a cancelled or an ended event', async () => {
@@ -259,9 +307,56 @@ describe('an event on the map (app/(tabs)/map.tsx)', () => {
 
     it('opens the event\'s own card when tapped, as before', async () => {
         await drawMap();
-        await act(async () => { (host.querySelector(`[data-marker="${CAFE.lat},${CAFE.lng}"]`) as HTMLElement).click(); });
+        await act(async () => { markerAt(BEE)!.click(); });
         await settle();
         expect(host.textContent).toContain('View event');
-        expect(host.textContent).toContain(CAFE.title);
+        expect(host.textContent).toContain(BEE.title);
+    });
+});
+
+describe('an event in the bubbles (react-native-map-clustering, as patched)', () => {
+    /** The hall's four pins: two listings and two events. */
+    const HALL = [OFFER, NEED, CAFE, PARTY];
+
+    it('leaves no cluster={false} on the map: nothing is held out of the bubbles', () => {
+        expect(readFileSync(join(NATIVE, 'app', '(tabs)', 'map.tsx'), 'utf8')).not.toContain('cluster={false}');
+    });
+
+    it.each(['ios', 'android'] as const)('%s: folds into a bubble with the listings beside it, counted, and stays mounted behind it', async (platform) => {
+        os.now = platform;
+        await drawMap();
+        // The bubble wears the image captured for 4: the eggs, the ladder and both events.
+        expect(bubbles().map((b) => b.count)).toEqual([4]);
+        // Every leaf stays mounted and is hidden by its opacity (the patch's way, which keeps iOS pins from vanishing).
+        for (const p of HALL) expect(opacityAt(p), p.id).toBe('0');
+        // The working bee, away from them, stands alone.
+        expect(opacityAt(BEE)).toBe('1');
+    });
+
+    it('comes out as its own pin when the map zooms in, and the bubble goes', async () => {
+        await drawMap();
+        await act(async () => { maps.regionChanged({ latitude: CAFE.lat, longitude: CAFE.lng, latitudeDelta: 0.001, longitudeDelta: 0.001 }); });
+        await settle(2);
+        expect(bubbles()).toEqual([]);
+        for (const p of HALL) expect(opacityAt(p), p.id).toBe('1');
+    });
+
+    it('is among the pins a tap on the bubble fits to', async () => {
+        await drawMap();
+        await act(async () => { bubbles()[0].el.click(); });
+        expect(maps.fits.at(-1)).toEqual(expect.arrayContaining(HALL.map((p) => ({ latitude: p.lat, longitude: p.lng }))));
+        expect(maps.fits.at(-1)).toHaveLength(HALL.length);
+    });
+
+    it('under the Events pill the bubble counts the events alone: the listings have left the map', async () => {
+        await drawMap();
+        const events = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Events')!;
+        await act(async () => { events.click(); });
+        await settle();
+        expect(bubbles().map((b) => b.count)).toEqual([2]);
+        expect(markerAt(OFFER)).toBeNull();
+        expect(markerAt(NEED)).toBeNull();
+        expect(opacityAt(CAFE)).toBe('0');
+        expect(opacityAt(BEE)).toBe('1');
     });
 });

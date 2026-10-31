@@ -515,7 +515,7 @@ ci_head_state(){ # SHA → the required check on exactly that commit: green | re
   fi
   print -r -- "$s"; }
 ci_state(){ # PR → the required check on its head now: SUCCESS | FAILURE | CANCELLED | PENDING | UNKNOWN, empty when no run
-  # started. Not `gh pr checks | head -1`: since the shards, "Test-All" matches 14 other checks and the first one answered.
+  # started. Not `gh pr checks | head -1`: since the shards, "Test-All" matches every shard too and the first one answered.
   local sha
   sha=$(pr_head "$1") || { print UNKNOWN; return; }
   case "$(ci_head_state "$sha")" in

@@ -31,8 +31,12 @@ const push = vi.hoisted(() => vi.fn());
 vi.mock('expo-router', () => ({ router: { push, navigate: vi.fn(), replace: vi.fn(), back: vi.fn() } }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) }));
-vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
-vi.mock('../knock', () => ({ readKnockStatus: vi.fn(async () => null), cardKnockLines: () => [], sendKnock: vi.fn(), rememberKnock: vi.fn(), rememberedKnocks: vi.fn(async () => []) }));
+const kept = vi.hoisted(() => new Map<string, string>());
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async (key: string) => kept.get(key) ?? null), setItem: vi.fn(async (key: string, value: string) => { kept.set(key, value); }), removeItem: vi.fn() },
+}));
+const sendKnock = vi.hoisted(() => vi.fn());
+vi.mock('../knock', () => ({ readKnockStatus: vi.fn(async () => null), cardKnockLines: () => [], sendKnock, rememberKnock: vi.fn(), rememberedKnocks: vi.fn(async () => []) }));
 const posted = vi.hoisted(() => [] as { path: string; body: any }[]);
 vi.mock('../node-post', () => ({
     signedPost: vi.fn(async (_base: string, path: string, body: unknown) => {
@@ -47,6 +51,7 @@ vi.mock('../community-directory', async (original) => ({ ...(await original<Reco
 import { lightColors, darkColors } from '../../constants/colors';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import { MarketCircleLine } from '../../components/MarketCircleLine';
+import { circleIntents, setCircleIntent } from '../circle-intent';
 import type { GlobalHome } from '../community-directory';
 
 const identity = { publicKey: 'a'.repeat(64), privateKey: '00', callsign: 'Ana' } as never;
@@ -64,7 +69,7 @@ async function mount(element: unknown): Promise<HTMLElement> {
 const find = (home: GlobalHome, colors = lightColors) => mount(createElement(FindCommunityBody, { home, knocks: [], identity, nodeUrl: null, point: { lat: 10.52, lng: 76.21 }, colors }));
 const by = (host: HTMLElement, id: string) => host.querySelector(`[data-testid="${id}"]`);
 
-beforeEach(() => { document.body.innerHTML = ''; posted.length = 0; push.mockClear(); fetchHome.mockReset(); });
+beforeEach(() => { document.body.innerHTML = ''; posted.length = 0; push.mockClear(); fetchHome.mockReset(); kept.clear(); sendKnock.mockReset(); });
 afterEach(() => { document.body.innerHTML = ''; });
 
 describe.each([['light', lightColors], ['dark', darkColors]])('in the %s theme', (_name, colors) => {
@@ -98,6 +103,55 @@ describe.each([['light', lightColors], ['dark', darkColors]])('in the %s theme',
         expect(by(host, 'market-circle-line')?.textContent).toContain('5 people near you are waiting for a community too.');
         await act(async () => { (by(host, 'market-meet-them') as HTMLElement).click(); });
         expect(push).toHaveBeenCalledWith('/find-community');
+    });
+});
+
+describe('the knock a retired circle owes', () => {
+    const me = 'a'.repeat(64);
+    const retired = (acceptingKnocks: boolean) => ({
+        ...openCircle, doneAt: '2026-11-01T00:00:00.000Z', community: { key: 'k', name: 'Thrissur Commons', url: 'https://t.beanpool.org', acceptingKnocks },
+    });
+    /** Home's Find card, read twice. */
+    async function twoReads(first: GlobalHome['circle'], then: GlobalHome['circle']) {
+        const onKnocksChange = vi.fn();
+        const body = (circle: GlobalHome['circle']) => createElement(FindCommunityBody, {
+            home: noneNear({ circle }), knocks: [], identity, nodeUrl: null, point: { lat: 10.52, lng: 76.21 }, colors: lightColors, onKnocksChange,
+        }) as Parameters<Root['render']>[0];
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const root = createRoot(host);
+        await act(async () => { root.render(body(first)); });
+        const sentAtFirst = sendKnock.mock.calls.length;
+        await act(async () => { root.render(body(then)); });
+        return { sentAtFirst, onKnocksChange };
+    }
+
+    it('waits for a community that takes no requests yet, and goes on the read that says it does', async () => {
+        await setCircleIntent(me, 'c1', true);
+        sendKnock.mockResolvedValue({ kind: 'waiting', message: '' });
+        const { sentAtFirst, onKnocksChange } = await twoReads(retired(false), retired(true));
+        expect(sentAtFirst).toBe(0);
+        expect(sendKnock).toHaveBeenCalledTimes(1);
+        expect(await circleIntents(me)).toEqual([]);
+        expect(onKnocksChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('tries a community it could not reach again on the next read', async () => {
+        await setCircleIntent(me, 'c1', true);
+        sendKnock.mockResolvedValueOnce({ kind: 'unreachable', message: '' }).mockResolvedValue({ kind: 'waiting', message: '' });
+        await twoReads(retired(true), retired(true));
+        expect(sendKnock).toHaveBeenCalledTimes(2);
+        expect(await circleIntents(me)).toEqual([]);
+    });
+
+    it('still lists the request when a read lands while the knock is out', async () => {
+        await setCircleIntent(me, 'c1', true);
+        let answer: (r: unknown) => void = () => {};
+        sendKnock.mockReturnValue(new Promise(resolve => { answer = resolve; }));
+        const { onKnocksChange } = await twoReads(retired(true), retired(true));
+        expect(sendKnock).toHaveBeenCalledTimes(1);
+        await act(async () => { answer({ kind: 'waiting', message: '' }); });
+        expect(onKnocksChange).toHaveBeenCalledTimes(1);
     });
 });
 

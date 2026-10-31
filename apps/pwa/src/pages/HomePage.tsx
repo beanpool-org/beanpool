@@ -1115,17 +1115,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         return askPinned(ans, at, { hasOpenKnock });
     }, []);
 
-    // A community retired this member's circle, and they asked to join when one started: this browser asks, once.
+    // A community retired this member's circle, and they asked to join when one started: this browser asks, once. Each
+    // read looks again: one that takes no requests yet, or couldn't be reached, gets it on a later read (knockForCircle).
     const ownCircle = (answer?.cards?.find as HomeFind | undefined)?.circle ?? null;
-    const retiredBy = ownCircle?.community?.key;
     useEffect(() => {
-        if (!identity || !ownCircle || !retiredBy) return;
-        let alive = true;
+        if (!identity || !ownCircle) return;
         void knockForCircle(identity, ownCircle).then(async sent => {
-            if (sent && alive) setKnocks(await rememberedKnocks(identity.publicKey));
+            if (sent) setKnocks(await rememberedKnocks(identity.publicKey));
         });
-        return () => { alive = false; };
-    }, [identity?.publicKey, ownCircle?.id, retiredBy]);
+    }, [identity?.publicKey, ownCircle]);
 
     const currentPins = useCallback((ans: Pick<FrameAnswer, 'profile' | 'me' | 'cards'> | null | undefined, at: number = Date.now()) => {
         const hasOpenKnock = (knocksRef.current ?? knocks).some(k => !k.cancelledAt && knockStillAnswerable(k, at));

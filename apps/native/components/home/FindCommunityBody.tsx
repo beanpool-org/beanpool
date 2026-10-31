@@ -81,16 +81,14 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
 
     useEffect(() => setCircle(home.circle ?? null), [home.circle]);
 
-    // A community retired this phone's circle, and the member asked to join when one started: this phone asks, once.
-    const retiredBy = home.circle?.community?.key;
+    // A community retired this phone's circle, and the member asked to join when one started: this phone asks, once. Each
+    // read looks again: one that takes no requests yet, or couldn't be reached, gets it on a later read (knockForCircle).
     useEffect(() => {
-        if (!identity || !home.circle || !retiredBy) return;
-        let alive = true;
+        if (!identity || !home.circle) return;
         void knockForCircle(identity, home.circle).then(async sent => {
-            if (sent && alive) onKnocksChange?.(await rememberedKnocks(identity.publicKey));
+            if (sent) onKnocksChange?.(await rememberedKnocks(identity.publicKey));
         });
-        return () => { alive = false; };
-    }, [identity?.publicKey, home.circle?.id, retiredBy]);
+    }, [identity?.publicKey, home.circle]);
 
     // Only the communities this phone asked, once per request it remembers (a new request to the same community is read anew).
     const knockKey = activeKnocks.map(requestKey).join(' ');

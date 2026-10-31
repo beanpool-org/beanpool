@@ -45,6 +45,7 @@ vi.mock('../lib/sync', () => ({ onSyncActivity: vi.fn(() => () => {}), onSocketO
 import * as api from '../lib/api';
 import { HomePage, WATCH_WORDS } from './HomePage';
 import { rememberKnock } from '../lib/knock';
+import { circleIntents, setCircleIntent } from '../lib/circle-intent';
 import * as knockModule from '../lib/knock';
 
 const { done: WATCH_DONE, joinFirst: WATCH_JOIN_FIRST, needsPlace: WATCH_NEEDS_PLACE } = WATCH_WORDS;
@@ -85,6 +86,39 @@ async function memberAtLismore() {
     fireEvent.click(screen.getByTestId('town-search'));
     return screen.findByTestId('home-find-actions');
 }
+
+describe('the knock a retired circle owes', () => {
+    const retired = (acceptingKnocks: boolean) => ({
+        id: 'c1', people: 4, starting: null, doneAt: '2026-11-01T00:00:00.000Z',
+        community: { key: 'thrissur', name: 'Thrissur Commons', url: 'https://thrissur.beanpool.org', acceptingKnocks },
+    });
+    const knocksSent = () => vi.mocked(api.signedFetchAt).mock.calls.filter(c => c[0] === 'POST');
+    /** A read of Home with this circle, then the town the member picks, and with it the next read. */
+    async function twoReads(first: HomeFind['circle'], then: HomeFind['circle']) {
+        vi.mocked(api.signedFetchAt).mockClear();
+        setCircleIntent(ME.publicKey, 'c1', true);
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, circle: first }, true))).mockResolvedValue(fresh(globalAnswer({ circle: then }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        await act(async () => { await Promise.resolve(); });
+        const sentAtFirst = knocksSent().length;
+        vi.mocked(api.signedFetchAt).mockImplementationOnce(async () => new Response('{}', { status: 201 }));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(knocksSent().length).toBe(sentAtFirst + 1));
+        return sentAtFirst;
+    }
+
+    it('waits for a community that takes no requests yet, and goes on the read that says it does', async () => {
+        expect(await twoReads(retired(false), retired(true))).toBe(0);
+        await waitFor(() => expect(circleIntents(ME.publicKey)).toEqual([]));
+        await waitFor(async () => expect((await knockModule.rememberedKnocks(ME.publicKey)).map(k => k.url)).toEqual(['https://thrissur.beanpool.org']));
+    });
+
+    it('tries a community it could not reach again on the next read', async () => {
+        expect(await twoReads(retired(true), retired(true))).toBe(1);
+        await waitFor(() => expect(circleIntents(ME.publicKey)).toEqual([]));
+    });
+});
 
 describe('the web find card with no community near', () => {
     it('a member is told when one starts: the watch is sent at the point Home was read from, then the button goes', async () => {

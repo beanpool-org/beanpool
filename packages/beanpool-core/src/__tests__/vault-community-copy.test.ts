@@ -36,6 +36,7 @@ import {
     vaultVoucherHoldId,
     vaultVoucherToSign,
     VAULT_COMMUNITY_PROVIDER,
+    VAULT_VOUCHER_CLOCK_SKEW_MS,
     VAULT_VOUCHER_TTL_MS,
     type VaultVoucher,
 } from '../vault-wire.js';
@@ -164,6 +165,14 @@ describe('the community\'s voucher', () => {
         expect(checkVaultVoucher(sign(voucher({ exp: NOW })), { now: NOW, key: PHONE })).toEqual({ ok: false, reason: 'expired' });
         expect(checkVaultVoucher(sign(voucher({ exp: NOW + VAULT_VOUCHER_TTL_MS })), { now: NOW, key: PHONE }).ok).toBe(true);
         expect(checkVaultVoucher(sign(voucher({ exp: NOW + 7 * VAULT_VOUCHER_TTL_MS })), { now: NOW, key: PHONE })).toEqual({ ok: false, reason: 'malformed' });
+    });
+
+    it('takes a community\'s server some minutes ahead of the vault: its clock sets the expiry and the vault\'s reads it', () => {
+        // A code made just now, by a clock five minutes ahead: a fresh voucher, not a long-lived one.
+        expect(checkVaultVoucher(sign(voucher({ exp: NOW + VAULT_VOUCHER_TTL_MS + 5 * 60_000 })), { now: NOW, key: PHONE }).ok).toBe(true);
+        const latest = NOW + VAULT_VOUCHER_TTL_MS + VAULT_VOUCHER_CLOCK_SKEW_MS;
+        expect(checkVaultVoucher(sign(voucher({ exp: latest })), { now: NOW, key: PHONE }).ok).toBe(true);
+        expect(checkVaultVoucher(sign(voucher({ exp: latest + 1 })), { now: NOW, key: PHONE })).toEqual({ ok: false, reason: 'malformed' });
     });
 
     it('has one spelling, so one voucher is one hold', () => {

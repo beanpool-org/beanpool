@@ -507,6 +507,13 @@ export function openVaultRelease(box: unknown, requesterPrivateKey: Uint8Array):
 export const VAULT_VOUCHER_TAG = 'beanpool-vault-voucher/1';
 /** The most a voucher may live: a bring-back code's day. Far short of how long the vault keeps a hold (a week). */
 export const VAULT_VOUCHER_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * How far a voucher's expiry may sit beyond a code's day before it is refused. A community's own server sets that expiry by
+ * its clock and the vault reads it by the vault's, so a server some minutes ahead makes a fresh voucher look too long-lived,
+ * and every new code it makes would be refused the same way. Ten minutes is a ticket's whole life: a server further ahead
+ * than that finds every vault ticket expired on arrival, and its log says to check its clock (the server's open-join.ts).
+ */
+export const VAULT_VOUCHER_CLOCK_SKEW_MS = 10 * 60 * 1000;
 /** Longer than any voucher a node makes (about 500 characters). */
 const MAX_VOUCHER_CHARS = 1024;
 
@@ -602,7 +609,7 @@ export function checkVaultVoucher(voucher: unknown, opts: { now: number; key: st
     }
     if (!valid) return { ok: false, reason: 'signature' };
     if (parsed.payload.exp <= opts.now) return { ok: false, reason: 'expired' };
-    if (parsed.payload.exp > opts.now + VAULT_VOUCHER_TTL_MS + VAULT_TICKET_CLOCK_SKEW_MS) return { ok: false, reason: 'malformed' };
+    if (parsed.payload.exp > opts.now + VAULT_VOUCHER_TTL_MS + VAULT_VOUCHER_CLOCK_SKEW_MS) return { ok: false, reason: 'malformed' };
     if (parsed.payload.phone !== opts.key) return { ok: false, reason: 'wrong_key' };
     return { ok: true, voucher: parsed.payload, holdId: vaultVoucherHoldId(parsed.payloadB64) };
 }

@@ -16,9 +16,10 @@ import {
     vaultCopyDigest,
     vaultVoucherToSign,
     VAULT_COMMUNITY_PROVIDER,
+    VAULT_VOUCHER_CLOCK_SKEW_MS,
     type VaultVoucher,
 } from '@beanpool/core';
-import { VaultDb } from '../api/db.js';
+import { HOLD_KEEP_AFTER_END_MS, VaultDb } from '../api/db.js';
 import { LIMITS, MAX_COMMUNITY_COPIES_PER_KEY } from '../api/server.js';
 import { noticeFor } from '../api/push.js';
 import { deposit, doGenesis, newMember, scan, signed, startVault, type Genesis, type Member, type VaultUnderTest } from './harness.js';
@@ -267,6 +268,24 @@ describe('a voucher in place of a sign-in', () => {
         const tooLong = newPhone(node, member, made, v.clock.now() + 30 * DAY);
         expect((await restoreWith(tooLong.e, tooLong.voucher)).body.code).toBe('voucher_malformed');
         expect((await signed(v, '/v1/restore', { provider: VAULT_COMMUNITY_PROVIDER, ticket: await ticket(e, 'restore'), voucher: 'nope' }, e)).status).toBe(401);
+    });
+
+    it('a community\'s server some minutes ahead of the vault gets its hold: a fresh voucher is not refused for that server\'s clock', async () => {
+        const member = newMember();
+        const node = newNode();
+        const { made } = await depositCommunity(member, node);
+        const tooFar = newPhone(node, member, made, v.clock.now() + DAY + VAULT_VOUCHER_CLOCK_SKEW_MS + 1);
+        expect((await restoreWith(tooFar.e, tooFar.voucher)).body.code).toBe('voucher_malformed');
+
+        // A code made just now, by a clock five minutes ahead: its day ends a day and five minutes from now, by the vault's.
+        const ahead = newPhone(node, member, made, v.clock.now() + DAY + 5 * 60_000);
+        const held = await restoreWith(ahead.e, ahead.voucher);
+        expect(held.status).toBe(200);
+        expect(held.body.status).toBe('held');
+    });
+
+    it('the longest voucher ends long before a stopped hold is forgotten, so a Stop stays a Stop', () => {
+        expect(DAY + VAULT_VOUCHER_CLOCK_SKEW_MS).toBeLessThan(HOLD_KEEP_AFTER_END_MS);
     });
 
     it('a ticket is spent once a voucher checks out, and not before', async () => {

@@ -2759,7 +2759,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                             <TagPicker
                                 tags={eventTags}
                                 onChange={setEventTags}
-                                category="community"
+                                category="general"
                                 title={newPostTitle}
                                 description={newPostDescription}
                             />

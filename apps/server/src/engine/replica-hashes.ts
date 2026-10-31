@@ -62,7 +62,10 @@ export interface TableHashes {
  * updated before its main server hashes `posts` over one more column, so it would read every copy as "posts not exact"
  * and force-resync until the main server is updated; with the version raised, the two compare row counts only until then.
  */
-export const TABLE_HASHES_VERSION = 8;
+/**
+ * 9: posts gains free_tags (DESIGN-tags-free-entry-fable.md §2, slice F1). Raised for the same reason as 8.
+ */
+export const TABLE_HASHES_VERSION = 9;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { parseReachPeers } from '@beanpool/core';
+import { freeTagsOf, parseReachPeers } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -1035,6 +1035,8 @@ function postOfRow(row: any): MarketplacePost {
         ...(row.created_via != null ? { createdVia: row.created_via } : {}),
         // Its tags, as the main server holds them (apps/server engine/sync.ts postTags): none said is none.
         ...(typeof row.tags === 'string' && row.tags ? { tags: row.tags.split(' ').filter(Boolean) } : {}),
+        // The tags its author typed, as the main server holds them (apps/server engine/sync.ts postFreeTags): none said is none.
+        ...(freeTagsOf(row.free_tags).length > 0 ? { freeTags: freeTagsOf(row.free_tags) } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

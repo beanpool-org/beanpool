@@ -223,7 +223,7 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
             inputSchema: t.inputSchema as any,
             outputSchema: t.outputSchema as any,
             annotations: t.write
-                ? { title: t.title, readOnlyHint: false, idempotentHint: t.name === 'take_backup', destructiveHint: false, openWorldHint: false }
+                ? { title: t.title, readOnlyHint: false, idempotentHint: t.name === 'take_backup', destructiveHint: t.destructive === true, openWorldHint: false }
                 : { title: t.title, readOnlyHint: true, openWorldHint: false },
         })),
     }));
@@ -250,6 +250,8 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
             ...logBase, tool: tool.name, args: argNames, rows: out.ok ? out.rows : 0, ok: out.ok, ms: Date.now() - started,
             // The post an owner's assistant made (agent/owner-posts.ts): the audit names it.
             ...(out.ok && typeof out.result.postId === 'string' ? { post: out.result.postId } : {}),
+            // The posts it removed (remove_post, remove_all_i_made): the audit names each.
+            ...(out.ok && Array.isArray(out.result.removed) ? { removed: (out.result.removed as string[]).slice(0, 200) } : {}),
         });
         if (!out.ok) return { content: [{ type: 'text' as const, text: out.error }], isError: true };
         return { content: [{ type: 'text' as const, text: JSON.stringify(out.result) }], structuredContent: out.result };

@@ -45,6 +45,14 @@ interface AgentGrantRow {
     /** "May post for me", ticked when it was connected (a server older than it sends none). */
     canPost?: boolean;
     postsToday?: number;
+    /** Its posts still up (slice S2), which "Remove its posts" takes down (a server older than it sends none). */
+    madePosts?: number;
+}
+
+/** An assistant disconnected or expired whose posts are still up (slice S2): an owner removes them by its id. */
+interface DisconnectedRow {
+    id: string;
+    madePosts: number;
 }
 
 interface GrantsAnswer {
@@ -63,6 +71,8 @@ interface GrantsAnswer {
     postsPerDayMin?: number;
     postsPerDayMax?: number;
     grants: AgentGrantRow[];
+    /** An owner's list only. */
+    disconnected?: DisconnectedRow[];
 }
 
 interface PreviewTool {
@@ -120,6 +130,9 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
     const proof = useFreshProof();
     // Connecting one ticked "May post for me" asks the same fresh proof (server agent/grants-route.ts); its own box, by the form.
     const makeProof = useFreshProof();
+    // "Remove its posts" asks the same fresh proof each time (server agent/grants-route.ts remove-made).
+    const removeProof = useFreshProof();
+    const [removeMessage, setRemoveMessage] = useState('');
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState('');
     // The one-time token: component state only.
@@ -296,6 +309,49 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
         }
         await load();
     };
+
+    // Every post an assistant made that is still up, taken down as their author would (server agent/owner-posts.ts
+    // removeAllMadeBy), for a disconnected one too. `code`: the fresh proof typed in the box, when the node asked one.
+    const handleRemoveMade = async (id: string, label: string, count: number, code?: string) => {
+        if (code === undefined && !(await ask({
+            title: `Remove the ${count} post${count === 1 ? '' : 's'} ${label} made?`,
+            body: 'Each is taken down as its author would take it down; an event is cancelled and its goers told. One with a deal in escrow stays up.',
+            confirmLabel: 'Remove its posts',
+        }))) return;
+        setRemoveMessage('');
+        setBusy(true);
+        try {
+            const { res, json } = await post(`${GRANTS}/${encodeURIComponent(id)}/remove-made`, { ...proofField(code) });
+            throwIfFreshProof(res.status, json);
+            removeProof.close();
+            if (res.ok) {
+                const removed = Array.isArray(json.removed) ? json.removed.length : 0;
+                const kept = Array.isArray(json.kept) ? json.kept.length : 0;
+                setRemoveMessage(`Removed ${removed} post${removed === 1 ? '' : 's'}${kept ? `; ${kept} stay up (a deal in escrow, or an enterprise no longer kept)` : ''}.`);
+            } else {
+                setRemoveMessage(`Not removed: ${json.error || `HTTP ${res.status}`}`);
+            }
+        } catch (e: unknown) {
+            if (removeProof.checkError(e, (c) => handleRemoveMade(id, label, count, c), code)) return;
+            setRemoveMessage(e instanceof Error ? e.message : String(e));
+        } finally {
+            setBusy(false);
+        }
+        await load();
+    };
+
+    const removeButton = (id: string, label: string, count: number) => (
+        <button
+            type="button"
+            onClick={() => void handleRemoveMade(id, label, count)}
+            disabled={busy}
+            aria-label={`Remove its posts: ${label}`}
+            data-testid="agent-remove-made"
+            className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 disabled:opacity-50"
+        >
+            Remove its posts
+        </button>
+    );
 
     const openPreview = async (forId: string) => {
         if (previewFor === forId) {
@@ -672,6 +728,11 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                                         : 'Reads only: not ticked to post'}
                                                 </p>
                                             )}
+                                            {typeof g.madePosts === 'number' && g.madePosts > 0 && (
+                                                <p className="text-[11px] text-nature-400 m-0 break-words" data-testid="agent-grant-made">
+                                                    Made: {g.madePosts} post{g.madePosts === 1 ? '' : 's'} still up
+                                                </p>
+                                            )}
                                             <p className="text-[11px] text-nature-400 m-0 break-words">
                                                 {g.expired ? 'Expired' : g.via === 'oauth' ? 'Until disconnected, or 30 days unused' : `Until ${g.expiresAt ? formatDay(g.expiresAt) : 'disconnected'}`}
                                             </p>
@@ -701,12 +762,28 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                             >
                                                 Disconnect
                                             </button>
+                                            {isOwner && typeof g.madePosts === 'number' && g.madePosts > 0 && removeButton(g.id, `"${g.name}"`, g.madePosts)}
                                         </div>
                                         {previewFor === g.id && previewPanel}
                                     </li>
                                 ))}
                             </ul>
                         )}
+                        {isOwner && (data.disconnected ?? []).length > 0 && (
+                            <ul className="list-none p-0 m-0 space-y-2" data-testid="agent-disconnected-list">
+                                {(data.disconnected ?? []).map((d) => (
+                                    <li key={d.id} className="p-3 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-disconnected-row">
+                                        <p className="text-xs font-bold text-white m-0 break-words">A disconnected assistant</p>
+                                        <p className="text-[11px] text-nature-400 m-0 break-words">
+                                            Made: {d.madePosts} post{d.madePosts === 1 ? '' : 's'} still up
+                                        </p>
+                                        <div className="flex flex-col sm:flex-row gap-2">{removeButton(d.id, 'a disconnected assistant', d.madePosts)}</div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        <FreshProofBox proof={removeProof} testId="agent-remove-proof" />
+                        {removeMessage && <p className="text-[11px] text-nature-300 m-0 break-words" role="status">{removeMessage}</p>}
                     </div>
                 </>
             )}

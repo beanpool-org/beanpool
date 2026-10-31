@@ -335,9 +335,9 @@ async function main(): Promise<void> {
         assert(modList.status === 403, `a moderator sees none (${show(modList)})`);
         const row = (ownerList.body?.grants ?? []).find((g: any) => g.name === "Adam's Claude");
         assert(!!row && row.member === 'Adam' && row.role === 'admin' && row.via === 'token' && row.lastUsedAt === null && row.callsToday === 0 && row.mine === false
-            && Object.keys(row).sort().join() === 'callsToday,canPost,createdAt,expired,expiresAt,id,lastUsedAt,member,mine,name,postsToday,role,via'
-            && row.canPost === false && row.postsToday === 0,
-        `each row: member, name, role, via, last used, calls today, "May post for me" and posts today, and nothing else (${JSON.stringify(row)})`);
+            && Object.keys(row).sort().join() === 'callsToday,canPost,createdAt,expired,expiresAt,id,lastUsedAt,madePosts,member,mine,name,postsToday,role,via'
+            && row.canPost === false && row.postsToday === 0 && row.madePosts === 0,
+        `each row: member, name, role, via, last used, calls today, "May post for me", posts today and its posts still up (slice S2), and nothing else (${JSON.stringify(row)})`);
         assert(ownerList.body?.mcpUrl === `https://localhost:${port}/mcp` && ownerList.body?.defaultDays === 30 && ownerList.body?.maxDays === 90,
             `the list gives the address to paste and the days (${ownerList.body?.mcpUrl})`);
 

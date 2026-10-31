@@ -39,6 +39,13 @@
  * - The row records `created_via = 'assistant:<grant id>'` (schema.sql posts.created_via); the AGENT line of every create
  *   names the post id (mcp-route.ts). Revoking the grant or turning the switch off stops the next call at the door; posts
  *   made stay, and are deleted as any post is.
+ * - Slice S2 (design §2.3, §2.7): `my_posts`, `update_post`, `remove_post` and `remove_all_i_made` act only on a post THIS
+ *   grant made (created_via = 'assistant:<this grant id>'), still by the owner or an enterprise they keep now: never another
+ *   member's post, nor one the owner made in the app, nor another assistant's. Through the routes' own engine calls
+ *   (updatePost, removePost): an edit holds to the create's fields, a deal in escrow keeps a post up, and no tool moves a
+ *   Bean. 200 edits a day; remove_all_i_made once a day. The owner's own "Remove its posts" in Settings
+ *   (agent/grants-route.ts) runs the same removal (removeAllMadeBy), for a disconnected assistant too, and both write an
+ *   ADMIN line naming the ids removed.
  * - An answer carries the new post's id and its link in the app (`/?post=<id>`, a path the assistant joins to the address in
  *   its welcome), an event's start and end as its members see them, and the day's count: no key, no token, nothing about
  *   another member. An event's times must carry their offset: one without would be read in this server's own zone.
@@ -48,10 +55,11 @@ import { approximateLocation, PRICING_CATEGORIES } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { featureOffFor } from '../routes/profile-feature-gate.js';
-import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS } from '../state-engine.js';
+import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS, removePost, updatePost } from '../state-engine.js';
+import { logger } from '../logger.js';
 import { createEventFromBody } from '../routes/event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
-import { assertMayAddPhotos, assertMayPost } from '../engine/probation.js';
+import { assertMayAddPhotos, assertMayEditPhotos, assertMayPost } from '../engine/probation.js';
 import { enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -63,7 +71,10 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { memberErrorText } from '../routes/member-error-text.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
-import { admitAgentCreate, agentCreatesToday, agentPostsPerDay, returnAgentCreate } from './limits.js';
+import {
+    admitAgentCreate, admitAgentEdit, admitAgentRemoveAll, agentCreatesToday, agentEditsToday, agentPostsPerDay, returnAgentCreate, returnAgentEdit,
+    AGENT_EDITS_PER_DAY, AGENT_LIST_MAX,
+} from './limits.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 export const AGENT_POST_PHOTOS_MIN = 1;
@@ -657,5 +668,310 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         },
         outputSchema: POST_OUT,
         run: (grant, args) => createListing(grant, { kind: args.kind === 'need' ? 'need' : 'offer', args, enterprise: true }),
+    },
+];
+
+/** A post this grant made, as it is now: for update_post, remove_post and the undo list. */
+interface MadeRow {
+    id: string; type: string; status: string; active: number; title: string; author_pubkey: string; created_by: string | null; created_at: string;
+}
+
+/** The words for a post that is not this assistant's to change (design §2.3). */
+const NOT_MADE_HERE = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
+
+/**
+ * The post `postId` names, when THIS grant made it (created_via) and it is this community's own (not a copy pulled from
+ * another), still by the owner or an enterprise they keep now; else why not, in words.
+ */
+function madePost(grant: AgentGrant, postId: unknown): { ok: true; row: MadeRow } | { ok: false; error: string } {
+    if (typeof postId !== 'string' || !postId.trim()) return { ok: false, error: 'post_id is required: the id a create answered, or my_posts lists.' };
+    const row = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at FROM posts
+        WHERE id = ? AND created_via = ? AND origin_node IS NULL`).get(postId.trim().slice(0, 200), createdViaOf(grant)) as MadeRow | undefined;
+    if (!row) return { ok: false, error: NOT_MADE_HERE };
+    if (row.author_pubkey !== grant.member && !(row.created_by === grant.member && canOperateTreasury(grant.member, row.author_pubkey))) {
+        return { ok: false, error: "That post is an enterprise's you no longer keep: its keepers edit or remove it in the app." };
+    }
+    return { ok: true, row };
+}
+
+const isLive = (r: Pick<MadeRow, 'active' | 'status'>): boolean => r.active === 1 && r.status !== 'cancelled';
+
+/** The refusals before an edit, a removal or the undo list: an owner's grant ticked "May post for me", on a server still this community's. */
+function tendGate(grant: AgentGrant): string | null {
+    if (grant.role !== 'owner') return "Only an owner's assistant can change posts: an admin's cannot.";
+    if (!grant.canPost) return NOT_TICKED;
+    const replaced = getReplacedInfo();
+    if (replaced) return `${replaced.message} This server takes no changes now; use the one that took over.`;
+    return null;
+}
+
+/** update_post: the fields an edit may change, by the tools' own names, through the route's own updatePost. */
+async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Promise<ToolResult> {
+    const refused = tendGate(grant);
+    if (refused) return { ok: false, error: refused };
+    const made = madePost(grant, args.post_id);
+    if (!made.ok) return made;
+    const { row } = made;
+    if (!isLive(row) || row.status !== 'active') return { ok: false, error: `That post is ${isLive(row) ? row.status : 'removed'} now: only a live post is edited.` };
+    const event = row.type === 'event';
+    const updates: Record<string, unknown> = {};
+    for (const k of ['title', 'description'] as const) {
+        if (args[k] === undefined) continue;
+        if (!isText(args[k])) return { ok: false, error: `${k} is empty: send the new ${k}, or leave it out to keep it.` };
+        updates[k] = (args[k] as string).trim();
+    }
+    const tooLong = updates.title !== undefined ? titleTooLong(args, event ? AGENT_TITLE_MAX.event : AGENT_TITLE_MAX.listing) : null;
+    if (tooLong) return { ok: false, error: tooLong };
+    if (event && (args.category !== undefined || args.beans !== undefined || args.price_type !== undefined)) {
+        return { ok: false, error: 'An event has no category or price: send title, description or photos.' };
+    }
+    if (args.category !== undefined) {
+        const category = typeof args.category === 'string' ? args.category.trim() : '';
+        if (!AGENT_POST_CATEGORIES.includes(category)) return { ok: false, error: `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.` };
+        updates.category = category;
+    }
+    if (args.beans !== undefined) {
+        const beans = num(args.beans);
+        if (beans === undefined || beans < 0) return { ok: false, error: 'beans is the price in Beans: a number, 0 or more.' };
+        // An enterprise's listing keeps a price of more than 0, as its form asks (create_enterprise_listing).
+        if (row.author_pubkey !== grant.member && beans <= 0) return { ok: false, error: "beans must be more than 0: an enterprise's listing has a price, as its form asks." };
+        updates.credits = beans;
+    }
+    if (args.price_type !== undefined) updates.priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
+    if (args.photos !== undefined) {
+        const photos = await photosFrom(args.photos);
+        if (!photos.ok) return photos;
+        updates.photos = photos.photos;
+    }
+    if (!Object.keys(updates).length) return { ok: false, error: 'Send at least one field to change: title, description, category, beans, price_type or photos.' };
+    if (!admitAgentEdit(grant.id)) {
+        return { ok: false, error: `This assistant has made ${AGENT_EDITS_PER_DAY} edits today, the most a day allows: try again tomorrow (UTC).` };
+    }
+    const owner = grant.member;
+    try {
+        // What POST /api/marketplace/posts/update runs after its signature check: the mute, the photo allowance, then the
+        // engine's own edit, which holds every field to the create's rules and lets a keeper edit their enterprise's.
+        assertNotMuted(owner);
+        const photos = updates.photos as string[] | undefined;
+        if (photos) assertMayEditPhotos(owner, row.id, Math.min(photos.length, 5), photos.length);
+        const post = updatePost(row.id, row.author_pubkey, updates as Parameters<typeof updatePost>[2], owner, {});
+        if (!post) {
+            returnAgentEdit(grant.id);
+            return { ok: false, error: 'The post could not be changed now: try again later.' };
+        }
+        return {
+            ok: true, rows: 1,
+            result: {
+                postId: row.id, kind: row.type, link: `/?post=${encodeURIComponent(row.id)}`,
+                changed: Object.keys(args).filter((k) => k !== 'post_id'), editsToday: agentEditsToday(grant.id), editsPerDay: AGENT_EDITS_PER_DAY,
+            },
+        };
+    } catch (e) {
+        returnAgentEdit(grant.id);
+        return { ok: false, error: refusalText(e, grant, 'The post could not be changed: try again later.') };
+    }
+}
+
+/** One post taken down by `member` through the route's own removePost (the author, or the keeper who made it); why not, in words. */
+function removeOne(postId: string, member: string): { ok: true } | { ok: false; error: string } {
+    try {
+        if (!removePost(postId, member)) return { ok: false, error: 'It could not be removed here: its author or keeper removes it in the app.' };
+        syncPulseMarketplaceGate();
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: memberErrorText(e, 'It could not be removed now: try again later.') };
+    }
+}
+
+/** The ADMIN line of a removal of what an assistant made: the grant, who asked, and the ids (design §2.8). */
+function logRemoval(grantId: string, ids: string[], via: 'assistant' | 'settings', by: string): void {
+    logger.info('ADMIN', 'Posts an AI assistant made removed', { grant: grantId, via, by: by.slice(0, 16), count: ids.length, posts: ids.slice(0, 200) });
+}
+
+function removeMade(grant: AgentGrant, args: Record<string, unknown>): ToolResult {
+    const refused = tendGate(grant);
+    if (refused) return { ok: false, error: refused };
+    const made = madePost(grant, args.post_id);
+    if (!made.ok) return made;
+    if (!isLive(made.row)) return { ok: false, error: 'That post is already removed.' };
+    const out = removeOne(made.row.id, grant.member);
+    if (!out.ok) return out;
+    logRemoval(grant.id, [made.row.id], 'assistant', grant.member);
+    return { ok: true, rows: 1, result: { removed: [made.row.id], kept: [] } };
+}
+
+/** The confirmation remove_all_i_made asks, said out loud (design §2.3). */
+export const REMOVE_ALL_CONFIRM = 'remove everything this assistant made';
+
+export interface RemovedMade {
+    removed: string[];
+    /** Posts still up (a deal in escrow, an enterprise its maker no longer keeps), each with why, in words. */
+    kept: Array<{ postId: string; why: string }>;
+}
+
+/**
+ * Every live post the assistant `grantId` made, taken down by the member it acted for (the keeper who made an enterprise's,
+ * else the author), through the route's own removePost: remove_all_i_made, and the owner's "Remove its posts" in Settings,
+ * which works whether or not the grant is still connected (its id is on the rows). Never a post it did not make.
+ */
+export function removeAllMadeBy(grantId: string, via: 'assistant' | 'settings', by: string): RemovedMade {
+    const rows = db.prepare(`SELECT id, author_pubkey, created_by FROM posts WHERE created_via = ? AND origin_node IS NULL
+        AND active = 1 AND status != 'cancelled' ORDER BY created_at`).all(`assistant:${grantId}`) as Array<{ id: string; author_pubkey: string; created_by: string | null }>;
+    const result: RemovedMade = { removed: [], kept: [] };
+    for (const row of rows) {
+        const out = removeOne(row.id, row.created_by ?? row.author_pubkey);
+        if (out.ok) result.removed.push(row.id);
+        else result.kept.push({ postId: row.id, why: out.error });
+    }
+    logRemoval(grantId, result.removed, via, by);
+    return result;
+}
+
+/** How many live posts the assistant `grantId` made (Settings' "Made: N posts"). */
+export function madePostsCount(grantId: string): number {
+    return (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE created_via = ? AND origin_node IS NULL AND active = 1 AND status != 'cancelled'`)
+        .get(`assistant:${grantId}`) as { c: number }).c;
+}
+
+/** The grants that made live posts here, by id: Settings lists the ones whose assistant is gone ("a disconnected assistant"). */
+export function grantIdsWithMadePosts(): string[] {
+    return (db.prepare(`SELECT DISTINCT substr(created_via, 11) AS id FROM posts WHERE created_via LIKE 'assistant:%' AND origin_node IS NULL
+        AND active = 1 AND status != 'cancelled'`).all() as Array<{ id: string }>).map((r) => r.id);
+}
+
+/** my_posts: what THIS grant made, newest first (design §2.2: the undo list). */
+function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: string): ToolResult {
+    const status = args.status === 'removed' ? 'removed' : args.status === 'all' ? 'all' : 'live';
+    const n = Math.floor(Number(args.limit));
+    const limit = Number.isFinite(n) && n >= 1 ? Math.min(n, AGENT_LIST_MAX) : 20;
+    const where = status === 'live' ? `AND active = 1 AND status != 'cancelled'` : status === 'removed' ? `AND (active = 0 OR status = 'cancelled')` : '';
+    const rows = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at FROM posts
+        WHERE created_via = ? AND origin_node IS NULL ${where} ORDER BY created_at DESC LIMIT ?`).all(createdViaOf(grant), limit) as MadeRow[];
+    const total = (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE created_via = ? AND origin_node IS NULL ${where}`).get(createdViaOf(grant)) as { c: number }).c;
+    return {
+        ok: true, rows: rows.length,
+        result: {
+            status, total, returned: rows.length,
+            posts: rows.map((r) => ({
+                postId: r.id, kind: r.type, status: isLive(r) ? r.status : 'removed', createdAt: r.created_at,
+                by: r.author_pubkey === grant.member ? 'me' : `enterprise:${enterpriseRef(r.author_pubkey)}`,
+                link: `/?post=${encodeURIComponent(r.id)}`,
+                title: fence(boundary, `post ${r.id}, title`, r.title),
+            })),
+            _notice: MEMBER_TEXT_NOTICE,
+        },
+    };
+}
+
+const POST_ID_PROP = { post_id: { type: 'string', description: 'the id a create answered (my_posts lists them)' } };
+const REMOVED_OUT = {
+    type: 'object',
+    properties: { removed: { type: 'array', items: { type: 'string' } }, kept: { type: 'array' } },
+    required: ['removed', 'kept'],
+};
+
+/** Slice S2's rows (design §2.3, §2.7): the undo list, and tending what this assistant made, nothing else. */
+export const OWNER_TEND_TOOLS: AgentTool[] = [
+    {
+        name: 'my_posts',
+        title: 'Posts this assistant made',
+        reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
+            + 'its link and its title, fenced; the live ones (the default), the removed ones, or all',
+        never: "a post made in the app or by another assistant, another member's data, or a key",
+        memberText: true,
+        ownerOnly: true,
+        posts: true,
+        inputSchema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', enum: ['live', 'removed', 'all'], description: 'live (default), removed or all' },
+                limit: { type: 'integer', minimum: 1, maximum: AGENT_LIST_MAX },
+            },
+            additionalProperties: false,
+        },
+        outputSchema: {
+            type: 'object',
+            properties: { status: { type: 'string' }, total: { type: 'number' }, returned: { type: 'number' }, posts: { type: 'array' } },
+            required: ['status', 'total', 'returned', 'posts'],
+        },
+        run: (grant, args, boundary) => {
+            const refused = tendGate(grant);
+            return refused ? { ok: false, error: refused } : myPosts(grant, args, boundary);
+        },
+    },
+    {
+        name: 'update_post',
+        title: 'Edit a post this assistant made',
+        reads: `nothing: it changes the title, description, category, price or photos of a live post THIS assistant made, as the app's edit does, `
+            + `at most ${AGENT_EDITS_PER_DAY} edits a day; any other post is refused`,
+        never: "anything but the post's id and its link, or another member's data; it never moves Beans",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        inputSchema: {
+            type: 'object',
+            properties: {
+                ...POST_ID_PROP,
+                title: { type: 'string', description: `the new title: at most ${AGENT_TITLE_MAX.listing} characters for an Offer or a Need, ${AGENT_TITLE_MAX.event} for an event` },
+                description: { type: 'string', description: 'the new details' },
+                category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: "an Offer's or a Need's new Market category" },
+                beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
+                price_type: { type: 'string', enum: ['fixed', 'hourly'] },
+                photos: { ...PHOTOS_SCHEMA, description: `in place of the ones it has: ${PHOTOS_SCHEMA.description}` },
+            },
+            required: ['post_id'],
+            additionalProperties: false,
+        },
+        outputSchema: {
+            type: 'object',
+            properties: {
+                postId: { type: 'string' }, kind: { type: 'string' }, link: { type: 'string' }, changed: { type: 'array' },
+                editsToday: { type: 'number' }, editsPerDay: { type: 'number' },
+            },
+            required: ['postId', 'kind', 'link', 'changed', 'editsToday', 'editsPerDay'],
+        },
+        run: (grant, args) => updateMade(grant, args),
+    },
+    {
+        name: 'remove_post',
+        title: 'Remove a post this assistant made',
+        reads: 'nothing: it takes down one live post THIS assistant made, as its author does in the app (an event is cancelled and its goers told); '
+            + 'one with a deal in escrow stays up; any other post is refused',
+        never: "another member's data; it never moves Beans",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        destructive: true,
+        inputSchema: { type: 'object', properties: POST_ID_PROP, required: ['post_id'], additionalProperties: false },
+        outputSchema: REMOVED_OUT,
+        run: (grant, args) => removeMade(grant, args),
+    },
+    {
+        name: 'remove_all_i_made',
+        title: 'Remove everything this assistant made',
+        reads: `nothing: it takes down every live post THIS assistant made, once a day, when confirm is "${REMOVE_ALL_CONFIRM}"; `
+            + 'one with a deal in escrow stays up and is listed back with why',
+        never: "a post made in the app or by another assistant, or another member's data; it never moves Beans",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        destructive: true,
+        inputSchema: {
+            type: 'object',
+            properties: { confirm: { type: 'string', const: REMOVE_ALL_CONFIRM, description: `exactly "${REMOVE_ALL_CONFIRM}"` } },
+            required: ['confirm'],
+            additionalProperties: false,
+        },
+        outputSchema: REMOVED_OUT,
+        run: (grant, args) => {
+            const refused = tendGate(grant);
+            if (refused) return { ok: false, error: refused };
+            if (args.confirm !== REMOVE_ALL_CONFIRM) return { ok: false, error: `confirm must be exactly "${REMOVE_ALL_CONFIRM}": nothing was removed.` };
+            if (!admitAgentRemoveAll(grant.id)) {
+                return { ok: false, error: 'This assistant has removed everything it made once today, the most a day allows: try again tomorrow (UTC), or the owner presses "Remove its posts" in Settings.' };
+            }
+            const out = removeAllMadeBy(grant.id, 'assistant', grant.member);
+            return { ok: true, rows: out.removed.length, result: { removed: out.removed, kept: out.kept } };
+        },
     },
 ];

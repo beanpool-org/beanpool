@@ -1534,11 +1534,20 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
         // the moderator is TOLD — a silent short refund is how a discrepancy between the deal rows and the
         // ledger stays invisible until it is old data nobody can explain.
         const refundShortfalls: EscrowRefundShortfall[] = [];
+        // An owner's AI assistant made it (posts.created_via, agent/owner-posts.ts): its removal is an ADMIN line naming the
+        // post and the assistant, as the assistant's own removals and Settings' "Remove its posts" are (design S2 §2.8).
+        const via = (db.prepare('SELECT created_via FROM posts WHERE id = ?').get(ctx.params.id) as { created_via: string | null } | undefined)?.created_via;
         const ok = adminDeletePost(ctx.params.id, { reasonCategory, onRefundShortfall: s => refundShortfalls.push(s) });
         if (!ok) {
             ctx.status = 404;
             ctx.body = { success: false, error: 'Post not found' };
             return;
+        }
+        if (typeof via === 'string' && via.startsWith('assistant:')) {
+            logger.info('ADMIN', 'A post an AI assistant made removed by a moderator', {
+                grant: via.slice('assistant:'.length), post: ctx.params.id, role: (ctx.state as any)?.adminRole ?? null,
+                by: String((ctx.state as any)?.actor ?? 'owner:password').slice(0, 16),
+            });
         }
         ctx.body = refundShortfalls.length > 0
             ? {

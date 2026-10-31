@@ -10940,6 +10940,7 @@ export function removeGroupMemberByVote(groupId: string, subject: string): void 
         .run(now, now, groupId, subject);
     reconcileGroupLeadEngine(db, groupId);
     if (groupKeyRoster(groupId).join(',') !== before) markGroupEpochStale(groupId);
+    afterLeavingCircle(groupId, subject);
 }
 
 export function setGroupJoinPolicyByVote(groupId: string, policy: JoinPolicy): void {

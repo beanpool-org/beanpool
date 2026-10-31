@@ -38,7 +38,7 @@
  * on a main server with `directoryMirror` on. A standby gets the rows with the rest of the group.
  */
 import { db } from '../db/db.js';
-import { haversineKm } from '@beanpool/engine';
+import { haversineKm, isNodeMember, isSuspendedAccount } from '@beanpool/engine';
 import { CIRCLE_MIN_PEOPLE, GROUP_KIND_CIRCLE, pushNoticeWords, word, type CircleCard, type CircleCommunity, type CircleDemand } from '@beanpool/core';
 import { firstSightings } from './directory-cache.js';
 import { hasBlocked } from './member-blocks.js';
@@ -328,6 +328,15 @@ function isCircleMember(groupId: string, pubkey: string): boolean {
     return !!db.prepare(`SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'`).get(groupId, pubkey);
 }
 
+/**
+ * Who is starting one here, or null. Only they can take it back, so someone who no longer can holds it for nobody: a prune
+ * or a deletion leaves group_members as it was, and a suspension holds it for no one while it lasts.
+ */
+function standingStarter(row: Pick<CircleRow, 'id' | 'circle_starter'>): string | null {
+    const pk = row.circle_starter;
+    return pk && isCircleMember(row.id, pk) && isNodeMember(db, pk) && !isSuspendedAccount(db, pk) ? pk : null;
+}
+
 /** The community that retired it, from the directory as it stands: its name is the directory's, not a copy of it. */
 function circleCommunity(key: string | null): CircleCommunity | null {
     if (!key) return null;
@@ -339,9 +348,10 @@ function circleCommunity(key: string | null): CircleCommunity | null {
 
 function cardOf(row: CircleRow, viewer: string): CircleCard {
     const people = activeMembers(row.id).length;
+    const starter = standingStarter(row);
     return {
         people: people >= CIRCLE_MIN_PEOPLE ? people : null,
-        starting: !row.circle_starter ? null : row.circle_starter === viewer ? 'you' : 'someone',
+        starting: !starter ? null : starter === viewer ? 'you' : 'someone',
         doneAt: row.circle_done_at,
         community: circleCommunity(row.circle_community_key),
     };
@@ -382,7 +392,8 @@ export function setCircleStarting(groupId: string, pubkey: string, starting: boo
         const row = db.prepare('SELECT id, kind, circle_done_at, circle_community_key, circle_starter, circle_starting_at FROM groups WHERE id = ?').get(groupId) as CircleRow | undefined;
         if (row?.kind !== GROUP_KIND_CIRCLE || !isCircleMember(groupId, pubkey)) throw new CircleError(404, CIRCLE_NOT_YOURS);
         if (row.circle_done_at) throw new CircleError(409, CIRCLE_ENDED);
-        if (row.circle_starter && row.circle_starter !== pubkey) throw new CircleError(409, CIRCLE_ALREADY_STARTING);
+        const starter = standingStarter(row);
+        if (starter && starter !== pubkey) throw new CircleError(409, CIRCLE_ALREADY_STARTING);
         const now = new Date(nowMs).toISOString();
         if (!starting) {
             db.prepare('UPDATE groups SET circle_starter = NULL, updated_at = ? WHERE id = ?').run(now, groupId);

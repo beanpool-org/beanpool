@@ -15,7 +15,8 @@
  *   6. retire and close: the first community near retires it once and tells its members with no name, a second changes
  *      nothing, a flood retires nothing, its flags go so no run forms it again, and its chat stays open 30 days; then the
  *      group closes, read-only, its row kept; a run stopped between retiring and clearing the flags did neither
- *   7. "I'm starting one here": members only, one at a time, only its maker takes it back, the others told once in a day
+ *   7. "I'm starting one here": members only, one at a time, only its maker takes it back, the others told once in a day;
+ *      someone removed, deleted or suspended holds it for nobody
  *   8. a standby holds the flag and the circle; the 10,000-watch run and read each fit in 50 ms
  *
  * Run: SERVER_SUITES_ONLY=test-place-circles TEST_ALL_JOBS=2 node scripts/run-server-suites.mjs
@@ -66,7 +67,7 @@ let notGeneric = 0;
 };
 
 const { initTls } = await import('./services/tls.js');
-const { initStateEngine, seedGenesisMember, setNodeRole } = await import('./state-engine.js');
+const { adminPruneUser, initStateEngine, purgeMemberSelf, removeGroupMemberByVote, seedGenesisMember, setNodeRole } = await import('./state-engine.js');
 const { startHttpsServer } = await import('./https-server.js');
 const { db } = await import('./db/db.js');
 const { putPushTokenRow } = await import('./services/push-token-seal.js');
@@ -359,6 +360,28 @@ async function main(): Promise<void> {
     await call('DELETE', gus, `/api/groups/${mumbaiId}/members/${gus.pk}`);
     assert((await call('GET', fay, `/api/groups/${mumbaiId}`)).body?.circle?.starting === null, 'leaving takes it with them');
     assert((await call('POST', ana, `/api/global/circles/${circle.id}/starting`, { starting: true })).status >= 400, 'a finished circle takes no one starting');
+    // Only its maker can take it back, so someone who can't any more holds it for nobody. A prune and a deletion leave
+    // group_members as it was, so being in the group is not enough.
+    const [ava, bo, cy, di, fin] = [phoned('Ava'), phoned('Bo'), phoned('Cy'), phoned('Di'), phoned('Fin')];
+    for (const id of [ava, bo, cy, di, fin]) await help(id, 35.7, 51.4);
+    await mirror();
+    const tehranId = circleRows().find(c => c.place_cell === '35.7,51.4')?.id as string;
+    const startingIn = (id: Id) => call('POST', id, `/api/global/circles/${tehranId}/starting`, { starting: true });
+    const avaReads = async () => (await call('GET', ava, `/api/groups/${tehranId}`)).body?.circle?.starting;
+    assert((await startingIn(bo)).status === 200 && await avaReads() === 'someone', 'one of the five says so');
+    adminPruneUser(bo.pk, owner.pk);
+    assert(await avaReads() === null, 'removed from the community, they are no longer starting one');
+    assert((await startingIn(cy)).status === 200, 'and someone else can say so');
+    purgeMemberSelf(cy.pk);
+    assert(await avaReads() === null, 'an account its owner deleted is not starting one');
+    assert((await startingIn(di)).status === 200, 'and someone else can say so');
+    removeGroupMemberByVote(tehranId, di.pk);
+    assert(await avaReads() === null, "the group's vote takes it with them");
+    assert((db.prepare('SELECT would_help FROM place_watches WHERE pubkey = ?').get(di.pk) as any)?.would_help === 0, 'and their flag, as a convenor removing them does');
+    assert((await startingIn(fin)).status === 200, 'and someone else can say so');
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(fin.pk);
+    assert(await avaReads() === null, 'a suspended member is not starting one while it lasts');
+    assert((await startingIn(ava)).status === 200 && await avaReads() === 'you', 'and someone else can say so');
 
     console.log('── 7b. a circle stays a circle ──');
     assert(await patch(fay, `/api/groups/${mumbaiId}`, { description: 'Buy my stuff' }) >= 400, "a convenor can't turn it into another group");

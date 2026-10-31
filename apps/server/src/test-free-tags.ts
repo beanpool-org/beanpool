@@ -222,6 +222,7 @@ async function main(): Promise<void> {
         ['a web address', ['https://example.com'], /not a contact/],
         ['a bare domain', ['example.com'], /not a contact/],
         ['www', ['www.example.org'], /not a contact/],
+        ['a domain with an ideographic stop', ['example。com'], /not a contact/],
         ['full-width digits', ['０４１２３４５６７８'], /not a contact/],
         ['a control character', ['ab\u0007cd'], /hidden characters/],
         ['a NUL', ['ab\u0000cd'], /hidden characters/],

@@ -72,10 +72,12 @@ const HIDDEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b\u200e\u200f\
 // Not digits after the dot ("3.5mm"), a single letter ("a.k.a"), or other scripts, whose abbreviations are written with a
 // dot and no space ("г.москва", "ดร.สมชาย").
 const WEB_ADDRESS = /:\/\/|[^\s.]\.[a-z]{2,}/;
+// The full stops a browser reads as a dot in a host name that NFKC leaves alone: "example。com" opens example.com.
+const IDEOGRAPHIC_STOPS = /[\u3002\uff61]/g;
 
 function looksLikeContact(tag: string): boolean {
     // Compatibility forms too: a full-width "＠" or "０４１２" is still an address or a number.
-    const folded = normalised(tag, 'NFKC');
+    const folded = normalised(tag, 'NFKC').replace(IDEOGRAPHIC_STOPS, '.');
     if (folded.includes('@') || WEB_ADDRESS.test(folded)) return true;
     return (folded.match(DIGIT_RUN) ?? []).some((run) => (run.match(DIGIT) ?? []).length >= PHONE_DIGITS);
 }

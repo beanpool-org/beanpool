@@ -14,6 +14,7 @@ describe('a free tag\'s stored form', () => {
         expect(freeTagStored('  ## Second   Hand\t\nLaptop ')).toBe('second hand laptop');
         expect(freeTagStored('＃Vintage')).toBe('vintage');
         expect(freeTagStored('a #b')).toBe('a #b');
+        expect(freeTagStored('二手。笔记本')).toBe('二手。笔记本');
     });
 
     it('writes the same letters one way (NFC), so the same tag is one', () => {
@@ -36,7 +37,7 @@ describe('a free tag\'s stored form', () => {
 describe('what a free tag may not be', () => {
     it('passes the shapes members type', () => {
         for (const tag of ['2nd hand', 'wi-fi router', 'Limón 🍋 fresco', '二手 笔记本', 'segunda mano', 'don\'t panic', '3.5mm jack', 'a.k.a', '24/7', '1/4 inch', '50/50', '120/240v',
-            'г.москва', 'ดร.สมชาย', 'iphone 15 pro', '1984', 'rtx4090 ti 2024', 'میوه\u200cفروشی', 'ab']) {
+            'г.москва', 'ดร.สมชาย', '二手。笔记本', 'iphone 15 pro', '1984', 'rtx4090 ti 2024', 'میوه\u200cفروشی', 'ab']) {
             expect(freeTagRefusal(tag), tag).toBeNull();
         }
     });
@@ -59,7 +60,7 @@ describe('what a free tag may not be', () => {
     it('refuses a contact in every shape, its full-width forms too', () => {
         for (const tag of ['@handle', 'me@example.com', 'hello @ you', 'a＠b', '0412 345 678', '0412345678', '+61 412 345 678', '(04) 1234 5678', '04-12-34-56-78',
             '04 12 34 56 78', '1234567', 'call 0412 345 678', '0412/345/678', '０４１２／３４５／６７８', '02/9876/543', '０４１２３４５６７８', '٠٤١٢٣٤٥٦٧٨', 'http://x', 'https://example.com/a', 'www.example.com', 'example.com',
-            'bit.ly/abc', 't.me/someone', 'wa.me', 'ＥＸＡＭＰＬＥ．ＣＯＭ']) {
+            'bit.ly/abc', 't.me/someone', 'wa.me', 'ＥＸＡＭＰＬＥ．ＣＯＭ', 'example。com', 'example｡com', 'wa。me/chat', 't。me/someone', 'bit｡ly/abc', '0412。345。678']) {
             expect(freeTagRefusal(tag), tag).toBe(FREE_TAG_NOT_A_CONTACT);
         }
     });

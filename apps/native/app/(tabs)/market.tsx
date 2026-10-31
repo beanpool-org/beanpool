@@ -878,6 +878,7 @@ export default function MarketScreen() {
 
     // Debounced FTS5 server search
     useEffect(() => {
+        let active = true;
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         
         const q = searchQuery.trim();
@@ -892,8 +893,10 @@ export default function MarketScreen() {
             try {
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                 if (!anchorUrl) {
-                    setSearchResults(null);
-                    setIsSearching(false);
+                    if (active) {
+                        setSearchResults(null);
+                        setIsSearching(false);
+                    }
                     return;
                 }
                 // Events are opt-in on the list route; All and Events ask for them. The category only while its chip is on screen.
@@ -912,20 +915,26 @@ export default function MarketScreen() {
                 // Nearest first where the node sorts by distance and the phone already knows where it is.
                 const near = marketSearchDistanceParams(nodeProfile, myLocation);
                 const res = await fetch(`${anchorUrl}/api/marketplace/posts${queryPrefix}${type}${cat}${near}&limit=50`);
-                if (res.ok) {
-                    const data = await res.json();
-                    const parsed = normalizeServerPosts(data, anchorUrl);
-                    setSearchResults(parsed);
-                } else {
-                    setSearchResults(null); // Fall back to local filtering
+                if (active) {
+                    if (res.ok) {
+                        const data = await res.json();
+                        const parsed = normalizeServerPosts(data, anchorUrl);
+                        setSearchResults(parsed);
+                    } else {
+                        setSearchResults(null); // Fall back to local filtering
+                    }
                 }
             } catch {
-                setSearchResults(null); // Fall back to local filtering
+                if (active) setSearchResults(null); // Fall back to local filtering
+            } finally {
+                if (active) setIsSearching(false);
             }
-            setIsSearching(false);
         }, 300);
 
-        return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+        return () => {
+            active = false;
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
     }, [searchQuery, selectedTag, filter, categoryFilter, nodeProfile, myLocation]);
 
     const loadPosts = async (): Promise<boolean> => {

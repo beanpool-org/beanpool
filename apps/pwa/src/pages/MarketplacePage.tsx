@@ -581,6 +581,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Debounced server search resolving query words through label index to send q AND tags (§4.7)
     useEffect(() => {
+        let active = true;
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         const q = searchQuery.trim();
         if (!q && !selectedTag) {
@@ -600,14 +601,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     ...(searchTagIds.length > 0 ? { tags: searchTagIds } : {}),
                     limit: 50,
                 });
-                setSearchResults(results);
+                if (active) setSearchResults(results);
             } catch {
-                setSearchResults(null);
+                if (active) setSearchResults(null);
             } finally {
-                setIsSearching(false);
+                if (active) setIsSearching(false);
             }
         }, 300);
-        return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
+        return () => {
+            active = false;
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
     }, [searchQuery, selectedTag, typeFilter, categoryFilter, beansOnlyPicked, groupFilter]);
 
     // Handle deep-link from Map pins or routes

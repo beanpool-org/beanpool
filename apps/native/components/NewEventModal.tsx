@@ -263,8 +263,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setIsCopy(true);
         setTitle(prefill.title);
         setDescription(prefill.description);
-        const prefillTags = (prefill as any)?.tags;
-        setTags(Array.isArray(prefillTags) ? prefillTags : (typeof prefillTags === 'string' ? prefillTags.split(' ').filter(Boolean) : []));
+        setTags([]);
         setPlaceName(prefill.placeName);
         setNote(prefill.privateNote);
         setStart(null); setEnd(null); setPicker(null); setPhoto(null);

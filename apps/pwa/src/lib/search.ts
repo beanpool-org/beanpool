@@ -23,6 +23,25 @@ export function matchesExpandedSearch(searchQuery: string, title: string, descri
 }
 
 /**
+ * The words the Market's search asks the node for (`q=`): core's `searchTermsFor`, as the phone's Market and Home's card
+ * ask, so the node finds a synonym ("sofa" finds "Old couch"), since a listing's keywords hold only its category.
+ */
+export function marketSearchQuery(search: string): string {
+    return searchTermsFor(search).join(' ');
+}
+
+/**
+ * The rows a search's list is drawn from: the node's answer, in its order, then whatever else the page holds that the words
+ * match. That is what the node can't answer for: peers' listings, and what was pushed or read after it answered. So a search
+ * finds at least what the filter over the feed found before the node was asked. A peer's copy can share an id with one of
+ * this node's, and stays.
+ */
+export function searchRows<T extends { id: string; title: string; description: string; tags?: unknown }>(answer: T[], feed: T[], search: string): T[] {
+    const answered = new Set(answer.map(p => p.id));
+    return [...answer, ...feed.filter(p => ((p as { _remoteNode?: string })._remoteNode || !answered.has(p.id)) && matchesExpandedSearch(search, p.title, p.description, p.tags))];
+}
+
+/**
  * The words a saved search's "See more" on Home fills the Market's search with: trimmed, at most a saved search's 40
  * characters; null for none, and the search stays as it was.
  */

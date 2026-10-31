@@ -1049,7 +1049,8 @@ export default function MarketScreen() {
     // newest from elsewhere come beneath, read as the search reads the node. The same filters apply to both parts.
     const fillNeeded = marketFillWanted({
         profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
-        searching: searchQuery.trim().length > 0, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
+        // A tag filter reads as words do, nearest first from anywhere, so there is no elsewhere to fill from.
+        searching: searchQuery.trim().length > 0 || !!selectedTag, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
         shownNear: filteredPosts,
     });
     const fillKey = `${filter}|${categoryFilter}`;

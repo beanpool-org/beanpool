@@ -14,6 +14,7 @@ import { MarketplaceCard } from '../components/MarketplaceCard';
 import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
+import { PostTagChips } from '../components/PostTagChips';
 import { SharePostButtons } from '../components/SharePost';
 import { YourEvents } from '../components/YourEvents';
 import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow, movedCopyContext } from '../lib/events';
@@ -71,7 +72,7 @@ import { iRated, reviewTargetOf } from '../lib/trade-review';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { standingFromRefusal } from '../lib/standing-refusal';
 
-import { marketSearchFromLink, marketSearchToSave, matchesExpandedSearch } from '../lib/search';
+import { marketSearchFromLink, marketSearchQuery, marketSearchToSave, matchesExpandedSearch, searchRows } from '../lib/search';
 import { SAVE_SEARCH_BUTTON, saveSearchLabel, type HomeSearchSettings } from '@beanpool/core';
 import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
@@ -116,8 +117,6 @@ interface Props {
     openSearch?: string | null;
     onSearchOpened?: () => void;
     /** Tag filter to open with (e.g. from post detail chip or home card) */
-    openTag?: string | null;
-    onTagOpened?: () => void;
     /**
      * "Save this search to Home" (Marty, 7 Oct): the search as a saved search's settings; App opens Home, which opens the
      * saved search's own dialog with them filled in. Absent (the lobby), the button isn't drawn.
@@ -308,7 +307,7 @@ const SAVE_SEARCH_LINES = { button: SAVE_SEARCH_BUTTON };
 /** A deal still open: held in trust, or asked for and not yet answered. */
 const OPEN_DEAL_STATUSES = ['pending', 'requested'] as const;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, openTag, onTagOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, sayWhenPostUnopened = false, openReviewTxId, openTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -326,8 +325,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // The tags the form opened with, moved on by a reload's: what the save compares with, as on the phone (app/post/[id].tsx).
     const editTagsFrom = useRef<string[]>([]);
     const [searchResults, setSearchResults] = useState<MarketplacePost[] | null>(null);
-    const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<any>(null);
+    // Asks the node again for the search on screen: each read of the list does, so what it brought in reaches the search.
+    const searchAgainRef = useRef<(() => void) | null>(null);
+    const [listReads, setListReads] = useState(0);
     const [groupFilter, setGroupFilter] = useState<string>('all');
     const [userGroups, setUserGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
@@ -555,6 +556,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 
+    // A tag chip on a listing or an event: the Market filtered by it, the page left as Back leaves it (§4.4).
+    const openTag = (id: string) => {
+        setSelectedTag(id);
+        setSelectedPost(null);
+        setSelectedTxId(null);
+    };
+
     // Reset detail view when bottom tab is double-tapped
     useEffect(() => {
         if (marketClickCount > 0) {
@@ -575,47 +583,55 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         onSearchOpened?.();
     }, [openSearch, onSearchOpened]);
 
-    // Tag filter from post detail or link (§4.4)
-    useEffect(() => {
-        if (!openTag) return;
-        setSelectedTag(openTag);
-        onTagOpened?.();
-    }, [openTag, onTagOpened]);
-
-    // Debounced server search resolving query words through label index to send q AND tags (§4.7)
+    // Debounced server search: the phone's terms for the words, and the tags they resolve to through the label index (q AND
+    // tags, §4.7), read from where the list is read. A push lands on the answer as it lands on the list (lib/live-posts).
     useEffect(() => {
         let active = true;
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         const q = searchQuery.trim();
-        if (!q && !selectedTag) {
+        const terms = q ? marketSearchQuery(q) : '';
+        const resolvedTags = q ? searchTagsFor(q) : [];
+        const searchTagIds = [...new Set([...(selectedTag ? [selectedTag] : []), ...resolvedTags])].slice(0, 20);
+        // Words that leave nothing to ask (quote marks alone) are no read: without `q` it would be every listing.
+        if (!terms && searchTagIds.length === 0) {
             setSearchResults(null);
-            setIsSearching(false);
             return;
         }
-        setIsSearching(true);
-        searchTimerRef.current = setTimeout(async () => {
+        const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
+        const fits = (p: MarketplacePost) => postFitsList(p, filter) && fitsNear(p) && matchesExpandedSearch(q, p.title, p.description, p.tags);
+        const offView = onLivePostChange(change => setSearchResults(prev => prev && applyLivePostChange(prev, change, fits)));
+        let out = false;
+        const read = async () => {
+            // A read already out stands: answers slower than the list's reads would each be thrown away for the next.
+            if (out) return;
+            out = true;
+            const liveMark = liveChangeMark();
             try {
-                const filter = feedListFilter(typeFilter, categoryFilter, beansOnlyPicked, groupFilter);
-                const resolvedTags = q ? searchTagsFor(q) : [];
-                const searchTagIds = [...new Set([...(selectedTag ? [selectedTag] : []), ...resolvedTags])].slice(0, 20);
-                const results = await getMarketplacePosts({
+                const results = await readNearestInCircle(near, 50, page => getMarketplacePosts({
                     ...filter,
-                    ...(q ? { q } : {}),
+                    ...nearParams(near),
+                    ...(terms ? { q: terms } : {}),
                     ...(searchTagIds.length > 0 ? { tags: searchTagIds } : {}),
                     limit: 50,
-                });
-                if (active) setSearchResults(results);
+                    ...page,
+                }));
+                if (active) setSearchResults(replayLiveChanges(liveMark, results, fits));
             } catch {
                 if (active) setSearchResults(null);
             } finally {
-                if (active) setIsSearching(false);
+                out = false;
             }
-        }, 300);
+        };
+        searchAgainRef.current = read;
+        searchTimerRef.current = setTimeout(read, 300);
         return () => {
             active = false;
+            searchAgainRef.current = null;
+            offView();
             if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         };
-    }, [searchQuery, selectedTag, typeFilter, categoryFilter, beansOnlyPicked, groupFilter]);
+    }, [searchQuery, selectedTag, typeFilter, categoryFilter, beansOnly, groupFilter, near, fitsNear]);
+    useEffect(() => { searchAgainRef.current?.(); }, [listReads]);
 
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
@@ -725,6 +741,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
     const [editInShop, setEditInShop] = useState<boolean>(false);
     const [saving, setSaving] = useState(false);
+    // The form's values are one listing's: however a listing is left (a tag chip, the Market tab tapped again, a link), its
+    // edit ends with it, or the next listing the member may edit opens in the form and Save writes the first's words on it.
+    useEffect(() => {
+        setEditMode(false);
+        setEditPhotos([]);
+    }, [selectedPost?.id]);
 
     // Accept & Complete Inline Forms
     const [showAcceptConfirm, setShowAcceptConfirm] = useState(false);
@@ -912,6 +934,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // until the 300s backstop, which is exactly the window this stage widened.
                 lastRefreshTimeRef.current = Date.now();
                 setFillStamp(n => n + 1);
+                setListReads(n => n + 1);
             } catch (e: any) {
                 if (isMembersOnlyRefusal(e)) {
                     setMembersOnly(true);
@@ -1250,7 +1273,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         if (searchQuery.trim()) {
             filtered = filtered.filter(p => {
                 if (p.type === 'poll' && typeFilter !== 'poll') return false;
-                if (searchResults !== null) return true;
+                // The node's answer stands for the words, unless a tag filter is on: it asks for the words OR the tags, so there
+                // the words still narrow the tag's listings.
+                if (searchResults !== null && !selectedTag) return true;
                 return matchesExpandedSearch(searchQuery, p.title, p.description, p.tags);
             });
         }
@@ -1477,6 +1502,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onChangeThisDateOnly={(p) => onNavigate?.('map-copy-event', movedCopyContext(p.id))}
                         onEdit={(p) => onNavigate?.('map-edit-event', p.id)}
                         onOpenProfile={onOpenProfile}
+                        onOpenTag={openTag}
                         onChange={(p) => { setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                         onCancelled={(p) => { if (p) setSelectedPost(p); setYourEventsKey(k => k + 1); refresh().catch(() => {}); }}
                     />
@@ -1857,36 +1883,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </p>
                         )}
 
-                        {/* Tags chips (§4.4) */}
-                        {postTagsOf(selectedPost.tags).length > 0 && (() => {
-                            const idx = tagIndex();
-                            const visibleTags = postTagsOf(selectedPost.tags).filter(id => {
-                                try { return !!idx.label(id); } catch { return false; }
-                            });
-                            if (visibleTags.length === 0) return null;
-                            return (
-                                <div className="flex flex-wrap gap-1.5 mb-5" data-testid="post-detail-tags">
-                                    {visibleTags.map(id => {
-                                        const label = idx.label(id);
-                                        if (!label) return null;
-                                        return (
-                                            <button
-                                                key={id}
-                                                type="button"
-                                                onClick={() => {
-                                                    setSelectedTag(id);
-                                                    setSelectedPost(null);
-                                                }}
-                                                className="inline-flex items-center min-h-[44px] px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700/60 cursor-pointer transition-colors"
-                                                aria-label={t('Filter marketplace by tag {tag}', { tag: label })}
-                                            >
-                                                #{label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            );
-                        })()}
+                        <PostTagChips tags={selectedPost.tags} onPick={openTag} className="mb-5" />
 
                         {/* Photos */}
                         {selectedPost.photos && selectedPost.photos.length > 0 && (
@@ -3682,7 +3679,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {loading ? (
                 <p className="text-nature-500 text-center py-8">{t('Loading...')}</p>
             ) : membersOnly ? null : (() => {
-                let filtered = clientFilter(searchResults !== null ? searchResults : posts);
+                let filtered = clientFilter(searchResults !== null ? searchRows(searchResults, posts, searchQuery) : posts);
 
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {
@@ -3757,7 +3754,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </p>
                 ) : null;
 
-                const narrowed = !!searchQuery.trim() || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
+                const narrowed = !!searchQuery.trim() || !!selectedTag || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
                     || groupFilter !== 'all' || beansOnly || foundingOnly;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: fillPending ? FILL_BELOW : filtered.length + fillRows.length })
                     ? <ExampleListings />

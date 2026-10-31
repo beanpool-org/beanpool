@@ -169,6 +169,56 @@ describe("a keeper editing their enterprise's listing on the web", () => {
         });
     });
 
+    describe('leaving a listing ends its edit: the form never opens on the next one holding the first\'s words (review of #2663)', () => {
+        const lemons = { ...eggs, title: 'Lemons', tags: ['food.fruit.lemon'] };
+        const jam = { ...eggs, id: 'offer-jam', title: 'Plum jam', description: 'Last summer', credits: 9, photos: [] };
+        const props = { identity, isMember: true, onPostOpened: () => {}, transactions: [] };
+
+        /** Lemons open at its Edit form, with words typed, and the next listing ready. */
+        async function editLemons() {
+            stubNode([lemons, jam], [ENT]);
+            const update = vi.spyOn(api, 'updateMarketplacePost').mockImplementation(async () => ({ success: true, post: jam }) as any);
+            const page = render(<MarketplacePage {...props} openPostId="offer-eggs" />);
+            await screen.findByRole('heading', { name: /Lemons/ });
+            await waitFor(() => expect(screen.getByText('✏️ Edit Post')).toBeInTheDocument());
+            fireEvent.click(screen.getByText('✏️ Edit Post'));
+            fireEvent.change(screen.getByPlaceholderText('Title'), { target: { value: 'Lemons from A' } });
+            return { page, update };
+        }
+
+        it('a tag chip tapped during an edit: the next listing opens to read, with nothing of the first to Save', async () => {
+            const { page, update } = await editLemons();
+            fireEvent.click(screen.getByRole('button', { name: 'Filter marketplace by tag Lemon' }));
+            await settle();
+            page.rerender(<MarketplacePage {...props} openPostId="offer-jam" />);
+            await screen.findByRole('heading', { name: /Plum jam/ });
+            expect(screen.queryByText('💾 Save')).toBeNull();
+            await waitFor(() => expect(screen.getByText('✏️ Edit Post')).toBeInTheDocument());
+            fireEvent.click(screen.getByText('✏️ Edit Post'));
+            expect((screen.getByPlaceholderText('Title') as HTMLInputElement).value).toBe('Plum jam');
+            expect(update).not.toHaveBeenCalled();
+        });
+
+        it('the Market tab tapped again during an edit does the same', async () => {
+            const { page } = await editLemons();
+            page.rerender(<MarketplacePage {...props} openPostId="offer-eggs" marketClickCount={1} />);
+            await settle();
+            page.rerender(<MarketplacePage {...props} openPostId="offer-jam" marketClickCount={1} />);
+            await screen.findByRole('heading', { name: /Plum jam/ });
+            expect(screen.queryByText('💾 Save')).toBeNull();
+        });
+
+        it('an edit saved stays on its listing: Save still closes the form there, and re-reading it does not', async () => {
+            const { page, update } = await editLemons();
+            expect(screen.getByText('💾 Save')).toBeInTheDocument();
+            page.rerender(<MarketplacePage {...props} openPostId="offer-eggs" />);
+            await settle();
+            // The same listing read again: the member's words and the form stay.
+            expect((screen.getByPlaceholderText('Title') as HTMLInputElement).value).toBe('Lemons from A');
+            expect(update).not.toHaveBeenCalled();
+        });
+    });
+
     it('Pause and Resume Offer for a keeper of the enterprise: calls pauseMarketplacePost and resumeMarketplacePost with member\'s key', async () => {
         const listings: Array<Record<string, unknown>> = [eggs];
         stubNode(listings, [ENT]);

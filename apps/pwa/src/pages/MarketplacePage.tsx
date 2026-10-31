@@ -3232,6 +3232,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             try {
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
+                                                const originalTags = postTagsOf(selectedPost.tags);
+                                                const tagsChanged = editTags.join(' ') !== originalTags.join(' ');
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
                                                     type: editType,
                                                     category: editCategory,
@@ -3241,7 +3243,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     priceType: editPriceType,
                                                     repeatable: editRepeatable,
                                                     photos: editPhotos,
-                                                    tags: editTags,
+                                                    ...(tagsChanged ? { tags: editTags } : {}),
                                                     ...(shopId !== undefined ? { shopId } : {}),
                                                 });
                                                 setSelectedPost(result.post);

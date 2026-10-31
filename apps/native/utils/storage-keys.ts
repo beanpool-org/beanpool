@@ -230,6 +230,8 @@ export const IDENTITY_THIS_DEVICE_STORE_KEY = 'beanpool_identity_this_device_onl
  * lost answer or a restart comes back to the same hold; removed once the account is saved or the restore ends.
  */
 export const VAULT_RESTORE_STORE_KEY = 'beanpool_vault_restore';
+/** A shared bring-back waiting on the key vault (utils/community-recovery.ts), in the secure store. */
+export const COMMUNITY_RESTORE_STORE_KEY = 'beanpool_community_restore';
 
 /** When one account last said "Not now" to moving its sign-in recovery to the key vault (utils/vault.ts). */
 export function vaultMoveLaterStoreKey(publicKey: string): string {

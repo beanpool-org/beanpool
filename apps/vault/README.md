@@ -1,7 +1,8 @@
 # @beanpool/vault — BeanPool's key vault
 
 A small server that keeps each member's locked sign-in recovery copy, and gives one back only after it has checked
-the Google, Apple or Facebook sign-in itself. No community keeps a copy or can ask for one. The design is
+the Google, Apple or Facebook sign-in itself. No community keeps a sign-in copy or can ask for one. It also keeps
+community copies (vault rethink VR4, below), which it can't open. The design is
 `scratch/global-node/DESIGN-key-vault-opus.md` (V2: the two programs; V3: the image, releases and the custodian
 tool), with `DESIGN-vault-host-tee-opus.md` §5.1 for the host checks.
 
@@ -185,10 +186,29 @@ The sign-ins it keeps copies for are one list, `src/shared/providers.ts`. A prov
 2026-09-29: its `sub` is the account's public user id) is refused everywhere, and its copies go, each with its deletion
 record, whenever the database next opens.
 
+## Community copies (vault rethink VR4)
+
+"Your community's admins can bring you back", where a community's rule is the key vault. `provider: 'community'` is the
+one more kind of envelope: a copy sealed under a random key, and one half of that key. The member's community keeps the
+other half, under its recovery seal. **The vault can't open these, open or not**: that is the difference from a sign-in
+copy, and why this kind exists. Nor can the community alone. It is the member's own copy of their own account.
+
+A row's `sub_index` is `HMAC(K_index, "community" ‖ nodeKey ‖ memberKey)`. The node key arrives inside the deposit box, so the
+keyholder alone reads it, and the API sees only the index until a restore shows the community's voucher (core
+`vault-wire.ts` "Vouchers"). A voucher is the community's signed word, in place of a sign-in, that its admin saw the member
+in person, naming the member, the restoring device's key, the copy and an expiry of at most a day. A node key with no row
+here finds `no_copy`. The vault never calls a node: the voucher comes by the phone. The hold, Stop, "Yes, it's me", the
+collect and the push tokens are a sign-in's, and one voucher is one hold, so sending it again after a Stop gets `stopped`.
+
+A community deposit has no provider's proof behind it, so it has limits of its own: `communityDepositsPerAddressPerDay`,
+and `MAX_COMMUNITY_COPIES_PER_KEY`. A reshare re-wraps these as it does every envelope. The keyholder holds the new
+code, so this kind needs an image release: an API-only release on an older keyholder answers such a deposit 500, which
+the phone reads as no answer, with nothing kept and nothing said to be on.
+
 ## Never stored
 
-Callsigns, emails, IP addresses, raw `sub`s, tokens, community lists, or a copy of what a release handed out. A copy's
-row is `{id, sub_index, pk_index, envelope, updated_day}`.
+Callsigns, emails, IP addresses, raw `sub`s, tokens, community lists, a community's node key (only the keyed index above),
+or a copy of what a release handed out. A copy's row is `{id, sub_index, pk_index, envelope, updated_day}`.
 
 ## Releases (design §3; host design §5.1 item 3)
 

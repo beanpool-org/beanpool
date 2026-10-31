@@ -47,7 +47,7 @@ import { vaultCopyKnowledge, vaultCopyKnown } from '../vault';
 import { retryCommunityRemovals, vaultMoveOffer } from '../vault-move';
 import {
     beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom,
-    removeEverything, removeVaultCopy, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
+    removeEverything, removeVaultCopy, strayVaultHalves, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
 } from '../ways-back';
 import { FakeVault, OTHER_KEY, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 import { boundSignatureValid } from './server-signature-check';
@@ -192,6 +192,45 @@ async function kimsPhone(net: Net) {
     net.vault.keep('google', 'ali-google', OTHER_KEY, SOME_COPY, '2026-10-05');
     mem.async.set(vaultCopyKnownStoreKey(kim.publicKey), '1');
 }
+
+describe('a shared copy is one way back in two places (vault rethink VR4)', () => {
+    const half = { ref: 'label-1', copy: 'digest-1', since: '2026-10-01', lastReleasedAt: null };
+    const part = (copy: string | null, vaultRef: string | null = 'label-1') => ({
+        url: 'https://mullum.test', name: 'Mullum', vaultRef,
+        status: { providers: [], generation: 1, ...(copy ? { adminsCopy: { since: '2026-10-01', placement: 'shared' as const, copy } } : {}) },
+    });
+    const ways = (halves: typeof half[], ...communities: ReturnType<typeof part>[]) => ({ vault: { kind: 'listed' as const, copies: [], communityCopies: halves }, communities, pending: [] });
+    const PHONE = { hasWords: true, writtenDown: false };
+
+    it('both halves of one copy count as a way back, once', () => {
+        const w = ways([half], part('digest-1'));
+        expect(knownCopies(w)).toEqual([{ at: 'admins', url: 'https://mullum.test' }]);
+        expect(wordsOnly(w)).toBe(false);
+        expect(beforeRemoving(w, { at: 'admins', url: 'https://mullum.test' }, PHONE)).toBe('show-words-first');
+    });
+
+    it('half a pair is no way back, but it is kept: never "nothing is kept", and removing it asks nothing about the 12 words', () => {
+        for (const w of [ways([], part('digest-1')), ways([half], part('digest-2')), ways([half], part(null))]) {
+            expect(knownCopies(w)).toEqual([]);
+            expect(wordsOnly(w)).toBe(false);
+            expect(beforeRemoving(w, { at: 'admins', url: 'https://mullum.test' }, PHONE)).toBe('confirm');
+        }
+    });
+
+    it('a half no community on this phone says is its own is listed alone, and removes alone', () => {
+        const w = ways([half], part(null, 'label-2'));
+        expect(strayVaultHalves(w)).toEqual([half]);
+        expect(wordsOnly(w)).toBe(false);
+        expect(beforeRemoving(w, { at: 'vault-half', ref: half.ref }, PHONE)).toBe('confirm');
+        expect(strayVaultHalves(ways([half], part('digest-1')))).toEqual([]);
+    });
+
+    it('with the vault unable to say, a half is not counted as a way back', () => {
+        const w = { vault: { kind: 'unknown' as const, why: 'paused' as const }, communities: [part('digest-1')], pending: [] };
+        expect(knownCopies(w)).toEqual([]);
+        expect(wordsOnly(w)).toBe(false);
+    });
+});
 
 describe('the list: every copy, since when, as far as the phone can ask', () => {
     it("the vault's copies with since, from its signed status, and each saved community's; never another key's", async () => {

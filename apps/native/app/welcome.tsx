@@ -24,6 +24,7 @@ import {
 import { askGlobalDoorOffer, globalDoorOffer, rememberGlobalDoor } from '../utils/global-door-offer';
 import type { GlobalDoorState } from '../utils/global-entry';
 import { WelcomeDoors } from '../components/WelcomeDoors';
+import { RestoreMenu } from '../components/welcome/RestoreMenu';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
     keepJoinedIdentity, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
@@ -74,6 +75,7 @@ import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { holdEndsWords } from '../components/RecoveryAlertBanner';
 import { VAULT_WORDS } from '../utils/vault-words';
+import { loadPendingCommunityRestore } from '../utils/community-recovery';
 import { landNextOn } from '../utils/member-landing';
 import { visitGlobalAsGuest } from '../utils/global-guest-visit';
 import { LOOK_JOIN, LOOK_LANDING, lookingAroundHere } from '../utils/look-around';
@@ -1009,7 +1011,9 @@ export default function WelcomeScreen() {
     // A re-key ask the app was closed in the middle of (utils/rekey-redeem.ts): back to its screen, which asks once more.
     useEffect(() => {
         let alive = true;
-        rekeySlotStore.get().then((held) => { if (alive && held) router.push('/rekey-code'); }).catch(() => {});
+        // And a shared bring-back waiting out its day at the key vault (utils/community-recovery.ts).
+        Promise.all([rekeySlotStore.get(), loadPendingCommunityRestore()])
+            .then(([held, waiting]) => { if (alive && (held || waiting)) router.push('/rekey-code'); }).catch(() => {});
         return () => { alive = false; };
     }, []);
 
@@ -3433,33 +3437,20 @@ export default function WelcomeScreen() {
                             {t("Your account isn't lost — bring it to this device with your social sign-in or 12 recovery words.")}
                         </Text>
 
-                        <Pressable
-                            style={styles.ssoRecoverBtn}
-                            onPress={() => {
-                                setMode('ssoRecover');
-                                setError(null);
-                            }}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Recover with Social Sign-In')}
-                        >
-                            <View style={styles.ssoRecoverRow}>
-                                <Text style={styles.ssoRecoverBtnText}>{t('🌐 Recover with Social')}</Text>
-                                <View style={styles.ssoRecoverLogos}>
+                        <RestoreMenu
+                            styles={styles}
+                            logos={(
+                                <>
                                     {Platform.OS === 'ios' && <AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />}
                                     <GoogleLogo size={16} />
                                     <FacebookLogo size={16} />
-                                </View>
-                            </View>
-                        </Pressable>
-
-                        <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
-                            <Text style={styles.recoverBtnText}>{t('🔑 Recover with 12 Words')}</Text>
-                        </Pressable>
-
-                        {/* Lost the phone and the words: an admin's re-key code (app/rekey-code.tsx, #1768). */}
-                        <Pressable style={styles.recoverBtn} onPress={() => { setError(null); router.push('/rekey-code'); }} accessibilityRole="button">
-                            <Text style={styles.recoverBtnText}>{t('🪪 An admin gave me a re-key code')}</Text>
-                        </Pressable>
+                                </>
+                            )}
+                            onSocial={() => { setMode('ssoRecover'); setError(null); }}
+                            onWords={() => { setMode('recover'); setError(null); }}
+                            onCommunity={() => { setError(null); router.push({ pathname: '/rekey-code', params: { bringBack: '1' } }); }}
+                            onRekey={() => { setError(null); router.push('/rekey-code'); }}
+                        />
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel={t('Back to Home')}>
                             <Text style={styles.backBtnText}>{t('← Back to Home')}</Text>
@@ -4231,7 +4222,8 @@ const styles = StyleSheet.create({
     ssoRecoverBtnText: { color: dark ? palette.blue400 : '#1D4ED8', fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
     ssoRecoverLogos: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
-    recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700' },
+    recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+    restoreRowHint: { color: colors.text.secondary, fontSize: 13, marginTop: 4, textAlign: 'center' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },
     socialRecoverBtnText: { color: colors.brand.primary, fontSize: 16, fontWeight: '700' },
 

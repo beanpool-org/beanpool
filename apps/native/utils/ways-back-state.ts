@@ -4,7 +4,7 @@
  * here, so the list can be drawn anywhere it is checked (the words render test, the 320 dp shots).
  */
 import type { SsoProvider } from './sso-providers';
-import type { VaultCopy } from './vault';
+import type { VaultCommunityCopy, VaultCopy } from './vault';
 import type { CommunityCopyStatus, PendingRemoval } from './vault-move';
 
 /** Why a keeper couldn't say, or didn't remove: paused (the vault, locked), no answer, or one that didn't check out. */
@@ -13,7 +13,8 @@ export type NotAnswered = 'paused' | 'unreachable' | 'unverified';
 export type VaultPart =
     /** This build keeps no copies at BeanPool's key vault: nothing is asked there, and nothing is said about it. */
     | { kind: 'no-vault' }
-    | { kind: 'listed'; copies: VaultCopy[] }
+    /** `communityCopies`: half a key and a copy it can't open, for a community's admins (vault rethink VR4). */
+    | { kind: 'listed'; copies: VaultCopy[]; communityCopies?: VaultCommunityCopy[] }
     /** The vault couldn't say. Its copies, if it keeps any, are neither listed nor said to be gone. */
     | { kind: 'unknown'; why: NotAnswered };
 
@@ -23,6 +24,8 @@ export interface CommunityPart {
     name: string;
     /** Its answer about this key's copies, or null when it gave none: never read as "none". */
     status: CommunityCopyStatus | null;
+    /** This member's label for it at the vault, when it said its node key: how this phone knows which vault copy is this one's. */
+    vaultRef?: string | null;
 }
 
 export interface WaysBack {
@@ -39,7 +42,9 @@ export interface WaysBack {
 export type CopyAt =
     | { at: 'vault'; provider: SsoProvider }
     | { at: 'community'; url: string; provider: SsoProvider }
-    | { at: 'admins'; url: string };
+    | { at: 'admins'; url: string }
+    /** A community copy at the vault that no community saved on this phone says is its own: it goes alone, by its label. */
+    | { at: 'vault-half'; ref: string };
 
 /** What a removal did. `remembered`: a community's delete that didn't land, kept and tried again. */
 export type Removal = { removed: true } | { removed: false; why: NotAnswered | 'refused' | 'remembered' };
@@ -69,9 +74,35 @@ export function isPending(w: WaysBack, url: string, provider: SsoProvider): bool
     return w.pending.some(p => p.provider === provider && sameCommunity(p.url, url));
 }
 
+/** The community copies the vault lists: half a key each (VR4). */
+export function vaultHalves(w: WaysBack): VaultCommunityCopy[] {
+    return w.vault.kind === 'listed' ? w.vault.communityCopies ?? [] : [];
+}
+
+/** The vault's copy that goes with community `c`'s half, or undefined. */
+export function vaultHalfOf(w: WaysBack, c: CommunityPart): VaultCommunityCopy | undefined {
+    return c.vaultRef ? vaultHalves(w).find(h => h.ref === c.vaultRef) : undefined;
+}
+
+/**
+ * Whether what community `c` keeps for its admins can bring the member back: its whole copy, or its half with the vault's
+ * half of the very same copy. Half a pair brings nobody back.
+ */
+function adminsCopyWorks(w: WaysBack, c: CommunityPart): boolean {
+    const copy = c.status?.adminsCopy;
+    if (!copy) return false;
+    return copy.placement !== 'shared' || vaultHalfOf(w, c)?.copy === copy.copy;
+}
+
+/** The vault's community copies no community on this phone says are its own: listed and removable, never a way back. */
+export function strayVaultHalves(w: WaysBack): VaultCommunityCopy[] {
+    return vaultHalves(w).filter(h => !w.communities.some(c => c.vaultRef === h.ref));
+}
+
 /**
  * Every copy this phone knows is kept now, not counting ones waiting to be removed. A copy a community keeps for its
  * admins but can't open (`adminsCopyUnopenable`) is not one: it brings nobody back, so it is listed but never counted.
+ * Nor is half of a shared copy without the other half (VR4).
  */
 export function knownCopies(w: WaysBack): CopyAt[] {
     const out: CopyAt[] = [];
@@ -80,7 +111,7 @@ export function knownCopies(w: WaysBack): CopyAt[] {
         for (const provider of c.status?.providers ?? []) {
             if (!isPending(w, c.url, provider)) out.push({ at: 'community', url: c.url, provider });
         }
-        if (c.status?.adminsCopy) out.push({ at: 'admins', url: c.url });
+        if (adminsCopyWorks(w, c)) out.push({ at: 'admins', url: c.url });
     }
     return out;
 }
@@ -88,6 +119,7 @@ export function knownCopies(w: WaysBack): CopyAt[] {
 function sameCopy(a: CopyAt, b: CopyAt): boolean {
     if (a.at === 'vault') return b.at === 'vault' && a.provider === b.provider;
     if (a.at === 'admins') return b.at === 'admins' && sameCommunity(a.url, b.url);
+    if (a.at === 'vault-half') return b.at === 'vault-half' && a.ref === b.ref;
     return b.at === 'community' && a.provider === b.provider && sameCommunity(a.url, b.url);
 }
 
@@ -108,7 +140,8 @@ export function unopenableAdminsCopies(w: WaysBack): CommunityPart[] {
  * 12 words still work).
  */
 export function wordsOnly(w: WaysBack): boolean {
-    return everyoneAnswered(w) && knownCopies(w).length === 0 && w.pending.length === 0 && unopenableAdminsCopies(w).length === 0;
+    return everyoneAnswered(w) && knownCopies(w).length === 0 && w.pending.length === 0 && unopenableAdminsCopies(w).length === 0
+        && vaultHalves(w).length === 0 && !w.communities.some(c => c.status?.adminsCopy);
 }
 
 /**
@@ -122,8 +155,8 @@ export type BeforeRemoving = 'confirm' | 'show-words-first' | 'no-words-on-phone
 export function beforeRemoving(
     w: WaysBack, removing: CopyAt | 'everything', phone: { hasWords: boolean; writtenDown: boolean },
 ): BeforeRemoving {
-    // Removing a copy its community can't open takes no way back away: the ask is an ordinary one.
-    if (removing !== 'everything' && removing.at === 'admins' && unopenableAdminsCopies(w).some(c => sameCommunity(c.url, removing.url))) return 'confirm';
+    // Removing what brings nobody back (a copy its community can't open, half a pair) takes no way back away: an ordinary ask.
+    if (removing !== 'everything' && (removing.at === 'vault-half' || (removing.at === 'admins' && !knownCopies(w).some(c => sameCopy(c, removing))))) return 'confirm';
     const left = removing === 'everything' ? [] : knownCopies(w).filter(c => !sameCopy(c, removing));
     if (left.length > 0 || phone.writtenDown) return 'confirm';
     return phone.hasWords ? 'show-words-first' : 'no-words-on-phone';

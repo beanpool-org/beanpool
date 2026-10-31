@@ -32,8 +32,8 @@ import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import { anchorUrl } from '../utils/node-post';
 import { copiesAtFor } from '../utils/copies-rule';
 import {
-    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom, removeEverything, removeVaultCopy,
-    sameCommunity, wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
+    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom, removeEverything, removeVaultCopy, removeVaultHalf,
+    sameCommunity, vaultHalfOf, wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
 } from '../utils/ways-back';
 
 export { ErrorBoundary };
@@ -147,21 +147,40 @@ export default function WaysBackScreen() {
 
     const onRemove = (copy: CopyAt) => {
         if (!identity || !ways || busy) return;
+        if (copy.at === 'vault-half') {
+            // Half a copy no community on this phone says is its own: it goes from the vault alone, and is no way back.
+            confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), t('Remove this copy?'), VAULT_DELETES(), () => {
+                void (async () => {
+                    setBusy(true);
+                    try {
+                        const removal = await removeVaultHalf(identity, copy.ref);
+                        await after([removal.removed ? t("Removed from BeanPool's key vault.") : vaultNotRemoved(removal.why)]);
+                    } finally {
+                        setBusy(false);
+                    }
+                })();
+            });
+            return;
+        }
         if (copy.at === 'admins') {
             // The copy a community keeps for its admins to bring the member back from (VR3): the row's own words.
             const at = ways.communities.find(c => sameCommunity(c.url, copy.url));
             if (!at) return;
             // One its server can't open is no way back now: the ask says what removing it does, and nothing more.
             const cantOpen = !at.status?.adminsCopy && !!at.status?.adminsCopyUnopenable;
+            // A shared copy (VR4) is one way back in two places: its one Remove asks both.
+            const shared = at.status?.adminsCopy?.placement === 'shared' || !!vaultHalfOf(ways, at);
             confirm(beforeRemoving(ways, copy, { hasWords, writtenDown }), cantOpen ? t('Remove this copy?') : t('Remove this way back?'),
                 cantOpen
                     ? t("{community}'s server deletes the copy it can't open. Your 12 words still work.", { community: at.name })
-                    : t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
+                    : shared
+                        ? t(WAYS_BACK_LINES.removeShared, { community: at.name })
+                        : t("{community}'s server deletes its copy of your account. Your admins can no longer bring you back; your 12 words still work.", { community: at.name }),
                 () => {
                     void (async () => {
                         setBusy(true);
                         try {
-                            await after([adminsResult(at.name, await removeAdminsCopyFrom(identity, at))]);
+                            await after([adminsResult(at.name, await removeAdminsCopyFrom(identity, at, { vaultToo: shared }))]);
                         } finally {
                             setBusy(false);
                         }

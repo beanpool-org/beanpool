@@ -57,6 +57,11 @@ export function holdEndsWords(releaseAt: number, now: number = Date.now()): stri
     return tn(hours, 'in about {n} hour ({at})', 'in about {n} hours ({at})', { at });
 }
 
+/** What started a hold, as a sentence names it: a sign-in, or a community's admins (vault rethink VR4). */
+function holdSourceName(hold: VaultHold): string {
+    return hold.provider === 'community' ? t("a community's admins") : SSO_PROVIDER_NAMES[hold.provider];
+}
+
 export const RECOVERY_ALERT_COPY = {
     /** The title over a final answer to a Stop or "Yes, it's me" (utils/vault.ts `holdAnswerIsFinal`). */
     finalTitle: (e: unknown) => {
@@ -249,7 +254,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
 
     const handleStopHold = useCallback((hold: VaultHold) => {
         if (!identity) return;
-        const name = SSO_PROVIDER_NAMES[hold.provider];
+        const name = holdSourceName(hold);
         Alert.alert(
             t('Stop it?'),
             t("The restore with {name} won't go through, and whoever started it gets nothing. If it was you after all, use your 12 words on that phone.", { name }),
@@ -264,7 +269,9 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             await stopVaultHold(identity, hold.holdId);
                             setHolds(h => h.filter(x => x.holdId !== hold.holdId));
                             onStopSuccess?.();
-                            Alert.alert(t('Stopped'), t("The restore with {name} won't go through. To be safe, check that your {name} account's password is one only you know.", { name }));
+                            Alert.alert(t('Stopped'), hold.provider === 'community'
+                                ? t("The restore won't go through. If it wasn't you, tell your community's owners.")
+                                : t("The restore with {name} won't go through. To be safe, check that your {name} account's password is one only you know.", { name }));
                         } catch (e) {
                             // Too late (collected), already stopped, or gone: a final answer, never "try again".
                             if (holdAnswerIsFinal(e)) Alert.alert(RECOVERY_ALERT_COPY.finalTitle(e), RECOVERY_ALERT_COPY.finalBody(e));
@@ -281,7 +288,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
 
     const handleApproveHold = useCallback((hold: VaultHold) => {
         if (!identity) return;
-        const name = SSO_PROVIDER_NAMES[hold.provider];
+        const name = holdSourceName(hold);
         Alert.alert(
             t('Was it you?'),
             t('Only if you started getting back into BeanPool with {name} on another phone yourself. Your account goes there now.', { name }),
@@ -315,7 +322,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
     return (
         <View>
             {holds.map((hold) => {
-                const name = SSO_PROVIDER_NAMES[hold.provider];
+                const name = holdSourceName(hold);
                 const busy = busyHold === hold.holdId;
                 if (approved.includes(hold.holdId)) {
                     // Let through from here: nothing left to answer, so no Stop and no "Yes, it's me" again.
@@ -333,7 +340,9 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                             <Text style={styles.title} accessibilityRole="header">{t('Someone is getting back into your account')}</Text>
                         </View>
                         <Text style={styles.body}>
-                            {t('Someone used {name} to get back into your BeanPool account on another device. It goes through {when} unless you stop it.', { name, when: holdEndsWords(hold.releaseAt) })}
+                            {hold.provider === 'community'
+                                ? t("Someone is getting your account back with help from a community's admins. It goes through {when} unless you stop it.", { when: holdEndsWords(hold.releaseAt) })
+                                : t('Someone used {name} to get back into your BeanPool account on another device. It goes through {when} unless you stop it.', { name, when: holdEndsWords(hold.releaseAt) })}
                         </Text>
                         <Text style={styles.detail}>
                             {t('Started {when}', { when: momentWords(new Date(hold.openedAt)) })}

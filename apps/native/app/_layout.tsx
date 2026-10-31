@@ -889,7 +889,9 @@ function RootLayoutNav() {
                     // one was cut mid-word (measured on the emulator). The body says what happened.
                     Alert.alert(
                         t('Is this you?'),
-                        t('Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, you can let it through now. If not, stop it.'),
+                        holds.some(h => h.provider === 'community')
+                            ? t("Someone is getting your account back on another device, with help from a community's admins. If it was you, you can let it through now. If not, stop it.")
+                            : t('Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, you can let it through now. If not, stop it.'),
                         [
                             { text: t('Not now'), style: 'cancel' },
                             { text: t('Review'), onPress: () => router.push('/(tabs)/settings') },

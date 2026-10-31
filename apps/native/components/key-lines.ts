@@ -25,6 +25,12 @@ import { listNameWords, settingsLineWords } from './settings/settings-lines';
 
 /** Whole sentences, by their English. */
 const FIXED: Readonly<Record<string, WordKey>> = {
+    // utils/community-recovery.ts COMMUNITY_RECOVERY_TEXT: a shared bring-back, and the key vault paused during one.
+    "BeanPool's key vault keeps no copy your community can bring back. Your 12 words work any time, and an admin can re-key you to a new key.": word("BeanPool's key vault keeps no copy your community can bring back. Your 12 words work any time, and an admin can re-key you to a new key."),
+    'This bring-back ran out of time. Ask the admin for a new code.': word('This bring-back ran out of time. Ask the admin for a new code.'),
+    "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.": word("BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back."),
+    "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": word("BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time."),
+    "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": word("BeanPool's key vault is paused for a little while, so nothing was removed. Try again later."),
     // utils/group-history-unlock.ts: the old 12 words and a new phone's code.
     'I have my old phone or old 12 words': word('I have my old phone or old 12 words'),
     "These aren't the words of the key this account moved from.": word("These aren't the words of the key this account moved from."),

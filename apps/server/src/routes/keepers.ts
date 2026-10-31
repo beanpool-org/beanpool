@@ -697,8 +697,10 @@ export function createKeeperRoutes(deps: RouteDeps): Router {
             generation: getCurrentGeneration(owner),
             keepers,
             enrolledSso,
-            communityCopy: copy.kept ? { since: copy.since, placement: copy.placement } : null,
+            communityCopy: copy.kept ? { since: copy.since, placement: copy.placement, copy: copy.copy } : null,
             communityCopyUnopenable: copy.unopenable,
+            // Which of the vault's community copies is this community's (the member's phone derives its own label from it).
+            nodeKey: nodeKeyHex(),
             total,
             threshold,
             canAffordToLose: Math.max(0, effectiveTotal - threshold),

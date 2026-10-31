@@ -880,7 +880,10 @@ function RootLayoutNav() {
         const waits = new Set<() => void>();
         // A bring-back this phone is waiting on at the key vault, for another account than the one it holds: it has no
         // welcome screen to come back through, and the wait outlives the code (utils/community-recovery.ts).
-        loadPendingCommunityRestore().then((waiting) => { if (current && waiting) router.push('/rekey-code'); }).catch(() => {});
+        // Once the app itself shows, as the alert below: never under App Lock's screen, or before the navigator is there.
+        loadPendingCommunityRestore().then((waiting) => {
+            if (current && waiting) waits.add(whenAppShows(() => { if (current) router.push('/rekey-code'); }));
+        }).catch(() => {});
         const look = () => {
             vaultHoldsAtOpen(identity).then((holds) => {
                 if (!current || holds.length === 0) return;

@@ -63,7 +63,7 @@ export function StartCommunityScreen({
             <div className="mx-auto max-w-2xl px-4 pb-10 pt-4">
                 <div className="mb-4 flex items-center gap-2">
                     <button ref={backRef} type="button" onClick={onClose} aria-label={t('Back')}
-                        className="-ml-2 shrink-0 rounded-lg px-2 py-1 text-xl text-nature-600 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800">←</button>
+                        className="-ml-2 shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg px-2 py-1 text-xl text-nature-600 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800">←</button>
                     <h1 id="start-community-title" className="min-w-0 text-2xl font-extrabold text-nature-900 dark:text-nature-50">{t(COPY.title)}</h1>
                 </div>
                 <p className="mb-5 text-[15px] leading-relaxed text-nature-700 dark:text-nature-200">{t(COPY.intro)}</p>

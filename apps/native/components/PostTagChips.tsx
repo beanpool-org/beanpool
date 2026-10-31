@@ -53,5 +53,5 @@ export function PostTagChips({ tags, freeTags, inset = 0 }: { tags: unknown; fre
 const styles = StyleSheet.create({
     row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 16 },
     chip: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 22, borderWidth: 1, justifyContent: 'center', alignItems: 'center', maxWidth: '100%' },
-    chipText: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
+    chipText: { fontSize: 13, fontWeight: '700', flexShrink: 1, minWidth: 0 },
 });

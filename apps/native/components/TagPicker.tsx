@@ -115,6 +115,7 @@ export function TagPicker({
             fontWeight: '600',
             color: colors.text.body,
             flexShrink: 1,
+            minWidth: 0,
         },
         chipTextSelected: {
             color: colors.text.onBrand,
@@ -233,6 +234,7 @@ export function TagPicker({
         },
         addTypedText: {
             flexShrink: 1,
+            minWidth: 0,
             fontSize: 15,
             fontWeight: '700',
             color: colors.brand.primary,

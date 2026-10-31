@@ -5887,6 +5887,5 @@
   "Second pause in 30 days. The last vote said No.": "30日以内で2回目の一時停止です。前回の投票の結果は「いいえ」でした。",
   "Second pause in 30 days. Too few members voted on the last one.": "30日以内で2回目の一時停止です。前回の投票は投票した会員が少なすぎました。",
   "Second pause in 30 days. The last vote was stopped before it closed.": "30日以内で2回目の一時停止です。前回の投票は締め切り前に止められました。",
-  "This will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "これにより取り組みは終了し、エスクローされていたすべてのプレッジが支援者に即座に返金されます。その後に閉鎖されたアカウント（削除されたアカウント、または清算された事業者）からのプレッジは、閉鎖されたアカウントの残りのビーンズと同様に代わりにコモンズに送られ、他の全員のプレッジはそのまま各自に返金されます。",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "完全な鍵更新（re-key）コードではありません。「RK-」で始まり、8文字の英数字が続きます。"
+  "This will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "これにより取り組みは終了し、エスクローされていたすべてのプレッジが支援者に即座に返金されます。その後に閉鎖されたアカウント（削除されたアカウント、または清算された事業者）からのプレッジは、閉鎖されたアカウントの残りのビーンズと同様に代わりにコモンズに送られ、他の全員のプレッジはそのまま各自に返金されます。"
 }

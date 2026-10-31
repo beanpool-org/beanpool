@@ -269,3 +269,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `updateEnterpriseLocation` and `clearEnterpriseLocation` in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage in `node-client.test.ts`.
 **Learning:** Testing enterprise location helpers verified `POST` and `DELETE` requests to `/api/local/admin/treasury/:pubkey/location` with coordinate payloads, admin credentials/2FA session headers, and error handling for failed requests.
 **Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.
+
+## 2026-10-28 - [manager tests] photo-resize error handling unit tests
+**Gap:** Canvas context creation returning `null` and `FileReader` error branches in `resizePhotoFile` (`apps/manager/src/lib/photo-resize.ts`) were untested.
+**Learning:** Testing `resizePhotoFile` error branches required extending `stubPipeline` in `photo-resize.test.ts` to mock `FileReader.prototype.onerror` and `HTMLCanvasElement.prototype.getContext` returning `null`, verifying promise rejections with expected error messages.
+**Action:** Continue identifying error recovery paths in utility functions across `apps/manager/src/lib/`.

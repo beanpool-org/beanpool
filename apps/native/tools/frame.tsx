@@ -28,6 +28,7 @@ import { editHomeStyles } from '../components/home/EditHomeSheet';
 import { openUpdate } from '../utils/update-destination';
 import { reminderOn, readToolDoc, subscribeToolStore, type ToolSettings } from './store';
 import { keepsNodeCopy } from './node-copy';
+import { toolHref } from './route-params';
 import type { PhoneTool } from './index';
 
 /** The row's state line, the Home card's lines: a manifest's function on the document, never a throw. */
@@ -345,7 +346,7 @@ function SwitchRow({ text, value, colors, onChange, disabled, testID }: { text: 
 
 /** Opens a tool, at a screen of its own (its first when none is named). */
 export function openTool(id: string, screen?: string) {
-    router.push({ pathname: '/tool/[id]', params: screen ? { id, screen } : { id } });
+    router.push(toolHref(id, screen));
 }
 
 /**

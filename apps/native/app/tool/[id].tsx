@@ -1,7 +1,8 @@
 /**
  * The one host route of every tool (scratch/tools/DESIGN-tool-template-fable.md §1.3, slice T0.2): `/tool/<id>`, with
- * `screen` (default: the manifest's first) and any params the tool set (`key`, a record's id). Deep links are
- * `beanpool://tool/<id>?screen=…&key=…`. It looks the tool up in the registry (tools/index.ts phoneTool), reads its
+ * `toolScreen` (default: the manifest's first; never `screen` from inside the app, tools/route-params.ts says why) and any
+ * params the tool set (`key`, a record's id). Deep links are `beanpool://tool/<id>?screen=…&key=…`, and either name opens
+ * the screen. It looks the tool up in the registry (tools/index.ts phoneTool), reads its
  * document from the one store (tools/store.ts), builds its host narrowed to its permissions (tools/builder.ts hostFor) and
  * draws the screen inside the frame (tools/frame.tsx), with the two doors while the document is empty.
  *
@@ -41,6 +42,7 @@ import {
     toolBack, type ToolCopyNote,
 } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
+import { TOOL_SCREEN_PARAM, toolHref, toolParams, toolScreenOf } from '../../tools/route-params';
 import { shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
 import { SHOP_TOGGLE_READ_MS, readMyShop } from '../../utils/shop';
 
@@ -57,19 +59,12 @@ function tellOpenScreens(key: string, from: Hear | null, next: Partial<SharedSta
     for (const hear of [...(openScreens.get(key) ?? [])]) if (hear !== from) hear(next);
 }
 
-/** The route's params as the tool sees them: every one but the route's own `id` and `screen`. */
-function toolParams(all: Record<string, string | string[] | undefined>): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(all)) if (k !== 'id' && k !== 'screen' && typeof v === 'string') out[k] = v;
-    return out;
-}
-
 export default function ToolRoute() {
     const all = useLocalSearchParams<Record<string, string>>();
     const { colors } = useTheme();
     const id = typeof all.id === 'string' ? all.id : '';
     const tool = phoneTool(id);
-    const screenName = typeof all.screen === 'string' && all.screen ? all.screen : tool?.manifest.screens[0] ?? '';
+    const screenName = toolScreenOf(all) || (tool?.manifest.screens[0] ?? '');
     const Screen = useMemo(() => {
         if (!tool || !tool.manifest.screens.includes(screenName)) return null;
         try {
@@ -269,7 +264,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
             maxBytes: () => toolDocMaxHere(manifest, settingsRef.current),
         },
         navigate: (screen: string, p?: Record<string, string>) => {
-            router.push({ pathname: '/tool/[id]', params: { ...(p ?? {}), id: manifest.id, screen } });
+            router.push(toolHref(manifest.id, screen, p));
         },
         back: toolBack,
         now: () => Date.now(),
@@ -309,7 +304,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                         tellOpenScreens(shareKey, hear, { doc: empty, stored: false, settings: left, copyNote: null });
                         // On a later screen (a record), back to the first, where the doors are: what it showed has gone.
                         if (screenName !== manifest.screens[0]) {
-                            router.setParams({ screen: manifest.screens[0], ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
+                            router.setParams({ [TOOL_SCREEN_PARAM]: manifest.screens[0], screen: undefined, ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
                         }
                     })().catch((e) => console.warn('[Tools] Could not remove the tool\'s data', e instanceof Error ? e.message : e));
                 },

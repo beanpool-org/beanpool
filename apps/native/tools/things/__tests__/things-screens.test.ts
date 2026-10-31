@@ -566,11 +566,11 @@ describe('Your things', () => {
         expect(rows().map((r) => r!.split(',')[0])).toEqual(['Camping tent']);
         await click('things-filter-all');
         await click('things-add');
-        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { id: 'things', screen: 'edit' } });
+        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { id: 'things', toolScreen: 'edit' } });
         await click('things-loans');
-        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { id: 'things', screen: 'loans' } });
+        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { id: 'things', toolScreen: 'loans' } });
         await click('thing-row-t-3');
-        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { key: 't-3', id: 'things', screen: 'thing' } });
+        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { key: 't-3', id: 'things', toolScreen: 'thing' } });
     });
 
     it("a photo that isn't on this phone (one taken on another device): its row has the thing's emoji, and no screen draws an empty box", async () => {
@@ -1802,7 +1802,7 @@ describe('Loans', () => {
         expect(byTestId('loans-beanpool')).not.toBeNull();
         expect(byTestId('loans-asked')).not.toBeNull();
         await click('loan-row-t-1');
-        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { key: 't-1', id: 'things', screen: 'thing' } });
+        expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { key: 't-1', id: 'things', toolScreen: 'thing' } });
     });
 
     it('nothing out says so', async () => {

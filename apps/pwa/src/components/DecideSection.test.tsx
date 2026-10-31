@@ -206,6 +206,32 @@ describe('DecideSection voting answers', () => {
         expect(screen.queryByTestId('pause-vote-box')).toBeNull();
     });
 
+    // Removal by vote S4 (design §3.4): an owner's second pause within 30 days of a vote that didn't remove the member says so,
+    // by how that vote ended; a first pause says nothing of it.
+    it('a second pause within 30 days says so on its card, by how the last vote ended', () => {
+        const card = decisionCard('s', '1m1v', null);
+        card.authorPubkey = 'SYSTEM';
+        card.effect = 'remove_member';
+        card.title = 'Remove Dave?';
+        const base = { memberName: 'Dave', pausedAt: '2026-10-22T10:00:00.000Z', rule: 2, reason: 'Deposits again', commonsPool: 240 };
+        const shown: Array<[string, string]> = [
+            ['no', 'Second pause in 30 days. The last vote said No.'],
+            ['too_few', 'Second pause in 30 days. Too few members voted on the last one.'],
+            ['stopped', 'Second pause in 30 days. The last vote was stopped before it closed.'],
+        ];
+        for (const [after, words] of shown) {
+            card.params = { ...base, secondPause: { after, endedAt: '2026-10-15T10:00:00.000Z' } };
+            const view = renderDecide(true, [card]);
+            expect(screen.getByTestId('second-pause-line').textContent).toBe(words);
+            expect(screen.getByTestId('pause-vote-box').textContent).toContain(words);
+            view.unmount();
+        }
+        card.params = base;
+        renderDecide(true, [card]);
+        expect(screen.getByTestId('pause-vote-box')).toBeInTheDocument();
+        expect(screen.queryByTestId('second-pause-line')).toBeNull();
+    });
+
     // Nobody votes on their own removal (the node refuses it): its subject reads why, and gets no buttons to press.
     it('a vote on removing the reader says they can\'t vote on it, in place of the buttons; anyone else votes', () => {
         const mine = decisionCard('o', '1m1v', null);

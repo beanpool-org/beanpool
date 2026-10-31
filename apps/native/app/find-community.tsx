@@ -10,7 +10,6 @@ import * as Location from 'expo-location';
 import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
-import { getCanonicalAvatar } from '../utils/canonical-profile';
 import {
     fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts, notAnsweringLine,
     type DirectoryCommunity, type PlaceWatch, type Point,
@@ -350,7 +349,8 @@ export default function FindCommunityScreen() {
         await askNotificationPermissionOnAction('knock', signer.publicKey);
         setSending(true);
         setFormError(null);
-        const avatar = identity ? await getCanonicalAvatar().catch(() => null) : null;
+        // Profile S2-W: knocks do not leak another community's photo
+        const avatar = null;
         // From the global community only for a member there; otherwise the knock names no community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;

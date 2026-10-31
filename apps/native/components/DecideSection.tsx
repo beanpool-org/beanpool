@@ -21,7 +21,7 @@ import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../utils/de
 import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, word, type WordKey } from '@beanpool/core';
 import {
     DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
-    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, turnoutLine, voiceCreditsLine,
+    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine, voiceCreditsLine,
 } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
@@ -976,6 +976,10 @@ export function DecideSection({
                                             <Text style={styles.keepHeadline}>
                                                 {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'), item.proposer)}
                                             </Text>
+                                            {/* A second pause within 30 days of a vote that didn't remove them (removal by vote S4) */}
+                                            {secondPauseLine(item.params) && (
+                                                <Text style={styles.keepHeadline} testID="second-pause-line">{secondPauseLine(item.params)}</Text>
+                                            )}
                                             <Text style={styles.keepBody}>
                                                 {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                             </Text>

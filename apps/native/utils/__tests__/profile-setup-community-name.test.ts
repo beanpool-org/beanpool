@@ -102,6 +102,7 @@ let host: HTMLElement | null = null;
 let root: Root | null = null;
 let requests: Array<{ url: string; method: string; body: string | undefined }> = [];
 let status = 200;
+let responseBody: any = null;
 
 beforeEach(() => {
     mem.store.clear();
@@ -113,10 +114,11 @@ beforeEach(() => {
     community.row = null;
     requests = [];
     status = 200;
+    responseBody = null;
     (globalThis as any).fetch = vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
         requests.push({ url, method: init?.method ?? 'GET', body: init?.body });
         if (status === 0) throw new Error('offline');
-        return { ok: status < 400, status, json: async () => ({ success: true }) };
+        return { ok: status < 400, status, json: async () => (responseBody ?? (status === 409 ? { error: 'callsign_taken', message: 'That name was just taken — please pick another.' } : { success: true })) };
     });
 });
 afterEach(() => {
@@ -253,6 +255,32 @@ describe('Re-run Setup starts from this community\'s own name, not the phone-wid
         await click('Done');
         expect(published()).toEqual([{ publicKey: KEY, avatar: PICK, callsign: 'Rosa Parked' }]);
         expect(await pendingProfileChange(NODE, KEY)).toBeNull();
+    });
+
+    it('when the published name is 409 refused by the node, the refusal is recorded as pendingNameRefused (r4420109422)', async () => {
+        community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
+        await keepPendingProfileChange(NODE, KEY, { callsign: 'Rosa Parked' });
+        status = 409;
+        responseBody = { error: 'callsign_taken', message: 'That name was just taken — please pick another.' };
+        await render();
+        await pickPhoto();
+        await click('Next →');
+        await click('Done');
+        const pending = await pendingProfileChange(NODE, KEY);
+        expect(pending?.refusedCallsign).toBe('Rosa Parked');
+    });
+
+    it('when the 409 is not callsign_taken, the name is not marked as refused', async () => {
+        community.row = { public_key: KEY, callsign: 'Rosa 2', avatar_url: null };
+        await keepPendingProfileChange(NODE, KEY, { callsign: 'Rosa Parked' });
+        status = 409;
+        responseBody = { error: 'concurrent_mutation', message: 'Conflict, please retry.' };
+        await render();
+        await pickPhoto();
+        await click('Next →');
+        await click('Done');
+        const pending = await pendingProfileChange(NODE, KEY);
+        expect(pending?.refusedCallsign).toBeUndefined();
     });
 
     it('offline with no name given: only the pick is kept for the retry, the name is not invented into it', async () => {

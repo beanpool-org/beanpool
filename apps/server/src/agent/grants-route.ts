@@ -12,8 +12,9 @@
  *   the per-member cap hold for every one.
  * - "May post for me" (agent/owner-posts.ts; design Q1): a tick on the make form, default off, kept on the token; only a
  *   ticked owner's assistant is offered the posting tools. The list shows it, and the posts each made today.
- * - "Assistant posts a day" (`POST …/agent/posts-per-day`): how many posts one ticked assistant may make in a UTC day,
- *   1–1,000, 100 unless set (agent/limits.ts). An owner change with a fresh proof every time, as the gateway's settings
+ * - "Owner and admin limit", first "Assistant posts a day" (`POST …/agent/posts-per-day`): how many posts one ticked
+ *   assistant may make in a UTC day, and since 31 Oct owners' and admins' own content limits in the apps
+ *   (engine/owner-admin-limit.ts), 1–1,000, 100 unless set (agent/limits.ts). An owner change with a fresh proof every time, as the gateway's settings
  *   (requireFreshProof: a computer's key session is sent to the phone), in this server's local config (never copied to a
  *   standby), and the owners are told (sec.agent).
  * - List: an owner sees every assistant (member, name, role, via, last used, calls today); an admin their own.
@@ -193,7 +194,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             defaultDays: AGENT_TOKEN_DEFAULT_DAYS,
             maxDays: AGENT_TOKEN_MAX_DAYS,
             perMember: AGENT_GRANTS_PER_MEMBER,
-            /** The owners' "Assistant posts a day" (an owner changes it: AGENT_POSTS_PER_DAY_PATH). */
+            /** The owners' "Owner and admin limit" (an owner changes it: AGENT_POSTS_PER_DAY_PATH). */
             postsPerDay: agentPostsPerDay(),
             postsPerDayDefault: AGENT_POSTS_PER_DAY_DEFAULT,
             postsPerDayMin: AGENT_POSTS_PER_DAY_MIN,
@@ -292,25 +293,26 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/agent/posts-per-day', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         if (!(await personOnly(ctx, deps))) return;
-        if (!requireAdminRole(ctx, ['owner'], 'Only an owner sets how many posts an assistant may make a day')) return;
+        if (!requireAdminRole(ctx, ['owner'], 'Only an owner sets the owner and admin limit')) return;
         const perDay = body(ctx).perDay;
         if (!isAgentPostsPerDay(perDay)) {
             ctx.status = 400;
-            ctx.body = { error: `Assistant posts a day is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX.toLocaleString('en')}` };
+            ctx.body = { error: `The owner and admin limit is a whole number from ${AGENT_POSTS_PER_DAY_MIN} to ${AGENT_POSTS_PER_DAY_MAX.toLocaleString('en')}` };
             return;
         }
-        // Part of what bounds a leaked posting token (design §2.10), so an owner's fresh proof every time, as the gateway's own
-        // rate limit asks (routes/admin.ts): a computer's key session is sent to the phone, the phone's hand-off must be
-        // fresh, the password sends a current code. After the range check: a code is spent when it is checked (#2002 NB1).
-        if (!(await requireFreshProof(ctx, body(ctx).code, 'change how many posts an assistant may make a day'))) return;
+        // Part of what bounds a leaked posting token (design §2.10), and since 31 Oct what an owner's or admin's key may
+        // make in the apps, so an owner's fresh proof every time, as the gateway's own rate limit asks (routes/admin.ts): a
+        // computer's key session is sent to the phone, the phone's hand-off must be fresh, the password sends a current
+        // code. After the range check: a code is spent when it is checked (#2002 NB1).
+        if (!(await requireFreshProof(ctx, body(ctx).code, 'change the owner and admin limit'))) return;
         const was = agentPostsPerDay();
         if (was !== perDay) {
             setAgentPostsPerDay(perDay);
             const by = actorOf(ctx) ?? 'owner:password';
-            logger.info('ADMIN', 'Assistant posts a day changed', { from: was, to: perDay, by: by.slice(0, 16) });
+            logger.info('ADMIN', 'Owner and admin limit changed', { from: was, to: perDay, by: by.slice(0, 16) });
             noteSecurityEvent({
                 key: 'sec.agent', actor: by, actorRole: 'owner',
-                detail: `An owner changed how many posts each owner's AI assistant may make a day, from ${was.toLocaleString('en')} to ${perDay.toLocaleString('en')}.`,
+                detail: `An owner changed the owner and admin limit, how many posts and other things each owner and admin, and each owner's AI assistant, may make a day, from ${was.toLocaleString('en')} to ${perDay.toLocaleString('en')}.`,
             });
         }
         ctx.body = { postsPerDay: perDay };

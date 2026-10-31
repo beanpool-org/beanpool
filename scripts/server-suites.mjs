@@ -313,6 +313,7 @@ export const SUITES = [
     'test-detached-pwa',
     'test-dos-caps',
     'test-writer-bounds',
+    'test-owner-admin-limits',
     'test-money-limits',
     'test-money-limits-gate',
     'test-economic-hardening',

@@ -32,7 +32,7 @@ On the phone, **Commons** shows **Yours** at the top of **Groups**: the enterpri
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
 - Tap **Create Group**. You become its **lead convenor**. On the phone, the app takes you straight into the new group's chat.
 
-You can start up to 5 groups in any 24 hours.
+You can start up to 5 groups in any 24 hours. An owner or admin can start as many as the owners' **Owner and admin limit** allows (100 unless an owner changes it).
 
 With Beans involved? Start a project or an enterprise instead: tap **Start something** (on the phone, the round **+** button) on **Commons**, then pick **Project** or **Enterprise** (or from the link at the bottom of the group form, **Start a project or an enterprise →**). See "Projects and enterprises".
 

@@ -827,7 +827,8 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                         isDeduplicated = true;
                     }
                 } else {
-                    // Fresh insert: 50 new links by hand a day per member (W-main, engine/writer-bounds.ts). Checked here,
+                    // Fresh insert: 50 new links by hand a day per member, an owner's or admin's the owners' setting
+                    // (W-main, engine/writer-bounds.ts). Checked here,
                     // in the transaction, so a link already there or brought back is never refused.
                     assertMaySubmitToPulse(actor);
                     finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;

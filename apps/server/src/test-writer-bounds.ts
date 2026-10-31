@@ -21,11 +21,13 @@
  *  7. Groups: 5 a day (the 6th 429 groups_per_day).
  *  8. Invites: 20 a day (the 21st 429 invites_per_day); 50 unused (the 51st 429 invites_unused), and a used one makes
  *     room; the codes an owner makes in Settings under the first member never count against that member's own; an
- *     offline ticket counts when someone joins with it, and past 20 that join is refused with nothing written.
+ *     offline ticket counts when someone joins with it, and past 20 that join is refused with nothing written; an
+ *     admin's are the owners' setting (test-owner-admin-limits has the rule; here, through the route).
  *  9. The unused-invite prune: an unused code (or ticket row) past 30 days goes, with no tombstone; a used one and a
  *     younger one stay; a standby prunes nothing.
  * 10. The Pulse: 50 links by hand a day (the 51st 429 pulse_per_day); a link already there, spelled with share tracking
- *     and a fragment, is the same link and never refused; 300 synced items a day over HTTPS, the rest left for later.
+ *     and a fragment, is the same link and never refused; 300 synced items a day over HTTPS, the rest left for later; an
+ *     admin's links by hand are the owners' setting, through the route.
  * 11. Read marks (PR #1312 review): 4,999 read marks, then a DM line, is 200 (it used to be 429 day_budget); past the
  *     budget a read mark (mark-read, notices seen) still goes and a real write is 429 day_budget; no other spelling or
  *     method of the read-mark paths, and no real write dressed as one, rides the exemption; the minute bucket still
@@ -58,6 +60,7 @@ import { DEFAULT_GATEWAY_CONFIG } from './config/gateway.js';
 import { WRITER_LIMITS } from './config/writer-limits.js';
 import { pruneUnusedInvites } from './engine/writer-bounds.js';
 import { grantNodeRole } from './engine/node-roles.js';
+import { setAgentPostsPerDay, AGENT_POSTS_PER_DAY_DEFAULT } from './agent/limits.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { addChannel } from './engine/creator-channels.js';
 import { createPulseSubmitRoutes, type PulseSubmitRouteDeps } from './routes/pulse-submit.js';
@@ -455,6 +458,18 @@ async function main(): Promise<void> {
             `a join with his next ticket is refused, in words the joiner reads (${show(b)})`);
         assert(count('SELECT COUNT(*) AS n FROM members WHERE public_key = ?', joinB.pk) === 0 && count('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ?', rex.pk) === rowsBefore,
             'and nothing is written: no member row, the ticket still unused');
+
+        // An admin's are the owners' setting instead (engine/owner-admin-limit.ts): past a member's 20 here, and held at it.
+        const ida = member('Ida');
+        grantNodeRole(ida.pk, 'admin', owner.pk);
+        const setting = WRITER_LIMITS.invitesPerDay + 2;
+        setAgentPostsPerDay(setting);
+        const idaMade: number[] = [];
+        for (let i = 0; i < setting; i++) idaMade.push((await invite(ida)).status);
+        const idaOver = await invite(ida);
+        setAgentPostsPerDay(AGENT_POSTS_PER_DAY_DEFAULT);
+        assert(idaMade.every(s => s === 200) && idaOver.status === 429 && idaOver.body?.code === 'invites_unused' && /owners allow 22 at a time for owners and admins/.test(idaOver.body?.error ?? ''),
+            `an admin at a setting of 22 makes 22, past a member's 20; the 23rd is 429 naming it (${[...new Set(idaMade)].join(',')}, then ${show(idaOver)})`);
     }
 
     // ── 9. The unused-invite prune ────────────────────────────────────────────────────────────────────────────
@@ -498,8 +513,8 @@ async function main(): Promise<void> {
         };
         const router = createPulseSubmitRoutes(deps) as any;
         const layer = router.stack.find((l: any) => l.path === '/api/member/pulse/submit' && l.methods.includes('POST'));
-        const submit = async (url: string) => {
-            const ctx: any = { state: { actor: tia.pk }, requestBody: { url, channelId: site.id }, params: {}, status: 200, body: undefined, set: () => {} };
+        const submit = async (url: string, actor = tia.pk, channelId = site.id) => {
+            const ctx: any = { state: { actor }, requestBody: { url, channelId }, params: {}, status: 200, body: undefined, set: () => {} };
             await layer.stack[layer.stack.length - 1](ctx, async () => {});
             return { status: ctx.status, body: ctx.body };
         };
@@ -512,6 +527,19 @@ async function main(): Promise<void> {
         assert(again.status === 200 && again.body?.deduplicated === true,
             `the first link again, with share tracking and a fragment: the same link, never refused at the limit (${again.status} deduplicated ${again.body?.deduplicated})`);
         assert(count("SELECT COUNT(*) AS n FROM pulse_items WHERE owner_pubkey = ? AND source = 'manual'", tia.pk) === 50, 'and 50 are stored');
+
+        // An admin's are the owners' setting instead (engine/owner-admin-limit.ts): past a member's 50 here, and held at it.
+        const ivo = member('Ivo');
+        grantNodeRole(ivo.pk, 'admin', owner.pk);
+        const ivoSite = addChannel({ ownerPubkey: ivo.pk, platform: 'website', raw: 'https://blog.example.org', category: 'other' });
+        const setting = WRITER_LIMITS.pulseSubmissionsPerDay + 2;
+        setAgentPostsPerDay(setting);
+        const ivoAdded: number[] = [];
+        for (let i = 1; i <= setting; i++) ivoAdded.push((await submit(`https://blog.example.org/ivo-${i}`, ivo.pk, ivoSite.id)).status);
+        const ivoOver = await submit('https://blog.example.org/ivo-53', ivo.pk, ivoSite.id);
+        setAgentPostsPerDay(AGENT_POSTS_PER_DAY_DEFAULT);
+        assert(ivoAdded.every(s => s === 200) && ivoOver.status === 429 && ivoOver.body?.code === 'pulse_per_day' && /owners allow 52 new links to the Pulse/.test(ivoOver.body?.error ?? ''),
+            `an admin at a setting of 52 adds 52 links, past a member's 50; the 53rd is 429 naming it (${[...new Set(ivoAdded)].join(',')}, then ${ivoOver.status} ${JSON.stringify(ivoOver.body).slice(0, 160)})`);
 
         // The synced items, over HTTPS: they carry their own titles, so nothing is looked up.
         const uma = member('Uma');

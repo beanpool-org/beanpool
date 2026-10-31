@@ -147,6 +147,8 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
                     <Text style={styles.secondaryText}>{t(VAULT_MOVE_COPY.removeButton)}</Text>
                 </Pressable>
             )}
+            {/* No tick on this card, so the new copy carries no list of communities (vault rethink VR5): the sheet's
+                `listCommunities` stays off. */}
             <SsoEnrolSheet
                 visible={sheetOpen}
                 provider={offer.provider}

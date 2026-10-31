@@ -84,20 +84,32 @@ afterEach(() => {
 });
 
 describe('the tick', () => {
+    // The panel draws the tick from what is kept, and hands what it shows to the sheet (KeeperProtectionPanel onProtectSso).
+    const shownTick = () => copyListsCommunities(ID.publicKey);
+
     it('is on until the member unticks it, per account; off, a connect carries no list', async () => {
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(SAVED));
         expect(await copyListsCommunities(ID.publicKey)).toBe(true);
-        expect(await communitiesForCopy(ID.publicKey)).not.toBeNull();
+        expect(await communitiesForCopy(await shownTick())).not.toBeNull();
         await setCopyListsCommunities(ID.publicKey, false);
         expect(await copyListsCommunities(ID.publicKey)).toBe(false);
         expect(await copyListsCommunities('ab'.repeat(32))).toBe(true);
-        expect(await communitiesForCopy(ID.publicKey)).toBeNull();
+        expect(await communitiesForCopy(await shownTick())).toBeNull();
         await setCopyListsCommunities(ID.publicKey, true);
-        expect(await communitiesForCopy(ID.publicKey)).toHaveLength(3);
+        expect(await communitiesForCopy(await shownTick())).toHaveLength(3);
+    });
+
+    it('the kept tick alone sends no list: only a choice the opener hands over does (#2660 review, finding 1)', async () => {
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(SAVED));
+        await setCopyListsCommunities(ID.publicKey, true);
+        // An opener with no tick on screen (Settings' move card, welcome's claim-flow Add a sign-in) hands nothing, or false.
+        expect(await communitiesForCopy(undefined)).toBeNull();
+        expect(await communitiesForCopy(false)).toBeNull();
+        expect(await communitiesForCopy(true)).toHaveLength(3);
     });
 
     it("the list is this phone's communities, the one it is on first, by the names the phone shows; none, no list", async () => {
-        expect(await communitiesForCopy(ID.publicKey)).toBeNull();
+        expect(await communitiesForCopy(true)).toBeNull();
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(SAVED));
         mem.async.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
         expect(await communitiesOnPhoneForCopy()).toEqual([
@@ -111,7 +123,7 @@ describe('the tick', () => {
 describe('a connect with the list', () => {
     it('seals it inside the copy at the vault: the copy opens to the key, the words and the list', async () => {
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(SAVED));
-        const result = await connect('google-sub-1', await communitiesForCopy(ID.publicKey));
+        const result = await connect('google-sub-1', await communitiesForCopy(true));
         expect(result.error).toBeUndefined();
         expect(result.communitiesListed).toBe(3);
         expect(result.communitiesLeftOut).toBe(0);
@@ -123,7 +135,7 @@ describe('a connect with the list', () => {
 
     it('never sends a name or address of a community in the clear: not one byte of any request to the vault', async () => {
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(SAVED));
-        await connect('google-sub-1', await communitiesForCopy(ID.publicKey));
+        await connect('google-sub-1', await communitiesForCopy(true));
         const sent = net.sent.filter((s) => s.origin === VAULT);
         expect(sent.some((s) => s.path === '/v1/copies')).toBe(true);
         for (const s of sent) {

@@ -25,7 +25,11 @@ export async function copyListsCommunities(publicKey: string): Promise<boolean> 
     }
 }
 
-/** The member's tick. Applies to the next copy made (a connect, or Connect again); nothing already kept changes. */
+/**
+ * The member's tick, remembered for the next time it is drawn. Applies to the next copy made where it is drawn (a connect,
+ * or Connect again); nothing already kept changes. It never sends a list by itself: the screen that drew the tick hands
+ * what it showed to the sheet (`communitiesForCopy`).
+ */
 export async function setCopyListsCommunities(publicKey: string, on: boolean): Promise<void> {
     await AsyncStorage.setItem(copyListsCommunitiesStoreKey(publicKey), on ? '1' : '0').catch(() => {});
 }
@@ -56,11 +60,12 @@ export async function communitiesOnPhoneForCopy(): Promise<CopyCommunity[]> {
 }
 
 /**
- * The list a connect for this account seals into the copy: this phone's communities when the member's tick is on, else
- * null (no list: the copy is as before lists).
+ * The list a connect seals into the copy: this phone's communities when the member chose it in the flow that opened the
+ * sheet (the tick on screen, left on), else null (no list: the copy is as before lists). Only that choice counts, never
+ * the stored tick alone: a screen that draws no tick (Settings' move card, welcome's claim-flow Add a sign-in) passes none.
  */
-export async function communitiesForCopy(publicKey: string): Promise<CopyCommunity[] | null> {
-    if (!(await copyListsCommunities(publicKey))) return null;
+export async function communitiesForCopy(chosen: boolean | undefined): Promise<CopyCommunity[] | null> {
+    if (chosen !== true) return null;
     const list = await communitiesOnPhoneForCopy();
     return list.length ? list : null;
 }

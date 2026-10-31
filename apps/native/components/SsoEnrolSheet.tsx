@@ -26,6 +26,7 @@ export function SsoEnrolSheet({
     copyAt,
     copiesAt,
     onCopiesChanged,
+    listCommunities = false,
 }: {
     visible: boolean;
     onClose: () => void;
@@ -58,6 +59,13 @@ export function SsoEnrolSheet({
      * before the member links one, and to offer no sign-in where the community keeps none.
      */
     onCopiesChanged?: () => void;
+    /**
+     * The member chose, in the flow that opened the sheet, to keep their list of communities in the copy (vault rethink
+     * VR5): true only from Account Protection's Protect with or Connect again, with the tick beside them on screen and left
+     * on (components/KeeperProtectionPanel.tsx). Absent or false: no list, whatever the stored tick says, so an opener that
+     * draws no tick (Settings' move card, welcome's claim-flow Add a sign-in) never sends one.
+     */
+    listCommunities?: boolean;
 }): React.JSX.Element | null {
     const { colors } = useOnboardingColors();
     const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -127,8 +135,9 @@ export function SsoEnrolSheet({
                 setStep('error');
                 return;
             }
-            // The member's communities ride inside the copy when their tick beside Protect with is on (vault rethink VR5).
-            const communities = await communitiesForCopy(identity.publicKey);
+            // The member's communities ride inside the copy only when the opener says the member left the tick on there
+            // (vault rethink VR5), never from the stored tick alone.
+            const communities = await communitiesForCopy(listCommunities);
             const result = await connectAndDeposit({
                 provider,
                 url,

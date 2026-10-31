@@ -376,6 +376,11 @@ export default function WelcomeScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [showSsoSheet, setShowSsoSheet] = useState(false);
     const [ssoProvider, setSsoProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
+    /**
+     * The sheet's copy carries the list of communities (vault rethink VR5): only from the panel's Protect with, with its
+     * tick on. The claim flow's Add a sign-in draws no tick, so it sets this off.
+     */
+    const [ssoListCommunities, setSsoListCommunities] = useState(false);
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     /**
      * Where a copy made at Safety Backup goes: the joined community's rule (vault rethink VR2, utils/copies-rule.ts),
@@ -2423,8 +2428,9 @@ export default function WelcomeScreen() {
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
                             copiesAt={backupCopiesAt}
                             communityName={joinFlow === 'claim' ? claimedName ?? undefined : undefined}
-                            onProtectSso={Platform.OS !== 'web' ? (prov) => {
+                            onProtectSso={Platform.OS !== 'web' ? (prov, listCommunities) => {
                                 if (prov) setSsoProvider(prov);
+                                setSsoListCommunities(listCommunities);
                                 setShowSsoSheet(true);
                             } : undefined}
                             listCommunitiesFor={pendingIdentity?.publicKey}
@@ -2466,6 +2472,7 @@ export default function WelcomeScreen() {
                             askPhoneLock={!pendingWordsAreNew}
                             copyAt={joinFlow === 'claim' ? 'community' : undefined}
                             copiesAt={backupCopiesAt}
+                            listCommunities={ssoListCommunities}
                             onClose={() => setShowSsoSheet(false)}
                             onCopiesChanged={() => setBackupCopiesRead((n) => n + 1)}
                             onEnrolled={(result) => {
@@ -2607,7 +2614,12 @@ export default function WelcomeScreen() {
                         {wordsMember && Platform.OS !== 'web' && (
                             <Pressable
                                 style={[styles.secondaryBtn, { marginTop: 8 }]}
-                                onPress={() => (joinFlow === 'claim' ? setShowSsoSheet(true) : setShowLinkSheet(true))}
+                                onPress={() => {
+                                    if (joinFlow !== 'claim') return setShowLinkSheet(true);
+                                    // No tick here, so no list of communities in this copy (vault rethink VR5).
+                                    setSsoListCommunities(false);
+                                    setShowSsoSheet(true);
+                                }}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.secondaryBtnText}>{backupCopiesAt === 'none' ? t('Add a sign-in') : t(WORDS_BACKUP_TEXT.addSignIn)}</Text>

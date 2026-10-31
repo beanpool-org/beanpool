@@ -614,7 +614,9 @@ async function main(): Promise<void> {
             && !afterRestart.ok && /^This assistant has made 1,000 posts today/.test(afterRestart.ok ? '' : afterRestart.error) && madeBy(seedGrant) === 1000,
             `the 1,001st is refused, and still after a restart empties the count kept in memory (${thousandAndOne.ok ? 'made' : thousandAndOne.error.slice(0, 80)} | ${afterRestart.ok ? 'made' : afterRestart.error.slice(0, 50)})`);
         // The owner's photo budget stays as it is (100 MB unless the server sets another); its refusal says the room left.
-        const photoGrant = { ...seedGrant, id: 'photo-room-check' } as AgentGrant;
+        // A real second grant (its own counts): a post is made only for a grant that is still live when its photos are in.
+        const photoT = await call('POST', '/api/local/admin/agent/grants', { headers: ownerPhoneSessionHeaders(owner.pub), body: { name: 'Olive\'s photo room check', canPost: true } });
+        const photoGrant = { ...seedGrant, id: photoT.body?.grant?.id, name: 'Olive\'s photo room check' } as AgentGrant;
         const budgetWas = process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY;
         process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = String(memberPhotoRoom(owner.pub)!.used + 2048);
         try {

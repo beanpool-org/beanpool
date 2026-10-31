@@ -105,6 +105,7 @@ export function pauseVoteHeadline(params: { memberName?: string; pausedAt?: stri
 export function secondPauseLine(params: { secondPause?: { after?: string } | null } | null | undefined): string | null {
     const after = params?.secondPause?.after;
     if (after === 'no') return t('Second pause in 30 days. The last vote said No.');
+    if (after === 'too_few_yes') return t('Second pause in 30 days. The last vote had fewer than 3 Yes votes.');
     if (after === 'too_few') return t('Second pause in 30 days. Too few members voted on the last one.');
     if (after === 'stopped') return t('Second pause in 30 days. The last vote was stopped before it closed.');
     return null;
@@ -185,8 +186,8 @@ export function ownerDecisionLine(
     }
     if (decision.ownerDecidedAt) {
         return reason
-            ? t('Too few members can vote, so an owner decided: unless more of them vote, {name} is removed when this vote closes. Their reason: {reason}', { name, reason })
-            : t('Too few members can vote, so an owner decided: unless more of them vote, {name} is removed when this vote closes.', { name });
+            ? t('Too few members can vote, so an owner decided: unless more of them vote, {name} is removed 7 days after this vote closes. Their reason: {reason}', { name, reason })
+            : t('Too few members can vote, so an owner decided: unless more of them vote, {name} is removed 7 days after this vote closes.', { name });
     }
     return decision.caseHiddenAt
         ? t('Too few members can vote, so unless more of them vote, {name} is back when this vote closes.', { name })
@@ -214,11 +215,14 @@ export function pauseVoteBody(
 /**
  * Why a vote that closed as failed did nothing, beside its numbers: too few voted, or its share fell short, or on a removal
  * (the node's `minYes`) only the Yes floor stopped it (design §5 point 1). A removal that passed and was then cancelled in
- * its grace window by a vote to reinstate the member failed too, and says so: its numbers still show a vote that passed.
+ * its grace window by a vote to reinstate the member failed too, and says so: its numbers still show a vote that passed. So
+ * does one an owner decided: once carried out (`ownerDecisionCarriedAt`) nothing else fails it, and its numbers passed nothing.
  */
 export function notExecutedLine(
     tally: Pick<DecisionTally, 'quorumMet' | 'passed' | 'minYes' | 'yesWeight' | 'noWeight' | 'supportRatio' | 'thresholdRequired'>,
+    decision?: { ownerDecisionCarriedAt?: string | null } | null,
 ): string {
+    if (decision?.ownerDecisionCarriedAt) return t('Not executed: a reinstatement vote cancelled it');
     if (!tally.quorumMet) return t('Not executed: Quorum not reached');
     if (tally.minYes) {
         if (tally.passed) return t('Not executed: a reinstatement vote cancelled it');

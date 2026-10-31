@@ -67,6 +67,7 @@ describe('Decision card wording (native)', () => {
         const endedAt = '2026-10-15T10:00:00.000Z';
         expect(secondPauseLine({ secondPause: { after: 'no', endedAt } } as any)).toBe('Second pause in 30 days. The last vote said No.');
         expect(secondPauseLine({ secondPause: { after: 'too_few', endedAt } } as any)).toBe('Second pause in 30 days. Too few members voted on the last one.');
+        expect(secondPauseLine({ secondPause: { after: 'too_few_yes', endedAt } } as any)).toBe('Second pause in 30 days. The last vote had fewer than 3 Yes votes.');
         expect(secondPauseLine({ secondPause: { after: 'stopped', endedAt } } as any)).toBe('Second pause in 30 days. The last vote was stopped before it closed.');
         expect(secondPauseLine({ memberName: 'Dave', rule: 2 } as any)).toBeNull();
         expect(secondPauseLine({ secondPause: { after: 'something new' } })).toBeNull();
@@ -130,14 +131,14 @@ describe('Decision card wording (native)', () => {
         expect(ownerDecisionLine(open, null, 'abc')).toBeNull();
         const decided = { ...open, ownerDecidedAt: '2026-10-30T10:00:00.000Z', ownerDecidedReason: 'Both who could vote saw it' };
         expect(ownerDecisionLine(decided, { tooFewToVote: true }, 'abc'))
-            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Sam is removed when this vote closes. Their reason: Both who could vote saw it');
+            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Sam is removed 7 days after this vote closes. Their reason: Both who could vote saw it');
         const carried = { ...decided, status: 'executed', ownerDecisionCarriedAt: '2026-11-06T10:00:00.000Z' };
         expect(ownerDecisionLine(carried, { tooFewToVote: true }, 'abc')).toBe('Decided by the owner: too few members to vote. Their reason: Both who could vote saw it');
         // Decided, but enough members voted by the close: the vote ended as any vote does, and the closed card says nothing of it.
         expect(ownerDecisionLine({ ...decided, status: 'unresolved' }, { tooFewToVote: false }, 'abc')).toBeNull();
         // An admin hid the case: the node leaves the owner's reason off, as it may repeat the accusation, and the line says the rest.
         expect(ownerDecisionLine({ ...decided, ownerDecidedReason: null }, { tooFewToVote: true }, 'abc'))
-            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Sam is removed when this vote closes.');
+            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Sam is removed 7 days after this vote closes.');
         expect(ownerDecisionLine({ ...carried, ownerDecidedReason: null }, { tooFewToVote: true }, 'abc')).toBe('Decided by the owner: too few members to vote.');
         // No vote, and no owner, removes someone holding a server role: nothing about the owner on that card.
         expect(ownerDecisionLine({ status: 'open', params: { ...params, serverRole: 'admin' } }, { tooFewToVote: true }, 'abc')).toBeNull();
@@ -161,7 +162,7 @@ describe('Decision card wording (native)', () => {
         expect(ownerDecisionLine({ ...decided, ownerDecidedReason: null }, { tooFewToVote: false }, 'abc'))
             .toBe('An owner decided when too few members could vote, but enough can now, so this vote decides.');
         // Should it fall back to too few, the owner's decision stands again, and the line says so.
-        expect(ownerDecisionLine(decided, { tooFewToVote: true }, 'abc')).toContain('Xia is removed when this vote closes');
+        expect(ownerDecisionLine(decided, { tooFewToVote: true }, 'abc')).toContain('Xia is removed 7 days after this vote closes');
     });
 
     it('a case an admin hid: too few to vote, no owner can decide, so the line says what happens instead', () => {
@@ -170,7 +171,7 @@ describe('Decision card wording (native)', () => {
         expect(ownerDecisionLine(hidden, { tooFewToVote: false }, 'abc')).toBeNull();
         // An owner decided before it was hidden: that stands, without their reason.
         expect(ownerDecisionLine({ ...hidden, ownerDecidedAt: '2026-10-28T10:00:00.000Z', ownerDecidedReason: null }, { tooFewToVote: true }, 'abc'))
-            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Joy is removed when this vote closes.');
+            .toBe('Too few members can vote, so an owner decided: unless more of them vote, Joy is removed 7 days after this vote closes.');
     });
 
     it('why a failed vote did nothing: a removal that passed and was then cancelled says so, not the Yes floor beside its 3 Yes', () => {
@@ -179,6 +180,9 @@ describe('Decision card wording (native)', () => {
         expect(notExecutedLine(base)).toBe('Not executed: fewer than 3 Yes votes');
         expect(notExecutedLine({ ...base, yesWeight: 3, noWeight: 2, supportRatio: 0.6 })).toBe('Not executed: Threshold not met');
         expect(notExecutedLine({ ...base, yesWeight: 3, noWeight: 0, supportRatio: 1, passed: true })).toBe('Not executed: a reinstatement vote cancelled it');
+        // An owner decided it and it was carried out, so it failed only as a reinstatement vote cancelled it: whatever its tally.
+        expect(notExecutedLine({ ...base, quorumMet: false }, { ownerDecisionCarriedAt: '2026-11-06T10:00:00.000Z' })).toBe('Not executed: a reinstatement vote cancelled it');
+        expect(notExecutedLine({ ...base, quorumMet: false }, { ownerDecisionCarriedAt: null })).toBe('Not executed: Quorum not reached');
         // Not a removal: no floor, and these words only.
         expect(notExecutedLine({ ...base, minYes: undefined })).toBe('Not executed: Threshold not met');
         expect(notExecutedLine({ ...base, minYes: undefined, passed: true })).toBe('Not executed: Threshold not met');

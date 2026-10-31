@@ -2924,21 +2924,28 @@ export function pauseChainRefusal(
     return null;
 }
 
+/** How the vote before a second pause ended: its `params.secondPause.after`, which both apps' secondPauseLine read. */
+type SecondPauseAfter = 'no' | 'too_few_yes' | 'too_few' | 'stopped';
+
 /**
  * What a pause made again within REPAUSE_NEEDS_OWNER_DAYS of a vote that ended without removing them records for its card
  * (design §3.4 rule 1: "Second pause in 30 days. The last vote said No."): how that vote ended and when, or null for any
- * other pause. Read in pauseMember, after pauseChainRefusal let it through: an owner's, with a new reason.
+ * other pause. A vote only the Yes floor stopped did not say No (design §5 point 1), so it has its own `after`, which an
+ * app from before shows no line for (the stored description still says it). Read in pauseMember, after pauseChainRefusal
+ * let it through: an owner's, with a new reason.
  */
-export function secondPauseOf(subjectPubkey: string, now: number): { after: 'no' | 'too_few' | 'stopped'; endedAt: string } | null {
+export function secondPauseOf(subjectPubkey: string, now: number): { after: SecondPauseAfter; endedAt: string } | null {
     const window = repauseWindow(subjectPubkey, now);
     if (!window) return null;
-    const after = window.decision.status === 'failed' ? 'no' : window.decision.status === 'unresolved' ? 'too_few' : 'stopped';
+    const { status, executionReason } = window.decision;
+    const after = status === 'failed' ? (executionReason?.startsWith(YES_FLOOR_RECORD) ? 'too_few_yes' : 'no') : status === 'unresolved' ? 'too_few' : 'stopped';
     return { after, endedAt: new Date(window.endedAt).toISOString() };
 }
 
 /** The sentence a second pause's record opens with, in the node's English (the apps say it in the member's language). */
-function secondPauseSentence(second: { after: 'no' | 'too_few' | 'stopped' }): string {
+function secondPauseSentence(second: { after: SecondPauseAfter }): string {
     if (second.after === 'no') return tr('Second pause in 30 days. The last vote said No.');
+    if (second.after === 'too_few_yes') return tr('Second pause in 30 days. The last vote had fewer than 3 Yes votes.');
     if (second.after === 'too_few') return tr('Second pause in 30 days. Too few members voted on the last one.');
     return tr('Second pause in 30 days. The last vote was stopped before it closed.');
 }
@@ -3146,7 +3153,7 @@ export function ownerDecideTooFew(decisionId: string, actor: string, reason: unk
 
 /** What the member is told when an owner decides the vote about them (noticeOwnerDecided): no reason, no name. */
 export const OWNER_DECIDED_NOTICE_BODY = 'Too few members can vote on whether you stay here, so an owner decided. Unless more of them vote, '
-    + 'you are removed when the vote closes. Open Commons, then Decide, to read their reason and to reply.';
+    + 'you are removed 7 days after the vote closes. Open Commons, then Decide, to read their reason and to reply.';
 
 /**
  * An owner decided the vote about this member (ownerDecideTooFew): they are told as they were told the vote opened
@@ -3184,13 +3191,16 @@ function ownerDecisionStands(decision: Decision, tally: DecisionTally): boolean 
 
 // ── Tick Engine ─────────────────────────────────────────────────────────
 
+/** How the record of a removal only the Yes floor stopped opens (notPassedWhy); no other failed vote's does (secondPauseOf). */
+const YES_FLOOR_RECORD = 'Fewer than ';
+
 /**
  * Why a vote that met its quorum did not pass, for its record: its share short of the threshold, a tie, or, on a removal
  * whose share would pass, fewer Yes votes than REMOVAL_MIN_YES (design §5 point 1).
  */
 function notPassedWhy(tally: DecisionTally): string {
     const shareWouldPass = tally.totalWeight > 0 && tally.supportRatio >= tally.thresholdRequired && tally.yesWeight > tally.noWeight;
-    if (shareWouldPass && tally.minYes) return `Fewer than ${tally.minYes} Yes votes (${tally.yesWeight})`;
+    if (shareWouldPass && tally.minYes) return `${YES_FLOOR_RECORD}${tally.minYes} Yes votes (${tally.yesWeight})`;
     return `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
 }
 

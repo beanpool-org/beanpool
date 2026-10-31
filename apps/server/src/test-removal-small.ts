@@ -15,7 +15,7 @@
  *
  *  1. The design's table: electorates of 3 (a family of 4), 4, 6 (castlemaine: 7 active, 6 without the subject), 7 and 25
  *     (mullum): each one's quorum, which tallies pass, and what the tick does with them. 2 Yes to 1 No passed before this
- *     slice (66.7%) and fails now, its record saying why.
+ *     slice (66.7%) and fails now, its record saying why, and a second pause says the floor stopped it, not that it said No.
  *  2. The subject never counted: their own vote, written straight into the table as one cast before the rule or carried
  *     by a restore would be, is left out of the tally; they can't cast one; they are out of their own electorate while
  *     paused.
@@ -329,6 +329,36 @@ async function main() {
         gone(others);
     }
 
+    // What the next pause tells of this vote. The floor alone stopped 2 Yes to 1 No, so two of three said Yes, and its card
+    // never says the last vote said No. 3 Yes to 2 No fell short of the share, and it still does.
+    {
+        const voters = ['Ida', 'Jon', 'Kay', 'Lou', 'Max'].map(n => seed(`Second${n}`));
+        const pausedAgain = async (who: Id, yes: Id[], no: Id[]) => {
+            const last = pauseOf(who);
+            vote(last, yes, no);
+            closeNow(last);
+            hushStanding();
+            const again = de.adminEmergencySuspend(who.pubKeyHex, otto.pubKeyHex, `A new case against ${who.callsign}, not the last one`, { freshProof: true });
+            if (!again.success || !again.decision) throw new Error(`setup: could not pause ${who.callsign} again: ${again.error}`);
+            const { card } = await cardFor(voters[0], again.decision.id);
+            return { id: again.decision.id, card, lastRecord: String(row(last).execution_reason) };
+        };
+        const noa = seed('NoaNash');
+        const floor = await pausedAgain(noa, voters.slice(0, 2), voters.slice(2, 3));
+        assert(floor.lastRecord.startsWith('Fewer than 3 Yes votes (2).'), `2 Yes to 1 No: the floor alone stopped it (${floor.lastRecord})`);
+        assert(floor.card?.params?.secondPause?.after === 'too_few_yes', `an owner pauses Noa again: the record says the floor stopped the last vote (${JSON.stringify(floor.card?.params?.secondPause)})`);
+        assert(String(floor.card?.description).startsWith('Second pause in 30 days. The last vote had fewer than 3 Yes votes. '),
+            `the stored words say so too, never that it said No (${floor.card?.description})`);
+        const ric = seed('RicRoss');
+        const share = await pausedAgain(ric, voters.slice(0, 3), voters.slice(3));
+        assert(share.lastRecord.startsWith('Threshold not met (60.0% < 66.0%).') && share.card?.params?.secondPause?.after === 'no'
+            && String(share.card?.description).startsWith('Second pause in 30 days. The last vote said No.'),
+            `3 Yes to 2 No fell short of the share: its second pause still says the last vote said No (${share.card?.params?.secondPause?.after})`);
+        closeNow(floor.id);
+        closeNow(share.id);
+        gone([...voters, noa, ric]);
+    }
+
     // ── 2. The subject never counted ────────────────────────────────────────────────────────────────────────────────
     console.log('\n2. The subject is never counted: not their vote, not them');
     {
@@ -405,6 +435,9 @@ async function main() {
     const samPushes = pushes.filter(p => p.to.includes(sam.token)).slice(samPushesBefore);
     assert(samPushes.length === 1 && samPushes[0].k === 'account.removal-vote' && !samPushes[0].body.includes(REASON),
         `Sam is told, as when the vote opened, and the push carries no reason (${samPushes.map(p => p.k).join(', ')})`);
+    const samNotice = db.prepare('SELECT body FROM moderation_notices WHERE recipient = ? ORDER BY rowid DESC LIMIT 1').get(sam.pubKeyHex) as { body: string } | undefined;
+    assert(samNotice?.body.includes('Unless more of them vote, you are removed 7 days after the vote closes.'),
+        `the notice Sam keeps puts the removal 7 days after the close, where it falls (${samNotice?.body})`);
     const lines = decidedLines();
     assert(lines.length === 1 && lines[0].detail === 'A vote on removing a member, which too few members could vote on, was decided in the last day, by an owner.',
         `the owners are told: "${lines[0]?.detail}"`);
@@ -422,6 +455,8 @@ async function main() {
         && closed.execution_reason === 'Decided by the owner: too few members to vote. Member suspended. 7-day grace period active before destructive removal.'
         && statusOf(sam) === 'disabled' && frozenOf(sam) === 1,
         `the vote closes: the owner's decision is carried out, the grace window opens, its record "Decided by the owner: too few members to vote." (${closed.status}: ${closed.execution_reason})`);
+    const graceDays = (Date.parse(closed.grace_period_ends_at) - Date.parse(closed.closes_at)) / DAY;
+    assert(Math.abs(graceDays - 7) < 0.01, `and the removal falls 7 days after the close, as the card and Sam's notice say (${graceDays.toFixed(3)} days)`);
     seen = await cardFor(tia, samVote);
     assert(!!seen.card?.ownerDecisionCarriedAt && seen.card.ownerDecidedReason === REASON && seen.card.tally?.passed === false,
         'the closed card says the owner decided it, with the reason; the vote itself did not pass');

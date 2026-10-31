@@ -803,7 +803,7 @@ export function DecideSection({
                                             )}
                                             {item.status === 'failed' && (
                                                 <div className="text-red-300">
-                                                    {notExecutedLine(tally)}
+                                                    {notExecutedLine(tally, item)}
                                                 </div>
                                             )}
                                             {item.status === 'unresolved' && (

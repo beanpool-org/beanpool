@@ -249,6 +249,13 @@ describe('the Decide section in the pseudo-locale', () => {
         expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
     });
 
+    it('a second pause after a vote only the Yes floor stopped', async () => {
+        await showIn('xx');
+        drawDecide([decision('j', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Dave', rule: 2, secondPause: { after: 'too_few_yes', endedAt: '2026-10-15T10:00:00.000Z' } } })]);
+        expect(screen.getByTestId('second-pause-line').textContent).toBe(xx('Second pause in 30 days. The last vote had fewer than 3 Yes votes.'));
+        expect(bypassing(document.body, { others: DECIDE_OTHERS })).toEqual([]);
+    });
+
     it('a removal a reinstatement cancelled, in the history', async () => {
         await showIn('xx');
         const tally = { ...decision('t').tally, quorumMet: true, minYes: 3, yesWeight: 3, noWeight: 0, totalWeight: 3, supportRatio: 1, passed: true };

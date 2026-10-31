@@ -1292,7 +1292,7 @@ export function DecideSection({
                                         )}
                                         {item.status === 'failed' && (
                                             <Text style={styles.historyProvenanceText}>
-                                                {notExecutedLine(tally)}
+                                                {notExecutedLine(tally, item)}
                                             </Text>
                                         )}
                                         {item.status === 'unresolved' && (

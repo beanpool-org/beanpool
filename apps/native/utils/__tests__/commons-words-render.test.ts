@@ -299,6 +299,9 @@ const OPEN = [
     // An owner's second pause within 30 days of a vote that said No (removal by vote S4): the card says so.
     decision('26262626', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Pia', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()),
         secondPause: { after: 'no', endedAt: iso(new Date(2026, 9, 15, 12).getTime()) } } }),
+    // And one after a vote only the Yes floor stopped (removal by vote S6).
+    decision('26262627', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Noa', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()),
+        secondPause: { after: 'too_few_yes', endedAt: iso(new Date(2026, 9, 15, 12).getTime()) } } }),
     // Removal by vote S6, the deciding review of #2668: an owner decided and enough can vote now; too few, with its case hidden.
     decision('27272727', { authorPubkey: 'SYSTEM', effect: 'remove_member', params: { memberName: 'Xia', rule: 2, pausedAt: iso(new Date(2026, 9, 22, 12).getTime()) },
         tally: tally({ minYes: 3, tooFewToVote: false }), ownerDecidedAt: iso(Date.now() - DAY), ownerDecidedReason: 'Xia threatened one of them' }),
@@ -314,6 +317,9 @@ const PAST = [
     // A removal that passed, then a reinstatement cancelled it in its grace window.
     decision('29292929', { status: 'failed', effect: 'remove_member', executionReason: 'Cancelled by member reinstatement decision',
         tally: tally({ quorumMet: true, passed: true, minYes: 3, yesWeight: 3, noWeight: 0, totalWeight: 3, supportRatio: 1 }) }),
+    // One an owner decided, carried out, then cancelled the same way: never the quorum it could not meet.
+    decision('30303030', { status: 'failed', effect: 'remove_member', executionReason: 'Cancelled by member reinstatement decision', ownerDecidedAt: iso(Date.now() - 9 * DAY),
+        ownerDecisionCarriedAt: iso(Date.now() - 2 * DAY), ownerDecidedReason: 'Both who could vote saw it', tally: tally({ minYes: 3, tooFewToVote: true }) }),
     decision('12121212', { status: 'admin_halted', effect: 'grant_hardship', adminHaltReason: 'Duplicate of last week' }),
     decision('13131313', { status: 'execution_pending_grace', effect: 'remove_member', gracePeriodEndsAt: iso(new Date(2026, 9, 25, 12).getTime()) }),
     decision('14141414', { status: 'execution_void', effect: 'write_off_deficit' }),
@@ -642,7 +648,7 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
         expect(host.textContent).toContain('PAUSED BY STORM');
         expect(host.textContent).toContain(pseudoLocalise('Not executed: Threshold not met'));
         expect(host.textContent).toContain(pseudoLocalise('Not executed: Quorum not reached'));
-        expect(host.textContent).toContain(pseudoLocalise('Not executed: a reinstatement vote cancelled it'));
+        expect(host.textContent!.split(pseudoLocalise('Not executed: a reinstatement vote cancelled it')).length - 1, 'one passed, one an owner decided').toBe(2);
         expect(host.textContent).toContain(pseudoLocalise('Expired unresolved: Quorum not reached'));
         expect(host.textContent).toContain(pseudoLocalise('Executed successfully'));
         expect(bypassing(), 'all').toEqual([]);
@@ -727,6 +733,7 @@ describe('the Commons in the pseudo-locale: every word on it came through t() (w
             "An owner paused Ivy on 22 Oct 2026, signed in with the server's password.",
             'An admin hid the case for this vote, as one shown to be false. Their reason: Two witnesses showed it false', 'Proposed by Tia.',
             'Reply to this case', 'Report this case as false', 'An owner paused Pia on 22 Oct 2026.', 'Second pause in 30 days. The last vote said No.',
+            'Second pause in 30 days. The last vote had fewer than 3 Yes votes.',
             'An owner decided when too few members could vote, but enough can now, so this vote decides. Their reason: Xia threatened one of them',
             'Too few members can vote, so unless more of them vote, Joy is back when this vote closes.']) {
             expect(host.textContent, english).toContain(english);

@@ -500,18 +500,23 @@ lane_ci_word(){ # "runs: <conclusions>" → green | red | pending | cancelled | 
   esac; }
 ci_head_state(){ # SHA → the required check on exactly that commit: green | red | pending | cancelled | none (no run) | unknown
   # (GitHub did not answer). "runs:" keeps a reply with no checks non-empty: gh_try reads empty as no answer.
-  local out s
+  local out s r
   out=$(gh_try gh api "repos/$LANE_GH_REPO/commits/$1/check-runs?check_name=${LANE_CI_CHECK// /%20}&filter=latest" \
         --jq '[.check_runs[] | (.conclusion // "pending")] | "runs: " + join(" ")') || { print unknown; return; }
   s=$(lane_ci_word "$out")
-  if [ "$s" = none ]; then
+  if [ "$s" = none ] || [ "$s" = red ]; then
     # The required job has `needs: shard`, so GitHub creates it only when every shard has finished: 7 min into a live run
     # on 31 Oct 2026 the commit had 15 check runs and not that one. No required check is "no run" only if the workflow
     # has no run either. A finished run says nothing for the required check, so it never reads as green.
+    # It also has `if: always()`, so a cancelled run still runs it and it FAILS: 5 of 5 cancelled runs measured on 31 Oct
+    # 2026 had the run cancelled and the required check failure. Red is only a run that finished and failed.
     out=$(gh_try gh run list -R "$LANE_GH_REPO" --commit "$1" --workflow "$LANE_CI_WORKFLOW" --json status,conclusion \
           --jq 'map(if .status == "completed" then .conclusion else "pending" end) | "runs: " + join(" ")') || { print unknown; return; }
-    s=$(lane_ci_word "$out")
-    [ "$s" = green ] && s=pending
+    r=$(lane_ci_word "$out")
+    case "$s:$r" in
+      none:green) s=pending;;
+      none:*|red:cancelled|red:pending) s=$r;;
+    esac
   fi
   print -r -- "$s"; }
 ci_state(){ # PR → the required check on its head now: SUCCESS | FAILURE | CANCELLED | PENDING | UNKNOWN, empty when no run

@@ -371,7 +371,7 @@ check "the deciding brief itself is still there" brief_has claude.prompt-1 "DECI
 check "decide lock released"                     [ ! -e "$LANE_LOCK_DIR/decide.lock" ]
 
 scenario "28. red → no review, one fix stage on the build backend, then the review on the pushed head once it is green"
-head_is aaa1; ci aaa1 failure; ci aaa2 pending success; print aaa2 > "$FAKE_STATE/pushes"
+head_is aaa1; ci aaa1 failure; print failure > "$FAKE_STATE/run-aaa1"; ci aaa2 pending success; print aaa2 > "$FAKE_STATE/pushes"
 decide
 check "CLEAN=1"                                  [ "$CLEAN" = 1 ]
 check "one fix stage, one deciding pass"         [ "$(fixes):$(reviews)" = 1:1 ]
@@ -451,7 +451,7 @@ decide
 check "CLEAN=1, one review, past the no-run limit" [ "$CLEAN:$(reviews):$(reads aaa1)" = 1:1:5 ]
 check "not held"                                 not_logged "LEFT FOR THE DIRECTOR"
 
-scenario "37. cancelled → no review, at once; also when the run was cancelled before the required check existed"
+scenario "37. cancelled → no review and no fix stage: before the required check existed, and the way a real one reads (if: always())"
 head_is aaa1; ci aaa1 cancelled
 decide
 check "CLEAN=0, no stage ran, one read"          [ "$CLEAN:$(fixes):$(reviews):$(reads aaa1)" = 0:0:0:1 ]
@@ -459,6 +459,15 @@ check "says so"                                  logged "LEFT FOR THE DIRECTOR, 
 head_is bbb1; ci bbb1 none; print cancelled > "$FAKE_STATE/run-bbb1"
 { decide_review 42 feat/x 3 1; } >> "$LOG" 2>&1
 check "no required check, run cancelled: same"   eval '[ "$CLEAN:$(reviews)" = 0:0 ] && logged "the run on bbb1 was cancelled"'
+: > "$LOG"; head_is ccc1; ci ccc1 failure; print cancelled > "$FAKE_STATE/run-ccc1"
+decide
+check "required check failed, run cancelled → cancelled, no fix stage" eval '[ "$CLEAN:$(fixes):$(reviews):$(reads ccc1)" = 0:0:0:1 ] && logged "the run on ccc1 was cancelled"'
+: > "$LOG"; head_is ddd1; ci ddd1 failure; print -l in_progress cancelled > "$FAKE_STATE/run-ddd1"
+decide
+check "... and with that run still finishing: a wait, then cancelled, no fix stage" eval '[ "$CLEAN:$(fixes):$(reviews):$(reads ddd1)" = 0:0:0:2 ] && logged "the run on ddd1 was cancelled"'
+: > "$LOG"; head_is eee1; ci eee1 failure; print -l in_progress failure > "$FAKE_STATE/run-eee1"; print eee2 > "$FAKE_STATE/pushes"
+decide
+check "a real red waits for its run too, then gets its fix stage" eval '[ "$CLEAN:$(fixes):$(reviews):$(reads eee1)" = 1:1:1:2 ]'
 
 scenario "38. no run at all on a code PR → no review after the no-run limit"
 head_is aaa1; ci aaa1 none
@@ -477,6 +486,9 @@ check "CLEAN=0, no review"                       [ "$CLEAN:$(reviews)" = 0:0 ]
 : > "$LOG"; FAKE_GH_RUNS_DOWN=1; head_is bbb1; ci bbb1 none
 decide
 check "the run list does not answer → held, once" eval '[ "$CLEAN:$(reviews):$(reads bbb1)" = 0:0:1 ] && logged "GitHub did not answer about bbb1"'
+: > "$LOG"; head_is ddd1; ci ddd1 failure
+decide
+check "... on a red too: held, no fix stage"     eval '[ "$CLEAN:$(fixes):$(reviews)" = 0:0:0 ] && logged "GitHub did not answer about ddd1"'
 unset FAKE_GH_RUNS_DOWN
 : > "$LOG"; FAKE_GH_DOWN=1; head_is ccc1
 decide
@@ -512,6 +524,10 @@ head_is ccc1; ci ccc1 failure+push; print ccc2 > "$FAKE_STATE/pushes"
 decide
 check "red on a head already replaced costs no fix stage" [ "$CLEAN:$(fixes):$(reviews)" = 1:0:1 ]
 : > "$LOG"; rm -f "$FAKE_STATE/claude.calls" "$FAKE_STATE/claude.runs"
+head_is eee1; ci eee1 failure+push; print cancelled > "$FAKE_STATE/run-eee1"; print eee2 > "$FAKE_STATE/pushes"
+decide
+check "a superseded run as it really reads (check failed, run cancelled): no hold, no fix" eval '[ "$CLEAN:$(fixes):$(reviews)" = 1:0:1 ] && not_logged "LEFT FOR THE DIRECTOR"'
+: > "$LOG"; rm -f "$FAKE_STATE/claude.calls" "$FAKE_STATE/claude.runs"
 LANE_GREEN_TRIES=2; head_is ddd1; ci ddd1 pending pending+push; ci ddd2 pending pending success; print ddd2 > "$FAKE_STATE/pushes"; LANE_GREEN_TRIES=3
 decide
 check "the poll limit starts again on a new head" [ "$CLEAN:$(reviews):$(reads ddd2)" = 1:1:3 ]
@@ -538,6 +554,9 @@ FAKE_GH_PR=42 LANE_MERGE=1
 head_is aaa1; ci aaa1 failure
 { land 42; } >> "$LOG" 2>&1
 check "a red required check → left open, no merge" eval 'logged "PR #42 CI=FAILURE — left open" && [ ! -e "$FAKE_STATE/merges" ]'
+: > "$LOG"; head_is ddd1; ci ddd1 failure; print cancelled > "$FAKE_STATE/run-ddd1"
+{ land 42; } >> "$LOG" 2>&1
+check "a cancelled run reads CANCELLED, not FAILURE: left open, no merge" eval 'logged "PR #42 CI=CANCELLED — left open" && [ ! -e "$FAKE_STATE/merges" ]'
 : > "$LOG"; head_is bbb1; ci bbb1 none pending success; print in_progress > "$FAKE_STATE/run-bbb1"
 { land 42 hold; } >> "$LOG" 2>&1
 LANE_MERGE=0

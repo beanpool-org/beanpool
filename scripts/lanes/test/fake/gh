@@ -9,7 +9,7 @@
 #   $FAKE_STATE/pushes     heads still to come, one per line: a push moves the PR to the next (fake agy/claude push in a CI fix stage)
 #   $FAKE_STATE/ci-<sha>   that commit's required check, one line per read, the last one sticks: success failure cancelled pending,
 #                          none (GitHub has not created the check), or any of those +push (a push lands during that read). No file: success.
-#   $FAKE_STATE/run-<sha>  that commit's workflow run: queued in_progress success failure cancelled. No file: no run.
+#   $FAKE_STATE/run-<sha>  that commit's workflow run, one line per read, the last one sticks: queued in_progress success failure cancelled. No file: no run.
 #   $FAKE_STATE/files      the PR's changed files, one per line (no file: src/a.ts)
 # --jq filters run through real jq over GitHub's JSON shape (gh's own is gojq), so the library's filters are what gets tested.
 S=${FAKE_STATE:?}
@@ -58,7 +58,7 @@ case "$1 $2" in
   "pr merge") print -r -- "$*" >> "$S/merges";;
   "run list") if [[ "$*" == *--commit* ]]; then
                 [ "$FAKE_GH_RUNS_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
-                sha=${args[$args[(i)--commit]+1]}; r=$(cat "$S/run-$sha" 2>/dev/null)
+                sha=${args[$args[(i)--commit]+1]}; r=$(pop "$S/run-$sha" '')
                 case "$r" in
                   '')                 print -r -- '[]';;
                   queued|in_progress) print -r -- "[{\"status\":\"$r\",\"conclusion\":\"\"}]";;

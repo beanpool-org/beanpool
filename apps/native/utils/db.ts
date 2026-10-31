@@ -3414,7 +3414,7 @@ export interface Decision {
  * closed. `name` is null when the node can't know it.
  */
 export interface RemovalProposer {
-    kind: 'admin' | 'password' | 'member';
+    kind: 'admin' | 'owner' | 'password' | 'member';
     name: string | null;
 }
 

@@ -224,11 +224,13 @@ describe('DecideSection voting answers', () => {
             const view = renderDecide(true, [card]);
             expect(screen.getByTestId('second-pause-line').textContent).toBe(words);
             expect(screen.getByTestId('pause-vote-box').textContent).toContain(words);
+            expect(screen.getByTestId('pause-vote-box').textContent).toContain('An owner paused Dave on 22 Oct 2026.');
             view.unmount();
         }
         card.params = base;
         renderDecide(true, [card]);
         expect(screen.getByTestId('pause-vote-box')).toBeInTheDocument();
+        expect(screen.getByTestId('pause-vote-box').textContent).toContain('An admin paused Dave on 22 Oct 2026.');
         expect(screen.queryByTestId('second-pause-line')).toBeNull();
     });
 

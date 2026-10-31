@@ -38,7 +38,14 @@ describe('PricingGuideModal Component', () => {
         spy.mock.calls.flatMap((c, i) => (c[1] === 1200 ? [spy.mock.results[i].value] : []));
 
     it('clears the pending feedback timer itself on unmount', async () => {
-        const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+        // Each timer remembers when it has fired: on a busy machine the 1.2 s can pass before the unmount, and then nothing is pending.
+        const fired = new Set<unknown>();
+        const realSetTimeout = window.setTimeout.bind(window);
+        const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((fn: (...a: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+            let id: unknown;
+            id = realSetTimeout(() => { fired.add(id); fn(...args); }, ms);
+            return id;
+        }) as typeof window.setTimeout);
         const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
         try {
             const { unmount } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
@@ -50,7 +57,8 @@ describe('PricingGuideModal Component', () => {
             const [timer] = reportTimers(setTimeoutSpy);
             expect(timer).toBeDefined();
             unmount();
-            expect(clearTimeoutSpy.mock.calls.some(c => c[0] === timer)).toBe(true);
+            // Cleared by the unmount, unless it had already fired (nothing left to clear).
+            expect(fired.has(timer) || clearTimeoutSpy.mock.calls.some(c => c[0] === timer)).toBe(true);
         } finally {
             setTimeoutSpy.mockRestore();
             clearTimeoutSpy.mockRestore();

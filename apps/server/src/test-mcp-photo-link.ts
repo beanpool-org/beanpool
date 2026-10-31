@@ -13,9 +13,9 @@
  *   3. Upload only: a GET, HEAD, DELETE or PATCH reads nothing and says nothing about the token; the web app is never served
  *      there; a wrong token is answered as a dead link, to the byte; a wrong case of the route is 404.
  *   4. Through the same path as /mcp/photos: too small, not an image, a wrong type, JSON, over 5 MB (declared, while 10 bytes
- *      of it were sent; and streamed), another site's page: refused, nothing kept.
- *   5. It dies: past its hour, a grant's days ending first, revoked (and during an upload), unticked, a demoted owner, the
- *      owners' switch, and a fourth link replaces the oldest. Each stays dead when what killed it is undone.
+ *      of it were sent; and streamed), another site's page, a disk at its floor: refused, nothing kept.
+ *   5. It dies: past its hour, a grant's days ending first, revoked (a token's, during an upload, and an OAuth grant's), unticked,
+ *      a demoted owner, the owners' switch, and a fourth link replaces the oldest. Each stays dead when what killed it is undone.
  *   6. Photos a day are 4 × the owners' setting, read through its function: 2 → 8, the 9th refused by every door in words that
  *      name 8; 1,000 → 4,000, and uploads don't end at the 2,000 calls; the door's 60 a minute and the server's two
  *      places at once are shared with /mcp/photos.
@@ -43,9 +43,11 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
+import { resetAutomationTokenUseThrottle } from './automation-tokens.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { ownerPhoneSessionHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { setSimulatedFreeDiskBytesForTests, STORAGE_NEARLY_FULL_MESSAGE } from './engine/photo-upload-budget.js';
 import { getImageStore, readObject } from './storage/image-store.js';
 import {
     admitAgentCall, admitAgentPhoto, agentCallsToday, agentPhotosPerDay, agentPhotosToday, AGENT_CALLS_PER_DAY, setAgentPostsPerDay,
@@ -54,6 +56,7 @@ import {
     issuePhotoLink, photoLinkHashesForTests, photoLinksHeld, PHOTO_LINK_KEEP_MS, PHOTO_LINK_LOG_PATH, PHOTO_LINK_PATH, uploadedPhotosWaiting,
 } from './agent/owner-photos.js';
 import { OWNER_POST_TOOLS } from './agent/owner-posts.js';
+import { revokeOAuthGrant } from './agent/oauth.js';
 import type { AgentGrant } from './agent/tools.js';
 import { AGENT_LOG_KEEP_ROWS } from './logger.js';
 import { sanitizeMessage } from './sanitize-message.js';
@@ -332,6 +335,8 @@ async function main(): Promise<void> {
             `the row itself refuses them too, as the create tools' do, and a node that can't name its own address makes none (${!runUnticked.ok && runUnticked.error} | ${!runAdmin.ok && runAdmin.error})`);
         const preview = await call('POST', '/api/local/admin/agent/preview', { headers: asSession(ownerS), body: { tool: 'photo_upload_link' } });
         assert(preview.status === 400 && /never writes/.test(preview.body?.error ?? ''), `Settings' preview never makes one (${show(preview)})`);
+        // A member has at most 5 assistants connected: each section's goes when it is done.
+        assert(await revoke(R.id) === 200, 'the reader is disconnected');
 
         const first = await newLink(a);
         assert(first.url === `${BASE}${PHOTO_LINK_PATH}/${first.token}` && /^[A-Za-z0-9_-]{43,}$/.test(first.token) && Buffer.from(first.token, 'base64url').length >= 32
@@ -374,6 +379,7 @@ async function main(): Promise<void> {
         const otherGrant = await o.callTool({ name: 'create_offer', arguments: { ...offerArgs, photo_ids: [putIt.body.photoId] } });
         assert(otherGrant.isError === true && /is not a photo this assistant uploaded/.test(errorText(otherGrant)) && uploadedPhotosWaiting(A.id) === 2,
             `the ids are the link's grant's: another assistant's call is refused, and the upload is still there (${errorText(otherGrant).slice(0, 70)})`);
+        assert(await revoke(O.id) === 200, 'the other script is disconnected');
 
         // ── 3. Upload only ───────────────────────────────────────────────────────────────────────
         console.log('── 3. It takes uploads and reads nothing ──');
@@ -423,6 +429,14 @@ async function main(): Promise<void> {
         // A body the 64 KiB the door reads for JSON would stop, not the 2 MB of every other route.
         const bigJson = await post(refusals.path, JSON.stringify({ photo: 'x'.repeat(70 * 1024) }), 'application/json');
         assert(bigJson.status === 413, `a JSON body past the door's 64 KiB is refused before it is parsed (${bigJson.status})`);
+        const photosBeforeFloor = agentPhotosToday(L.id);
+        setSimulatedFreeDiskBytesForTests(1);
+        const atFloor = await post(refusals.path, goodJpg);
+        const atFloorDoor = await call('POST', '/mcp/photos', { raw: goodJpg, type: 'image/jpeg', headers: bearer(L.token) });
+        setSimulatedFreeDiskBytesForTests(null);
+        assert(atFloor.status === 507 && atFloor.body?.error === STORAGE_NEARLY_FULL_MESSAGE && atFloorDoor.status === 507 && agentPhotosToday(L.id) === photosBeforeFloor && uploadedPhotosWaiting(L.id) === 0,
+            `a disk at the floor every stored photo keeps to → 507 in words by either door, nothing counted or kept (${show(atFloor)})`);
+        assert(await revoke(L.id) === 200, 'the refusals check is disconnected');
 
         // ── 5. It dies ───────────────────────────────────────────────────────────────────────────
         console.log('── 5. It dies, and stays dead ──');
@@ -463,6 +477,22 @@ async function main(): Promise<void> {
         });
         assert(midUpload === 401 && uploadedPhotosWaiting(M.id) === 0, `revoked while a photo is arriving through a link → 401, nothing kept (${midUpload})`);
 
+        // An OAuth grant, the way Claude Code connects: its link is read through its record, so a grant gone is a link dead.
+        const now = Date.now();
+        updateLocalConfig({
+            agentOAuthGrants: [{
+                id: 'oa0123456789', clientId: 'bpc_test', clientName: 'Claude Code', redirectUri: 'https://claude.ai/cb', resource: `${BASE}/mcp`, member: owner.pub,
+                createdAt: now, lastUsedAt: null, refreshIssuedAt: now, refreshHash: 'none', spentRefresh: [], canPost: true,
+            }],
+        });
+        const viaOAuth = issuePhotoLink(asGrant({ id: 'oa0123456789', name: 'Claude Code', via: 'oauth' }));
+        tokens.push(viaOAuth.token);
+        const oauthUp = await post(`${PHOTO_LINK_PATH}/${viaOAuth.token}`, smallWebp, 'image/webp');
+        revokeOAuthGrant('oa0123456789');
+        const oauthGone = await post(`${PHOTO_LINK_PATH}/${viaOAuth.token}`, smallWebp, 'image/webp');
+        assert(oauthUp.status === 201 && oauthGone.status === 401 && oauthGone.text === wrong.text && photoLinksHeld('oa0123456789') === 0,
+            `an OAuth grant's link works, and dies with the grant (${oauthUp.status} → ${oauthGone.status})`);
+
         const setTick = (id: string, canPost: boolean) => updateLocalConfig({
             automationTokens: (getLocalConfig().automationTokens ?? []).map(t => (t.id === id ? { ...t, canPost } : t)),
         });
@@ -475,6 +505,7 @@ async function main(): Promise<void> {
         const reticked = await post(uLink.path, goodJpg);
         assert(unticked.status === 401 && unticked.text === wrong.text && reticked.status === 401 && uploadedPhotosWaiting(U.id) === 0 && photoLinksHeld(U.id) === 0,
             `unticked → dead, the same answer; ticked again it stays dead (${unticked.status}, ${reticked.status})`);
+        assert(await revoke(U.id) === 200, 'the ticked one is disconnected');
 
         // Ottilie is an admin since section 1: an owner again, to make the grant a demotion ends.
         grantNodeRole(owner2.pub, 'owner', 'SYSTEM');
@@ -497,6 +528,7 @@ async function main(): Promise<void> {
         const afterOn = await post(sLink.path, goodJpg);
         assert(offIt.status === 200 && whileOff.status === 404 && heldWhileOff === 0 && onIt.status === 200 && afterOn.status === 401 && afterOn.text === wrong.text,
             `the owners' switch off → 404, as /mcp; every link dropped then; turned on again they stay dead (${whileOff.status}, ${heldWhileOff} held, ${afterOn.status})`);
+        assert(await revoke(S.id) === 200, 'the switch check is disconnected');
 
         const F = await makeToken(owner, 'Olive\'s four');
         const f = await connect(F.token);
@@ -504,6 +536,7 @@ async function main(): Promise<void> {
         const fourth = await Promise.all(four.map(x => post(x.path, smallWebp, 'image/webp')));
         assert(photoLinksHeld(F.id) === 3 && fourth[0].status === 401 && fourth[0].text === wrong.text && fourth.slice(1).every(r => r.status === 201),
             `a fourth link replaces the oldest: the first is dead, the other three work (${fourth.map(r => r.status).join(', ')})`);
+        assert(await revoke(F.id) === 200, 'the four links\' check is disconnected');
 
         // ── 6. The day ───────────────────────────────────────────────────────────────────────────
         console.log('── 6. Photos a day: 4 × the owners\' setting, one count ──');
@@ -545,6 +578,7 @@ async function main(): Promise<void> {
         setAgentPostsPerDay(100);
         assert(agentPhotosPerDay() === 400 && AGENT_LOG_KEEP_ROWS >= AGENT_CALLS_PER_DAY + 4000,
             `back at 100 → 400; and the assistants' log ring holds a full day of the most calls and the most uploads (${AGENT_LOG_KEEP_ROWS.toLocaleString('en')} lines)`);
+        assert(await revoke(T.id) === 200, 'the seeding day\'s check is disconnected');
 
         const G = await makeToken(owner, 'Olive\'s quick one');
         const g = await connect(G.token);
@@ -555,6 +589,7 @@ async function main(): Promise<void> {
         assert(overLink.status === 429 && /calls in a minute/.test(overLink.body?.error ?? '') && Number(overLink.headers.get('retry-after')) > 0 && overDoor.status === 429 && agentPhotosToday(G.id) === 0
             && refusalLines().some(x => x.message === 'Assistant refused: over its limit' && x.metadata.includes(`"route":"${PHOTO_LINK_LOG_PATH}"`)),
             `rate-limited like /mcp: past the minute's 60, shared with its bearer, → 429 in words, nothing counted (${show(overLink)})`);
+        assert(await revoke(G.id) === 200, 'the quick one is disconnected');
 
         const P = await makeToken(owner, 'Olive\'s slow line');
         const p = await connect(P.token);
@@ -568,6 +603,7 @@ async function main(): Promise<void> {
         arriving.forEach(x => x.leave());
         assert(busy?.status === 503 && busy.headers.get('retry-after') === '5',
             `${PHOTO_UPLOADS_AT_ONCE} bodies arriving through a link fill the server's places: one more by /mcp/photos → 503 (${busy ? show(busy) : 'no answer'})`);
+        assert(await revoke(P.id) === 200, 'the slow line is disconnected');
 
         // ── 7. The doors in front ────────────────────────────────────────────────────────────────
         console.log('── 7. The gateway in front of it ──');
@@ -611,11 +647,11 @@ async function main(): Promise<void> {
             `none of the ${tokens.length} tokens is in any of the ${allLines.length} system_logs lines; each link made is an AGENT line, ${linkRefusal.length} refused lines name the route with no token`);
         const inPrinted = printed.filter(line => tokens.some(tok => line.includes(tok)));
         assert(inPrinted.length === 0, `nor in anything this process printed, ${printed.length} writes${inPrinted.length ? ` — ${inPrinted.length} carry one` : ''}`);
-        const record = (getLocalConfig().automationTokens ?? []).find(x => x.id === A.id);
-        assert(record?.lastUsedRoute === 'POST /mcp/photos/u/…' || record?.lastUsedRoute === 'PUT /mcp/photos/u/…',
-            `the grant's "last used" names the route with no token (${record?.lastUsedRoute})`);
-
         const live = await newLink(a);
+        resetAutomationTokenUseThrottle();
+        await post(live.path, smallWebp, 'image/webp');
+        const record = (getLocalConfig().automationTokens ?? []).find(x => x.id === A.id);
+        assert(record?.lastUsedRoute === 'POST /mcp/photos/u/…', `the grant's "last used" names the route with no token (${record?.lastUsedRoute})`);
         const hashes = photoLinkHashesForTests();
         const liveHash = crypto.createHash('sha256').update(live.token).digest('hex');
         assert(hashes.includes(liveHash) && hashes.every(h => /^[0-9a-f]{64}$/.test(h)) && !hashes.some(h => tokens.includes(h)), `what is kept for a link is its SHA-256 (${hashes.length} kept)`);

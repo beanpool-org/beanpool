@@ -17,8 +17,9 @@
  *      step 6 counts it as a photo: then its day is the photos' own (returnAgentDayCall);
  *   5. a server another took over takes nothing (503), as the posting tools;
  *   6. a Content-Type of image/jpeg, image/png or image/webp (415), and a Content-Length over 5 MB refused before a byte is
- *      read (413); at most PHOTO_UPLOADS_AT_ONCE bodies read at once on this server (503, Retry-After); then the grant's
- *      photos for the day, shared by both doors and photo_urls (limits.ts agentPhotosPerDay: 429);
+ *      read (413); none while the disk is at the floor every stored photo keeps to (507: a photo waits here up to 24 hours, and
+ *      the day's number can be 4,000); at most PHOTO_UPLOADS_AT_ONCE bodies read at once on this server (503, Retry-After);
+ *      then the grant's photos for the day, shared by both doors and photo_urls (limits.ts agentPhotosPerDay: 429);
  *   7. the body read with a hard limit (413 the moment it passes 5 MB, nothing kept) and a deadline (408);
  *   8. the photo made what the apps send (owner-posts.ts storableImage: sniffed whatever the Content-Type said, at most
  *      2,048 px a side, at least 200 px on its shorter side, made 800 px with no metadata, a PNG as a JPEG; else 400 in words);
@@ -37,6 +38,7 @@ import { noteAutomationTokenUse } from '../automation-tokens.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { logAddressTag } from '../log-address.js';
 import { logger } from '../logger.js';
+import { assertDiskFloorSpace, STORAGE_NEARLY_FULL_MESSAGE } from '../engine/photo-upload-budget.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { admitAgentCall, admitAgentPhoto, agentPhotosPerDay, agentPhotosToday, returnAgentDayCall } from './limits.js';
 import { agentGrantFrom, aiAssistantsAllowed, logRefusal, ownOrigin } from './mcp-route.js';
@@ -161,6 +163,7 @@ async function takePhoto(ctx: any, grant: AgentGrant, route: string): Promise<vo
     if (Number.isFinite(declared) && declared > PHOTO_SOURCE_MAX_BYTES) {
         return refuse(413, 'too big', `The photo is too big: at most ${MAX_WORDS}. Send a smaller copy.`);
     }
+    try { assertDiskFloorSpace(); } catch { return refuse(507, 'disk nearly full', STORAGE_NEARLY_FULL_MESSAGE); }
     if (reading >= PHOTO_UPLOADS_AT_ONCE) {
         return refuse(503, 'busy', 'This server is taking other photos now: send it again in a few seconds.', { close: true, retryAfter: 5 });
     }

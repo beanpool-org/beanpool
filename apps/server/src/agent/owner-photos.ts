@@ -320,8 +320,8 @@ const tokenHash = (token: string): string => crypto.createHash('sha256').update(
  */
 export function issuePhotoLink(grant: AgentGrant, now = Date.now()): { token: string; expiresAt: string } {
     for (const [hash, link] of photoLinks) if (now >= link.expiresAt) photoLinks.delete(hash);
-    const held = [...photoLinks].filter(([, link]) => link.grant.id === grant.id);
-    for (const [hash] of held.slice(0, Math.max(0, held.length - PHOTO_LINKS_PER_GRANT + 1))) photoLinks.delete(hash);
+    const mine = [...photoLinks].filter(([, link]) => link.grant.id === grant.id);
+    for (const [hash] of mine.slice(0, Math.max(0, mine.length - PHOTO_LINKS_PER_GRANT + 1))) photoLinks.delete(hash);
     const token = crypto.randomBytes(PHOTO_LINK_TOKEN_BYTES).toString('base64url');
     const expiresAt = Math.min(now + PHOTO_LINK_KEEP_MS, grant.expiresAt ?? Infinity);
     photoLinks.set(tokenHash(token), { grant, expiresAt });

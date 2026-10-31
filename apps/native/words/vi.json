@@ -5922,5 +5922,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "Kho khóa của BeanPool tạm dừng trong một thời gian ngắn, nên việc này chưa được bật. Hãy thử lại sau. 12 từ của bạn hoạt động bất cứ lúc nào.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "Kho khóa của BeanPool tạm dừng trong một thời gian ngắn, nên chưa có gì bị gỡ bỏ. Hãy thử lại sau.",
   "Kept since {date}": "Được giữ từ {date}",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Một nửa bản sao này nằm ở kho khóa của BeanPool, và phiên bản ứng dụng này không thể truy cập kho đó. Hãy dùng phiên bản truy cập được, hoặc 12 từ của bạn."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Một nửa bản sao này nằm ở kho khóa của BeanPool, và phiên bản ứng dụng này không thể truy cập kho đó. Hãy dùng phiên bản truy cập được, hoặc 12 từ của bạn.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "Máy chủ cộng đồng của bạn không phản hồi. Một cộng đồng khác nơi bạn đã bật tính năng này có thể lấy lại tài khoản cho bạn, hoặc dùng 12 từ của bạn."
 }

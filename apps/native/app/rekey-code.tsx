@@ -318,13 +318,16 @@ export default function RekeyCodeScreen() {
         } else if (answer.state === 'released') {
             await (answer.voucher ? onSharedRelease(s, answer) : onBroughtBack(s, answer));
         } else if (answer.state === 'unreachable') {
-            setError(keyLineWords(REKEY_TEXT.unreachable));
+            // A bring-back has other ways on (design §4.4); a re-key's code still works until it expires.
+            setError(isBringBackCode(s.code)
+                ? t("Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.")
+                : keyLineWords(REKEY_TEXT.unreachable));
         } else {
             if (endsRekey(answer)) await abandonRekey(deps);
             setError(keyLineWords(answer.state === 'declined' ? REKEY_TEXT.declined : answer.state === 'gone' ? REKEY_TEXT.gone : answer.message));
             setPhase(endsRekey(answer) ? 'ended' : 'form');
         }
-    }, [onBound, onBroughtBack, onSharedRelease]);
+    }, [onBound, onBroughtBack, onSharedRelease, t]);
 
     // An ask left waiting (the app was closed): asked once more, with the same key. Once per visit to the screen: the
     // record is kept after Not now, so a second run would put the number back after the member left it.

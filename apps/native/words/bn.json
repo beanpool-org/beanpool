@@ -6159,5 +6159,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "BeanPool-এর চাবির ভল্ট কিছু সময়ের জন্য স্থগিত রয়েছে, তাই এটি এখনও চালু হয়নি। পরে আবার চেষ্টা করুন। আপনার ১২টি শব্দ যেকোনো সময় কাজ করে।",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "BeanPool-এর চাবির ভল্ট কিছু সময়ের জন্য স্থগিত রয়েছে, তাই কিছুই সরানো হয়নি। পরে আবার চেষ্টা করুন।",
   "Kept since {date}": "{date} থেকে রাখা আছে",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "এই কপির অর্ধেক BeanPool-এর চাবির ভল্টে রাখা আছে, আর অ্যাপের এই সংস্করণ সেখানে পৌঁছাতে পারে না। এমন একটি সংস্করণ ব্যবহার করুন যা সেখানে পৌঁছাতে পারে, অথবা আপনার ১২টি শব্দ ব্যবহার করুন।"
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "এই কপির অর্ধেক BeanPool-এর চাবির ভল্টে রাখা আছে, আর অ্যাপের এই সংস্করণ সেখানে পৌঁছাতে পারে না। এমন একটি সংস্করণ ব্যবহার করুন যা সেখানে পৌঁছাতে পারে, অথবা আপনার ১২টি শব্দ ব্যবহার করুন।",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "আপনার কমিউনিটির সার্ভার সাড়া দিচ্ছে না। আপনি যেখানে এটি চালু করেছেন, এমন অন্য একটি কমিউনিটি আপনার অ্যাকাউন্ট ফিরিয়ে আনতে পারে, অথবা আপনার ১২টি শব্দ ব্যবহার করুন।"
 }

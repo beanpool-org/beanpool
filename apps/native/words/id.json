@@ -5921,5 +5921,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "Brankas kunci BeanPool dijeda untuk sementara waktu, jadi ini belum aktif. Coba lagi nanti. 12 katamu berfungsi kapan saja.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "Brankas kunci BeanPool dijeda untuk sementara waktu, jadi tidak ada yang dihapus. Coba lagi nanti.",
   "Kept since {date}": "Disimpan sejak {date}",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Separuh dari salinan ini disimpan di brankas kunci BeanPool, dan versi aplikasi ini tidak bisa menjangkaunya. Pakai versi yang bisa, atau pakai 12 katamu."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Separuh dari salinan ini disimpan di brankas kunci BeanPool, dan versi aplikasi ini tidak bisa menjangkaunya. Pakai versi yang bisa, atau pakai 12 katamu.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "Server komunitasmu tidak merespons. Komunitas lain tempat kamu mengaktifkannya bisa memulihkan akunmu, atau pakai 12 katamu."
 }

@@ -6634,5 +6634,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "Хранилище ключей BeanPool временно приостановлено, поэтому это ещё не включено. Попробуйте позже. Ваши 12 слов работают в любое время.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "Хранилище ключей BeanPool временно приостановлено, поэтому ничего не удалено. Попробуйте позже.",
   "Kept since {date}": "Хранится с {date}",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Половина этой копии хранится в хранилище ключей BeanPool, а эта версия приложения не имеет к нему доступа. Используйте версию с доступом или свои 12 слов."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Половина этой копии хранится в хранилище ключей BeanPool, а эта версия приложения не имеет к нему доступа. Используйте версию с доступом или свои 12 слов.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "Сервер вашего сообщества не отвечает. Другое сообщество, где вы это включили, может восстановить аккаунт, или воспользуйтесь своими 12 словами."
 }

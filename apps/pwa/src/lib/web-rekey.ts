@@ -169,8 +169,6 @@ export async function finishWebRekey(key: WebRekeyKey, answer: { callsign: strin
 }
 
 /** A bring-back's release that didn't open to the account it names: nothing is saved. */
-/** A shared copy's bring-back asked in a browser: the web app has no key vault client (design VR6), so it can't finish here. */
-export const WEB_BRING_BACK_NEEDS_PHONE = 'Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.';
 export const WEB_BRING_BACK_NOT_OPENED = 'What your community sent didn’t open to your account, so nothing was saved. Ask the admin to try again.';
 
 const toHex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');

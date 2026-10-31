@@ -623,7 +623,7 @@ async function runTests() {
         setRecoveryCopies('server');
         const atServer = await copyStatus(lea);
         assert(atServer.json.offered === true && atServer.json.sharedOffered === false && atServer.json.nodeKey === nodeKey,
-            `under "This server" the whole copy is offered, not the half (got ${JSON.stringify(atServer.json)})`);
+            'under "This server" the whole copy is offered, not the half, and the status says the node key');
         const refusedAtServer = await putHalf(lea, m.nodeHalf, m.digest);
         assert(refusedAtServer.status === 409 && refusedAtServer.json.code === 'not_offered' && !copyRow(lea.pubKeyHex), 'under "This server" a half is refused, and nothing kept');
         setRecoveryCopies('none');
@@ -632,7 +632,7 @@ async function runTests() {
         setRecoveryCopies('vault');
         const atVault = await copyStatus(lea);
         assert(atVault.json.offered === false && atVault.json.sharedOffered === true && atVault.json.kept === false,
-            `under "BeanPool's key vault" the half is offered, and the whole copy (an app from before it, the web) is not (got ${JSON.stringify(atVault.json)})`);
+            'under "BeanPool\'s key vault" the half is offered, and the whole copy (an app from before it, the web) is not');
         process.env.NODE_PROFILE = 'global';
         const openDoor = await putHalf(lea, m.nodeHalf, m.digest);
         const openStatus = await copyStatus(lea);
@@ -653,9 +653,10 @@ async function runTests() {
         assert(!rowText.includes(m.nodeHalf) && !rowText.includes(m.digest), 'the half and its digest are not in the stored row in the clear');
         const st = await copyStatus(lea);
         assert(st.json.kept === true && st.json.placement === 'shared' && st.json.copy === m.digest && st.json.since === on.json.since,
-            `the status says a half is kept, of which copy (got ${JSON.stringify(st.json)})`);
+            'the status says a half is kept, of which copy');
         const shares = await signedReq(lea, 'POST', '/api/recovery/shares/status', {});
-        assert(shares.json.communityCopy?.since === on.json.since && shares.json.communityCopy?.placement === 'shared', `the copies' status lists it as a half (got ${JSON.stringify(shares.json.communityCopy)})`);
+        assert(shares.json.communityCopy?.since === on.json.since && shares.json.communityCopy?.placement === 'shared' && shares.json.communityCopy?.copy === m.digest && shares.json.nodeKey === nodeKey,
+            'the copies\' status lists it as a half, of which copy, with the node key the phone matches the vault\'s copy by');
         const admin0 = await adminStatus(ownerSession, lea.pubKeyHex);
         assert(admin0.json.communityCopy?.kept === true && admin0.json.communityCopy?.placement === 'shared', 'the admin sees it can be brought back');
 
@@ -668,7 +669,7 @@ async function runTests() {
         const phone = makeKeypair();
         const a = await ask(phone, code);
         const bound_ = await bindByNumber(ownerSession, lea.pubKeyHex, code, a.json.match);
-        assert(bound_.status === 200 && bound_.json.broughtBack === true && bound_.json.placement === 'shared', `the number confirms it, and says the placement (got ${JSON.stringify(bound_.json)})`);
+        assert(bound_.status === 200 && bound_.json.broughtBack === true && bound_.json.placement === 'shared', `the number confirms it, and says the placement (got ${bound_.status})`);
         await flush();
         assert(pushed.length === 1 && pushed[0].body === PUSH_NOTICE_KINDS['account.bring-back-started'].body,
             `the phones are told at the code, and never told it is back: the vault holds it a day, and tells them itself (got ${pushed.length})`);
@@ -718,7 +719,7 @@ async function runTests() {
         const relocked = rewrapCommunityCopiesFromRetiredKeys();
         const after = await copyStatus(rae);
         assert(relocked >= 1 && copyRow(rae.pubKeyHex)!.copy_ct !== before.copy_ct && after.json.kept === true && after.json.copy === r.digest,
-            `a carried seal key: the half is locked again with it, and still opens (got ${relocked}, ${JSON.stringify(after.json)})`);
+            `a carried seal key: the half is locked again with it, and still opens (${relocked} relocked)`);
 
         // Its name in the clear says which holder it is bound to; a row that lies about it doesn't open.
         const liar = join('LiamMember');
@@ -726,7 +727,7 @@ async function runTests() {
         await putHalf(liar, l.nodeHalf, l.digest);
         db.prepare('UPDATE community_copies SET kdf_params = ? WHERE owner_pubkey = ?').run(JSON.stringify({ alg: 'node-wrap-xc20p-v1', inner: 'copykey-xc20p-v1' }), liar.pubKeyHex);
         const liarStatus = await copyStatus(liar);
-        assert(liarStatus.json.kept === false && liarStatus.json.unopenable?.reason === 'recovery_seal_unopenable', `a half can't be read as a whole copy (got ${JSON.stringify(liarStatus.json)})`);
+        assert(liarStatus.json.kept === false && liarStatus.json.unopenable?.reason === 'recovery_seal_unopenable', 'a half can\'t be read as a whole copy: said as a copy this server can\'t open');
 
         // Removals are a copy's: the member's own, a re-key and deleting the account.
         const off = await signedReq(rae, 'DELETE', '/api/recovery/community-copy', {});

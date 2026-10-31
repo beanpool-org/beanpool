@@ -5923,5 +5923,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "BeanPool 키 금고가 잠시 중단되어 아직 켜지지 않았어요. 나중에 다시 시도하세요. 12개 단어는 언제든 사용할 수 있어요.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "BeanPool 키 금고가 잠시 중단되어 아무것도 삭제되지 않았어요. 나중에 다시 시도하세요.",
   "Kept since {date}": "{date}부터 보관 중",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "이 사본의 절반은 BeanPool 키 금고에 있고, 이 버전의 앱으로는 그곳에 접근할 수 없어요. 접근할 수 있는 버전을 쓰거나 12개 단어를 사용하세요."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "이 사본의 절반은 BeanPool 키 금고에 있고, 이 버전의 앱으로는 그곳에 접근할 수 없어요. 접근할 수 있는 버전을 쓰거나 12개 단어를 사용하세요.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "커뮤니티 서버가 응답하지 않아요. 이 기능을 켠 다른 커뮤니티가 계정을 복구해 줄 수 있어요. 아니면 12개 단어를 사용하세요."
 }

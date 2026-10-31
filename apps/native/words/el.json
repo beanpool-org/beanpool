@@ -6159,5 +6159,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "Το θησαυροφυλάκιο κλειδιών του BeanPool βρίσκεται σε παύση για λίγο, οπότε αυτό δεν είναι ακόμη ενεργό. Δοκίμασε ξανά αργότερα. Οι 12 λέξεις σου λειτουργούν οποιαδήποτε στιγμή.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "Το θησαυροφυλάκιο κλειδιών του BeanPool βρίσκεται σε παύση για λίγο, οπότε δεν αφαιρέθηκε τίποτα. Δοκίμασε ξανά αργότερα.",
   "Kept since {date}": "Φυλάσσεται από {date}",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Το μισό αυτού του αντιγράφου φυλάσσεται στο θησαυροφυλάκιο κλειδιών του BeanPool και αυτή η έκδοση της εφαρμογής δεν έχει πρόσβαση σε αυτό. Χρησιμοποίησε μια έκδοση με πρόσβαση ή τις 12 λέξεις σου."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Το μισό αυτού του αντιγράφου φυλάσσεται στο θησαυροφυλάκιο κλειδιών του BeanPool και αυτή η έκδοση της εφαρμογής δεν έχει πρόσβαση σε αυτό. Χρησιμοποίησε μια έκδοση με πρόσβαση ή τις 12 λέξεις σου.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "Ο διακομιστής της κοινότητάς σου δεν ανταποκρίνεται. Μια άλλη κοινότητα όπου το ενεργοποίησες μπορεί να επαναφέρει τον λογαριασμό σου, ή χρησιμοποίησε τις 12 λέξεις σου."
 }

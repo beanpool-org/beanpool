@@ -6159,5 +6159,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "Naka-pause sandali ang key vault ng BeanPool, kaya hindi pa ito naka-on. Subukan muli mamaya. Gumagana ang iyong 12 salita anumang oras.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "Naka-pause sandali ang key vault ng BeanPool, kaya walang naalis. Subukan muli mamaya.",
   "Kept since {date}": "Nakatabi mula {date}",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Kalahati ng kopyang ito ay nasa key vault ng BeanPool, at hindi ito ma-access ng bersyong ito ng app. Gumamit ng bersyong may access, o ang iyong 12 salita."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Kalahati ng kopyang ito ay nasa key vault ng BeanPool, at hindi ito ma-access ng bersyong ito ng app. Gumamit ng bersyong may access, o ang iyong 12 salita.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "Hindi sumasagot ang server ng iyong komunidad. Maibabalik ka ng ibang komunidad kung saan mo ito binuksan, o gamitin ang iyong 12 salita."
 }

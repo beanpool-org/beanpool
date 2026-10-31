@@ -6164,5 +6164,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "El depósito de claves de BeanPool está en pausa temporalmente, por lo que esto aún no está activado. Inténtalo de nuevo más tarde. Tus 12 palabras funcionan en cualquier momento.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "El depósito de claves de BeanPool está en pausa temporalmente, por lo que no se quitó nada. Inténtalo de nuevo más tarde.",
   "Kept since {date}": "Copia guardada desde el {date}",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "La mitad de esta copia está en el depósito de claves de BeanPool, y esta versión de la app no puede acceder a él. Usa una versión que pueda, o tus 12 palabras."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "La mitad de esta copia está en el depósito de claves de BeanPool, y esta versión de la app no puede acceder a él. Usa una versión que pueda, o tus 12 palabras.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "El servidor de tu comunidad no responde. Otra comunidad en la que lo activaste puede recuperar tu cuenta, o usa tus 12 palabras."
 }

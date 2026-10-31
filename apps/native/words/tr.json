@@ -6159,5 +6159,6 @@
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "BeanPool'un anahtar kasası kısa bir süreliğine duraklatıldı, bu nedenle bu henüz açık değil. Daha sonra tekrar deneyin. 12 kelimeniz her zaman çalışır.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "BeanPool'un anahtar kasası kısa bir süreliğine duraklatıldı, bu nedenle hiçbir şey kaldırılmadı. Daha sonra tekrar deneyin.",
   "Kept since {date}": "{date} tarihinden beri saklanıyor",
-  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Bu kopyanın yarısı BeanPool'un anahtar kasasında saklanıyor ve uygulamanın bu sürümü oraya ulaşamıyor. Ulaşabilen bir sürüm kullanın ya da 12 kelimenizi kullanın."
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Bu kopyanın yarısı BeanPool'un anahtar kasasında saklanıyor ve uygulamanın bu sürümü oraya ulaşamıyor. Ulaşabilen bir sürüm kullanın ya da 12 kelimenizi kullanın.",
+  "Your community's server isn't answering. Another community you turned this on in can bring you back, or use your 12 words.": "Topluluğunuzun sunucusu yanıt vermiyor. Bunu açtığınız başka bir topluluk hesabınızı geri getirebilir ya da 12 kelimenizi kullanabilirsiniz."
 }

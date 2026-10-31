@@ -59,7 +59,7 @@ function inCategory(p: any, state: MapFilterState): boolean {
     return normalizeCategory(p.category) === state.category;
 }
 
-/** Offer and Need pins — the UnifiedMapPin layer. Events never go through it. */
+/** Offer and Need pins. Events come from visibleEventPins; both draw through UnifiedMapPin and cluster together. */
 export function visibleMarketPins<T = any>(posts: T[], state: MapFilterState): T[] {
     return posts.filter((p: any) => {
         if (p.status && p.status !== 'active') return false;
@@ -74,8 +74,9 @@ export function visibleMarketPins<T = any>(posts: T[], state: MapFilterState): T
 }
 
 /**
- * Event pins — their own violet layer, under All and under Events. Under Events the date chips filter
- * them; under All every upcoming event shows. `eventInWindow` drops ended and cancelled events either way.
+ * Event pins — the violet event pin, clustered with the listings (Marty, 31 Oct), under All and under Events.
+ * Under Events the date chips filter them; under All every upcoming event shows. `eventInWindow` drops ended
+ * and cancelled events either way.
  */
 export function visibleEventPins<T = any>(posts: T[], state: MapFilterState, nowMs: number = Date.now()): T[] {
     if (state.type !== 'all' && state.type !== 'events') return [];
@@ -125,7 +126,7 @@ export function mapFiltersActive(state: MapFilterState): boolean {
 
 // ===================== BRINGING EVENTS INTO VIEW (events round 2, B2) =====================
 
-/** Height of an event pin above its point, in dp (map.tsx EventMapMarker: 34 head + 8 stem, with margin). */
+/** Height of an event pin above its point, in dp (UnifiedMapPin's teardrop: 45 from the head's top to the tip, with margin). */
 export const EVENT_PIN_HEIGHT_DP = 48;
 /** Half the span shown around a lone event (~450 m each way), so fitting one pin does not zoom to the street. */
 const LONE_EVENT_HALF_SPAN_DEG = 0.004;

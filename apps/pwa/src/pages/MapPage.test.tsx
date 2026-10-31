@@ -67,7 +67,8 @@ vi.mock('leaflet', () => {
                 getBounds: vi.fn(() => ({ circleBoundsOf: center, radius: opts?.radius })),
             })),
             markerClusterGroup: vi.fn(() => layerGroup),
-            // Event pins: their own layer, outside the cluster group.
+            // A plain layer group: nothing on the map makes one any more (event pins went into the cluster group,
+            // Marty 31 Oct), kept so the events suite can show none is made.
             layerGroup: vi.fn(() => ({ clearLayers: vi.fn(), addLayer: vi.fn(), addTo: vi.fn().mockReturnThis() })),
         },
     };
@@ -513,18 +514,22 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(offerPins.every(m => !String(m.opts.html).includes('data-event-pin-icon'))).toBe(true);
     });
 
-    it('keeps event pins out of the listing clusters, in their own layer drawn above the listings (B2)', async () => {
+    // Marty, 31 Oct: events are part of what the map already has. They go into the same cluster group as the Offers and
+    // Needs, so a bubble counts them with the listings; there is no event layer of their own any more (it was B2's).
+    it('puts event pins in the listing clusters, with no layer of their own, still drawn above a listing beside them', async () => {
         await act(async () => { render(<MapPage identity={mockIdentity} />); });
         await waitFor(() => expect(eventPins().length).toBeGreaterThan(0));
         const clusterGroup = (L as any).markerClusterGroup.mock.results[0].value;
-        const eventLayer = (L as any).layerGroup.mock.results[0].value;
-        expect(eventLayer).not.toBe(clusterGroup);
+        expect((L as any).layerGroup).not.toHaveBeenCalled();
         for (const pin of eventPins()) {
-            expect(pin.addTo).toHaveBeenCalledWith(eventLayer);
-            expect(pin.addTo).not.toHaveBeenCalledWith(clusterGroup);
+            expect(pin.addTo).toHaveBeenCalledWith(clusterGroup);
+            expect(pin.addTo.mock.calls.every((c: any[]) => c[0] === clusterGroup)).toBe(true);
             expect(pin.opts.zIndexOffset).toBeGreaterThan(0);
         }
+        // Still only the open events: the cancelled and the ended one are in no cluster and on no layer.
+        expect(new Set(eventPins().map(m => m.opts.title))).toEqual(new Set(['Event: Repair café', 'Event: Spring working bee']));
         const offerPins = mockCreatedMarkers.filter(m => m.opts?.className?.includes('custom-map-pin'));
+        expect(offerPins.length).toBeGreaterThan(0);
         expect(offerPins.every(m => m.addTo.mock.calls.every((c: any[]) => c[0] === clusterGroup))).toBe(true);
     });
 

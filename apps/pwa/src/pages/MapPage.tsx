@@ -224,13 +224,12 @@ const EVENT_PRIVATE_NOTE_MAX = 1000;
 export function MapPage({ identity, openNewPost, initialGroupId, initialPostType, onOpenNewPostHandled, openDraft, onDraftOpened, onNavigate, onOpenTreasury, isMember, covered = false, focusPostId, onFocusPostHandled, copyEventPostId, onCopyEventHandled, editEventPostId, onEditEventHandled, visitor = false }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
-    const markersRef = useRef<L.LayerGroup | null>(null);
     /**
-     * Event pins, in their own layer OUTSIDE the cluster group: an event folded into a bubble of listings could
-     * not be found under the date chips (events round 2, B2). Few enough to never need clustering — five
-     * upcoming per host.
+     * The cluster group every pin goes into: Offers, Needs, events and enterprises. Events are clustered with the
+     * listings and counted in their bubbles (Marty, 31 Oct: an event is part of what the map already has, not a
+     * layer of its own).
      */
-    const eventLayerRef = useRef<L.LayerGroup | null>(null);
+    const markersRef = useRef<L.LayerGroup | null>(null);
     const eventChipsRef = useRef<HTMLDivElement | null>(null);
     const userMarkerRef = useRef<L.Marker | null>(null);
     const radiusCircleRef = useRef<L.Circle | null>(null);
@@ -610,7 +609,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                 });
             }
         }).addTo(map);
-        eventLayerRef.current = L.layerGroup().addTo(map);
 
         mapRef.current = map;
 
@@ -1489,7 +1487,6 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
     useEffect(() => {
         if (!markersRef.current || !mapRef.current) return;
         markersRef.current.clearLayers();
-        eventLayerRef.current?.clearLayers();
 
         posts
             .filter(post => post.type !== 'poll' && post.type !== 'event' && (!post.status || post.status === 'active') && !blockedSet.has(post.authorPublicKey) && !inactiveEnterpriseKeys.has(post.authorPublicKey))
@@ -1583,8 +1580,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
             marker.addTo(markersRef.current!);
         });
 
-        // Event pins (docs/events-on-the-map.md §3): violet with a drawn calendar, filtered by the chips, in their
-        // own unclustered layer above the listings. Cancelled and ended events never pin.
+        // Event pins (docs/events-on-the-map.md §3): violet with a drawn calendar, filtered by the chips, in the same
+        // cluster group as the listings and counted in its bubbles (Marty, 31 Oct). Cancelled and ended events never pin.
         visibleEventPins
             .forEach(post => {
                 const html = `
@@ -1619,7 +1616,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, initialPostType
                         mapRef.current.setView([post.lat!, post.lng!], mapRef.current.getZoom(), { animate: true });
                     }
                 });
-                marker.addTo(eventLayerRef.current ?? markersRef.current!);
+                marker.addTo(markersRef.current!);
             });
 
         // Render enterprise pins (docs/the-commons.md §2.2, Slice 6)

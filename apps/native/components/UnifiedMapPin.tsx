@@ -39,16 +39,39 @@ export const PIN_ANCHOR = { x: 0.5, y: TAIL_TIP_Y / VB_H };
 // PinVisual — the SVG component (used ONLY for off-screen capture)
 // ═══════════════════════════════════════════════════════
 
+/** A glyph drawn in the disc in place of an emoji: the event pin's calendar. */
+export type PinGlyph = 'calendar';
+
 interface PinVisualProps {
   emoji: string;
   bgColor: string;
   isElder?: boolean;
+  glyph?: PinGlyph;
 }
+
+/**
+ * The event pin's glyph: a calendar drawn from Views, with no date on it, in the pin's own colour on the white disc.
+ * The 📅 emoji is drawn by Android with a date printed on the page ("JUL 17"), which read as the event's date (events
+ * round 2, B7). Plain Views rather than an icon font, because the pin is rasterised once by the capture below and a
+ * font glyph that had not loaded yet would come out blank.
+ */
+const CalendarGlyph = ({ color }: { color: string }) => (
+  <View style={{ width: 18, height: 18, alignItems: 'center' }}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: 10, height: 4, zIndex: 1 }}>
+      <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: color }} />
+      <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: color }} />
+    </View>
+    <View style={{ width: 17, height: 14, marginTop: -2, borderRadius: 3, borderWidth: 2, borderColor: color, overflow: 'hidden' }}>
+      <View style={{ height: 3.5, backgroundColor: color }} />
+    </View>
+  </View>
+);
 
 export const PinVisual = React.memo<PinVisualProps>(({
   emoji,
   bgColor,
   isElder = false,
+  glyph,
 }) => {
   const strokeColor = isElder ? '#fbbf24' : 'transparent';
   const strokeWidth = isElder ? 2 : 0;
@@ -63,7 +86,9 @@ export const PinVisual = React.memo<PinVisualProps>(({
         <Circle cx={CX} cy={CY} r={EMOJI_BG_R} fill="rgba(255,255,255,0.85)" />
       </Svg>
       <View collapsable={false} style={pinStyles.emojiOverlay}>
-        <Text style={pinStyles.emoji} maxFontSizeMultiplier={PIN_FONT_SCALE}>{emoji}</Text>
+        {glyph === 'calendar'
+          ? <CalendarGlyph color={bgColor} />
+          : <Text style={pinStyles.emoji} maxFontSizeMultiplier={PIN_FONT_SCALE}>{emoji}</Text>}
       </View>
     </View>
   );
@@ -99,8 +124,8 @@ const pinStyles = StyleSheet.create({
 // Image Cache — shared module-level state
 // ═══════════════════════════════════════════════════════
 
-export function pinCacheKey(emoji: string, bgColor: string, isElder: boolean): string {
-  return `${emoji}|${bgColor}|${isElder ? '1' : '0'}`;
+export function pinCacheKey(emoji: string, bgColor: string, isElder: boolean, glyph?: PinGlyph): string {
+  return `${glyph ?? emoji}|${bgColor}|${isElder ? '1' : '0'}`;
 }
 
 const imageCache = new Map<string, string>();
@@ -110,8 +135,9 @@ export function getCachedMarkerImage(
   emoji: string,
   bgColor: string,
   isElder: boolean,
+  glyph?: PinGlyph,
 ): string | null {
-  const key = pinCacheKey(emoji, bgColor, isElder);
+  const key = pinCacheKey(emoji, bgColor, isElder, glyph);
   return imageCache.get(key) || null;
 }
 
@@ -125,7 +151,21 @@ export interface CaptureRequest {
   emoji: string;
   bgColor: string;
   isElder: boolean;
+  glyph?: PinGlyph;
 }
+
+/**
+ * The one pin every event wears: the same teardrop, size and anchor as an Offer's or a Need's, in the events' violet
+ * (components/EventCard.tsx's EVENT_ACCENT), a calendar in the disc instead of an emoji, and never an elder ring. It is
+ * captured with the listings' pins and clusters with them (Marty, 31 Oct: events are part of what the map already has).
+ */
+export const EVENT_PIN: CaptureRequest = {
+  key: pinCacheKey('', palette.violet600, false, 'calendar'),
+  emoji: '',
+  bgColor: palette.violet600,
+  isElder: false,
+  glyph: 'calendar',
+};
 
 interface MapMarkerManagerProps {
   variants: CaptureRequest[];
@@ -199,6 +239,7 @@ export const MapMarkerManager = React.memo<MapMarkerManagerProps>(({ variants, o
             emoji={v.emoji}
             bgColor={v.bgColor}
             isElder={v.isElder}
+            glyph={v.glyph}
           />
         </View>
       ))}
@@ -284,6 +325,14 @@ export function buildVariantList(
   const categoriesMap = new Map((categories || []).map((c: any) => [c.id, c]));
 
   for (const post of posts) {
+    // Every event shares the one event pin: no category emoji, no elder ring.
+    if ((post.type || '').toLowerCase() === 'event') {
+      if (!seen.has(EVENT_PIN.key)) {
+        seen.add(EVENT_PIN.key);
+        result.push(EVENT_PIN);
+      }
+      continue;
+    }
     const isOffer = (post.type || '').toLowerCase() === 'offer';
     const bgColor = isOffer ? '#10b981' : '#ea580c';
     const catObj = categoriesMap.get(post.category);

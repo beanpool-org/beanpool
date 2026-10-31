@@ -156,7 +156,7 @@ async function main(): Promise<void> {
         const asBakery = await a.callTool({ name: 'create_enterprise_listing', arguments: { ...offer('Bakery rye loaves'), kind: 'offer', as_enterprise: enterpriseRef(bakery) } });
         madeA.push(structured(asBakery)?.postId);
         const madeB = structured(await b.callTool({ name: 'create_offer', arguments: offer('Helper-made marmalade') }))?.postId as string;
-        const tiny = await jpeg(64, 48);
+        const tiny = await jpeg(240, 200);
         const ownApp = createPost('offer', 'food', 'Olive\'s own jam, from the app', 'From the phone.', 2, 'fixed', owner.pub, -28.55, 153.5, [tiny], false)!.id;
         const miaPost = createPost('offer', 'food', 'Mia\'s kombucha', 'Scoby too.', 2, 'fixed', mia.pub, -28.55, 153.5, [tiny], false)!.id;
         assert(madeA.every(id => typeof id === 'string') && madeA.length === 4 && !!madeB && !!ownApp && !!miaPost,

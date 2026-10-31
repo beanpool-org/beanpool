@@ -34,6 +34,7 @@ Expo's domain is `apps/native/` ONLY. Do NOT touch `apps/server`, `apps/manager`
 - Navigation types should be declared in a central params file
 
 ## ✅ Resolved — do NOT re-file
+- 2026-10-31 #2616, #2651: repeated route params in propose-project kind (#2616) and community-card node (#2651) (ninth and tenth filings; DECIDED in #1753 / #2073: repeated param refused on purpose; taking [0] is wrong). See POLICY.md.
 - 2026-10-27 #2517: repeated params in tool/[id].tsx (decided: refused on every screen) — CLOSED. Resolved — do NOT re-file.
 - 2026-10-26 #2488: Resolved — do NOT re-file: toolParams array handling (#2488).
 - 2026-10-25 #2454: string[] params in join-open-door.tsx are DECIDED (#2118): a repeated param fails closed. See POLICY.md.

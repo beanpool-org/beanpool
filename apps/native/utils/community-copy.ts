@@ -8,9 +8,11 @@
  * seals them to the member's new phone (utils/rekey-redeem.ts openBringBack). Nothing goes to BeanPool's key vault.
  *
  * Offered only where the community keeps copies itself (`recoveryCopies: 'server'`, utils/copies-rule.ts) and never in
- * the global community, where nobody meets anyone (design §4.2, Q13). The server holds the same rule, so a phone that
- * offered it on a stale answer is refused there with the sentence, and nothing is kept. Never a false success: the row
- * says On only once the server answered that it keeps the copy.
+ * the global community, where nobody meets anyone (design §4.2, Q13). The copy and its key go only on the server's own
+ * `offered`, asked at the moment of turning it on (components/CommunityAdminsRow.tsx), never on the rule as this phone
+ * read it: a server that refuses them keeps nothing, but it has been handed the key. It holds the same rule, so a rule
+ * moved in that moment is refused there with the sentence. Never a false success: the row says On only once the server
+ * answered that it keeps the copy.
  *
  * Where the community's rule is the key vault (the default), the same row turns on the shared placement instead, in a
  * build with a vault: utils/community-recovery.ts. This file's status tells them apart, by the server's own answer.
@@ -54,8 +56,8 @@ export const COMMUNITY_COPY_TEXT = {
 } as const;
 
 /**
- * Whether this phone offers the community path at `url` under `rule`: "this server", or the key vault in a build that has
- * one (the shared placement), and never the global community.
+ * Whether this phone asks the community at `url` about this path under `rule`: "this server", or the key vault in a build
+ * that has one (the shared placement), and never the global community. Whom to ask, no more: the answer decides the offer.
  */
 export function offersCommunityCopy(url: string | null | undefined, rule: RecoveryCopiesRule | null | undefined): boolean {
     return !!url && (rule === 'server' || (rule === 'vault' && hasVault())) && url.trim().replace(/\/+$/, '').toLowerCase() !== GLOBAL_NODE_URL;

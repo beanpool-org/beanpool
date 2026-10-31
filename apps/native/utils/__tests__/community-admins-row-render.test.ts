@@ -29,9 +29,16 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'),
         ActivityIndicator: () => createElement('span', { 'data-spinner': 'true' }),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, flatten: (s: unknown) => s },
-        Alert: { alert: (title: string, body: string) => { fx.alerts.push({ title, body }); } },
+        Alert: {
+            alert: (title: string, body: string, buttons?: { style?: string; onPress?: () => void }[]) => {
+                fx.alerts.push({ title, body });
+                if (alertsPress.remove) buttons?.find(b => b.style === 'destructive')?.onPress?.();
+            },
+        },
     };
 });
+/** A test that wants the member's yes to a Remove (the rest only read what the ask says). */
+const alertsPress = vi.hoisted(() => ({ remove: false }));
 /** Account Protection coming into view again: every focus effect mounted runs once more. */
 const focus = vi.hoisted(() => ({ effects: new Set<() => void>() }));
 vi.mock('expo-router', async () => {
@@ -75,7 +82,7 @@ const fx = vi.hoisted(() => ({
     alerts: [] as { title: string; body: string }[],
     /** The shared placement (vault rethink VR4): whether this build has a vault, and the vault's side of the copy. */
     vault: false,
-    side: null as string | null,
+    side: null as string | null | (() => Promise<string | null>),
     sharedFails: null as string | null,
     turnedOnShared: [] as string[],
     removedShared: [] as string[],
@@ -92,7 +99,7 @@ vi.mock('../vault-config', async (importOriginal) => ({
 }));
 vi.mock('../community-recovery', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../community-recovery')>()),
-    sharedCopySide: async () => fx.side,
+    sharedCopySide: async () => (typeof fx.side === 'function' ? fx.side() : fx.side),
     turnOnSharedCopy: async (url: string) => {
         if (fx.sharedFails) throw new Error(fx.sharedFails);
         fx.turnedOnShared.push(url);
@@ -142,6 +149,7 @@ beforeEach(() => {
     fx.sharedFails = null;
     fx.turnedOnShared.length = 0;
     fx.removedShared.length = 0;
+    alertsPress.remove = false;
     setLanguage('en');
 });
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; });
@@ -255,6 +263,124 @@ describe('the shared placement: half at the key vault, half at the community (va
         fx.side = 'unknown';
         await mount();
         expect(byTestId('community-admins-row')).toBeNull();
+    });
+
+    // #2683 deciding pass, CommunityAdminsRow.tsx:171: under this rule a whole key at the community ends "the node alone
+    // opens nothing", so the rule as the phone read it may never send one, and a slow vault may never hide what the community said.
+    describe('under the key vault\'s rule, nothing leaves on a guess', () => {
+        const never = () => new Promise<never>(() => {});
+        const noneSent = () => {
+            expect(fx.turnedOn, 'the whole copy and its key never left the phone').toEqual([]);
+            expect(fx.turnedOnShared).toEqual([]);
+        };
+
+        it('the status call still out: the row offers nothing, and says nothing of who can open what', async () => {
+            let answer: (v: unknown) => void = () => {};
+            fx.answers[MULLUM] = () => new Promise((resolve) => { answer = resolve; });
+            await mount();
+            expect(fx.asked).toEqual([MULLUM]);
+            expect(byTestId('community-admins-row')).toBeNull();
+            expect(byTestId('community-admins-turn-on')).toBeNull();
+            noneSent();
+            // It answers: only now is there an offer, and it is the community's.
+            fx.side = 'none';
+            await act(async () => { answer(OFFER); });
+            await settle();
+            expect(text()).toContain('each keep half of a locked copy');
+            expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on');
+        });
+
+        it('the status call failed, for good on a server from before (404): the row offers nothing', async () => {
+            fx.answers[MULLUM] = null;
+            await mount();
+            expect(fx.asked).toEqual([MULLUM]);
+            expect(byTestId('community-admins-row')).toBeNull();
+            expect(byTestId('community-admins-turn-on')).toBeNull();
+            noneSent();
+        });
+
+        it('the community answered and the vault is slow: its offer shows at once, Turn on is shared, and what it says is true', async () => {
+            fx.answers[MULLUM] = OFFER;
+            fx.side = never;
+            await mount();
+            expect(text()).toContain('each keep half of a locked copy');
+            expect(text()).not.toContain('The people who run it can open it; nobody else.');
+            await click('community-admins-turn-on');
+            expect(fx.turnedOnShared).toEqual([MULLUM]);
+            expect(fx.turnedOn, 'the whole copy and its key never left the phone').toEqual([]);
+        });
+
+        it('a member whose shared copy is On, and the vault slow: On at once, with no Turn on', async () => {
+            fx.answers[MULLUM] = SHARED;
+            fx.side = never;
+            await mount();
+            expect(byTestId('community-admins-on')?.textContent).toContain('since');
+            expect(byTestId('community-admins-unfinished')).toBeNull();
+            expect(byTestId('community-admins-turn-on')).toBeNull();
+            expect(byTestId('community-admins-remove')).toBeTruthy();
+        });
+
+        it('half a pair still says "Not finished" once the slow vault has answered', async () => {
+            fx.answers[MULLUM] = SHARED;
+            let answer: (v: string) => void = () => {};
+            fx.side = () => new Promise((resolve) => { answer = resolve; });
+            await mount();
+            expect(byTestId('community-admins-on')).toBeTruthy();
+            await act(async () => { answer('none'); });
+            await settle();
+            expect(byTestId('community-admins-on')).toBeNull();
+            expect(byTestId('community-admins-unfinished')).toBeTruthy();
+        });
+
+        it('a Turn on that finishes while an older read waits on the vault stays On: that read\'s late answer is dropped', async () => {
+            fx.answers[MULLUM] = OFFER;
+            let late: (v: string) => void = () => {};
+            fx.side = () => new Promise((resolve) => { late = resolve; });
+            await mount();
+            const lateAnswer = late;
+            fx.answers[MULLUM] = SHARED;
+            fx.side = 'matches';
+            await click('community-admins-turn-on');
+            expect(byTestId('community-admins-on')?.textContent).toContain('since');
+            // What the vault said before the deposit: no copy. It says nothing about the copy just made.
+            await act(async () => { lateAnswer('none'); });
+            await settle();
+            expect(byTestId('community-admins-on')?.textContent).toContain('since');
+            expect(byTestId('community-admins-unfinished')).toBeNull();
+        });
+
+        it('with the row open, the status it showed is not what decides: no answer at the tap sends nothing and remembers nothing', async () => {
+            fx.answers[MULLUM] = OFFER;
+            fx.side = 'none';
+            await mount();
+            fx.answers[MULLUM] = null;
+            await click('community-admins-turn-on');
+            noneSent();
+            expect(text()).toContain('Couldn’t reach your community, so nothing changed.');
+            expect(store.has(`beanpool_community_copy_on_${MULLUM}`), 'nothing began, so there is nothing to finish').toBe(false);
+        });
+
+        it('a community that can\'t be asked just now never turns an On off: what it last said stands', async () => {
+            fx.answers[MULLUM] = SHARED;
+            fx.side = 'matches';
+            await mount();
+            expect(byTestId('community-admins-on')).toBeTruthy();
+            fx.answers[MULLUM] = null;
+            await refocus();
+            expect(byTestId('community-admins-on')?.textContent).toContain('since');
+            expect(byTestId('community-admins-remove')).toBeTruthy();
+        });
+
+        it('removed, and the read after it gets no answer: On is over, not said from what the community last said', async () => {
+            fx.answers[MULLUM] = SHARED;
+            fx.side = 'matches';
+            alertsPress.remove = true;
+            await mount();
+            fx.answers[MULLUM] = null;
+            await click('community-admins-remove');
+            expect(fx.removedShared).toEqual([MULLUM]);
+            expect(byTestId('community-admins-on')).toBeNull();
+        });
     });
 });
 
@@ -390,5 +516,59 @@ describe('CommunityAdminsRow: Turn on is offered on the server\'s own word', () 
         fx.answers[MULLUM] = null;
         await mount();
         expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on');
+    });
+
+    it('the server is still being asked: nothing to tap yet, even where the rule says "this server"', async () => {
+        fx.answers[MULLUM] = () => new Promise(() => {});
+        await mount();
+        expect(fx.asked).toEqual([MULLUM]);
+        expect(byTestId('community-admins-turn-on')).toBeNull();
+        expect(byTestId('community-admins-row')).toBeNull();
+    });
+
+    it('tapping with still no answer says so, and sends nothing; the same tap once the server is back goes through', async () => {
+        fx.answers[MULLUM] = null;
+        await mount();
+        await click('community-admins-turn-on');
+        expect(host!.textContent).toContain('Couldn’t reach your community, so nothing changed. Try again in a moment.');
+        expect(fx.turnedOn).toEqual([]);
+        expect(byTestId('community-admins-on')).toBeNull();
+
+        fx.answers[MULLUM] = { kept: false, since: null, offered: true, unopenable: null };
+        await click('community-admins-turn-on');
+        expect(fx.turnedOn).toEqual([MULLUM]);
+    });
+
+    it('the phone read "this server", and the server, asked at the tap, is on the key vault\'s rule now: half a copy goes, never the whole key', async () => {
+        fx.vault = true;
+        fx.answers[MULLUM] = null;
+        await mount();
+        fx.answers[MULLUM] = { kept: false, since: null, offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), placement: null, copy: null };
+        fx.side = 'none';
+        await click('community-admins-turn-on');
+        expect(fx.turnedOn).toEqual([]);
+        expect(fx.turnedOnShared).toEqual([MULLUM]);
+    });
+
+    it('an offer the screen read earlier is not what decides: the rule moved since, so the tap sends what the server says now', async () => {
+        fx.vault = true;
+        fx.answers[MULLUM] = { kept: false, since: null, offered: true, unopenable: null };
+        await mount();
+        expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on');
+        fx.answers[MULLUM] = { kept: false, since: null, offered: false, unopenable: null, sharedOffered: true, nodeKey: 'ab'.repeat(32), placement: null, copy: null };
+        fx.side = 'none';
+        await click('community-admins-turn-on');
+        expect(fx.turnedOn).toEqual([]);
+        expect(fx.turnedOnShared).toEqual([MULLUM]);
+    });
+
+    it('asked at the tap, the server offers neither any more: nothing is sent, nothing is said to be on, and the row goes', async () => {
+        fx.answers[MULLUM] = { kept: false, since: null, offered: true, unopenable: null };
+        await mount();
+        fx.answers[MULLUM] = { kept: false, since: null, offered: false, unopenable: null };
+        await click('community-admins-turn-on');
+        expect(fx.turnedOn).toEqual([]);
+        expect(store.has(`beanpool_community_copy_on_${MULLUM}`)).toBe(false);
+        expect(byTestId('community-admins-row')).toBeNull();
     });
 });

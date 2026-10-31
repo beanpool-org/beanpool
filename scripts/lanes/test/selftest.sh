@@ -646,6 +646,13 @@ check "... and the same wake says the lane finished" grep -qE "selftestleft at [
 check "a lane that ended with no PR wakes it too, and says so" eval '[ "$woke_nopr" = 1 ] && grep -qE "selftestnopr at [0-9:]+ — clean=0, no PR, held for the director" "$T/w-nopr.out"'
 check "watch.sh printed no shell errors"         eval '! grep -qE "bad option|bad pattern|command not found|parse error|read-only" "$T"/w-*.out'
 
+scenario "47. the AGY rules in the repo carry the pre-flight and the heavy-test wait, and send no stage to the full suite"
+ab=$(lane_brief agy "Build the thing on feat/z.")
+ab_has(){ print -r -- "$ab" | grep -qF -- "$1"; }
+check "AGY brief carries PRE-FLIGHT"             ab_has "PRE-FLIGHT (Marty, 1 Nov)"
+check "AGY brief carries the heavy-test wait"    ab_has 'while [ -d /Users/marty/.cache/heavy-test.lock ]; do sleep 30; done'
+check "no stage is told to run the full suite"   eval '! ab_has "test-all.sh LAST" && ab_has "Do NOT run scripts/test-all.sh"'
+
 print
 print "selftest: $PASS passed, $FAILS failed"
 if [ "$KEEP" = 1 ]; then print "kept $T"; else

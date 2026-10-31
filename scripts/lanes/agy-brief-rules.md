@@ -13,12 +13,20 @@
   with `manage_task` (Action: status) until Status: DONE, then read its output. NEVER end your turn while a task is
   RUNNING, and never say you are "waiting for" something: poll instead. The CLI kills every background task ~5 s after
   you stop replying, and four runs in a row ended with nothing because of it.
-- Order: read → edit → commit → push → run the 2-3 suites you touched → push → scripts/test-all.sh LAST. Never run
-  the full suite as a "baseline" before editing: one stage did, the baseline consumed its whole budget, and it
+- Order: read → edit → commit → push → run the suites you touched → push → STOP. Do NOT run scripts/test-all.sh or
+  the whole server suite set: CI runs the full suite on the PR, and this Mac is shared with another project (a full
+  run here pushed the load to 46 on 20 Oct). Any run bigger than a few named suites only under the machine-wide lock,
+  taken and released in ONE command:
+  `L=/Users/marty/.cache/heavy-test.lock; until mkdir $L 2>/dev/null; do sleep 60; done; echo "pid=$$ since=$(date +%s) beanpool agy" > $L/owner; <the run>; rm -f $L/owner; rmdir $L`.
+  Never run a suite as a "baseline" before editing: one stage did, the baseline consumed its whole budget, and it
   committed nothing.
 - Stage named paths only; never `git add -A` or `git add .`.
 - NEVER delete or weaken a test assertion to make a suite pass. If an assertion encodes behaviour that was
   deliberately changed, update it and say so in the commit message.
+- **While a full run holds the heavy-test lock, wait before ANY install (pnpm/npm install, npm ci), tsc, vitest, node test suite, build or Playwright/browser run** (Marty, 26 Oct: lanes stay
+  at 5–8, but their CPU must not land on the merge gate's full run). Before each such command, in the SAME shell:
+  `while [ -d /Users/marty/.cache/heavy-test.lock ]; do sleep 30; done; <your command>` (this only waits; never take or remove the
+  lock for a targeted run). Reading, editing, commits, pushes and git/gh calls don't wait. A `pnpm install` or `tsc --noEmit` is NOT exempt: it costs as much CPU as a test file.
 - scripts/test-all.sh suite lists sit inside a single-quoted bash -c block: never put an apostrophe anywhere in
   that block, comments included, or the whole script fails with an error pointing at EOF.
 - Never merge, never deploy, never force-push, never touch another branch or PR. Never touch the live nodes.
@@ -36,3 +44,4 @@
   what is coherent, and continue. Never `git reset --hard`, `git checkout -- .`, stash, or start over.
 - Report at the end: what you changed, the real `git status`, the real `git log --oneline -8`, test results, the
   PR as `gh pr list --head <branch>` shows it, and anything unfinished stated plainly.
+PRE-FLIGHT (Marty, 1 Nov): before you push, run lint and the type check for every package you changed (`pnpm --filter <package> lint`, and its tsc), plus scripts/words/words.mjs lint and check if any words changed. Fix what they find, then push. These take minutes and cost a full test run when skipped (#2667 lint, #2643 route list). A new or renamed route also goes through test-guest-view, as NEW ROUTES says.

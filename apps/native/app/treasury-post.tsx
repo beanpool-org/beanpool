@@ -77,6 +77,7 @@ export default function TreasuryPostScreen() {
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState(!isNeed && isShopCategory(shopCategory) ? shopCategory : '');
     const [tags, setTags] = useState<string[]>([]);
+    const [freeTags, setFreeTags] = useState<string[]>([]);
     const [credits, setCredits] = useState('');
     const [priceType, setPriceType] = useState<string>('fixed');
     const [footerHeight, setFooterHeight] = useState(0);
@@ -140,6 +141,7 @@ export default function TreasuryPostScreen() {
             repeatable,
             ...(photos.length > 0 ? { photos } : {}),
             ...(tags.length > 0 ? { tags } : {}),
+            ...(freeTags.length > 0 ? { freeTags } : {}),
         };
         try {
             if (isNeed) {
@@ -236,6 +238,8 @@ export default function TreasuryPostScreen() {
                         <TagPicker
                             value={tags}
                             onChange={setTags}
+                            freeTags={freeTags}
+                            onFreeTagsChange={setFreeTags}
                             category={category}
                             title={title}
                             description={description}

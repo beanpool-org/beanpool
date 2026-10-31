@@ -11,7 +11,7 @@ import {
     eventWhenParts, deviceLocalClock, zoneLabelFor, zonePlaceFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
     LOCAL_CLOCK_RE, formatDate, formatNumber, t, tn, word, type EventWhenParts, type WordKey,
     repeatCaption, repeatChoiceKeyOf, repeatChoicesFor, repeatLengthProblem, repeatPatternFor, repeatUntilProblem, type RepeatChoiceKey, type RepeatPattern,
-    postTagsOf,
+    listingFreeTags, postTagsOf, storedFreeTags,
 } from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
@@ -738,6 +738,7 @@ export interface EventEditValues {
     title: string;
     description: string;
     tags?: string[];
+    freeTags?: string[];
     start: Date | null;
     end: Date | null;
     placeName: string;
@@ -774,6 +775,7 @@ export function eventEditValues(post: any): EventEditValues {
         title: post?.title || '',
         description: post?.description || '',
         tags: postTagsOf(post?.tags),
+        freeTags: listingFreeTags(post),
         start: clock(f.startLocal, f.startAt),
         end: clock(f.endLocal, f.endAt),
         placeName: post?.eventPlaceName ?? post?.event_place_name ?? '',
@@ -796,6 +798,7 @@ export interface EventEditPatch {
     title?: string;
     description?: string;
     tags?: string[];
+    freeTags?: string[];
     eventStartAt?: string;
     eventEndAt?: string;
     eventStartLocal?: string;
@@ -855,6 +858,7 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
         const afterTags = (after.tags || []).join(' ');
         if (beforeTags !== afterTags) patch.tags = after.tags;
     }
+    if (after.freeTags !== undefined && storedFreeTags(before.freeTags ?? []) !== storedFreeTags(after.freeTags)) patch.freeTags = after.freeTags;
     // The clock goes with the instant whenever a zone is known: a node with event times reads the clock (in the zone the
     // event has, or the one sent below), and one from before them reads the instant.
     const clocks = !!(after.tz ?? before.tz);

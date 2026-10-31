@@ -49,6 +49,7 @@ export default function GroupPostScreen() {
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState('general');
     const [tags, setTags] = useState<string[]>([]);
+    const [freeTags, setFreeTags] = useState<string[]>([]);
     const [credits, setCredits] = useState('');
     const [priceType, setPriceType] = useState<string>('fixed');
     // On a community with Beans off (the worldwide one) a post has no price: no field, and it goes up at 0 Beans.
@@ -260,6 +261,7 @@ export default function GroupPostScreen() {
                 targetGroupId: groupId,
                 reach: 'local',
                 ...(tags.length > 0 ? { tags } : {}),
+                ...(freeTags.length > 0 ? { freeTags } : {}),
             });
             hapticSuccess();
             Alert.alert(
@@ -366,6 +368,8 @@ export default function GroupPostScreen() {
                         <TagPicker
                             value={tags}
                             onChange={setTags}
+                            freeTags={freeTags}
+                            onFreeTagsChange={setFreeTags}
                             category={category}
                             title={title}
                             description={description}

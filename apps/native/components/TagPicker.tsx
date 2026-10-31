@@ -5,7 +5,8 @@ import {
 import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    POST_TAGS_MAX, suggestTags, tagChildren, tagIndex, t,
+    ADD_TYPED_TAG, FREE_TAGS_MAX, FREE_TAGS_TOO_MANY, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAGS_ARE_PUBLIC, TAGS_IN_YOUR_WORDS, TAG_COMMA,
+    enterTypedTags, exactLibraryTag, lastTagOff, suggestTags, tagChildren, tagIndex, t, typedTag, type WordKey,
 } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { hapticTick, hapticWarning } from '../utils/haptics';
@@ -15,6 +16,9 @@ export interface TagPickerProps {
     value?: string[];
     tags?: string[];
     onChange: (tags: string[]) => void;
+    /** The tags the member typed, as stored, and what takes them. Without it the picker holds the library's tags only. */
+    freeTags?: string[];
+    onFreeTagsChange?: (freeTags: string[]) => void;
     category?: string;
     title?: string;
     description?: string;
@@ -25,6 +29,8 @@ export function TagPicker({
     value,
     tags,
     onChange,
+    freeTags = [],
+    onFreeTagsChange,
     category,
     title = '',
     description = '',
@@ -35,6 +41,8 @@ export function TagPicker({
     const [sheetVisible, setSheetVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+    // Why the last commit stayed in the field, in words, until the field changes.
+    const [refusal, setRefusal] = useState<WordKey | null>(null);
 
     useEffect(() => {
         if (!sheetVisible) return;
@@ -96,6 +104,7 @@ export function TagPicker({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
+            maxWidth: '100%',
         },
         chipSelected: {
             backgroundColor: colors.brand.fill,
@@ -105,6 +114,7 @@ export function TagPicker({
             fontSize: 14,
             fontWeight: '600',
             color: colors.text.body,
+            flexShrink: 1,
         },
         chipTextSelected: {
             color: colors.text.onBrand,
@@ -200,6 +210,33 @@ export function TagPicker({
             color: colors.text.body,
             paddingVertical: 8,
         },
+        refusal: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.feedback.danger.fg,
+            marginTop: -6,
+            marginBottom: 10,
+        },
+        hint: {
+            fontSize: 13,
+            color: colors.text.secondary,
+            marginBottom: 6,
+        },
+        addTypedRow: {
+            minHeight: 44,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            paddingVertical: 8,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.border.default,
+        },
+        addTypedText: {
+            flexShrink: 1,
+            fontSize: 15,
+            fontWeight: '700',
+            color: colors.brand.primary,
+        },
         sectionTitle: {
             fontSize: 13,
             fontWeight: '700',
@@ -248,11 +285,49 @@ export function TagPicker({
         } else {
             if (selectedTags.length >= POST_TAGS_MAX) {
                 hapticWarning();
+                setRefusal(FREE_TAGS_TOO_MANY);
                 return;
             }
             hapticTick();
             onChange([...selectedTags, id]);
         }
+    };
+
+    const canType = !!onFreeTagsChange;
+    const held = { tags: selectedTags, freeTags };
+
+    /** Commits what is typed (core typed-tags.ts); false when a piece was refused and stays in the field with its words. */
+    const enter = (text: string, done: boolean): boolean => {
+        const entry = enterTypedTags(text, held, done, index);
+        const added = entry.tags.length !== selectedTags.length || entry.freeTags.length !== freeTags.length;
+        if (entry.tags.length !== selectedTags.length) onChange(entry.tags);
+        if (entry.freeTags.length !== freeTags.length) onFreeTagsChange?.(entry.freeTags);
+        setSearchQuery(entry.rest);
+        setRefusal(entry.refusal);
+        if (entry.refusal) hapticWarning();
+        else if (added) hapticTick();
+        return !entry.refusal;
+    };
+
+    const typeInField = (text: string) => {
+        setRefusal(null);
+        if (canType && TAG_COMMA.test(text)) enter(text, false);
+        else setSearchQuery(text);
+    };
+
+    // Backspace on an empty field takes the last chip off. Fired before the text changes, so the last letter is not one.
+    const backspaceOnEmpty = (key: string) => {
+        if (!canType || key !== 'Backspace' || searchQuery.length > 0) return;
+        const off = lastTagOff(held);
+        if (off.freeTags.length !== freeTags.length) onFreeTagsChange?.(off.freeTags);
+        else if (off.tags.length !== selectedTags.length) onChange(off.tags);
+        else return;
+        hapticTick();
+    };
+
+    // Done commits what is in the field: a refused piece keeps the sheet open, with its words.
+    const finish = () => {
+        if (!canType || enter(searchQuery, true)) setSheetVisible(false);
     };
 
     // The keyboard goes first: a Modal opened over a raised one leaves the screen under it padded by its height.
@@ -279,14 +354,58 @@ export function TagPicker({
     const searchResults = useMemo(() => {
         const q = searchQuery.trim();
         if (q.length < 2) return [];
-        return index.search(q, 12);
-    }, [searchQuery, index]);
+        const found = index.search(q, 12);
+        // A plural ("lemons") is no prefix of its label, and Enter picks that label: it has a row like any other.
+        const exact = canType ? exactLibraryTag(q, index) : null;
+        return exact && !found.includes(exact) ? [exact, ...found] : found;
+    }, [searchQuery, index, canType]);
+
+    // What Enter would do with the field now. A word still being typed is not yet too short.
+    const typed = canType ? typedTag(searchQuery, held, index) : null;
+    const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
+    const shownRefusal = refusal ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed.why : null);
 
     // Groups for the selected category
     const groups = useMemo(() => {
         if (!category) return [];
         return tagChildren(category);
     }, [category]);
+
+    const chosenChips = (
+        <>
+            {selectedTags.map((id) => {
+                const label = index.label(id);
+                if (!label) return null;
+                return (
+                    <Pressable
+                        key={id}
+                        style={[styles.chip, styles.chipSelected]}
+                        onPress={() => toggleTag(id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Remove {name}', { name: label })}
+                    >
+                        <Text style={[styles.chipText, styles.chipTextSelected]}>{label}</Text>
+                        <MaterialCommunityIcons name="close" size={16} color={colors.text.onBrand} style={styles.removeIcon} />
+                    </Pressable>
+                );
+            })}
+            {freeTags.map((tag) => (
+                <Pressable
+                    key={`#${tag}`}
+                    style={[styles.chip, styles.chipSelected]}
+                    onPress={() => {
+                        hapticTick();
+                        onFreeTagsChange?.(freeTags.filter((other) => other !== tag));
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Remove {name}', { name: `#${tag}` })}
+                >
+                    <Text style={[styles.chipText, styles.chipTextSelected]}>#{tag}</Text>
+                    <MaterialCommunityIcons name="close" size={16} color={colors.text.onBrand} style={styles.removeIcon} />
+                </Pressable>
+            ))}
+        </>
+    );
 
     return (
         <View style={styles.container} testID={testID}>
@@ -295,24 +414,9 @@ export function TagPicker({
             </View>
 
             <View style={styles.chipsRow}>
-                {selectedTags.map((id) => {
-                    const label = index.label(id);
-                    if (!label) return null;
-                    return (
-                        <Pressable
-                            key={id}
-                            style={[styles.chip, styles.chipSelected]}
-                            onPress={() => toggleTag(id)}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Remove {name}', { name: label })}
-                        >
-                            <Text style={[styles.chipText, styles.chipTextSelected]}>{label}</Text>
-                            <MaterialCommunityIcons name="close" size={16} color={colors.text.onBrand} style={styles.removeIcon} />
-                        </Pressable>
-                    );
-                })}
+                {chosenChips}
 
-                {selectedTags.length < POST_TAGS_MAX && (
+                {(selectedTags.length < POST_TAGS_MAX || (canType && freeTags.length < FREE_TAGS_MAX)) && (
                     <Pressable
                         style={styles.addBtn}
                         onPress={openSheet}
@@ -339,7 +443,7 @@ export function TagPicker({
                             <Text style={styles.headerTitle}>{t('Tags')}</Text>
                             <Pressable
                                 style={styles.doneBtn}
-                                onPress={() => setSheetVisible(false)}
+                                onPress={finish}
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Done')}
                             >
@@ -354,14 +458,17 @@ export function TagPicker({
                                 placeholder={t('Search tags...')}
                                 placeholderTextColor={colors.text.muted}
                                 value={searchQuery}
-                                onChangeText={setSearchQuery}
+                                onChangeText={typeInField}
+                                onKeyPress={(e) => backspaceOnEmpty(e.nativeEvent.key)}
+                                // Return commits and the keyboard stays, for the next tag.
+                                {...(canType ? { onSubmitEditing: () => { enter(searchQuery, true); }, submitBehavior: 'submit' as const, returnKeyType: 'done' as const } : {})}
                                 autoCapitalize="none"
                                 autoCorrect={false}
                                 accessibilityLabel={t('Search tags')}
                             />
                             {searchQuery.length > 0 && (
                                 <Pressable
-                                    onPress={() => setSearchQuery('')}
+                                    onPress={() => { setSearchQuery(''); setRefusal(null); }}
                                     style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' }}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Clear search')}
@@ -371,16 +478,21 @@ export function TagPicker({
                             )}
                         </View>
 
+                        {shownRefusal && <Text style={styles.refusal} accessibilityLiveRegion="polite">{t(shownRefusal)}</Text>}
+
                         <ScrollView
                             keyboardShouldPersistTaps="handled"
                             showsVerticalScrollIndicator
-                            contentContainerStyle={{ paddingBottom: 24 }}
+                            contentContainerStyle={{ paddingBottom: canType ? 8 : 24 }}
                         >
+                            {canType && selectedTags.length + freeTags.length > 0 && (
+                                <View style={[styles.chipsRow, styles.sectionWrap]} testID="tag-picker-chosen">{chosenChips}</View>
+                            )}
                             {searchQuery.trim().length >= 2 ? (
                                 <View style={styles.sectionWrap}>
-                                    <Text style={styles.sectionTitle}>{t('Search results')}</Text>
+                                    {(searchResults.length > 0 || !canType) && <Text style={styles.sectionTitle}>{t('Search results')}</Text>}
                                     {searchResults.length === 0 ? (
-                                        <Text style={styles.emptyText}>{t('No tags found')}</Text>
+                                        !canType && <Text style={styles.emptyText}>{t('No tags found')}</Text>
                                     ) : (
                                         <View style={styles.chipsRow}>
                                             {searchResults.map((id) => {
@@ -408,6 +520,12 @@ export function TagPicker({
                                 </View>
                             ) : (
                                 <>
+                                    {canType && (
+                                        <View style={styles.sectionWrap}>
+                                            <Text style={styles.hint}>{t(TAGS_ARE_PUBLIC)}</Text>
+                                            <Text style={styles.hint}>{t(TAGS_IN_YOUR_WORDS)}</Text>
+                                        </View>
+                                    )}
                                     {suggestions.length > 0 && (
                                         <View style={styles.sectionWrap}>
                                             <Text style={styles.sectionTitle}>{t('Suggested')}</Text>
@@ -510,6 +628,14 @@ export function TagPicker({
                                 </>
                             )}
                         </ScrollView>
+
+                        {/* The last row, and held below the list: on a short sheet twelve results would push it under the keyboard. */}
+                        {addable && (
+                            <Pressable style={styles.addTypedRow} onPress={() => enter(searchQuery, true)} accessibilityRole="button" testID="tag-picker-add-typed">
+                                <MaterialCommunityIcons name="plus" size={18} color={colors.brand.primary} />
+                                <Text style={styles.addTypedText}>{t(ADD_TYPED_TAG, { tag: `#${addable}` })}</Text>
+                            </Pressable>
+                        )}
                     </Pressable>
                 </Pressable>
                 </KeyboardAvoidingView>

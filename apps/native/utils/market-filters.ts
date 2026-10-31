@@ -16,7 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { foldApostrophes, HOME_SEARCH_MAX_CHARS, readSearchSettings, searchFromMarket, searchTermsFor, postTagsOf, searchTagsFor, t, tierIndexForCredit, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, listingFreeTags, readSearchSettings, searchFromMarket, searchTermsFor, postTagsOf, searchTagsFor, t, tierIndexForCredit, word, type HomeSearchSettings, type WordKey } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -89,11 +89,12 @@ export function marketSearchQuery(search: string): string {
 }
 
 /**
- * Whether a listing's title or description holds one of the search's terms: the Market's own filter, for a node without FTS.
+ * Whether a listing's title, description or a tag its author typed holds one of the search's terms: the Market's own filter,
+ * for a node without FTS, and it runs over the node's answer too, so a listing found by a typed tag must pass it.
  * The apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
  */
-export function marketSearchMatches(p: { title?: string | null; description?: string | null; tags?: unknown }, search: string): boolean {
-    const text = foldApostrophes(`${(p.title ?? '').toLowerCase()} ${(p.description ?? '').toLowerCase()}`);
+export function marketSearchMatches(p: { title?: string | null; description?: string | null; tags?: unknown; freeTags?: unknown; free_tags?: unknown }, search: string): boolean {
+    const text = foldApostrophes(`${p.title ?? ''} ${p.description ?? ''} ${listingFreeTags(p).join(' ')}`.toLowerCase());
     if (searchTermsFor(search).some(term => text.includes(foldApostrophes(term)))) return true;
     const resolved = searchTagsFor(search);
     if (resolved.length > 0) {

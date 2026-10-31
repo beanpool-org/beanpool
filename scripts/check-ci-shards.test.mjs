@@ -222,7 +222,7 @@ test('each edit the check exists to catch fails it', () => {
     assert.match(shardProblems(moved, TEST_ALL).join('\n'), /website_status waits for website_contrast/);
     // The aggregate renamed, a second job given the name, or the aggregate no longer always()/gating.
     assert.match(requiredCheckProblems(CI.replace(`    name: ${REQUIRED_CHECK}\n`, '    name: Test-All\n')).join('\n'), /jobs.test-all is not named/);
-    assert.match(requiredCheckProblems(CI.replace('Test-All in one job (remove after 3 green main runs)', REQUIRED_CHECK)).join('\n'), /2 jobs or steps are named/);
+    assert.match(requiredCheckProblems(CI.replace('Test-All shard ${{ matrix.name }}', REQUIRED_CHECK)).join('\n'), /2 jobs or steps are named/);
     assert.match(requiredCheckProblems(CI, [`jobs:\n  x:\n    name: ${REQUIRED_CHECK}\n`]).join('\n'), /2 jobs or steps are named/);
     assert.match(requiredCheckProblems(CI.replace('    if: always()\n', '')).join('\n'), /no `if: always\(\)`/);
     assert.match(requiredCheckProblems(CI.replace('    needs: shard\n', '')).join('\n'), /does not need the shard job/);

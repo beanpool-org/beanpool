@@ -26,7 +26,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Reading the repository is all this needs (the cache and the log upload use the runner's own token), so a compromised
 # action or dependency on a push to main gets no write token. Every action is pinned to a full commit SHA with its
@@ -145,58 +145,3 @@ jobs:
           echo "Shards: $SHARDS"
           [ "$SHARDS" = success ]
 
-  # The old single job, kept beside the shards on pushes to main (and by hand) until it and the shards have agreed on three
-  # green main runs. REMOVE THIS JOB after 3 green main runs (Fable test-throughput S3). Renamed, because the required
-  # check's name is the aggregate's now. Not on pull requests: it would hold a runner for 90-110 min per push.
-  test-all-single:
-    name: Test-All in one job (remove after 3 green main runs)
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          fetch-depth: 2
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-        with:
-          version: 9.0.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
-          cache: 'pnpm'
-
-      - name: Install Dependencies
-        run: pnpm install
-
-      - name: Install expect
-        run: command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
-
-      - name: Install Chromium for the browser checks
-        timeout-minutes: 15
-        run: pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium
-
-      - name: Build core, engine, and signin
-        run: pnpm turbo run build --filter=@beanpool/core --filter=@beanpool/engine --filter=@beanpool/signin
-
-      # At 115 min `timeout` signals test-all.sh, which names the checks that had not finished and keeps every log; the
-      # step's 120 min cap is the backstop. The slowest green run of the last 59 took 72 min here.
-      - name: Run test-all checks
-        timeout-minutes: 120
-        env:
-          TEST_ALL_LOG_DIR: ${{ runner.temp }}/test-all-logs
-        run: timeout -s INT 115m bash scripts/test-all.sh --all
-
-      - name: Upload test-all logs
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: test-all-logs
-          path: ${{ runner.temp }}/test-all-logs
-          if-no-files-found: ignore
-          overwrite: true
-          retention-days: 14

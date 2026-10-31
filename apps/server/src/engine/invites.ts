@@ -89,9 +89,9 @@ function assertInvitesOn(): void {
  * Creates standard online invite code for an active member.
  */
 /**
- * `beforeWrite`: a caller's own limit on new codes (the route's 20 a day and 50 unused, W-main), run once the inviter is
- * known to be a member who may bring someone in and before anything is written, so a limit never answers for someone
- * who may not invite at all.
+ * `beforeWrite`: a caller's own limit on new codes (the route's 20 a day and 50 unused, an owner's or admin's the owners'
+ * setting, W-main), run once the inviter is known to be a member who may bring someone in and before anything is written,
+ * so a limit never answers for someone who may not invite at all.
  *
  * Where only admins invite (the door, config/door.ts), a member who is no owner or admin here gets DoorClosedError (403
  * `admins_only`), after the member check and before the limit: a knock's answer included (engine/knocks.ts).
@@ -395,7 +395,7 @@ export function redeemOfflineTicket(
         return { success: false, error: ADMINS_ONLY_TICKET_MESSAGE };
     }
     // A ticket is an invite its maker makes on the phone, which this server first sees when someone joins with it, so it
-    // counts against the maker's 20 invites a day then (W-main, engine/writer-bounds.ts). Past it, nothing is written and
+    // counts against the maker's invites a day then (W-main, engine/writer-bounds.ts). Past it, nothing is written and
     // the ticket stays unused.
     const inviterAtLimit = ticketJoinRefusal(inviterPubkey);
     if (inviterAtLimit) {

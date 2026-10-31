@@ -176,7 +176,7 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
                             role="menu"
                             aria-label={t('Add to calendar')}
                             onKeyDown={onCalendarKeyDown}
-                            className="absolute left-0 right-0 sm:right-auto top-full mt-1 z-30 min-w-[14rem] max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800"
+                            className="absolute right-0 left-auto top-full mt-1 z-30 min-w-[14rem] max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800"
                         >
                             <button
                                 type="button"

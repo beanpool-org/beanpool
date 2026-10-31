@@ -307,4 +307,23 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         fireEvent.mouseDown(document.body);
         expect(screen.queryByTestId('event-add-calendar-file')).toBeNull();
     });
+
+    it('anchors calendar menu with right-0 so it fits within card at 320px phone width without clipping (finding 1)', () => {
+        // At 320px phone width with 1.3x text, EventDetail card inner width is 288px (320px - 32px padding).
+        // The calendar button sits in the right column of flex row (Share min-w 128px + gap 8px + Calendar min-w 128px).
+        // If the menu was left-0 with min-w-[14rem] (224px), it would overrun the 288px card right edge by ~72px,
+        // getting clipped by EventDetail's overflow-hidden.
+        // Anchoring with right-0 left-auto aligns the menu's right edge with the wrapper's right edge,
+        // so it extends inward over the card (leaving ~64px to spare on the left) without any clipping.
+        render(
+            <div style={{ width: 320 }}>
+                <EventDetail post={event} identity={identity} />
+            </div>
+        );
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        const menu = screen.getByRole('menu', { name: 'Add to calendar' });
+        expect(menu.className).toContain('right-0');
+        expect(menu.className).toContain('left-auto');
+        expect(menu.className).not.toMatch(/\bleft-0\b/);
+    });
 });

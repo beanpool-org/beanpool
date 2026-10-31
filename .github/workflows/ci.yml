@@ -59,19 +59,32 @@ jobs:
           - { name: vitest-native-2, checks: test, test_slice: "--only --filter=beanpool-pillar -- --shard=2/2" }
           - { name: vitest-pwa-1, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=1/2" }
           - { name: vitest-pwa-2, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=2/2" }
-          - { name: vitest-rest, checks: test, test_slice: "--filter=!beanpool-pillar --filter=!@beanpool/pwa", expect: true }
+          - { name: vitest-rest, checks: test, test_slice: "--filter=!beanpool-pillar --filter=!@beanpool/pwa", expect: true, compare_main: true }
           - { name: web-pages, checks: "pwa_dark_classes pwa_wide_pages native_phone_width website_colours website_contrast website_status website_android website_start website_lang", browser: true }
-          - { name: checks, checks: "build lint typecheck native_dark_contrast suite_registration tool_budgets deploy_preserve deploy_no_fleet_secrets deploy_health deploy_package fail_summary merge_gate undeclared_imports balance_writes migration_steps directory_register workflows no_google_fonts website_global_link website_links setup_backup token_scripts reddit_inbox words secrets_guard" }
+          - { name: checks, checks: "build lint typecheck native_dark_contrast suite_registration tool_budgets deploy_preserve deploy_no_fleet_secrets deploy_health deploy_package fail_summary merge_gate undeclared_imports balance_writes migration_steps directory_register workflows no_google_fonts website_global_link website_links setup_backup token_scripts reddit_inbox words secrets_guard", compare_main: true }
 
     steps:
-      # Two commits deep: the guide check (packages/beanpool-guide/scripts/build.mjs, findBase) compares
-      # the published guide with the commit before HEAD — main before this push, or, for a pull request's
-      # merge commit, main's tip — and fails when a shallow clone lacks it. A workflow_dispatch run on a
-      # branch has no origin/main: when its tip is a merge, the check says the versions were not compared.
+      # Two commits deep: on a push to main the guide, words and migration checks compare with the commit before HEAD,
+      # main before this push, and the guide check fails when a shallow clone lacks it.
       - name: Checkout Code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 2
+
+      # The checks that compare with main (migration_steps and words in `checks`, the guide's versions in `vitest-rest`) need
+      # origin/main and a merge base, and checkout writes no origin/main for a pull request or a branch: migration_steps
+      # read as a pass in 0 s on every pull request. Both ends go 50 deep: a train branch's merge base is up to four merges
+      # back from its tip, and main takes about 30 merges a day. Measured: 6 s here against 18 s for the checkout (200 deep
+      # 17 s, the whole history 30 s), so only the shards that compare do it, and the whole history only if 50 did not reach
+      # the merge base (a run re-run days later). A push to main has what it needs from the checkout.
+      # scripts/check-ci-shards.test.mjs runs this step against a throwaway origin.
+      - name: Fetch origin/main
+        if: matrix.compare_main && github.event_name != 'push'
+        run: |
+          head=$(git rev-parse HEAD)
+          main=+refs/heads/main:refs/remotes/origin/main
+          git fetch --no-tags --depth=50 origin "$main" "$head"
+          git merge-base origin/main HEAD > /dev/null || git fetch --no-tags --unshallow origin "$main" "$head"
 
       - name: Install pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0

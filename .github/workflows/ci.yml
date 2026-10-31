@@ -35,15 +35,125 @@ permissions:
   contents: read
 
 jobs:
-  test-all:
-    name: Run BeanPool Test-All Pipeline
+  # test-all.sh's checks split across parallel jobs (Fable test-throughput S3, 31 Oct 2026). One job ran them all in
+  # 90-110 min on 4 vCPUs; each shard here runs a named part (TEST_ALL_ONLY) and the slowest sets the wall clock. Every
+  # check is in exactly one shard, the vitest `test` check split by package and vitest --shard, the server suites by
+  # SERVER_SUITES_SHARD over the committed durations in scripts/server-suite-durations.json. scripts/check-ci-shards.test.mjs
+  # (test-all's `workflows` check) fails when a check is in no shard or two, or the server shards do not count to K.
+  # fail-fast off: a red shard does not cancel the others, so one run names every failure.
+  shard:
+    name: Test-All shard ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: server-1, checks: server_suites, server_shard: 1/6 }
+          - { name: server-2, checks: server_suites, server_shard: 2/6 }
+          - { name: server-3, checks: server_suites, server_shard: 3/6 }
+          - { name: server-4, checks: server_suites, server_shard: 4/6 }
+          - { name: server-5, checks: server_suites, server_shard: 5/6 }
+          - { name: server-6, checks: server_suites, server_shard: 6/6 }
+          - { name: settings-phone, checks: settings_phone, browser: true }
+          - { name: vitest-native-1, checks: test, test_slice: "--only --filter=beanpool-pillar -- --shard=1/2" }
+          - { name: vitest-native-2, checks: test, test_slice: "--only --filter=beanpool-pillar -- --shard=2/2" }
+          - { name: vitest-pwa-1, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=1/2" }
+          - { name: vitest-pwa-2, checks: test, test_slice: "--only --filter=@beanpool/pwa -- --shard=2/2" }
+          - { name: vitest-rest, checks: test, test_slice: "--filter=!beanpool-pillar --filter=!@beanpool/pwa", expect: true }
+          - { name: web-pages, checks: "pwa_dark_classes pwa_wide_pages native_phone_width website_colours website_contrast website_status website_android website_start website_lang", browser: true }
+          - { name: checks, checks: "build lint typecheck native_dark_contrast suite_registration tool_budgets deploy_preserve deploy_no_fleet_secrets deploy_health deploy_package fail_summary merge_gate undeclared_imports balance_writes migration_steps directory_register workflows no_google_fonts website_global_link website_links setup_backup token_scripts reddit_inbox words secrets_guard" }
 
     steps:
       # Two commits deep: the guide check (packages/beanpool-guide/scripts/build.mjs, findBase) compares
       # the published guide with the commit before HEAD — main before this push, or, for a pull request's
       # merge commit, main's tip — and fails when a shallow clone lacks it. A workflow_dispatch run on a
       # branch has no origin/main: when its tip is a merge, the check says the versions were not compared.
+      - name: Checkout Code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 9.0.0
+
+      # The pnpm store is cached by lockfile (install measured 4-5 s with it); core, engine and signin are rebuilt in
+      # each shard below, 10-15 s, which a dist cache would not beat by enough to be worth a stale dist.
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      # The vault custodian tool's terminal test (apps/vault/src/__tests__/cli-terminal.test.ts) drives it on a pty with
+      # expect; on CI the test fails rather than skips when expect is missing. Vault's vitest is in vitest-rest.
+      - name: Install expect
+        if: matrix.expect
+        run: command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
+
+      # Chromium and its system libraries for the browser checks, in the shards that run them, before any check starts:
+      # apt lets one install hold dpkg's lock at a time, and checks each installing --with-deps side by side failed on it
+      # (run 39768723431). The checks' own `playwright install` then finds it and downloads nothing.
+      - name: Install Chromium for the browser checks
+        if: matrix.browser
+        timeout-minutes: 15
+        run: pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium
+
+      # Built once before the checks fan out, so two tsc processes never write packages/beanpool-core/dist at once
+      # (PR #2533 run 40547765597).
+      - name: Build core, engine, and signin
+        run: pnpm turbo run build --filter=@beanpool/core --filter=@beanpool/engine --filter=@beanpool/signin
+
+      # A shard is 10-20 min; at 50 `timeout` signals test-all.sh, which names the checks that had not finished and
+      # keeps their logs for the upload below. The step's 55 min cap is the backstop.
+      - name: Run test-all checks (${{ matrix.name }})
+        timeout-minutes: 55
+        env:
+          TEST_ALL_ONLY: ${{ matrix.checks }}
+          TEST_ALL_TEST_SLICE: ${{ matrix.test_slice }}
+          SERVER_SUITES_SHARD: ${{ matrix.server_shard }}
+          TEST_ALL_LOG_DIR: ${{ runner.temp }}/test-all-logs
+        run: timeout -s INT 50m bash scripts/test-all.sh --all
+
+      - name: Upload test-all logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-all-logs-${{ matrix.name }}
+          path: ${{ runner.temp }}/test-all-logs
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 14
+
+  # THE REQUIRED CHECK. The "Protect main" ruleset requires a check named exactly "Run BeanPool Test-All Pipeline" and
+  # matches it by name, so this job carries it and no other job may (scripts/check-ci-shards.test.mjs). It passes only when
+  # every shard passed: a failed, cancelled or skipped shard fails it. always(), so it reports even then.
+  test-all:
+    name: Run BeanPool Test-All Pipeline
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.shard.result }}
+        run: |
+          echo "Shards: $SHARDS"
+          [ "$SHARDS" = success ]
+
+  # The old single job, kept beside the shards on pushes to main (and by hand) until it and the shards have agreed on three
+  # green main runs. REMOVE THIS JOB after 3 green main runs (Fable test-throughput S3). Renamed, because the required
+  # check's name is the aggregate's now. Not on pull requests: it would hold a runner for 90-110 min per push.
+  test-all-single:
+    name: Test-All in one job (remove after 3 green main runs)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
       - name: Checkout Code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -63,47 +173,24 @@ jobs:
       - name: Install Dependencies
         run: pnpm install
 
-      # The vault custodian tool's terminal test (apps/vault/src/__tests__/cli-terminal.test.ts) drives it on a pty with
-      # expect; on CI the test fails rather than skips when expect is missing.
       - name: Install expect
         run: command -v expect || (sudo apt-get update && sudo apt-get install -y expect)
 
-      # Chromium and its system libraries for test-all's browser checks (settings_phone, pwa_dark_classes,
-      # native_phone_width, website_contrast, and website_status and website_lang after it), ONCE, before any check
-      # starts. Each check used to run `playwright install --with-deps` itself, and apt lets one install hold dpkg's lock
-      # at a time: on run 39768723431 settings_phone's took 5m29s on a slow mirror (25.9 MB at 78.8 kB/s), and
-      # pwa_dark_classes and native_phone_width, started 2m23s and 2m32s in, failed in 8-9 s on that lock. The workspace
-      # has one Playwright (1.63.0), so the PWA's install is every check's browser; their own `playwright install` then
-      # finds it and downloads nothing.
-      # Measured 11 s on CI; a stalled apt mirror or download fails here instead of holding the runner for GitHub's 6 h default.
       - name: Install Chromium for the browser checks
         timeout-minutes: 15
         run: pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium
 
-      # Build shared packages (@beanpool/core, @beanpool/engine, @beanpool/signin) before running parallel checks.
-      # Both `turbo run build` and `turbo run test` (via dependsOn: ["^build"]) compile @beanpool/core. Running both
-      # concurrently on a clean checkout causes a race where two tsc processes write to packages/beanpool-core/dist
-      # simultaneously, truncating avatar-presets.d.ts while the PWA's tsc is reading it (seen on PR #2533 run
-      # 40547765597 and PR #2541). Building them once here ensures dist is complete and turbo caches the task before
-      # checks fan out.
       - name: Build core, engine, and signin
         run: pnpm turbo run build --filter=@beanpool/core --filter=@beanpool/engine --filter=@beanpool/signin
 
-      # A hang fails the step instead of holding the runner for GitHub's 6 h default. patches/vitest@3.2.7.patch drops
-      # vitest's 60 s per-call rpc timer, as vitest 4 does: a test file whose import never finishes (a plugin transform
-      # that never settles) now waits for this. The slowest green run of the last 59 took 72 min here; the median, 55.
-      # At 115 min `timeout` signals test-all.sh and every check in it, so test-all.sh names the checks that had not
-      # finished, prints the end of their logs and copies every log for the upload below. The step's 120 min cap is the
-      # backstop: the runner's signal need not reach test-all.sh, and a run stopped by it leaves nothing to upload.
+      # At 115 min `timeout` signals test-all.sh, which names the checks that had not finished and keeps every log; the
+      # step's 120 min cap is the backstop. The slowest green run of the last 59 took 72 min here.
       - name: Run test-all checks
         timeout-minutes: 120
         env:
-          # On failure, or when `timeout` stops it, test-all.sh copies every check log here; a passing run writes nothing.
           TEST_ALL_LOG_DIR: ${{ runner.temp }}/test-all-logs
         run: timeout -s INT 115m bash scripts/test-all.sh --all
 
-      # The job output shows the failing package's own error, but only its last lines. The full
-      # log of every check is here, so a failure never has to be re-run to be read.
       - name: Upload test-all logs
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

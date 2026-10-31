@@ -11,7 +11,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { ownVoteSummary, startingVoteCount, voteButtonStates } from '../lib/decision-own-vote';
 import {
     DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, caseHiddenLine, electorateLine, isOwnRemoval, isPauseVote, keepSuspensionHeadline, pauseVoteBody,
-    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, turnoutLine, voiceCreditsLine,
+    pauseVoteHeadline, poolVoteBlocker, proposedByLine, replyHeading, replyTakenDownLine, secondPauseLine, turnoutLine, voiceCreditsLine,
 } from '../lib/decision-card';
 import { LocalCommunityAction, LocalCommunityStrip, type LocalCommunityWays } from './LocalCommunityMark';
 import { SampleHeader, samplePoolVoting } from './ShowcasePreviews';
@@ -476,6 +476,12 @@ export function DecideSection({
                                                 <div className="text-sm font-bold text-amber-200">
                                                     {pauseVoteHeadline(item.params, item.subject?.slice(0, 8) || t('a member'), item.proposer)}
                                                 </div>
+                                                {/* A second pause within 30 days of a vote that didn't remove them (removal by vote S4) */}
+                                                {secondPauseLine(item.params) && (
+                                                    <div className="text-sm font-bold text-amber-200" data-testid="second-pause-line">
+                                                        {secondPauseLine(item.params)}
+                                                    </div>
+                                                )}
                                                 <div className="text-xs text-nature-300">
                                                     {pauseVoteBody(item.params, item.subject?.slice(0, 8) || t('a member'))}
                                                 </div>

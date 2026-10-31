@@ -19,8 +19,13 @@
 // should be split or made quicker rather than the limit raised.
 //
 // ORDER. Longest first, from the durations the last run recorded in <git common dir>/server-suite-durations.json (shared
-// by every worktree of the checkout, never tracked). A run with no recorded duration goes first, so a new suite is never
-// the one holding up the end. SERIAL runs in the manifest go last, one at a time, with no other suite beside them.
+// by every worktree of the checkout, never tracked), else the committed snapshot scripts/server-suite-durations.json (all
+// a fresh CI checkout has). A run in neither goes first, so a new suite is never the one holding up the end. SERIAL runs
+// in the manifest go last, one at a time, with no other suite beside them.
+//
+// SHARDS. SERVER_SUITES_SHARD=i/K runs the i-th of K parts (CI runs each in a job of its own, .github/workflows/ci.yml):
+// scripts/server-suite-shards.mjs splits the runs by the committed snapshot alone, so every shard computes the same split
+// and the K parts together are every run exactly once. Each part runs its pooled runs, then its serial ones, as above.
 //
 // NO RETRIES. A failure is red. The report lists every failing run with its log, then one roll-up line that
 // scripts/test-all-lib.sh reads (`❌ Server suites failed: test-x test-y(on) test-z(TIMEOUT)`).
@@ -28,6 +33,7 @@
 // Env:
 //   TEST_ALL_JOBS           runs at a time. Default 3 on CI, else the core count minus 4, at least 1.
 //   SERVER_SUITES_ONLY      run only these (run ids or suite names, space or comma separated), e.g. to reproduce one.
+//   SERVER_SUITES_SHARD     i/K: run only the i-th of K shards (not with SERVER_SUITES_ONLY).
 //   SERVER_SUITES_TIMEOUT   seconds per run for EVERY run when set (overrides each run's timeoutS); default 300, or the run's timeoutS.
 //   SERVER_SUITES_SUMMARY   file to write the short timing summary to (test-all.sh prints it in its report).
 //   TEST_ALL_LOG_DIR        when set (CI), the logs of failing runs are copied to $TEST_ALL_LOG_DIR/server-suites/.
@@ -39,6 +45,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_ENV, SUITES, VARIANTS, SERIAL } from './server-suites.mjs';
+import { parseShard, readSnapshot, splitIntoShards } from './server-suite-shards.mjs';
 import { hasCountLine } from './suite-count-line.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -87,6 +94,19 @@ function buildRuns() {
         process.exit(2);
     }
     const only = (process.env.SERVER_SUITES_ONLY || '').split(/[\s,]+/).filter(Boolean);
+    const shardSpec = process.env.SERVER_SUITES_SHARD;
+    if (shardSpec) {
+        const shard = parseShard(shardSpec);
+        if (!shard) {
+            console.log(`❌ SERVER_SUITES_SHARD=${shardSpec} is not i/K with 1 <= i <= K`);
+            process.exit(2);
+        }
+        if (only.length) {
+            console.log('❌ SERVER_SUITES_SHARD and SERVER_SUITES_ONLY together: use one');
+            process.exit(2);
+        }
+        return splitIntoShards(runs, { durations: readSnapshot(), serial: SERIAL, count: shard.count })[shard.index - 1].runs;
+    }
     if (only.length === 0) return runs;
     const picked = runs.filter((r) => only.includes(r.id) || only.includes(r.name));
     if (picked.length === 0) {
@@ -287,14 +307,15 @@ async function main() {
     const runs = buildRuns();
     total = runs.length;
     const file = durationsFile();
-    const known = file ? readDurations(file) : {};
+    const known = { ...readSnapshot(), ...(file ? readDurations(file) : {}) };
     const weight = (r) => known[r.id] ?? Infinity;
     const pooled = runs.filter((r) => !SERIAL[r.id]).sort((a, b) => weight(b) - weight(a));
     const serial = runs.filter((r) => SERIAL[r.id]);
 
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'ss-'));
-    console.log(`Server suites: ${pooled.length} runs, ${JOBS} at a time (${cores} cores), then ${serial.length} serial; ${TIMEOUT_FROM_ENV ? `${TIMEOUT_S}s limit each` : `${TIMEOUT_S}s limit each (${[...pooled, ...serial].filter(r => r.timeoutS).length} with their own)`}`);
-    if (Object.keys(known).length === 0) console.log('  (no recorded durations yet, so manifest order; the next run goes longest first)');
+    const shardNote = process.env.SERVER_SUITES_SHARD ? ` (shard ${process.env.SERVER_SUITES_SHARD.trim()})` : '';
+    console.log(`Server suites${shardNote}: ${pooled.length} runs, ${JOBS} at a time (${cores} cores), then ${serial.length} serial; ${TIMEOUT_FROM_ENV ? `${TIMEOUT_S}s limit each` : `${TIMEOUT_S}s limit each (${[...pooled, ...serial].filter(r => r.timeoutS).length} with their own)`}`);
+    if (Object.keys(known).length === 0) console.log('  (no recorded durations and no snapshot, so manifest order; the next run goes longest first)');
 
     const results = [];
     const t0 = Date.now();

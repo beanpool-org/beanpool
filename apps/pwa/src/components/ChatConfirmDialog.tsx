@@ -60,14 +60,14 @@ function ChatConfirmDialogContent({
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="px-4 py-2 rounded-xl text-sm font-semibold bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
+                        className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
                     >
                         {cancelLabel}
                     </button>
                     <button
                         type="button"
                         onClick={onConfirm}
-                        className={`px-4 py-2 rounded-xl text-sm font-semibold border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 ${
+                        className={`min-h-[44px] px-4 py-2 rounded-xl text-sm font-semibold border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 ${
                             destructive
                                 ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on focus-visible:ring-red-500'
                                 : 'bg-nature-900 hover:bg-nature-800 text-white dark:bg-white dark:hover:bg-nature-100 dark:text-nature-900 focus-visible:ring-nature-400'

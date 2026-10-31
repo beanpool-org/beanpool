@@ -738,26 +738,24 @@ export default function SettingsScreen() {
             const cleaned = (profile?.avatar_url && profile.avatar_url !== 'null' && profile.avatar_url !== 'undefined' && profile.avatar_url.trim() !== '') ? profile.avatar_url : null;
             if (!edited.avatar) setAvatar(cleaned);
             {
+                // Profile S2-W: bio and contact belong to this community alone; no fallback to canonical across communities.
                 if (profile) {
                     if (!edited.bio) {
-                        if (profile.bio) setBio(profile.bio);
-                        else if (canonical?.bio) setBio(canonical.bio);
+                        setBio(profile.bio ?? '');
                     }
                     if (!edited.contact) {
-                        if (profile.contact_value) setContact(profile.contact_value);
-                        else if (canonical?.contactValue) setContact(canonical.contactValue);
-                        if (profile.contact_visibility) setContactVisibility(profile.contact_visibility);
-                        else if (canonical?.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
+                        setContact(profile.contact_value ?? '');
+                        setContactVisibility((profile.contact_visibility as any) || 'community');
                     }
                     if (profile.archetype) setArchetypeRaw(profile.archetype);
                     else if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
-                } else if (canonical) {
-                    if (canonical.bio && !edited.bio) setBio(canonical.bio);
+                } else {
+                    if (!edited.bio) setBio('');
                     if (!edited.contact) {
-                        if (canonical.contactValue) setContact(canonical.contactValue);
-                        if (canonical.contactVisibility) setContactVisibility(canonical.contactVisibility as any);
+                        setContact('');
+                        setContactVisibility('community');
                     }
-                    if (canonical.archetype) setArchetypeRaw(canonical.archetype);
+                    if (canonical?.archetype) setArchetypeRaw(canonical.archetype);
                 }
             }
 
@@ -797,10 +795,10 @@ export default function SettingsScreen() {
                         // whatever the row had.
                         await updateMemberProfile(identity.publicKey, {
                             callsign: remoteName,
-                            bio: profile?.bio ?? canonical?.bio,
-                            contact_value: profile?.contact_value ?? canonical?.contactValue,
-                            contact_visibility: profile?.contact_visibility ?? (canonical?.contactVisibility as any),
-                            archetype: profile?.archetype ?? canonical?.archetype,
+                            bio: profile?.bio ?? undefined,
+                            contact_value: profile?.contact_value ?? undefined,
+                            contact_visibility: profile?.contact_visibility ?? undefined,
+                            archetype: profile?.archetype ?? canonical?.archetype ?? undefined,
                         });
                     }
                     if (!identity.callsign?.trim()) {

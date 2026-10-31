@@ -20,6 +20,7 @@ import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { forgetAgentGrant } from '../agent/limits.js';
 import { dropSuggestionsOf } from '../agent/suggestions.js';
+import { dropUploadedPhotosOf } from '../agent/owner-photos.js';
 import { agentDisconnectedWords } from '../agent/welcome.js';
 import { cleanMemberText } from '../agent/fence.js';
 import { AGENT_GRANTS_PATH } from '../agent/grants-route.js';
@@ -104,6 +105,7 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
         if (revoked?.scope === 'agent') {
             forgetAgentGrant(id);
             dropSuggestionsOf(id);
+            dropUploadedPhotosOf(id);
             noteSecurityEvent({ key: 'sec.agent', actor: String(by), actorRole: 'owner', detail: agentDisconnectedWords(cleanMemberText(revoked.name, 60), 'owner') });
         }
         ctx.body = { revoked: id };

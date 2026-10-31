@@ -217,7 +217,7 @@ const ROWS: Record<AlertKey, Row> = {
     /** A change to where backups go or who copies this server: one line each, folded hourly past the actor's bound. */
     'sec.backups': { title: 'a backup setting changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     /** Members removed by an admin, branches pruned by an owner, accounts moved to a new phone by a re-key: a day's count. */
-    'sec.members': { title: 'members removed or moved', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
+    'sec.members': { title: 'members removed, moved or paused', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     /** The community's name, callsign or contacts changed by an admin; how this community works changed, by an owner. */
     'sec.settings': { title: "the community's details changed", priority: 2, webhook: true, pushEveryMs: EACH, banner: true },
     /**

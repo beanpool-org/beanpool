@@ -421,7 +421,20 @@ interface PinnedResolution {
     family: number;
 }
 
-async function resolveAndPinHost(hostname: string): Promise<PinnedResolution> {
+/** Where a host's addresses come from: the system's DNS (dns.lookup), unless a suite gives a table (pinnedHostResolver). */
+export type HostLookup = (hostname: string) => Promise<LookupAddress[]>;
+const systemLookup: HostLookup = (hostname) => dns.lookup(hostname, { all: true, verbatim: true });
+
+/**
+ * This file's own resolver (every check below: the name's syntax, each address it resolves to, the pin) over another
+ * source of addresses. Only a suite uses it, to answer a name from a table instead of the internet, through the test hook
+ * below: an address the table gives is held to exactly the checks a real lookup's is, so nothing is loosened.
+ */
+export function pinnedHostResolver(lookup: HostLookup): HostResolver {
+    return (hostname) => resolveAndPinHost(hostname, lookup);
+}
+
+async function resolveAndPinHost(hostname: string, lookup: HostLookup = systemLookup): Promise<PinnedResolution> {
     let normHost = hostname.replace(/\.+$/, '').toLowerCase();
     if (normHost.startsWith('[') && normHost.endsWith(']')) {
         normHost = normHost.slice(1, -1);
@@ -436,7 +449,7 @@ async function resolveAndPinHost(hostname: string): Promise<PinnedResolution> {
 
     let addresses: LookupAddress[];
     try {
-        addresses = await dns.lookup(normHost, { all: true, verbatim: true });
+        addresses = await lookup(normHost);
     } catch (err: any) {
         throw new SsrfSecurityError(`DNS resolution failed for ${normHost}: ${err.message}`);
     }

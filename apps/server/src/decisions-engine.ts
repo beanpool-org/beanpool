@@ -57,6 +57,7 @@ import { keepNotice } from './engine/kept-notices.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from './services/security-signal.js';
 import { getProfileSwitches, BeansOffError, FeatureOffError, FEATURE_OFF, featureOffMessage, type ProfileSwitch } from './config/node-profile.js';
 import {
     conservingTransaction,
@@ -73,6 +74,7 @@ import {
     inviteBranchOf,
     reportSuspensionTakesPrivilegedRole,
     reportSuspensionTakesRole,
+    reportPauseNeedsOwner,
     broadcast,
     dispatchPushNotification,
     isNodeAdmin,
@@ -2090,17 +2092,20 @@ export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 
  * (adminEmergencySuspend, adminLiftSuspension, adminHaltDecision, adminAccelerateDecision, state-engine assertMayPrune
  * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard, member-wizards assertMayRekey for rekey),
  * whoever is acting. A re-key of an owner or admin is asked even of themselves: the code it answers binds a key of the
- * caller's choosing to that role. No role gate sees these,
+ * caller's choosing to that role. A pause (suspend, report-suspend) is one too while the chain rules keep it for an owner,
+ * within 30 days of a vote on removing its member that ended without removing them (repauseNeedsOwner, the window
+ * pauseChainRefusal refuses it to an admin in). No role gate sees these,
  * since they turn on the target, so the routes ask the phone's step-up on exactly these (routes/admin.ts
  * stepUpIfOwnerOnly), and an owner's fresh proof on those that remove or suspend an owner (adminActionRemovesOwner). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
  */
 export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
     if (!target) return false;
-    // An owner, whose role acts or whose key waits on a re-key code (adminEmergencySuspend's own test).
-    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner';
+    // An owner, whose role acts or whose key waits on a re-key code (adminEmergencySuspend's own test); or a member only
+    // an owner may pause again (pauseChainRefusal's re-pause rule).
+    if (action === 'suspend') return heldPrivilegedRole(target) === 'owner' || repauseNeedsOwner(target);
     if (action === 'prune') return pruneNeedsOwner(target, actor);
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
-    if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
+    if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target) || reportPauseNeedsOwner(target);
     if (action === 'rekey') return !!heldPrivilegedRole(target);
     if (action === 'lift') return !!heldRoleFor(openPauseVotes(target).map(k => k.id));
     const decision = getDecision(target);
@@ -2225,7 +2230,7 @@ export interface EmergencySuspendResult {
     success: boolean;
     error?: string;
     status?: number;
-    /** REMOVAL_COOL_DOWN_CODE for a pause the cool-down refuses. */
+    /** The code of a pause the chain rules refuse (pauseChainRefusal): REMOVAL_COOL_DOWN_CODE, THIRD_PAUSE_CODE, …. */
     code?: string;
     decision?: Decision;
 }
@@ -2274,8 +2279,16 @@ export function mayBePaused(member: { publicKey: string; status?: string | null 
  *    before it ends (madeWithoutVote).
  * Moves no Beans: nothing here touches an account's balance, so it runs in the caller's plain transaction. Returns the
  * record; announcePause tells everyone once the caller's transaction has committed.
+ *
+ * The chain rules (removal by vote S4, design §3.4) are enforced here, the one act every pause makes, before anything is
+ * written: pauseChainRefusal refuses with PauseRefusedError, which takes the caller's transaction with it. `freshProof`
+ * says the route asked the owner's fresh proof (the tripwire). A pause made again within 30 days of a vote that ended
+ * without removing them (an owner's, with a new reason) says so on its card (`secondPause`). The owners are told of every
+ * pause, how many in the day and who acted (an admin, an owner, the admin password), never whom (notePauseForOwners).
  */
-export function pauseMember(subject: Member, actor: string | null, reason: string, by: RoleChangeBy): Decision {
+export function pauseMember(subject: Member, actor: string | null, reason: string, by: RoleChangeBy, opts: { freshProof?: boolean } = {}): Decision {
+    const refusal = pauseChainRefusal(subject.publicKey, actor, reason, opts);
+    if (refusal) throw new PauseRefusedError(refusal);
     const id = crypto.randomUUID();
     const now = new Date();
     const opensAt = now.toISOString();
@@ -2289,11 +2302,13 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
         const serverRole = heldPrivilegedRole(subject.publicKey);
         // Who paused, by the name they have here now (Amendment A point 3): the card names them, as the case's proposer.
         const pausedByName = actor && actor !== 'owner:password' ? callsignOf(actor) : null;
+        const secondPause = secondPauseOf(subject.publicKey, now.getTime());
         effect = 'remove_member';
         params = {
             ...removalBalanceParams(subject.publicKey), memberName, pausedAt: opensAt, pausedBy: actor, rule: PAUSE_VOTE_RULE, reason,
             ...(pausedByName ? { pausedByName } : {}),
             ...(serverRole ? { serverRole } : {}),
+            ...(secondPause ? { secondPause } : {}),
         };
         title = tr('Remove {name}?', { name: memberName });
         description = serverRole
@@ -2301,6 +2316,7 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
                 { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason })
             : tr('An admin paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
                 { name: memberName, date: opensAt.slice(0, 10), reason });
+        if (secondPause) description = `${secondPauseSentence(secondPause)} ${description}`;
     } else {
         effect = 'keep_suspension';
         params = { memberName, suspendedAt: opensAt, ...(actor ? { suspendedBy: actor } : {}), reason, noVote: true };
@@ -2309,11 +2325,11 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
             + `the suspension lifts by itself on ${closesAt.slice(0, 10)}, or sooner if a moderator lifts it. Reason given: ${reason}`;
     }
     // Hold the member's node role aside before the pause deletes it, so a pause that ends gives it back exactly.
-    db.prepare(`
+    const heldRole = db.prepare(`
         INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
         SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
         FROM node_roles WHERE member_pubkey = ?
-    `).run(id, subject.publicKey);
+    `).run(id, subject.publicKey).changes > 0;
     setUserStatusRow(subject.publicKey, 'disabled', by);
     db.prepare(`
         INSERT INTO decisions (
@@ -2321,6 +2337,7 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
             franchise, status, opens_at, closes_at, created_at, updated_at
         ) VALUES (?, ?, ?, ?, 'member', ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?)
     `).run(id, SYSTEM_AUTHOR, title, description, effect, subject.publicKey, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
+    notePauseForOwners(id, actor, heldRole);
     return getDecision(id)!;
 }
 
@@ -2342,41 +2359,61 @@ export function announcePause(decision: Decision): void {
 /**
  * An admin pauses a member at once (answer L; pauseMember). The reason is shown to members on the record, so they can
  * judge it. A moderator who wants the member kept out longer than a vote that lapses pauses them again, or removes the
- * account.
+ * account, as the chain rules allow (pauseChainRefusal). `freshProof`: the route asked the owner's fresh proof, for the
+ * tripwire.
  */
-export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
+export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string, opts: { freshProof?: boolean } = {}): EmergencySuspendResult {
     assertPlainTablesWritable();
     // Guards first, outside any transaction.
-    if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can suspend a member' };
+    const refusal = emergencySuspendRefusal(subjectPubkey, adminActor, reason, opts);
+    if (refusal) return { success: false, ...refusal };
+    const member = getMember(subjectPubkey)!;
+    const cleanReason = String(reason || '').trim();
+
+    let decision!: Decision;
+    try {
+        db.transaction(() => {
+            decision = pauseMember(member, adminActor, cleanReason, { actor: adminActor, how: 'suspended' }, opts);
+        })();
+    } catch (e) {
+        if (e instanceof PauseRefusedError) return { success: false, status: e.status, error: e.message, code: e.code };
+        throw e;
+    }
+    announcePause(decision);
+    return { success: true, decision };
+}
+
+/**
+ * Why adminEmergencySuspend would refuse this pause, or null: who may pause whom, the reason, the member's state, and last
+ * the chain rules (pauseChainRefusal). Writes nothing. The suspend route asks it before the tripwire's fresh proof, so a
+ * code is spent only on a pause that would then be made.
+ */
+export function emergencySuspendRefusal(
+    subjectPubkey: string, adminActor: string, reason: string, opts: { freshProof?: boolean } = {},
+): { status: number; error: string; code?: string } | null {
+    if (!isAdminActor(adminActor)) return { status: 403, error: 'Only a node admin can suspend a member' };
     const cleanReason = String(reason || '').trim();
     const reasonProblem = suspendReasonProblem(cleanReason);
-    if (reasonProblem) return { success: false, status: 400, error: reasonProblem };
-    if (!subjectPubkey || subjectPubkey === SYSTEM_AUTHOR) return { success: false, status: 400, error: 'Member not found' };
+    if (reasonProblem) return { status: 400, error: reasonProblem };
+    if (!subjectPubkey || subjectPubkey === SYSTEM_AUTHOR) return { status: 400, error: 'Member not found' };
     const member = getMember(subjectPubkey);
-    if (!member) return { success: false, status: 404, error: 'Member not found' };
-    if (member.isTreasury) return { success: false, status: 400, error: ENTERPRISE_NOT_PAUSED };
+    if (!member) return { status: 404, error: 'Member not found' };
+    if (member.isTreasury) return { status: 400, error: ENTERPRISE_NOT_PAUSED };
     if (!mayBePaused(member)) {
-        return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+        return { status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
     }
-    if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: SOLE_OWNER_SUSPEND_REFUSAL };
-    if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
+    if (isSoleOwner(subjectPubkey)) return { status: 400, error: SOLE_OWNER_SUSPEND_REFUSAL };
+    if (adminActor === subjectPubkey) return { status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
     // who thinks an owner must go asks another owner: no community vote removes an owner (§3.8, NODE_OPERATOR_EFFECTS).
     // An owner whose key waits on a re-key code is one too (heldPrivilegedRole reads their role row): the code made them
     // 'suspended', not an admin (the deciding review of #1992, BLOCKING 1).
     if (heldPrivilegedRole(subjectPubkey) === 'owner' && !isOwnerLevelActor(adminActor)) {
-        return { success: false, status: 403, error: 'Only an owner can suspend an owner' };
+        return { status: 403, error: 'Only an owner can suspend an owner' };
     }
-    // Whoever brought a vote on removing them that ended without removing them waits out the cool-down (Amendment A point 5).
-    const coolDown = removalCoolDownRefusal(subjectPubkey, adminActor);
-    if (coolDown) return { success: false, status: 403, error: coolDown, code: REMOVAL_COOL_DOWN_CODE };
-
-    let decision!: Decision;
-    db.transaction(() => {
-        decision = pauseMember(member, adminActor, cleanReason, { actor: adminActor, how: 'suspended' });
-    })();
-    announcePause(decision);
-    return { success: true, decision };
+    // The chain rules, the cool-down first (Amendment A point 5; removal by vote S4): asked before the transaction, and by
+    // pauseMember again inside it.
+    return pauseChainRefusal(subjectPubkey, adminActor, cleanReason, opts);
 }
 
 /** Why a pause's own vote closed when an admin lifted the pause by hand (adminLiftSuspension). */
@@ -2615,30 +2652,251 @@ const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
  * community passed that an admin then halted in its grace window, nor one that passed and couldn't be carried out
  * ('execution_blocked'): the community agreed with that case. Another admin may still pause them, under the usual rules.
  * Only where the community votes: with votes off a pause opens no vote, and the moderators decide (design §10 Q11). The
- * same proposer is the same actor: an admin's key, or the server's password (an owner). adminEmergencySuspend and
- * actionReport refuse a pause with it, and the routes ask it before any fresh proof.
+ * same proposer is the same actor: an admin's key, or the server's password (an owner). pauseChainRefusal asks it first,
+ * so adminEmergencySuspend, actionReport and pauseMember refuse a pause with it, and the routes ask it before any fresh
+ * proof. Its last sentence says who else may pause them now, as the chain rules allow: another admin; or, while a vote
+ * on them ended less than REPAUSE_NEEDS_OWNER_DAYS ago, an owner with a new reason (another owner, to an owner or the
+ * password: they are refused here too); or, with a third pause refused to everyone, nobody, which it then leaves unsaid.
  */
 export function removalCoolDownRefusal(subjectPubkey: string | null | undefined, actor: string | null | undefined, now: number = Date.now()): string | null {
     if (!actor || !subjectPubkey || !decisionsOn()) return null;
-    const ended = (db.prepare(`
-        SELECT * FROM decisions
-        WHERE subject = ? AND effect = 'remove_member' AND scope_kind = 'community'
-          AND (status IN ('failed', 'unresolved') OR (status = 'admin_halted' AND grace_period_ends_at IS NULL))
-    `).all(subjectPubkey) as any[]).map(rowToDecision)
-        .filter(d => (isPauseVote(d) ? d.params?.pausedBy : d.authorPubkey) === actor)
-        .map(d => parseDbTime(d.status === 'admin_halted' ? d.adminHaltedAt : d.closesAt))
-        .filter(Number.isFinite);
+    const ended = votesEndedWithoutRemoving(subjectPubkey).filter(v => broughtBy(v.decision) === actor).map(v => v.endedAt);
     if (!ended.length) return null;
     const last = Math.max(...ended);
     const until = last + REMOVAL_COOL_DOWN_DAYS * DAY_MS;
     if (now >= until) return null;
     const name = callsignOf(subjectPubkey) || subjectPubkey.slice(0, 8);
-    return tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. Another admin can.",
-        { name, ended: dayOf(last), until: dayOf(until) });
+    const values = { name, ended: dayOf(last), until: dayOf(until) };
+    if (thirdPauseRefused(subjectPubkey, now)) {
+        return tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}.", values);
+    }
+    if (repauseWindow(subjectPubkey, now)) {
+        return isOwnerLevelActor(actor)
+            ? tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. Another owner can, with a new reason.", values)
+            : tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. An owner can, with a new reason.", values);
+    }
+    return tr("A vote you brought on removing {name} ended on {ended} without removing them, so you can't pause {name} again until {until}. Another admin can.", values);
 }
 
 /** The code a cool-down refusal answers with (removalCoolDownRefusal), so an admin's app can tell it from other refusals. */
 export const REMOVAL_COOL_DOWN_CODE = 'removal_cool_down';
+
+// ── Pause chains (removal by vote S4: design §3.4, "Abuse case: a pause chain") ─────────────────────────────────
+
+/**
+ * After a vote on removing a member ends without removing them (votesEndedWithoutRemoving), pausing them again within this
+ * many days is an owner's, with a reason that is not that vote's (design §3.4 rule 2; Marty 23 Oct "Accept all", 24 Oct).
+ */
+export const REPAUSE_NEEDS_OWNER_DAYS = 30;
+/** A third pause of the same member within this many days of the first is refused to everyone (design §3.4 rule 3). */
+export const THIRD_PAUSE_DAYS = 90;
+/** One admin with this many pauses whose votes are still open makes another only with the owner's fresh proof (§3.4). */
+export const OPEN_PAUSES_BEFORE_PROOF = 5;
+
+/** What a pause the chain rules refuse answers with (pauseChainRefusal), so an admin's app can tell each from the others. */
+export const REPAUSE_NEEDS_OWNER_CODE = 'repause_needs_owner';
+export const REPAUSE_SAME_REASON_CODE = 'repause_same_reason';
+export const THIRD_PAUSE_CODE = 'third_pause';
+export const OPEN_PAUSES_PROOF_CODE = 'open_pauses_need_proof';
+/** Every code a pause refusal carries, the cool-down's included: the report route answers each with its code. */
+export const PAUSE_REFUSAL_CODES: ReadonlySet<string> = new Set([
+    REMOVAL_COOL_DOWN_CODE, REPAUSE_NEEDS_OWNER_CODE, REPAUSE_SAME_REASON_CODE, THIRD_PAUSE_CODE, OPEN_PAUSES_PROOF_CODE,
+]);
+
+/** A pause refused (pauseChainRefusal): its HTTP status, the words an admin reads, and its code. */
+export interface PauseRefusal { status: number; error: string; code: string }
+
+/** pauseMember's refusal, thrown inside its caller's transaction so nothing written before it stays. */
+export class PauseRefusedError extends Error {
+    readonly status: number;
+    readonly code: string;
+    constructor(refusal: PauseRefusal) {
+        super(refusal.error);
+        this.name = 'PauseRefusedError';
+        this.status = refusal.status;
+        this.code = refusal.code;
+    }
+}
+
+/** Who brought a vote on removing a member: the admin whose pause opened it, or the member who proposed it before S3. */
+function broughtBy(decision: Decision): unknown {
+    return isPauseVote(decision) ? decision.params?.pausedBy : decision.authorPubkey;
+}
+
+/**
+ * The community's votes on removing this member that ended without removing them, newest first, each with when it ended:
+ * the community said No or tied ('failed', at its close), too few voted ('unresolved', at its close), or it was stopped
+ * before it closed, by a halt or by lifting the pause ('admin_halted' with no grace window begun, when it was stopped). Not
+ * a removal the community passed that an admin then halted in its grace window, nor one that passed and couldn't be carried
+ * out ('execution_blocked'): the community agreed with that case. The cool-down (removalCoolDownRefusal) reads the ones a
+ * given admin brought, and the re-pause rule (repauseWindow) the newest of all.
+ */
+function votesEndedWithoutRemoving(subjectPubkey: string): Array<{ decision: Decision; endedAt: number }> {
+    return (db.prepare(`
+        SELECT * FROM decisions
+        WHERE subject = ? AND effect = 'remove_member' AND scope_kind = 'community'
+          AND (status IN ('failed', 'unresolved') OR (status = 'admin_halted' AND grace_period_ends_at IS NULL))
+    `).all(subjectPubkey) as any[]).map(rowToDecision)
+        .map(decision => ({ decision, endedAt: parseDbTime(decision.status === 'admin_halted' ? decision.adminHaltedAt : decision.closesAt) }))
+        .filter(v => Number.isFinite(v.endedAt))
+        .sort((a, b) => b.endedAt - a.endedAt);
+}
+
+/**
+ * The vote whose end makes pausing this member again an owner's act with a new reason (design §3.4 rule 2), and the moment
+ * that stops: the newest vote that ended without removing them, while it ended less than REPAUSE_NEEDS_OWNER_DAYS ago.
+ */
+function repauseWindow(subjectPubkey: string, now: number): { decision: Decision; endedAt: number; until: number } | null {
+    const last = votesEndedWithoutRemoving(subjectPubkey)[0];
+    if (!last) return null;
+    const until = last.endedAt + REPAUSE_NEEDS_OWNER_DAYS * DAY_MS;
+    return now < until ? { ...last, until } : null;
+}
+
+/**
+ * Whether the chain rules speak to a pause of this member (pauseChainRefusal, repauseNeedsOwner): only where the community
+ * votes, since with votes off a pause opens no vote and the moderators decide (design §10 Q11), and only on a member a
+ * pause would be made on. Anyone else is refused by the guards before them, in their own words.
+ */
+function chainRulesApply(subjectPubkey: string): boolean {
+    if (!subjectPubkey || !decisionsOn()) return false;
+    const member = getMember(subjectPubkey);
+    return !!member && !member.isTreasury && mayBePaused(member);
+}
+
+/**
+ * Whether pausing this member now is an owner's act (design §3.4 rule 2): inside the window pauseChainRefusal refuses the
+ * pause to an admin in (its rule 3). adminActionNeedsOwner asks it for a suspension and a report's pause, so the routes
+ * ask that pause what they ask every owner-only one (routes/admin.ts stepUpIfOwnerOnly): an automation token, which acts
+ * for an owner at admin level, is refused it, and the phone's Manage hand-off is asked its unlock again.
+ */
+export function repauseNeedsOwner(subjectPubkey: string, now: number = Date.now()): boolean {
+    return chainRulesApply(subjectPubkey) && !!repauseWindow(subjectPubkey, now);
+}
+
+/**
+ * Whether pausing this member again would be a third pause within THIRD_PAUSE_DAYS of the first (design §3.4 rule 3): two
+ * pauses opened in that time, whatever their votes decided. Each pause opens its own vote (isPauseVote), so they are counted
+ * by their votes' opening.
+ */
+function thirdPauseRefused(subjectPubkey: string, now: number): boolean {
+    const since = now - THIRD_PAUSE_DAYS * DAY_MS;
+    return (db.prepare(`
+        SELECT * FROM decisions WHERE subject = ? AND effect = 'remove_member' AND author_pubkey = ? AND scope_kind = 'community'
+    `).all(subjectPubkey, SYSTEM_AUTHOR) as any[]).map(rowToDecision)
+        .filter(d => isPauseVote(d) && parseDbTime(d.opensAt) > since).length >= 2;
+}
+
+/** How many pauses this admin (a key, or the server's password) made whose votes are still open: the tripwire's count. */
+export function openPausesBy(actor: string): number {
+    return (db.prepare(`
+        SELECT * FROM decisions WHERE status = 'open' AND effect = 'remove_member' AND author_pubkey = ? AND scope_kind = 'community'
+    `).all(SYSTEM_AUTHOR) as any[]).map(rowToDecision)
+        .filter(d => isPauseVote(d) && d.params?.pausedBy === actor).length;
+}
+
+/** The case a vote on removing a member was brought with: a pause's reason, or a member's proposal's own words. */
+function caseOf(decision: Decision): string {
+    return typeof decision.params?.reason === 'string' ? decision.params.reason : decision.description || '';
+}
+
+/**
+ * Why `actor` may not pause this member now with `reason`, or null (removal by vote S4: design §3.4, "Abuse case: a pause
+ * chain"; Marty 23 Oct "Accept all" and 24 Oct). One rule set, enforced where every pause is made: pauseMember refuses with
+ * it, inside its caller's transaction, so no path that pauses gets past it. adminEmergencySuspend and actionReport ask it
+ * before any write, and both routes before a fresh proof is spent. Only where the community votes: with votes off a pause
+ * opens no vote, and the moderators decide (design §10 Q11). In order:
+ *  1. The cool-down (Amendment A point 5, removalCoolDownRefusal): whoever brought a vote on removing them that ended
+ *     without removing them waits 90 days.
+ *  2. A third pause within THIRD_PAUSE_DAYS of the first is refused to everyone, an owner and the server's password too:
+ *     the community has decided twice, and repeated conduct is for a Decision members propose (suspend_member), which
+ *     stays open to them.
+ *  3. Within REPAUSE_NEEDS_OWNER_DAYS of a vote that ended without removing them, only an owner (or the server's password,
+ *     which only owners hold) pauses them again, and with a reason that is not that vote's case (not equal once both are
+ *     trimmed: cheap, and enough to make the second reason a visible act). That pause's card says so (secondPauseOf). An
+ *     admin's refusal says how that vote ended: the community decided (No), too few voted, or it was stopped. The routes
+ *     ask that pause what they ask every owner-only one (repauseNeedsOwner, through adminActionNeedsOwner).
+ *  4. The tripwire: an admin with OPEN_PAUSES_BEFORE_PROOF pauses whose votes are still open makes another only with the
+ *     owner's fresh proof, which the routes ask (`freshProof`), so a plain admin is refused and an owner proves it.
+ */
+export function pauseChainRefusal(
+    subjectPubkey: string, actor: string | null | undefined, reason: string, opts: { freshProof?: boolean; now?: number } = {},
+): PauseRefusal | null {
+    if (!chainRulesApply(subjectPubkey)) return null;
+    const now = opts.now ?? Date.now();
+    const coolDown = removalCoolDownRefusal(subjectPubkey, actor, now);
+    if (coolDown) return { status: 403, error: coolDown, code: REMOVAL_COOL_DOWN_CODE };
+    const name = callsignOf(subjectPubkey) || subjectPubkey.slice(0, 8);
+    if (thirdPauseRefused(subjectPubkey, now)) {
+        return { status: 403, code: THIRD_PAUSE_CODE, error: tr('The community has decided on {name} twice in 90 days. Ask them to propose a Decision.', { name }) };
+    }
+    const window = repauseWindow(subjectPubkey, now);
+    if (window) {
+        const values = { name, date: dayOf(window.endedAt), until: dayOf(window.until) };
+        if (!isOwnerLevelActor(actor)) {
+            // Told as that vote ended, as the card of an owner's second pause tells it (secondPauseSentence).
+            return {
+                status: 403, code: REPAUSE_NEEDS_OWNER_CODE,
+                error: window.decision.status === 'admin_halted'
+                    ? tr('A vote on {name} was stopped on {date} without removing them. Only an owner can pause them again before {until}.', values)
+                    : window.decision.status === 'unresolved'
+                        ? tr('Too few members voted on {name} by {date}. Only an owner can pause them again before {until}.', values)
+                        : tr('The community decided on {name} on {date}. Only an owner can pause them again before {until}.', values),
+            };
+        }
+        if (caseOf(window.decision).trim() === reason.trim()) {
+            return {
+                status: 400, code: REPAUSE_SAME_REASON_CODE,
+                error: tr('The last pause of {name} gave this same reason. Pausing them again before {until} needs a new one.', values),
+            };
+        }
+    }
+    const open = actor && !opts.freshProof ? openPausesBy(actor) : 0;
+    if (open >= OPEN_PAUSES_BEFORE_PROOF) {
+        return {
+            status: 403, code: OPEN_PAUSES_PROOF_CODE,
+            error: tr("You have {n} pauses whose votes are still open, so another needs an owner's fresh proof.", { n: open }),
+        };
+    }
+    return null;
+}
+
+/**
+ * What a pause made again within REPAUSE_NEEDS_OWNER_DAYS of a vote that ended without removing them records for its card
+ * (design §3.4 rule 1: "Second pause in 30 days. The last vote said No."): how that vote ended and when, or null for any
+ * other pause. Read in pauseMember, after pauseChainRefusal let it through: an owner's, with a new reason.
+ */
+export function secondPauseOf(subjectPubkey: string, now: number): { after: 'no' | 'too_few' | 'stopped'; endedAt: string } | null {
+    const window = repauseWindow(subjectPubkey, now);
+    if (!window) return null;
+    const after = window.decision.status === 'failed' ? 'no' : window.decision.status === 'unresolved' ? 'too_few' : 'stopped';
+    return { after, endedAt: new Date(window.endedAt).toISOString() };
+}
+
+/** The sentence a second pause's record opens with, in the node's English (the apps say it in the member's language). */
+function secondPauseSentence(second: { after: 'no' | 'too_few' | 'stopped' }): string {
+    if (second.after === 'no') return tr('Second pause in 30 days. The last vote said No.');
+    if (second.after === 'too_few') return tr('Second pause in 30 days. Too few members voted on the last one.');
+    return tr('Second pause in 30 days. The last vote was stopped before it closed.');
+}
+
+/**
+ * The owners are told of every pause (design §3.4 rule 4), on the channel that carries an admin's removals: one sec.members
+ * line a day counting them, in the words of who acted ("by an admin", "by an owner", "by the admin password"), never whom,
+ * nor why (services/security-signal.ts), under the actor's own bound as a removal is. A pause that held a role aside is
+ * told by its role line alone ("A moderator lost that role, suspended by an admin": dropNodeRoleRow, sec.role, pushed),
+ * so one pause is one line in the admin's hour. Called inside the pause's transaction: the alert book tells it once that is
+ * over, and only if the record is there (a rolled-back pause paused nobody).
+ */
+function notePauseForOwners(decisionId: string, actor: string | null, heldRole: boolean): void {
+    if (heldRole) return;
+    const actorRole = actor === 'owner:password' ? 'admin password' : !actor ? 'server' : isOwnerLevelActor(actor) ? 'owner' : 'admin';
+    const how = { 'admin password': 'by the admin password', server: 'by the server itself', owner: 'by an owner', admin: 'by an admin' }[actorRole];
+    noteSecurityEvent({
+        key: 'sec.members', detail: '', perDay: OWNER_ALERT_WORDS.membersPaused(how), actor: actor || 'SYSTEM', actorRole,
+        stillTrue: () => !!db.prepare('SELECT 1 FROM decisions WHERE id = ?').get(decisionId),
+    });
+}
 
 /**
  * Everyone who may vote on this removal now, as checkVoterEligibility judges each: an account active, or paused and held

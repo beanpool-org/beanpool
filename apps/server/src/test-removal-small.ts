@@ -450,6 +450,16 @@ async function main() {
     grantNodeRole(otto.pubKeyHex, 'owner', gen.pubKeyHex);
     gone([yan]);
 
+    // Decided, but the member deleted their own account before the close: nothing to carry out, and nothing says it was.
+    const ivo = seed('IvoIrwin');
+    const ivoVote = pauseOf(ivo);
+    r = await decide(ottoPhone(), ivoVote, 'Only two could vote and Ivo stopped answering anyone');
+    assert(r.status === 200, `Otto decides Ivo's vote (${r.status})`);
+    db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(ivo.pubKeyHex);
+    closeNow(ivoVote);
+    assert(row(ivoVote).status === 'execution_void' && !row(ivoVote).owner_decision_carried_at,
+        `Ivo deleted his account first: the vote is void at the close, and it is never marked carried out (${row(ivoVote).status})`);
+
     // No decision: too few to vote, and the pause lifts as it always has.
     const zoe = seed('ZoeZane');
     const zoeVote = pauseOf(zoe);

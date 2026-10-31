@@ -1583,9 +1583,11 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     // the window to give back.
     if (decision.effect === 'remove_member') {
         const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-        // A removal too few could vote on, which an owner decided (removal by vote S6: ownerDecideTooFew, carried out by the
-        // tick as it closed): its record says so, as the design words it. The vote itself did not pass.
-        const byOwner = pauseVote && !!decision.ownerDecisionCarriedAt;
+        // A removal too few could vote on, which an owner decided (removal by vote S6: ownerDecideTooFew, which the tick
+        // passes here as the vote closes): the vote itself did not pass, so it is the owner's. Its record says so, as the
+        // design words it, and owner_decision_carried_at marks it, in the same transaction as the grace window it opens: a
+        // decision that is blocked or void here was never carried out, and its card never says it was.
+        const byOwner = pauseVote && !!decision.ownerDecidedAt && !tallyDecision(decision.id).passed;
         const graceReason = `${byOwner ? `${DECIDED_BY_OWNER}. ` : ''}Member suspended. 7-day grace period active before destructive removal.`;
         try {
             // A plain transaction, not a conservingTransaction: the suspension moves no Beans, so it must not wait on the
@@ -1606,9 +1608,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         status = 'execution_pending_grace',
                         grace_period_ends_at = ?,
                         execution_reason = ?,
+                        owner_decision_carried_at = CASE WHEN ? THEN ? ELSE owner_decision_carried_at END,
                         updated_at = ?
                     WHERE id = ?
-                `).run(graceEndsAt, graceReason, now, decisionId);
+                `).run(graceEndsAt, graceReason, byOwner ? 1 : 0, now, now, decisionId);
             })();
             broadcast({ type: 'profile_updated', publicKey: decision.subject! });
             announceDecisionUpdated(decisionId);
@@ -3225,7 +3228,7 @@ export function tickDecisions(asOfTime?: number): {
             // closes, as a Yes would be, the removal's grace window saying who decided. Not if enough members could vote by
             // now, nor if whoever decided is no owner any more: then it ends below as any vote that didn't pass.
             if (pauseVote && ownerDecisionStands(rowToDecision(r), tally)) {
-                db.prepare("UPDATE decisions SET status = 'passed', owner_decision_carried_at = ?, updated_at = ? WHERE id = ?").run(now, now, r.id);
+                db.prepare("UPDATE decisions SET status = 'passed', updated_at = ? WHERE id = ?").run(now, r.id);
                 const res = executeDecision(r.id);
                 if (res.success && res.status === 'executed') executed++;
                 continue;

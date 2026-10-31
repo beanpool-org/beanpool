@@ -148,7 +148,18 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
 vi.mock('expo-haptics', () => ({ impactAsync: async () => {}, notificationAsync: async () => {}, selectionAsync: async () => {} }));
-vi.mock('expo-secure-store', () => ({ getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
+vi.mock('expo-secure-store', () => ({
+    getItemAsync: async () => null,
+    setItemAsync: async () => {},
+    deleteItemAsync: async () => {},
+    WHEN_UNLOCKED: 1,
+    AFTER_FIRST_UNLOCK: 2,
+    ALWAYS: 3,
+    WHEN_PASSCODE_SET_THIS_DEVICE_ONLY: 4,
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 5,
+    AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 6,
+    ALWAYS_THIS_DEVICE_ONLY: 7,
+}));
 vi.mock('expo-location', () => ({
     getForegroundPermissionsAsync: async () => ({ status: 'denied', canAskAgain: false }), getLastKnownPositionAsync: async () => null,
     requestForegroundPermissionsAsync: async () => ({ status: 'denied' }), getCurrentPositionAsync: async () => null,

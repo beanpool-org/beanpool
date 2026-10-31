@@ -20,9 +20,19 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share, Alert, Linking, Platform, ActivityIndicator, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
+
+let _intentLauncher: typeof import('expo-intent-launcher') | null | undefined;
+async function getIntentLauncher(): Promise<typeof import('expo-intent-launcher') | null> {
+    if (_intentLauncher !== undefined) return _intentLauncher;
+    try {
+        _intentLauncher = await import('expo-intent-launcher');
+    } catch {
+        _intentLauncher = null;
+    }
+    return _intentLauncher;
+}
 import { fetchMemberPreferences, fetchMyEvents, isRouteMissing, setEventReminder } from '../utils/db';
 import { eventShareWhen } from '../utils/events';
 import {
@@ -102,18 +112,24 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     };
 
     const addCalendarFile = async () => {
-        setChoiceOpen(false);
         try {
             const link = eventLink(await anchorOrThrow(), event.id);
             const path = `${FileSystem.cacheDirectory}${icsFileName(event)}`;
             await FileSystem.writeAsStringAsync(path, buildIcs(event, link), { encoding: FileSystem.EncodingType.UTF8 });
             if (Platform.OS === 'ios') {
                 await Sharing.shareAsync(path, { mimeType: 'text/calendar', UTI: 'com.apple.ical.ics', dialogTitle: t('Add to calendar') });
+                setChoiceOpen(false);
+                return;
+            }
+            setChoiceOpen(false);
+            const launcher = await getIntentLauncher();
+            if (!launcher) {
+                await Sharing.shareAsync(path, { mimeType: 'text/calendar', dialogTitle: t('Add to calendar') });
                 return;
             }
             try {
                 const contentUri = await FileSystem.getContentUriAsync(path);
-                await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+                await launcher.startActivityAsync('android.intent.action.VIEW', {
                     data: contentUri,
                     type: 'text/calendar',
                     flags: 1,
@@ -123,6 +139,7 @@ export function EventShareAndCalendar({ post }: { post: any }) {
                 await Sharing.shareAsync(path, { mimeType: 'text/calendar', dialogTitle: t('Add to calendar') });
             }
         } catch (e: any) {
+            setChoiceOpen(false);
             Alert.alert(t('Not added'), e?.message || t('Could not make a calendar entry.'));
         }
     };

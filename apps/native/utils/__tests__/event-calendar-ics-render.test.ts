@@ -278,6 +278,25 @@ describe('iOS path', () => {
             UTI: 'com.apple.ical.ics',
             dialogTitle: 'Add to calendar',
         });
+        expect(host.querySelector('[data-testid="modal-choice"]')).toBeNull();
+    });
+
+    it('iOS offline error dismisses modal and displays alert', async () => {
+        platform.OS = 'ios';
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        vi.mocked(AsyncStorage.getItem).mockResolvedValueOnce(null);
+        await renderComponent();
+
+        const addBtn = host.querySelector('[aria-label="Add this event to your calendar"]') as HTMLElement;
+        await act(async () => { addBtn.click(); });
+
+        const fileOption = host.querySelector('[data-testid="event-add-calendar-file"]') as HTMLElement;
+        await act(async () => { fileOption.click(); });
+
+        expect(alertCalls.calls.length).toBe(1);
+        expect(alertCalls.calls[0][0]).toBe('Not added');
+        expect(alertCalls.calls[0][1]).toBe('You are currently offline.');
+        expect(host.querySelector('[data-testid="modal-choice"]')).toBeNull();
     });
 });
 

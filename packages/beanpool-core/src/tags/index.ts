@@ -283,6 +283,7 @@ export function tagIndex(langOrWords?: string | Words | Translate): TagIndex {
 
 /** An English plural's singular forms to try: berries → berry, tomatoes → tomato, lemons → lemon. */
 export function singulars(word: string): string[] {
+    if (!word || typeof word !== 'string') return [];
     const out: string[] = [];
     if (word.length > 4 && word.endsWith('ies')) out.push(`${word.slice(0, -3)}y`);
     if (word.length > 4 && /(?:oes|ches|shes|xes|sses)$/.test(word)) out.push(word.slice(0, -2));
@@ -291,10 +292,13 @@ export function singulars(word: string): string[] {
 }
 
 export function lookupPhrase(words: string[], find: (text: string) => readonly string[]): readonly string[] {
+    if (!words || words.length === 0) return [];
     const found = find(words.join(' '));
     if (found.length) return found;
     const head = words.slice(0, -1);
-    for (const last of singulars(words[words.length - 1])) {
+    const lastWord = words[words.length - 1];
+    if (!lastWord) return [];
+    for (const last of singulars(lastWord)) {
         const again = find([...head, last].join(' '));
         if (again.length) return again;
     }
@@ -327,6 +331,7 @@ export function searchTagsFor(query: string, options: { index?: TagIndex; limit?
     const searchWith = (idx: TagIndex) => {
         // First try the whole query as a name/label or alias: e.g. "limón", "citrus", "free-range eggs"
         const wholeWords = compoundWords(text);
+        if (wholeWords.length === 0) return false;
         const wholeByName = lookupPhrase(wholeWords, idx.byName);
         if (wholeByName.length > 0) {
             addIds(wholeByName);

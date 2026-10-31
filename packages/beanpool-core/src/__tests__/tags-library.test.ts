@@ -329,6 +329,14 @@ describe('suggestTags', () => {
             expect(searchTagsFor('   ', { index: en })).toEqual([]);
             expect(searchTagsFor('citrus', { index: en, limit: 2 })).toHaveLength(2);
         });
+
+        it('does not throw when searching punctuation or symbols', () => {
+            const en = buildTagIndex(wordsFor('en'));
+            expect(searchTagsFor('???', { index: en })).toEqual([]);
+            expect(searchTagsFor('!#--', { index: en })).toEqual([]);
+            expect(searchTagsFor('...', { index: en })).toEqual([]);
+            expect(searchTagsFor('###', { index: en })).toEqual([]);
+        });
     });
 });
 

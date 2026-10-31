@@ -470,6 +470,28 @@ describe('the end of a run', () => {
         expect(await pendingBringOffer(ME, LOCAL, 2_000)).toBeNull();
         expect(await pendingBringOffer(ME, LOCAL, 2_000 + BRING_ASK_AGAIN_MS)).toMatchObject({ accepted: false, asks: 1 });
     });
+
+    it('held after a "Not now": a yes is not a no, so the question still comes back', async () => {
+        await noted();
+        await settleBringOffer({ ...OFFER, accepted: true, asks: 1 }, { brought: 0, lines: [], kept: false, held: true }, 2_000);
+        expect(await pendingBringOffer(ME, LOCAL, 2_000)).toBeNull();
+        expect(await pendingBringOffer(ME, LOCAL, 2_000 + BRING_ASK_AGAIN_MS)).toMatchObject({ accepted: false, asks: 1 });
+    });
+
+    it('held on every yes, the offer lasts until it lapses, and a "Not now" is still the member\'s last word', async () => {
+        await noted();
+        let at = 2_000;
+        let now = (await pendingBringOffer(ME, LOCAL, at))!;
+        for (let yes = 0; yes < 3; yes++) {
+            await settleBringOffer(await acceptBringOffer(now), { brought: 0, lines: [], kept: false, held: true }, at);
+            at += BRING_ASK_AGAIN_MS;
+            now = (await pendingBringOffer(ME, LOCAL, at))!;
+            expect(now).toMatchObject({ accepted: false });
+        }
+        await putOffBringOffer(now, at);
+        expect(await pendingBringOffer(ME, LOCAL, at + BRING_ASK_AGAIN_MS)).toBeNull();
+        expect(await noteBringOffer({ publicKey: ME, from: GLOBAL, to: LOCAL, name: 'Mullumbimby', alreadyMember: false, now: at })).toBe(false);
+    });
 });
 
 describe('the words', () => {

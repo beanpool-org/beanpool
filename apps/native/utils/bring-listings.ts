@@ -207,7 +207,12 @@ export async function putOffBringOffer(offer: BringOffer, now: number = Date.now
 
 /** What the end of a run leaves: the offer closed, kept for another run, or asked again. */
 export async function settleBringOffer(offer: BringOffer, result: BringResult, now: number = Date.now()): Promise<void> {
-    if (result.held) return putOffBringOffer(offer, now);
+    // Held is the community's answer, not the member's: a yes is no "Not now", so it never ends the offer. Asked again a
+    // day later as one would be, and so until the offer lapses or the member says no.
+    if (result.held) {
+        await store({ ...offer, accepted: false, asks: Math.max(offer.asks ?? 0, 1), notBefore: now + BRING_ASK_AGAIN_MS });
+        return;
+    }
     if (!result.kept) return closeBringOffer(offer.publicKey);
     await store({ ...offer, accepted: true, tries: (offer.tries ?? 0) + 1 });
 }

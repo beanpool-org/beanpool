@@ -2365,6 +2365,8 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
             ...(secondPause ? { secondPause } : {}),
         };
         title = tr('Remove {name}?', { name: memberName });
+        // What each answer does is the card's to say, not these words': it turns on how many can vote by then, which these
+        // can't know (pauseVoteBody). Only a server role's stays here, since no vote and no owner changes that.
         description = serverRole
             ? (secondPause
                 ? tr("An owner paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
@@ -2372,10 +2374,8 @@ export function pauseMember(subject: Member, actor: string | null, reason: strin
                 : tr("An admin paused {name} on {date}. {name} holds the {role} role on this community's server, and no community vote removes an owner or admin, so whatever this vote decides, the pause ends when it closes. Reason given: {reason}",
                     { name: memberName, date: opensAt.slice(0, 10), role: serverRole, reason }))
             : (secondPause
-                ? tr('An owner paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
-                    { name: memberName, date: opensAt.slice(0, 10), reason })
-                : tr('An admin paused {name} on {date}. Yes removes {name} after 7 days; No brings {name} back as soon as the vote closes. Reason given: {reason}',
-                    { name: memberName, date: opensAt.slice(0, 10), reason }));
+                ? tr('An owner paused {name} on {date}. Reason given: {reason}', { name: memberName, date: opensAt.slice(0, 10), reason })
+                : tr('An admin paused {name} on {date}. Reason given: {reason}', { name: memberName, date: opensAt.slice(0, 10), reason }));
         if (secondPause) description = `${secondPauseSentence(secondPause)} ${description}`;
     } else {
         effect = 'keep_suspension';
@@ -3068,6 +3068,7 @@ export const OWNER_DECISION_NOT_PAUSE_VOTE = 'Only a vote on removing a member, 
 export const OWNER_DECISION_CLOSED = 'This vote has closed, so it ends as it stands';
 export const OWNER_DECISION_ALREADY = 'An owner has already decided this vote';
 export const OWNER_DECISION_ENOUGH_VOTERS = 'Enough members can vote on this, so the community decides it, not an owner';
+export const OWNER_DECISION_CASE_HIDDEN = "An admin hid this vote's case as false, so an owner can't decide it: no member could read why. Halt the vote to lift the pause now.";
 export const OWNER_DECISION_REASON_MIN_CHARS = 10;
 export const OWNER_DECISION_REASON_MAX_CHARS = 1000;
 
@@ -3085,7 +3086,10 @@ export function ownerDecisionReasonProblem(reason: unknown): string | null {
 /**
  * Why `actor` may not decide this vote as its owner now (ownerDecideTooFew), or null: its HTTP status and the words an
  * owner reads. Writes nothing. The route asks it, the reason included, before the fresh proof, so a code is spent only on a
- * decision that would then be made.
+ * decision that would then be made. A vote past its closing time is closed, as it is to a voter and to the member's reply,
+ * though its status waits for the tick. A case an admin hid as false takes the owner's reason with it (withCaseHidden), so a
+ * decision made then would remove a member with no reason any member can read: the owner's path is "with a public reason"
+ * (design §5 point 3).
  */
 export function ownerDecisionRefusal(decisionId: string, actor: string | null | undefined, reason: unknown): { status: number; error: string } | null {
     if (!decisionsOn()) return { status: 404, error: featureOffMessage('decisions') };
@@ -3093,8 +3097,9 @@ export function ownerDecisionRefusal(decisionId: string, actor: string | null | 
     if (!decision) return { status: 404, error: 'Decision not found' };
     if (!isPauseVote(decision)) return { status: 400, error: OWNER_DECISION_NOT_PAUSE_VOTE };
     if (!actor || !isOwnerLevelActor(actor)) return { status: 403, error: OWNER_DECISION_ONLY_OWNER };
-    if (decision.status !== 'open') return { status: 409, error: OWNER_DECISION_CLOSED };
+    if (decision.status !== 'open' || parseDbTime(decision.closesAt) <= Date.now()) return { status: 409, error: OWNER_DECISION_CLOSED };
     if (decision.ownerDecidedAt) return { status: 409, error: OWNER_DECISION_ALREADY };
+    if (decision.caseHiddenAt) return { status: 409, error: OWNER_DECISION_CASE_HIDDEN };
     // No vote removes an owner or admin (§3.8), so no owner's decision does: the pause ends with its vote, whatever it says.
     if (decision.subject && heldPrivilegedRole(decision.subject)) return { status: 403, error: NODE_OPERATOR_VOTE_REFUSAL };
     const reasonProblem = ownerDecisionReasonProblem(reason);
@@ -3108,10 +3113,11 @@ export function ownerDecisionRefusal(decisionId: string, actor: string | null | 
  * 23 Oct "Accept all"): fewer than QUORUM_FLOOR others could vote, so its quorum can't be met and, left alone, it would
  * lift the pause whatever they think. A community of three is its owner. Only an owner (an owner's key, or the server's
  * password; never an admin), with the fresh proof the route asks (routes/admin.ts), with a public reason members read on
- * the card beside the case, and only while the vote is open and too few: it records the decision, and the tick carries it
- * out when the vote closes, if it is still too few then (tickDecisions: the removal's grace window opens, its record saying
- * DECIDED_BY_OWNER). So the vote still runs its 7 days, a pause still never outlives its vote, the member reads the
- * owner's reason and can answer it before the vote closes, and if enough members vote by then, they decide, not the owner.
+ * the card beside the case, and only while the vote is open, too few and its case not hidden: it records the decision, and
+ * the tick carries it out when the vote closes, if it is still too few then (tickDecisions: the removal's grace window
+ * opens, its record saying DECIDED_BY_OWNER). So the vote still runs its 7 days, a pause still never outlives its vote, the
+ * member reads the owner's reason and can answer it before the vote closes, and if enough members vote by then, they
+ * decide, not the owner.
  * Any admin can still halt the removal in its grace window, with a public reason. The member is told at once, as when the
  * vote opened; the owners are told on their alert channel, who acted and never whom (as every pause is, notePauseForOwners).
  */

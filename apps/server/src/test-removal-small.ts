@@ -371,6 +371,10 @@ async function main() {
     let seen = await cardFor(tia, samVote);
     assert(seen.card?.tally?.tooFewToVote === true && seen.card.tally.electorate === 2 && seen.card.tally.quorumRequired === 3 && !seen.card.ownerDecidedAt,
         `the card says too few can vote: 2 could, 3 are needed (${JSON.stringify(seen.card?.tally ?? null).slice(0, 200)})`);
+    // What each answer does turns on who can vote by the close, so it is the card's to say (pauseVoteBody), never the stored
+    // words': with an owner's decision, No does not bring Sam back.
+    assert(seen.card?.description === `An admin paused ${sam.callsign} on ${String(seen.card?.opensAt).slice(0, 10)}. Reason given: ${SAM_CASE}`,
+        `the stored description says who paused and why, and promises nothing of Yes or No (${seen.card?.description})`);
     const REASON = 'Only Tia and Uma could vote; both saw the shed emptied, and Sam has not answered in five days';
     const untouched = () => !row(samVote).owner_decided_at && !row(samVote).owner_decided_by && !row(samVote).owner_decided_reason;
     let r = await decide(adaSession, samVote, REASON);
@@ -446,11 +450,15 @@ async function main() {
     const wes = seed('WesWard', false);
     const xia = seed('XiaXu');
     const xiaVote = pauseOf(xia);
-    r = await decide(ottoPhone(), xiaVote, 'Only two could vote and Xia threatened one of them');
+    const XIA_REASON = 'Only two could vote and Xia threatened one of them';
+    r = await decide(ottoPhone(), xiaVote, XIA_REASON);
     assert(r.status === 200, `Otto decides Xia's vote while too few could vote (${r.status})`);
     vote(xiaVote, [wes], []);
     let t = de.tallyDecision(xiaVote);
     assert(t.electorate === 3 && t.tooFewToVote === false, `Wes, quiet until now, votes Yes: 3 could vote now, not too few (${t.electorate})`);
+    seen = await cardFor(tia, xiaVote);
+    assert(seen.card?.tally?.tooFewToVote === false && !!seen.card.ownerDecidedAt && seen.card.ownerDecidedReason === XIA_REASON,
+        "so the card can say this vote decides now, and members still read the owner's reason (ownerDecisionLine)");
     closeNow(xiaVote);
     assert(row(xiaVote).status === 'unresolved' && !row(xiaVote).owner_decision_carried_at && statusOf(xia) === 'active',
         `at the close the community decides: too few voted (1 of 3), the owner's decision is not carried out, Xia is back (${row(xiaVote).status})`);
@@ -510,6 +518,24 @@ async function main() {
         `the admins' list keeps the owner's reason (${String(adminRow?.ownerDecidedReason).slice(0, 40)})`);
     gone([hal]);
 
+    // The other order: the case is hidden first, and then no owner can decide. Their reason would go from what members read at
+    // once, so the member would be removed on a case marked false, with no reason anyone but the admins can read. A hand-off
+    // gone stale would be asked Manage again: it is told this instead, so the refusal comes before the proof and spends nothing.
+    const joy = seed('JoyJames');
+    const joyVote = pauseOf(joy);
+    fresh();
+    const joyHid = await admin(`/api/local/admin/decisions/${joyVote}/hide-case`, adaSession, { reason: 'The eggs were her own, as her neighbour showed' });
+    r = await decide(ottoPhoneStale(), joyVote, 'Only two could vote, and this reason is my own');
+    assert(joyHid.status === 200 && r.status === 409 && r.body?.error === de.OWNER_DECISION_CASE_HIDDEN && !row(joyVote).owner_decided_at,
+        `the case hidden first: an owner can't decide the vote, and hears so before any proof (${r.status} ${r.body?.code ?? r.body?.error})`);
+    r = await decide(ottoPhone(), joyVote, 'Only two could vote, and this reason is my own');
+    assert(r.status === 409 && r.body?.error === de.OWNER_DECISION_CASE_HIDDEN && !row(joyVote).owner_decided_at,
+        `a fresh hand-off is refused the same, and nothing is written (${r.status} ${r.body?.error})`);
+    closeNow(joyVote);
+    assert(row(joyVote).status === 'unresolved' && !row(joyVote).owner_decision_carried_at && statusOf(joy) === 'active',
+        `left alone it ends as too few voted, and Joy is back (${row(joyVote).status}, ${statusOf(joy)})`);
+    gone([joy]);
+
     // Decided, but the member deleted their own account before the close: nothing to carry out, and nothing says it was.
     const ivo = seed('IvoIrwin');
     const ivoVote = pauseOf(ivo);
@@ -526,6 +552,11 @@ async function main() {
     closeNow(zoeVote);
     assert(row(zoeVote).status === 'unresolved' && statusOf(zoe) === 'active' && /^Quorum not met \(0\/3\)/.test(row(zoeVote).execution_reason),
         `nobody decides: the vote ends as too few voted, and Zoe is back (${row(zoeVote).status}: ${row(zoeVote).execution_reason})`);
+    // An owner pauses her again with a new reason: the stored words of a second pause promise nothing of Yes or No either.
+    const zoeAgain = de.adminEmergencySuspend(zoe.pubKeyHex, otto.pubKeyHex, 'A new case, from this week, about the shed', { freshProof: true });
+    assert(zoeAgain.success && (zoeAgain.decision?.description ?? '').endsWith(`An owner paused ${zoe.callsign} on ${String(zoeAgain.decision?.opensAt).slice(0, 10)}. Reason given: A new case, from this week, about the shed`),
+        `a second pause's description says an owner paused her and why, and nothing else of the vote (${zoeAgain.decision?.description ?? zoeAgain.error})`);
+    closeNow(zoeAgain.decision!.id);
     gone([zoe]);
 
     // On a standby: refused at the door with its JSON answer, before the proof, so no code is spent, and nothing is written.
@@ -565,6 +596,22 @@ async function main() {
     r = await decide(ottoPhone(), kaiVote, 'Deciding a vote that has already closed');
     assert(r.status === 409 && r.body?.error === de.OWNER_DECISION_CLOSED, `a closed vote can't be decided (${r.status} ${r.body?.error})`);
     gone([...crowd, kai]);
+    // Past its closing time with the tick still to run: its status says open, but it is closed to an owner as it is to a voter
+    // and to the member's reply, before any proof (a stale hand-off is told this, not asked Manage again).
+    const pia = seed('PiaPope');
+    const piaVote = pauseOf(pia);
+    db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(ago(5000), piaVote);
+    const piaLate = de.castDecisionVote(piaVote, tia.pubKeyHex, false);
+    r = await decide(ottoPhoneStale(), piaVote, 'Deciding after the close, before the tick has run');
+    assert(!piaLate.success && r.status === 409 && r.body?.error === de.OWNER_DECISION_CLOSED && row(piaVote).status === 'open' && !row(piaVote).owner_decided_at,
+        `past its closing time and before the tick: as a vote is refused, an owner's decision is (${r.status} ${r.body?.code ?? r.body?.error})`);
+    r = await decide(ottoPhone(), piaVote, 'Deciding after the close, before the tick has run');
+    assert(r.status === 409 && r.body?.error === de.OWNER_DECISION_CLOSED && !row(piaVote).owner_decided_at,
+        `a fresh hand-off is refused the same, and nothing is written (${r.status} ${r.body?.error})`);
+    de.tickDecisions();
+    assert(row(piaVote).status === 'unresolved' && !row(piaVote).owner_decision_carried_at && statusOf(pia) === 'active',
+        `the tick then ends it as too few voted, and Pia is back (${row(piaVote).status}, ${statusOf(pia)})`);
+    gone([pia]);
 
     // Votes off: no owner's decision either.
     const lea = seed('LeaLong');

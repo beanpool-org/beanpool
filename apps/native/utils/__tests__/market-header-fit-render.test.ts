@@ -122,11 +122,20 @@ vi.mock('expo', () => ({
     requireOptionalNativeModule: vi.fn(() => null),
 }));
 vi.mock('expo-modules-core', () => ({
+    Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default, isDOMAvailable: false },
     requireNativeModule: vi.fn(() => ({})),
     requireOptionalNativeModule: vi.fn(() => null),
     EventEmitter: vi.fn(() => ({ addListener: vi.fn(), removeListener: vi.fn() })),
     NativeModulesProxy: {},
     ProxyNativeModule: {},
+    CodedError: class CodedError extends Error { constructor(public code: string, message: string) { super(message); } },
+    UnavailabilityError: class UnavailabilityError extends Error { constructor(module: string, method: string) { super(`${module}.${method} is unavailable`); } },
+}));
+vi.mock('expo-local-authentication', () => ({
+    SecurityLevel: { NONE: 0, BIOMETRIC: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
+    hasHardwareAsync: async () => false,
+    isEnrolledAsync: async () => false,
+    authenticateAsync: async () => ({ success: false }),
 }));
 vi.mock('expo-crypto', () => ({
     randomUUID: () => 'test-uuid',

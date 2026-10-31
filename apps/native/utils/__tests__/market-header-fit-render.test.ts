@@ -223,7 +223,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
     });
 
     it('1. deals pill uses minHeight + paddingVertical so it grows; fixed height is removed; label never clips at 320 dp × 1.3', async () => {
-        await act(async () => { root.render(createElement(MarketScreen)); });
+        await act(async () => { root.render(createElement(MarketScreen) as any); });
         const dealsPill = host.querySelector('[data-testid="market-deals-pill"]') as HTMLElement;
         expect(dealsPill, 'deals pill should be rendered').not.toBeNull();
 
@@ -254,7 +254,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
     });
 
     it('2. header pills reach ≥ 44 dp touch targets without changing the look at 1.0', async () => {
-        await act(async () => { root.render(createElement(MarketScreen)); });
+        await act(async () => { root.render(createElement(MarketScreen) as any); });
 
         // Deals pill touch target
         const dealsPill = host.querySelector('[data-testid="market-deals-pill"]') as HTMLElement;
@@ -296,7 +296,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
                 callsign: 'Sam',
                 energyCycled: 500,
                 mode: 'full',
-            }));
+            }) as any);
         });
         const authorChipFull = host.querySelector('[data-testid="author-chip"]') as HTMLElement;
         expect(authorChipFull).not.toBeNull();
@@ -314,7 +314,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
                 callsign: 'Sam',
                 energyCycled: 500,
                 mode: 'compact',
-            }));
+            }) as any);
         });
         const authorChipCompact = host.querySelector('[data-testid="author-chip"]') as HTMLElement;
         expect(authorChipCompact).not.toBeNull();
@@ -328,7 +328,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
     it('4. both themes keep their colours and contrast for the deals pill', async () => {
         // Light theme
         themeState.current = 'light';
-        await act(async () => { root.render(createElement(MarketScreen)); });
+        await act(async () => { root.render(createElement(MarketScreen) as any); });
         const lightDeals = host.querySelector('[data-testid="market-deals-pill"]') as HTMLElement;
         const lightStyle = JSON.parse(lightDeals.getAttribute('data-style') || '{}');
         expect(lightStyle.backgroundColor).toBe('#fffbeb'); // amber50
@@ -336,7 +336,7 @@ describe('Market Header at 320 dp × 1.3 font scale (DEALS-PILL-FIT)', () => {
 
         // Dark theme
         themeState.current = 'dark';
-        await act(async () => { root.render(createElement(MarketScreen)); });
+        await act(async () => { root.render(createElement(MarketScreen) as any); });
         const darkDeals = host.querySelector('[data-testid="market-deals-pill"]') as HTMLElement;
         const darkStyle = JSON.parse(darkDeals.getAttribute('data-style') || '{}');
         // In dark mode: colors.feedback.warning.bg and border

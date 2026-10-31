@@ -89,6 +89,24 @@ describe('what the card says', () => {
     });
 });
 
+describe('Join when it starts, when the card moves on', () => {
+    it('says the wish of the circle it is drawn for, not of the one before it', () => {
+        setCircleIntent(ME.publicKey, 'c1', true);
+        const { rerender } = render(<PlaceCircleCard id="c1" circle={OPEN} myPubkey={ME.publicKey} onStart={() => {}} />);
+        expect(screen.getByTestId('circle-join-when')).toHaveAttribute('aria-pressed', 'true');
+        rerender(<PlaceCircleCard id="c2" circle={OPEN} myPubkey={ME.publicKey} onStart={() => {}} />);
+        expect(screen.getByTestId('circle-join-when')).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('reads the wish once the account is known', () => {
+        setCircleIntent(ME.publicKey, 'c1', true);
+        const { rerender } = render(<PlaceCircleCard id="c1" circle={OPEN} myPubkey={null} onStart={() => {}} />);
+        expect(screen.getByTestId('circle-join-when')).toHaveAttribute('aria-pressed', 'false');
+        rerender(<PlaceCircleCard id="c1" circle={OPEN} myPubkey={ME.publicKey} onStart={() => {}} />);
+        expect(screen.getByTestId('circle-join-when')).toHaveAttribute('aria-pressed', 'true');
+    });
+});
+
 describe('the knock when a community starts', () => {
     const retired = { id: 'c1', ...OPEN, doneAt: '2026-11-01T00:00:00.000Z', community: THRISSUR };
 

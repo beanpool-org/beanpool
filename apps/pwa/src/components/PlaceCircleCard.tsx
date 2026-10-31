@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, circlePeopleLine, circleStartedLine, t, type CircleCard } from '@beanpool/core';
 import { setCircleStarting } from '../lib/api';
 import { circleIntents, setCircleIntent } from '../lib/circle-intent';
@@ -22,6 +22,10 @@ export function PlaceCircleCard({ id, circle, myPubkey, onStart, onChange }: {
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [joinAsked, setJoinAsked] = useState(() => !!myPubkey && circleIntents(myPubkey).includes(id));
+
+    useEffect(() => {
+        setJoinAsked(!!myPubkey && circleIntents(myPubkey).includes(id));
+    }, [id, myPubkey]);
 
     if (circle.doneAt) {
         return (

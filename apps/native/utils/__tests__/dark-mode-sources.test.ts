@@ -203,7 +203,6 @@ describe('dark mode: themed screens draw with the theme', () => {
 
     // White grounds that are right in both schemes: brand buttons, ticks and glyphs on coloured marks, dev-only probes.
     const WHITE_OK = new Set([
-        'app/(tabs)/map.tsx',          // the pin glyph's white strokes (and the file is protected)
         'app/apple-probe.tsx',         // dev-only probe screen
         'app/google-probe.tsx',        // dev-only probe screen
         'components/CreditBar.tsx',    // ticks and the thumb on the coloured bar

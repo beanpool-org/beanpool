@@ -13,7 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { FilterChipRow } from '../../components/FilterChipRow';
 import { FilterChipPicker } from '../../components/FilterChipPicker';
-import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR } from '../../components/UnifiedMapPin';
+import { PinVisual, MapMarkerManager, getCachedMarkerImage, buildVariantList, PIN_ANCHOR, PIN_RENDER_W, PIN_RENDER_H, pinCacheKey, ClusterCaptureManager, getCachedClusterImage, CLUSTER_ANCHOR, EVENT_PIN } from '../../components/UnifiedMapPin';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EVENT_ACCENT } from '../../components/EventCard';
 import { eventPinCard, type EventWindow } from '../../utils/events';
@@ -138,10 +138,13 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
 
     const postType = (post.type || '').toLowerCase();
     const isOffer = postType === 'offer';
-    const bgColor = isOffer ? '#10b981' : '#ea580c';
-    const markerEmoji = catObj?.emoji || (isOffer ? '📦' : '❤️');
-    const isElder = (post.author_energy_cycled || 0) >= 10000;
-    const cachedImage = markersReady ? getCachedMarkerImage(markerEmoji, bgColor, isElder) : null;
+    // An event wears the one event pin (UnifiedMapPin's EVENT_PIN): the event violet, a calendar, no elder ring.
+    const isEvent = postType === 'event';
+    const bgColor = isEvent ? EVENT_PIN.bgColor : isOffer ? '#10b981' : '#ea580c';
+    const markerEmoji = isEvent ? EVENT_PIN.emoji : catObj?.emoji || (isOffer ? '📦' : '❤️');
+    const isElder = !isEvent && (post.author_energy_cycled || 0) >= 10000;
+    const glyph = isEvent ? EVENT_PIN.glyph : undefined;
+    const cachedImage = markersReady ? getCachedMarkerImage(markerEmoji, bgColor, isElder, glyph) : null;
 
     // Platform fix: We start tracksViewChanges=true on Android.
     // It will be set to false ONLY when the RNImage's onLoad fires.
@@ -202,64 +205,12 @@ const CustomMapMarker = React.memo(({ coordinate, post, catObj, isSelected, onPr
                     emoji={markerEmoji}
                     bgColor={bgColor}
                     isElder={isElder}
+                    glyph={glyph}
                 />
             </View>
         </Marker>
     );
 });
-
-/**
- * The event pin's glyph: a calendar drawn from Views, with no date on it. The 📅 emoji it replaces is drawn by
- * Android with a date printed on the page ("JUL 17"), which read as the event's date (events round 2, B7). Plain
- * Views rather than an icon font, because the marker is rasterised once (tracksViewChanges={false}) and a font
- * glyph that had not loaded yet would come out blank.
- */
-const EventPinGlyph = () => (
-    <View style={{ width: 18, height: 18, alignItems: 'center' }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: 10, height: 4, zIndex: 1 }}>
-            <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: '#ffffff' }} />
-            <View style={{ width: 2.5, height: 4, borderRadius: 1, backgroundColor: '#ffffff' }} />
-        </View>
-        <View style={{ width: 17, height: 14, marginTop: -2, borderRadius: 3, borderWidth: 2, borderColor: '#ffffff', overflow: 'hidden' }}>
-            <View style={{ height: 3.5, backgroundColor: '#ffffff' }} />
-        </View>
-    </View>
-);
-
-/**
- * An event's pin, in the deep violet the event card and the web map's pin already use. Drawn here rather
- * than through UnifiedMapPin, which knows only Offer (green) and Need (orange) and is off-limits — an event
- * routed through it came out as a Need.
- *
- * Rendered with `cluster={false}` (on this element: react-native-map-clustering reads the prop off the map's
- * direct children): an event is never folded into a bubble of listings, where nobody looking for events would
- * find it (events round 2, B2). There are few — five upcoming per host.
- */
-const EventMapMarker = React.memo(({ coordinate, post, isSelected, onPress }: any) => (
-    <Marker
-        coordinate={coordinate}
-        tracksViewChanges={false}
-        anchor={PIN_ANCHOR}
-        zIndex={10}
-        onPress={(e) => { e.stopPropagation(); onPress(post); }}
-    >
-        <View collapsable={false} style={{ width: PIN_RENDER_W, height: PIN_RENDER_H, alignItems: 'center', justifyContent: 'flex-start' }}>
-            <View style={{
-                width: 34, height: 34, borderRadius: 17, backgroundColor: EVENT_ACCENT,
-                borderWidth: isSelected ? 3.5 : 2.5, borderColor: '#ffffff',
-                alignItems: 'center', justifyContent: 'center',
-            }}>
-                <EventPinGlyph />
-            </View>
-            {/* The stem, so an event pin points at its spot the way every other pin does. */}
-            <View style={{
-                width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 8,
-                borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: EVENT_ACCENT,
-                marginTop: -1,
-            }} />
-        </View>
-    </Marker>
-));
 
 export default function MapScreen() {
     const currencyStr = useCurrencyString();
@@ -365,10 +316,10 @@ export default function MapScreen() {
     const [markersReady, setMarkersReady] = useState(false);
     const [clustersReady, setClustersReady] = useState(false);
 
-    // Pre-compute unique marker variants for off-screen capture. Events are left out: they draw their own
-    // violet pin, so feeding them here would only capture offer/need images nothing renders.
+    // Pre-compute unique marker variants for off-screen capture. The list holds the one event pin (EVENT_PIN) too,
+    // captured with the listings' pins so it is ready before any pin shows.
     const markerVariants = useMemo(
-        () => buildVariantList(posts.filter(p => (p.type || '').toLowerCase() !== 'event'), CATEGORIES),
+        () => buildVariantList(posts, CATEGORIES),
         [posts]
     );
 
@@ -574,7 +525,13 @@ export default function MapScreen() {
                     animationEnabled={false}
                     radius={15}
                 >
-                    {visibleMarketPins(posts, mapFilterState).map(post => {
+                    {/* Offer, Need and event pins, one marker for all three. Events are clustered with the
+                        listings and counted in their bubbles (Marty, 31 Oct: an event is part of what the map
+                        already has, not a layer of its own). They show under All and under the Events pill,
+                        filtered by the date chips; `eventInWindow` applies the slice-1 feed rule first, so an
+                        event that has ended or been cancelled never pins — the sync pull is a replica of the
+                        list, not the list, and carries both. */}
+                    {[...visibleMarketPins(posts, mapFilterState), ...visibleEventPins(posts, mapFilterState)].map(post => {
                         const catObj = CATEGORIES_BY_ID.get(post.category) || { id: normalizeCategory(post.category), emoji: categoryEmoji(post.category), label: categoryLabel(post.category) };
                         const safePost = { ...post, lat: Number(post.lat), lng: Number(post.lng) };
                         const isSelected = selectedPostPreview?.id === post.id;
@@ -591,21 +548,6 @@ export default function MapScreen() {
                             />
                         );
                     })}
-
-                    {/* Event pins. Their own layer in the event violet, shown under All and under the
-                        Events pill, and filtered by the date chips. `eventInWindow` applies the slice-1
-                        feed rule first, so an event that has ended or been cancelled never pins — the
-                        sync pull is a replica of the list, not the list, and carries both. */}
-                    {visibleEventPins(posts, mapFilterState).map(post => (
-                        <EventMapMarker
-                            key={`event-${post.id}-${selectedPostPreview?.id === post.id}`}
-                            cluster={false}
-                            coordinate={{ latitude: Number(post.lat), longitude: Number(post.lng) }}
-                            post={{ ...post, lat: Number(post.lat), lng: Number(post.lng) }}
-                            isSelected={selectedPostPreview?.id === post.id}
-                            onPress={setSelectedPostPreview}
-                        />
-                    ))}
 
                     {/* Service radius circle overlay */}
                     {nodeRadius && nodeRadius.radiusKm > 0 && (

@@ -14,7 +14,7 @@ Tap **Map** in the row of tabs. The map shows your community's posts:
 - **Orange pins:** Needs.
 - **Purple pins with a calendar:** events that have not finished yet.
 
-A pin shows the post's category picture. Where many Offers and Needs are close together, they join into a circle with a number. The circle is blue on the phone and dark grey in the web app. Zoom in to see them one by one. Events always show on their own.
+A pin shows the post's category picture. Where many pins are close together, they join into a circle with a number. Events join the same circles as Offers and Needs, and the number counts them too. The circle is blue on the phone and dark grey in the web app. Zoom in to see them one by one.
 
 People and groups are not on the map. In the web app, an enterprise that has set a place shows as a square pin with its picture. Tap it to open the enterprise.
 

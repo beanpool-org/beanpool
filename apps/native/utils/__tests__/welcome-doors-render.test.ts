@@ -55,6 +55,7 @@ import { RestoreMenu } from '../../components/welcome/RestoreMenu';
 import { LanguageProvider } from '../../components/LanguageProvider';
 import { setLanguage, type UiLang } from '@beanpool/core';
 import type { GlobalDoorState } from '../global-entry';
+import { onboardingColors } from '../onboarding-colors';
 
 const STYLES = { homeDoors: {}, memberBtn: {}, memberBtnText: {}, doorLine: {}, inviteOnlyHint: {} };
 const LINE: Record<GlobalDoorState, string | null> = {
@@ -225,14 +226,14 @@ describe('above the fold at 320 dp with text at 1.3×', () => {
 });
 
 describe('Restore your account: four rows, at 320 dp with text at 1.3× (vault rethink VR4)', () => {
-    const MENU_STYLES = { ssoRecoverBtn: {}, ssoRecoverRow: {}, ssoRecoverBtnText: {}, ssoRecoverLogos: {}, recoverBtn: {}, recoverBtnText: {}, restoreRowHint: {} };
     const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
+    const restoreMenu = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/RestoreMenu.tsx'), 'utf-8');
     const LABELS = ['🌐 Recover with Social', '🔑 Recover with 12 Words', '🤝 My community can bring me back', '🪪 An admin gave me a re-key code'];
     const HINT_LINE = 'For members of a local community.';
     const menuTaps = { social: 0, words: 0, community: 0, rekey: 0 };
     async function drawMenu(initial?: UiLang): Promise<void> {
         const menu = createElement(RestoreMenu, {
-            styles: MENU_STYLES, logos: null,
+            ...onboardingColors('light'), logos: null,
             onSocial: () => { menuTaps.social++; }, onWords: () => { menuTaps.words++; },
             onCommunity: () => { menuTaps.community++; }, onRekey: () => { menuTaps.rekey++; },
         });
@@ -256,7 +257,7 @@ describe('Restore your account: four rows, at 320 dp with text at 1.3× (vault r
         await drawMenu();
         for (const b of buttons()) for (const s of Array.from(b.querySelectorAll('span'))) expect(s.getAttribute('data-lines')).toBeNull();
         // The label's Text, centred in its button, wraps there too: nothing here gives it a width of its own.
-        expect(welcome).toMatch(/recoverBtnText: \{[^}]*textAlign: 'center'/);
+        expect(restoreMenu).toMatch(/recoverBtnText: \{[^}]*textAlign: 'center'/);
     });
 
     it('every word is through t(): in the pseudo-locale all four are their translations', async () => {
@@ -275,11 +276,11 @@ describe('Restore your account: four rows, at 320 dp with text at 1.3× (vault r
     const em = (c: string) => (/\p{M}/u.test(c) ? 0 : /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
     const widest = (s: string) => Math.max(...s.split(/\s+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).map((w) => Array.from(w).reduce((n, c) => n + em(c) * FONT, 0)));
 
-    it('the styles the measure rests on are the screen\'s', () => {
+    it('the styles the measure rests on are the screen\'s and the rows\'', () => {
         expect(welcome).toMatch(/\n\s*scroll: \{[^}]*padding: 24/);
         expect(welcome).toMatch(/\n\s*card: \{[^}]*padding: 24/);
-        expect(welcome).toMatch(/\n\s*recoverBtn: \{[^}]*padding: 16/);
-        expect(welcome).toMatch(/\n\s*recoverBtnText: \{[^}]*fontSize: 16/);
+        expect(restoreMenu).toMatch(/\n\s*recoverBtn: \{[^}]*padding: 16/);
+        expect(restoreMenu).toMatch(/\n\s*recoverBtnText: \{[^}]*fontSize: 16/);
     });
 
     const NATIVE_WORDS = path.resolve(__dirname, '../../words');

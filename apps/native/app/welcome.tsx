@@ -3438,7 +3438,8 @@ export default function WelcomeScreen() {
                         </Text>
 
                         <RestoreMenu
-                            styles={styles}
+                            colors={colors}
+                            dark={dark}
                             logos={(
                                 <>
                                     {Platform.OS === 'ios' && <AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />}
@@ -4215,15 +4216,8 @@ const styles = StyleSheet.create({
     secondaryBtnText: { color: dark ? colors.text.secondary : palette.gray600, fontSize: 16, fontWeight: '600' },
 
     // Member sub-options
-    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : '#93C5FD', backgroundColor: dark ? colors.feedback.info.bg : '#EFF6FF', alignItems: 'center', marginBottom: 10 },
-    // The label shrinks and wraps; the logos keep their size. A label that could not shrink made the row wider than
-    // the button at 320dp or with enlarged text, and the centred row spilled past both edges.
-    ssoRecoverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
-    ssoRecoverBtnText: { color: dark ? palette.blue400 : '#1D4ED8', fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
-    ssoRecoverLogos: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
     recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700', textAlign: 'center' },
-    restoreRowHint: { color: colors.text.secondary, fontSize: 13, marginTop: 4, textAlign: 'center' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },
     socialRecoverBtnText: { color: colors.brand.primary, fontSize: 16, fontWeight: '700' },
 

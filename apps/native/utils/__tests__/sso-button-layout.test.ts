@@ -126,14 +126,14 @@ describe('the social sign-in screen: Apple, Google and Facebook buttons', () => 
 
 describe('Restore your account: the Recover with Social button', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf-8');
-    // The four rows are drawn by components/welcome/RestoreMenu.tsx (vault rethink VR4), with welcome.tsx's styles and logos.
+    // The four rows are drawn by components/welcome/RestoreMenu.tsx (vault rethink VR4), in its styles with welcome.tsx's logos.
     const menu = fs.readFileSync(path.resolve(__dirname, '../../components/welcome/RestoreMenu.tsx'), 'utf-8');
     /**
-     * A one-line entry in welcome.tsx's StyleSheet (inside makeStyles(colors, dark)), in light and in dark: only the
+     * A one-line entry in RestoreMenu.tsx's StyleSheet (inside makeStyles(colors, dark)), in light and in dark: only the
      * colours may differ between the two, so the layout below holds in both.
      */
     function style(name: string): Style {
-        const m = src.match(new RegExp(`^ {4}${name}: (\\{[^\\n]*\\}),$`, 'm'));
+        const m = menu.match(new RegExp(`^ {8}${name}: (\\{[^\\n]*\\}),$`, 'm'));
         expect(m, `styles.${name}`).not.toBeNull();
         const inScheme = (theme: 'light' | 'dark') => {
             const { colors, dark } = onboardingColors(theme);

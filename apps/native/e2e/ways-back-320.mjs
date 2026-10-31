@@ -26,7 +26,7 @@
  *
  * And the shared placement (vault rethink VR4, §4.3): the row offered, on, and "Not finished"; the list with half a copy
  * at the vault, half a pair, and a half no community on this phone owns; and Restore your account's four rows
- * (components/welcome/RestoreMenu.tsx), in welcome.tsx's own styles, read from its file.
+ * (components/welcome/RestoreMenu.tsx), in the screen's colours.
  *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
  * 44dp tall (the panel's own floor); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
@@ -139,22 +139,13 @@ const stubFor = (spec) => {
     return STUB_BASENAMES.has(name) ? name : null;
 };
 
-/** A one-line entry of welcome.tsx's StyleSheet, as the screen has it, so the restore menu is drawn in the screen's own styles. */
-const welcomeSrc = fs.readFileSync(path.join(NATIVE, 'app/welcome.tsx'), 'utf8');
-const welcomeStyle = (name) => {
-    const m = welcomeSrc.match(new RegExp(`^ {4}${name}: (\\{[^\\n]*\\}),$`, 'm'));
-    if (!m) throw new Error(`welcome.tsx has no one-line style ${name}`);
-    return `${name}: ${m[1]}`;
-};
-const MENU_STYLES = ['ssoRecoverBtn', 'ssoRecoverRow', 'ssoRecoverBtnText', 'ssoRecoverLogos', 'recoverBtn', 'recoverBtnText', 'restoreRowHint'].map(welcomeStyle).join(',\n    ');
-
 const entry = path.join(work, 'entry.tsx');
 fs.writeFileSync(entry, `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { View, Text } from 'react-native';
 import { t } from '@beanpool/core';
-import { lightColors, darkColors, palette } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
+import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
 import { RestoreMenu } from ${JSON.stringify(path.join(NATIVE, 'components/welcome/RestoreMenu'))};
 import { KeeperProtectionPanel } from ${JSON.stringify(path.join(NATIVE, 'components/KeeperProtectionPanel'))};
 import { protectionFrom } from ${JSON.stringify(path.join(NATIVE, 'utils/protection-state'))};
@@ -310,14 +301,11 @@ const WaysPage = () => {
 /** welcome.tsx's Restore your account: its page and card, its title and line, its four rows. */
 const RestorePage = () => {
     const { colors: oc, dark } = onboardingColors(scheme);
-    const styles = ((colors, dark) => ({
-    ${MENU_STYLES}
-    }))(oc, dark);
     return (
         <View style={{ backgroundColor: oc.surface.page, padding: 24 }}>
             <View style={{ width: '100%', backgroundColor: oc.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: oc.border.default }}>
                 <Text style={{ fontSize: 20, fontWeight: 'bold', color: oc.text.heading, marginBottom: 8 }}>{t('🔑 Restore your account')}</Text>
-                <RestoreMenu styles={styles} logos={<View style={{ width: 48, height: 16 }} />} onSocial={noop} onWords={noop} onCommunity={noop} onRekey={noop} />
+                <RestoreMenu colors={oc} dark={dark} logos={<View style={{ width: 48, height: 16 }} />} onSocial={noop} onWords={noop} onCommunity={noop} onRekey={noop} />
             </View>
         </View>
     );

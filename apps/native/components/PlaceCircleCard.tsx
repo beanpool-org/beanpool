@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import type { AppColors } from '../constants/colors';
 import type { BeanPoolIdentity } from '../utils/identity';
 import { setCircleStarting } from '../utils/community-directory';
 import { circleIntents, currentNodeUrl, setCircleIntent } from '../utils/circle-intent';
 import { FIND_COMMUNITY_WORDS, PLACE_CIRCLE_WORDS, circlePeopleLine, circleStartedLine, t, type CircleCard } from '@beanpool/core';
-import { HomeButton, homeStyles } from './home/HomeParts';
+import { HOME_CARD_PADDING_DP, HomeButton } from './home/HomeParts';
 
 /**
  * A place circle's own rows (Lounge L2, §3.3): how many are here, Start a community, and "I'm starting one here", entry S8's
@@ -23,7 +23,7 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChang
     colors: AppColors;
     onChange?: (card: CircleCard) => void;
 }) {
-    const s = homeStyles(colors);
+    const s = useMemo(() => makeStyles(colors), [colors]);
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState<string | null>(null);
     const [joinAsked, setJoinAsked] = useState(false);
@@ -37,9 +37,9 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChang
 
     if (circle.doneAt) {
         return (
-            <View style={[s.card, { marginHorizontal: 0, marginTop: 8, marginBottom: 8, paddingVertical: 10 }]} testID="circle-card-done">
-                <Text style={[s.rowLine, s.rowStrong]} testID="circle-started-line">{circleStartedLine(circle.community)}</Text>
-                <Text style={[s.rowSub, { marginTop: 4 }]}>{t(PLACE_CIRCLE_WORDS.done)}</Text>
+            <View style={s.card} testID="circle-card-done">
+                <Text style={[s.line, s.strong]} testID="circle-started-line">{circleStartedLine(circle.community)}</Text>
+                <Text style={s.sub}>{t(PLACE_CIRCLE_WORDS.done)}</Text>
             </View>
         );
     }
@@ -64,11 +64,11 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChang
     };
 
     return (
-        <View style={[s.card, { marginHorizontal: 0, marginTop: 8, marginBottom: 8, paddingVertical: 10 }]} testID="circle-card">
-            {!!people && <Text style={[s.rowLine, s.rowStrong]} testID="circle-people">{people}</Text>}
-            {circle.starting === 'someone' && <Text style={[s.rowLine, { marginTop: 4 }]} testID="circle-someone-starting">{t(PLACE_CIRCLE_WORDS.someoneStarting)}</Text>}
-            {circle.starting === 'you' && <Text style={[s.rowLine, { marginTop: 4 }]} testID="circle-you-starting">{t(PLACE_CIRCLE_WORDS.youAreStarting)}</Text>}
-            <View style={s.buttonRow}>
+        <View style={s.card} testID="circle-card">
+            {!!people && <Text style={[s.line, s.strong]} testID="circle-people">{people}</Text>}
+            {circle.starting === 'someone' && <Text style={[s.line, s.gap]} testID="circle-someone-starting">{t(PLACE_CIRCLE_WORDS.someoneStarting)}</Text>}
+            {circle.starting === 'you' && <Text style={[s.line, s.gap]} testID="circle-you-starting">{t(PLACE_CIRCLE_WORDS.youAreStarting)}</Text>}
+            <View style={s.buttons}>
                 <HomeButton colors={colors} text={t(FIND_COMMUNITY_WORDS.start)} onPress={() => router.push('/start-community')} testID="circle-start" />
                 {circle.starting !== 'someone' && (
                     <HomeButton colors={colors} busy={busy} primary={circle.starting === null} text={circle.starting === 'you' ? t(PLACE_CIRCLE_WORDS.notStarting) : t(PLACE_CIRCLE_WORDS.starting)}
@@ -79,7 +79,23 @@ export function PlaceCircleCard({ id, circle, identity, nodeUrl, colors, onChang
                         onPress={() => void onJoinWhenStarts()} testID="circle-join-when" />
                 )}
             </View>
-            {!!note && <Text style={[s.rowSub, { marginTop: 4 }]} accessibilityLiveRegion="polite" testID="circle-note">{note}</Text>}
+            {!!note && <Text style={s.sub} accessibilityLiveRegion="polite" testID="circle-note">{note}</Text>}
         </View>
     );
+}
+
+// Home's card, row and button-row values, in a table of the card's own so the contrast check reads it in both themes
+// (it can't follow `homeStyles` across files).
+function makeStyles(colors: AppColors) {
+    return StyleSheet.create({
+        card: {
+            marginTop: 8, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default,
+            backgroundColor: colors.surface.card, paddingHorizontal: HOME_CARD_PADDING_DP, paddingVertical: 10,
+        },
+        line: { fontSize: 15, lineHeight: 20, color: colors.text.body },
+        strong: { fontWeight: '700', color: colors.text.heading },
+        gap: { marginTop: 4 },
+        sub: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 4 },
+        buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6, marginBottom: 4 },
+    });
 }

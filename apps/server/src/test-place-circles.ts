@@ -357,19 +357,24 @@ async function main(): Promise<void> {
     const helpers = Array.from({ length: 10_000 }, (_, i) => i % 2
         ? { pubkey: `p${i}`, lat: -60 + (i % 1200) * 0.1, lng: -170 + (i % 3000) * 0.1 }
         : { pubkey: `p${i}`, lat: Number((10 + (i % 40) * 0.1).toFixed(1)), lng: Number((70 + (i % 30) * 0.1).toFixed(1)) });
-    const startRun = performance.now();
-    const clusters = circles?.clusterHelpers?.(helpers) ?? [];
-    const runMs = performance.now() - startRun;
-    assert(clusters.length > 0 && runMs < 50, `10,000 watches compare in ${runMs.toFixed(1)} ms (under 50)`);
+    // CPU time, as test-member-words measures its budget: this call is synchronous, so it is the compare's own work, and a busy
+    // runner's wall clock can't fail it (75.3 ms wall on CI, 1 Nov, against 7.7 here).
+    const cpuMs = (work: () => void) => {
+        const c0 = process.cpuUsage();
+        work();
+        const c = process.cpuUsage(c0);
+        return (c.user + c.system) / 1000;
+    };
+    let clusters: any[] = [];
+    const runMs = cpuMs(() => { clusters = circles?.clusterHelpers?.(helpers) ?? []; });
+    assert(clusters.length > 0 && runMs < 50, `10,000 watches compare in ${runMs.toFixed(1)} ms CPU (under 50)`);
     assert(new Set(clusters.flatMap((c: any) => c.members)).size === clusters.flatMap((c: any) => c.members).length, 'and nobody is in two');
     const insert = db.prepare('INSERT OR IGNORE INTO place_watches (id, pubkey, lat, lng, radius_km, would_help) VALUES (?, ?, ?, ?, 50, 1)');
     db.pragma('foreign_keys = OFF');
     db.transaction(() => { helpers.forEach((h, i) => insert.run(`load-${i}`, ana.pk.slice(0, 54) + String(i).padStart(10, '0'), h.lat, h.lng)); })();
     db.pragma('foreign_keys = ON');
-    const startRead = performance.now();
-    circles?.waitingNear?.({ lat: 10.5, lng: 70.5 });
-    const readMs = performance.now() - startRead;
-    assert(!!circles && readMs < 50, `the count reads a 10,000-watch table in ${readMs.toFixed(1)} ms (under 50)`);
+    const readMs = cpuMs(() => circles?.waitingNear?.({ lat: 10.5, lng: 70.5 }));
+    assert(!!circles && readMs < 50, `the count reads a 10,000-watch table in ${readMs.toFixed(1)} ms CPU (under 50)`);
 
     console.log(`\n${passed}/${run} checks passed`);
     process.exit(passed === run ? 0 : 1);

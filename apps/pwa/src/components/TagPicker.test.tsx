@@ -105,6 +105,27 @@ describe('TagPicker Web Component', () => {
         expect(handleSubmit).not.toHaveBeenCalled();
     });
 
+    it('the sheet is drawn on document.body, out of any panel that would clip it (the map New Post panel), and above that panel', () => {
+        const { container } = render(<div className="fixed z-[1000] overflow-y-auto backdrop-blur-xl"><TagPicker tags={[]} onChange={vi.fn()} category="food" /></div>);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        const sheet = screen.getByRole('dialog');
+        expect(sheet.parentElement).toBe(document.body);
+        expect(container.contains(sheet)).toBe(false);
+        expect(Number(/z-\[(\d+)\]/.exec(sheet.className)?.[1])).toBeGreaterThan(1000);
+    });
+
+    it('a click on the sheet or its overlay reaches no form it was opened from: React bubbles through the portal', () => {
+        const parentClick = vi.fn();
+        render(<div onClick={parentClick}><TagPicker tags={[]} onChange={vi.fn()} category="food" /></div>);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        parentClick.mockClear();
+        fireEvent.click(screen.getByPlaceholderText('Search tags...'));
+        expect(parentClick).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('dialog'));
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(parentClick).not.toHaveBeenCalled();
+    });
+
     it('the button reads "+ Add", once (never "+ + Add")', () => {
         render(<TagPicker tags={[]} onChange={vi.fn()} category="food" />);
         expect(screen.getByRole('button', { name: '+ Add tag' }).textContent).toBe('+ Add');

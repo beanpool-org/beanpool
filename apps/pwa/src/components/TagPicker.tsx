@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
     POST_TAGS_MAX, suggestTags, tagChildren, tagIndex, t,
 } from '@beanpool/core';
@@ -115,11 +116,14 @@ export function TagPicker({
                 )}
             </div>
 
-            {/* Modal Sheet */}
-            {isOpen && (
+            {/* Modal Sheet. On document.body: inside the map's New Post panel (z-[1000], backdrop-blur, overflow-y-auto) `fixed`
+                measured against the panel and the sheet was clipped to it, and inside a tab's page it sat under the app's header
+                and tabs (ReportModal.tsx). Above that panel. React still bubbles a click through the portal to the form it was
+                opened from, so the overlay's stops here: the enterprise form's backdrop closes that form. */}
+            {isOpen && createPortal(
                 <div
-                    className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-sm"
-                    onClick={() => setIsOpen(false)}
+                    className="fixed inset-0 z-[1100] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4 backdrop-blur-sm"
+                    onClick={(e) => { e.stopPropagation(); setIsOpen(false); }}
                     role="dialog"
                     aria-modal="true"
                     aria-label={t('Tags')}
@@ -321,7 +325,8 @@ export function TagPicker({
                             )}
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body,
             )}
         </div>
     );

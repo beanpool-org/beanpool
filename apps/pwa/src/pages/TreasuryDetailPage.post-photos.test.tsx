@@ -101,14 +101,16 @@ describe("an enterprise's Offer or Need, with photos while posting it, on the we
         expect((within(form).getByRole('button', { name: 'Publish Listing' }) as HTMLButtonElement).disabled).toBe(false);
 
         fireEvent.click(within(form).getByRole('button', { name: '+ Add tag' }));
-        const search = within(form).getByPlaceholderText('Search tags...');
+        // On document.body, out of the form (components/TagPicker.tsx): the input has no form to submit, and Enter is held anyway.
+        const search = screen.getByPlaceholderText('Search tags...') as HTMLInputElement;
+        expect(search.form).toBeNull();
         fireEvent.change(search, { target: { value: 'lemon' } });
         // keydown's default action is the browser's implicit submit (jsdom has none): prevented, so it never comes.
         expect(fireEvent.keyDown(search, { key: 'Enter', code: 'Enter' })).toBe(false);
         expect(post).not.toHaveBeenCalled();
 
         fireEvent.keyDown(search, { key: 'Escape' });
-        expect(within(form).queryByPlaceholderText('Search tags...')).toBeNull();
+        expect(screen.queryByPlaceholderText('Search tags...')).toBeNull();
         expect(screen.getByRole('dialog')).toBe(form);
         expect((within(form).getByPlaceholderText('e.g. Dozen fresh eggs') as HTMLInputElement).value).toBe('Duck eggs');
     });

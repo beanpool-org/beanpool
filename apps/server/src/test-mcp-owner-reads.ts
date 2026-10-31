@@ -116,6 +116,8 @@ async function main(): Promise<void> {
     const miaPublic = post('Sourdough starter from Mia', mia.pub, -28.567891, 153.512345);
     const ownersOwn = post('Sourdough loaves from Olive', owner.pub);
     const bakerys = post('Sourdough rye from the bakery', bakery);
+    const miasPoll = createPost('poll', 'general', 'Sourdough or rye for the fair?', 'Pick one.', 0, 'fixed', mia.pub, -28.55, 153.5, [], false,
+        undefined, undefined, { pollOptions: [{ id: 'sour', text: 'Sourdough' }, { id: 'rye', text: 'Rye' }] })!.id;
     const groupPost = post('Sourdough for the choir only', mia.pub);
     db.prepare("UPDATE posts SET audience_scope = 'group', target_group_id = 'g-choir' WHERE id = ?").run(groupPost);
     const directPost = post('Sourdough for Ned only', mia.pub);
@@ -180,6 +182,10 @@ async function main(): Promise<void> {
         const notSeen = { groupPost, directPost, hidden, paused, removed };
         const seenWrongly = Object.entries(notSeen).filter(([, id]) => ids.has(id)).map(([k]) => k);
         assert(seenWrongly.length === 0, `and no more than the owner's Market: no group post outside their groups, no direct post between others, nothing hidden, paused or removed (${seenWrongly.join(', ') || 'none'})`);
+        // A poll found by its words when the search names polls (the engine's word search leaves polls out otherwise).
+        const polls = structured(await seeder.callTool({ name: 'listings_search', arguments: { kind: 'poll', q: 'rye' } }));
+        assert((polls?.listings ?? []).some((l: any) => l.postId === miasPoll && l.kind === 'poll'),
+            `listings_search {kind: 'poll', q} finds the poll by its words (${polls?.returned ?? 'no answer'})`);
         assert((plain?.listings ?? []).every((l: any) => !('title' in l)) && !('_notice' in (plain ?? {})), 'without include_text, no titles');
         sweep('listings_search', plain);
         const withText = structured(await seeder.callTool({ name: 'listings_search', arguments: { q: 'starter', include_text: true } }));

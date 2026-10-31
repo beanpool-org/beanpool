@@ -57,7 +57,8 @@ function listingsSearch(grant: AgentGrant, args: Record<string, unknown>, bounda
     // the engine decides what this viewer may see.
     const posts = getPosts({
         viewerPubkey: grant.member, query: q || undefined, category, status: 'active', limit,
-        ...(kind ? { types: [kind] } : { types: [...KINDS] }),
+        // `type` as well for a poll: the engine's word search leaves polls out unless the read names that one type.
+        ...(kind ? { types: [kind], ...(kind === 'poll' ? { type: 'poll' } : {}) } : { types: [...KINDS] }),
     });
     const kept = keptKeys(grant.member);
     const result: Record<string, unknown> = {

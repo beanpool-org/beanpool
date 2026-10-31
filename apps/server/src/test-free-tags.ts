@@ -270,7 +270,7 @@ async function main(): Promise<void> {
     assert((await found(bea, q('limon'))).includes(laptopId), 'q=limon finds "limón": accent-folded');
     assert((await found(bea, q('limón'))).includes(laptopId), 'q=limón finds it');
     assert((await found(bea, q('LIMÓN'))).includes(laptopId), 'in any case');
-    assert((await found(bea, q('#limón'))).length === 0 || (await found(bea, q('limón'))).includes(laptopId), 'a typed # is punctuation to the index');
+    assert((await found(bea, q('#limón'))).includes(laptopId), 'q=#limón finds it: a typed # is punctuation to the index');
     assert(!(await found(bea, q('hand'))).includes(plainId), 'and it does not find the listing without it');
     assert((await found(bea, `${q('barn')}&types=event`)).includes(eventId), 'an event, where the read asks for events');
     assert(!(await found(bea, q('barn'))).includes(pollId), 'polls stay out of a search, as they are');
@@ -308,8 +308,8 @@ async function main(): Promise<void> {
     assert(tagFree.includes(lemonId) && tagFree.includes(inTag) && !tagFree.includes(plainId), 'tags OR free alone');
     assert(!(await found(bea, free('barn dance'))).includes(pollId), 'a poll stays out of the filter');
     assert((await found(bea, `${free('barn dance')}&types=event`)).includes(eventId), 'an event is found by it where the read asks for events');
-    const onlyEvent = await found(bea, `${free('barn dance')}&type=poll`);
-    assert(onlyEvent.includes(pollId), 'a read that asks for polls alone gets one, as a search does');
+    const onlyPolls = await found(bea, `${free('barn dance')}&type=poll`);
+    assert(onlyPolls.includes(pollId), 'a read that asks for polls alone gets one, as a search does');
 
     const stale = await call('GET', bea, `/api/marketplace/posts?${free('2nd hand')}`);
     addBlocks(bea.pk, [ann.pk]);
@@ -473,6 +473,19 @@ async function main(): Promise<void> {
     db.transaction(() => scrubPostsOf(stranger.pk, new Date().toISOString()))();
     assert(row(doomedId)?.free_tags === '' && !words(row(doomedId)?.search_keywords).has('leaves'), `a deleted member's tags go with their words (${row(doomedId)?.search_keywords})`);
     assert((await found(bea, free('leaves with me'))).length === 0 && !(await found(bea, q('leaves'))).includes(doomedId), 'and neither the filter nor the search finds it');
+    const pollster = member('Eli');
+    const hisPoll = await call('POST', pollster, '/api/marketplace/posts', {
+        type: 'poll', category: 'general', title: 'Which day suits', description: '', authorPublicKey: pollster.pk,
+        pollOptions: [{ id: 'sat', text: 'Saturday' }, { id: 'sun', text: 'Sunday' }], durationDays: 7, tags: ['food.eggs'], freeTags: ['my own words'],
+    });
+    const hisPollId = hisPoll.body?.post?.id as string;
+    db.prepare(`UPDATE posts SET updated_at = ? WHERE id = ?`).run(stamp, hisPollId);
+    db.transaction(() => scrubPostsOf(pollster.pk, new Date().toISOString()))();
+    const pollAfter = db.prepare('SELECT title, tags, free_tags, search_keywords, updated_at FROM posts WHERE id = ?').get(hisPollId) as any;
+    assert(hisPoll.status === 200 && pollAfter?.title === 'Which day suits' && pollAfter?.tags === 'food.eggs', 'a poll\'s question stays, the community\'s record');
+    assert(pollAfter?.free_tags === '' && !words(pollAfter?.search_keywords).has('words') && words(pollAfter?.search_keywords).has('poultry'),
+        `but the tags its author typed go with their words, and a library tag's stay (${pollAfter?.search_keywords})`);
+    assert(pollAfter?.updated_at > stamp, 'stamped, so a standby\'s delta carries it');
     const seen = (await call('GET', bea, `/api/marketplace/posts?id=${typedLemonId}`)).body?.[0];
     assert(JSON.stringify(guestPost(seen)?.freeTags) === '["lemon","food"]', 'public with the listing: a visitor\'s copy keeps them');
 

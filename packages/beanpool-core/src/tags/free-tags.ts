@@ -15,7 +15,10 @@ export const FREE_TAGS_MAX = 5;
 export const FREE_TAG_MIN_CHARS = 2;
 export const FREE_TAG_MAX_CHARS = 30;
 export const FREE_TAG_MAX_WORDS = 4;
-/** The longest the stored column may be, as `POST_TAGS_CHARS` bounds `posts.tags`. Only tags in the supplementary planes reach it. */
+/**
+ * The longest the stored column may be, its JSON counted as `POST_TAGS_CHARS` counts `posts.tags`. Five tags of 30 characters
+ * are 150 and fit; this is what bounds the ones that store longer than they read, in emoji or quote marks.
+ */
 export const FREE_TAGS_CHARS = 200;
 
 export const FREE_TAG_TOO_SHORT = word('A tag needs at least two letters or numbers');

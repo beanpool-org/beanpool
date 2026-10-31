@@ -17,13 +17,14 @@
  * takes the neutral title.
  *
  * A poll is left as it is: a closed poll is the community's record, its question and votes stay, and its author already
- * reads as Deleted Member. An admin's removal (adminPruneUser) keeps the posts' words, photos and places: a vote can
- * bring the member back.
+ * reads as Deleted Member. The tags its author typed are no part of that record, and go with their search words. An
+ * admin's removal (adminPruneUser) keeps the posts' words, photos and places: a vote can bring the member back.
  *
  * The copies of a title kept elsewhere go too: the event chat's name (engine/event-thread.ts ensureEventThread), the
  * titles in the activity feed, and a pricing guide item's picture that points at one of the photos (pricing-aggregator.ts).
  */
 
+import { postTagsOf } from '@beanpool/core';
 import { generateSearchKeywords } from '@beanpool/engine';
 import { db, afterTransactionCommit } from '../db/db.js';
 import { deleteStoredObjects } from '../storage/image-columns.js';
@@ -47,6 +48,11 @@ function tombstonePhoto(rowKey: string, at: string, rowStamp: string | null): vo
  * Returns the ids of the posts it wiped.
  */
 export function scrubPostsOf(publicKey: string, at: string): string[] {
+    const polls = db.prepare(`SELECT id, title, description, category, tags FROM posts WHERE author_pubkey = ? AND type = 'poll' AND free_tags != ''`)
+        .all(publicKey) as { id: string; title: string; description: string; category: string; tags: string }[];
+    const clearTyped = db.prepare(`UPDATE posts SET free_tags = '', search_keywords = ?, updated_at = ? WHERE id = ?`);
+    for (const p of polls) clearTyped.run(generateSearchKeywords(p.title, p.description, p.category, undefined, postTagsOf(p.tags)), at, p.id);
+
     const posts = db.prepare(`SELECT id, type, category FROM posts WHERE author_pubkey = ? AND type != 'poll'`)
         .all(publicKey) as { id: string; type: string; category: string | null }[];
     if (posts.length === 0) return [];

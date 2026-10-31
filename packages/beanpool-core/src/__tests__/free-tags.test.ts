@@ -1,7 +1,7 @@
 /**
  * The tags a member types, as the node stores and copies them (DESIGN-tags-free-entry-fable.md §2, slice F1): tags/free-tags.ts.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     FREE_TAGS_CHARS, FREE_TAGS_MAX, FREE_TAG_HIDDEN_CHARACTER, FREE_TAG_HOLDS_A_COMMA, FREE_TAG_MAX_CHARS, FREE_TAG_NOT_A_CONTACT,
     FREE_TAG_TOO_LONG, FREE_TAG_TOO_MANY_WORDS, FREE_TAG_TOO_SHORT, copiedFreeTags, freeTagRefusal, freeTagStored, freeTagsOf,
@@ -72,6 +72,30 @@ describe('what a free tag may not be', () => {
 
     it('refuses a comma, which `free=` and the pickers read as two tags', () => {
         expect(freeTagRefusal('wood, fire')).toBe(FREE_TAG_HOLDS_A_COMMA);
+    });
+});
+
+describe('on an old Android engine, with no Unicode property escapes', () => {
+    it('loads, and holds the rule by the fallbacks', async () => {
+        const Real = RegExp;
+        vi.stubGlobal('RegExp', class extends Real {
+            constructor(source: string | RegExp, flags?: string) {
+                if (String(source).includes('\\p{')) throw new SyntaxError('Invalid escape');
+                super(source, flags);
+            }
+        });
+        vi.resetModules();
+        try {
+            const old = await import('../tags/free-tags.js');
+            expect(old.freeTagRefusal('🍋🍋🍋')).toBe(old.FREE_TAG_TOO_SHORT);
+            expect(old.freeTagRefusal('a🍋')).toBe(old.FREE_TAG_TOO_SHORT);
+            for (const tag of ['2nd hand', 'Limón 🍋 fresco', '二手 笔记本', 'яйца', 'ไข่ไก่']) expect(old.freeTagRefusal(tag), tag).toBeNull();
+            expect(old.freeTagRefusal('0412 345 678')).toBe(old.FREE_TAG_NOT_A_CONTACT);
+            expect(old.freeTagRefusal('０４１２３４５６７８')).toBe(old.FREE_TAG_NOT_A_CONTACT);
+        } finally {
+            vi.unstubAllGlobals();
+            vi.resetModules();
+        }
     });
 });
 

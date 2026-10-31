@@ -36,6 +36,24 @@
  * itself, so it learns the `sub` that opens the copy, at every deposit and every restore. What stands between the vault
  * and a member's seed is who runs it (its custodians and its host), not this format.
  *
+ * ## A community copy (vault rethink VR4, the shared placement)
+ *
+ * `provider: 'community'` ({@link VAULT_COMMUNITY_PROVIDER}): "Your community's admins can bring you back" for a member
+ * whose community's rule is the key vault. The deposit box holds a copy sealed under a random key (keeper-crypto.ts
+ * `sealSeedToCopyKey`), one half of that key, the community's node key and the member's own label for that community
+ * ({@link vaultCommunityRef}). The other half is at the community's server. So the vault can open nothing, open or not.
+ *
+ * The node key is inside the box: only the keyholder reads it, for as long as it takes to make the row's keyed index
+ * (HMAC under K_index of the node key and the member's key), which is all that is kept. The vault learns which community
+ * it is at a restore, from the voucher, and not before. The label is what the member's phone asks about: it is derived
+ * from the member's own seed, so it says nothing to the vault, and two members' labels for one community differ.
+ *
+ * A restore proves itself with a **voucher** ({@link VaultVoucher}), in place of a provider's id_token: the community's
+ * statement, signed by its node key, that its admin saw this member in person and that this device's throwaway key
+ * speaks for them. A voucher from a node key with no index here finds no copy. The rest is the sign-in restore's: the
+ * ticket, the 24-hour hold, Stop and "Yes, it's me", the release sealed to the throwaway key. The release also holds the
+ * vault's half, and the phone joins it to the community's.
+ *
  * ## Signed answers
  *
  * Every release, every deposit receipt and every other answer the phone acts on is signed with the ticket key, under
@@ -51,7 +69,7 @@ import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, concatBytes, hexToBytes, randomBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
-import { KEEPER_ALG_SSO_SINGLE, type SealedShare } from './keeper-crypto.js';
+import { KEEPER_ALG_COPY_KEY, KEEPER_ALG_SSO_SINGLE, isCopyKeyHalf, type SealedShare } from './keeper-crypto.js';
 
 // ─── Bytes ─────────────────────────────────────────────────────────────────────────────────
 
@@ -292,11 +310,13 @@ export function isVaultPushToken(value: unknown): value is string {
 export const MAX_VAULT_CLIENT_COPY_CHARS = 8192;
 
 /**
- * Whether `value` has the shape of what `sealSeedToSso` returns: a single-blob sign-in copy of a 32-byte seed. This
- * only stops the vault keeping something no app can open. It is no lock against the vault: the vault sees the `sub` that
- * opens the copy whenever it checks that member's sign-in (see the header).
+ * What a community copy goes by at the vault, where a sign-in's copy says which sign-in. Never a sign-in provider, and
+ * never a provider the vault checks a token for.
  */
-export function isVaultClientCopy(value: unknown): value is SealedShare {
+export const VAULT_COMMUNITY_PROVIDER = 'community';
+
+/** A sealed copy of a 32-byte seed under the scheme `alg`. */
+function isSealedCopyOf(value: unknown, alg: string): value is SealedShare {
     const c = value as Record<string, unknown> | null;
     if (!c || typeof c !== 'object' || Array.isArray(c)) return false;
     const keys = Object.keys(c);
@@ -310,25 +330,84 @@ export function isVaultClientCopy(value: unknown): value is SealedShare {
         || Buffer.from(c.shareTag, 'base64').length !== 16) return false;
     try {
         const params = JSON.parse(c.kdfParams) as Record<string, unknown>;
-        return !!params && params.alg === KEEPER_ALG_SSO_SINGLE;
+        return !!params && params.alg === alg;
     } catch {
         return false;
     }
+}
+
+/**
+ * Whether `value` has the shape of what `sealSeedToSso` returns: a single-blob sign-in copy of a 32-byte seed. This
+ * only stops the vault keeping something no app can open. It is no lock against the vault: the vault sees the `sub` that
+ * opens the copy whenever it checks that member's sign-in (see the header).
+ */
+export function isVaultClientCopy(value: unknown): value is SealedShare {
+    return isSealedCopyOf(value, KEEPER_ALG_SSO_SINGLE);
+}
+
+/**
+ * Whether `value` has the shape of what `sealSeedToCopyKey` makes: a community copy of a 32-byte seed. Unlike a sign-in
+ * copy this one IS a lock against the vault: the key that opens it is in two halves, and the vault holds one.
+ */
+export function isVaultCommunityCopy(value: unknown): value is SealedShare {
+    return isSealedCopyOf(value, KEEPER_ALG_COPY_KEY);
+}
+
+/** A label for a community as the vault keeps it: 16 bytes of base64url ({@link vaultCommunityRef}). */
+export function isVaultCommunityRef(value: unknown): value is string {
+    const b = vaultUnb64(value, 16);
+    return !!b && b.length === 16;
+}
+
+/**
+ * The member's own label for the community with node key `nodeKey`: derived from their seed, so only their own phones
+ * can make it, and it means nothing to the vault. The status names a community copy by it, and a delete asks for it, so
+ * the phone can tell its copies apart without the vault ever being told which community each is for.
+ */
+export function vaultCommunityRef(seed: Uint8Array, nodeKey: string): string {
+    if (!isVaultKeyHex(nodeKey)) throw new Error('A community is named by its 64-character hex node key.');
+    if (seed.length !== 32) throw new Error('A label is made from a 32-byte seed.');
+    return vaultB64(hkdf(sha256, seed, undefined, utf8ToBytes(`beanpool-vault-community-ref/1\n${nodeKey}`), 16));
 }
 
 function depositAad(memberKey: string, provider: string): Uint8Array {
     return utf8ToBytes(`${VAULT_DEPOSIT_TAG}\n${memberKey}\n${provider}`);
 }
 
+/** What a community copy's deposit holds besides the copy (see the header). */
+export interface VaultCommunityDeposit {
+    /** The community's Ed25519 node key (hex). Read by the keyholder alone, to make the row's index, and not kept. */
+    nodeKey: string;
+    /** The vault's half of the key that opens the copy. */
+    half: string;
+    /** The member's own label for this community ({@link vaultCommunityRef}). */
+    ref: string;
+}
+
+function isCommunityDeposit(value: unknown): value is VaultCommunityDeposit {
+    const c = value as Record<string, unknown> | null;
+    return !!c && typeof c === 'object' && !Array.isArray(c) && Object.keys(c).length === 3
+        && isVaultKeyHex(c.nodeKey) && isCopyKeyHalf(c.half) && isVaultCommunityRef(c.ref);
+}
+
 export interface VaultDepositContents {
     clientCopy: SealedShare;
     /** This device's Expo push token, for the vault's notices (design §1.5). */
     pushToken?: string;
+    /** On a community copy (`provider: 'community'`) and only there. */
+    community?: VaultCommunityDeposit;
+}
+
+/** Whether `copy` and `community` are what a deposit for `provider` holds: one kind's fields, never the other's. */
+function depositHolds(provider: string, copy: unknown, community: unknown): boolean {
+    return provider === VAULT_COMMUNITY_PROVIDER
+        ? isVaultCommunityCopy(copy) && isCommunityDeposit(community)
+        : isVaultClientCopy(copy) && community === undefined;
 }
 
 /**
- * The phone's deposit box: `{clientCopy, pushToken?}` sealed to the vault's deposit key (base64url, pinned in the
- * app) for `memberKey` and `provider`.
+ * The phone's deposit box: `{clientCopy, pushToken?}`, and `community` for a community copy, sealed to the vault's
+ * deposit key (base64url, pinned in the app) for `memberKey` and `provider`.
  */
 export function sealVaultDepositBox(
     contents: VaultDepositContents, depositPublicKey: string, memberKey: string, provider: string,
@@ -336,9 +415,15 @@ export function sealVaultDepositBox(
     const recipient = vaultUnb64(depositPublicKey, 32);
     if (!recipient || recipient.length !== 32) throw new Error('The vault deposit key is not a 32-byte base64url key.');
     if (!isVaultKeyHex(memberKey)) throw new Error('A deposit names a 64-character hex member key.');
-    if (!isVaultClientCopy(contents.clientCopy)) throw new Error('A deposit holds a single-blob sign-in copy.');
+    if (!depositHolds(provider, contents.clientCopy, contents.community)) {
+        throw new Error(provider === VAULT_COMMUNITY_PROVIDER ? 'A community deposit holds a community copy, its half and its community.' : 'A deposit holds a single-blob sign-in copy.');
+    }
     if (contents.pushToken !== undefined && !isVaultPushToken(contents.pushToken)) throw new Error('That is not an Expo push token.');
-    const body = contents.pushToken ? { clientCopy: contents.clientCopy, pushToken: contents.pushToken } : { clientCopy: contents.clientCopy };
+    const body = {
+        clientCopy: contents.clientCopy,
+        ...(contents.pushToken ? { pushToken: contents.pushToken } : {}),
+        ...(contents.community ? { community: contents.community } : {}),
+    };
     const box = sealToX25519(recipient, utf8ToBytes(JSON.stringify(body)), VAULT_DEPOSIT_TAG, depositAad(memberKey, provider));
     return { v: 1, kid: vaultDepositKeyId(recipient), epk: box.epk, n: box.n, ct: box.ct };
 }
@@ -354,14 +439,16 @@ export function openVaultDepositBox(box: unknown, depositSecret: Uint8Array, mem
     } finally {
         plain.fill(0);
     }
-    if (!parsed || typeof parsed !== 'object' || Object.keys(parsed).some(k => k !== 'clientCopy' && k !== 'pushToken')) {
+    if (!parsed || typeof parsed !== 'object' || Object.keys(parsed).some(k => k !== 'clientCopy' && k !== 'pushToken' && k !== 'community')) {
         throw new Error('The deposit box holds something other than a copy and a push token.');
     }
-    if (!isVaultClientCopy(parsed.clientCopy)) throw new Error('The deposit box does not hold a single-blob sign-in copy.');
+    if (!depositHolds(provider, parsed.clientCopy, parsed.community)) throw new Error('The deposit box does not hold the copy this kind of deposit keeps.');
     if (parsed.pushToken !== undefined && !isVaultPushToken(parsed.pushToken)) throw new Error('The deposit box holds a push token that is not Expo\'s.');
-    return parsed.pushToken === undefined
-        ? { clientCopy: parsed.clientCopy }
-        : { clientCopy: parsed.clientCopy, pushToken: parsed.pushToken as string };
+    return {
+        clientCopy: parsed.clientCopy as SealedShare,
+        ...(parsed.pushToken === undefined ? {} : { pushToken: parsed.pushToken as string }),
+        ...(parsed.community === undefined ? {} : { community: parsed.community as VaultCommunityDeposit }),
+    };
 }
 
 function releaseAad(requesterKey: string): Uint8Array {
@@ -373,6 +460,8 @@ export interface VaultReleaseContents {
     /** The BeanPool key the copy belongs to. A device saves the opened seed only if it makes this key. */
     pubkey: string;
     clientCopy: SealedShare;
+    /** On a community copy: the vault's half of the key that opens it. The phone joins it to the community's. */
+    half?: string;
 }
 
 /** The vault's release: the copy sealed to the restoring device's hex Ed25519 key. */
@@ -384,7 +473,10 @@ export function sealVaultRelease(contents: VaultReleaseContents, requesterKey: s
     } catch {
         throw new Error('The restoring key is not an Ed25519 point.');
     }
-    const body = { provider: contents.provider, pubkey: contents.pubkey, clientCopy: contents.clientCopy };
+    const body = {
+        provider: contents.provider, pubkey: contents.pubkey, clientCopy: contents.clientCopy,
+        ...(contents.half === undefined ? {} : { half: contents.half }),
+    };
     return sealToX25519(recipient, utf8ToBytes(JSON.stringify(body)), VAULT_RELEASE_TAG, releaseAad(requesterKey));
 }
 
@@ -401,10 +493,118 @@ export function openVaultRelease(box: unknown, requesterPrivateKey: Uint8Array):
         secret.fill(0);
     }
     const parsed = JSON.parse(Buffer.from(plain).toString('utf8')) as Record<string, unknown>;
-    if (typeof parsed.provider !== 'string' || !isVaultKeyHex(parsed.pubkey) || !isVaultClientCopy(parsed.clientCopy)) {
-        throw new Error('The release does not hold a copy.');
+    if (typeof parsed.provider !== 'string' || !isVaultKeyHex(parsed.pubkey)) throw new Error('The release does not hold a copy.');
+    if (parsed.provider === VAULT_COMMUNITY_PROVIDER) {
+        if (!isVaultCommunityCopy(parsed.clientCopy) || !isCopyKeyHalf(parsed.half)) throw new Error('The release does not hold a community copy and its half.');
+        return { provider: parsed.provider, pubkey: parsed.pubkey, clientCopy: parsed.clientCopy, half: parsed.half };
     }
+    if (!isVaultClientCopy(parsed.clientCopy)) throw new Error('The release does not hold a copy.');
     return { provider: parsed.provider, pubkey: parsed.pubkey, clientCopy: parsed.clientCopy };
+}
+
+// ─── Vouchers (a community copy's restore) ─────────────────────────────────────────────────
+
+export const VAULT_VOUCHER_TAG = 'beanpool-vault-voucher/1';
+/** The most a voucher may live: a bring-back code's day. Far short of how long the vault keeps a hold (a week). */
+export const VAULT_VOUCHER_TTL_MS = 24 * 60 * 60 * 1000;
+/** Longer than any voucher a node makes (about 500 characters). */
+const MAX_VOUCHER_CHARS = 1024;
+
+/**
+ * The community's statement to the vault: its admin saw `member` in person and typed the number shown on the phone
+ * holding `phone`, so that key may ask for `member`'s community copy. Signed by the community's node key `community`:
+ *
+ *   voucher   = base64url(payload JSON) "." base64url(signature)
+ *   signature = Ed25519(nodeKey, utf8("beanpool-vault-voucher/1\n" base64url(payload JSON)))
+ *
+ * It travels from the node to the phone to the vault, and the vault never calls the node. It is not a secret: only the
+ * key it names can use it, and the vault answers it for that key alone. `copy` is {@link vaultCopyDigest} of the copy the
+ * community's half belongs to, so a half that no longer matches the vault's copy is said at once, not after a day's
+ * wait. One voucher is one hold, whatever is done with it after ({@link vaultVoucherHoldId}): sending it again gets that
+ * same hold, so a Stop stays a Stop until the voucher has expired.
+ */
+export interface VaultVoucher {
+    v: 1;
+    /** The community's Ed25519 node key (hex): the key that signs. */
+    community: string;
+    /** The member's key (hex): whose copy. */
+    member: string;
+    /** The key of the phone being brought back (hex), which must sign the restore. */
+    phone: string;
+    /** {@link vaultCopyDigest} of the copy the community's half belongs to. */
+    copy: string;
+    /** Milliseconds since the epoch. */
+    exp: number;
+}
+
+/** The payload's one JSON spelling: fields in this order, no spaces. */
+export function vaultVoucherPayloadText(v: VaultVoucher): string {
+    return JSON.stringify({ v: v.v, community: v.community, member: v.member, phone: v.phone, copy: v.copy, exp: v.exp });
+}
+
+/** The payload in its wire form, and the bytes a node key signs over it. */
+export function vaultVoucherToSign(v: VaultVoucher): { payloadB64: string; bytes: Uint8Array } {
+    const payloadB64 = vaultB64(utf8ToBytes(vaultVoucherPayloadText(v)));
+    return { payloadB64, bytes: utf8ToBytes(`${VAULT_VOUCHER_TAG}\n${payloadB64}`) };
+}
+
+/** A voucher from its payload and the node key's signature over {@link vaultVoucherToSign}'s bytes. */
+export function joinVaultVoucher(payloadB64: string, signature: Uint8Array): string {
+    return `${payloadB64}.${vaultB64(signature)}`;
+}
+
+/** The hold one voucher opens, and no other: the same id every time it is sent. A hash of the payload, spelt as a hold's id is. */
+export function vaultVoucherHoldId(payloadB64: string): string {
+    return vaultB64(sha256(utf8ToBytes(`${VAULT_VOUCHER_TAG}\n${payloadB64}`)).slice(0, 16));
+}
+
+/** A voucher read back into its parts, or null when it is not one (in shape; the signature is not checked here). */
+export function parseVaultVoucher(voucher: unknown): { payload: VaultVoucher; payloadB64: string; signature: Uint8Array } | null {
+    if (typeof voucher !== 'string' || voucher.length > MAX_VOUCHER_CHARS) return null;
+    const dot = voucher.indexOf('.');
+    if (dot <= 0 || dot !== voucher.lastIndexOf('.')) return null;
+    const payloadB64 = voucher.slice(0, dot);
+    const payloadBytes = vaultUnb64(payloadB64, 512);
+    const signature = vaultUnb64(voucher.slice(dot + 1), 64);
+    if (!payloadBytes || !signature || signature.length !== 64) return null;
+    let raw: unknown;
+    try {
+        raw = JSON.parse(Buffer.from(payloadBytes).toString('utf8'));
+    } catch {
+        return null;
+    }
+    const p = raw as Record<string, unknown>;
+    if (!p || typeof p !== 'object' || p.v !== 1 || !isVaultKeyHex(p.community) || !isVaultKeyHex(p.member) || !isVaultKeyHex(p.phone)
+        || typeof p.copy !== 'string' || vaultUnb64(p.copy, 32)?.length !== 32 || typeof p.exp !== 'number' || !Number.isSafeInteger(p.exp)) {
+        return null;
+    }
+    const payload: VaultVoucher = { v: 1, community: p.community, member: p.member, phone: p.phone, copy: p.copy, exp: p.exp };
+    // One spelling per voucher, as a ticket: anything but the canonical JSON is not one a node signed.
+    if (vaultVoucherPayloadText(payload) !== Buffer.from(payloadBytes).toString('utf8')) return null;
+    return { payload, payloadB64, signature };
+}
+
+export type VaultVoucherRefusal = 'malformed' | 'signature' | 'expired' | 'wrong_key';
+export type VaultVoucherCheck = { ok: true; voucher: VaultVoucher; holdId: string } | { ok: false; reason: VaultVoucherRefusal };
+
+/**
+ * Whether `voucher` is signed by the node key it names, unexpired, no longer-lived than a code's day, for the key `key`.
+ * Whether that node key means anything here is the vault's own index: a key it has no copy under finds nothing.
+ */
+export function checkVaultVoucher(voucher: unknown, opts: { now: number; key: string }): VaultVoucherCheck {
+    const parsed = parseVaultVoucher(voucher);
+    if (!parsed) return { ok: false, reason: 'malformed' };
+    let valid = false;
+    try {
+        valid = ed25519.verify(parsed.signature, utf8ToBytes(`${VAULT_VOUCHER_TAG}\n${parsed.payloadB64}`), hexToBytes(parsed.payload.community), { zip215: false });
+    } catch {
+        valid = false;
+    }
+    if (!valid) return { ok: false, reason: 'signature' };
+    if (parsed.payload.exp <= opts.now) return { ok: false, reason: 'expired' };
+    if (parsed.payload.exp > opts.now + VAULT_VOUCHER_TTL_MS + VAULT_TICKET_CLOCK_SKEW_MS) return { ok: false, reason: 'malformed' };
+    if (parsed.payload.phone !== opts.key) return { ok: false, reason: 'wrong_key' };
+    return { ok: true, voucher: parsed.payload, holdId: vaultVoucherHoldId(parsed.payloadB64) };
 }
 
 // ─── Signed answers ────────────────────────────────────────────────────────────────────────
@@ -438,13 +638,16 @@ export type VaultAnswerKind =
     | 'receipt'
     /** A copy handed out: `provider`, `pubkey` (the account's key) and `box` (the release sealed to `key`). */
     | 'release'
-    /** `/v1/copies/status`: `copies` (each `provider`, `lastReleasedAt`, `since`, and the same day as `updatedDay`) and `holds`. */
+    /**
+     * `/v1/copies/status`: `copies` (each `provider`, `lastReleasedAt`, `since`, and the same day as `updatedDay`; a community
+     * copy also its `community`, the member's label, and `copy`, {@link vaultCopyDigest}) and `holds`.
+     */
     | 'status'
     /** `/v1/copies/delete`: `deleted`, how many copies went. */
     | 'deleted'
     /** `/v1/push-token` and `/remove`: `updated`. */
     | 'push-token'
-    /** `/v1/restore`: `status` (held), `holdId`, `until`. */
+    /** `/v1/restore`: `status` (held, with `holdId` and `until`; or, for a voucher whose hold was stopped, stopped). */
     | 'restore'
     /** `/v1/restore/collect` short of a release: `status` (held or stopped), `until`. */
     | 'collect'

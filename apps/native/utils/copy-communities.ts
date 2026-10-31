@@ -11,7 +11,7 @@
  * Off, the copy is exactly what it was before lists. A copy made before lists restores exactly as before.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { CopyCommunity } from '@beanpool/core';
+import { copyCommunityUrl, type CopyCommunity } from '@beanpool/core';
 import { addSavedNode, getSavedNodes } from './nodes';
 import { isPlainNodeAddress } from './node-url';
 import { copyListsCommunitiesStoreKey } from './storage-keys';
@@ -46,7 +46,7 @@ export async function communitiesOnPhoneForCopy(): Promise<CopyCommunity[]> {
     try {
         const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
         const saved = await getSavedNodes();
-        const ordered = [...saved].sort((a, b) => (a.url === anchor ? -1 : b.url === anchor ? 1 : 0));
+        const ordered = [...saved.filter((n) => n?.url === anchor), ...saved.filter((n) => n?.url !== anchor)];
         return ordered
             .filter((n) => n && typeof n.url === 'string' && isPlainNodeAddress(n.url))
             .map((n) => ({ name: n.alias?.trim() || hostOf(n.url), url: n.url }));
@@ -76,10 +76,12 @@ export async function saveCommunitiesFromCopy(list: readonly CopyCommunity[] | n
     try {
         const saved = new Set((await getSavedNodes()).map((n) => n.url.toLowerCase()));
         for (const c of list) {
-            if (!c || typeof c.url !== 'string' || !isPlainNodeAddress(c.url) || saved.has(c.url.toLowerCase())) continue;
+            // A community's address and nothing more (core copyCommunityUrl: no path, no user part), and plain for the phone.
+            const url = copyCommunityUrl(c?.url);
+            if (!url || !isPlainNodeAddress(url) || saved.has(url.toLowerCase())) continue;
             try {
-                await addSavedNode(c.url, c.name?.trim() || undefined);
-                saved.add(c.url.toLowerCase());
+                await addSavedNode(url, c.name?.trim() || undefined);
+                saved.add(url.toLowerCase());
                 added++;
             } catch {
                 // Not a plain address after all: skipped, the rest still saved.

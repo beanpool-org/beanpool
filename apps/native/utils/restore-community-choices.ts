@@ -9,7 +9,7 @@
  * typed.
  */
 import { GLOBAL_NODE_URL } from './global-node-url';
-import type { CopyCommunity } from '@beanpool/core';
+import { copyCommunityUrl, type CopyCommunity } from '@beanpool/core';
 import { isPlainNodeAddress, normalizeNodeUrl } from './node-url';
 import type { SavedNode } from './nodes';
 
@@ -64,11 +64,13 @@ export function withCopyCommunities(
     const out = [...saved];
     const seen = new Set(saved.filter((n) => n && typeof n.url === 'string').map((n) => sameAddress(n.url)));
     for (const c of fromCopy ?? []) {
-        if (!c || typeof c.url !== 'string' || !isPlainNodeAddress(c.url)) continue;
-        const key = sameAddress(c.url);
+        // A community's address and nothing more (core copyCommunityUrl: no path, no user part), as the phone saves one.
+        const url = copyCommunityUrl(c?.url);
+        if (!url || !isPlainNodeAddress(url)) continue;
+        const key = sameAddress(url);
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ url: c.url, ...(c.name?.trim() ? { alias: c.name.trim() } : {}) });
+        out.push({ url, ...(c.name?.trim() ? { alias: c.name.trim() } : {}) });
     }
     return out;
 }

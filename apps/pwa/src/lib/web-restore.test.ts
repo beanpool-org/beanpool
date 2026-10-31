@@ -210,6 +210,19 @@ describe('the copy is saved only when it opens to the account the lookup named',
         expect(r.kind === 'ok' && r.identity.mnemonic).toBeUndefined();
     });
 
+    it("a copy with the member's list of communities gives it back with the account; one without, none (VR5)", async () => {
+        const list = [{ name: 'Mullumbimby', url: 'https://mullum.beanpool.org' }, { name: 'Castlemaine', url: 'https://castlemaine.beanpool.org' }];
+        const withList = await sealSeedToSso(toEd25519Seed(hexToBytes(account.privateKey)), 'google', 'g-sub-1', {
+            words: account.mnemonic ?? null, communities: list,
+        });
+        const r = await openRestoredAccount(withList, 'google', 'g-sub-1', { publicKey: account.publicKey, callsign: 'Alice' });
+        expect(r.kind === 'ok' && r.communities).toEqual(list);
+        expect(r.kind === 'ok' && r.identity.mnemonic).toEqual(account.mnemonic);
+        const without = await openRestoredAccount(await sealed(account, 'google', 'g-sub-1'), 'google', 'g-sub-1', { publicKey: account.publicKey, callsign: 'Alice' });
+        expect(without.kind === 'ok' && without.communities).toEqual([]);
+        expect(without.kind === 'ok' && without.identity.publicKey).toBe(account.publicKey);
+    });
+
     it('another sign-in does not open it', async () => {
         const copy = await sealed(account, 'google', 'g-sub-1');
         expect(await openRestoredAccount(copy, 'google', 'g-sub-2', { publicKey: account.publicKey, callsign: 'Alice' })).toEqual({ kind: 'unreadable' });

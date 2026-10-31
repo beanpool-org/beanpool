@@ -9,7 +9,8 @@
  * typed.
  */
 import { GLOBAL_NODE_URL } from './global-node-url';
-import { normalizeNodeUrl } from './node-url';
+import { copyCommunityUrl, t, type CopyCommunity } from '@beanpool/core';
+import { isPlainNodeAddress, normalizeNodeUrl } from './node-url';
 import type { SavedNode } from './nodes';
 
 /** One chip: the global community, or a community saved on this phone, with the address it puts in the field. */
@@ -53,6 +54,28 @@ export function restoreCommunityChoices(saved: readonly SavedNode[], globalUrl: 
 }
 
 /**
+ * The phone's saved communities, then each community a restored copy listed that the phone hasn't saved (vault rethink
+ * VR5, utils/copy-communities.ts), by the name the copy gives it: what a restore from such a copy offers to open the
+ * account in. A copy without a list leaves the saved list exactly as it is. Nothing is saved here.
+ */
+export function withCopyCommunities(
+    saved: readonly SavedNode[], fromCopy: readonly CopyCommunity[] | null | undefined,
+): SavedNode[] {
+    const out = [...saved];
+    const seen = new Set(saved.filter((n) => n && typeof n.url === 'string').map((n) => sameAddress(n.url)));
+    for (const c of fromCopy ?? []) {
+        // A community's address and nothing more (core copyCommunityUrl: no path, no user part), as the phone saves one.
+        const url = copyCommunityUrl(c?.url);
+        if (!url || !isPlainNodeAddress(url)) continue;
+        const key = sameAddress(url);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ url, ...(c.name?.trim() ? { alias: c.name.trim() } : {}) });
+    }
+    return out;
+}
+
+/**
  * Which chip the field shows chosen: the one whose address it holds, `another` for any other address typed, or null for
  * an empty field (nothing chosen yet).
  */
@@ -60,4 +83,46 @@ export function chosenRestoreChoice(typed: string, choices: readonly RestoreChoi
     if (!typed.trim()) return null;
     const key = sameAddress(typed);
     return choices.find((c) => sameAddress(c.url) === key) ?? 'another';
+}
+
+/**
+ * What the sign-in restore's "Which community?" field holds, for the lines that say so (vault rethink VR5; #2660 review
+ * finding 3): the global community it starts with, the copy's first community it was filled with (by the copy's name for
+ * it), or something else the member typed or picked. Never "the global community" for a field that holds another.
+ */
+export function releaseFieldHolds(
+    field: string, fromCopy: CopyCommunity | null | undefined, globalUrl: string = GLOBAL_NODE_URL,
+): { kind: 'global' } | { kind: 'copy'; name: string } | { kind: 'other' } {
+    const key = sameAddress(field);
+    const copyUrl = copyCommunityUrl(fromCopy?.url);
+    if (copyUrl && field.trim() && key === sameAddress(copyUrl)) {
+        let host = copyUrl;
+        try { host = new URL(copyUrl).host; } catch { /* shown as given */ }
+        return { kind: 'copy', name: fromCopy?.name?.trim() || host };
+    }
+    if (field.trim() && key === sameAddress(globalUrl)) return { kind: 'global' };
+    return { kind: 'other' };
+}
+
+/** The line under that field and its screen-reader hint, naming what the field really holds (`releaseFieldHolds`). */
+export function releaseFieldHints(
+    field: string, fromCopy: CopyCommunity | null | undefined, globalUrl: string = GLOBAL_NODE_URL,
+): { hint: string; a11y: string } {
+    const holds = releaseFieldHolds(field, fromCopy, globalUrl);
+    if (holds.kind === 'copy') {
+        return {
+            hint: t('{community}, from your copy, is filled in. To open your account in another community, pick it above or type its name or address. Your name and picture come back from it.', { community: holds.name }),
+            a11y: t("{community}, from your copy, is filled in. Enter your community's name, like mullum, or its full address", { community: holds.name }),
+        };
+    }
+    if (holds.kind === 'global') {
+        return {
+            hint: t('The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.'),
+            a11y: t("The global community is filled in. Enter your community's name, like mullum, or its full address"),
+        };
+    }
+    return {
+        hint: t("Type your community's name or address, or pick one above. Your name and picture come back from it."),
+        a11y: t("Enter your community's name, like mullum, or its full address"),
+    };
 }

@@ -73,7 +73,7 @@ describe('PhoneSignIn — the QR card', () => {
         render(<PhoneSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />);
         await screen.findByTestId('phone-signin-qr');
         const text = screen.getByTestId('phone-signin').textContent!.replace(/\s+/g, ' ');
-        expect(text).toContain('open Settings → Manage this community from a computer and scan this code');
+        expect(text).toContain('Scan it inside the BeanPool app, not with the phone\'s camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”');
         expect(text).toContain("A moderator's app says Moderate this community from a computer");
         expect(text).toContain('older apps say Sign in on a computer');
     });

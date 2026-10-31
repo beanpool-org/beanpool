@@ -474,7 +474,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     };
 
     const editValues = (): EventEditValues => ({
-        title, description, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
+        title, description, tags, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
         online, link, tz: zone.tz, tzOffsetMinutes: zoneOffset,
         hostLetsIn, repeat, repeatUntil,
     });
@@ -491,15 +491,14 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             Alert.alert(t('Almost there'), t('Add a photo first'));
             return;
         }
-        const patch: any = { ...editCheck.patch, tags };
-        if (Object.keys(editCheck.patch).length === 0 && tags.join(' ') === ((editOf.values as any).tags ? (Array.isArray((editOf.values as any).tags) ? (editOf.values as any).tags.join(' ') : (editOf.values as any).tags) : '')) {
+        if (Object.keys(editCheck.patch).length === 0) {
             onClose();
             return;
         }
         setSubmitting(true);
         try {
             const out: { eventTimeAdjusted?: any } = {};
-            const saved = await updateEvent(editOf.id, patch, out);
+            const saved = await updateEvent(editOf.id, editCheck.patch, out);
             const dst = eventTimeAdjustedText(out.eventTimeAdjusted, zone.tz);
             // The node's word on UPDATED: a new zone with the same offset (Lagos → Kinshasa) moves no instant, so it marks
             // nothing and tells nobody (#1946 review, finding 6).

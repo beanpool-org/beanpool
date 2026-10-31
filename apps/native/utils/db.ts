@@ -2580,10 +2580,14 @@ export async function updateEvent(postId: string, patch: EventEditPatch, out?: {
         try {
             const database = await waitForInit();
             const photos = Array.isArray(post.photos) ? JSON.stringify(post.photos.filter((u: string) => !u.startsWith('file://'))) : null;
-            const tags = post.tags != null ? (Array.isArray(post.tags) ? post.tags.join(' ') : post.tags) : null;
+            const tagsVal = patch.tags !== undefined
+                ? (Array.isArray(patch.tags) ? patch.tags.join(' ') : '')
+                : (post.tags != null ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : null);
+            const tagsSql = tagsVal !== null ? ', tags = ?' : '';
+            const tagsArg = tagsVal !== null ? [tagsVal] : [];
             await database.runAsync(
-                `UPDATE posts SET title = ?, description = ?, lat = ?, lng = ?, photos = COALESCE(?, photos), tags = COALESCE(?, tags) WHERE id = ?`,
-                [post.title ?? null, post.description ?? '', post.lat ?? null, post.lng ?? null, photos, tags, post.id]
+                `UPDATE posts SET title = ?, description = ?, lat = ?, lng = ?, photos = COALESCE(?, photos)${tagsSql} WHERE id = ?`,
+                [post.title ?? null, post.description ?? '', post.lat ?? null, post.lng ?? null, photos, ...tagsArg, post.id]
             );
         } catch (dbErr) {
             console.warn('[SQLite] Failed to cache the edited event:', dbErr);

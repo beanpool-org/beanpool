@@ -3,6 +3,8 @@
  * reads, what it sends, what it says, and what is kept for later. Both communities are fakes here;
  * bring-listings-e2e.test.ts runs the same code against two real nodes.
  */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mem = vi.hoisted(() => new Map<string, string>());
@@ -394,6 +396,39 @@ describe('what the new community answers', () => {
         expect(deps.post).toHaveBeenCalledTimes(1);
         expect(result).toEqual({ brought: 0, lines: [{ kind: 'held', reason: words }], kept: false, held: true });
         expect(bringLineWords(result.lines[0], 'Mullumbimby')).toBe(words);
+    });
+});
+
+describe('every way a member joins a community', () => {
+    const NATIVE = path.resolve(__dirname, '../..');
+    /** The source without comments, as community-switch-sweep.test.ts reads it. */
+    const source = (file: string) => fs.readFileSync(path.join(NATIVE, file), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const redeems = (text: string) => text.split('redeemInvite(').length - 1;
+
+    it('from another community, it notes the offer: a tapped invite link redeems by itself', () => {
+        const layout = source('app/_layout.tsx');
+        const link = layout.slice(layout.indexOf("t('Switch & Join')"), layout.indexOf('showUnregisteredMemberDialog'));
+        expect(redeems(link)).toBe(1);
+        expect(link).toMatch(/noteBringOffer\(\{[^}]*from: current[^}]*to: targetOrigin/);
+        expect(source('utils/join-another-community.ts')).toMatch(/noteBringOffer\?\.\(\{[^}]*from: opts\.returnUrl/);
+        expect(source('utils/global-join-existing.ts')).toMatch(/noteBringOffer\?\.\(\{[\s\S]{0,120}to: options\.at\.url/);
+    });
+
+    // A new one fails here until it is decided: a join that moves the phone notes the offer, as the ones above do.
+    it('the only other redeems are on the community the phone is already on, or a phone in no community: nowhere to bring from', () => {
+        expect(Object.fromEntries(['app/(tabs)/people.tsx', 'app/(tabs)/settings.tsx', 'app/_layout.tsx', 'app/welcome.tsx', 'utils/join-another-community.ts']
+            .map((file) => [file, redeems(source(file))]))).toEqual({
+            // A guest here, redeeming here.
+            'app/(tabs)/people.tsx': 1,
+            'app/(tabs)/settings.tsx': 1,
+            // Switch & Join, and Join Node for the community the link names when the phone is on it.
+            'app/_layout.tsx': 2,
+            // The join wizard: no community yet.
+            'app/welcome.tsx': 2,
+            // Its one redeem, and the type of its deps.
+            'utils/join-another-community.ts': 2,
+        });
     });
 });
 

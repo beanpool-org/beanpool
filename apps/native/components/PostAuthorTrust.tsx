@@ -65,7 +65,7 @@ export function PostAuthorTrust({ pubkey, callsign, energyCycled = 0, avatarUrl,
                     onPress: handlePress,
                     accessibilityRole: 'button' as const,
                     accessibilityLabel: t("View {name}'s profile", { name: callsign }),
-                    hitSlop: { top: 13, bottom: 13, left: 8, right: 8 },
+                    hitSlop: { top: 4, bottom: 22, left: 8, right: 8 },
                     testID: 'author-chip',
                 } : {})}
                 style={styles.compactContainer}

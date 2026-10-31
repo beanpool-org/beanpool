@@ -30,3 +30,4 @@ RULES FOR THIS HEADLESS RUN
   bug, say so explicitly instead of changing it.
 - FINAL REPORT: real `git status`, `git log --oneline origin/main..HEAD`, the PR as `gh pr list --head <branch>`
   shows it, test output before/after where relevant, and anything unfinished stated plainly.
+- **While a full run holds the heavy-test lock, wait before ANY install, tsc, vitest, node test suite, build or browser run** (Marty): `while [ -d /Users/marty/.cache/heavy-test.lock ]; do sleep 30; done; <your command>` in the SAME shell. It only waits; never take or remove the lock. Reading, editing, commits, pushes and git/gh calls do not wait.

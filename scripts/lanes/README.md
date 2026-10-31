@@ -13,9 +13,9 @@ not repeat them; the code comments name the incident behind each rule.
 | File | What it is |
 |---|---|
 | `lib.sh` | The library. Source it from a run script. Stages for both backends, watchdog, gates, land, deploy, process-tree and worktree helpers. |
-| `decide.sh` | Deciding reviews: one at a time, behind a machine-wide lock, probing the model first. `lib.sh` sources it. |
+| `decide.sh` | Deciding reviews: they wait for GitHub on the PR's head, then run one at a time behind a machine-wide lock, probing the model first. `lib.sh` sources it. |
 | `start.sh` | Runs `run-<lane>.sh` in the foreground under `caffeinate -i`, logging to `scratch/lanes/log-<lane>.txt`. |
-| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, or when all lanes have stopped. |
+| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, left a PR unreviewed because GitHub was not green, or when all lanes have stopped. |
 | `stop.sh` | Stops lanes now, killing each lane's whole process tree. |
 | `stop-at-boundary.sh` | Lets each lane finish its current stage, then stops it as a FIX, SYNC or deciding stage starts. |
 | `sweep-orphans.sh` | Lists (or `--kill`s) test runners reparented to launchd that are more than an hour old. |
@@ -36,7 +36,7 @@ sit beside them. Worktrees go in `.claude/worktrees/lane-<lane>`, which is also 
 source "$(git -C "${0:A:h}" rev-parse --show-toplevel)/scripts/lanes/lib.sh"
 LANE_BUILD_BACKEND=claude            # high-risk build: headless Opus 5. Omit for AGY Flash.
 log "lane S7 — keeper succession"
-item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 2 early passes → deciding pass
+item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 2 early passes → GitHub green → deciding pass
 [ "$CLEAN" = 1 ] && land "$PR"          # CI green, then HELD unless LANE_MERGE=1
 log "LANE S7 DONE (clean=$CLEAN merged=$MERGED)"
 ```
@@ -53,8 +53,9 @@ stage). Afterwards, run `scripts/lanes/sweep-orphans.sh` and, once a worktree is
 `scripts/lanes/remove-worktree.sh .claude/worktrees/lane-s7`.
 
 The building blocks are `stage NAME TIMEOUT BRIEF [ROLE]`, `cont`, `item`, `review`, `decide_review`,
-`decide_pass PR BRANCH`, `sync_main`, `land PR [hold]`, `merge_if_clean`, `deploy_main NODE SYMBOL [LABEL]`,
-`count`, `prnum` and `gh_try`. The comment above each function describes its contract.
+`decide_pass PR BRANCH`, `ci_gate PR BRANCH`, `sync_main`, `land PR [hold]`, `merge_if_clean`,
+`deploy_main NODE SYMBOL [LABEL]`, `count`, `prnum`, `pr_head`, `ci_head_state SHA` and `gh_try`. The comment above each
+function describes its contract.
 
 ## Backends and models
 
@@ -83,6 +84,19 @@ gate counts it as clean.
 
 ## Gates
 
+- A deciding pass waits for the required check on the PR's exact head, outside the deciding slot; every path to one goes
+  through `decide_review`, so `land()`'s post-sync pass and a run script's own confirmation pass wait too. Early passes
+  do not wait.
+  - **Green:** the pass runs, and its brief names the head. The head is checked again once the slot is held.
+  - **Red:** no pass. Up to `LANE_GREEN_FIXES` (2) `FIX-CI-*` stages on the build backend, with each failing check and the
+    command that prints its log, then back to the wait on the pushed head. A red the PR did not cause still counts.
+  - **Pending for 70 polls, cancelled, no run after 15 polls, a fix stage that pushed nothing, or GitHub silent:** no
+    pass. The log says `LEFT FOR THE DIRECTOR` and `watch.sh` wakes.
+  - **Only `.md` files:** `ci.yml` starts no run, so the pass runs at once. Guide pages are the exception: they get a run.
+  - The required job has `needs: shard`, so GitHub creates it only when every shard has finished. A commit with no
+    required check counts as "no run" only if `ci.yml` has no run on it either.
+  - It also has `if: always()`, so a cancelled run still runs it and it reports `failure`. Red therefore also needs the
+    run's own conclusion: a run that says `cancelled` is cancelled, and one still finishing is pending.
 - `count` returns `-1` when GitHub does not answer, after four tries through `gh_try`. Every gate refuses `-1`.
 - A killed, idle-killed, errored or downgraded stage never satisfies a review gate.
 - The idle watchdog kills a stage only when its output has not grown for 45 min **and** no worktree file has
@@ -109,7 +123,8 @@ if both of these hold in the **running** container:
 Every setting is an env var with a default derived from the checkout (see the top of `lib.sh`): `LANE_REPO`,
 `LANE_NAME`, `LANE_BASE`, `LANE_STATE`, `LANE_WT`, `LANE_DEPLOY_WT`, `LANE_LOCK_DIR` (machine-wide, under
 `$TMPDIR`), `LANE_GH_REPO`, `LANE_AGY_BIN`, `LANE_CLAUDE_BIN`, `LANE_BUILD_TIMEOUT` (60m), `LANE_REVIEW_TIMEOUT`
-(40m), `LANE_HEADER_FILE`, and the timing knobs (`LANE_IDLE_OUTPUT_SECS`, `LANE_IDLE_WT_SECS`, `LANE_WAIT_SECS`, …).
+(40m), `LANE_HEADER_FILE`, `LANE_CI_CHECK`, `LANE_CI_WORKFLOW`, and the timing knobs (`LANE_IDLE_OUTPUT_SECS`,
+`LANE_IDLE_WT_SECS`, `LANE_WAIT_SECS`, `LANE_GREEN_TRIES`, `LANE_GREEN_NONE_TRIES`, `LANE_GREEN_SECS`, …).
 
 ## zsh gotchas (each one has broken a lane script)
 

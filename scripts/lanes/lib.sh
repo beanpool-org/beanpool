@@ -70,7 +70,13 @@ fi
 : ${LANE_DECIDE_PROBE_SECS:=900}
 : ${LANE_CI_TRIES:=90}
 : ${LANE_CI_SECS:=60}
-: ${LANE_CI_CHECK_RE:=Test-All}
+: ${LANE_CI_CHECK:=Run BeanPool Test-All Pipeline}   # the check the "Protect main" ruleset requires; one job carries it
+: ${LANE_CI_WORKFLOW:=ci.yml}
+# The wait before a deciding pass, with the limits of scratch/lanes/bin/queue-gates.sh wait_green.
+: ${LANE_GREEN_TRIES:=70}            # a head still pending: polls before it goes to the director
+: ${LANE_GREEN_NONE_TRIES:=15}       # a head with no run at all: polls before it goes to the director
+: ${LANE_GREEN_SECS:=60}
+: ${LANE_GREEN_FIXES:=2}             # fix stages per deciding pass
 : ${LANE_IMAGE_WORKFLOW:=Build and Push Docker Image}
 : ${LANE_IMAGE_TRIES:=40}
 : ${LANE_IMAGE_SECS:=60}
@@ -478,7 +484,48 @@ $(cat "$(lane_brief_path "$4")")" build
 
 sync_main(){ # BRANCH — merge origin/<base> into the branch so GitHub can build the merge ref and CI runs
   stage "SYNC-${1//\//-}" "$LANE_BUILD_TIMEOUT" "SYNC STAGE. Branch $1 (git fetch origin && git checkout $1 in the lane worktree). origin/$LANE_BASE has moved since this branch was created and GitHub cannot build the PR's merge ref, so CI has not run on it. MERGE origin/$LANE_BASE INTO the branch (git merge origin/$LANE_BASE — do NOT rebase; review comments reference these commits). Resolve every conflict so BOTH sides' intent survives: $LANE_BASE carries recent fixes and bot merges, the branch carries its feature — keep both. Then pnpm exec tsc --noEmit in apps/server, run the suites the branch touches, commit the merge, PUSH. Report each conflict and how you resolved it." build; }
-ci_state(){ gh_try gh pr checks "$1" -R "$LANE_GH_REPO" --json name,state --jq ".[]|select(.name|test(\"$LANE_CI_CHECK_RE\"))|.state" | head -1 || true; }
+pr_head(){ gh_try gh pr view "$1" -R "$LANE_GH_REPO" --json headRefOid --jq .headRefOid; }   # PR → its head commit now
+pr_only_md(){ # PR → 0 when ci.yml starts no run for it: every file is Markdown and none is a guide page, which still gets one
+  local f
+  f=$(gh_try gh api "repos/$LANE_GH_REPO/pulls/$1/files" --paginate --jq '.[].filename') || return 1
+  ! print -r -- "$f" | grep -qvE '\.md$' && ! print -r -- "$f" | grep -qE '^packages/beanpool-guide/'; }
+lane_ci_word(){ # "runs: <conclusions>" → green | red | pending | cancelled | none, the same reading as queue-gates.sh
+  case "$1 " in
+    "runs:  ") print none;;
+    *" failure "*|*" timed_out "*|*" startup_failure "*) print red;;
+    *" pending "*) print pending;;
+    *" cancelled "*) print cancelled;;
+    *" success "*) print green;;
+    *) print pending;;
+  esac; }
+ci_head_state(){ # SHA → the required check on exactly that commit: green | red | pending | cancelled | none (no run) | unknown
+  # (GitHub did not answer). "runs:" keeps a reply with no checks non-empty: gh_try reads empty as no answer.
+  local out s r
+  out=$(gh_try gh api "repos/$LANE_GH_REPO/commits/$1/check-runs?check_name=${LANE_CI_CHECK// /%20}&filter=latest" \
+        --jq '[.check_runs[] | (.conclusion // "pending")] | "runs: " + join(" ")') || { print unknown; return; }
+  s=$(lane_ci_word "$out")
+  if [ "$s" = none ] || [ "$s" = red ]; then
+    # The required job has `needs: shard`, so GitHub creates it only when every shard has finished: 7 min into a live run
+    # on 31 Oct 2026 the commit had 15 check runs and not that one. No required check is "no run" only if the workflow
+    # has no run either. A finished run says nothing for the required check, so it never reads as green.
+    # It also has `if: always()`, so a cancelled run still runs it and it FAILS: 5 of 5 cancelled runs measured on 31 Oct
+    # 2026 had the run cancelled and the required check failure. Red is only a run that finished and failed.
+    out=$(gh_try gh run list -R "$LANE_GH_REPO" --commit "$1" --workflow "$LANE_CI_WORKFLOW" --json status,conclusion \
+          --jq 'map(if .status == "completed" then .conclusion else "pending" end) | "runs: " + join(" ")') || { print unknown; return; }
+    r=$(lane_ci_word "$out")
+    case "$s:$r" in
+      none:green) s=pending;;
+      none:*|red:cancelled|red:pending) s=$r;;
+    esac
+  fi
+  print -r -- "$s"; }
+ci_state(){ # PR → the required check on its head now: SUCCESS | FAILURE | CANCELLED | PENDING | UNKNOWN, empty when no run
+  # started. Not `gh pr checks | head -1`: since the shards, "Test-All" matches every shard too and the first one answered.
+  local sha
+  sha=$(pr_head "$1") || { print UNKNOWN; return; }
+  case "$(ci_head_state "$sha")" in
+    green) print SUCCESS;; red) print FAILURE;; cancelled) print CANCELLED;; pending) print PENDING;; none) ;; *) print UNKNOWN;;
+  esac; }
 
 land(){ # PR [hold] — sync if needed, re-review the sync, wait for CI, merge only when LANE_MERGE=1 and not held
   local pr=$1 hold=$2 br m s b0 b1 n t

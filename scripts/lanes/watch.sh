@@ -4,6 +4,7 @@
 #   NO CAPACITY           a model returned 503 — waiting will not help, switch the model marker
 #   DECIDING REVIEW DOWNGRADED   a deciding pass retried on a fallback model; the PR needs a human read
 #   READY FOR DECIDING REVIEW / HELD   a PR is waiting for the in-session deciding review or the maintainer
+#   NOT REVIEWED          GitHub was not green on a PR's head and the lane has stopped trying; its deciding pass never ran
 #   ALL LANES STOPPED     every lane it saw running has exited
 # Silence is the failure mode: without this, a lane stuck at 02:00 is found at 09:00.
 #
@@ -33,13 +34,14 @@ while :; do
           tail -4 "$f"; exit 0
         fi ;;
     esac
-    ev=$(tail -30 "$f" | grep -E "NO CAPACITY|VERIFY THIS PR BY HAND|ready for the in-session deciding review|HELD for the maintainer" | tail -1)
+    ev=$(tail -30 "$f" | grep -E "NO CAPACITY|VERIFY THIS PR BY HAND|ready for the in-session deciding review|HELD for the maintainer|LEFT FOR THE DIRECTOR" | tail -1)
     if [ -n "$ev" ] && once "$lane $ev"; then
       case "$ev" in
         *"NO CAPACITY"*)                 print "NO CAPACITY on lane $lane at $(date +%H:%M) — switch the model marker";;
         *"VERIFY THIS PR BY HAND"*)      print "DECIDING REVIEW DOWNGRADED on lane $lane at $(date +%H:%M) — the strong model did not answer";;
         *"ready for the in-session"*)    print "READY FOR DECIDING REVIEW on lane $lane at $(date +%H:%M)";;
         *"HELD for the maintainer"*)     print "PR HELD FOR THE MAINTAINER on lane $lane at $(date +%H:%M)";;
+        *"LEFT FOR THE DIRECTOR"*)       print "NOT REVIEWED on lane $lane at $(date +%H:%M) — GitHub not green, PR left for the director";;
       esac
       tail -4 "$f"; exit 0
     fi

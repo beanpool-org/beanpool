@@ -129,9 +129,9 @@ For each community where it keeps half of a copy for your admins (see "Your comm
 - a label only your own phones can read, so the app can tell which community a copy is for;
 - the push addresses of your phones, and the days, as above.
 
-The key vault doesn't know which community that is. It finds out only if that community vouches for you when someone is getting your account back.
+Nothing the key vault keeps says which community that is. It is told when the copy is made, to make that fingerprint, and doesn't keep what it was told. It is told again only if that community vouches for you when someone is getting your account back, and doesn't keep it then either. Anyone with the running vault's secret could still work the community out, by trying each community against the fingerprint.
 
-While someone is getting back in with a sign-in or with a community's word (see "If someone else tries"), it keeps the new phone's one-time key and the times, until 7 days after that ends. When you remove a copy, it keeps a note of the removal for 30 days, with the two fingerprints and the day, so that a restore from an older backup removes the copy again.
+While someone is getting back in with a sign-in or with a community's word (see "If someone else tries"), it keeps the key the phone asked with and the times, until 7 days after that ends. That is a one-time key made for this, unless the phone already holds another account and came with a community's word: then it is the public half of that account's key. When you remove a copy, it keeps a note of the removal for 30 days, with the two fingerprints and the day, so that a restore from an older backup removes the copy again.
 
 It never keeps your name, email, phone number or address, your sign-in account's id itself (only its fingerprint), which communities you are in (except inside the locked copy, and the fingerprint above), or a copy of what it handed back. It never writes down your IP address: to limit abuse, it counts the requests from each address in its memory, and forgets them when it restarts. The totals it signs each day count copies, restores and removals, and say nothing about anyone.
 

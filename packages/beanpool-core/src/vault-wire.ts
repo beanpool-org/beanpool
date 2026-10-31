@@ -44,9 +44,11 @@
  * ({@link vaultCommunityRef}). The other half is at the community's server. So the vault can open nothing, open or not.
  *
  * The node key is inside the box: only the keyholder reads it, for as long as it takes to make the row's keyed index
- * (HMAC under K_index of the node key and the member's key), which is all that is kept. The vault learns which community
- * it is at a restore, from the voucher, and not before. The label is what the member's phone asks about: it is derived
- * from the member's own seed, so it says nothing to the vault, and two members' labels for one community differ.
+ * (HMAC under K_index of the node key and the member's key), which is all that is kept. The API sees it at a restore, in
+ * the voucher, and not before, and keeps it no more than the keyholder did. Node keys are public, so whoever holds K_index
+ * can still test them against an index and find the community: not being kept is all this promises. The label is what the
+ * member's phone asks about: it is derived from the member's own seed, so it says nothing to the vault, and two members'
+ * labels for one community differ.
  *
  * A restore proves itself with a **voucher** ({@link VaultVoucher}), in place of a provider's id_token: the community's
  * statement, signed by its node key, that its admin saw this member in person and that this device's throwaway key
@@ -362,7 +364,7 @@ export function isVaultCommunityRef(value: unknown): value is string {
 /**
  * The member's own label for the community with node key `nodeKey`: derived from their seed, so only their own phones
  * can make it, and it means nothing to the vault. The status names a community copy by it, and a delete asks for it, so
- * the phone can tell its copies apart without the vault ever being told which community each is for.
+ * the phone can tell its copies apart with neither call saying which community each is for.
  */
 export function vaultCommunityRef(seed: Uint8Array, nodeKey: string): string {
     if (!isVaultKeyHex(nodeKey)) throw new Error('A community is named by its 64-character hex node key.');

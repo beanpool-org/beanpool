@@ -165,7 +165,7 @@ It is the reshare rotation design's §5 and §6, corrected where review #1996 me
 | `POST /v1/ticket` | the member key, or a throwaway key to restore | a ticket; the provider nonce is `base64url(SHA-256(ticket))` |
 | `POST /v1/copies` | the member key | a deposit: `{ticket, provider, idToken, box}` |
 | `POST /v1/copies/status`, `/delete`, `/v1/push-token`, `/v1/push-token/remove` | the member key | connected sign-ins, each with `since` (the day its copy was deposited) and when it last brought the account back, and open holds; disconnect (one sign-in, or `all`); this device's push token, added or (an account leaving the phone) taken out |
-| `POST /v1/restore`, `/v1/restore/collect` | the throwaway key | every restore is held 24 hours (D2), then released sealed to that key |
+| `POST /v1/restore`, `/v1/restore/collect` | the key that asks: a throwaway, or on a community's voucher a phone's own account's | every restore is held 24 hours (D2), then released sealed to that key |
 | `POST /v1/holds/approve`, `/cancel` | the member key | "Yes, it's me" (released now), or Stop (never released) |
 | `GET /v1/report` | nobody | signed daily totals, nothing per member (below) |
 | `POST /v1/unlock/*`, `/v1/reshare/*` | a custodian key | hello, genesis, share, restore-from-backup; pending, confirm, cancel (a genesis or reshare waiting); reshare |

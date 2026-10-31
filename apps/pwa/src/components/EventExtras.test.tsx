@@ -326,4 +326,36 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         expect(menu.className).toContain('left-auto');
         expect(menu.className).not.toMatch(/\bleft-0\b/);
     });
+
+    it('returns focus to trigger button when Calendar file (.ics) is activated (finding 3)', () => {
+        render(<EventDetail post={event} identity={identity} />);
+        const trigger = screen.getByTestId('event-add-to-calendar');
+        trigger.focus();
+        expect(document.activeElement).toBe(trigger);
+
+        fireEvent.click(trigger);
+        const fileItem = screen.getByTestId('event-add-calendar-file');
+        expect(fileItem).toBeInTheDocument();
+
+        fireEvent.click(fileItem);
+        expect(screen.queryByTestId('event-add-calendar-file')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+    });
+
+    it('returns focus to trigger button when Google Calendar is activated (finding 3)', () => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        render(<EventDetail post={event} identity={identity} />);
+        const trigger = screen.getByTestId('event-add-to-calendar');
+        trigger.focus();
+        expect(document.activeElement).toBe(trigger);
+
+        fireEvent.click(trigger);
+        const googleItem = screen.getByTestId('event-add-google-calendar');
+        expect(googleItem).toBeInTheDocument();
+
+        fireEvent.click(googleItem);
+        expect(screen.queryByTestId('event-add-google-calendar')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+        open.mockRestore();
+    });
 });

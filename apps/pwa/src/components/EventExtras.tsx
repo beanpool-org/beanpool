@@ -98,6 +98,8 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
 
     const downloadIcs = () => {
         setCalendarMenuOpen(false);
+        calendarButtonRef.current?.focus();
+        requestAnimationFrame(() => calendarButtonRef.current?.focus());
         const blob = new Blob([buildIcs(event, link)], { type: 'text/calendar;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -112,6 +114,8 @@ export function EventShareAndCalendar({ post }: { post: MarketplacePost }) {
 
     const openGoogleCalendar = () => {
         setCalendarMenuOpen(false);
+        calendarButtonRef.current?.focus();
+        requestAnimationFrame(() => calendarButtonRef.current?.focus());
         window.open(googleCalendarUrl(event, link), '_blank', 'noopener,noreferrer');
     };
 

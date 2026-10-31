@@ -57,7 +57,7 @@ export function CopyCommunitiesTick({ publicKey, colors, onChange, connected }: 
             </Pressable>
             {connected && (
                 <Text style={s.applies} testID="copy-communities-applies">
-                    {t(connected === 'words' ? COPY_COMMUNITIES_WORDS.appliesNext : COPY_COMMUNITIES_WORDS.appliesNextNoWords)}
+                    {connected === 'words' ? t(COPY_COMMUNITIES_WORDS.appliesNext) : t(COPY_COMMUNITIES_WORDS.appliesNextNoWords)}
                 </Text>
             )}
         </>

@@ -690,7 +690,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     aiAssistantsAllowed: { kind: 'per-server', reason: "the owner switch for this server's AI assistant endpoint (/mcp), beside its agent tokens" },
     agentOAuthGrants: { kind: 'per-server', reason: "AI assistants connected to this server through OAuth (refresh-token hashes); a standby's copy holds none" },
-    agentPostsPerDay: { kind: 'per-server', reason: "the owners' number of posts one of this server's assistants may make a day, beside its grants; never copied" },
+    agentPostsPerDay: { kind: 'per-server', reason: "the owners' \"Owner and admin limit\": posts one of this server's assistants may make a day, beside its grants, and owners' and admins' own content limits; never copied" },
     automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },

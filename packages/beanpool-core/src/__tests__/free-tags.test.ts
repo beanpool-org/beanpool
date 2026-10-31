@@ -43,7 +43,7 @@ describe('what a free tag may not be', () => {
     });
 
     it('refuses too short, and a tag with no two letters or numbers (an emoji is no search word)', () => {
-        for (const tag of ['', ' ', '#', '##', 'a', '#a', '🍋', '🍋🍋🍋', '...', 'a🍋']) expect(freeTagRefusal(tag), tag).toBe(FREE_TAG_TOO_SHORT);
+        for (const tag of ['', ' ', '#', '##', 'a', '#a', '🍋', '🍋🍋🍋', '...', 'a🍋', '\u3164\u3164', '\uffa0\uffa0', '\u1160\u1160', '\u115f\u115f', 'a\u3164', '\u3164\u3164🍋']) expect(freeTagRefusal(tag), tag).toBe(FREE_TAG_TOO_SHORT);
     });
 
     it('refuses over 30 characters, an emoji counting as one', () => {

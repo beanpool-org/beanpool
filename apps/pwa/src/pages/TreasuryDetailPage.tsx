@@ -33,6 +33,7 @@ import {
 import { usePictureCrop } from '../components/PictureCropDialog';
 import { ReportModal } from '../components/ReportModal';
 import { PostPhotoPicker, MAX_POST_PHOTOS } from '../components/PostPhotoPicker';
+import { TagPicker } from '../components/TagPicker';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 const EnterpriseLocationPicker = lazy(() => import('../components/EnterpriseLocationPicker').then(m => ({ default: m.EnterpriseLocationPicker })));
@@ -298,6 +299,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [postPriceType, setPostPriceType] = useState('fixed');
     const [postDescription, setPostDescription] = useState('');
     const [postRepeatable, setPostRepeatable] = useState(true);
+    const [postTags, setPostTags] = useState<string[]>([]);
     // Its photos, added while posting it, as the member's own composer adds them (Damo, 26 Oct: the only way was to post
     // it, then edit it to add one).
     const [postPhotos, setPostPhotos] = useState<string[]>([]);
@@ -1003,6 +1005,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     description: postDescription.trim() || undefined,
                     repeatable: postRepeatable,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
+                    ...(postTags.length > 0 ? { tags: postTags } : {}),
                 });
             } else {
                 await treasuryPostNeed(pubkey, {
@@ -1012,6 +1015,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     priceType: postPriceType,
                     description: postDescription.trim() || undefined,
                     ...(postPhotos.length > 0 ? { photos: postPhotos } : {}),
+                    ...(postTags.length > 0 ? { tags: postTags } : {}),
                 });
             }
             setPostModalMode(null);
@@ -1019,6 +1023,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostDescription('');
             setPostCredits('');
             setPostPhotos([]);
+            setPostTags([]);
             const offer = postModalMode === 'offer';
             setActionFeedback({
                 type: 'success',
@@ -2973,6 +2978,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <option value="hourly">{t('Hourly (/hr)')}</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            {/* TagPicker (§4.4) */}
+                            <div>
+                                <TagPicker
+                                    tags={postTags}
+                                    onChange={setPostTags}
+                                    category={postCategory}
+                                    title={postTitle}
+                                    description={postDescription}
+                                />
                             </div>
 
                             <div>

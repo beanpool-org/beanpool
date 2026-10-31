@@ -256,6 +256,7 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
 
         render(<EventDetail post={event} identity={identity} />);
         fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        fireEvent.click(screen.getByTestId('event-add-calendar-file'));
 
         expect(clicks).toHaveLength(1);
         expect(clicks[0].download).toBe('working-bee-at-the-hall.ics');
@@ -270,9 +271,81 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         HTMLAnchorElement.prototype.click = realClick;
     });
 
+    it('opens Google Calendar with pre-filled details when chosen', () => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        render(<EventDetail post={event} identity={identity} />);
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        fireEvent.click(screen.getByTestId('event-add-google-calendar'));
+
+        expect(open).toHaveBeenCalledTimes(1);
+        const [url, target, rel] = open.mock.calls[0];
+        expect(url).toContain('https://calendar.google.com/calendar/render?');
+        expect(url).toContain('text=Working+bee+at+the+hall');
+        expect(target).toBe('_blank');
+        expect(rel).toBe('noopener,noreferrer');
+        open.mockRestore();
+    });
+
     it('offers both to a member with no RSVP — you do not have to be going to pass it on', () => {
         render(<EventDetail post={{ ...event, myRsvp: null }} identity={identity} />);
         expect(screen.getByTestId('event-share')).toBeInTheDocument();
         expect(screen.getByTestId('event-add-to-calendar')).toBeInTheDocument();
+    });
+
+    it('closes menu on outside click and safely handles non-Node targets', () => {
+        render(<EventDetail post={event} identity={identity} />);
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        expect(screen.getByTestId('event-add-calendar-file')).toBeInTheDocument();
+
+        // Non-Node event target does not throw error
+        const nonNodeEvent = new MouseEvent('mousedown', { bubbles: true });
+        Object.defineProperty(nonNodeEvent, 'target', { value: window });
+        document.dispatchEvent(nonNodeEvent);
+        expect(screen.getByTestId('event-add-calendar-file')).toBeInTheDocument();
+
+        // Outside click on body closes the menu
+        fireEvent.mouseDown(document.body);
+        expect(screen.queryByTestId('event-add-calendar-file')).toBeNull();
+    });
+
+    it('the calendar menu sits in the page flow, so the overflow-hidden card can cut it off on no side', () => {
+        render(<EventDetail post={event} identity={identity} />);
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        const menu = screen.getByRole('menu', { name: 'Add to calendar' });
+        expect(menu.className).not.toMatch(/\b(absolute|fixed)\b/);
+        expect(menu.className).toContain('w-full');
+        expect(menu.closest('[class*="flex-wrap"]')).toBeNull();
+    });
+
+    it('returns focus to trigger button when Calendar file (.ics) is activated (finding 3)', () => {
+        render(<EventDetail post={event} identity={identity} />);
+        const trigger = screen.getByTestId('event-add-to-calendar');
+        trigger.focus();
+        expect(document.activeElement).toBe(trigger);
+
+        fireEvent.click(trigger);
+        const fileItem = screen.getByTestId('event-add-calendar-file');
+        expect(fileItem).toBeInTheDocument();
+
+        fireEvent.click(fileItem);
+        expect(screen.queryByTestId('event-add-calendar-file')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+    });
+
+    it('returns focus to trigger button when Google Calendar is activated (finding 3)', () => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        render(<EventDetail post={event} identity={identity} />);
+        const trigger = screen.getByTestId('event-add-to-calendar');
+        trigger.focus();
+        expect(document.activeElement).toBe(trigger);
+
+        fireEvent.click(trigger);
+        const googleItem = screen.getByTestId('event-add-google-calendar');
+        expect(googleItem).toBeInTheDocument();
+
+        fireEvent.click(googleItem);
+        expect(screen.queryByTestId('event-add-google-calendar')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+        open.mockRestore();
     });
 });

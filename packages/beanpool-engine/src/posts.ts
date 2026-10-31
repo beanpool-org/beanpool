@@ -749,13 +749,13 @@ export function generateSearchKeywords(title: string, description: string, categ
  */
 export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false, tierByAuthor?: Map<string, number>): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
+    const freeTags = freeTagsOf(row.free_tags);
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
     // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards; the floor
     // dropped a frozen member to Newcomer on their cards alone, which gave the freeze away (r4178376532).
     // Every member reads the card, so it carries the tier's threshold, never the figure itself (r4178445225). The figure
     // leaves out the known grant (the admins' confirmation stays private; Marty, 21 Oct). The apps only ever turn it into
     // the badge (tierForCredit), which the threshold gives exactly.
-    const freeTags = freeTagsOf(row.free_tags);
     let trustPoints = 0;
     if (!forGuest) {
         const known = tierByAuthor?.get(row.author_pubkey);

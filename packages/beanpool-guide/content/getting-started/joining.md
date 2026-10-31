@@ -104,7 +104,7 @@ Any member can invite people, unless the community has chosen that only its admi
 - Show them the QR code, or tap **Share Invite** to send the link and the code.
 - In the web app, open **People**, then **Invites**, and tap **Generate New Invite**. Then **Copy** or **Share** it.
 - Invites nobody has used yet are listed under **Pending**, each with **Share** to send it again.
-- You can make 20 invites a day, and have 50 that nobody has used yet. An invite nobody uses is deleted after its 30 days, and leaves **Pending**.
+- You can make 20 invites a day, and have 50 that nobody has used yet. For an owner or admin, both numbers are the owners' **Owner and admin limit** instead (100 unless an owner changes it). An invite nobody uses is deleted after its 30 days, and leaves **Pending**.
 
 A community's admins can turn invites off for the whole community.
 

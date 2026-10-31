@@ -200,7 +200,8 @@ function git(...args) {
  *                                          is main's tip
  * A merge commit with no origin/main, outside a pull_request run, is not compared: its first parent need not be main.
  * On a branch whose tip merged origin/main (a sync), it is the branch before the sync, and main's own publish would be
- * blamed on the branch — a workflow_dispatch run on a branch checks out only that branch.
+ * blamed on the branch. CI's shard for this check fetches origin/main (ci.yml, "Fetch origin/main"), so a pull request,
+ * and a workflow_dispatch run on a branch (a train's shadow run), both compare with where they left main.
  * Returns { ref, why }. ref is null when there is nothing to compare with; `broken` marks the cases the check must
  * not pass over: a shallow clone missing the commit before HEAD (CI fetches it: fetch-depth 2 in ci.yml), or a bad
  * GUIDE_BASE.
@@ -471,7 +472,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         const langNames = GUIDE_LANGS.filter(l => published[`guide:${l}`]).map(l => `${l} guide v${published[`guide:${l}`].version}`);
         const allNames = langNames.length ? `${baseNames}, ${langNames.join(', ')}` : baseNames;
         console.log(`${allNames}: the pages build and the generated files match the published copies.`);
-        console.log(base.ref ? `Versions checked against ${base.ref.slice(0, 10)} (${base.why}).` : `Versions not compared: ${base.why}.`);
+        // "⚪ SKIP:" is how test-all.sh tells this from a pass: it reports the check as skipped, with this reason.
+        console.log(base.ref ? `Versions checked against ${base.ref.slice(0, 10)} (${base.why}).` : `⚪ SKIP: Versions not compared: ${base.why}.`);
         const note = pendingNote(unpublished(published, sourceGuides()));
         if (note) console.log(note);
     } else if (args[0] === '--publish') {

@@ -32,6 +32,7 @@ import { useTheme, useStyles } from './ThemeContext';
 import { NewPollModal } from '../components/NewPollModal';
 import { NewEventModal } from '../components/NewEventModal';
 import { NewPostTypeSheet } from '../components/NewPostTypeSheet';
+import { TagPicker } from '../components/TagPicker';
 import { composeCarriesPin, composeTargetFor, parseNewPostParam, type ComposePostType, clearDraftToolMarker, decideDraftOpen } from '../utils/compose-options';
 import { palette } from '../constants/colors';
 import { HAS_MAPS_KEY } from '../utils/maps';
@@ -257,6 +258,7 @@ export default function NewListingScreen() {
     // Contribution-first gate: until the member has listed an Offer they can't post Needs.
     const [blockedFromTrading, setBlockedFromTrading] = useState(false);
     const [postCategory, setPostCategory] = useState('');
+    const [postTags, setPostTags] = useState<string[]>([]);
     const [postTitle, setPostTitle] = useState('');
     const [postDescription, setPostDescription] = useState('');
     const [postCredits, setPostCredits] = useState('');
@@ -364,7 +366,7 @@ export default function NewListingScreen() {
 
     // --- New Post Functions ---
     const resetNewPost = () => {
-        setPostType('offer'); setPostCategory(''); setPostTitle(''); setPostDescription('');
+        setPostType('offer'); setPostCategory(''); setPostTags([]); setPostTitle(''); setPostDescription('');
         setPostCredits(''); setPostPriceType('fixed'); setPostRepeatable(false); setPostPhotos([]);
         setPostLat(null); setPostLng(null); setPinDropMode(false); setValidationErrors(new Set());
         setValidationToast(''); setPostReach('local'); setPostReachPeers([]);
@@ -378,25 +380,26 @@ export default function NewListingScreen() {
     const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
 
     const draftHasContent = () =>
-        !!(postTitle.trim() || postDescription.trim() || postCategory || postPhotos.length > 0 || postLat != null);
+        !!(postTitle.trim() || postDescription.trim() || postCategory || postTags.length > 0 || postPhotos.length > 0 || postLat != null);
 
     const persistDraft = useCallback(async () => {
         try {
             const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             const draft = {
-                anchorUrl, postType, postCategory, postTitle, postDescription, postCredits,
+                anchorUrl, postType, postCategory, postTags, postTitle, postDescription, postCredits,
                 postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng,
                 postReach, postReachPeers, savedAt: Date.now(),
             };
             await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(draft));
         } catch { /* draft is best-effort */ }
-    }, [postType, postCategory, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
+    }, [postType, postCategory, postTags, postTitle, postDescription, postCredits, postPriceType, postRepeatable, postCashAlsoNeeded, postPhotos, postLat, postLng, postReach, postReachPeers]);
 
     const clearDraft = async () => { try { await AsyncStorage.removeItem(OFFER_DRAFT_KEY); } catch {} };
 
     const restoreDraft = (d: any) => {
         setPostType(d.postType === 'need' ? 'need' : 'offer');
         setPostCategory(d.postCategory || '');
+        setPostTags(Array.isArray(d.postTags) ? d.postTags : []);
         setPostTitle(d.postTitle || '');
         setPostDescription(d.postDescription || '');
         setPostCredits(d.postCredits || '');
@@ -623,6 +626,7 @@ export default function NewListingScreen() {
                 // #143 step 4 — per-listing reach (fallback to 'local' if 'peers' selected without chosen targets)
                 reach: (postReach === 'peers' && postReachPeers.length === 0) ? 'local' : postReach,
                 ...(postReach === 'peers' && postReachPeers.length > 0 ? { reachPeers: postReachPeers } : {}),
+                ...(postTags.length > 0 ? { tags: postTags } : {}),
             });
             clearDraft();
             setTimeout(() => {
@@ -827,6 +831,15 @@ export default function NewListingScreen() {
                                     </View>
                                 </Pressable>
                             </Modal>
+
+                            {/* Tags */}
+                            <TagPicker
+                                value={postTags}
+                                onChange={setPostTags}
+                                category={postCategory}
+                                title={postTitle}
+                                description={postDescription}
+                            />
 
                             {/* Description */}
                             <Text style={styles.sectionLabel}>{upperCase(t('Description'))} <Text style={styles.requiredStar}>*</Text></Text>

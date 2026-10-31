@@ -134,7 +134,7 @@ describe("MarketplacePage: a saved search's See more on Home fills the search (C
         expect(save).toHaveTextContent('Save this search to Home');
         expect(save).toHaveAccessibleName('Save the search "fresh eggs" to Home');
         fireEvent.click(save);
-        expect(onSaveSearch).toHaveBeenCalledWith({ q: 'fresh eggs', kind: 'offer' });
+        expect(onSaveSearch).toHaveBeenCalledWith({ q: 'fresh eggs', kind: 'offer', tags: ['food.eggs'] });
     });
 
     it('Save this search to Home: the words shown and the screen-reader name are one language (review of #2166)', async () => {

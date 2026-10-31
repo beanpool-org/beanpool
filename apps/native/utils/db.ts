@@ -33,7 +33,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { reportKind, t, requestAfterOwnLine, requestAfterRead } from '@beanpool/core';
+import { reportKind, t, requestAfterOwnLine, requestAfterRead, postTagsOf } from '@beanpool/core';
 import { dealAction } from './deal-rows';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
@@ -429,7 +429,8 @@ async function _doInitDB() {
             event_repeat_until TEXT,
             carried_callsign TEXT,
             carried_avatar TEXT,
-            carried_banner TEXT
+            carried_banner TEXT,
+            tags TEXT NOT NULL DEFAULT ''
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -743,6 +744,23 @@ ${TOOL_DOCS_TABLE}
         // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
         // polls; NULL where it says nothing). The split by answer travels inside poll_options.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
+        // #2631/#2637 tag library: posts.tags space-separated tag ids (DESIGN-owner-seeding-tags-fable.md §4.5)
+        if (!(await database.getAllAsync<{ name: string }>('PRAGMA table_info(posts)')).some(c => c.name === 'tags')) {
+            newCopyGeneration();
+            try {
+                const file = dbFileOf.get(database);
+                const { syncCursorKeysOf } = await import('../services/pillar-sync');
+                if (file) await AsyncStorage.multiRemove(syncCursorKeysOf(file));
+            } catch (e) {
+                console.warn('[SQLite] Could not forget the sync cursors of a copy from before tags:', e);
+            }
+            try { await database.execAsync(`ALTER TABLE posts ADD COLUMN tags TEXT NOT NULL DEFAULT '';`); } catch (e) {}
+            // Read the copy whole now rather than at the next timer (as the bp_trust_sync_v3 read does).
+            try {
+                const { requestSync } = require('../services/pillar-sync');
+                requestSync().catch(() => {});
+            } catch (e) {}
+        }
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -1139,7 +1157,7 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
     }
     const p = posts[0];
     const before = await database.getFirstAsync<any>(
-        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable FROM posts WHERE id = ?', [id]
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos, lendable, tags FROM posts WHERE id = ?', [id]
     );
     await acquireSyncLock();
     try {
@@ -1160,7 +1178,8 @@ async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: str
         (before.completed_at || null) !== (p.completed_at || p.completedAt || null) ||
         (before.updated_at || null) !== (p.updated_at || p.updatedAt || null) ||
         (before.lendable ? 1 : 0) !== (p.lendable ? 1 : 0) ||
-        (before.photos ?? null) !== syncedPhotosColumn(p);
+        (before.photos ?? null) !== syncedPhotosColumn(p) ||
+        (before.tags ?? '') !== syncedTagsColumn(p);
     if (changed) {
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -2161,6 +2180,7 @@ export async function createPost(post: any) {
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
         ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
+        ...(post.tags ? { tags: Array.isArray(post.tags) ? post.tags : postTagsOf(post.tags) } : {}),
         ...(shopId ? { shopId } : {}),
     };
     // "Post as → an enterprise" on the event form (NewEventModal). An enterprise's event goes through the
@@ -2244,9 +2264,10 @@ export async function createPost(post: any) {
 
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
+    const tagsStr = post.tags ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : '';
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, lendable, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0,
@@ -2258,6 +2279,7 @@ export async function createPost(post: any) {
          post.type === 'poll' && post.pollOpenVote === true ? 1 : 0,
          post.audienceScope || post.audience_scope || 'public',
          post.targetGroupId || post.target_group_id || null,
+         tagsStr,
          ...eventCacheColumns(post)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
@@ -2574,9 +2596,14 @@ export async function updateEvent(postId: string, patch: EventEditPatch, out?: {
         try {
             const database = await waitForInit();
             const photos = Array.isArray(post.photos) ? JSON.stringify(post.photos.filter((u: string) => !u.startsWith('file://'))) : null;
+            const tagsVal = patch.tags !== undefined
+                ? (Array.isArray(patch.tags) ? patch.tags.join(' ') : '')
+                : (post.tags != null ? (Array.isArray(post.tags) ? post.tags.join(' ') : String(post.tags)) : null);
+            const tagsSql = tagsVal !== null ? ', tags = ?' : '';
+            const tagsArg = tagsVal !== null ? [tagsVal] : [];
             await database.runAsync(
-                `UPDATE posts SET title = ?, description = ?, lat = ?, lng = ?, photos = COALESCE(?, photos) WHERE id = ?`,
-                [post.title ?? null, post.description ?? '', post.lat ?? null, post.lng ?? null, photos, post.id]
+                `UPDATE posts SET title = ?, description = ?, lat = ?, lng = ?, photos = COALESCE(?, photos)${tagsSql} WHERE id = ?`,
+                [post.title ?? null, post.description ?? '', post.lat ?? null, post.lng ?? null, photos, ...tagsArg, post.id]
             );
         } catch (dbErr) {
             console.warn('[SQLite] Failed to cache the edited event:', dbErr);
@@ -2762,11 +2789,11 @@ export async function getTreasuryDetail(publicKey: string): Promise<any | null> 
 // Operator actions — signed as the operator; the treasury id rides the URL path (dodges the
 // requireSignature spoof-guard, which pins body *pubkey fields to the signer).
 /** `photos`: JPEG data URLs, at most five (utils/post-photo.ts), checked by the node as a member's own listing's are. */
-export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }) {
+export async function treasuryPostOffer(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/offer`, body);
 }
-export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[] }) {
+export async function treasuryPostNeed(treasury: string, body: { category: string; title: string; description?: string; credits: number; priceType?: string; repeatable?: boolean; photos?: string[]; tags?: string[] }) {
     await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/need`, body);
 }
@@ -3414,7 +3441,7 @@ export interface Decision {
  * closed. `name` is null when the node can't know it.
  */
 export interface RemovalProposer {
-    kind: 'admin' | 'password' | 'member';
+    kind: 'admin' | 'owner' | 'password' | 'member';
     name: string | null;
 }
 
@@ -3541,6 +3568,10 @@ export async function updatePost(id: string, updates: any) {
         ? (Array.isArray(updates.photos) ? updates.photos : (typeof updates.photos === 'string' && updates.photos ? JSON.parse(updates.photos) : []))
         : undefined;
 
+    const tags = updates.tags !== undefined
+        ? (Array.isArray(updates.tags) ? updates.tags : postTagsOf(updates.tags))
+        : undefined;
+
     // 1. Broadcast UPDATE to remote network
     await _signedRequest('/api/marketplace/posts/update', { 
         id, 
@@ -3553,22 +3584,25 @@ export async function updatePost(id: string, updates: any) {
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
         photos,
+        ...(tags !== undefined ? { tags } : {}),
         // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
         ...(updates.shopId !== undefined ? { shopId: updates.shopId } : {}),
     });
 
     // 2. Erase from local SQLite Cache (or gracefully update it)
     const database = await getDb();
+    const tagsSql = tags !== undefined ? ', tags = ?' : '';
+    const tagsArg = tags !== undefined ? [tags.join(' ')] : [];
     if (photos !== undefined) {
         const photosJson = photos && photos.length > 0 ? JSON.stringify(photos) : null;
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ? WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?, photos = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, photosJson, ...tagsArg, id]
         );
     } else {
         await database.runAsync(
-            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ? WHERE id = ?`,
-            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, id]
+            `UPDATE posts SET type = ?, category = ?, title = ?, description = ?, credits = ?, price_type = ?, repeatable = ?${tagsSql} WHERE id = ?`,
+            [updates.type, updates.category, updates.title, updates.description, updates.credits, updates.price_type || 'fixed', updates.repeatable ? 1 : 0, ...tagsArg, id]
         );
     }
 }
@@ -3703,7 +3737,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, lendable, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, tags, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, event_repeat, event_repeat_until, carried_callsign, carried_avatar, carried_banner) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -3743,6 +3777,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.targetGroupId || p.target_group_id || null,
             p.targetPubkey || p.target_pubkey || null,
             p.assignedTo || p.assigned_to || null,
+            syncedTagsColumn(p),
             ...eventCacheColumns(p),
             // A copy without the name (an older node) keeps the one the row has.
             syncedAuthorCallsign(p),
@@ -3755,6 +3790,14 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             syncedAuthorBanner(p),
         ]
     );
+}
+
+function syncedTagsColumn(p: any): string {
+    const raw = p.tags;
+    if (!raw) return '';
+    if (Array.isArray(raw)) return raw.filter(Boolean).join(' ');
+    if (typeof raw === 'string') return raw;
+    return '';
 }
 
 /** The author's face URL a listing carries (the node's `authorAvatarUrl` on a by-area read), or null for a copy without one. */

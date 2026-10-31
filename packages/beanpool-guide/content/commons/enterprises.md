@@ -79,6 +79,6 @@ Before a project reaches its goal, it can also be cancelled under **Manage**, an
 
 It starts straight away, and you are its leader (a project) or its lead keeper (an enterprise). There is no community vote to start one. When you start an enterprise, it opens on its own page with **Add a banner photo**: tap it to choose the photo and the part that shows, or **Not now** to leave it for later.
 
-You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
+You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another. For an owner or admin, both numbers are the owners' **Owner and admin limit** instead (100 unless an owner changes it).
 
 Its keepers change its logo, its banner photo and its words under **Manage**, in either app (see "If you keep it").

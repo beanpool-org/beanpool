@@ -108,7 +108,8 @@ export function freeTagRefusal(text: string): WordKey | null {
     if (looksLikeContact(tag)) return FREE_TAG_NOT_A_CONTACT;
     if (tag.includes(',')) return FREE_TAG_HOLDS_A_COMMA;
     const chars = Array.from(tag).length;
-    if (chars < FREE_TAG_MIN_CHARS || (tag.match(LETTER_OR_DIGIT) ?? []).length < 2) return FREE_TAG_TOO_SHORT;
+    // Unicode files some blank characters as letters (U+3164): they count for nothing here.
+    if (chars < FREE_TAG_MIN_CHARS || (tag.replace(SHOWS_NOTHING, '').match(LETTER_OR_DIGIT) ?? []).length < 2) return FREE_TAG_TOO_SHORT;
     if (chars > FREE_TAG_MAX_CHARS) return FREE_TAG_TOO_LONG;
     if (tag.split(' ').length > FREE_TAG_MAX_WORDS) return FREE_TAG_TOO_MANY_WORDS;
     return null;

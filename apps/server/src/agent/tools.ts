@@ -6,6 +6,7 @@
  * Redaction is at the source: every tool builds its answer from named fields, never by passing a record through. No
  * answer carries a key, a balance of any member, a reporter, a DM, a photo, an address or URL (the node's own included:
  * links are Settings paths the assistant joins to the address in its welcome), a host, a log line, or a destination's name.
+ * The one exception is what a tool is for: photo_upload_link answers an address on this node, which the assistant sends photos to.
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *
  * Slice S1: reads, and `take_backup` for owner grants. Slice S4: `suggest_action`, which changes nothing: it files a card the
@@ -38,7 +39,7 @@ import { getBackupStatus } from '../services/backup-puller.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE, type Fenced } from './fence.js';
 import {
     admitAgentBackup, agentBackupsToday, agentCallsToday, agentPhotosToday, returnAgentBackup,
-    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPostsPerDay, AGENT_LIST_MAX, AGENT_PHOTOS_PER_DAY,
+    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPhotosPerDay, agentPostsPerDay, AGENT_LIST_MAX,
 } from './limits.js';
 import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-posts.js';
 import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
@@ -85,8 +86,11 @@ export interface AgentTool {
     destructive?: boolean;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
-    /** A create (agent/owner-posts.ts) answers once its photos are resized; every other tool answers at once. */
-    run: (grant: AgentGrant, args: Record<string, unknown>, boundary: string) => ToolResult | Promise<ToolResult>;
+    /**
+     * A create (agent/owner-posts.ts) answers once its photos are resized; every other tool answers at once. `nodeUrl` is the address
+     * in the welcome (agent/mcp-route.ts nodeUrlFor), for the one tool that answers an address; a Settings preview runs no such tool.
+     */
+    run: (grant: AgentGrant, args: Record<string, unknown>, boundary: string, nodeUrl?: string) => ToolResult | Promise<ToolResult>;
 }
 
 /** A tool's description, made from its row (§7: two sentences, a third where member text can appear). */
@@ -533,9 +537,9 @@ export const AGENT_TOOLS: AgentTool[] = [
                 // with the owner's photo room left in words; a grant that does not post (an admin's, or one not ticked) has no count.
                 canPost: grantPosts(grant),
                 ...(grantPosts(grant) ? { posts: { today: assistantPostsToday(grant), perDay: agentPostsPerDay(), photoRoom: photoRoomWords(grant.member) } } : {}),
-                // Slice S4: the photos it has had fetched or uploaded today against the 200 (agent/owner-photos.ts), where an
-                // upload goes (a path it joins to the address in its welcome), and the two ways besides base64, in words.
-                ...(grantPosts(grant) ? { photos: { today: agentPhotosToday(grant.id), perDay: AGENT_PHOTOS_PER_DAY, uploadPath: PHOTO_UPLOAD_PATH, ways: PHOTO_WAYS } } : {}),
+                // Slice S4: the photos it has had fetched or uploaded today against the day's (limits.ts agentPhotosPerDay; agent/
+                // owner-photos.ts), where an upload goes (a path it joins to the address in its welcome), and the ways besides base64, in words.
+                ...(grantPosts(grant) ? { photos: { today: agentPhotosToday(grant.id), perDay: agentPhotosPerDay(), uploadPath: PHOTO_UPLOAD_PATH, ways: PHOTO_WAYS } } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
                 cannot: AGENT_CANNOT,
             },

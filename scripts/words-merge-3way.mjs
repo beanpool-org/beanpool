@@ -23,7 +23,7 @@
  * checks files git merged by itself.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 export const CATALOG = /^(apps|packages)\/[^/]+\/words\/[^/]+\.json$/;
@@ -182,4 +182,6 @@ function main(argv) {
     return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(main(process.argv.slice(2)));
+// realpath: import.meta.url is the real path, and on a Mac the temp dir is reached through a symlink (/var → /private/var).
+// Without it the script does nothing and exits 0, so --verify would pass anything.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) process.exit(main(process.argv.slice(2)));

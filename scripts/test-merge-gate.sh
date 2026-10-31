@@ -484,6 +484,9 @@ GOTCAT=$(on_main apps/pwa/words/fr.json | node -e 'const o = JSON.parse(require(
 NEW30=$(git --git-dir="$T/torigin.git" rev-parse refs/heads/t-dog)
 [ "$(git --git-dir="$T/torigin.git" rev-parse "$NEW30^1")" = "$H30" ] && ok "train: ...#30's branch got main merged in on top of its head (a fast-forward push)" || bad "train: #30's branch is $NEW30, not a merge on $H30"
 node "$REPO_ROOT/scripts/words-merge-3way.mjs" --base t-dog --main t-dog --pr t-dog --verify apps/pwa/words/fr.json >/dev/null 2>&1 && ok "words-merge-3way: --verify passes an unchanged catalog" || bad "words-merge-3way: --verify failed an unchanged catalog"
+ln -s "$REPO_ROOT/scripts" "$T/linked-scripts"
+GOTLINK=$(node "$T/linked-scripts/words-merge-3way.mjs" --nonsense 2>&1; echo "rc=$?")
+case "$GOTLINK" in *"unexpected argument"*"rc=2") ok "words-merge-3way: reached through a symlink it still runs (a Mac's temp dir is one), and does not exit 0 having done nothing" ;; *) bad "words-merge-3way: through a symlink it did not run: $GOTLINK" ;; esac
 : > "$GH_STUB_DIR/merges"
 branch 37 t-bonjour1 "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Salut" "Dog=Chien" "Cat=Chat" "Bye=Au revoir"
 branch 38 t-bonjour2 "" -- catalog apps/pwa/words/fr.json "base; #29 note; #30 note" "2026-10-31" "Hello=Coucou" "Dog=Chien" "Cat=Chat" "Bye=Au revoir"

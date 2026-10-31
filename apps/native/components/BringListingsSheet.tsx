@@ -20,18 +20,23 @@ import { BringListingsSheetView, type BringStep } from './BringListingsSheetView
 
 /** How often Home reads two communities for an offer it can't finish. Home comes to the front at every tab change. */
 const LOOK_GAP_MS = 5 * 60 * 1000;
+/**
+ * One look or run at a time on this phone, outside the component: a run goes on when it is closed, so it can outlive a
+ * Home that is drawn anew. A second would send the same listings, and the node's refusal of each copy would read as a
+ * listing left behind when it had arrived.
+ */
+let busy = false;
 
 export function BringListingsSheet() {
     const { identity } = useIdentity();
     const [view, setView] = useState<BringStep | null>(null);
     const asked = useRef<{ offer: BringOffer; plan: BringPlan } | null>(null);
-    const busy = useRef(false);
     const closed = useRef(false);
     const lastLook = useRef(0);
 
     const run = useCallback(async (offer: BringOffer, plan: BringPlan, shown: boolean) => {
         if (!identity) return;
-        busy.current = true;
+        busy = true;
         closed.current = false;
         try {
             const onStep = (done: number, total: number) => { if (!closed.current) setView({ step: 'bringing', done, total }); };
@@ -44,7 +49,7 @@ export function BringListingsSheet() {
             // Never left on a sheet with no way out: the offer is as it was, for the next visit.
             setView(null);
         } finally {
-            busy.current = false;
+            busy = false;
         }
     }, [identity]);
 
@@ -52,16 +57,16 @@ export function BringListingsSheet() {
         let live = true;
         void (async () => {
             const publicKey = identity?.publicKey;
-            if (!identity || !publicKey || busy.current || asked.current) return;
+            if (!identity || !publicKey || busy || asked.current) return;
             const offer = await pendingBringOffer(publicKey, await anchorUrl().catch(() => null)).catch(() => null);
             if (!offer || Date.now() - lastLook.current < LOOK_GAP_MS) return;
             lastLook.current = Date.now();
-            busy.current = true;
+            busy = true;
             let plan: Awaited<ReturnType<typeof planBring>>;
             try {
                 plan = await planBring(offer, identity);
             } finally {
-                busy.current = false;
+                busy = false;
             }
             if (plan === 'unreachable') return;
             if (plan === 'nothing' || (plan.bring.length === 0 && (offer.accepted || plan.gone.length === 0))) {

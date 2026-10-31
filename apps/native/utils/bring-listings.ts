@@ -19,7 +19,8 @@
  * - **Never a gate.** Joining never waits on any of this, and it can be put off or ignored.
  *
  * Archived means off the Market with its photos deleted (engine/posts.ts archiveStaleListings): the row has no mark of its
- * own, and the same `cancelled` with its photos still there is a listing its member took down, which needs no line.
+ * own, and the same `cancelled` with its photos still there is a listing its member took down, which needs no line. Past
+ * the 90 days the run takes a taken-down listing's photos too, and it reads as archived: the line is true of both.
  *
  * Phone only for now, deliberately (the design's row): the web app is one community per browser. It says nothing of
  * this, and its members' listings stay where they are.

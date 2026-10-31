@@ -273,6 +273,23 @@ describe('Home\'s sheet', () => {
         expect(host.textContent).toContain('2 listings are now in Mullumbimby.');
     });
 
+    it('a Home drawn anew during a run starts no second one: each listing would be sent twice, and the node refuses the copy', async () => {
+        let finish: (r: BringResult) => void = () => {};
+        calls.run.mockImplementation(async () => new Promise<BringResult>((resolve) => { finish = resolve; }));
+        await draw(createElement(BringListingsSheet));
+        await focus();
+        await press('bring-listings-yes');
+        expect(calls.run).toHaveBeenCalledTimes(1);
+        await act(async () => { root?.unmount(); });
+        root = null;
+        calls.pending.mockResolvedValue({ ...OFFER, accepted: true });
+        await draw(createElement(BringListingsSheet));
+        await focus();
+        expect(calls.run).toHaveBeenCalledTimes(1);
+        await act(async () => { finish({ brought: 2, lines: [], kept: false, held: false }); });
+        await flush();
+    });
+
     it('a run that leaves something for later says so', async () => {
         calls.run.mockResolvedValue({ brought: 1, lines: [], kept: true, held: false });
         await draw(createElement(BringListingsSheet));

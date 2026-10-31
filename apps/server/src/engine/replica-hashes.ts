@@ -57,7 +57,12 @@ export interface TableHashes {
  * row 4). Raised for the same reason as 4: a standby updated before its main server hashes `shops` over one more column,
  * and `shop_photos` too.
  */
-export const TABLE_HASHES_VERSION = 7;
+/**
+ * 8: posts gains tags (DESIGN-owner-seeding-tags-fable.md §4.5, slice T2). Raised for the same reason as 4: a standby
+ * updated before its main server hashes `posts` over one more column, so it would read every copy as "posts not exact"
+ * and force-resync until the main server is updated; with the version raised, the two compare row counts only until then.
+ */
+export const TABLE_HASHES_VERSION = 8;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

@@ -3,11 +3,11 @@
  * sheet) and `needDoor` do, and how a picked photo is kept. Only the host and its sheets call these; the eslint fence
  * refuses a tool any import of this file, so a tool reaches them only through the functions its permissions grant.
  *
- * A door writes the map composer's own draft (map.tsx `OFFER_DRAFT_KEY`, read there, never changed here), marked as the
- * tool's, and opens the composer with `?newPost=<type>`; the composer opens it prefilled without asking "Unfinished post?"
- * (utils/compose-options.ts decideDraftOpen, while the draft is a minute old at most), and nothing is posted until the
- * member taps Post there. map.tsx was edited once for that, by #2291 (its openComposer asks decideDraftOpen); nothing here
- * edits the map files.
+ * A door writes the composer's own draft (app/new-listing.tsx `OFFER_DRAFT_KEY`, read there, never changed here), marked
+ * as the tool's, and opens the composer with `?newPost=<type>`; the composer opens it prefilled without asking "Unfinished
+ * post?" (utils/compose-options.ts decideDraftOpen, while the draft is a minute old at most), and nothing is posted until
+ * the member taps Post there. The composer was the map's (map.tsx, edited once for this by #2291) until MAP-FORM moved it
+ * to its own screen; nothing here edits the map files.
  */
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,9 +20,9 @@ import { keepToolPhoto, toolPhotoDataUri } from './photos';
 import { communityKey } from './community';
 import { clearShopChoice, rememberShopChoice } from '../utils/shop-choice';
 
-/** The Offer composer's draft key (app/(tabs)/map.tsx `OFFER_DRAFT_KEY`, read there and never changed here). */
+/** The Offer composer's draft key (app/new-listing.tsx `OFFER_DRAFT_KEY`, read there and never changed here). */
 export const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
-/** The composer keeps at most this many photos (map.tsx pickPhoto). */
+/** The composer keeps at most this many photos (app/new-listing.tsx pickPhoto). */
 const DRAFT_PHOTOS = 5;
 
 /** A photo picked or taken: 800 px wide JPEG (the Offer form's downsize), kept in the tool's folder under a new ref. */
@@ -105,7 +105,7 @@ export async function openOfferComposer(owner: string, tool: string, draft: Tool
     const listed = inShop && !draft.category && shopCategory ? { ...draft, category: shopCategory } : draft;
     const { anchorUrl, photos } = await writeDraft('offer', owner, tool, listed, fee);
     await rememberShopChoice(anchorUrl, { title: draft.title, description: draft.description, photos }, inShop);
-    router.push('/(tabs)/map?newPost=offer');
+    router.push('/new-listing?newPost=offer');
 }
 
 /** Asked before a door replaces the member's unfinished post on the map (the composer keeps one draft): true to go on. */
@@ -127,5 +127,5 @@ export async function openNeedComposer(owner: string, tool: string, draft: ToolN
     if (await unfinishedPostHere() && !await replaceUnfinishedPost()) return;
     await writeDraft('need', owner, tool, draft, null);
     await clearShopChoice();
-    router.push('/(tabs)/map?newPost=need');
+    router.push('/new-listing?newPost=need');
 }

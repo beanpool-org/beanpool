@@ -114,7 +114,10 @@ On the global community there is no vote. The suspension lasts 7 days and then l
 - **A false case can be hidden.** When a case is shown to be false, an admin can hide it. Members then read the admin's reason in its place. Hiding a case doesn't stop the vote: an admin stops it by halting it, which lifts the suspension.
 - **A reply that harms someone can be taken down.** If a reply gives someone's address or phone number, or threatens them, an owner or admin can take it down, with a reason. The reply is deleted, and members read the reason in its place. The member is told, and can't write another reply on that vote. The vote carries on.
 - **A false accusation can be reported.** The member the vote is about can tap **Report this case as false**. The report goes to the admins and owners, and names whoever brought the case.
-- **No second case for a while.** After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can.
+- **No second case for a while.** After a vote on removing someone ends without removing them, whoever brought it can't suspend that member again for 90 days. Another admin can, after the first 30 days.
+- **A second suspension within 30 days is an owner's.** In those 30 days only an owner can suspend the member again, and with a new reason. The vote then says "Second pause in 30 days", and how the last vote ended.
+- **No third suspension in 90 days.** A third suspension of the same member within 90 days of the first is refused to everyone. If there is more to decide, a member proposes a Decision.
+- **The owners hear of every suspension,** without being told who it was or why: the vote shows that to everyone who can vote.
 - **Everyone who can vote is told.** When the vote opens, each member who can vote on it gets an alert on their phone, if their **Direct Messages** alerts are on. The alert never says who the vote is about.
 
 ## What admins can and cannot do

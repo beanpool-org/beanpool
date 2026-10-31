@@ -239,8 +239,12 @@ async function main(): Promise<void> {
         const copied = (payload?.posts ?? []).find((p: any) => p.id === o?.postId);
         assert(copied?.createdVia === `assistant:${grantId}` && (payload?.posts ?? []).filter((p: any) => p.createdVia).length === 1,
             `the standby copy's payload carries created_via for it, and for no other post (${copied?.createdVia})`);
-        const asRead = JSON.stringify(getPosts({ id: o?.postId, viewerPubkey: owner.pub }));
-        assert(asRead.includes('Quincefield') && !/created_?via|assistant:/i.test(asRead), 'the listings an app reads never carry it');
+        // Slice S2 (design §2.8) narrows "never in an app's read" to "never to anyone but its author": the owner's own read
+        // carries it ("via assistant" on their own listing), another member's never.
+        const asRead = JSON.stringify(getPosts({ id: o?.postId, viewerPubkey: owner2.pub }));
+        const ownRead = getPosts({ id: o?.postId, viewerPubkey: owner.pub })[0];
+        assert(asRead.includes('Quincefield') && !/created_?via|assistant:/i.test(asRead) && ownRead?.createdVia === `assistant:${grantId}`,
+            `another member's read never carries it; the author's own does (${ownRead?.createdVia})`);
 
         // ── 1b. Through the node's own image store, disk and S3 ─────────────────────────────────────
         type PhotoRow = { storage_key: string | null; photo_data: string | null };
@@ -434,12 +438,15 @@ async function main(): Promise<void> {
         const emptyOf = (v: unknown): unknown => Array.isArray(v) ? [] : typeof v === 'number' ? '' : '   ';
         const KINDS: Array<{ tool: string; args: Record<string, unknown>; required: string[]; schema?: string[] }> = [
             // The pin unless use_my_area: JSON Schema's `required` cannot say "unless", so the schema lists the ones always needed.
-            { tool: 'create_offer', args: offerArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans', 'photos'] },
-            { tool: 'create_need', args: needArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans', 'photos'] },
+            // Nor "one of": since slice S4 a photo may come from photos, photo_urls or photo_ids, so no schema requires `photos`
+            // itself, and the server still refuses a post with none, naming photos (each kind's `required` below).
+            { tool: 'create_offer', args: offerArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans'] },
+            { tool: 'create_need', args: needArgs, required: ['title', 'description', 'category', 'beans', 'lat', 'lng', 'photos'], schema: ['title', 'description', 'category', 'beans'] },
             // In person, its place too: the same "unless online".
             { tool: 'create_event', args: eventArgs, required: ['title', 'description', 'start_at', 'timezone', 'photos', 'place_name', 'lat', 'lng'],
-                schema: ['title', 'description', 'start_at', 'timezone', 'photos'] },
-            { tool: 'create_enterprise_listing', args: entArgs, required: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'] },
+                schema: ['title', 'description', 'start_at', 'timezone'] },
+            { tool: 'create_enterprise_listing', args: entArgs, required: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'],
+                schema: ['kind', 'as_enterprise', 'title', 'category', 'beans'] },
         ];
         const postsBefore2b = (db.prepare('SELECT COUNT(*) AS c FROM posts').get() as any).c;
         const kindGrants: string[] = [];
@@ -607,7 +614,9 @@ async function main(): Promise<void> {
             && !afterRestart.ok && /^This assistant has made 1,000 posts today/.test(afterRestart.ok ? '' : afterRestart.error) && madeBy(seedGrant) === 1000,
             `the 1,001st is refused, and still after a restart empties the count kept in memory (${thousandAndOne.ok ? 'made' : thousandAndOne.error.slice(0, 80)} | ${afterRestart.ok ? 'made' : afterRestart.error.slice(0, 50)})`);
         // The owner's photo budget stays as it is (100 MB unless the server sets another); its refusal says the room left.
-        const photoGrant = { ...seedGrant, id: 'photo-room-check' } as AgentGrant;
+        // A real second grant (its own counts): a post is made only for a grant that is still live when its photos are in.
+        const photoT = await call('POST', '/api/local/admin/agent/grants', { headers: ownerPhoneSessionHeaders(owner.pub), body: { name: 'Olive\'s photo room check', canPost: true } });
+        const photoGrant = { ...seedGrant, id: photoT.body?.grant?.id, name: 'Olive\'s photo room check' } as AgentGrant;
         const budgetWas = process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY;
         process.env.PHOTO_BYTES_PER_MEMBER_PER_DAY = String(memberPhotoRoom(owner.pub)!.used + 2048);
         try {

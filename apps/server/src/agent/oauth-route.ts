@@ -44,6 +44,7 @@ import {
     markRegistrationOpened, OAUTH_SCOPE, redirectHost, refreshGrant, registerClient, revokeByToken, setConsentCanPost, type OAuthGrantView, type TokenResult,
 } from './oauth.js';
 import { dropSuggestionsOf } from './suggestions.js';
+import { dropUploadedPhotosOf } from './owner-photos.js';
 import { offersSuggestions } from './tools.js';
 import { agentConnectedWords, agentDisconnectedWords } from './welcome.js';
 
@@ -138,6 +139,7 @@ function tellOwners(kind: 'connected' | 'reuse' | 'revoked', grant: OAuthGrantVi
 function forgetGrant(id: string): void {
     forgetAgentGrant(id);
     dropSuggestionsOf(id);
+    dropUploadedPhotosOf(id);
 }
 
 function tokenAnswer(ctx: any, res: TokenResult, from: string): void {

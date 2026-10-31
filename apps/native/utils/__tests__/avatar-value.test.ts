@@ -964,10 +964,10 @@ describe('redeemInvite reports whether the node already holds a photo', () => {
         await redeemInvite('CODE', 'Damo');
 
         globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }) as any;
-        await pushProfileToServer();
-
-        const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
-        expect('avatar' in body).toBe(false);
+        // Profile S2-W: bio and contact do not fall back to phone-wide canonical; with no local changes, push bails out.
+        const published = await pushProfileToServer();
+        expect(published).toBe(false);
+        expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 });
 

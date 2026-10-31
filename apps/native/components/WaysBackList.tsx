@@ -1,8 +1,9 @@
 /**
  * "Where your account can be brought back from" (vault rethink VR1, DESIGN-vault-rethink-fable.md §5.1), drawn from what
  * utils/ways-back.ts found: the 12 words (on this phone or not, and the member's say-so that they are written down),
- * each copy at BeanPool's key vault with since when it is kept, each copy at each community saved on this phone, the
- * deletes still waiting, and Remove beside each copy and Remove everything under them. The vault keeps a copy per
+ * each copy at BeanPool's key vault with since when it is kept, each copy at each community saved on this phone (the
+ * one its admins can bring the member back from, VR3, with since when), the deletes still waiting, and Remove beside each
+ * copy and Remove everything under them. The vault keeps a copy per
  * sign-in account and removes a sign-in's copies together, so a sign-in with two accounts linked shows both copies, each
  * with its own dates, above one Remove that says it takes both. app/ways-back.tsx asks, removes and confirms; this only
  * draws, so the words render test and the 320 dp shots draw exactly what the screen does.
@@ -17,7 +18,7 @@ import { formatDate, t, tn, word } from '@beanpool/core';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import {
-    everyoneAnswered, knownCopies, sameCommunity, vaultCopiesBySignIn, wordsOnly, type CopyAt, type NotAnswered, type WaysBack,
+    everyoneAnswered, knownCopies, sameCommunity, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, type CopyAt, type NotAnswered, type WaysBack,
 } from '../utils/ways-back-state';
 
 /** The screen's sentences said in more than one place (the list, its dialogs, the results): marked here, t() where shown. */
@@ -43,6 +44,11 @@ export const WAYS_BACK_LINES = {
     // what is listed was made elsewhere.
     keepsNoCopies: word("This community keeps no copies of members' accounts and doesn't use BeanPool's key vault, so no sign-in can be linked here. Your 12 words are your way back here."),
     madeElsewhere: word('Any copy listed here was made before, here or in another community: it is yours until you remove it.'),
+    // The copy a community keeps for its admins to bring the member back from (vault rethink VR3), whole, on its server.
+    admins: word("Your community's admins"),
+    adminsLine: word('A locked copy an admin can bring your account back from, when they see you in person.'),
+    // One its server keeps but can't open now (its key gone, or another): listed and removable, never a way back.
+    adminsCantOpen: word("Its server can't open this copy now, so it can't bring your account back. Account Protection says what can be done. Your 12 words still work."),
 } as const;
 
 /** Why the vault's copies can't be listed, in the member's words. */
@@ -164,11 +170,35 @@ export function WaysBackList({
                             {ways.communities.map(c => {
                                 const waiting = ways.pending.filter(p => sameCommunity(p.url, c.url)).map(p => p.provider);
                                 const kept = (c.status?.providers ?? []).filter(p => !waiting.includes(p));
+                                const admins = c.status?.adminsCopy;
+                                const adminsSince = admins?.since ? new Date(admins.since) : null;
+                                const cantOpen = admins ? null : c.status?.adminsCopyUnopenable ?? null;
+                                const cantOpenSince = cantOpen?.since ? new Date(cantOpen.since) : null;
                                 return (
                                     <View key={c.url} style={s.community}>
                                         <Text style={s.communityName}>{c.name}</Text>
                                         {!c.status && <Text style={s.line}>{t(WAYS_BACK_LINES.communityUnknown)}</Text>}
-                                        {c.status && kept.length === 0 && waiting.length === 0 && <Text style={s.line}>{t(WAYS_BACK_LINES.keepsNone)}</Text>}
+                                        {c.status && kept.length === 0 && waiting.length === 0 && !admins && !cantOpen && <Text style={s.line}>{t(WAYS_BACK_LINES.keepsNone)}</Text>}
+                                        {cantOpen && (
+                                            <View style={s.copy} testID="ways-back-admins-cant-open">
+                                                <Text style={s.copyName}>{t(WAYS_BACK_LINES.admins)}</Text>
+                                                {cantOpenSince && Number.isFinite(cantOpenSince.getTime()) && (
+                                                    <Text style={s.small}>{t('Kept since {date}', { date: formatDate(cantOpenSince, 'day-month-year') })}</Text>
+                                                )}
+                                                <Text style={s.small}>{t(WAYS_BACK_LINES.adminsCantOpen)}</Text>
+                                                {removeButton({ at: 'admins', url: c.url }, t("Remove the copy at {community} that its server can't open", { community: c.name }))}
+                                            </View>
+                                        )}
+                                        {admins && (
+                                            <View style={s.copy} testID="ways-back-admins-copy">
+                                                <Text style={s.copyName}>{t(WAYS_BACK_LINES.admins)}</Text>
+                                                <Text style={s.small}>{t(WAYS_BACK_LINES.adminsLine)}</Text>
+                                                {adminsSince && Number.isFinite(adminsSince.getTime()) && (
+                                                    <Text style={s.small}>{t('Kept since {date}', { date: formatDate(adminsSince, 'day-month-year') })}</Text>
+                                                )}
+                                                {removeButton({ at: 'admins', url: c.url }, t('Remove the copy at {community} that its admins can bring you back from', { community: c.name }))}
+                                            </View>
+                                        )}
                                         {kept.map((p: SsoProvider) => (
                                             <View key={p} style={s.copy}>
                                                 <Text style={s.copyName}>{SSO_PROVIDER_NAMES[p]}</Text>
@@ -201,7 +231,7 @@ export function WaysBackList({
                         </View>
                     )}
 
-                    {(knownCopies(ways).length > 0 || !everyoneAnswered(ways)) && (
+                    {(knownCopies(ways).length > 0 || unopenableAdminsCopies(ways).length > 0 || !everyoneAnswered(ways)) && (
                         <Pressable
                             style={[s.everything, busy && s.disabled]}
                             disabled={busy}

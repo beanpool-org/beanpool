@@ -31,12 +31,21 @@ import { assertPlainTablesWritable } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
 import { assertMayRekey, completeRekey, type RekeyRequestRow } from './member-wizards.js';
+import { bringBackRelease, confirmBringBack, type BringBackReleased } from './bring-back.js';
 import { word } from '@beanpool/core';
 
 /** The one sentence for a code that is unknown, used, expired or cancelled. */
 export const REKEY_CODE_NOT_VALID = word('That code isn’t valid. Ask the admin for a new one.');
 /** A phone that already holds an account here (a member, a visitor or a closed account). */
 export const REKEY_KEY_HAS_ACCOUNT = word('This phone already has an account in this community, so it can’t take over another one. Use a phone with no account here, or ask the admin to paste its key instead.');
+/**
+ * The same, to a phone that typed a bring-back's code (BB-): a bring-back is never finished with a pasted key
+ * (completeRekey refuses one, and the Bring back window has no paste), so the only way is a phone with no account here.
+ */
+export const BRING_BACK_KEY_HAS_ACCOUNT = word('This phone already has an account in this community, so it can’t take over another one. To be brought back, use a phone with no account here.');
+/** The admin acts on a code that isn't waiting any more: a re-key's, or a bring-back's, each in its own window's words. */
+export const REKEY_NO_LIVE_CODE = word('This member has no re-key code waiting. Make a new code.');
+export const BRING_BACK_NO_LIVE_CODE = word('This member has no bring-back code waiting. Make a new code.');
 /** A code that has taken all the phones it will. */
 export const REKEY_CODE_FULL = word('This code can’t take any more phones. Ask the admin for a new one.');
 /** An address's wrong codes this hour are used up. */
@@ -67,11 +76,18 @@ export class RekeyRedeemRefusal extends Error {
 export type RekeyAsk =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
-    | { state: 'declined' };
+    | BringBackReleased
+    | { state: 'declined' }
+    | { state: 'gone' };
 
+/**
+ * `released`: a bring-back code (engine/bring-back.ts) the admin confirmed with this phone's number. The member's community
+ * copy and its key, sealed to the asking key; nothing was bound.
+ */
 export type RekeyRedeemStatus =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
+    | BringBackReleased
     | { state: 'declined' }
     | { state: 'gone' };
 
@@ -83,9 +99,12 @@ interface WrongBucket { startedAt: number; count: number; logged: boolean }
 const byAddress = new Map<string, WrongBucket>();
 const byPrefix = new Map<string, WrongBucket>();
 
-/** The bucket a code counts in: "RK-AB12" of "RK-AB12-CD34" (16 bits); a malformed code counts per address only. */
+/**
+ * The bucket a code counts in: "RK-AB12" of "RK-AB12-CD34" (16 bits), or "BB-AB12" of a bring-back's (engine/bring-back.ts);
+ * a malformed code counts per address only.
+ */
 export function rekeyCodePrefix(code: string): string | null {
-    return /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code) ? code.slice(0, 7) : null;
+    return /^(RK|BB)-[0-9A-F]{4}-[0-9A-F]{4}$/.test(code) ? code.slice(0, 7) : null;
 }
 
 function countIn(map: Map<string, WrongBucket>, key: string, now: number): number {
@@ -176,9 +195,11 @@ export function proposeRekey(rawCode: unknown, newKey: string, address: string, 
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
 
-    // A lost answer: the code was completed with this very key, which is the member now. Needs that key, so it is no
-    // guess, and no wrong-code bucket holds it back.
-    if (req?.status === 'completed' && req.new_pubkey === newKey) return boundAnswer(newKey);
+    // A lost answer: the code was completed with this very key, which is the member now (or, for a bring-back, the phone
+    // the release is sealed to). Needs that key, so it is no guess, and no wrong-code bucket holds it back.
+    if (req?.status === 'completed' && req.new_pubkey === newKey) {
+        return req.kind === 'bring_back' ? bringBackRelease(req, newKey, now) : boundAnswer(newKey);
+    }
 
     if (countIn(byAddress, address, now) >= REKEY_WRONG_CODES.perAddress) {
         throw new RekeyRedeemRefusal(429, 'too_many_wrong_codes', REKEY_TOO_MANY_WRONG);
@@ -189,10 +210,11 @@ export function proposeRekey(rawCode: unknown, newKey: string, address: string, 
     }
 
     // Any row here: a member (a member re-keying someone else from their own phone), a visitor's row, a closed account.
-    // Asked before the code, whatever the code is, so the answer to such a key says nothing about which codes are live.
+    // Asked before the code, whatever the code is, so the answer to such a key says nothing about which codes are live:
+    // its words go by the code as typed (BB-: a bring-back's), never by a row.
     if (db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(newKey)
         || db.prepare('SELECT 1 FROM invalidated_keys WHERE public_key = ?').get(newKey)) {
-        throw new RekeyRedeemRefusal(409, 'key_has_account', REKEY_KEY_HAS_ACCOUNT);
+        throw new RekeyRedeemRefusal(409, 'key_has_account', code.startsWith('BB') ? BRING_BACK_KEY_HAS_ACCOUNT : REKEY_KEY_HAS_ACCOUNT);
     }
     if (!isLive(req, now)) {
         noteWrongCode(code, address, now);
@@ -235,7 +257,10 @@ export function rekeyRedeemStatus(rawCode: unknown, key: string, now = Date.now(
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
     if (!req) return { state: 'gone' };
-    if (req.status === 'completed') return req.new_pubkey === key ? boundAnswer(key) : { state: 'gone' };
+    if (req.status === 'completed') {
+        if (req.new_pubkey !== key) return { state: 'gone' };
+        return req.kind === 'bring_back' ? bringBackRelease(req, key, now) : boundAnswer(key);
+    }
     const mine = proposalOf(code, key);
     if (!mine) return { state: 'gone' };
     if (mine.declined_at) return { state: 'declined' };
@@ -256,8 +281,12 @@ export function declineRekeyProposal(oldPublicKey: string, newPublicKey: string,
     const cleanOperator = (operator || '').trim().toLowerCase() || 'owner:password';
     const req = db.prepare("SELECT * FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC, id DESC LIMIT 1")
         .get(cleanOld) as RekeyRequestRow | undefined;
-    if (!isLive(req, now)) throw new RekeyRedeemRefusal(404, 'no_live_code', word('This member has no re-key code waiting. Make a new code.'));
-    assertMayRekey(cleanOld, cleanOperator);
+    if (!isLive(req, now)) {
+        // Said in the words of the window it came from: the member's last code says which (a bring-back's, or a re-key's).
+        const last = req ?? db.prepare('SELECT kind FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1').get(cleanOld) as { kind?: string } | undefined;
+        throw new RekeyRedeemRefusal(404, 'no_live_code', last?.kind === 'bring_back' ? BRING_BACK_NO_LIVE_CODE : REKEY_NO_LIVE_CODE);
+    }
+    assertMayRekey(cleanOld, cleanOperator, req.kind === 'bring_back' ? 'bring_back' : 'rekey');
     const at = new Date(now).toISOString();
     const changed = db.prepare('UPDATE rekey_proposals SET declined_at = ? WHERE code = ? AND new_pubkey = ? AND declined_at IS NULL').run(at, req.code, cleanNew).changes;
     if (changed !== 1) throw new RekeyRedeemRefusal(404, 'no_such_phone', word('No phone with that key is waiting on this code.'));
@@ -275,20 +304,23 @@ export function declineRekeyProposal(oldPublicKey: string, newPublicKey: string,
  * completeRekey's errors.
  */
 export function bindRekeyByMatch(oldPublicKey: string, rawCode: unknown, rawMatch: unknown, operator: string, now = Date.now()):
-    ReturnType<typeof completeRekey> {
+    ReturnType<typeof completeRekey> | ReturnType<typeof confirmBringBack> {
     assertPlainTablesWritable();
     const cleanOld = (oldPublicKey || '').trim().toLowerCase();
     const cleanOperator = (operator || '').trim().toLowerCase() || 'owner:password';
     const code = cleanRekeyCode(rawCode);
     const req = requestByCode(code);
     if (!req || req.old_pubkey !== cleanOld || !isLive(req, now)) {
-        throw new RekeyRedeemRefusal(404, 'no_live_code', word('This member has no re-key code waiting. Make a new code.'));
+        // A bring-back's code (BB-) is said as one: the Bring back window typed it.
+        throw new RekeyRedeemRefusal(404, 'no_live_code', code.startsWith('BB') ? BRING_BACK_NO_LIVE_CODE : REKEY_NO_LIVE_CODE);
     }
-    assertMayRekey(cleanOld, cleanOperator);
+    assertMayRekey(cleanOld, cleanOperator, req.kind === 'bring_back' ? 'bring_back' : 'rekey');
     const match = typeof rawMatch === 'string' ? rawMatch.trim() : '';
     if (!/^\d{2}$/.test(match)) throw new RekeyRedeemRefusal(400, 'match_required', word('Type the two digits on their phone.'));
 
     const found = db.prepare('SELECT new_pubkey FROM rekey_proposals WHERE code = ? AND match = ? AND declined_at IS NULL').get(code, match) as { new_pubkey: string } | undefined;
+    // A bring-back binds nothing: the code is done for that phone, whose own poll collects the release (engine/bring-back.ts).
+    if (found && req.kind === 'bring_back') return confirmBringBack(req, found.new_pubkey, cleanOperator, now);
     if (found) return completeRekey(cleanOld, found.new_pubkey, code, cleanOperator);
 
     const tries = db.transaction((): number => {

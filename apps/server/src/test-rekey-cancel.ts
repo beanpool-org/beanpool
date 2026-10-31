@@ -370,6 +370,13 @@ async function runTests() {
         const lifted = await lift(pia.pubKeyHex);
         assert(lifted.status === 200 && getMember(pia.pubKeyHex)?.status === 'active' && await acts(pia, 'lifted'),
             `H: Lift suspension makes Pia active, and she acts (${lifted.status} ${JSON.stringify(lifted.json)})`);
+        // Removal by vote S4's tripwire: whoever has 5 pauses whose votes are still open makes another only with an owner's
+        // fresh proof, which this computer's session can't give. Kit's, Ivy's, Quin's and Ren's pauses have shown what they
+        // were made for, so they are lifted, and the pauses below are made as before.
+        for (const done of [kit, ivy, quin, ren]) {
+            const l = await lift(done.pubKeyHex);
+            if (l.status !== 200) throw new Error(`setup: lifting ${done.pubKeyHex.slice(0, 8)}: ${l.status} ${JSON.stringify(l.json)}`);
+        }
         const reportActioned = async (pk: string) => {
             const report = submitReport(rep.pubKeyHex, pk, 'Spam links posted in the market listings');
             if (!report) throw new Error('report refused');

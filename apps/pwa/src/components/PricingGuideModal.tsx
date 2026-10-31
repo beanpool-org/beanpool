@@ -2,7 +2,7 @@
  * PricingGuideModal — Searchable, Auto-Adjusting Community Pricing Guide for PWA (#206).
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     PRICING_CATEGORIES,
     DEFAULT_PRICING_CATALOG,
@@ -84,6 +84,59 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
     const [reportComment, setReportComment] = useState('');
     const [reportSubmitting, setReportSubmitting] = useState(false);
     const [reportSuccess, setReportSuccess] = useState(false);
+    const reportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Bumped whenever the report form is opened, closed, or the modal closes or goes: a submit that comes back after
+    // that touches nothing (no state, no timer).
+    const reportRunRef = useRef(0);
+
+    const handleCloseReport = () => {
+        reportRunRef.current++;
+        if (reportTimerRef.current) {
+            clearTimeout(reportTimerRef.current);
+            reportTimerRef.current = null;
+        }
+        setReportingItem(null);
+        setReportSuccess(false);
+        setReportComment('');
+        setReportType('too_high');
+        setReportSubmitting(false);
+    };
+
+    const handleOpenReport = (item: PricingGuideItem) => {
+        reportRunRef.current++;
+        if (reportTimerRef.current) {
+            clearTimeout(reportTimerRef.current);
+            reportTimerRef.current = null;
+        }
+        setReportSuccess(false);
+        setReportComment('');
+        setReportType('too_high');
+        setReportSubmitting(false);
+        setReportingItem(item);
+    };
+
+    // Clear reporting timer and reset reporting state when modal closes or unmounts
+    useEffect(() => {
+        if (!isOpen) {
+            reportRunRef.current++;
+            if (reportTimerRef.current) {
+                clearTimeout(reportTimerRef.current);
+                reportTimerRef.current = null;
+            }
+            setReportingItem(null);
+            setReportSuccess(false);
+            setReportComment('');
+            setReportType('too_high');
+            setReportSubmitting(false);
+        }
+        return () => {
+            reportRunRef.current++;
+            if (reportTimerRef.current) {
+                clearTimeout(reportTimerRef.current);
+                reportTimerRef.current = null;
+            }
+        };
+    }, [isOpen]);
 
     // Keyboard (Escape) & Modal Accessibility
     useEffect(() => {
@@ -91,7 +144,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
         function handleKeyDown(e: KeyboardEvent) {
             if (e.key !== 'Escape') return;
             if (reportingItem) {
-                setReportingItem(null);
+                handleCloseReport();
                 return;
             }
             onClose();
@@ -145,11 +198,15 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
         e.preventDefault();
         if (!reportingItem) return;
 
+        const run = reportRunRef.current;
         setReportSubmitting(true);
         try {
             await submitPricingReportApi(reportingItem.id, reportType, reportComment.trim() || undefined, reporterPubkey);
+            if (run !== reportRunRef.current) return;
             setReportSuccess(true);
-            setTimeout(() => {
+            if (reportTimerRef.current) clearTimeout(reportTimerRef.current);
+            reportTimerRef.current = setTimeout(() => {
+                reportTimerRef.current = null;
                 setReportingItem(null);
                 setReportSuccess(false);
                 setReportComment('');
@@ -158,7 +215,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
         } catch (err) {
             console.error('[PricingGuide] Failed to submit report:', err);
         } finally {
-            setReportSubmitting(false);
+            if (run === reportRunRef.current) setReportSubmitting(false);
         }
     }
 
@@ -365,7 +422,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                             {/* relative z-10 keeps this above the select overlay spanning the row; the row's `isolate` keeps that z-10 local. */}
                                             <button
                                                 type="button"
-                                                onClick={() => setReportingItem(item)}
+                                                onClick={() => handleOpenReport(item)}
                                                 className="relative z-10 min-w-[44px] min-h-[44px] flex items-center justify-center p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 title={t('Report price feedback')}
                                                 aria-label={t('Report price for {name}', { name: item.name })}
@@ -388,7 +445,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         aria-modal="true"
                         aria-labelledby="report-modal-title"
                         onClick={(e) => {
-                            if (e.target === e.currentTarget) setReportingItem(null);
+                            if (e.target === e.currentTarget) handleCloseReport();
                         }}
                     >
                         <div className="w-full max-w-sm bg-white dark:bg-zinc-900 rounded-2xl p-5 shadow-2xl border border-zinc-200 dark:border-zinc-800 animate-in fade-in zoom-in-95 duration-150">
@@ -473,7 +530,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     <div className="flex gap-2">
                                         <button
                                             type="button"
-                                            onClick={() => setReportingItem(null)}
+                                            onClick={handleCloseReport}
                                             className="flex-1 py-2 min-h-[44px] rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                         >
                                             {t('Cancel')}

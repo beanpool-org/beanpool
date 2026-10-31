@@ -13,7 +13,7 @@
  * (fake-vault.ts, which checks each request's signature and signs its answers as the vault does) and answers two
  * communities itself, checking that every request is signed by Kim's key for that community.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 const mem = vi.hoisted(() => ({ async: new Map<string, string>(), secure: new Map<string, string>() }));
@@ -46,8 +46,8 @@ import { SAVED_NODES_STORE_KEY, vaultCopyKnownStoreKey, vaultMoveUnfinishedStore
 import { vaultCopyKnowledge, vaultCopyKnown } from '../vault';
 import { retryCommunityRemovals, vaultMoveOffer } from '../vault-move';
 import {
-    beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, removeCommunityCopyFrom, removeEverything,
-    removeVaultCopy, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
+    beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom,
+    removeEverything, removeVaultCopy, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
 } from '../ways-back';
 import { FakeVault, OTHER_KEY, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 import { boundSignatureValid } from './server-signature-check';
@@ -74,6 +74,14 @@ interface Community {
     deletedAt: number;
     /** When set, each request's fate (the seeded sweep): answered, refused (a 5xx), no answer, or landed with its answer lost. */
     fate: ((req: SentRequest) => Fate) | null;
+    /** The copy it keeps for its admins to bring Kim back from (vault rethink VR3), since when; null: none. */
+    admins: { since: string } | null;
+    /** A copy it keeps for its admins but can't open now (its seal key gone, or another), since when and why; null: none. */
+    adminsUnopenable: { since: string; reason: string } | null;
+    /** How its delete of that copy goes: as the node answers, refused (a 5xx), or a proxy's 200 page. */
+    adminsDelete: 'answered' | 'refused' | 'proxy';
+    /** A server from before VR3: its status never names the copy, and it has no route to delete one. */
+    beforeVr3: boolean;
 }
 
 type Fate = 'answered' | 'refused' | 'down' | 'lost';
@@ -97,7 +105,7 @@ let kim: BeanPoolIdentity;
 function network(): Net {
     const community = (copies: string[], generation: number): Community => ({
         copies: new Set(copies), generation, down: false, deletesFail: false, deletesFailFor: new Set(), answersLostFor: new Set(),
-        deletedAt: 0, fate: null,
+        deletedAt: 0, fate: null, admins: null, adminsUnopenable: null, adminsDelete: 'answered', beforeVr3: false,
     });
     const net: Net = { vault: new FakeVault(), communities: { [MULLUM]: community(['google'], 4), [GLOBAL]: community([], 0) }, sent: [], statusGate: null };
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -125,7 +133,16 @@ function network(): Net {
         }
         if (req.method === 'POST' && u.pathname === '/api/recovery/shares/status') {
             if (net.statusGate) await net.statusGate;
-            return json(200, { generation: c.generation, enrolledSso: [...c.copies], keepers: [], total: c.copies.size, threshold: 1 });
+            const status = { generation: c.generation, enrolledSso: [...c.copies], keepers: [], total: c.copies.size, threshold: 1 };
+            return json(200, c.beforeVr3 ? status : { ...status, communityCopy: c.admins, communityCopyUnopenable: c.adminsUnopenable });
+        }
+        if (req.method === 'DELETE' && u.pathname === '/api/recovery/community-copy' && !c.beforeVr3) {
+            if (c.adminsDelete === 'refused') return json(503, { error: 'Try again later.', code: 'standby' });
+            if (c.adminsDelete === 'proxy') return new Response('<html>Welcome to the cafe wifi</html>', { status: 200, headers: { 'Content-Type': 'text/html' } });
+            const removed = c.admins || c.adminsUnopenable ? 1 : 0;
+            c.admins = null;
+            c.adminsUnopenable = null;
+            return json(200, { removed, kept: false });
         }
         const del = /^\/api\/recovery\/shares\/sso\/([a-z]+)$/.exec(u.pathname);
         if (req.method === 'DELETE' && del) {
@@ -707,25 +724,43 @@ describe('a community that can\'t be reached: "not yet removed", remembered, and
             return null;
         }
 
-        it("a seeded sweep with nobody else changing Mullum's copies: every one goes, and nothing waits", async () => {
-            const random = seeded(2570);
-            const wrong: string[] = [];
-            for (let i = 0; i < 250; i++) {
-                const w = await sweepTrial(random, false);
-                if (w) wrong.push(`trial ${i}: ${w}`);
+        describe("a seeded sweep with nobody else changing Mullum's copies: every one goes, and nothing waits", () => {
+            let random: () => number;
+            beforeAll(() => {
+                random = seeded(2570);
+            });
+            for (let chunk = 0; chunk < 5; chunk++) {
+                const start = chunk * 50;
+                const end = start + 50;
+                it(`trials ${start}–${end - 1}`, async () => {
+                    const wrong: string[] = [];
+                    for (let i = start; i < end; i++) {
+                        const w = await sweepTrial(random, false);
+                        if (w) wrong.push(`trial ${i}: ${w}`);
+                    }
+                    expect(wrong).toEqual([]);
+                }, 60_000);
             }
-            expect(wrong).toEqual([]);
-        }, 60_000);
+        });
 
-        it('a seeded sweep with a copy linked again from another device meanwhile: that copy is never sent a delete, and nothing waits', async () => {
-            const random = seeded(4402938538);
-            const wrong: string[] = [];
-            for (let i = 0; i < 250; i++) {
-                const w = await sweepTrial(random, true);
-                if (w) wrong.push(`trial ${i}: ${w}`);
+        describe('a seeded sweep with a copy linked again from another device meanwhile: that copy is never sent a delete, and nothing waits', () => {
+            let random: () => number;
+            beforeAll(() => {
+                random = seeded(4402938538);
+            });
+            for (let chunk = 0; chunk < 5; chunk++) {
+                const start = chunk * 50;
+                const end = start + 50;
+                it(`trials ${start}–${end - 1}`, async () => {
+                    const wrong: string[] = [];
+                    for (let i = start; i < end; i++) {
+                        const w = await sweepTrial(random, true);
+                        if (w) wrong.push(`trial ${i}: ${w}`);
+                    }
+                    expect(wrong).toEqual([]);
+                }, 60_000);
             }
-            expect(wrong).toEqual([]);
-        }, 60_000);
+        });
     });
 
     it('the move card never offers to move a copy that is waiting to be removed', async () => {
@@ -755,6 +790,8 @@ describe('Remove everything', () => {
                 { url: MULLUM, name: 'Mullumbimby', provider: 'google', removal: { removed: true } },
                 { url: GLOBAL, name: 'Global community', provider: 'google', removal: { removed: true } },
             ],
+            // Neither keeps a copy for its admins (vault rethink VR3): nothing to remove there.
+            admins: [],
             notAsked: [],
         });
         expect(vaultDeletes(net).map((s) => s.body)).toEqual([expect.objectContaining({ all: true })]);
@@ -900,5 +937,132 @@ describe('after Remove everything, the "one way back" card learns there is no va
         const after = await oneWayBackFromNode(kim.publicKey, GLOBAL, standing, Date.now(), { vaultCopy: await vaultCopyKnown(kim.publicKey) });
         expect(oneWayBackPlace(after, Date.now(), false)).toBe('card');
         expect(mem.async.has(`beanpool_one_way_back:${kim.publicKey.toLowerCase()}`)).toBe(true);
+    });
+});
+
+describe("your community's admins (vault rethink VR3): their copy is listed, since when, and removed like the others", () => {
+    const SINCE = '2026-10-29T04:05:06.000Z';
+    const adminsAt = (net: Net, origin: string) => deletesAt(net, origin).filter((s) => s.path === '/api/recovery/community-copy');
+
+    it("listed under its community with since when, from the same signed status; a way back, so never 'words only'", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.communities[MULLUM].admins = { since: SINCE };
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0]).toEqual({ url: MULLUM, name: 'Mullumbimby', status: { providers: ['google'], generation: 4, adminsCopy: { since: SINCE } } });
+        expect(ways.communities[1].status).toEqual({ providers: [], generation: 0 });
+        expect(knownCopies(ways)).toContainEqual({ at: 'admins', url: MULLUM });
+        // One status per community, as before: the copy rides in the answer the list already asks for.
+        expect(net.sent.filter((s) => s.path === '/api/recovery/community-copy/status')).toEqual([]);
+        expect(net.sent.filter((s) => s.path === '/api/recovery/shares/status')).toHaveLength(2);
+
+        // With nothing else kept anywhere, the admins' copy alone still keeps the list from saying "words only".
+        net.vault.copies.clear();
+        net.communities[MULLUM].copies.clear();
+        const alone = await listWaysBack(kim);
+        expect(knownCopies(alone)).toEqual([{ at: 'admins', url: MULLUM }]);
+        expect(wordsOnly(alone)).toBe(false);
+        // ...and removing it is removing the last way back: the 12 words are asked about first.
+        expect(beforeRemoving(alone, { at: 'admins', url: MULLUM }, { hasWords: true, writtenDown: false })).toBe('show-words-first');
+        expect(beforeRemoving(ways, { at: 'admins', url: MULLUM }, { hasWords: true, writtenDown: false })).toBe('confirm');
+    });
+
+    it("a server from before it never names the copy: nothing listed for it, and nothing sent to remove one", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.communities[MULLUM].beforeVr3 = true;
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status).toEqual({ providers: ['google'], generation: 4 });
+        expect(knownCopies(ways).some((c) => c.at === 'admins')).toBe(false);
+        await removeEverything(kim, ways);
+        expect(adminsAt(net, MULLUM)).toEqual([]);
+    });
+
+    it("Remove: the signed delete, removed on the community's own answer, and gone from the list", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.communities[MULLUM].admins = { since: SINCE };
+        const ways = await listWaysBack(kim);
+        expect(await removeAdminsCopyFrom(kim, ways.communities[0])).toEqual({ removed: true });
+        expect(adminsAt(net, MULLUM)).toHaveLength(1);
+        expect(net.communities[MULLUM].admins).toBeNull();
+        // The sign-in copy there is untouched.
+        expect([...net.communities[MULLUM].copies]).toEqual(['google']);
+        expect(knownCopies(await listWaysBack(kim)).some((c) => c.at === 'admins')).toBe(false);
+    });
+
+    for (const [what, how] of [['refuses it (a standby, a 5xx)', 'refused'], ["answers with a proxy's page", 'proxy']] as const) {
+        it(`a community that ${what}: not removed, still listed, and not remembered as waiting`, async () => {
+            const net = network();
+            await kimsPhone(net);
+            net.communities[MULLUM].admins = { since: SINCE };
+            net.communities[MULLUM].adminsDelete = how;
+            const ways = await listWaysBack(kim);
+            const r = await removeAdminsCopyFrom(kim, ways.communities[0]);
+            expect(r.removed).toBe(false);
+            expect(net.communities[MULLUM].admins).toEqual({ since: SINCE });
+            const again = await listWaysBack(kim);
+            expect(knownCopies(again)).toContainEqual({ at: 'admins', url: MULLUM });
+            expect(again.pending).toEqual([]);
+            expect(mem.async.get(vaultMoveUnfinishedStoreKey(kim.publicKey))).toBeUndefined();
+        });
+    }
+
+    it("Remove everything takes it too, beside the vault's copies and the sign-ins'; after it, the words only", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.communities[MULLUM].admins = { since: SINCE };
+        const done = await removeEverything(kim, await listWaysBack(kim));
+        expect(done.admins).toEqual([{ url: MULLUM, name: 'Mullumbimby', removal: { removed: true } }]);
+        expect(done.communities.map((c) => c.provider)).toEqual(['google']);
+        expect(done.vault).toEqual({ removed: true });
+        expect(adminsAt(net, MULLUM)).toHaveLength(1);
+        // Global keeps no copy for its admins (never offered there): nothing is sent to remove one.
+        expect(adminsAt(net, GLOBAL)).toEqual([]);
+        expect(wordsOnly(await listWaysBack(kim))).toBe(true);
+    });
+
+    it("Remove everything with that delete refused: said as not removed, and the list still shows the copy", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.communities[MULLUM].admins = { since: SINCE };
+        net.communities[MULLUM].adminsDelete = 'refused';
+        const done = await removeEverything(kim, await listWaysBack(kim));
+        expect(done.admins).toEqual([{ url: MULLUM, name: 'Mullumbimby', removal: { removed: false, why: 'unreachable' } }]);
+        const after = await listWaysBack(kim);
+        expect(knownCopies(after)).toEqual([{ at: 'admins', url: MULLUM }]);
+        expect(wordsOnly(after)).toBe(false);
+    });
+
+    it("a copy its server keeps but can't open: listed as that and removable, never a way back (#2626 deciding pass)", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.vault.copies.clear();
+        net.communities[MULLUM].copies.clear();
+        net.communities[MULLUM].adminsUnopenable = { since: SINCE, reason: 'recovery_seal_key_missing' };
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status).toEqual({ providers: [], generation: 4, adminsCopyUnopenable: { since: SINCE, reason: 'recovery_seal_key_missing' } });
+        expect(knownCopies(ways), 'it brings nobody back: not counted').toEqual([]);
+        expect(unopenableAdminsCopies(ways).map((c) => c.url)).toEqual([MULLUM]);
+        // It is kept, so the list never says nothing is (its row says the 12 words still work).
+        expect(wordsOnly(ways)).toBe(false);
+        // Removing it takes no way back away: an ordinary confirm, not "show my 12 words first".
+        expect(beforeRemoving(ways, { at: 'admins', url: MULLUM }, { hasWords: true, writtenDown: false })).toBe('confirm');
+        // Remove everything takes it too: it is still the member's key, on that server.
+        const done = await removeEverything(kim, ways);
+        expect(done.admins).toEqual([{ url: MULLUM, name: 'Mullumbimby', removal: { removed: true } }]);
+        expect(adminsAt(net, MULLUM)).toHaveLength(1);
+        expect(net.communities[MULLUM].adminsUnopenable).toBeNull();
+        expect(wordsOnly(await listWaysBack(kim))).toBe(true);
+    });
+
+    it("a reason this phone doesn't know is still 'can't open', never kept", async () => {
+        const net = network();
+        await kimsPhone(net);
+        net.communities[MULLUM].adminsUnopenable = { since: SINCE, reason: 'a_reason_from_a_later_server' };
+        const ways = await listWaysBack(kim);
+        expect(ways.communities[0].status?.adminsCopyUnopenable).toEqual({ since: SINCE, reason: 'recovery_seal_unopenable' });
+        expect(ways.communities[0].status?.adminsCopy).toBeUndefined();
+        expect(knownCopies(ways).some((c) => c.at === 'admins')).toBe(false);
     });
 });

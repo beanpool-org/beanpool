@@ -80,6 +80,11 @@ export const OWNER_ALERT_WORDS = {
     offBoxShorter: 'Off-box backups are kept for fewer days now.',
     standbyTokenCleared: 'This standby no longer holds a replication token: it stops copying until one is saved.',
     membersRemoved: { one: 'A member was removed in the last day, by an admin.', many: '{n} members were removed in the last day, by an admin.' },
+    /** Every pause (decisions-engine.ts notePauseForOwners; removal by vote S4, design §3.4 rule 4), `how` who acted: "by an admin". */
+    membersPaused: (how: string) => ({
+        one: `A member was paused in the last day, ${how}.`,
+        many: `{n} members were paused in the last day, ${how}.`,
+    }),
     /** A re-key of an account with no owner or admin role (engine/node-roles.ts accountMovedAlert), `how` who acted: "by an admin". */
     accountsMoved: (how: string) => ({
         one: `A member's account was moved to a new phone in the last day, ${how}.`,

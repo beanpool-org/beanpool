@@ -8,13 +8,16 @@
  * a read of the whole node already), not under Events, a group, or a picked distance, which narrow the list on purpose.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { wantsFill, word } from '@beanpool/core';
+import { isNodePulsePost, READ_TIMEOUT_MS, wantsFill, word } from '@beanpool/core';
 import type { NodeProfile } from './node-profile';
 import { EVENT_TYPES_QUERY } from './events';
 import { marketSecondRow, type MarketTypeFilter } from './market-filters';
 
 /** The section's heading: a word() key, shown through t() (the list's headings are). */
 export const ELSEWHERE_HEADING = word('Newest from elsewhere');
+
+/** Re-exported so callers can import from here or core. */
+export { READ_TIMEOUT_MS, isNodePulsePost };
 
 /** The node's page, which is the most the fill holds (core FILL_MAX). */
 const READ_LIMIT = 50;
@@ -78,21 +81,20 @@ export interface FillInputs {
     distancePicked: boolean;
     /** The community refused this phone its listings, or the first sync has not landed. */
     ready: boolean;
-    /** How many listings the nearby list shows, under the member's filters. */
-    shownNear: number;
+    /** How many listings the nearby list shows, under the member's filters (or the list itself). */
+    shownNear: number | readonly any[];
 }
 
-/** Whether the list is to be filled from elsewhere. */
+/** Whether the list is to be filled from elsewhere. The node's own Daily Pulse post is never counted as a nearby listing. */
 export function fillWanted(i: FillInputs): boolean {
+    const nearCount = typeof i.shownNear === 'number'
+        ? i.shownNear
+        : Array.isArray(i.shownNear)
+        ? i.shownNear.filter(p => !isNodePulsePost(p)).length
+        : 0;
     return !!i.profile?.features?.nearbyListings && i.member && i.ready && !i.noArea && !i.searching
-        && i.filter !== 'events' && !i.groupFiltered && !i.distancePicked && wantsFill(i.shownNear);
+        && i.filter !== 'events' && !i.groupFiltered && !i.distancePicked && wantsFill(nearCount);
 }
-
-/**
- * Given up after this long: the screen does not start a second read while one is out, so a read that never answered
- * (a radio gone cold mid-request) would hold the section on its spinner for good.
- */
-export const READ_TIMEOUT_MS = 20_000;
 
 /** The newest from everywhere under the type and category, normalised as the feed reads rows; null when it can't be read. */
 export async function readElsewhere(filter: MarketTypeFilter, categoryFilter: string): Promise<any[] | null> {

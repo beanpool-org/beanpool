@@ -73,12 +73,21 @@ expect 1 "deps: no node_modules at all says nothing is installed" "nothing is in
 mkdir -p "$T/nodestub"
 cat > "$T/nodestub/node" <<'STUB'
 #!/bin/bash
-echo "stub node: SERVER_SUITES_ONLY=[${SERVER_SUITES_ONLY-unset}]"; exit 1
+echo "stub node: SERVER_SUITES_ONLY=[${SERVER_SUITES_ONLY-unset}] SERVER_SUITES_SHARD=[${SERVER_SUITES_SHARD-unset}] TEST_ALL_ONLY=[${TEST_ALL_ONLY-unset}] TEST_ALL_TEST_SLICE=[${TEST_ALL_TEST_SLICE-unset}]"; exit 1
 STUB
 chmod +x "$T/nodestub/node"
 expect 1 "test-all --all drops SERVER_SUITES_ONLY, so a narrowed run cannot record a full green" "SERVER_SUITES_ONLY=[unset]" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
 expect 1 "test-all --all ...and says it is ignoring it" "ignoring SERVER_SUITES_ONLY=test-x" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
 expect 1 "test-all without --all keeps SERVER_SUITES_ONLY, for reproducing one suite" "SERVER_SUITES_ONLY=[test-x]" -- env SERVER_SUITES_ONLY=test-x PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --fast
+
+# ── The real test-all.sh narrowed for a CI shard: TEST_ALL_ONLY, SERVER_SUITES_SHARD, TEST_ALL_TEST_SLICE ──────────────
+expect 1 "test-all --all without TEST_ALL_ONLY drops SERVER_SUITES_SHARD: the merge gate's run is every suite" "SERVER_SUITES_SHARD=[unset]" -- env SERVER_SUITES_SHARD=1/6 PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 1 "test-all --all ...and says it is ignoring it" "ignoring SERVER_SUITES_SHARD=1/6" -- env SERVER_SUITES_SHARD=1/6 PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 1 "test-all --all without TEST_ALL_ONLY drops TEST_ALL_TEST_SLICE too" "ignoring TEST_ALL_TEST_SLICE=--only" -- env TEST_ALL_TEST_SLICE="--only --filter=x" PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 1 "test-all --all with TEST_ALL_ONLY keeps SERVER_SUITES_SHARD for the shard's runner" "SERVER_SUITES_SHARD=[1/6]" -- env TEST_ALL_ONLY=server_suites SERVER_SUITES_SHARD=1/6 PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 1 "test-all with TEST_ALL_ONLY says the run records no green" "This run records no green." -- env TEST_ALL_ONLY=server_suites PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 1 "test-all keeps TEST_ALL_ONLY and TEST_ALL_TEST_SLICE from its checks (merge_gate runs test-all.sh again inside)" "TEST_ALL_ONLY=[unset] TEST_ALL_TEST_SLICE=[unset]" -- env TEST_ALL_ONLY=test TEST_ALL_TEST_SLICE=--only PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
+expect 2 "test-all refuses a TEST_ALL_ONLY name that is no check, before running anything" "TEST_ALL_ONLY names website_langs, which is no check here" -- env TEST_ALL_ONLY="website_lang website_langs" PATH="$T/nodestub:$PATH" bash "$REPO_ROOT/scripts/test-all.sh" --all
 
 # ── The real test-all.sh stopped part-way: CI's `timeout -s INT 115m`, or Ctrl-C ──────────────────────────────────
 # A copy of it beside the real test-all-lib.sh, with a stand-in install check and a stub pnpm on PATH: `turbo run build`
@@ -131,6 +140,16 @@ has "stopped run (local): keeps its logs where they are and says where" "$S/out"
 KEPT=$(sed -n 's/^Full logs of every check kept in //p' "$S/out")
 has "stopped run (local): ...held output included" "$KEPT/test.log" "stub test: held output"
 case "$KEPT" in */tmp.*) rm -rf "$KEPT" ;; esac
+
+# A CI shard's run of the same copy: only the checks TEST_ALL_ONLY names run and are reported, and a check that waits for
+# build (native_phone_width) or for website_contrast (website_status) starts at once when that check is not in the run,
+# instead of waiting for ever (alarm: 120 s). Both then fail fast here: their scripts are not in this copy.
+rm -f "$S/started/"*
+env TEST_ALL_ONLY="deploy_preserve native_phone_width website_status" STUB_STARTED="$S/started" PATH="$S/bin:$PATH" \
+  perl -e 'alarm 120; exec @ARGV' bash "$S/scripts/test-all.sh" --all > "$S/out" 2>&1; ONLY_RC=$?
+if [ "$ONLY_RC" = 1 ]; then ok "shard run: ends (exit 1: two checks failed), no check waiting for one not in the run"; else bad "shard run: exit $ONLY_RC, wanted 1 (142 is the 120 s alarm: a check waited for ever)"; tail -25 "$S/out" | sed 's/^/      /'; fi
+has "shard run: the three checks named ran" "$S/out" "Total: 1 passed, 2 failed, 0 skipped"
+if grep -qE "settings_phone|server_suites|secrets_guard" "$S/out"; then bad "shard run: reports a check it was not given"; else ok "shard run: reports no other check"; fi
 
 # ── The real test-all.sh: --continue runs every package, and the report marks only what failed ────
 expect 0 "test-all --continue: every package runs to its own result" "" -- bash "$REPO_ROOT/scripts/test-all-continue.sh"

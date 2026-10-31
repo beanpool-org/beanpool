@@ -647,6 +647,121 @@ function openSsoWords(ssoKey: Uint8Array, box: unknown): string[] {
     }
 }
 
+// ── The community copy: the seed and the 12 words under a random key (vault rethink VR3) ────────────────────────────────
+//
+// "Your community's admins can bring you back" (scratch/fable-design/DESIGN-vault-rethink-fable.md §4.3, Marty's picks of
+// 27 Oct). The phone seals its seed, and the words when it has them, under 32 random bytes it makes for this copy alone,
+// and hands the community's server the copy AND that key. The server keeps both under its recovery seal, like every copy
+// it keeps; it opens neither. When an admin who has seen the member in person brings them back, the server seals the copy
+// and its key to the new phone's throwaway key, and the phone opens the copy with the key.
+//
+// So who can open it is said plainly: the community's server, with its operator, can (it holds both halves); nobody
+// else can. That is the community-held placement, and the words the member reads say exactly that. The shared placement
+// (VR4) puts the copy and one half of this key at the vault and the other half here; the copy's format does not change.
+//
+// The seed box is bound (AAD) to the member's public key, so a copy opens only as the account it was made for: a server
+// that hands out another member's copy and key under this member's name is caught here, before any key is saved. The
+// words ride in a second box in `kdfParams`, exactly the sign-in copy's (same packing, same derivation from this copy's
+// key, same scheme name), so a damaged words box costs the words, never the account.
+
+/** The scheme of a community copy: the seed sealed under a random 32-byte key that travels beside it. */
+export const KEEPER_ALG_COPY_KEY = 'copykey-xc20p-v1';
+
+function copyKeyAad(memberPublicKey: Uint8Array): Uint8Array {
+    return utf8ToBytes(`beanpool-keeper-copy-key-v1\n${Buffer.from(memberPublicKey).toString('hex')}`);
+}
+
+/** A community copy as the phone makes it: the sealed copy, and the key that opens it. */
+export interface KeySealedCopy {
+    copy: SealedShare;
+    /** The 32 random bytes that open {@link copy}, base64. Never stored beside the copy unwrapped. */
+    copyKey: string;
+}
+
+/**
+ * Seal the 32-byte seed, and its 12 words when given, under a fresh random key. Refuses words that are not 12 words
+ * from the BIP-39 English list or that make another key, as {@link sealSeedToSso} does.
+ */
+export function sealSeedToCopyKey(seed: Uint8Array, options?: SealSeedToSsoOptions): KeySealedCopy {
+    if (!(seed instanceof Uint8Array) || seed.length !== KEY_LEN) {
+        throw new KeeperCryptoError(
+            `A community copy's seed must be exactly ${KEY_LEN} bytes, got ${seed instanceof Uint8Array ? seed.length : typeof seed}.`,
+        );
+    }
+    const words = options?.words;
+    if (words && words.length > 0) {
+        if (!isWellFormedRecoveryPhrase(words)) {
+            throw new KeeperCryptoError('The words to seal with this seed are not 12 words from the BIP-39 English list.');
+        }
+        if (!recoveryWordsMatchSeed(words, seed)) {
+            throw new KeeperCryptoError('The words to seal with this seed make a different account\'s key.');
+        }
+    }
+    assertRecoveryCsprngAvailable();
+    const key = randomBytes(KEY_LEN);
+    try {
+        const params: Record<string, unknown> = { alg: KEEPER_ALG_COPY_KEY };
+        if (words && words.length > 0) {
+            const packed = packRecoveryWords(words);
+            try {
+                const box = seal(ssoWordsKey(key), packed, AAD_SSO_WORDS);
+                params.words = {
+                    alg: KEEPER_ALG_SSO_WORDS, iv: box.shareIv, ct: box.encryptedShare, tag: box.shareTag,
+                } satisfies SealedSsoWords;
+            } finally {
+                packed.fill(0);
+            }
+        }
+        const copy = { ...seal(key, seed, copyKeyAad(ed25519.getPublicKey(seed))), kdfParams: JSON.stringify(params) };
+        return { copy, copyKey: b64(key) };
+    } finally {
+        key.fill(0);
+    }
+}
+
+/** Whether a stored copy is a community copy (by its scheme name alone; nothing is opened). */
+export function isKeySealedCopy(kdfParams: string | null | undefined): boolean {
+    try {
+        return JSON.parse(kdfParams ?? '')?.alg === KEEPER_ALG_COPY_KEY;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Open a community copy with its key, as the account `memberPublicKey` names (hex or bytes): the seed, and the words
+ * when it carries them and they make this seed's key. Throws {@link KeeperCryptoError} for a wrong key, a copy made for
+ * another account, an altered copy, or a seed that is not 32 bytes. The words never make it fail (see
+ * {@link openSeedFromSso}).
+ */
+export function openSeedWithCopyKey(
+    copy: Pick<SealedShare, 'encryptedShare' | 'shareIv' | 'shareTag' | 'kdfParams'>,
+    copyKey: string | Uint8Array,
+    memberPublicKey: string | Uint8Array,
+): OpenedSsoSeed {
+    const params = parseAlg(copy.kdfParams, KEEPER_ALG_COPY_KEY);
+    const key = typeof copyKey === 'string' ? unb64(copyKey, 'copyKey') : asBytes(copyKey, 'copyKey');
+    if (key.length !== KEY_LEN) throw new KeeperCryptoError(`A community copy's key must be ${KEY_LEN} bytes, got ${key.length}.`);
+    const member = requirePublicKey(memberPublicKey, 'memberPublicKey');
+    const seed = open(key, copy as SealedShare, copyKeyAad(member));
+    if (seed.length !== KEY_LEN) {
+        throw new KeeperCryptoError(`A community copy holds ${seed.length} bytes, not a ${KEY_LEN}-byte seed.`);
+    }
+    // The AAD already binds the member's key; this is the same promise said a second way, before anything is saved.
+    if (Buffer.from(ed25519.getPublicKey(seed)).toString('hex') !== Buffer.from(member).toString('hex')) {
+        throw new KeeperCryptoError('A community copy opened, but it makes another account\'s key.');
+    }
+    if (params.words === undefined || params.words === null) return { seed, words: null, wordsStatus: 'absent' };
+    let words: string[];
+    try {
+        words = openSsoWords(key, params.words);
+    } catch {
+        return { seed, words: null, wordsStatus: 'unreadable' };
+    }
+    if (!recoveryWordsMatchSeed(words, seed)) return { seed, words: null, wordsStatus: 'mismatch' };
+    return { seed, words, wordsStatus: 'carried' };
+}
+
 /** Re-derive the sign-in key from a freshly obtained `sub` and open the fragment. */
 export async function openShareFromSso(
     sealed: SealedShare, provider: string, sub: string,
@@ -916,6 +1031,38 @@ export function openReleaseOnDevice(
         throw new KeeperCryptoError('A released copy opened, but what it holds is not a copy.');
     }
     return { encryptedShare: c.encryptedShare, shareIv: c.shareIv, shareTag: c.shareTag, kdfParams: c.kdfParams as string | null };
+}
+
+/**
+ * A community copy and its key as one {@link ReleasedCopy}, so a bring-back seals both to the new phone in one box
+ * ({@link sealReleaseToDevice}); the key rides in `kdfParams` beside the copy's own. Read back with
+ * {@link communityCopyFromRelease}.
+ */
+export function communityCopyForRelease(copy: { copy: Omit<ReleasedCopy, 'kdfParams'> & { kdfParams: string | null }; copyKey: string }): ReleasedCopy {
+    return {
+        encryptedShare: copy.copy.encryptedShare,
+        shareIv: copy.copy.shareIv,
+        shareTag: copy.copy.shareTag,
+        kdfParams: JSON.stringify({ alg: KEEPER_ALG_COPY_KEY, copy: copy.copy.kdfParams, key: copy.copyKey }),
+    };
+}
+
+/** The community copy and its key out of a released copy ({@link communityCopyForRelease}); throws when it holds none. */
+export function communityCopyFromRelease(released: ReleasedCopy): KeySealedCopy {
+    let packed: unknown;
+    try {
+        packed = JSON.parse(released.kdfParams ?? '');
+    } catch {
+        throw new KeeperCryptoError('A released copy is not a community copy.');
+    }
+    const p = packed as Record<string, unknown> | null;
+    if (!p || p.alg !== KEEPER_ALG_COPY_KEY || typeof p.copy !== 'string' || typeof p.key !== 'string') {
+        throw new KeeperCryptoError('A released copy is not a community copy.');
+    }
+    return {
+        copy: { encryptedShare: released.encryptedShare, shareIv: released.shareIv, shareTag: released.shareTag, kdfParams: p.copy },
+        copyKey: p.key,
+    };
 }
 
 /** One fragment as `POST /api/recovery/collect/fragments` lists it. */

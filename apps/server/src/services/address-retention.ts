@@ -41,10 +41,11 @@
  *
  * Log lines lose their re-key and invite codes the same way, everywhere a line loses its addresses: in system_logs at
  * boot, in every copy made, and in the copies already kept (FABLE-sec-errors M1, M2). Older versions logged each code
- * in the clear. `redactCodes` (sanitize-message.ts) matches only a code's exact shape, standing alone: `RK-` and two
- * groups of 4 hex digits, `INV-` and two groups of 4 from the invite alphabet. A re-key code becomes
- * `[REDACTED_REKEY_CODE]`, an invite code the tag new lines carry for it (`inviteLogTag`); the rest of the line, and every
- * line without a code, is left byte for byte. Lines written since never have a code (sanitizeMessage rule 6).
+ * in the clear. `redactCodes` (sanitize-message.ts) matches only a code's exact shape, standing alone: `RK-` (or a
+ * bring-back's `BB-`) and two groups of 4 hex digits, `INV-` and two groups of 4 from the invite alphabet. A re-key
+ * code becomes `[REDACTED_REKEY_CODE]`, an invite code the tag new lines carry for it (`inviteLogTag`); the rest of the
+ * line, and every line without a code, is left byte for byte. Lines written since never have a code (sanitizeMessage
+ * rule 6).
  */
 
 import fs from 'node:fs';

@@ -21,9 +21,23 @@ describe('fillWanted', () => {
         expect(fillWanted({ ...base, shownNear: 7 })).toBe(true);
     });
 
+    it('7 real near listings + a pulse: the fill still shows', () => {
+        const pulse = { author_callsign: 'Daily Pulse' };
+        const real = Array.from({ length: 7 }, (_, i) => ({ id: `p${i}` }));
+        expect(fillWanted({ ...base, shownNear: [...real, pulse] })).toBe(true);
+        expect(fillWanted({ ...base, shownNear: [...real, { authorCallsign: 'Daily Pulse' }] })).toBe(true);
+    });
+
+    it('nullish shownNear is guarded and treated as 0', () => {
+        expect(fillWanted({ ...base, shownNear: undefined as any })).toBe(true);
+        expect(fillWanted({ ...base, shownNear: null as any })).toBe(true);
+    });
+
     it('from 8 near, no', () => {
         expect(fillWanted({ ...base, shownNear: 8 })).toBe(false);
         expect(fillWanted({ ...base, shownNear: 60 })).toBe(false);
+        const real8 = Array.from({ length: 8 }, (_, i) => ({ id: `p${i}` }));
+        expect(fillWanted({ ...base, shownNear: real8 })).toBe(false);
     });
 
     it.each([

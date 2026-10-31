@@ -530,6 +530,9 @@ async function main() {
     // The set is kept to `types=`: a singular `type=` would keep the rows to it and not the set (N7 of b97677d5's review).
     const singular = await get(`${SYNC}&nearby=1&type=offer`, ana);
     assert(singular.status === 400, `nearby=1 with type= is a 400 (${singular.status})`);
+    // So would `tags=` (tags slice T2): the rows kept to the tags, the set and its hash the whole neighbourhood (PR #2637 review).
+    const withTags = await get(`${SYNC}&nearby=1&tags=food.fruit`, ana);
+    assert(withTags.status === 400, `nearby=1 with tags= is a 400 (${withTags.status})`);
     // Only unknown types: nothing matches, in the set's own shape.
     const unknownOnly = await get('/api/marketplace/posts?limit=200&sync=true&types=nonsense&nearby=1', ana);
     const unknownBody = (() => { try { return JSON.parse(unknownOnly.text); } catch { return null; } })();

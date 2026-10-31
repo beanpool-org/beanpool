@@ -33,11 +33,11 @@ import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { attestJustCompletedRekey } from '../utils/key-succession';
 import {
-    abandonRekey, askRekey, beginRekey, cleanRekeyCode, endsRekey, finishRekey, parseRekeyLink, pollRekey, rekeyCommunityUrl, resumeRekey,
-    REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
+    abandonRekey, askRekey, beginRekey, cleanRekeyCode, endsRekey, finishRekey, isBringBackCode, openBringBack, parseRekeyLink, pollRekey,
+    rekeyCommunityUrl, resumeRekey, REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
 } from '../utils/rekey-redeem';
 
-type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain' | 'ended';
+type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain' | 'broughtBack' | 'ended';
 
 const deps: RekeyDeps = {
     slot: rekeySlotStore,
@@ -134,6 +134,8 @@ export default function RekeyCodeScreen() {
     // The node removed sign-in copies of the old key in the move: only then is the member asked to link one again.
     const [linkSignInAgain, setLinkSignInAgain] = useState(false);
     const [wroteThemDown, setWroteThemDown] = useState(false);
+    /** A bring-back (vault rethink VR3) gave the 12 words back with the account. */
+    const [wordsCameBack, setWordsCameBack] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false);
@@ -174,6 +176,66 @@ export default function RekeyCodeScreen() {
         }
     }, [setIdentity, t]);
 
+    /**
+     * "Replace this phone's account?" (restore-account.ts clearToRestore): only when this phone holds another account,
+     * which a bring-back replaces. The member's yes goes on; Keep it, or closing the question, keeps everything.
+     */
+    const confirmReplace = useCallback((outgoing: BeanPoolIdentity) => new Promise<boolean>((resolve) => {
+        Alert.alert(
+            t('Replace this phone’s account?'),
+            t('This phone holds another BeanPool account ({name}). Bringing yours back replaces it, and that account comes back only with its own 12 words: Settings shows them, if you need them first.', { name: outgoing.callsign || '…' }),
+            [
+                { text: t('Keep it'), style: 'cancel', onPress: () => resolve(false) },
+                { text: t('Replace'), style: 'destructive', onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+        );
+    }), [t]);
+
+    /**
+     * A bring-back the admin confirmed (vault rethink VR3): the member's SAME key, opened from the copy they keep with
+     * their community, saved through the restore gate (never over another account without asking), on that community.
+     */
+    const onBroughtBack = useCallback(async (s: RekeySlot, answer: Extract<RekeyAnswer, { state: 'released' }>) => {
+        if (finishing.current) return;
+        finishing.current = true;
+        // Loaded when a bring-back is released, as this screen loads the phone's database and saved communities.
+        const restore = await import('../utils/restore-account');
+        try {
+            const back = await openBringBack(s, answer, deps);
+            const cleared = await restore.clearToRestore({
+                publicKey: back.publicKey,
+                privateKey: back.privateKey,
+                callsign: answer.callsign,
+                createdAt: new Date().toISOString(),
+                ...(back.mnemonic ? { mnemonic: back.mnemonic } : {}),
+            }, confirmReplace);
+            await restore.saveRestoredAccount(cleared, s.community);
+            // The record and the key it asked with go: the account is the member's own key now.
+            await abandonRekey(deps);
+            const nodes = await import('../utils/nodes');
+            await nodes.addSavedNode(s.community, answer.communityName || undefined).catch(() => {});
+            setIdentity(cleared.identity);
+            setWordsCameBack(!!cleared.identity.mnemonic?.length);
+            setPhase('broughtBack');
+        } catch (e) {
+            finishing.current = false;
+            if (e instanceof restore.RestoreStopped) {
+                // The phone's account was kept: the release stays collectable while the code's day lasts.
+                setError(t('The account on this phone was kept. Nothing changed.'));
+                setPhase('ended');
+                return;
+            }
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and saved
+            // communities, and its key unless even that failed): the app must not go on as it, as welcome.tsx's restores don't.
+            if (e instanceof restore.ReplaceNotSaved) setIdentity(null);
+            setError(e instanceof StoredKeyUnreadableError
+                ? t("BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.")
+                : keyLineWords(e instanceof Error ? e.message : REKEY_TEXT.changedAccount));
+            setPhase('ended');
+        }
+    }, [setIdentity, confirmReplace, t]);
+
     /** One answer from the node, read into the screen. */
     const apply = useCallback(async (s: RekeySlot, answer: RekeyAnswer) => {
         if (answer.state === 'waiting') {
@@ -183,6 +245,8 @@ export default function RekeyCodeScreen() {
             setPhase('waiting');
         } else if (answer.state === 'bound') {
             await onBound(s, answer);
+        } else if (answer.state === 'released') {
+            await onBroughtBack(s, answer);
         } else if (answer.state === 'unreachable') {
             setError(keyLineWords(REKEY_TEXT.unreachable));
         } else {
@@ -190,7 +254,7 @@ export default function RekeyCodeScreen() {
             setError(keyLineWords(answer.state === 'declined' ? REKEY_TEXT.declined : answer.state === 'gone' ? REKEY_TEXT.gone : answer.message));
             setPhase(endsRekey(answer) ? 'ended' : 'form');
         }
-    }, [onBound]);
+    }, [onBound, onBroughtBack]);
 
     // An ask left waiting (the app was closed): asked once more, with the same key. Once per visit to the screen: the
     // record is kept after Not now, so a second run would put the number back after the member left it.
@@ -297,7 +361,9 @@ export default function RekeyCodeScreen() {
                         address could relay someone else's number here (#1783 review N9). */}
                     <Text style={styles.numberLabel} testID="rekey-number-host">{t('from {host}', { host: hostOf(slot?.community) })}</Text>
                     <Text style={styles.numberLabel}>
-                        {t("They type it on their screen. Check the address above is your community's. Your old phone stops working for good.")}
+                        {slot && isBringBackCode(slot.code)
+                            ? t("They type it on their screen. Check the address above is your community's. Your account comes back on this phone, the same key.")
+                            : t("They type it on their screen. Check the address above is your community's. Your old phone stops working for good.")}
                     </Text>
                 </View>
                 <View style={styles.busyRow}>
@@ -327,6 +393,21 @@ export default function RekeyCodeScreen() {
                 </Pressable>
                 <Pressable style={styles.primary} onPress={() => setPhase('linkAgain')} accessibilityRole="button">
                     <Text style={styles.primaryText}>{t('Continue')}</Text>
+                </Pressable>
+            </View>
+        );
+    } else if (phase === 'broughtBack') {
+        body = (
+            <View testID="rekey-brought-back">
+                <Text style={styles.title} accessibilityRole="header">{t('Welcome back')}</Text>
+                <Text style={styles.lead}>{t('This phone holds your account again: the same key, your Beans, your name, your chats and every community.')}</Text>
+                <Text style={styles.note}>
+                    {wordsCameBack
+                        ? t('Your 12 words came back with it. Settings shows them: check you have them written down.')
+                        : t('Your 12 words weren’t in the copy. Settings shows you how to keep them safe.')}
+                </Text>
+                <Pressable style={styles.primary} onPress={() => router.replace('/(tabs)')} accessibilityRole="button">
+                    <Text style={styles.primaryText}>{t('Done')}</Text>
                 </Pressable>
             </View>
         );

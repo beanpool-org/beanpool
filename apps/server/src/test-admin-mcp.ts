@@ -46,7 +46,7 @@ import { resetAgentLimits, admitAgentCall, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_P
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
 import { welcomeInstructions, promptText, PROMPTS, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
 import { AGENT_TOOLS } from './agent/tools.js';
-import { AGENT_CREATE_BODY_MAX } from './agent/owner-posts.js';
+import { AGENT_CREATE_BODY_MAX, REMOVE_ALL_CONFIRM } from './agent/owner-posts.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -275,22 +275,26 @@ async function main(): Promise<void> {
         console.log('── 2. tools/list and prompts/list ──');
         const tools = (await client.listTools()).tools;
         const names = tools.map(t => t.name).sort();
-        assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'community_totals', 'connection_info', 'create_enterprise_listing', 'create_event',
-            'create_need', 'create_offer', 'knocks_list', 'my_enterprises', 'node_overview', 'report_get', 'reports_list', 'safety_settings', 'server_health',
-            'suggest_action', 'take_backup']),
-        `an owner's assistant has the ten S1 tools, S4's suggest_action and the owner's posts (MCP-OWNER-POSTS) (${names.join(', ')})`);
+        assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'categories', 'community_area', 'community_totals', 'connection_info',
+            'create_enterprise_listing', 'create_event', 'create_need', 'create_offer', 'knocks_list', 'listings_search', 'my_enterprises', 'my_posts',
+            'node_overview', 'remove_all_i_made', 'remove_post', 'report_get', 'reports_list', 'safety_settings', 'server_health',
+            'suggest_action', 'take_backup', 'update_post']),
+        `an owner's assistant has the ten S1 tools, S4's suggest_action, the owner's posts (MCP-OWNER-POSTS) and S2's reads and undo (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
-        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'knocks_list,my_enterprises,report_get,reports_list',
+        assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'community_area,knocks_list,listings_search,my_enterprises,my_posts,report_get,reports_list',
             'the tools that can return member text say it is data');
         const tb = tools.find(t => t.name === 'take_backup');
         const sa = tools.find(t => t.name === 'suggest_action');
         // The posts an owner's assistant makes (agent/owner-posts.ts): writes, neither idempotent nor destructive.
         const creates = tools.filter(t => t.name.startsWith('create_'));
+        const S2_WRITES = ['update_post', 'remove_post', 'remove_all_i_made'];
         assert(tb?.annotations?.readOnlyHint === false && tb?.annotations?.idempotentHint === true && tb?.annotations?.destructiveHint === false
             && sa?.annotations?.readOnlyHint === false && sa?.annotations?.idempotentHint === false && sa?.annotations?.destructiveHint === false
             && creates.length === 4 && creates.every(t => t.annotations?.readOnlyHint === false && t.annotations?.idempotentHint === false && t.annotations?.destructiveHint === false)
-            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && !t.name.startsWith('create_')).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false),
-        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action and the four creates are writes, neither idempotent nor destructive');
+            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action' && !t.name.startsWith('create_') && !S2_WRITES.includes(t.name)).every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false)
+            // Slice S2: an edit is a write, not destructive; the two removals are destructive.
+            && S2_WRITES.every(n => { const a = tools.find(t => t.name === n)?.annotations; return a?.readOnlyHint === false && a?.idempotentHint === false && a?.destructiveHint === (n !== 'update_post'); }),
+        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action, the four creates and update_post are writes, neither idempotent nor destructive; remove_post and remove_all_i_made are destructive');
         const prompts = (await client.listPrompts()).prompts.map(p => p.name).sort();
         assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'draft-announcement', 'safety-settings-check', 'summarise-reports', 'triage-report',
             'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu (${prompts.join(', ')})`);
@@ -307,10 +311,13 @@ async function main(): Promise<void> {
         console.log('── 3. Every tool answers redacted at the source ──');
         const answers: Record<string, any> = {};
         // The posts an owner's assistant makes are their own suite's (test-mcp-owner-posts.ts): each needs photos and makes a post.
-        for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_'))) {
-            // suggest_action (S4) files one card on r1: swept like every answer; it changes no report.
+        // So are an edit and a removal of one it made (test-mcp-owner-undo.ts): this suite's assistant made none to name.
+        for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup' && !x.name.startsWith('create_') && x.name !== 'update_post' && x.name !== 'remove_post')) {
+            // suggest_action (S4) files one card on r1: swept like every answer; it changes no report. remove_all_i_made (S2),
+            // said out loud, answers that it removed nothing: this assistant made nothing.
             const args: Record<string, unknown> = t.name === 'report_get' ? { report_id: r1!.id }
                 : t.name === 'suggest_action' ? { kind: 'dismiss_report', report_id: r1!.id, reason: 'Swept: the reporter may be mistaken.' }
+                : t.name === 'remove_all_i_made' ? { confirm: REMOVE_ALL_CONFIRM }
                 : ['reports_list', 'knocks_list'].includes(t.name) ? { include_text: true, ...(t.name === 'reports_list' ? { status: 'all' } : {}) } : {};
             const r = await client.callTool({ name: t.name, arguments: args });
             answers[t.name] = r;

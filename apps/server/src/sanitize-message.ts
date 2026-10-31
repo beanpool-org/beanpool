@@ -76,12 +76,13 @@ function redactCredentialValues(text: string): string {
 }
 
 /**
- * Re-key codes (engine/member-wizards.ts generateRekeyCode: `RK-` and two groups of 4 hex digits) and invite codes
- * (@beanpool/engine generateShortCode: `INV-` and two groups of 4 from its 32-character alphabet, no 0, 1, I or O). Only
- * that whole shape, standing alone as a word: `XRK-1A2B-3C4D`, `INV-ABCD-EFGHI` and `INV-2024-0001` are left alone.
- * Case is ignored, for a code someone typed.
+ * Re-key codes (engine/member-wizards.ts generateRekeyCode: `RK-` and two groups of 4 hex digits), bring-back codes
+ * (engine/bring-back.ts generateBringBackCode: the same with `BB-`; its release hands out the member's key and 12 words)
+ * and invite codes (@beanpool/engine generateShortCode: `INV-` and two groups of 4 from its 32-character alphabet, no 0,
+ * 1, I or O). Only that whole shape, standing alone as a word: `XRK-1A2B-3C4D`, `XBB-1A2B-3C4D`, `INV-ABCD-EFGHI` and
+ * `INV-2024-0001` are left alone. Case is ignored, for a code someone typed.
  */
-export const REKEY_CODE_PATTERN = /(?<![A-Za-z0-9_])RK-[0-9A-F]{4}-[0-9A-F]{4}(?![A-Za-z0-9_])/gi;
+export const REKEY_CODE_PATTERN = /(?<![A-Za-z0-9_])(?:RK|BB)-[0-9A-F]{4}-[0-9A-F]{4}(?![A-Za-z0-9_])/gi;
 export const INVITE_CODE_PATTERN = /(?<![A-Za-z0-9_])INV-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}(?![A-Za-z0-9_])/gi;
 
 /**

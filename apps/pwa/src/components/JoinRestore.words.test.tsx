@@ -300,7 +300,7 @@ describe('a re-key code (WebRekey) in the pseudo-locale', () => {
         allThroughWords(['RK-XXXX-XXXX'], 4);
         fireEvent.change(screen.getByLabelText(xx('The code')), { target: { value: 'RK-12' } });
         fireEvent.click(screen.getByRole('button', { name: xx('Continue') }));
-        expect(screen.getByRole('alert').textContent).toBe(xx('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.'));
+        expect(screen.getByRole('alert').textContent).toBe(xx('That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.'));
         fireEvent.change(screen.getByLabelText(xx('The code')), { target: { value: 'RK-AB12-CD34' } });
         fireEvent.click(screen.getByRole('button', { name: xx('Continue') }));
         expect(await screen.findByTestId('web-rekey-number')).toHaveTextContent('42');

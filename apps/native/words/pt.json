@@ -2233,7 +2233,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "Pede confirmação primeiro e encerra seus logins nas Configurações de {name} em todos os computadores e celulares. Sua chave permanece neste celular",
   "Ends your Settings sign-ins on every computer and phone": "Encerra seus logins em Configurações em todos os computadores e celulares",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "Escaneie o código na página de Configurações de {name} no navegador do computador para entrar como você. Sua chave permanece neste celular",
-  "Scan the code on its Settings page · your key stays on this phone": "Escaneie o código na página de Configurações · sua chave permanece neste celular",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "Escaneie o código na página de Configurações ou conecte um assistente de IA · sua chave permanece neste celular",
   "Check your 12 words": "Verifique suas 12 palavras",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "Suas 12 palavras não estão verificadas. Se perder este celular, você não poderá assumir o servidor nem abrir um backup.",
   "Take over or restore with this phone": "Assumir ou restaurar com este celular",

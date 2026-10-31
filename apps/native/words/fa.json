@@ -2235,7 +2235,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "ابتدا می‌پرسد، سپس ورودهای شما به تنظیمات {name} را در همه رایانه‌ها و تلفن‌ها پایان می‌دهد. کلید شما در این تلفن باقی می‌ماند",
   "Ends your Settings sign-ins on every computer and phone": "ورودهای تنظیمات شما را در هر رایانه و تلفنی پایان می‌دهد",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "کد موجود در صفحه تنظیمات {name} در مرورگر رایانه را اسکن کنید تا با هویت شما وارد شود. کلید شما در این تلفن باقی می‌ماند",
-  "Scan the code on its Settings page · your key stays on this phone": "کد صفحه تنظیمات آن را اسکن کنید · کلید شما در این تلفن باقی می‌ماند",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "کد صفحه تنظیمات آن را اسکن کنید یا یک دستیار هوش مصنوعی را متصل کنید · کلید شما در این تلفن باقی می‌ماند",
   "Check your 12 words": "۱۲ کلمه خود را بررسی کنید",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "۱۲ کلمه شما بررسی نشده‌اند. اگر این تلفن را گم کنید، نمی‌توانید سرور را در اختیار بگیرید یا نسخه پشتیبان را باز کنید.",
   "Take over or restore with this phone": "در اختیار گرفتن یا بازیابی با این تلفن",

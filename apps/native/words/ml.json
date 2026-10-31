@@ -2233,7 +2233,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "ആദ്യം ചോദിക്കുന്നു, തുടർന്ന് എല്ലാ ഉപകരണങ്ങളിലും {name} ക്രമീകരണ സൈൻ-ഇന്നുകൾ അവസാനിപ്പിക്കുന്നു. നിങ്ങളുടെ കീ ഈ ഫോണിൽ തുടരും",
   "Ends your Settings sign-ins on every computer and phone": "എല്ലാ കമ്പ്യൂട്ടറിലും ഫോണിലും ക്രമീകരണ സൈൻ-ഇന്നുകൾ അവസാനിപ്പിക്കുന്നു",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "കമ്പ്യൂട്ടറിലെ {name} ക്രമീകരണ പേജിലെ കോഡ് സ്കാൻ ചെയ്യുക. നിങ്ങളുടെ കീ ഈ ഫോണിൽ തുടരും",
-  "Scan the code on its Settings page · your key stays on this phone": "ക്രമീകരണ പേജിലെ കോഡ് സ്കാൻ ചെയ്യുക · കീ ഫോണിൽ തുടരും",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "ക്രമീകരണ പേജിലെ കോഡ് സ്കാൻ ചെയ്യുക അല്ലെങ്കിൽ ഒരു AI അസിസ്റ്റന്റിനെ ബന്ധിപ്പിക്കുക · കീ ഫോണിൽ തുടരും",
   "Check your 12 words": "നിങ്ങളുടെ 12 വാക്കുകൾ പരിശോധിക്കുക",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "നിങ്ങളുടെ 12 വാക്കുകൾ പരിശോധിച്ചിട്ടില്ല. ഫോൺ നഷ്ടപ്പെട്ടാൽ സെർവർ നിയന്ത്രിക്കാനോ ബാക്കപ്പ് തുറക്കാനോ കഴിയില്ല.",
   "Take over or restore with this phone": "ഈ ഫോൺ ഉപയോഗിച്ച് ഏറ്റെടുക്കുക അല്ലെങ്കിൽ പുനഃസ്ഥാപിക്കുക",

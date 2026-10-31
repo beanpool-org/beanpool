@@ -2142,7 +2142,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "先确认，然后结束在所有电脑和手机上登录的 {name} 设置。你的密钥仍保存在本机",
   "Ends your Settings sign-ins on every computer and phone": "结束你在所有电脑和手机上的“设置”登录状态",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "在电脑浏览器中扫描 {name} 设置页面的二维码以你的身份登录。你的密钥仍保存在本机",
-  "Scan the code on its Settings page · your key stays on this phone": "扫描其“设置”页面上的二维码 · 你的密钥仍保存在本机",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "扫描其“设置”页面上的二维码或连接 AI 助手 · 你的密钥仍保存在本机",
   "Check your 12 words": "检查你的 12 位助记词",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "你的 12 位助记词尚未验证。如果丢失本机，你将无法接管服务器或恢复备份。",
   "Take over or restore with this phone": "使用本机接管或恢复",

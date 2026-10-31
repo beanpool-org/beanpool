@@ -178,7 +178,7 @@ export function consentWords(clientName: string, sendsTo: string, community: str
                 + '(as you, or as an enterprise you keep), at once, with no approval. '
                 + 'Anything else it can only SUGGEST, and a suggestion changes nothing until you approve it on your phone.',
             'It can never read messages, balances, keys, addresses, photos or logs, or change settings, roles, keys or money.',
-            `To connect it, scan this code with the BeanPool app on your phone (Manage → Manage this community from a computer), check that the phone names ${sendsTo}, and type the two digits it shows.`,
+            `To connect it, scan it INSIDE the BeanPool app, not with the phone's camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”. Check that the phone names ${sendsTo}, and type the two digits it shows.`,
         ],
     };
 }
@@ -438,7 +438,7 @@ h1{font-size:1.2rem}p{margin:.6rem 0}.qr{background:#fff;display:inline-block;pa
 <h1 id="who">${escapeHtml(p.words.heading)}</h1>${lines}
 <div class="qr">${p.svg}</div>
 <p class="muted">The phone should show the code <span class="code">${escapeHtml(p.shortCode)}</span>.</p>
-<form id="confirm" hidden><p><label><input type="checkbox" id="canpost"> May post for me: an owner's assistant posts Offers, Needs and events as you, at once, with no approval</label></p><label for="digits">Type the two digits your phone shows: </label><input id="digits" inputmode="numeric" maxlength="2" autocomplete="off"> <button type="submit">Connect</button></form>
+<form id="confirm" hidden><p><label><input type="checkbox" id="canpost"> May post for me: an owner's assistant posts Offers, Needs and events as you, at once, with no approval. Without it, the assistant can only read.</label></p><label for="digits">Type the two digits your phone shows: </label><input id="digits" inputmode="numeric" maxlength="2" autocomplete="off"> <button type="submit">Connect</button></form>
 <p id="status" role="status" class="muted">Waiting for your phone…</p>
 <script nonce="${p.nonce}">
 (function(){

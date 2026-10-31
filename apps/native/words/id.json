@@ -2144,7 +2144,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "Meminta konfirmasi terlebih dahulu, lalu mengakhiri sesi masukmu ke Pengaturan {name} di setiap komputer dan ponsel. Kuncimu tetap berada di ponsel ini",
   "Ends your Settings sign-ins on every computer and phone": "Mengakhiri sesi masuk Pengaturanmu di setiap komputer dan ponsel",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "Pindai kode di halaman Pengaturan {name} di browser komputer untuk masuk sebagai dirimu. Kuncimu tetap berada di ponsel ini",
-  "Scan the code on its Settings page · your key stays on this phone": "Pindai kode di halaman Pengaturannya · kuncimu tetap berada di ponsel ini",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "Pindai kode di halaman Pengaturannya atau hubungkan asisten AI · kuncimu tetap berada di ponsel ini",
   "Check your 12 words": "Periksa 12 katamu",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "12 katamu belum diperiksa. Jika kamu kehilangan ponsel ini, kamu tidak dapat mengambil alih server atau membuka cadangan.",
   "Take over or restore with this phone": "Ambil alih atau pulihkan dengan ponsel ini",

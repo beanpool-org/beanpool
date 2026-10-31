@@ -2235,7 +2235,7 @@
   "Asks first, then ends your sign-ins to {name}'s Settings on every computer and phone. Your key stays on this phone": "पहले पूछता है, फिर हर कंप्यूटर और फ़ोन पर {name} की सेटिंग्स में आपके साइन-इन समाप्त करता है। आपकी चाबी इस फ़ोन पर बनी रहती है",
   "Ends your Settings sign-ins on every computer and phone": "हर कंप्यूटर और फ़ोन पर आपके सेटिंग्स साइन-इन समाप्त करता है",
   "Scan the code on {name}'s Settings page in a computer's browser to sign it in as you. Your key stays on this phone": "कंप्यूटर के ब्राउज़र में {name} के सेटिंग्स पृष्ठ पर कोड को स्कैन करके अपने रूप में साइन इन करें। आपकी चाबी इस फ़ोन पर बनी रहती है",
-  "Scan the code on its Settings page · your key stays on this phone": "इसके सेटिंग्स पृष्ठ पर कोड को स्कैन करें · आपकी चाबी इस फ़ोन पर बनी रहती है",
+  "Scan the code on its Settings page or connect an AI assistant · your key stays on this phone": "इसके सेटिंग्स पृष्ठ पर कोड को स्कैन करें या AI सहायक कनेक्ट करें · आपकी चाबी इस फ़ोन पर बनी रहती है",
   "Check your 12 words": "अपने 12 शब्द जांचें",
   "Your 12 words aren't checked. If you lose this phone you couldn't take over the server or open a backup.": "आपके 12 शब्द जाँचे नहीं गए हैं। यदि आप यह फ़ोन खो देते हैं तो आप सर्वर का नियंत्रण नहीं ले सकते या बैकअप नहीं खोल सकते।",
   "Take over or restore with this phone": "इस फ़ोन से नियंत्रण लें या पुनर्स्थापित करें",

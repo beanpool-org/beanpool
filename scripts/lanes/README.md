@@ -36,7 +36,7 @@ sit beside them. Worktrees go in `.claude/worktrees/lane-<lane>`, which is also 
 source "$(git -C "${0:A:h}" rev-parse --show-toplevel)/scripts/lanes/lib.sh"
 LANE_BUILD_BACKEND=claude            # high-risk build: headless Opus 5. Omit for AGY Flash.
 log "lane S7 — keeper succession"
-item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 2 early passes → GitHub green → deciding pass
+item S7 feat/s7-keepers S7-keepers.md   # build → CONTINUE → open PR → 1 early pass → GitHub green → deciding pass
 [ "$CLEAN" = 1 ] && land "$PR"          # CI green, then HELD unless LANE_MERGE=1
 log "LANE S7 DONE (clean=$CLEAN merged=$MERGED)"
 ```
@@ -84,6 +84,11 @@ gate counts it as clean.
 
 ## Gates
 
+- Early passes depend on who built the lane. **AGY-built:** two passes, with a `FIX-*` stage after each one that comments.
+  **Claude-built:** one pass, no `FIX-*` stage and no second pass. Its comments go to the deciding pass, whose brief tells it
+  to weigh each one. A real one it posts as a new inline comment, so the count sees it. A false one it lists in its summary
+  and does not reply to, because a reply is an inline comment too. Either way, early comments are counted before the
+  deciding pass starts, so only what that pass adds can read as a defect.
 - A deciding pass waits for the required check on the PR's exact head, outside the deciding slot; every path to one goes
   through `decide_review`, so `land()`'s post-sync pass and a run script's own confirmation pass wait too. Early passes
   do not wait.

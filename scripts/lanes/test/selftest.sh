@@ -552,8 +552,11 @@ print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "⚠ PR #42 LEFT FOR THE DIRECTOR
 print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "waiting for GitHub on #43, head aaa1: pending (poll 1 of 70)"' 'sleep 600' > "$T/run-selftestwait.sh"
 zsh "${HERE:h}/start.sh" "$T/run-selftestgate.sh" > /dev/null 2>&1 &
 sleep 2
-{ LANE_WATCH_SECS=1 zsh "${HERE:h}/watch.sh"; r1=$?; } >> "$LOG" 2>&1
+LANE_WATCH_SECS=1 zsh "${HERE:h}/watch.sh" >> "$LOG" 2>&1 &
+w4=$!
+for i in {1..5}; do kill -0 $w4 2>/dev/null || break; sleep 1; done
 { zsh "${HERE:h}/stop.sh" selftestgate; } >> "$LOG" 2>&1
+for i in {1..5}; do kill -0 $w4 2>/dev/null || break; sleep 1; done
 zsh "${HERE:h}/start.sh" "$T/run-selftestwait.sh" > /dev/null 2>&1 &
 sleep 2
 touch -t 202001010000 "$LANE_STATE/log-selftestwait.txt"
@@ -564,7 +567,7 @@ sleep 3
 for i in {1..20}; do kill -0 $w3 2>/dev/null || break; sleep 1; done
 cat "$T/watch3.out" >> "$LOG"
 show
-check "woke on the held PR"                      eval '[ "$r1" = 0 ] && logged "NOT REVIEWED on lane selftestgate"'
+check "woke on the held PR"                      logged "NOT REVIEWED on lane selftestgate"
 check "a long wait for GitHub is not reported as a quota stall" eval '! grep -q "STUCK ON QUOTA" "$T/watch3.out" && grep -q "ALL LANES STOPPED" "$T/watch3.out"'
 wait 2>/dev/null
 

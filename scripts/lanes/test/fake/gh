@@ -26,6 +26,8 @@ case "$1 $2" in
   api\ *)     [ "$FAKE_GH_DOWN" = 1 ] && { print -u2 "HTTP 502: Bad Gateway"; exit 1; }
               case "$2" in
                 */check-runs*check_name=*)
+                  # A wait with no limit fails its scenario here instead of hanging the self-test.
+                  [ "$(grep -c 'check_name=' "$S/gh.calls")" -gt 100 ] && { print -u2 "fake gh: runaway polling"; exit 1; }
                   sha=${${2#*/commits/}%%/*}; st=$(pop "$S/ci-$sha" success)
                   [ -d "$LANE_LOCK_DIR/decide.lock" ] && print -r -- "$sha" >> "$S/ci-read-in-the-slot"
                   [[ "$st" == *+push ]] && { st=${st%+push}; push; }

@@ -178,7 +178,7 @@ export function consentWords(clientName: string, sendsTo: string, community: str
                 + '(as you, or as an enterprise you keep), at once, with no approval. '
                 + 'Anything else it can only SUGGEST, and a suggestion changes nothing until you approve it on your phone.',
             'It can never read messages, balances, keys, addresses, photos or logs, or change settings, roles, keys or money.',
-            `To connect it, scan it INSIDE the BeanPool app, not with the phone's camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”. Check that the phone names ${sendsTo}, and type the two digits it shows.`,
+            `To connect it, scan it inside the BeanPool app, not with the phone's camera: Settings tab → COMMUNITY ADMIN → the last row, “Manage this community from a computer”. Check that the phone names ${sendsTo}, and type the two digits it shows.`,
         ],
     };
 }

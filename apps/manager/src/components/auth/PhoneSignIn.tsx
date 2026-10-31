@@ -168,7 +168,7 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
             <div>
                 <h3 id="phone-signin-title" className="text-base font-bold text-white m-0">Sign in with your phone</h3>
                 <p className="text-sm text-nature-300 m-0 mt-1 leading-relaxed">
-                    Scan it INSIDE the BeanPool app, not with the phone&apos;s camera: <strong className="text-nature-100">Settings tab → COMMUNITY ADMIN → the last row, &ldquo;Manage this community from a computer&rdquo;</strong>. A moderator&apos;s app says <strong className="text-nature-100">Moderate this community from a computer</strong>;
+                    Scan it inside the BeanPool app, not with the phone&apos;s camera: <strong className="text-nature-100">Settings tab → COMMUNITY ADMIN → the last row, &ldquo;Manage this community from a computer&rdquo;</strong>. A moderator&apos;s app says <strong className="text-nature-100">Moderate this community from a computer</strong>;
                     older apps say <strong className="text-nature-100">Sign in on a computer</strong>. Owners, admins and moderators only.
                 </p>
             </div>

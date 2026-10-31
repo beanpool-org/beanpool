@@ -28,6 +28,7 @@ vi.mock('expo-crypto', async () => {
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
 
+import * as SecureStore from 'expo-secure-store';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
@@ -359,6 +360,37 @@ describe('getting back in on a new phone, on the fake vault', () => {
             const step = await advanceCommunityRestore(pending, { loadIdentity: async () => { throw new Error('the store is locked'); } });
             expect(step.status).toBe('waiting');
             expect(await loadPendingCommunityRestore()).toEqual(pending);
+        });
+    });
+
+    describe('with the phone\'s real reader, which tells a key that has gone from one it can\'t read', () => {
+        let pending: PendingCommunityRestore;
+        beforeEach(async () => {
+            const robin = await draftIdentity('Robin');
+            phone = robin;
+            slot = { community: MULLUM, code: CODE, publicKey: robin.publicKey, madeHere: false, startedAt: Date.now(), shown: true };
+            held = slot;
+            pending = await takeSharedRelease(slot, released(), { ...deps(), loadIdentity: async () => robin });
+        });
+
+        it('a key store that fails to answer (a locked phone) keeps the day\'s wait: never read as the account gone', async () => {
+            const store = vi.mocked(SecureStore.getItemAsync);
+            const answers = store.getMockImplementation();
+            store.mockImplementation(async (key: string) => {
+                if (key === COMMUNITY_RESTORE_STORE_KEY) return mem.secure.get(key) ?? null;
+                throw new Error('the keychain is locked');
+            });
+            try {
+                expect((await advanceCommunityRestore(pending)).status).toBe('waiting');
+                expect(await loadPendingCommunityRestore()).toEqual(pending);
+            } finally {
+                store.mockImplementation(answers!);
+            }
+        });
+
+        it('no key on the phone at all ends it', async () => {
+            expect(await advanceCommunityRestore(pending)).toEqual({ status: 'ended', message: REKEY_TEXT.changedAccount });
+            expect(await loadPendingCommunityRestore()).toBeNull();
         });
     });
 

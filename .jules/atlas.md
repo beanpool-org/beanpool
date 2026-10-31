@@ -279,3 +279,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** Canvas context creation returning `null` and `FileReader` error branches in `resizePhotoFile` (`apps/manager/src/lib/photo-resize.ts`) were untested.
 **Learning:** Testing `resizePhotoFile` error branches required extending `stubPipeline` in `photo-resize.test.ts` to mock `FileReader.prototype.onerror` and `HTMLCanvasElement.prototype.getContext` returning `null`, verifying promise rejections with expected error messages.
 **Action:** Continue identifying error recovery paths in utility functions across `apps/manager/src/lib/`.
+
+## 2026-11-01 - [manager tests] replication token helpers unit tests
+**Gap:** `getReplicationTokenStatus`, `generateReplicationToken`, `setReplicationTokenMode`, and `clearReplicationToken` in `apps/manager/src/lib/node-client.ts` were untested directly.
+**Learning:** Asserting fetch call URLs in `node-client.test.ts` requires wrapping endpoints with `resolveNodeApiUrl(nodeUrl, path)` to account for default proxy routing logic in tests.
+**Action:** Continue identifying utility functions with missing direct unit assertions across `apps/manager/src/lib/`.

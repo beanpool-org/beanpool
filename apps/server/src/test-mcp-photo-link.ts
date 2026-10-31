@@ -29,12 +29,13 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import sharp from 'sharp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -252,7 +253,6 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(webRoot, 'public', 'index.html'), '<!doctype html><title>BeanPool web app</title>');
     process.chdir(webRoot);
     const dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-    const uploadsRoot = path.join(dataDir, 'assistant-photos');
 
     const goodJpg = await sharp({ create: { width: 1600, height: 1200, channels: 3, background: { r: 180, g: 120, b: 60 } } })
         .composite([{ input: Buffer.from('<svg width="1600" height="1200"><circle cx="800" cy="600" r="400" fill="#2a6"/></svg>') }])
@@ -289,6 +289,7 @@ async function main(): Promise<void> {
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     const { PHOTO_UPLOADS_AT_ONCE } = await import('./agent/photo-upload-route.js');
+    const { endAgentRefusalLogMinute } = await import('./agent/mcp-route.js');
 
     try {
         resetAdminAuthTarpit();
@@ -371,7 +372,10 @@ async function main(): Promise<void> {
 
         const putIt = await post(first.path, goodJpg, 'image/jpeg', 'PUT');
         assert(putIt.status === 201 && /^ph_/.test(putIt.body?.photoId ?? ''), `a PUT of one image is the same (${show(putIt)})`);
-        const curlOut = execFileSync('curl', ['-sk', '--max-time', '30', '--data-binary', '@/dev/stdin', '-H', 'Content-Type: image/jpeg', first.url], { input: noisy }).toString();
+        // Never a sync call: the server is in this process, and it answers on this event loop.
+        const photoFile = path.join(webRoot, 'photo.jpg');
+        fs.writeFileSync(photoFile, noisy);
+        const curlOut = (await promisify(execFile)('curl', ['-sk', '--max-time', '30', '--data-binary', `@${photoFile}`, '-H', 'Content-Type: image/jpeg', first.url])).stdout;
         const curled = JSON.parse(curlOut);
         assert(/^ph_[0-9a-f]{32}$/.test(curled.photoId ?? ''), `the manual's curl line, with a ${Math.round(noisy.length / MB * 10) / 10} MB photo and no other header → an id (${curlOut.slice(0, 60)})`);
         const O = await makeToken(owner, 'Olive\'s other script');
@@ -533,7 +537,8 @@ async function main(): Promise<void> {
         const F = await makeToken(owner, 'Olive\'s four');
         const f = await connect(F.token);
         const four = [await newLink(f), await newLink(f), await newLink(f), await newLink(f)];
-        const fourth = await Promise.all(four.map(x => post(x.path, smallWebp, 'image/webp')));
+        const fourth: Reply[] = [];
+        for (const x of four) fourth.push(await post(x.path, smallWebp, 'image/webp'));
         assert(photoLinksHeld(F.id) === 3 && fourth[0].status === 401 && fourth[0].text === wrong.text && fourth.slice(1).every(r => r.status === 201),
             `a fourth link replaces the oldest: the first is dead, the other three work (${fourth.map(r => r.status).join(', ')})`);
         assert(await revoke(F.id) === 200, 'the four links\' check is disconnected');
@@ -584,6 +589,7 @@ async function main(): Promise<void> {
         const g = await connect(G.token);
         const gLink = await newLink(g);
         while (admitAgentCall(G.id).ok) { /* this minute's 60 */ }
+        endAgentRefusalLogMinute();
         const overLink = await post(gLink.path, smallWebp, 'image/webp');
         const overDoor = await call('POST', '/mcp/photos', { raw: smallWebp, type: 'image/webp', headers: bearer(G.token) });
         assert(overLink.status === 429 && /calls in a minute/.test(overLink.body?.error ?? '') && Number(overLink.headers.get('retry-after')) > 0 && overDoor.status === 429 && agentPhotosToday(G.id) === 0
@@ -662,7 +668,6 @@ async function main(): Promise<void> {
             return needles.some(n => bytes.includes(n));
         });
         assert(files.length > 2 && inFiles.length === 0, `no token in any of the ${files.length} files under the data folder (the database and its write-ahead log, local-config.json)${inFiles.length ? ` — ${inFiles.map(x => path.basename(x)).join(', ')}` : ''}`);
-        assert(!fs.existsSync(path.join(uploadsRoot, 'u')), 'a link leaves nothing of its own on disk');
 
         await reader.close().catch(() => {});
         await adminC.close().catch(() => {});

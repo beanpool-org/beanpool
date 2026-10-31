@@ -55,7 +55,7 @@ describe('AddCardDialog', () => {
         expect(settings).not.toHaveTextContent('coming app update');
         fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: '  eggs ' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add to Home' }));
-        expect(onAdd).toHaveBeenLastCalledWith('search', { q: 'eggs', kind: 'any' });
+        expect(onAdd).toHaveBeenLastCalledWith('search', { q: 'eggs', kind: 'any', tags: ['food.eggs'] });
     });
 
     it('a full Home says so and offers no Add; Escape and Done close it', () => {
@@ -78,7 +78,7 @@ describe('CardSettingsDialog', () => {
         expect(screen.getByTestId('home-settings-q')).toHaveValue('eggs');
         fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: 'duck eggs' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        expect(onSubmit).toHaveBeenCalledWith({ q: 'duck eggs', kind: 'offer', km: 5 });
+        expect(onSubmit).toHaveBeenCalledWith({ q: 'duck eggs', kind: 'offer', km: 5, tags: ['animals.poultry.ducks', 'food.eggs'] });
     });
 
     it('the words, then Offers or Needs or both, a category and a distance (CARD-FRAME §4, §5.2 item 20; slice F4)', () => {
@@ -97,7 +97,7 @@ describe('CardSettingsDialog', () => {
         fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'food' } });
         fireEvent.click(within(km).getByRole('button', { name: '5 km' }));
         fireEvent.click(screen.getByRole('button', { name: 'Add to Home' }));
-        expect(onSubmit).toHaveBeenCalledWith({ q: 'eggs', kind: 'need', category: 'food', km: 5 });
+        expect(onSubmit).toHaveBeenCalledWith({ q: 'eggs', kind: 'need', category: 'food', km: 5, tags: ['food.eggs'] });
     });
 
     it('with no point to measure from there are no distance chips, and a distance already kept stays', () => {
@@ -107,7 +107,32 @@ describe('CardSettingsDialog', () => {
         expect(screen.getByLabelText('Category')).toHaveValue('food');
         fireEvent.change(screen.getByLabelText('Category'), { target: { value: '' } });
         fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-        expect(onSubmit).toHaveBeenCalledWith({ q: 'eggs', kind: 'any', km: 10 });
+        expect(onSubmit).toHaveBeenCalledWith({ q: 'eggs', kind: 'any', km: 10, tags: ['food.eggs'] });
+    });
+
+    // DESIGN-owner-seeding-tags-fable.md §4.7: the card stores the ids it resolved, and the sheet, which has no field for
+    // them, neither drops them nor leaves the old words' ids behind.
+    describe('a saved search\'s tags', () => {
+        const held = { q: 'lemon', kind: 'any', tags: ['food.fruit.orange', 'food.fruit.lemon'] };
+        const open = (initial: Record<string, unknown>) => {
+            const onSubmit = vi.fn();
+            render(<CardSettingsDialog type="search" name="A saved search" mode="save" initial={initial} onSubmit={onSubmit} onClose={vi.fn()} />);
+            return onSubmit;
+        };
+
+        it('Save with the words as they were keeps them', () => {
+            const onSubmit = open(held);
+            fireEvent.click(within(screen.getByRole('group', { name: 'Show' })).getByRole('button', { name: 'Offers' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+            expect(onSubmit).toHaveBeenCalledWith({ q: 'lemon', kind: 'offer', tags: ['food.fruit.orange', 'food.fruit.lemon'] });
+        });
+
+        it('new words resolve again: the old words\' ids go, a chip\'s stays', () => {
+            const onSubmit = open(held);
+            fireEvent.change(screen.getByTestId('home-settings-q'), { target: { value: 'jam' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+            expect(onSubmit).toHaveBeenCalledWith({ q: 'jam', kind: 'any', tags: ['food.fruit.orange', 'food.preserves.jam'] });
+        });
     });
 });
 

@@ -116,7 +116,6 @@ interface Props {
     /** Words to put in the search (a saved search's See more on Home); taken once, then `onSearchOpened`. */
     openSearch?: string | null;
     onSearchOpened?: () => void;
-    /** Tag filter to open with (e.g. from post detail chip or home card) */
     /**
      * "Save this search to Home" (Marty, 7 Oct): the search as a saved search's settings; App opens Home, which opens the
      * saved search's own dialog with them filled in. Absent (the lobby), the button isn't drawn.

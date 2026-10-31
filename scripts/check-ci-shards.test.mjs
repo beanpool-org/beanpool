@@ -169,9 +169,13 @@ test('the server shards split every run exactly once, the same way each time', (
     assert.deepEqual(splitIntoShards([...runs].reverse(), { durations: readSnapshot(), serial: SERIAL, count: k }).map((s) => s.runs.map((r) => r.id).sort()),
         once.map((ids) => [...ids].sort()), 'the same shards whatever order the runs come in');
     for (const ids of once) assert.ok(ids.length > 0, 'no shard is empty');
-    // A suite the snapshot does not know goes first, so new suites spread one to a shard.
+    // A suite the snapshot does not know goes first, so new suites spread one to a shard. Every real run is given a time
+    // here, so the k made-up suites are the only unknown ones: suites added since the snapshot was last refreshed (main
+    // adds them most days) would otherwise also go first and take a shard's first place.
     const fresh = Array.from({ length: k }, (_, i) => ({ id: `test-zz-new-${i}` }));
-    const withNew = splitIntoShards([...runs, ...fresh], { durations: readSnapshot(), serial: SERIAL, count: k });
+    const known = { ...readSnapshot() };
+    for (const r of runs) known[r.id] ??= 1;
+    const withNew = splitIntoShards([...runs, ...fresh], { durations: known, serial: SERIAL, count: k });
     for (const s of withNew) assert.equal(s.runs.filter((r) => r.id.startsWith('test-zz-new-')).length, 1);
     assert.ok(withNew.every((s) => s.runs[0].id.startsWith('test-zz-new-')), 'unknown suites first');
 });

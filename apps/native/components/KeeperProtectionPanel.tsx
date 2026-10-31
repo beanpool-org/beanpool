@@ -127,6 +127,8 @@ export function KeeperProtectionPanel({
     waysBack = false,
     colors = lightColors,
     listCommunitiesFor,
+    listShown = false,
+    onListShown,
 }: {
     protection: Protection;
     /**
@@ -170,10 +172,14 @@ export function KeeperProtectionPanel({
      * communities (vault rethink VR5, components/CopyCommunitiesTick.tsx), beside Protect with. Absent: no tick.
      */
     listCommunitiesFor?: string;
+    /**
+     * What the tick shows, kept by the screen (the panel holds no state): it reports each change through `onListShown`
+     * (CopyCommunitiesTick `onChange`), and Protect with and Connect again hand it back as `listCommunities`.
+     */
+    listShown?: boolean;
+    onListShown?: (on: boolean) => void;
 }): React.JSX.Element {
     const styles = stylesFor(colors);
-    // What the tick shows (CopyCommunitiesTick `onChange`), handed on with Protect with and Connect again.
-    const [listOn, setListOn] = React.useState(false);
     const enrolledSso = protection.enrolledSso ?? [];
     const allProviders: SsoProvider[] = Platform.OS === 'ios'
         ? ['apple', 'google', 'facebook']
@@ -218,7 +224,7 @@ export function KeeperProtectionPanel({
     const renderSsoProviders = () => {
         if (Platform.OS === 'web' || !onProtectSso) return null;
         // The list rides only with the tick drawn here and left on (vault rethink VR5).
-        const protect = (prov: SsoProvider) => onProtectSso(prov, !!listCommunitiesFor && listOn);
+        const protect = (prov: SsoProvider) => onProtectSso(prov, !!listCommunitiesFor && listShown);
 
         return (
             <View style={[styles.ssoGroup, rowOnly && styles.ssoGroupFirst]}>
@@ -344,7 +350,7 @@ export function KeeperProtectionPanel({
                     <CopyCommunitiesTick
                         publicKey={listCommunitiesFor}
                         colors={colors}
-                        onChange={setListOn}
+                        onChange={onListShown}
                         connected={enrolledSso.length > 0 ? (hasWords ? 'words' : 'noWords') : undefined}
                     />
                 )}

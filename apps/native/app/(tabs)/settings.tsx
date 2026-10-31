@@ -342,7 +342,9 @@ export default function SettingsScreen() {
     /** Set before an SSO flow leaves the app, so the return trip does not reset the section. */
     const skipNextFocusResetRef = React.useRef(false);
     const [ssoEnrolProvider, setSsoEnrolProvider] = useState<SsoProvider>(Platform.OS === 'ios' ? 'apple' : 'google');
-    /** The tick beside Protect with was on when it was tapped: the copy carries the list of communities (vault rethink VR5). */
+    /** What the tick beside Protect with shows (KeeperProtectionPanel `listShown`), vault rethink VR5. */
+    const [listTickShown, setListTickShown] = useState(false);
+    /** The tick was on when Protect with or Connect again was tapped: the copy carries the list of communities. */
     const [ssoListCommunities, setSsoListCommunities] = useState(false);
     const [revealWords, setRevealWords] = useState(false);
     const [revealLoading, setRevealLoading] = useState(false);
@@ -1825,6 +1827,8 @@ export default function SettingsScreen() {
             } : undefined}
             onDisconnectSso={Platform.OS !== 'web' ? handleDisconnectSso : undefined}
             listCommunitiesFor={identity?.publicKey}
+            listShown={listTickShown}
+            onListShown={setListTickShown}
         />
     );
 

@@ -241,6 +241,8 @@ describe("welcome's claim-flow Add a sign-in draws no tick: its copy carries no 
         const settings = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
         expect(settings).toMatch(/setSsoListCommunities\(listCommunities\);/);
         expect(settings).toMatch(/copiesAt=\{copiesAt\}\s*listCommunities=\{ssoListCommunities\}/);
+        // Each screen keeps what its panel's tick shows, for the panel to hand back with Protect with.
+        for (const screen of [src, settings]) expect(screen).toMatch(/listShown=\{listTickShown\}\s*onListShown=\{setListTickShown\}/);
         // The move card passes none: its sheet keeps the default, off.
         const card = fs.readFileSync(path.resolve(__dirname, '../../components/VaultMoveCard.tsx'), 'utf8');
         expect(card).not.toMatch(/listCommunities=/);
@@ -251,13 +253,18 @@ describe("Account Protection's tick: the list rides only with the tick on screen
     const COVERED = { state: 'covered', holding: ['Google'], enrolledSso: ['google'] } as any;
     const NONE = { state: 'none', holding: [], enrolledSso: [] } as any;
 
+    /** The panel inside a screen that keeps what its tick shows, as settings.tsx and welcome.tsx do. */
     async function panel(protection: any, hasWords: boolean, listCommunitiesFor?: string) {
         const calls: Array<[string, boolean]> = [];
-        await draw(createElement(KeeperProtectionPanel, {
-            colors: lightColors, protection, hasWords, waysBack: true,
-            onProtectSso: (prov: string, list: boolean) => { calls.push([prov, list]); },
-            onDisconnectSso() {}, listCommunitiesFor,
-        } as any));
+        function Screen() {
+            const [listShown, setListShown] = ReactAll.useState(false);
+            return createElement(KeeperProtectionPanel, {
+                colors: lightColors, protection, hasWords, waysBack: true,
+                onProtectSso: (prov: string, list: boolean) => { calls.push([prov, list]); },
+                onDisconnectSso() {}, listCommunitiesFor, listShown, onListShown: setListShown,
+            } as any);
+        }
+        await draw(createElement(Screen));
         return calls;
     }
 

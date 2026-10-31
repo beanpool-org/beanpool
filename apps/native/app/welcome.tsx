@@ -381,6 +381,8 @@ export default function WelcomeScreen() {
      * tick on. The claim flow's Add a sign-in draws no tick, so it sets this off.
      */
     const [ssoListCommunities, setSsoListCommunities] = useState(false);
+    /** What the panel's tick shows (KeeperProtectionPanel `listShown`). */
+    const [listTickShown, setListTickShown] = useState(false);
     const [enrolment, setEnrolment] = useState<KeeperEnrolmentResult | null>(null);
     /**
      * Where a copy made at Safety Backup goes: the joined community's rule (vault rethink VR2, utils/copies-rule.ts),
@@ -2434,6 +2436,8 @@ export default function WelcomeScreen() {
                                 setShowSsoSheet(true);
                             } : undefined}
                             listCommunitiesFor={pendingIdentity?.publicKey}
+                            listShown={listTickShown}
+                            onListShown={setListTickShown}
                         />
                         )}
                         {linked && (

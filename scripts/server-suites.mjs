@@ -226,6 +226,7 @@ export const SUITES = [
     'test-mcp-owner-posts',
     'test-mcp-owner-reads',
     'test-mcp-owner-undo',
+    'test-mcp-owner-photos',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',

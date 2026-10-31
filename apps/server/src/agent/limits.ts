@@ -1,7 +1,7 @@
 /**
  * Limits per agent grant, kept by the server (admin MCP design §2): 60 calls a minute and 2,000 a day, answered 429 in
  * words past either; lists of at most 50 rows; at most 2 backups a day; at most the owners' "Assistant posts a day" made
- * by an owner's assistant (agent/owner-posts.ts). Counted in memory by grant id: a restart starts the counts again, which
+ * by an owner's assistant (agent/owner-posts.ts), and 200 photos fetched or uploaded for it (agent/owner-photos.ts). Counted in memory by grant id: a restart starts the counts again, which
  * an assistant cannot cause.
  */
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
@@ -22,6 +22,12 @@ export const AGENT_POSTS_PER_DAY_MAX = 1000;
 export const AGENT_EDITS_PER_DAY = 200;
 /** remove_all_i_made, once a UTC day per grant (design §2.8); the owner's own "Remove its posts" in Settings is not held to it. */
 export const AGENT_REMOVE_ALLS_PER_DAY = 1;
+/**
+ * Photos one owner's assistant may have this server fetch (photo_urls) or take as an upload (POST /mcp/photos) in a UTC day,
+ * the two together (design §2.8: 200 photo fetches; slice S4, agent/owner-photos.ts). Each one tried counts, whether or not
+ * it gave a photo: the work was done.
+ */
+export const AGENT_PHOTOS_PER_DAY = 200;
 
 /** Whether a value is a day's number the owners may set: a whole number from 1 to 1,000. */
 export function isAgentPostsPerDay(v: unknown): v is number {
@@ -50,6 +56,7 @@ interface Counts {
     dayCreates: number;
     dayEdits: number;
     dayRemoveAlls: number;
+    dayPhotos: number;
 }
 
 const counts = new Map<string, Counts>();
@@ -65,7 +72,7 @@ function countsOf(grantId: string, now: number): Counts {
     let c = counts.get(grantId);
     const day = utcDay(now);
     if (!c) {
-        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0, dayCreates: 0, dayEdits: 0, dayRemoveAlls: 0 };
+        c = { minuteFrom: now, minute: 0, day, dayCalls: 0, dayBackups: 0, dayCreates: 0, dayEdits: 0, dayRemoveAlls: 0, dayPhotos: 0 };
         counts.set(grantId, c);
     }
     if (c.day !== day) {
@@ -75,6 +82,7 @@ function countsOf(grantId: string, now: number): Counts {
         c.dayCreates = 0;
         c.dayEdits = 0;
         c.dayRemoveAlls = 0;
+        c.dayPhotos = 0;
     }
     if (now - c.minuteFrom >= MINUTE_MS) {
         c.minuteFrom = now;
@@ -173,6 +181,18 @@ export function admitAgentRemoveAll(grantId: string, now = Date.now()): boolean 
     const c = countsOf(grantId, now);
     if (c.dayRemoveAlls >= AGENT_REMOVE_ALLS_PER_DAY) return false;
     c.dayRemoveAlls++;
+    return true;
+}
+
+export function agentPhotosToday(grantId: string, now = Date.now()): number {
+    return countsOf(grantId, now).dayPhotos;
+}
+
+/** Whether this grant may have one more photo fetched or uploaded today; counts it when it may. */
+export function admitAgentPhoto(grantId: string, now = Date.now()): boolean {
+    const c = countsOf(grantId, now);
+    if (c.dayPhotos >= AGENT_PHOTOS_PER_DAY) return false;
+    c.dayPhotos++;
     return true;
 }
 

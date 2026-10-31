@@ -41,6 +41,7 @@ import {
     AGENT_POSTS_PER_DAY_DEFAULT, AGENT_POSTS_PER_DAY_MAX, AGENT_POSTS_PER_DAY_MIN,
 } from './limits.js';
 import { dropSuggestionsOf } from './suggestions.js';
+import { dropUploadedPhotosOf } from './owner-photos.js';
 import { aiAssistantsAllowed, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
 import { agentConnectedWords, agentDisconnectedWords } from './welcome.js';
@@ -323,6 +324,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         if (oauth && revokeOAuthGrant(id)) {
             forgetAgentGrant(id);
             dropSuggestionsOf(id);
+            dropUploadedPhotosOf(id);
             const by = actorOf(ctx) ?? 'owner:password';
             const role = roleOf(ctx);
             const name = `${cleanMemberText(oauth.clientName, 60) || 'unnamed'}, sending to ${redirectHost(oauth.redirectUri)}`;
@@ -339,6 +341,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         }
         forgetAgentGrant(id);
         dropSuggestionsOf(id);
+        dropUploadedPhotosOf(id);
         const by = actorOf(ctx) ?? 'owner:password';
         const role = roleOf(ctx);
         logger.info('AUTH', 'AI assistant disconnected', { tokenId: id, role, by: by.slice(0, 16) });

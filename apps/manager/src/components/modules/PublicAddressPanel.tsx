@@ -139,7 +139,7 @@ export function AddressNotices({ notices }: { notices: AddressNotice[] }) {
                     <div key={n.id} className={`border-l-4 ${lv.border} bg-nature-950 rounded-r-xl px-3 py-2 space-y-1`} data-testid="address-notice">
                         <p className="m-0 text-[11px] text-nature-400">
                             {lv.icon} {lv.word} · {day} · about <span className="font-mono text-nature-200">{n.name}</span>
-                            {n.link ? (
+                            {typeof n.link === 'string' && /^https?:\/\//i.test(n.link.trim()) ? (
                                 <>
                                     {' · '}
                                     <a href={n.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center min-h-[48px] lg:min-h-0 text-blue-400 underline">Reply</a>

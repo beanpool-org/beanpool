@@ -278,3 +278,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-29 - ChatConfirmDialog Touch Target Sizing & Test Coverage
 **Learning:** `ChatConfirmDialog.tsx` modal action buttons (cancel and confirm) used `px-4 py-2` without explicit minimum touch target height (`min-h-[44px]`), resulting in touch targets under 44px on mobile devices.
 **Action:** Added `min-h-[44px]` to the cancel and confirm buttons in `ChatConfirmDialog.tsx` and created `ChatConfirmDialog.test.tsx`.
+
+## 2026-11-01 - StartCommunityScreen Back Button Touch Target Sizing
+**Learning:** `StartCommunityScreen.tsx` modal back button used `px-2 py-1` without explicit minimum touch target dimensions, resulting in a touch target under 44px x 44px on mobile touch devices.
+**Action:** Added `min-w-[44px] min-h-[44px] flex items-center justify-center` to the Back button in `StartCommunityScreen.tsx` and updated `StartCommunityScreen.test.tsx`.

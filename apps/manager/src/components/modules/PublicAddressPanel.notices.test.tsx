@@ -49,6 +49,16 @@ describe('PublicAddressPanel: notices from the address service', () => {
         expect(reply[0]).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
+    it('refuses to render non-http(s) links such as javascript: schemes as links', async () => {
+        mockNotices([
+            { id: 9, at: 1_760_000_000, level: 'action', text: 'Malicious link notice', name: 'kestrel', link: 'javascript:alert(1)' },
+        ]);
+        render(<PublicAddressPanel activeNode={node} />);
+        const items = await screen.findAllByTestId('address-notice');
+        expect(items).toHaveLength(1);
+        expect(screen.queryByRole('link', { name: 'Reply' })).not.toBeInTheDocument();
+    });
+
     it('tells an admin, who is given no reply link, that only an owner can reply, with nothing to press', async () => {
         mockNotices([
             { id: 9, at: 1_760_000_000, level: 'action', text: 'Blocked by mistake?', name: 'kestrel', link: null, replyOwnerOnly: true },

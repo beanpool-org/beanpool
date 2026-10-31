@@ -301,10 +301,10 @@ describe('Beans only where its chip is hidden', () => {
 describe('a #tag the member typed (DESIGN-tags-free-entry-fable.md §4)', () => {
     const laptop = listing('laptop', 'A laptop', { freeTags: ['2nd hand'] });
     const phone = listing('phone', 'A phone');
-    async function filterByTyped() {
+    async function filterByTyped(props: Record<string, unknown> = {}) {
         node.feed = [laptop, phone];
         node.answer = () => [laptop];
-        await openMarket({ openPostId: 'laptop', onPostOpened: () => {} });
+        await openMarket({ openPostId: 'laptop', onPostOpened: () => {}, ...props });
         fireEvent.click(await screen.findByRole('button', { name: 'Filter marketplace by tag #2nd hand' }));
         await wait(340);
     }
@@ -327,6 +327,13 @@ describe('a #tag the member typed (DESIGN-tags-free-entry-fable.md §4)', () => 
         info.current = { features: { exampleListings: true } };
         await filterByTyped();
         expect(screen.queryByText('the example cards')).toBeNull();
+    });
+
+    it('saved to Home, it keeps the tag as its words: the card finds it by them', async () => {
+        const onSaveSearch = vi.fn();
+        await filterByTyped({ onSaveSearch });
+        fireEvent.click(screen.getByTestId('market-save-search'));
+        expect(onSaveSearch.mock.calls[0][0].q).toBe('2nd hand');
     });
 
     it('the words of a typed tag find its listing in the search box, under a tag filter too', async () => {

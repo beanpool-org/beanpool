@@ -21,9 +21,13 @@ saying what you verified: a pass with inline findings and no summary leaves the 
 ci_hold(){ log "⚠ PR #$1 LEFT FOR THE DIRECTOR, no deciding pass: $2"; }   # watch.sh wakes on this line
 
 ci_fix(){ # PR BRANCH SHA — one fix stage on the lane's build backend, with the failing checks and how to read their logs
+  # Only an Actions job has a /job/ URL. Cloudflare Pages reports on every head with .../runs/<id>, and GitHub allows a null
+  # URL, which would stop this jq and lose every check. Any check run can be read by its id.
   local failing
   failing=$(gh_try gh api "repos/$LANE_GH_REPO/commits/$3/check-runs?filter=latest&per_page=100" --paginate \
-    --jq '.check_runs[] | select(.conclusion | IN("failure", "timed_out", "startup_failure")) | "- \(.name): gh run view --job \(.html_url | sub(".*/job/"; "")) -R '"$LANE_GH_REPO"' --log-failed"')
+    --jq '.check_runs[] | select(.conclusion | IN("failure", "timed_out", "startup_failure")) | "- \(.name): " +
+      if ((.html_url // "") | test("/job/")) then "gh run view --job \(.html_url | sub(".*/job/"; "")) -R '"$LANE_GH_REPO"' --log-failed"
+      else "gh api repos/'"$LANE_GH_REPO"'/check-runs/\(.id) --jq .output" end')
   [ -n "$failing" ] || failing="- $LANE_CI_CHECK: gh pr checks $1 -R $LANE_GH_REPO"
   stage "FIX-CI-$2-$CI_FIXES" "$LANE_BUILD_TIMEOUT" "STAGE FIX-CI — PR #$1 (branch $2; fetch and check it out in the lane worktree). GitHub's required check \"$LANE_CI_CHECK\" is RED on the head $3, so the deciding review has not run. The failing checks, each with the command that prints its log:
 $failing

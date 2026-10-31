@@ -41,7 +41,9 @@ case "$1 $2" in
                     {"name":"Test-All shard checks","conclusion":"success","html_url":"https://github.com/example/fake/actions/runs/7/job/30"},
                     {"name":"Test-All shard server-3","conclusion":"failure","html_url":"https://github.com/example/fake/actions/runs/7/job/31"},
                     {"name":"Test-All shard vitest-pwa-1","conclusion":"timed_out","html_url":"https://github.com/example/fake/actions/runs/7/job/32"},
-                    {"name":"Test-All shard server-1","conclusion":null,"html_url":"https://github.com/example/fake/actions/runs/7/job/33"}]}' | jq -r "$jqf";;
+                    {"name":"Test-All shard server-1","conclusion":null,"html_url":"https://github.com/example/fake/actions/runs/7/job/33"},
+                    {"id":41,"name":"Cloudflare Pages","conclusion":"failure","html_url":"https://github.com/example/fake/runs/41"},
+                    {"id":42,"name":"Some other app","conclusion":"failure","html_url":null}]}' | jq -r "$jqf";;
                 */pulls/*/files*)
                   { [ -s "$S/files" ] && cat "$S/files" || print src/a.ts; } | jq -Rs 'split("\n") | map(select(length > 0) | {filename: .})' | jq -r "$jqf";;
                 *)

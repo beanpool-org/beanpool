@@ -380,6 +380,8 @@ check "a build stage: agy, build role, build timeout" logged "FIX-CI-feat/x-1 st
 check "the fix brief names the failed check and its log command" brief_has agy.prompt-1 '- Test-All shard server-3: gh run view --job 31 -R example/fake --log-failed'
 check "... and the timed-out one"                brief_has agy.prompt-1 '- Test-All shard vitest-pwa-1: gh run view --job 32 -R example/fake --log-failed'
 check "... and not the passed or running ones"   eval '! brief_has agy.prompt-1 "shard checks" && ! brief_has agy.prompt-1 "shard server-1"'
+check "... a check that is no Actions job gets a command that reads it" brief_has agy.prompt-1 '- Cloudflare Pages: gh api repos/example/fake/check-runs/41 --jq .output'
+check "... and so does one with no URL, which costs the others nothing" brief_has agy.prompt-1 '- Some other app: gh api repos/example/fake/check-runs/42 --jq .output'
 check "the fix brief names the red head"         brief_has agy.prompt-1 "is RED on the head aaa1"
 check "the review brief names the pushed head, not the red one" eval 'brief_has claude.prompt-1 "head aaa2" && ! brief_has claude.prompt-1 "aaa1"'
 

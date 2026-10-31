@@ -606,6 +606,46 @@ check "woke on the held PR"                      logged "NOT REVIEWED on lane se
 check "a long wait for GitHub is not reported as a quota stall" eval '! grep -q "STUCK ON QUOTA" "$T/watch3.out" && grep -q "ALL LANES STOPPED" "$T/watch3.out"'
 wait 2>/dev/null
 
+scenario "46. watch.sh wakes on a lane's last line while another lane keeps running, once; a hold just above that line keeps its own headline"
+done_line='log "LANE $LANE_NAME DONE (clean=$CLEAN pr=$PR) — HELD for the director"'
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'CLEAN=0 PR=42' "$done_line" > "$T/run-selftestdone.sh"
+# As a real lane ends after a hold: ci_hold's line and the run script's last line land in the same second.
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'log "⚠ PR #44 LEFT FOR THE DIRECTOR, no deciding pass: the run on aaa1 was cancelled"' 'CLEAN=0 PR=44' "$done_line" > "$T/run-selftestleft.sh"
+print -l '#!/bin/zsh' "source ${(qq)LIB}" 'CLEAN=0 PR=' "$done_line" > "$T/run-selftestnopr.sh"
+print -l '#!/bin/zsh' 'sleep 600' > "$T/run-selftestother.sh"
+watch_now(){ # OUT — starts a watcher; WOKE=1 if it exits within 5 s. One still asleep is stopped, or it would take the next lane's event.
+  LANE_WATCH_SECS=1 zsh "${HERE:h}/watch.sh" > "$1" 2>&1 &
+  local w=$! i
+  WOKE=1
+  for i in {1..5}; do kill -0 $w 2>/dev/null || return 0; sleep 1; done
+  WOKE=0; kill $w 2>/dev/null; wait $w 2>/dev/null; }
+zsh "${HERE:h}/start.sh" "$T/run-selftestother.sh" > /dev/null 2>&1 &
+sleep 1
+zsh "${HERE:h}/start.sh" "$T/run-selftestdone.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-done.out"; woke_done=$WOKE
+watch_now "$T/w-done2.out"; woke_done2=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestleft.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-left.out"; woke_left=$WOKE
+watch_now "$T/w-left2.out"; woke_left2=$WOKE
+zsh "${HERE:h}/start.sh" "$T/run-selftestnopr.sh" > /dev/null 2>&1 &
+sleep 2
+watch_now "$T/w-nopr.out"; woke_nopr=$WOKE
+{ zsh "${HERE:h}/stop.sh" selftestother; } >> "$LOG" 2>&1
+wait 2>/dev/null
+for o in done done2 left left2 nopr; do print -r -- "--- w-$o.out"; cat "$T/w-$o.out"; done >> "$LOG"
+show
+check "woke while the other lane still ran"      [ "$woke_done" = 1 ]
+check "printed the lane, clean and the PR"       grep -qF "LANE DONE on lane selftestdone" "$T/w-done.out"
+check "... clean=0 and PR #42"                   grep -qE "selftestdone at [0-9:]+ — clean=0, PR #42, held for the director" "$T/w-done.out"
+check "a restarted watcher stays asleep: once stops the repeat" [ "$woke_done2" = 0 ]
+check "the hold above the last line wakes it, once" [ "$woke_left:$woke_left2" = 1:0 ]
+check "the hold keeps its own headline"          grep -qF "NOT REVIEWED on lane selftestleft" "$T/w-left.out"
+check "... and the same wake says the lane finished" grep -qE "selftestleft at [0-9:]+ — clean=0, PR #44, held for the director" "$T/w-left.out"
+check "a lane that ended with no PR wakes it too, and says so" eval '[ "$woke_nopr" = 1 ] && grep -qE "selftestnopr at [0-9:]+ — clean=0, no PR, held for the director" "$T/w-nopr.out"'
+check "watch.sh printed no shell errors"         eval '! grep -qE "bad option|bad pattern|command not found|parse error|read-only" "$T"/w-*.out'
+
 print
 print "selftest: $PASS passed, $FAILS failed"
 if [ "$KEEP" = 1 ]; then print "kept $T"; else

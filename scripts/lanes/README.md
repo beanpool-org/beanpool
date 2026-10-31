@@ -15,7 +15,7 @@ not repeat them; the code comments name the incident behind each rule.
 | `lib.sh` | The library. Source it from a run script. Stages for both backends, watchdog, gates, land, deploy, process-tree and worktree helpers. |
 | `decide.sh` | Deciding reviews: they wait for GitHub on the PR's head, then run one at a time behind a machine-wide lock, probing the model first. `lib.sh` sources it. |
 | `start.sh` | Runs `run-<lane>.sh` in the foreground under `caffeinate -i`, logging to `scratch/lanes/log-<lane>.txt`. |
-| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, left a PR unreviewed because GitHub was not green, or when all lanes have stopped. |
+| `watch.sh` | Exits, which wakes the director, when a lane is stuck on quota, has no capacity, had a deciding review downgraded, holds a PR, left a PR unreviewed because GitHub was not green, or finished (its run script's last line, `LANE <name> DONE (clean=… pr=…) — HELD for the director`), or when all lanes have stopped. |
 | `stop.sh` | Stops lanes now, killing each lane's whole process tree. |
 | `stop-at-boundary.sh` | Lets each lane finish its current stage, then stops it as a FIX, SYNC or deciding stage starts. |
 | `sweep-orphans.sh` | Lists (or `--kill`s) test runners reparented to launchd that are more than an hour old. |

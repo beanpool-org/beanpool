@@ -616,6 +616,7 @@ export const SUITES = [
     'test-slice6-review-findings',
     'test-security-followups-0919',
     'test-security-followups-1001',
+    'test-error-message',
     'test-member-error-text',
     'test-member-words',
     'test-storm-smalls',

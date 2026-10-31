@@ -583,6 +583,7 @@ async function main() {
     r = await decide(ottoPhone(), abePaused.decision.id, 'Only two could vote, and Abe shared the list');
     assert(r.status === 403 && r.body?.error === de.NODE_OPERATOR_VOTE_REFUSAL && !row(abePaused.decision.id).owner_decided_at,
         `a vote on an admin: refused, no vote removes an owner or admin (${r.status})`);
+    gone([abe]);
 
     // Enough voters: the community decides.
     const crowd = ['Ali', 'Bo', 'Cy'].map(n => seed(`Crowd${n}`));
@@ -600,6 +601,7 @@ async function main() {
     // and to the member's reply, before any proof (a stale hand-off is told this, not asked Manage again).
     const pia = seed('PiaPope');
     const piaVote = pauseOf(pia);
+    assert(de.tallyDecision(piaVote).tooFewToVote === true, `Pia's vote is really too few to vote on (${de.tallyDecision(piaVote).electorate} could)`);
     db.prepare('UPDATE decisions SET closes_at = ? WHERE id = ?').run(ago(5000), piaVote);
     const piaLate = de.castDecisionVote(piaVote, tia.pubKeyHex, false);
     r = await decide(ottoPhoneStale(), piaVote, 'Deciding after the close, before the tick has run');

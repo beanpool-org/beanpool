@@ -79,6 +79,14 @@ export function vaultHalves(w: WaysBack): VaultCommunityCopy[] {
     return w.vault.kind === 'listed' ? w.vault.communityCopies ?? [] : [];
 }
 
+/**
+ * Whether Remove everything asks the vault: it listed a copy of either kind, or it couldn't say. The one test for the delete
+ * and for its confirm, so a member is never asked about less than goes (a shared copy's half is a vault copy too).
+ */
+export function removeEverythingAsksVault(w: WaysBack): boolean {
+    return w.vault.kind === 'unknown' || (w.vault.kind === 'listed' && w.vault.copies.length + vaultHalves(w).length > 0);
+}
+
 /** The vault's copy that goes with community `c`'s half, or undefined. */
 export function vaultHalfOf(w: WaysBack, c: CommunityPart): VaultCommunityCopy | undefined {
     return c.vaultRef ? vaultHalves(w).find(h => h.ref === c.vaultRef) : undefined;

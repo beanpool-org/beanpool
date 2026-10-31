@@ -32,7 +32,7 @@ import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import { anchorUrl } from '../utils/node-post';
 import { copiesAtFor } from '../utils/copies-rule';
 import {
-    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom, removeEverything, removeVaultCopy, removeVaultHalf,
+    beforeRemoving, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom, removeEverything, removeEverythingAsksVault, removeVaultCopy, removeVaultHalf,
     sameCommunity, vaultHalfOf, wordsWrittenDown, type BeforeRemoving, type CopyAt, type EverythingRemoved, type Removal, type WaysBack,
 } from '../utils/ways-back';
 
@@ -222,7 +222,7 @@ export default function WaysBackScreen() {
     const onRemoveEverything = () => {
         if (!identity || !ways || busy) return;
         const parts: string[] = [];
-        if (ways.vault.kind === 'unknown' || (ways.vault.kind === 'listed' && ways.vault.copies.length > 0)) {
+        if (removeEverythingAsksVault(ways)) {
             parts.push(t("BeanPool's key vault deletes its copies at once, and from its backups within 30 days, or later if the vault is paused in that time."));
         }
         if (ways.communities.some(c => (c.status?.providers.length ?? 0) > 0 || !!c.status?.adminsCopy || !!c.status?.adminsCopyUnopenable)) {

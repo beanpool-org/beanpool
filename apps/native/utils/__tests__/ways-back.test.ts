@@ -47,7 +47,7 @@ import { vaultCopyKnowledge, vaultCopyKnown } from '../vault';
 import { retryCommunityRemovals, vaultMoveOffer } from '../vault-move';
 import {
     beforeRemoving, everyoneAnswered, knownCopies, listWaysBack, noteWordsWrittenDown, removeAdminsCopyFrom, removeCommunityCopyFrom,
-    removeEverything, removeVaultCopy, strayVaultHalves, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
+    removeEverything, removeEverythingAsksVault, removeVaultCopy, strayVaultHalves, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly, wordsWrittenDown, type WaysBack,
 } from '../ways-back';
 import { FakeVault, OTHER_KEY, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 import { boundSignatureValid } from './server-signature-check';
@@ -215,6 +215,15 @@ describe('a shared copy is one way back in two places (vault rethink VR4)', () =
             expect(wordsOnly(w)).toBe(false);
             expect(beforeRemoving(w, { at: 'admins', url: 'https://mullum.test' }, PHONE)).toBe('confirm');
         }
+    });
+
+    it('Remove everything asks the vault for a copy of either kind, or when it couldn\'t say: the one test its delete and its confirm go by', () => {
+        expect(removeEverythingAsksVault(ways([half], part('digest-1'))), 'a member whose only vault copy is a shared one').toBe(true);
+        expect(removeEverythingAsksVault(ways([half], part(null, 'label-2'))), 'a stray half').toBe(true);
+        expect(removeEverythingAsksVault(ways([], part(null))), 'it listed none').toBe(false);
+        expect(removeEverythingAsksVault({ vault: { kind: 'listed', copies: [{ provider: 'google', since: '2026-10-01', lastReleasedAt: null }] }, communities: [], pending: [] })).toBe(true);
+        expect(removeEverythingAsksVault({ vault: { kind: 'unknown', why: 'paused' }, communities: [], pending: [] })).toBe(true);
+        expect(removeEverythingAsksVault({ vault: { kind: 'no-vault' }, communities: [], pending: [] })).toBe(false);
     });
 
     it('a half no community on this phone says is its own is listed alone, and removes alone', () => {

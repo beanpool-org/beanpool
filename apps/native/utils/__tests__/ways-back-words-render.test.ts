@@ -387,6 +387,20 @@ describe('what each confirm offers, and what a result says (English)', () => {
         expect(text).not.toMatch(/Removed from/);
     });
 
+    it("Remove everything when a member's only vault copy is a shared one: the confirm says the vault deletes too, as it will (#2683 deciding pass)", async () => {
+        fx.ways = {
+            vault: { kind: 'listed', copies: [], communityCopies: [{ ref: 'label-mullum', copy: 'digest', since: '2026-10-29', lastReleasedAt: null }] },
+            communities: [{ url: MULLUM, name: 'Mullumbimby', vaultRef: 'label-mullum', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-29T04:05:06.000Z', placement: 'shared', copy: 'digest' } } }],
+            pending: [],
+        };
+        fx.everything = { vault: { removed: true }, communities: [], admins: [{ url: MULLUM, name: 'Mullumbimby', removal: { removed: true } }], notAsked: [] };
+        await mount('en');
+        await click(buttonNamed('Remove everything'), 'Remove everything');
+        const a = alerts.shown.at(-1)!;
+        expect(a.body).toContain("BeanPool's key vault deletes its copies at once, and from its backups within 30 days, or later if the vault is paused in that time.");
+        expect(a.body).toContain("Each community's server deletes its copy.");
+    });
+
     it("the copy Mullumbimby keeps for its admins (VR3): its row with since when, its own confirm, and only what Mullumbimby answered", async () => {
         await mount('en');
         // Drawn under Mullumbimby, first (the whole copy, as design §5.1 lists it), before the next community (the host stubs carry no testID).

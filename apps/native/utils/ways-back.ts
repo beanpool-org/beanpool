@@ -42,10 +42,10 @@ import { wordsWrittenDownStoreKey } from './storage-keys';
 import { communityRefFor } from './community-recovery';
 import { disconnectCommunityCopy, disconnectFromVault, hasVault, vaultStatus, VaultError } from './vault';
 import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, removeAdminsCopy, retryCommunityRemovals } from './vault-move';
-import { sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
+import { removeEverythingAsksVault, sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
 
 export {
-    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, strayVaultHalves, unopenableAdminsCopies, vaultCopiesBySignIn, vaultHalfOf, vaultHalves, wordsOnly,
+    beforeRemoving, everyoneAnswered, isPending, knownCopies, removeEverythingAsksVault, sameCommunity, strayVaultHalves, unopenableAdminsCopies, vaultCopiesBySignIn, vaultHalfOf, vaultHalves, wordsOnly,
     type BeforeRemoving, type CommunityPart, type CopyAt, type NotAnswered, type Removal, type VaultPart, type WaysBack,
 } from './ways-back-state';
 
@@ -174,8 +174,7 @@ export interface EverythingRemoved {
  * never blocks on one keeper.
  */
 export async function removeEverything(identity: BeanPoolIdentity, w: WaysBack): Promise<EverythingRemoved> {
-    const askVaultToo = w.vault.kind === 'unknown' || (w.vault.kind === 'listed' && w.vault.copies.length + (w.vault.communityCopies?.length ?? 0) > 0);
-    const vault: Promise<Removal | null> = askVaultToo
+    const vault: Promise<Removal | null> = removeEverythingAsksVault(w)
         ? disconnectFromVault(identity, 'all').then((): Removal => ({ removed: true }), (e): Removal => ({ removed: false, why: notAnswered(e) }))
         : Promise.resolve(null);
     const communities = Promise.all(w.communities.filter(c => c.status).map(async c => {

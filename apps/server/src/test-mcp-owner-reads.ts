@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     // Mia's own area: no assistant reads it.
     setMemberArea(mia.pub, { lat: -28.612345, lng: 153.456789 });
 
-    const buf = await sharp({ create: { width: 64, height: 48, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
+    const buf = await sharp({ create: { width: 240, height: 200, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
     const tiny = `data:image/jpeg;base64,${buf.toString('base64')}`;
     const post = (title: string, author: string, lat = -28.55, lng = 153.5) => createPost('offer', 'food', title, 'Words.', 2, 'fixed', author, lat, lng, [tiny], false)!.id;
     const miaPublic = post('Sourdough starter from Mia', mia.pub, -28.567891, 153.512345);

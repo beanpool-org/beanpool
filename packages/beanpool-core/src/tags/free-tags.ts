@@ -53,8 +53,11 @@ const DIGITS = '0-9\\u0660-\\u0669\\u06f0-\\u06f9\\u07c0-\\u07c9\\u0966-\\u096f\
     + '\\u1090-\\u1099\\u17e0-\\u17e9\\u1810-\\u1819\\u1946-\\u194f\\u19d0-\\u19d9\\u1a80-\\u1a89\\u1a90-\\u1a99\\u1b50-\\u1b59\\u1bb0-\\u1bb9'
     + '\\u1c40-\\u1c49\\u1c50-\\u1c59\\ua620-\\ua629\\ua8d0-\\ua8d9\\ua900-\\ua909\\ua9d0-\\ua9d9\\ua9f0-\\ua9f9\\uaa50-\\uaa59\\uabf0-\\uabf9'
     + '\\uff10-\\uff19';
-/** What may stand between the digits of a phone number: spaces, dots, brackets, a plus and dashes. */
-const DIGIT_JOINS = '[\\s().+\\u2010-\\u2015-]*';
+/**
+ * What may stand between the digits of a phone number: spaces, dots, brackets, a plus, slashes and dashes. A slash counts
+ * as the rest do, so a date or a size in seven digits or more ("01/02/2024") is held as it is with dots or dashes.
+ */
+const DIGIT_JOINS = '[\\s().+/\\u2010-\\u2015-]*';
 const DIGIT = byProperty('\\p{Nd}', new RegExp(`[${DIGITS}]`, 'g'));
 const DIGIT_RUN = byProperty(`\\p{Nd}(?:${DIGIT_JOINS}\\p{Nd})*`, new RegExp(`[${DIGITS}](?:${DIGIT_JOINS}[${DIGITS}])*`, 'g'));
 const PHONE_DIGITS = 7;

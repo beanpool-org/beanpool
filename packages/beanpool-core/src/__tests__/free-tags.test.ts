@@ -35,7 +35,7 @@ describe('a free tag\'s stored form', () => {
 
 describe('what a free tag may not be', () => {
     it('passes the shapes members type', () => {
-        for (const tag of ['2nd hand', 'wi-fi router', 'Limón 🍋 fresco', '二手 笔记本', 'segunda mano', 'don\'t panic', '3.5mm jack', 'a.k.a', '24/7',
+        for (const tag of ['2nd hand', 'wi-fi router', 'Limón 🍋 fresco', '二手 笔记本', 'segunda mano', 'don\'t panic', '3.5mm jack', 'a.k.a', '24/7', '1/4 inch', '50/50', '120/240v',
             'г.москва', 'ดร.สมชาย', 'iphone 15 pro', '1984', 'rtx4090 ti 2024', 'میوه\u200cفروشی', 'ab']) {
             expect(freeTagRefusal(tag), tag).toBeNull();
         }
@@ -58,7 +58,7 @@ describe('what a free tag may not be', () => {
 
     it('refuses a contact in every shape, its full-width forms too', () => {
         for (const tag of ['@handle', 'me@example.com', 'hello @ you', 'a＠b', '0412 345 678', '0412345678', '+61 412 345 678', '(04) 1234 5678', '04-12-34-56-78',
-            '04 12 34 56 78', '1234567', 'call 0412 345 678', '０４１２３４５６７８', '٠٤١٢٣٤٥٦٧٨', 'http://x', 'https://example.com/a', 'www.example.com', 'example.com',
+            '04 12 34 56 78', '1234567', 'call 0412 345 678', '0412/345/678', '０４１２／３４５／６７８', '02/9876/543', '０４１２３４５６７８', '٠٤١٢٣٤٥٦٧٨', 'http://x', 'https://example.com/a', 'www.example.com', 'example.com',
             'bit.ly/abc', 't.me/someone', 'wa.me', 'ＥＸＡＭＰＬＥ．ＣＯＭ']) {
             expect(freeTagRefusal(tag), tag).toBe(FREE_TAG_NOT_A_CONTACT);
         }
@@ -97,6 +97,7 @@ describe('on an old Android engine, with no Unicode property escapes', () => {
             for (const tag of ['٠٤١٢٣٤٥٦٧٨', '٠٤١٢ ٣٤٥ ٦٧٨', '۰۴۱۲-۳۴۵-۶۷۸', '०४१२ ३४५ ६७८', '๐๔๑๒.๓๔๕.๖๗๘']) {
                 expect(old.freeTagRefusal(tag), tag).toBe(old.FREE_TAG_NOT_A_CONTACT);
             }
+            expect(old.freeTagRefusal('0412/345/678')).toBe(old.FREE_TAG_NOT_A_CONTACT);
             for (const digit of digits) expect(old.freeTagRefusal(digit.repeat(7)), digit).toBe(old.FREE_TAG_NOT_A_CONTACT);
         } finally {
             vi.unstubAllGlobals();

@@ -244,14 +244,17 @@ function unzonedTime(args: Record<string, unknown>): string | null {
 /**
  * The library's tags for some words, nearest first: the index the pickers read (@beanpool/core tagIndex; a server's is the
  * English labels, aliases and synonym words), on the whole text, then on each word and an English plural's singular, since it
- * matches a label from what it is given: "lemons" alone finds nothing, nor does "sourdough bread". Never a top.
+ * matches a label from what it is given: "lemons" alone finds nothing, nor does "sourdough bread". What a word names exactly
+ * comes before what merely starts with it, and a joining word finds nothing: "and" alone starts 41 labels, which would bury
+ * the pears in "apples and pears" past the list's cut, and an assistant would then type a free twin of a library tag. Never a top.
  */
+const JOINING_WORDS = new Set(['a', 'an', 'and', 'at', 'for', 'from', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
 export function libraryTagsFor(text: string): string[] {
     const index = tagIndex();
     const found = new Set(index.search(text, TAG_LIBRARY.length));
-    for (const word of plainWords(text)) {
-        for (const q of [word, ...singulars(word)]) for (const id of index.search(q, TAG_LIBRARY.length)) found.add(id);
-    }
+    const asked = plainWords(text).filter((word) => !JOINING_WORDS.has(word)).flatMap((word) => [word, ...singulars(word)]);
+    for (const q of asked) for (const id of index.byName(q)) if (id.includes('.')) found.add(id);
+    for (const q of asked) for (const id of index.search(q, TAG_LIBRARY.length)) found.add(id);
     return [...found];
 }
 

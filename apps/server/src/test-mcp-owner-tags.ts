@@ -195,6 +195,9 @@ async function main(): Promise<void> {
         assert((await searched({ q: 'lemons' }))[0]?.id === 'food.fruit.lemon', 'an English plural finds its singular');
         const twoWords = (await searched({ q: 'fresh sourdough bread' })).map((t) => t.id);
         assert(twoWords.includes('food.bakery.sourdough') && twoWords.includes('food.bakery.bread'), `words the library has no one label for are looked up each (${twoWords.slice(0, 5).join(', ')})`);
+        const pears = (await searched({ q: 'apples and pears' })).map((t) => t.id);
+        assert(pears.includes('food.fruit.apple') && pears.includes('food.fruit.pear'), `a joining word buries nothing: apples and pears finds both (${pears})`);
+        assert((await searched({ q: 'an old bike' })).some((t) => t.id.startsWith('transport.bikes')), 'nor does a short one: an old bike finds the bikes');
         const inFood = await searched({ q: 'tree', limit: 50 });
         const inGarden = await searched({ q: 'tree', category: 'garden', limit: 50 });
         assert(inFood.some((t) => t.id.startsWith('food.')) && inGarden.length > 0 && inGarden.every((t) => t.id.startsWith('garden.')), `category narrows it (${inGarden.slice(0, 3).map((t) => t.id).join(', ')})`);

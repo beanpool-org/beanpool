@@ -142,6 +142,6 @@ export function circleKnockTrouble(sent: { kind: string; status?: number }): Cir
 
 /** The retired card's line about a knock that didn't go, or null. */
 export function circleKnockLine(trouble: CircleKnockTrouble | null | undefined): string | null {
-    if (!trouble) return null;
-    return t(trouble === 'later' ? PLACE_CIRCLE_WORDS.knockLater : PLACE_CIRCLE_WORDS.knockRefused);
+    if (trouble === 'later') return t(PLACE_CIRCLE_WORDS.knockLater);
+    return trouble === 'refused' ? t(PLACE_CIRCLE_WORDS.knockRefused) : null;
 }

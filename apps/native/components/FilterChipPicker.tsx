@@ -57,7 +57,7 @@ export function FilterChipButton({
             style={[flat ? styles.flat : styles.floating, active && { backgroundColor: activeColor }, style]}
             onPress={onPress}
             onLayout={onLayout}
-            hitSlop={hitSlop ?? { top: 4, bottom: 4, left: 2, right: 2 }}
+            hitSlop={hitSlop ?? (flat ? { top: 2, bottom: 2, left: 0, right: 0 } : { top: 4, bottom: 4, left: 4, right: 4 })}
         >
             <Text style={[flat ? styles.flatText : styles.floatingText, active && styles.textActive, active && activeTextColor ? { color: activeTextColor } : null]} numberOfLines={1}>{label}</Text>
         </Pressable>

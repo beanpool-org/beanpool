@@ -19,6 +19,13 @@
  *      polls); made admin again, the setting at once.
  *   7. The one-active-poll index (db.ts makeActivePollIndexPlain): a plain index after boot; a node's old UNIQUE one is
  *      replaced once; an older image's `CREATE UNIQUE INDEX IF NOT EXISTS` on it is a no-op with an owner's 2 open polls.
+ *   8. Invites (Marty, 31 Oct ~20:35): a member's 21st in a day, and 51st unused, refused as before; an owner's and an
+ *      admin's 8th, unused and in a day, naming 7; with it at 120 an admin's 21st and a 51st unused go; a moderator keeps a
+ *      member's numbers; what was made in Settings still doesn't count; an offline ticket by the maker's role (7, a member 20).
+ *   9. Pulse links by hand (the same): a member's 51st refused as before; an owner's 8th, naming 7; with it at 120 an admin's
+ *      51st goes; a moderator keeps 50; items synced or harvested are neither counted here nor moved by the setting.
+ *  10. Demotion again, for both: an admin made a member again is held to 20 invites a day, 50 unused, a ticket's 20 and
+ *      50 links at once; made admin again, the setting at once.
  *
  * Local only: nothing leaves the box.
  *
@@ -31,9 +38,13 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import { setMemberPhoto } from '@beanpool/engine';
 import { db, makeActivePollIndexPlain } from './db/db.js';
-import { initStateEngine, createPost, createTreasury, adminAssignTreasuryOperator } from './state-engine.js';
+import { initStateEngine, createPost, createTreasury, adminAssignTreasuryOperator, generateInvite } from './state-engine.js';
 import { grantNodeRole, revokeNodeRole } from './engine/node-roles.js';
-import { assertMayPostToday, assertMayStartGroupToday, assertMayStartEnterprise, WriterLimitError } from './engine/writer-bounds.js';
+import {
+    assertMayMakeInvite, assertMayPostToday, assertMayStartEnterprise, assertMayStartGroupToday, assertMaySubmitToPulse,
+    pulseHarvestAllowance, pulseSyncAllowance, ticketJoinRefusal, WriterLimitError,
+} from './engine/writer-bounds.js';
+import { addChannel } from './engine/creator-channels.js';
 import { setAgentPostsPerDay, AGENT_POSTS_PER_DAY_DEFAULT, agentPostsPerDay } from './agent/limits.js';
 import { WRITER_LIMITS } from './config/writer-limits.js';
 
@@ -119,6 +130,39 @@ function seedEnterprise(member: string, hoursAgo = 1): void {
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at, is_treasury) VALUES (?, ?, ?, 'active', ?, 1)`)
         .run(pub, `Shop ${pub.slice(0, 6)}`, ago(hoursAgo), ago(hoursAgo));
     db.prepare(`INSERT INTO conversations (id, type, name, created_by, created_at) VALUES (?, 'enterprise_thread', 'Shop', ?, ?)`).run(pub, member, ago(hoursAgo));
+}
+
+/** A new invite code, as POST /api/invite/generate makes it (its limit: assertMayMakeInvite, the route's beforeWrite). */
+const newInvite = (pub: string) => generateInvite(pub, undefined, () => assertMayMakeInvite(pub));
+function invitesUntil(pub: string, max: number): { made: number; refused: string } {
+    let made = 0;
+    for (let i = 0; i < max; i++) {
+        const r = refusal(() => newInvite(pub));
+        if (r) return { made, refused: r };
+        made++;
+    }
+    return { made, refused: '' };
+}
+
+let seeded = 0;
+/** `count` invite codes of `member`'s nobody used, made `hoursAgo` (`issuedBy`: made in Settings, routes/community.ts). */
+function seedInvites(member: string, count: number, hoursAgo = 48, issuedBy: string | null = null): void {
+    const add = db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, issued_by) VALUES (?, ?, ?, ?)`);
+    for (let i = 0; i < count; i++) add.run(`INV-${String(++seeded).padStart(4, '0')}-SEED`, member, ago(hoursAgo), issuedBy);
+}
+/** `count` of `inviter`'s offline tickets someone joined with in the last hour: a ticket's row is keyed on its 16-hex hash. */
+function seedTicketJoins(inviter: string, count: number, joiner: string): void {
+    const add = db.prepare(`INSERT INTO invite_codes (code, created_by, created_at, used_by, used_at) VALUES (?, ?, ?, ?, ?)`);
+    for (let i = 0; i < count; i++) add.run(crypto.randomBytes(8).toString('hex'), inviter, ago(1), joiner, ago(1));
+}
+
+const channels = new Map<string, string>();
+/** `count` Pulse items of `member`'s added in the last hour, from `source` (the rows assertMaySubmitToPulse reads). */
+function seedPulseItems(member: string, count: number, source: 'manual' | 'oauth' | 'autolist' = 'manual'): void {
+    const channel = channels.get(member) ?? addChannel({ ownerPubkey: member, platform: 'website', raw: `https://${member.slice(0, 12)}.example.org`, category: 'other' }).id;
+    channels.set(member, channel);
+    const add = db.prepare(`INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, title, category, source) VALUES (?, ?, ?, 'website', ?, 'A post', 'other', ?)`);
+    for (let i = 0; i < count; i++) add.run(`item_${crypto.randomBytes(12).toString('hex')}`, channel, member, `https://example.org/${++seeded}`, source);
 }
 
 async function main(): Promise<void> {
@@ -289,6 +333,124 @@ async function main(): Promise<void> {
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active'`);
     assert(uniqueOf() === 0, 'an older image\'s schema line, run on it with an owner\'s 2 open polls, finds the name and does nothing (no failed boot)');
     closeAllPolls();
+
+    // ── 8. Invites ──────────────────────────────────────────────────────────────────────────────
+    console.log('\n--- 8. Invites ---');
+    setAgentPostsPerDay(7);
+    const bea = makeMember('Bea');
+    const beaInvites = invitesUntil(bea, 21);
+    assert(beaInvites.made === WRITER_LIMITS.invitesPerDay && codeOf(() => assertMayMakeInvite(bea)) === 'invites_per_day'
+        && /^You can make 20 invites in any 24 hours\. You can make more in about/.test(beaInvites.refused),
+        `a member: 20 invites in a day, the 21st refused as before (${beaInvites.made}; ${beaInvites.refused})`);
+    const cal = makeMember('Cal');
+    seedInvites(cal, WRITER_LIMITS.invitesUnused);
+    const calRefused = refusal(() => newInvite(cal));
+    assert(codeOf(() => assertMayMakeInvite(cal)) === 'invites_unused' && /^You have 50 invites nobody has used yet, the most one member can hold\./.test(calRefused),
+        `a member holding 50 unused: the 51st refused as before (${calRefused})`);
+    const iris = makeMember('Iris');
+    grantNodeRole(iris, 'owner', own);
+    const irisInvites = invitesUntil(iris, 8);
+    assert(irisInvites.made === 7 && codeOf(() => assertMayMakeInvite(iris)) === 'invites_unused'
+        && /^You have 7 invites nobody has used yet\. This community's owners allow 7 at a time for owners and admins/.test(irisInvites.refused) && OWNERS_SETTING.test(irisInvites.refused),
+        `an owner: 7 unused, the 8th refused naming 7 at a time and the setting (${irisInvites.made}; ${irisInvites.refused})`);
+    db.prepare(`UPDATE invite_codes SET used_by = ?, used_at = ? WHERE code IN (SELECT code FROM invite_codes WHERE created_by = ? LIMIT 2)`).run(mem, ago(1), iris);
+    const irisToday = refusal(() => newInvite(iris));
+    assert(codeOf(() => assertMayMakeInvite(iris)) === 'invites_per_day'
+        && /^This community's owners allow 7 new invites in any 24 hours for owners and admins/.test(irisToday) && OWNERS_SETTING.test(irisToday),
+        `with 2 of them used, the owner's 8th today is refused naming 7 a day (${irisToday})`);
+    const jo = makeMember('Jo');
+    grantNodeRole(jo, 'admin', own);
+    const joInvites = invitesUntil(jo, 8);
+    assert(joInvites.made === 7 && /owners allow 7 at a time/.test(joInvites.refused), `an admin: 7, the 8th refused (${joInvites.made}; ${joInvites.refused})`);
+    setAgentPostsPerDay(120);
+    const joMore = invitesUntil(jo, 14);
+    seedInvites(jo, 40);
+    const joUnused = refusal(() => newInvite(jo));
+    assert(joMore.made === 14 && joUnused === '', `set to 120, the admin's 21st in a day goes, and a 51st unused (${joMore.made}; ${joMore.refused}; ${joUnused})`);
+    setAgentPostsPerDay(7);
+    const modInvites = invitesUntil(mod, 21);
+    assert(modInvites.made === 20 && /^You can make 20 invites in any 24 hours/.test(modInvites.refused),
+        `a moderator keeps a member's 20, whatever the setting (${modInvites.made}; ${modInvites.refused})`);
+    const kit = makeMember('Kit');
+    grantNodeRole(kit, 'admin', own);
+    seedInvites(kit, 10, 1, 'owner:password');
+    assert(refusal(() => newInvite(kit)) === '', 'what was made in Settings still doesn\'t count against an admin\'s own');
+    // An offline ticket counts when someone joins with it, by its maker's role (the words go to the person joining).
+    const lou = makeMember('Lou');
+    seedTicketJoins(lou, 7, mem);
+    const pam = makeMember('Pam');
+    grantNodeRole(pam, 'owner', own);
+    seedTicketJoins(pam, 6, mem);
+    const pamUnder = ticketJoinRefusal(pam);
+    seedTicketJoins(pam, 1, mem);
+    const pamOver = ticketJoinRefusal(pam) ?? '';
+    assert(ticketJoinRefusal(lou) === null && pamUnder === null && /^The member whose invite this is has brought 7 people in today/.test(pamOver),
+        `a ticket by its maker's role: a member with 7 joins today passes; an owner's 7th passes and the 8th is refused at 7 (${pamOver})`);
+    seedTicketJoins(lou, 13, mem);
+    assert(/brought 20 people in today/.test(ticketJoinRefusal(lou) ?? ''), `and a member's is refused at 20, as before (${ticketJoinRefusal(lou)})`);
+    setAgentPostsPerDay(120);
+    seedTicketJoins(pam, 13, mem);
+    assert(ticketJoinRefusal(pam) === null, 'set to 120, an owner\'s 21st ticket join today passes');
+
+    // ── 9. Pulse links by hand ──────────────────────────────────────────────────────────────────
+    console.log('\n--- 9. Pulse links by hand ---');
+    setAgentPostsPerDay(7);
+    const ned = makeMember('Ned');
+    seedPulseItems(ned, 49);
+    const nedUnder = refusal(() => assertMaySubmitToPulse(ned));
+    seedPulseItems(ned, 1);
+    const nedOver = refusal(() => assertMaySubmitToPulse(ned));
+    assert(nedUnder === '' && codeOf(() => assertMaySubmitToPulse(ned)) === 'pulse_per_day' && /^You can add 50 links to the Pulse in any 24 hours\. You can add more in about/.test(nedOver),
+        `a member: 50 links, the 51st refused as before (${nedOver})`);
+    const uma = makeMember('Uma');
+    grantNodeRole(uma, 'owner', own);
+    seedPulseItems(uma, 6);
+    const umaUnder = refusal(() => assertMaySubmitToPulse(uma));
+    seedPulseItems(uma, 1);
+    const umaOver = refusal(() => assertMaySubmitToPulse(uma));
+    assert(umaUnder === '' && codeOf(() => assertMaySubmitToPulse(uma)) === 'pulse_per_day'
+        && /^This community's owners allow 7 new links to the Pulse in any 24 hours for owners and admins/.test(umaOver) && OWNERS_SETTING.test(umaOver),
+        `an owner: 7 links, the 8th refused naming 7 and the setting (${umaOver})`);
+    const val = makeMember('Val');
+    grantNodeRole(val, 'admin', own);
+    seedPulseItems(val, 7);
+    const valAt7 = refusal(() => assertMaySubmitToPulse(val));
+    setAgentPostsPerDay(120);
+    seedPulseItems(val, 43);
+    const valAt120 = refusal(() => assertMaySubmitToPulse(val));
+    assert(/owners allow 7 new links/.test(valAt7) && valAt120 === '', `an admin: refused at 7; set to 120, the 51st goes (${valAt7})`);
+    setAgentPostsPerDay(7);
+    seedPulseItems(mod, 7);
+    assert(refusal(() => assertMaySubmitToPulse(mod)) === '', 'a moderator keeps a member\'s 50: the 8th link goes at a setting of 7');
+    // A sync and the harvester are not hand submissions: their own numbers, for everyone.
+    const wes = makeMember('Wes');
+    grantNodeRole(wes, 'owner', own);
+    seedPulseItems(wes, 9, 'oauth');
+    seedPulseItems(wes, 9, 'autolist');
+    assert(refusal(() => assertMaySubmitToPulse(wes)) === '' && pulseSyncAllowance(wes) === WRITER_LIMITS.pulseSyncedItemsPerDay - 9
+        && pulseHarvestAllowance(wes) === WRITER_LIMITS.pulseHarvestedItemsPerDay - 9,
+        `at a setting of 7, 9 synced and 9 harvested use none of an owner's links, and keep their own 300 and 400 (${pulseSyncAllowance(wes)}, ${pulseHarvestAllowance(wes)})`);
+
+    // ── 10. Demotion, for invites and links ─────────────────────────────────────────────────────
+    console.log('\n--- 10. Demotion, for invites and links ---');
+    setAgentPostsPerDay(120);
+    const zed = makeMember('Zed');
+    grantNodeRole(zed, 'admin', own);
+    seedInvites(zed, WRITER_LIMITS.invitesPerDay, 1);
+    seedTicketJoins(zed, WRITER_LIMITS.invitesPerDay, mem);
+    seedPulseItems(zed, WRITER_LIMITS.pulseSubmissionsPerDay);
+    const asAdminAgain = [refusal(() => assertMayMakeInvite(zed)), ticketJoinRefusal(zed) ?? '', refusal(() => assertMaySubmitToPulse(zed))];
+    assert(asAdminAgain.every((r) => r === ''), `as an admin at 120: invite, ticket and link all go (${asAdminAgain.join(' | ')})`);
+    revokeNodeRole(zed, 'admin', own);
+    const demotedAgain = { invite: refusal(() => assertMayMakeInvite(zed)), ticket: ticketJoinRefusal(zed) ?? '', link: refusal(() => assertMaySubmitToPulse(zed)) };
+    assert(/^You can make 20 invites in any 24 hours/.test(demotedAgain.invite) && /brought 20 people in today/.test(demotedAgain.ticket)
+        && /^You can add 50 links to the Pulse in any 24 hours/.test(demotedAgain.link),
+        `made a member again: 20 invites, a ticket's 20 and 50 links at once (${Object.values(demotedAgain).join(' | ')})`);
+    seedInvites(zed, WRITER_LIMITS.invitesUnused - WRITER_LIMITS.invitesPerDay);
+    assert(/^You have 50 invites nobody has used yet, the most one member can hold/.test(refusal(() => assertMayMakeInvite(zed))), 'and to a member\'s 50 unused at once');
+    grantNodeRole(zed, 'admin', own);
+    assert(refusal(() => assertMayMakeInvite(zed)) === '' && refusal(() => assertMaySubmitToPulse(zed)) === '', 'made admin again, the setting at once');
+    setAgentPostsPerDay(AGENT_POSTS_PER_DAY_DEFAULT);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exit(1);

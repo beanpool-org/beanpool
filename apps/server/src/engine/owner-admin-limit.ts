@@ -9,12 +9,16 @@
  *   - enterprises started in any 24 hours (enterprisesPerDay, 3), and still running (enterprisesLive, 20);
  *   - upcoming events in a pool (engine/posts.ts EVENT_UPCOMING_CAP, 5), by the role of the member acting: a keeper's for
  *     an enterprise's events, the host's for a group's;
- *   - their own active polls (1). The node-wide 5 active polls stays as it is, for everyone.
+ *   - their own active polls (1). The node-wide 5 active polls stays as it is, for everyone;
+ *   - invites made in any 24 hours (invitesPerDay, 20; an offline ticket by its maker's role, when someone joins with it)
+ *     and invites unused at once (invitesUnused, 50) (Marty, 31 Oct ~20:35);
+ *   - links added to the Pulse by hand in any 24 hours (pulseSubmissionsPerDay, 50) (the same).
  * A per-day limit is the setting per 24 hours; a count at once is the setting as the count. It IS the setting, never the
  * bigger of the two: owners who set it below a member's number hold owners and admins to that too. Moderators, and
  * members, keep the member's numbers. What an owner's assistant makes keeps its own count against the same setting
  * (agent/owner-posts.ts), apart from the owner's own posts. The enterprise's own numbers (its 1,000 posts a day, a
- * keeper's 1,000 for the enterprises they keep), money, messages, invites and the Pulse are not content limits here.
+ * keeper's 1,000 for the enterprises they keep), money and messages are not content limits here, nor are Pulse items a
+ * sync or the harvester adds: nobody submits those (300 and 400 a day, for everyone).
  */
 import { agentPostsPerDay } from '../agent/limits.js';
 import { nodeRoleOf } from './node-roles.js';

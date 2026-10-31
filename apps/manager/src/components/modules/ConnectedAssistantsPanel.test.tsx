@@ -172,7 +172,7 @@ describe('ConnectedAssistantsPanel', () => {
         fireEvent.change(screen.getByLabelText(LIMIT), { target: { value: '1000' } });
         fireEvent.click(within(screen.getByTestId('agent-posts-per-day')).getByRole('button', { name: 'Save' }));
         await waitFor(() => expect(calls.find((c) => c.url.endsWith('/agent/posts-per-day'))?.body).toEqual({ perDay: 1000 }));
-        expect(await screen.findByText(`${LIMIT}: 1,000. Each owner and admin may put up this many posts, and start this many groups and enterprises, in any 24 hours, and have this many upcoming events, open polls and running enterprises at once. Members keep their own limits (100 posts a day, 5 upcoming events, 1 open poll). Each owner’s assistant ticked “May post for me” may make this many posts in a day (UTC) too, counted apart from the owner’s own; its photos count in the owner’s own photos for the day. Changing it asks for a fresh proof.`)).toBeInTheDocument();
+        expect(await screen.findByText(`${LIMIT}: 1,000. Each owner and admin may put up this many posts, start this many groups and enterprises, make this many invites and add this many links to the Pulse in any 24 hours, and have this many upcoming events, open polls, running enterprises and unused invites at once. Members keep their own limits (100 posts a day, 5 upcoming events, 1 open poll). Each owner’s assistant ticked “May post for me” may make this many posts in a day (UTC) too, counted apart from the owner’s own; its photos count in the owner’s own photos for the day. Changing it asks for a fresh proof.`)).toBeInTheDocument();
     });
 
     it('the "Owner and admin limit" asks a fresh proof: a computer\'s key session is sent to the phone, and nothing changes', async () => {

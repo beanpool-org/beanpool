@@ -30,8 +30,9 @@
  * what the member posts from the apps. An enterprise's post an assistant made still counts against the enterprise as any
  * keeper's.
  *
- * An owner or admin (their role now) is held to that same setting in place of a member's posts a day, groups a day, and
- * enterprises a day and running (engine/owner-admin-limit.ts; Marty, 31 Oct), and its refusals name it.
+ * An owner or admin (their role now) is held to that same setting in place of a member's posts a day, groups a day,
+ * enterprises a day and running, invites a day and unused, and Pulse links by hand a day (engine/owner-admin-limit.ts;
+ * Marty, 31 Oct), and its refusals name it.
  */
 import { db } from '../db/db.js';
 import { WRITER_LIMITS } from '../config/writer-limits.js';
@@ -260,28 +261,37 @@ function inviteTimes(member: string, now: number): string[] {
 const invitesPerDayWords = (limit: number) => (when: string) =>
     `You can make ${limit} invites in any 24 hours. You can make more ${when}.`;
 
-/** Before a new invite code by `member`: 20 a day, and 50 of theirs unused and still working (Settings' own aside). */
+/** Before a new invite code by `member`: 20 a day, and 50 of theirs unused and still working (Settings' own aside); an owner's or admin's, the owners' setting for each. */
 export function assertMayMakeInvite(member: string, now = Date.now()): void {
+    const owners = ownerAdminLimit(member);
     const unused = (db.prepare(`SELECT COUNT(*) AS n FROM invite_codes
                                  WHERE created_by = ? AND code LIKE 'INV-%' AND issued_by IS NULL AND used_by IS NULL AND created_at > ?`)
         .get(member, iso(now - INVITE_LIFE_DAYS * DAY_MS)) as { n: number }).n;
-    if (unused >= WRITER_LIMITS.invitesUnused) {
-        throw new WriterLimitError('invites_unused',
-            `You have ${WRITER_LIMITS.invitesUnused} invites nobody has used yet, the most one member can hold. You can make more as they are used, or as they lapse ${INVITE_LIFE_DAYS} days after you made them.`);
+    const held = owners ?? WRITER_LIMITS.invitesUnused;
+    if (unused >= held) {
+        const more = `You can make more as they are used, or as they lapse ${INVITE_LIFE_DAYS} days after you made them.`;
+        throw new WriterLimitError('invites_unused', owners !== null
+            // The count, not the number: owners may have set it below what is held.
+            ? `You have ${unused.toLocaleString('en')} invites nobody has used yet. ${ownersAllow(`${held.toLocaleString('en')} at a time`)} ${more}`
+            : `You have ${held} invites nobody has used yet, the most one member can hold. ${more}`);
     }
-    assertUnderDaily(inviteTimes(member, now), WRITER_LIMITS.invitesPerDay, now, 'invites_per_day', invitesPerDayWords(WRITER_LIMITS.invitesPerDay));
+    const limit = owners ?? WRITER_LIMITS.invitesPerDay;
+    assertUnderDaily(inviteTimes(member, now), limit, now, 'invites_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} new invites in any 24 hours`)} You can make more ${when}.`
+        : invitesPerDayWords(limit));
 }
 
 /**
  * Before someone joins with an offline ticket `inviter` signed: the ticket is an invite made now (inviteTimes), so it
- * counts against the same 20 a day, and past it the join is refused with nothing written and the ticket still unused.
- * The words go to the person joining.
+ * counts against the same 20 a day (an owner's or admin's, the owners' setting), and past it the join is refused with
+ * nothing written and the ticket still unused. The words go to the person joining, who has no Settings: so the number
+ * and not the setting's name, for every maker.
  */
 export function ticketJoinRefusal(inviter: string, now = Date.now()): string | null {
-    const limit = WRITER_LIMITS.invitesPerDay;
+    const limit = ownerAdminLimit(inviter) ?? WRITER_LIMITS.invitesPerDay;
     try {
         assertUnderDaily(inviteTimes(inviter, now), limit, now, 'invites_per_day',
-            (when) => `The member whose invite this is has brought ${limit} people in today, the most in 24 hours. Try this invite again ${when}.`);
+            (when) => `The member whose invite this is has brought ${limit.toLocaleString('en')} people in today, the most in 24 hours. Try this invite again ${when}.`);
         return null;
     } catch (e) {
         if (e instanceof WriterLimitError) return e.message;
@@ -375,11 +385,13 @@ export function pulseItemsToday(member: string, source: 'manual' | 'oauth' | 'au
         .all(member, source, since(now)));
 }
 
-/** Before a new Pulse item by hand (a resubmitted link that is already there, or comes back, is not new). */
+/** Before a new Pulse item by hand (a resubmitted link that is already there, or comes back, is not new); an owner's or admin's, the owners' setting. */
 export function assertMaySubmitToPulse(member: string, now = Date.now()): void {
-    const limit = WRITER_LIMITS.pulseSubmissionsPerDay;
-    assertUnderDaily(pulseItemsToday(member, 'manual', now), limit, now, 'pulse_per_day',
-        (when) => `You can add ${limit} links to the Pulse in any 24 hours. You can add more ${when}.`);
+    const owners = ownerAdminLimit(member);
+    const limit = owners ?? WRITER_LIMITS.pulseSubmissionsPerDay;
+    assertUnderDaily(pulseItemsToday(member, 'manual', now), limit, now, 'pulse_per_day', owners !== null
+        ? (when) => `${ownersAllow(`${limit.toLocaleString('en')} new links to the Pulse in any 24 hours`)} You can add more ${when}.`
+        : (when) => `You can add ${limit} links to the Pulse in any 24 hours. You can add more ${when}.`);
 }
 
 /** How many new items a sync from `member`'s connected accounts may still add today. */

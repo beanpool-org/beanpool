@@ -540,7 +540,7 @@ export function DecideSection({
                                                         style={{ width: `${quorumPct}%` }}
                                                     />
                                                 </div>
-                                                <div className="text-[11px] text-nature-500 mt-1">{electorateLine(tally)}</div>
+                                                <div className="text-xs text-nature-300 mt-1">{electorateLine(tally)}</div>
                                             </div>
 
                                             {/* Tally & Support */}
@@ -566,7 +566,7 @@ export function DecideSection({
                                                         style={{ width: `${supportPct}%` }}
                                                     />
                                                 </div>
-                                                {minYesLine(tally) && <div className="text-[11px] text-nature-500 mt-1" data-testid="min-yes-line">{minYesLine(tally)}</div>}
+                                                {minYesLine(tally) && <div className="text-xs text-nature-300 mt-1" data-testid="min-yes-line">{minYesLine(tally)}</div>}
                                             </div>
                                         </div>
 

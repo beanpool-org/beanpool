@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    POST_TAGS_MAX, isTagId, suggestTags, tagChildren, tagIndex, t,
+    POST_TAGS_MAX, suggestTags, tagChildren, tagIndex, t,
 } from '@beanpool/core';
 
 export interface TagPickerProps {

@@ -25,7 +25,7 @@ import {
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
     FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
-    postTagsOf, searchTagsFor, tagIndex,
+    editedTagsOver, postTagsOf, searchTagsFor, storedPostTags, tagIndex,
 } from '@beanpool/core';
 import { TagPicker } from '../components/TagPicker';
 import { Sentence } from '../components/Sentence';
@@ -323,6 +323,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [selectedTag, setSelectedTag] = useState<string | null>(null);
     const [editTags, setEditTags] = useState<string[]>([]);
+    // The tags the form opened with, moved on by a reload's: what the save compares with, as on the phone (app/post/[id].tsx).
+    const editTagsFrom = useRef<string[]>([]);
     const [searchResults, setSearchResults] = useState<MarketplacePost[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const searchTimerRef = useRef<any>(null);
@@ -702,6 +704,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Edit mode
     const [editMode, setEditMode] = useState(false);
+    // A listing read again while its form is open: the picker shows the tags it now has, the member's own changes on top.
+    const selectedPostTags = storedPostTags(postTagsOf(selectedPost?.tags));
+    useEffect(() => {
+        if (!editMode) return;
+        const now = postTagsOf(selectedPostTags);
+        const from = editTagsFrom.current;
+        if (selectedPostTags === storedPostTags(from)) return;
+        editTagsFrom.current = now;
+        setEditTags((edited) => editedTagsOver(from, edited, now));
+    }, [selectedPostTags, editMode]);
     const [editType, setEditType] = useState<'offer' | 'need'>('offer');
     const [editCategory, setEditCategory] = useState('other');
     const [editTitle, setEditTitle] = useState('');
@@ -2976,7 +2988,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPriceType(selectedPost.priceType || 'fixed');
                                         setEditRepeatable(!!selectedPost.repeatable);
                                         setEditPhotos(selectedPost.photos || []);
-                                        setEditTags(postTagsOf(selectedPost.tags));
+                                        editTagsFrom.current = postTagsOf(selectedPost.tags);
+                                        setEditTags(editTagsFrom.current);
                                         setEditShop({ kind: 'hidden' });
                                         setEditInShop(false);
                                         const post = selectedPost;
@@ -3233,8 +3246,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             try {
                                                 const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
                                                 const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
-                                                const originalTags = postTagsOf(selectedPost.tags);
-                                                const tagsChanged = editTags.join(' ') !== originalTags.join(' ');
+                                                const tagsChanged = storedPostTags(editTags) !== storedPostTags(editTagsFrom.current);
                                                 const result = await updateMarketplacePost(selectedPost.id, identity.publicKey, {
                                                     type: editType,
                                                     category: editCategory,

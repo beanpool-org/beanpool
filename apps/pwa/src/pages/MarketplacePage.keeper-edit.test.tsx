@@ -115,6 +115,60 @@ describe("a keeper editing their enterprise's listing on the web", () => {
         expect(screen.queryByText('💾 Save')).toBeNull();
     });
 
+    describe('its tags (DESIGN-owner-seeding-tags-fable.md §4.4, §4.7: sent only when chosen; an edit never wipes them)', () => {
+        const LEMON = 'food.fruit.lemon';
+        const ORANGE = 'food.fruit.orange';
+        const tagged = { ...eggs, tags: [LEMON, ORANGE] };
+        async function openForm(listing: Record<string, unknown> = tagged) {
+            const listings: Array<Record<string, unknown>> = [listing];
+            stubNode(listings, [ENT]);
+            const update = vi.spyOn(api, 'updateMarketplacePost').mockImplementation(async () => ({ success: true, post: listings[0] }) as any);
+            await openEggs();
+            await waitFor(() => expect(screen.getByText('✏️ Edit Post')).toBeInTheDocument());
+            fireEvent.click(screen.getByText('✏️ Edit Post'));
+            return { update, listings };
+        }
+        const save = async () => { await act(async () => { fireEvent.click(screen.getByText('💾 Save')); }); };
+
+        it('an edit that did not touch the tags sends none, on a listing that has some', async () => {
+            const { update } = await openForm();
+            fireEvent.change(screen.getByPlaceholderText('Title') as HTMLInputElement, { target: { value: 'Two dozen eggs' } });
+            await save();
+            await waitFor(() => expect(update).toHaveBeenCalled());
+            expect(update.mock.calls[0][2]).not.toHaveProperty('tags');
+        });
+
+        it('one taken off: the rest go, and taking off the last sends the empty list that clears them', async () => {
+            const { update } = await openForm({ ...eggs, tags: [LEMON] });
+            fireEvent.click(screen.getByRole('button', { name: 'Remove Lemon' }));
+            await save();
+            await waitFor(() => expect(update).toHaveBeenCalled());
+            expect(update.mock.calls[0][2]).toMatchObject({ tags: [] });
+        });
+
+        it('a tag put on goes with the ones it had', async () => {
+            const { update } = await openForm({ ...eggs, tags: [LEMON] });
+            fireEvent.click(screen.getByRole('button', { name: '+ Add tag' }));
+            fireEvent.change(screen.getByPlaceholderText('Search tags...'), { target: { value: 'orange' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Orange' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+            await save();
+            await waitFor(() => expect(update).toHaveBeenCalled());
+            expect(update.mock.calls[0][2]).toMatchObject({ tags: [LEMON, ORANGE] });
+        });
+
+        it("Escape in the tag sheet shuts the sheet and leaves the edit open: nothing typed is lost", async () => {
+            await openForm();
+            const title = screen.getByPlaceholderText('Title') as HTMLInputElement;
+            fireEvent.change(title, { target: { value: 'Unsaved words' } });
+            fireEvent.click(screen.getByRole('button', { name: '+ Add tag' }));
+            fireEvent.keyDown(screen.getByPlaceholderText('Search tags...'), { key: 'Escape' });
+            expect(screen.queryByPlaceholderText('Search tags...')).toBeNull();
+            expect((screen.getByPlaceholderText('Title') as HTMLInputElement).value).toBe('Unsaved words');
+            expect(screen.getByText('💾 Save')).toBeInTheDocument();
+        });
+    });
+
     it('Pause and Resume Offer for a keeper of the enterprise: calls pauseMarketplacePost and resumeMarketplacePost with member\'s key', async () => {
         const listings: Array<Record<string, unknown>> = [eggs];
         stubNode(listings, [ENT]);

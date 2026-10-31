@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-    View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet, Dimensions, BackHandler,
+    View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet, BackHandler,
 } from 'react-native';
+import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-    POST_TAGS_MAX, isTagId, suggestTags, tagChildren, tagIndex, t,
+    POST_TAGS_MAX, suggestTags, tagChildren, tagIndex, t,
 } from '@beanpool/core';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { hapticTick, hapticWarning } from '../utils/haptics';
+import { dismissKeyboardWithin } from '../utils/keyboard-dismiss';
 
 export interface TagPickerProps {
     value?: string[];
@@ -29,7 +31,7 @@ export function TagPicker({
     testID = 'tag-picker',
 }: TagPickerProps) {
     const selectedTags = value ?? tags ?? [];
-    const { colors, theme } = useTheme();
+    const { colors } = useTheme();
     const [sheetVisible, setSheetVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -132,6 +134,9 @@ export function TagPicker({
             marginLeft: 2,
         },
         // Modal sheet styles
+        keyboardLift: {
+            flex: 1,
+        },
         overlay: {
             flex: 1,
             backgroundColor: 'rgba(0,0,0,0.45)',
@@ -250,6 +255,12 @@ export function TagPicker({
         }
     };
 
+    // The keyboard goes first: a Modal opened over a raised one leaves the screen under it padded by its height.
+    const openSheet = async () => {
+        await dismissKeyboardWithin(() => KeyboardController.dismiss());
+        setSheetVisible(true);
+    };
+
     const toggleGroup = (groupId: string) => {
         setExpandedGroups((prev) => {
             const next = new Set(prev);
@@ -304,7 +315,7 @@ export function TagPicker({
                 {selectedTags.length < POST_TAGS_MAX && (
                     <Pressable
                         style={styles.addBtn}
-                        onPress={() => setSheetVisible(true)}
+                        onPress={openSheet}
                         accessibilityRole="button"
                         accessibilityLabel={t('+ Add tag')}
                     >
@@ -319,6 +330,8 @@ export function TagPicker({
                 animationType="slide"
                 onRequestClose={() => setSheetVisible(false)}
             >
+                {/* The search sits low in a short sheet at 320 dp: the root KeyboardProvider's lift, never a nested one. */}
+                <KeyboardAvoidingView style={styles.keyboardLift} behavior="padding">
                 <Pressable style={styles.overlay} onPress={() => setSheetVisible(false)}>
                     <Pressable testID="tag-picker-sheet" style={styles.sheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.handleBar} />
@@ -499,6 +512,7 @@ export function TagPicker({
                         </ScrollView>
                     </Pressable>
                 </Pressable>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );

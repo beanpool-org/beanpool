@@ -23,6 +23,18 @@ export function storedPostTags(ids: readonly string[]): string {
 }
 
 /**
+ * An open edit form's tags once the listing's own move under it, from `from` (what the form opened with) to `now` (what a
+ * reload read): `now`, less what the member took off, plus what they put on, at most POST_TAGS_MAX. A phone's copy from
+ * before the tags column opens the form with none and reads the real ones a moment later: they stay, since an edit takes
+ * off only what the member took off (DESIGN-owner-seeding-tags-fable.md §4.4, §4.7).
+ */
+export function editedTagsOver(from: readonly string[], edited: readonly string[], now: readonly string[]): string[] {
+    const put = edited.filter((id) => !from.includes(id));
+    const stay = now.filter((id) => !from.includes(id) || edited.includes(id));
+    return [...new Set([...stay, ...put])].slice(0, POST_TAGS_MAX);
+}
+
+/**
  * The tags a copy says a listing carries (a main server's row on a standby, a peer's listing), as this node keeps them:
  * each a well-formed id once, in its order, at most POST_TAGS_MAX in POST_TAGS_CHARS. An id this library does not know
  * stays, since the copy may come from a node with a newer library: an app shows a tag it cannot label as nothing (§4.3).

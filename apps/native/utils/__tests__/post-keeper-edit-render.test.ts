@@ -9,6 +9,10 @@
  * The phone's half was already right; the node refused it. So this test passes on origin/main too: it pins the phone's
  * request and screen, and the server suite is the one that fails there.
  *
+ * Its tags, on the same page (DESIGN-owner-seeding-tags-fable.md §4.4, §4.7): sent only when the member changed them, for a
+ * keeper as for an author, however the listing moved under the open form. Those tests fail on a page that compares the form
+ * with `post` as it stands at Save: the blocking finding of #2663, a phone's Edit wiping real tags, kept alive by a reload.
+ *
  * The listing page's harness is post-deal-open-render.test.ts's.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +25,8 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const alerts = vi.hoisted(() => ({ said: [] as string[], last: [] as Array<{ text?: string; onPress?: () => unknown }> }));
+/** The events the page listens for: sync_data_updated is its reload. */
+const emitter = vi.hoisted(() => ({ on: new Map<string, Set<() => void>>() }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -56,7 +62,15 @@ vi.mock('react-native', () => {
             },
         },
         Linking: { openURL: async () => {} },
-        DeviceEventEmitter: { addListener: listener, emit() {} },
+        DeviceEventEmitter: {
+            addListener: (name: string, cb: () => void) => {
+                const set = emitter.on.get(name) ?? new Set();
+                emitter.on.set(name, set.add(cb));
+                return { remove() { set.delete(cb); } };
+            },
+            emit(name: string) { for (const cb of [...(emitter.on.get(name) ?? [])]) cb(); },
+        },
+        BackHandler: { addEventListener: listener },
         AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) },
         Keyboard: { addListener: listener, dismiss() {} },
         I18nManager: { getConstants: () => ({ localeIdentifier: 'en_US' }), allowRTL: () => {}, forceRTL: () => {} },
@@ -105,7 +119,10 @@ vi.mock('expo-image-manipulator', () => ({
     manipulateAsync: async () => ({ uri: 'file:///hens.small.jpg', width: 800, height: 600, base64: 'SEVOUw==' }),
 }));
 vi.mock('expo-location', () => ({ getForegroundPermissionsAsync: async () => ({ status: 'denied' }), getLastKnownPositionAsync: async () => null }));
-vi.mock('react-native-keyboard-controller', () => ({ KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any) }));
+vi.mock('react-native-keyboard-controller', () => ({
+    KeyboardAvoidingView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
+    KeyboardController: { dismiss: async () => {} },
+}));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
 vi.mock('@react-native-picker/picker', () => ({
     Picker: Object.assign(({ children }: { children?: unknown }) => createElement('select', null, children as any), {
@@ -151,11 +168,11 @@ const EGGS = {
 };
 
 /** The node and the phone's copy: getPost answers the listing as it now is, and an edit saved changes it. */
-function answers(keeperOf: string[]) {
+function answers(keeperOf: string[], listing: () => Record<string, unknown> = () => EGGS) {
     let post: Record<string, unknown> = { ...EGGS };
     const database = { getFirstAsync: async () => null, getAllAsync: async () => [] };
     return (name: string, args: unknown[]) => {
-        if (name === 'getPost') return Promise.resolve({ ...post });
+        if (name === 'getPost') return Promise.resolve({ ...post, ...listing() });
         if (name === 'updatePost') {
             const u = args[1] as Record<string, unknown>;
             post = { ...post, title: u.title, description: u.description, photos: u.photos };
@@ -198,8 +215,8 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
-async function open(keeperOf: string[]) {
-    net.answer = answers(keeperOf);
+async function open(keeperOf: string[], listing?: () => Record<string, unknown>) {
+    net.answer = answers(keeperOf, listing);
     params.now = { id: EGGS.id };
     await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(PostDetailScreen)) as any); });
     await settle();
@@ -269,5 +286,66 @@ describe("a keeper editing their enterprise's Offer", () => {
         expect(host.textContent).toContain('Dozen eggs');
         expect(button('✏️ Edit Post')).toBeNull();
         expect(button('⏸️ Pause Offer')).toBeNull();
+    });
+});
+
+describe('its tags on the edit form', () => {
+    const LEMON = 'food.fruit.lemon';
+    const ORANGE = 'food.fruit.orange';
+    /** The row a phone holds: `tags` as the phone's copy has them now. */
+    const row = (tags: string) => () => ({ ...EGGS, tags });
+    /** What the page was asked to send as the edit. */
+    const sent = () => (net.args.get('updatePost') as [string, Record<string, unknown>])[1];
+    const reload = async () => {
+        await act(async () => { for (const cb of [...(emitter.on.get('sync_data_updated') ?? [])]) cb(); });
+        await settle(4);
+    };
+    const chip = (name: string) => host.querySelector(`[aria-label="Remove ${name}"]`);
+
+    it('an edit that left them alone sends none: the node keeps them', async () => {
+        await open([ENT], row(`${LEMON} ${ORANGE}`));
+        await click(button('✏️ Edit Post'), 'Edit Post');
+        expect(chip('Lemon')).toBeTruthy();
+        await type('Title', 'Dozen free-range eggs');
+        await click(button('💾 Save'), 'Save');
+        expect(net.calls).toContain('db.updatePost');
+        expect(sent()).not.toHaveProperty('tags');
+    });
+
+    it('a copy from before the tags column: the real ones land after the form opened, show in the picker, and Save still sends none', async () => {
+        let tags = '';
+        await open([ENT], () => ({ ...EGGS, tags }));
+        await click(button('✏️ Edit Post'), 'Edit Post');
+        expect(chip('Lemon')).toBeNull();
+
+        // The read behind getPost lands: the row has its tags now, and the page reloads on sync_data_updated.
+        tags = `${LEMON} ${ORANGE}`;
+        await reload();
+        expect(chip('Lemon')).toBeTruthy();
+        expect(chip('Orange')).toBeTruthy();
+
+        await type('Title', 'Dozen free-range eggs');
+        await click(button('💾 Save'), 'Save');
+        expect(sent()).not.toHaveProperty('tags');
+    });
+
+    it('one taken off before such a reload stays off, and the save names the rest', async () => {
+        let tags = LEMON;
+        await open([ENT], () => ({ ...EGGS, tags }));
+        await click(button('✏️ Edit Post'), 'Edit Post');
+        await click(chip('Lemon'), 'Remove Lemon');
+        tags = `${LEMON} ${ORANGE}`;
+        await reload();
+        expect(chip('Lemon')).toBeNull();
+        await click(button('💾 Save'), 'Save');
+        expect(sent().tags).toEqual([ORANGE]);
+    });
+
+    it('one taken off goes as the rest; the last taken off goes as the empty list that clears them', async () => {
+        await open([ENT], row(LEMON));
+        await click(button('✏️ Edit Post'), 'Edit Post');
+        await click(chip('Lemon'), 'Remove Lemon');
+        await click(button('💾 Save'), 'Save');
+        expect(sent().tags).toEqual([]);
     });
 });

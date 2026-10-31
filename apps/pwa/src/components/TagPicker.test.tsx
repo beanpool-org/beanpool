@@ -97,28 +97,50 @@ describe('TagPicker Web Component', () => {
         fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
         const input = screen.getByPlaceholderText('Search tags...');
 
-        // Type in search and press Enter
+        // Type in search and press Enter. jsdom submits no form from a key press, so the browser's own step is what is read:
+        // keydown's default action is the implicit submit, and fireEvent answers false once it has been prevented.
         fireEvent.change(input, { target: { value: 'lemon' } });
-        fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+        expect(fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })).toBe(false);
 
         expect(handleSubmit).not.toHaveBeenCalled();
     });
 
+    it('the button reads "+ Add", once (never "+ + Add")', () => {
+        render(<TagPicker tags={[]} onChange={vi.fn()} category="food" />);
+        expect(screen.getByRole('button', { name: '+ Add tag' }).textContent).toBe('+ Add');
+    });
+
+    it('every button in the sheet is type="button", so no tap in it can submit an outer form', () => {
+        render(<TagPicker tags={[]} onChange={vi.fn()} category="food" title="Lemons" />);
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        fireEvent.change(screen.getByPlaceholderText('Search tags...'), { target: { value: 'lemon' } });
+        const buttons = screen.getByRole('dialog').querySelectorAll('button');
+        expect(buttons.length).toBeGreaterThan(2);
+        for (const b of buttons) expect(b.getAttribute('type')).toBe('button');
+    });
+
     it('Escape in the tag sheet closes only the sheet and stops propagation to parent', () => {
         const parentEscape = vi.fn();
+        // Where the pages listen (MarketplacePage, TreasuryDetailPage, MapPage: window, bubbling), and a parent's own listener.
         window.addEventListener('keydown', parentEscape);
+        document.addEventListener('keydown', parentEscape);
         try {
-            render(<TagPicker tags={[]} onChange={vi.fn()} category="food" />);
+            render(<div onKeyDown={parentEscape}><TagPicker tags={[]} onChange={vi.fn()} category="food" /></div>);
             fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
             expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-            // Press Escape
-            fireEvent.keyDown(window, { key: 'Escape' });
+            // Press Escape where the keyboard really is: in the sheet's search
+            fireEvent.keyDown(screen.getByPlaceholderText('Search tags...'), { key: 'Escape' });
 
             expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
             expect(parentEscape).not.toHaveBeenCalled();
+
+            // The sheet shut: Escape is the page's again.
+            fireEvent.keyDown(screen.getByRole('button', { name: /\+ Add/i }), { key: 'Escape' });
+            expect(parentEscape).toHaveBeenCalled();
         } finally {
             window.removeEventListener('keydown', parentEscape);
+            document.removeEventListener('keydown', parentEscape);
         }
     });
 

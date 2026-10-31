@@ -359,8 +359,7 @@ export function searchTagsFor(query: string, options: { index?: TagIndex; limit?
         return out.size > 0;
     };
 
-    if (searchWith(index)) return [...out];
-
+    searchWith(index);
     return [...out];
 }
 

@@ -2,8 +2,8 @@
  * What the one Tags field makes of what a member types (tags/typed-tags.ts, DESIGN-tags-free-entry-fable.md §3, slice F2): the
  * rule both apps' pickers read. Enter, a comma, Done and the Add row commit through this, so one suite pins them for both.
  */
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
-import coreEs from '../../words/es.json';
 import { setLanguage } from '../words.js';
 import { buildTagIndex, tagIndex } from '../tags/index.js';
 import {
@@ -13,6 +13,7 @@ import {
 import { POST_TAGS_MAX, editedTagsOver } from '../tags/post-tags.js';
 import { TAG_COMMA, enterTypedTags, exactLibraryTag, lastTagOff, typedTag } from '../tags/typed-tags.js';
 
+const coreEs = JSON.parse(readFileSync(new URL('../../words/es.json', import.meta.url), 'utf8'));
 const LEMON = 'food.fruit.lemon';
 const none = { tags: [], freeTags: [] };
 
@@ -65,7 +66,7 @@ describe('anything else that passes the rule is the member\'s own tag, as it is 
     });
 
     it('a tag the listing already holds is not a second one', () => {
-        expect(enterTypedTags('Vintage', { tags: [], freeTags: ['vintage'] }, true)).toEqual({ tags: [], freeTags: ['vintage'], rest: '', refusal: null });
+        expect(enterTypedTags('Vintage', { tags: [], freeTags: ['vintage'] }, true)).toEqual({ tags: [], freeTags: ['vintage'], rest: '', refused: null });
         expect(enterTypedTags('lemon', { tags: [LEMON], freeTags: [] }, true).tags).toEqual([LEMON]);
     });
 });
@@ -104,16 +105,16 @@ describe('what no listing may carry is said in words, before anything is sent', 
 
 describe('a comma commits, Enter and Done end the last piece', () => {
     it('a comma commits what is before it; what follows is still being typed', () => {
-        expect(enterTypedTags('used,', none, false)).toEqual({ tags: [], freeTags: ['used'], rest: '', refusal: null });
-        expect(enterTypedTags('used, 2n', none, false)).toEqual({ tags: [], freeTags: ['used'], rest: ' 2n', refusal: null });
+        expect(enterTypedTags('used,', none, false)).toEqual({ tags: [], freeTags: ['used'], rest: '', refused: null });
+        expect(enterTypedTags('used, 2n', none, false)).toEqual({ tags: [], freeTags: ['used'], rest: ' 2n', refused: null });
     });
 
     it('Enter and Done take the last piece too', () => {
-        expect(enterTypedTags('used, 2nd hand', none, true)).toEqual({ tags: [], freeTags: ['used', '2nd hand'], rest: '', refusal: null });
+        expect(enterTypedTags('used, 2nd hand', none, true)).toEqual({ tags: [], freeTags: ['used', '2nd hand'], rest: '', refused: null });
     });
 
     it('each piece on its own: a pasted list with a library word in it', () => {
-        expect(enterTypedTags('lemons, 2nd hand, Vintage', none, true)).toEqual({ tags: [LEMON], freeTags: ['2nd hand', 'vintage'], rest: '', refusal: null });
+        expect(enterTypedTags('lemons, 2nd hand, Vintage', none, true)).toEqual({ tags: [LEMON], freeTags: ['2nd hand', 'vintage'], rest: '', refused: null });
     });
 
     it('the comma of each keyboard, none held in a tag', () => {
@@ -125,7 +126,7 @@ describe('a comma commits, Enter and Done end the last piece', () => {
 
     it('a refused piece stops there: those before it are in, and it stays in the field with its words', () => {
         expect(enterTypedTags('used, me@example.org, vintage', none, true)).toEqual({
-            tags: [], freeTags: ['used'], rest: 'me@example.org, vintage', refusal: FREE_TAG_NOT_A_CONTACT,
+            tags: [], freeTags: ['used'], rest: 'me@example.org, vintage', refused: { kind: 'refused', why: FREE_TAG_NOT_A_CONTACT },
         });
     });
 
@@ -141,7 +142,7 @@ describe('a comma commits, Enter and Done end the last piece', () => {
     });
 
     it('an empty field commits nothing and refuses nothing', () => {
-        expect(enterTypedTags('', { tags: [LEMON], freeTags: ['aa'] }, true)).toEqual({ tags: [LEMON], freeTags: ['aa'], rest: '', refusal: null });
+        expect(enterTypedTags('', { tags: [LEMON], freeTags: ['aa'] }, true)).toEqual({ tags: [LEMON], freeTags: ['aa'], rest: '', refused: null });
     });
 });
 

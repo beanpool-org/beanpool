@@ -81,8 +81,8 @@ async function signedFetch(method: 'POST' | 'GET', path: string, body: unknown, 
     return { status: res.status, body: json, error: json?.error as string | undefined, res };
 }
 
-const rowOf = (id: string) => db.prepare('SELECT title, description, author_pubkey, created_by, type FROM posts WHERE id = ?').get(id) as
-    { title: string; description: string; author_pubkey: string; created_by: string | null; type: string } | undefined;
+const rowOf = (id: string) => db.prepare('SELECT title, description, author_pubkey, created_by, type, tags, free_tags FROM posts WHERE id = ?').get(id) as
+    { title: string; description: string; author_pubkey: string; created_by: string | null; type: string; tags: string; free_tags: string } | undefined;
 const photoCountOf = (id: string) => (db.prepare('SELECT COUNT(*) c FROM post_photos WHERE post_id = ?').get(id) as { c: number }).c;
 const bytesOf = (pk: string) => getMemberPhotoUsageForTests(pk).usedBytes;
 const show = (r: { status: number; error?: string; body?: any }) => `${r.status} ${r.error ?? ''}${r.body?.code ? ` [${r.body.code}]` : ''}`;

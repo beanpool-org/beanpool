@@ -340,7 +340,7 @@ describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)
     it('Enter and a comma leave a word an input method is still building alone: it commits when the composition ends', () => {
         open();
         fireEvent.compositionStart(field());
-        fireEvent.change(field(), { target: { value: '二手，' }, nativeEvent: { isComposing: true } });
+        fireEvent.input(field(), { target: { value: '二手，' }, isComposing: true });
         fireEvent.keyDown(field(), { key: 'Enter', isComposing: true });
         expect(held.freeTags).toEqual([]);
         fireEvent.compositionEnd(field());

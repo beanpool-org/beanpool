@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    ADD_TYPED_TAG, FREE_TAGS_MAX, FREE_TAGS_TOO_MANY, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAGS_ARE_PUBLIC, TAGS_IN_YOUR_WORDS, TAG_COMMA,
-    enterTypedTags, exactLibraryTag, lastTagOff, suggestTags, tagChildren, tagIndex, t, typedTag, type WordKey,
+    FREE_TAGS_MAX, FREE_TAG_TOO_SHORT, POST_TAGS_MAX, TAG_COMMA, TOO_MANY_TAGS, TYPED_TAG_WORDS,
+    enterTypedTags, exactLibraryTag, lastTagOff, suggestTags, tagChildren, tagIndex, t, typedTag, type RefusedTag,
 } from '@beanpool/core';
 
 export interface TagPickerProps {
@@ -34,7 +34,7 @@ export function TagPicker({
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
     // Why the last commit stayed in the field, in words, until the field changes.
-    const [refusal, setRefusal] = useState<WordKey | null>(null);
+    const [refused, setRefused] = useState<RefusedTag | null>(null);
 
     // Keyboard accessibility: Escape closes modal
     useEffect(() => {
@@ -57,7 +57,7 @@ export function TagPicker({
             onChange(selectedTags.filter((t) => t !== id));
         } else {
             if (selectedTags.length >= POST_TAGS_MAX) {
-                setRefusal(FREE_TAGS_TOO_MANY);
+                setRefused(TOO_MANY_TAGS);
                 return;
             }
             onChange([...selectedTags, id]);
@@ -79,12 +79,12 @@ export function TagPicker({
         if (entry.tags.length !== selectedTags.length) onChange(entry.tags);
         if (entry.freeTags.length !== freeTags.length) onFreeTagsChange?.(entry.freeTags);
         setSearchQuery(entry.rest);
-        setRefusal(entry.refusal);
-        return !entry.refusal;
+        setRefused(entry.refused);
+        return !entry.refused;
     };
 
     const typeInField = (text: string, composing: boolean) => {
-        setRefusal(null);
+        setRefused(null);
         // A word an input method is still building is not the member's yet: it commits when the composition ends.
         if (canType && !composing && TAG_COMMA.test(text)) enter(text, false);
         else setSearchQuery(text);
@@ -128,7 +128,7 @@ export function TagPicker({
     // What Enter would do with the field now. A word still being typed is not yet too short.
     const typed = canType ? typedTag(searchQuery, held, index) : null;
     const addable = typed?.kind === 'free' && !freeTags.includes(typed.tag) ? typed.tag : null;
-    const shownRefusal = refusal ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed.why : null);
+    const shownRefusal = refused ?? (typed?.kind === 'refused' && typed.why !== FREE_TAG_TOO_SHORT ? typed : null);
 
     const groups = useMemo(() => {
         if (!category) return [];
@@ -249,7 +249,7 @@ export function TagPicker({
                                 {searchQuery.length > 0 && (
                                     <button
                                         type="button"
-                                        onClick={() => { setSearchQuery(''); setRefusal(null); }}
+                                        onClick={() => { setSearchQuery(''); setRefused(null); }}
                                         className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-nature-400 hover:text-nature-600 dark:hover:text-nature-200"
                                         aria-label={t('Clear search')}
                                     >
@@ -258,7 +258,7 @@ export function TagPicker({
                                 )}
                             </div>
                             {shownRefusal && (
-                                <p role="alert" className="m-0 mt-1.5 text-xs font-semibold text-red-600 dark:text-red-300">{t(shownRefusal)}</p>
+                                <p role="alert" className="m-0 mt-1.5 text-xs font-semibold text-red-600 dark:text-red-300">{t(shownRefusal.why)}</p>
                             )}
                         </div>
 
@@ -309,8 +309,8 @@ export function TagPicker({
                                 <>
                                     {canType && (
                                         <div className="text-xs text-nature-600 dark:text-nature-300 space-y-1">
-                                            <p className="m-0">{t(TAGS_ARE_PUBLIC)}</p>
-                                            <p className="m-0">{t(TAGS_IN_YOUR_WORDS)}</p>
+                                            <p className="m-0">{t(TYPED_TAG_WORDS.arePublic)}</p>
+                                            <p className="m-0">{t(TYPED_TAG_WORDS.yourWords)}</p>
                                         </div>
                                     )}
                                     {/* Suggestions */}
@@ -428,9 +428,9 @@ export function TagPicker({
                                 type="button"
                                 onClick={() => enter(searchQuery, true)}
                                 data-testid="tag-picker-add-typed"
-                                className="w-full min-h-[44px] mt-2 flex items-center text-left break-words text-sm font-bold text-terra-600 dark:text-terra-400 hover:underline border-t border-nature-100 dark:border-nature-800"
+                                className="w-full min-h-[44px] mt-2 flex items-center text-left break-words text-sm font-bold text-nature-900 dark:text-white hover:underline border-t border-nature-100 dark:border-nature-800"
                             >
-                                {t(ADD_TYPED_TAG, { tag: `#${addable}` })}
+                                {t(TYPED_TAG_WORDS.add, { tag: `#${addable}` })}
                             </button>
                         )}
                     </div>

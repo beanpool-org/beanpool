@@ -12,11 +12,13 @@ import {
 import { lookupPhrase, tagIndex, type TagIndex } from './index.js';
 import { POST_TAGS_MAX } from './post-tags.js';
 
-/** The last row of the sheet: what pressing Enter would add. `{tag}` is the tag with its `#`. */
-export const ADD_TYPED_TAG = word('Add “{tag}”');
-/** The composer's two hints, under the field (§5, §7). */
-export const TAGS_ARE_PUBLIC = word('Tags are public with your listing');
-export const TAGS_IN_YOUR_WORDS = word('A tag you type is in your own words. Pick a library tag to be found in every language.');
+export const TYPED_TAG_WORDS = {
+    /** The last row of the sheet: what pressing Enter would add. `{tag}` is the tag with its `#`. */
+    add: word('Add “{tag}”'),
+    /** The composer's two hints, under the field (§5, §7). */
+    arePublic: word('Tags are public with your listing'),
+    yourWords: word('A tag you type is in your own words. Pick a library tag to be found in every language.'),
+};
 
 /** What commits a typed tag as a comma does: the comma of the keyboards a member has, Arabic's and Chinese's among them. */
 export const TAG_COMMA = /[,،、，]/;
@@ -27,11 +29,20 @@ export interface TagsHeld {
     readonly freeTags: readonly string[];
 }
 
+/** A tag no listing may carry, and why, in words. */
+export interface RefusedTag {
+    kind: 'refused';
+    why: WordKey;
+}
+
 /** What typed text would become: a library tag, the member's own, or a refusal in words. */
 export type TypedTag =
     | { kind: 'library'; id: string }
     | { kind: 'free'; tag: string }
-    | { kind: 'refused'; why: WordKey };
+    | RefusedTag;
+
+/** The refusal of a tag past the five of its kind, for a picker that stops a tap on one. */
+export const TOO_MANY_TAGS: RefusedTag = { kind: 'refused', why: FREE_TAGS_TOO_MANY };
 
 /**
  * The library tag a text names exactly: a label in the member's language or in English, a plural's singular too, as a
@@ -55,13 +66,13 @@ export function typedTag(text: string, held: TagsHeld, index: TagIndex = tagInde
     if (!tag) return null;
     const id = exactLibraryTag(text, index);
     if (id) {
-        if (!held.tags.includes(id) && held.tags.length >= POST_TAGS_MAX) return { kind: 'refused', why: FREE_TAGS_TOO_MANY };
+        if (!held.tags.includes(id) && held.tags.length >= POST_TAGS_MAX) return TOO_MANY_TAGS;
         return { kind: 'library', id };
     }
     const why = freeTagRefusal(text);
     if (why) return { kind: 'refused', why };
     if (held.freeTags.includes(tag)) return { kind: 'free', tag };
-    if (held.freeTags.length >= FREE_TAGS_MAX) return { kind: 'refused', why: FREE_TAGS_TOO_MANY };
+    if (held.freeTags.length >= FREE_TAGS_MAX) return TOO_MANY_TAGS;
     if (storedFreeTags([...held.freeTags, tag]).length > FREE_TAGS_CHARS) return { kind: 'refused', why: FREE_TAGS_TOO_LONG_TOGETHER };
     return { kind: 'free', tag };
 }
@@ -71,7 +82,7 @@ export interface TagEntry {
     tags: string[];
     freeTags: string[];
     rest: string;
-    refusal: WordKey | null;
+    refused: RefusedTag | null;
 }
 
 /**
@@ -89,12 +100,12 @@ export function enterTypedTags(text: string, held: TagsHeld, done: boolean, inde
         if (!typed) continue;
         if (typed.kind === 'refused') {
             const rest = [...pieces.slice(i).map((piece) => piece.trim()), typing.trimStart()].filter(Boolean).join(', ');
-            return { tags, freeTags, rest, refusal: typed.why };
+            return { tags, freeTags, rest, refused: typed };
         }
         if (typed.kind === 'library' && !tags.includes(typed.id)) tags.push(typed.id);
         if (typed.kind === 'free' && !freeTags.includes(typed.tag)) freeTags.push(typed.tag);
     }
-    return { tags, freeTags, rest: typing, refusal: null };
+    return { tags, freeTags, rest: typing, refused: null };
 }
 
 /** The tags with the last chip off, as backspace on an empty field takes it: the member's own come after the library's. */

@@ -78,6 +78,10 @@ import {
     returnAgentEdit, AGENT_EDITS_PER_DAY, AGENT_LIST_MAX, AGENT_PHOTOS_PER_DAY,
 } from './limits.js';
 import { claimUploadedPhotos, fetchPhoto, photoDayFull, PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_KEEP_MS } from './owner-photos.js';
+import { grantStillLive } from './suggestions.js';
+import { listOAuthGrants } from './oauth.js';
+import { listAutomationTokens } from '../automation-tokens.js';
+import { getLocalConfig } from '../config/local-config.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 export const AGENT_POST_PHOTOS_MIN = 1;
@@ -522,7 +526,7 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     const shopId = str(args.shop_id, 200);
     const photos = await photosFrom(grant, args);
     if (!photos.ok) return photos;
-    return withPhotos(photos, () => {
+    return withPhotos(grant, photos, () => {
         // Counted before the post is made, so two calls at once cannot both take the last one; given back when it is not made.
         if (!admitAgentCreate(grant.id)) {
             return { ok: false, error: dayFull(grant) };
@@ -566,13 +570,34 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     });
 }
 
+const STOPPED_MEANWHILE = 'This assistant was disconnected, or may no longer post, while its photos were fetched: nothing was posted.';
+
+/**
+ * Whether the grant may still post NOW: not revoked or expired and its member still an owner (grantStillLive), still ticked
+ * "May post for me", and the owners' switch "Allow AI assistants" still on. Read again after any wait (photo fetches, uploads).
+ */
+export function grantMayStillPost(grant: AgentGrant, now = Date.now()): boolean {
+    if (getLocalConfig().aiAssistantsAllowed === false) return false;
+    const live = grantStillLive(grant.id, now);
+    if (!live || live.role !== 'owner' || live.member !== grant.member) return false;
+    const oauth = listOAuthGrants(now).find((g) => g.id === grant.id);
+    if (oauth) return oauth.canPost === true;
+    return listAutomationTokens().find((t) => t.id === grant.id)?.canPost === true;
+}
+
 /**
  * Make a post (or an edit) with its photos, then settle them: an uploaded photo is used up only by a post that was made, and
  * can be sent again after a refusal.
  */
-function withPhotos(photos: Extract<Photos, { ok: true }>, make: () => ToolResult): ToolResult {
+function withPhotos(grant: AgentGrant, photos: Extract<Photos, { ok: true }>, make: () => ToolResult): ToolResult {
     let out: ToolResult | undefined;
     try {
+        // Fetching photo_urls takes seconds; the grant was checked before it. Disconnecting the assistant, untick "May post for me",
+        // or turning AI assistants off in that time stops the post (the manual: "Disconnecting stops it at once").
+        if (!grantMayStillPost(grant)) {
+            out = { ok: false, error: STOPPED_MEANWHILE };
+            return out;
+        }
         out = make();
         return out;
     } finally {
@@ -591,7 +616,7 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
     if (!who.ok) return who;
     const photos = await photosFrom(grant, args);
     if (!photos.ok) return photos;
-    return withPhotos(photos, () => {
+    return withPhotos(grant, photos, () => {
         if (!admitAgentCreate(grant.id)) {
             return { ok: false, error: dayFull(grant) };
         }
@@ -927,7 +952,7 @@ async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Pro
             return { ok: false, error: refusalText(e, grant, 'The post could not be changed: try again later.') };
         }
     };
-    return newPhotos ? withPhotos(newPhotos, edit) : edit();
+    return newPhotos ? withPhotos(grant, newPhotos, edit) : edit();
 }
 
 /** One post taken down by `member` through the route's own removePost (the author, or the keeper who made it); why not, in words. */

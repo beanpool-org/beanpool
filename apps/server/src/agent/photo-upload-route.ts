@@ -34,7 +34,7 @@ import { noteOAuthGrantUse } from './oauth.js';
 import {
     keepUploadedPhoto, photoDayFull, PHOTO_SOURCE_MAX_BYTES, PHOTO_SOURCE_TYPES, PHOTO_UPLOAD_PATH, startSweepingUploadedPhotos,
 } from './owner-photos.js';
-import { sourceImageWords, storableImage } from './owner-posts.js';
+import { grantMayStillPost, sourceImageWords, storableImage } from './owner-posts.js';
 import { grantPosts } from './tools.js';
 
 export { PHOTO_UPLOAD_PATH };
@@ -165,21 +165,26 @@ export function createPhotoUploadRoutes(): Router {
             return refuse(503, 'busy', 'This server is taking other photos now: send it again in a few seconds.', { close: true, retryAfter: 5 });
         }
         if (!admitAgentPhoto(grant.id)) return refuse(429, 'day full', photoDayFull(grant.id), { close: true, retryAfter: secondsToUtcMidnight() });
-        // 7. The body.
+        // 7. The body, counted in `reading` until it is made 800 px (step 8), so at most PHOTO_UPLOADS_AT_ONCE are held at once.
         reading++;
+        let made: Awaited<ReturnType<typeof storableImage>>;
         let body: Buffer;
         try {
-            body = await readImageBody(ctx.req, PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_READ_MS);
-        } catch (e) {
-            if (e instanceof BodyTooBig) return refuse(413, 'too big', `The photo is too big: at most ${MAX_WORDS}. Send a smaller copy.`);
-            if (e instanceof BodyTooSlow) return refuse(408, 'timed out', `The photo did not arrive within ${PHOTO_UPLOAD_READ_MS / 1000} seconds: send it again.`);
-            return refuse(400, 'cut off', 'The photo was cut off: send it again.');
+            try {
+                body = await readImageBody(ctx.req, PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_READ_MS);
+            } catch (e) {
+                if (e instanceof BodyTooBig) return refuse(413, 'too big', `The photo is too big: at most ${MAX_WORDS}. Send a smaller copy.`);
+                if (e instanceof BodyTooSlow) return refuse(408, 'timed out', `The photo did not arrive within ${PHOTO_UPLOAD_READ_MS / 1000} seconds: send it again.`);
+                return refuse(400, 'cut off', 'The photo was cut off: send it again.');
+            }
+            // 8. Made what the apps send.
+            made = await storableImage(body, sourceImageWords('The upload', 'upload'));
         } finally {
             reading--;
         }
-        // 8. Made what the apps send, and kept.
-        const made = await storableImage(body, sourceImageWords('The upload', 'upload'));
         if (!made.ok) return refuse(400, 'not an image', made.error, {});
+        // 9. Kept, only while the grant may still post: disconnected, unticked or switched off during the upload keeps nothing.
+        if (!grantMayStillPost(grant)) return refuse(401, 'stopped meanwhile', 'This assistant was disconnected, or may no longer post, while the photo arrived: it was not kept.');
         const kept = keepUploadedPhoto(grant.id, made.value);
         logger.info('AGENT', 'Assistant uploaded a photo', { grant: grant.id, photo: kept.photoId, bytes: body.length });
         ctx.status = 201;

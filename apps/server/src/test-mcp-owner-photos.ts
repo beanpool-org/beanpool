@@ -220,6 +220,10 @@ function startImageServer(img: Images): Promise<http.Server> {
                 pump();
                 return;
             }
+            case '/slowish.jpg':
+                // The whole photo, but only after 700 ms (inside the deadline): time for a disconnect while it is fetched.
+                setTimeout(() => send('image/jpeg', img.goodJpg), 700);
+                return;
             case '/slow.jpg':
                 // The headers and a little, then nothing: the fetch's deadline must end it.
                 res.writeHead(200, { 'Content-Type': 'image/jpeg' });
@@ -561,6 +565,33 @@ async function main(): Promise<void> {
             `update_post replaces a post's photos from an address; a refused one leaves them as they were (${errorText(replaced) || 'replaced'} | ${errorText(refusedEdit).slice(0, 50)})`);
         await g.close().catch(() => {});
         assert(await revoke(G.id) === 200, 'the seeding check is disconnected');
+
+        // Disconnecting while the photos are still being fetched or uploaded stops it (the manual: "Disconnecting stops it at once").
+        const V = await makeToken(owner, 'Olive\'s late line');
+        const v = await connect(V.token);
+        const beforeLate = postsCount();
+        const late = tool(v, 'create_offer', { ...offerArgs, title: 'Late quince', photo_urls: [img('/slowish.jpg')] });
+        await new Promise(r => setTimeout(r, 250));
+        const revokedMid = await revoke(V.id);
+        const lateR = await late;
+        assert(revokedMid === 200 && lateR.isError === true && /disconnected, or may no longer post/.test(errorText(lateR)) && postsCount() === beforeLate,
+            `disconnected while its photo_urls are fetched → nothing posted (${errorText(lateR).slice(0, 70) || 'made'})`);
+        await v.close().catch(() => {});
+        const W = await makeToken(owner, 'Olive\'s late upload');
+        const midUpload = await new Promise<number>((resolve) => {
+            const req = https.request({
+                host: 'localhost', port: PORT, path: '/mcp/photos', method: 'POST', rejectUnauthorized: false,
+                headers: { Authorization: `Bearer ${W.token}`, 'Content-Type': 'image/jpeg', 'Content-Length': String(goodJpg.length) },
+            }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode ?? 0)); });
+            req.on('error', () => resolve(-1));
+            const half = Math.floor(goodJpg.length / 2);
+            req.write(goodJpg.subarray(0, half), () => setTimeout(async () => {
+                await revoke(W.id);
+                req.end(goodJpg.subarray(half));
+            }, 150));
+        });
+        assert(midUpload === 401 && uploadedPhotosWaiting(W.id) === 0,
+            `disconnected while an upload is still arriving → 401, nothing kept for it (${midUpload}, ${uploadedPhotosWaiting(W.id)} waiting)`);
 
         // ── 3. The day's 200, shared ─────────────────────────────────────────────────────────────
         console.log('── 3. 200 photos a day, fetched and uploaded together ──');

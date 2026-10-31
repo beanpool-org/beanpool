@@ -581,7 +581,7 @@ async function main(): Promise<void> {
         const seedGrant = { id: seedT.body?.grant?.id, name: 'Olive\'s seeding day', member: owner.pub, role: 'owner', via: 'token', createdAt: 0, expiresAt: null, canPost: true } as AgentGrant;
         // Through the tool's own run, what /mcp calls after the door: 1,000 calls through the door would wait out its 60 a minute.
         const createOffer = OWNER_POST_TOOLS.find(t => t.name === 'create_offer')!;
-        const tiny = await jpeg(64, 48, 60);
+        const tiny = await jpeg(240, 200, 60);
         const seedArgs = (i: number) => ({ title: `Seedling tray ${i}`, description: 'Tomato seedlings, ready to plant.', category: 'food', beans: 1, lat: -28.55, lng: 153.5, photos: [tiny] });
         const seedRefused: string[] = [];
         const seed = async (from: number, to: number) => {

@@ -89,6 +89,7 @@ vi.mock('../community-switch', () => ({ communitySwitched: () => {} }));
 vi.mock('../identity', () => ({
     StoredKeyUnreadableError: class StoredKeyUnreadableError extends Error {},
     loadIdentity: async () => fake.phone,
+    readStoredIdentity: async () => fake.phone,
     draftIdentity: async () => { throw new Error('a phone with an account asks with its own key'); },
     importIdentity: async (i: BeanPoolIdentity) => { fake.imported.push(i.publicKey); fake.phone = i; },
     removeStoredIdentity: async () => { fake.phone = null; },
@@ -249,6 +250,17 @@ describe('a shared bring-back on the re-key screen (vault rethink VR4)', () => {
         await until(() => text().includes('The account on this phone was kept. Nothing changed.'));
         expect(fake.imported).toEqual([]);
         expect(await loadPendingCommunityRestore()).not.toBeNull();
+    });
+
+    it('the phone\'s own account key is copied nowhere, and Sign Out during the wait ends it, saying why', async () => {
+        await until(() => text().includes('It comes through'));
+        expect([...fake.secure.values()].join()).not.toContain(PHONE_ACCOUNT.privateKey);
+        fake.phone = null;
+        await close();
+        await open();
+        await until(() => text().includes('This phone’s account changed while you waited, so nothing was saved.'));
+        expect(fake.imported).toEqual([]);
+        expect(await loadPendingCommunityRestore()).toBeNull();
     });
 
     it('a Stop from the member\'s own phone: it says so, and the wait is over with nothing saved', async () => {

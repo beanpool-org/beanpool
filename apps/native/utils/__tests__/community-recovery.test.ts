@@ -41,7 +41,8 @@ import {
     takeSharedRelease, turnOnSharedCopy, type PendingCommunityRestore,
 } from '../community-recovery';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
-import { BRING_BACK_NOT_OPENED, type RekeySlot } from '../rekey-redeem';
+import { BRING_BACK_NOT_OPENED, REKEY_TEXT, type RekeySlot } from '../rekey-redeem';
+import { COMMUNITY_RESTORE_STORE_KEY } from '../storage-keys';
 import { FakeVault, HOLD_MS, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 
 const MULLUM = 'https://mullum.test';
@@ -302,6 +303,69 @@ describe('getting back in on a new phone, on the fake vault', () => {
         expect(held).toBeNull();
         vi.useFakeTimers({ now: Date.now() + HOLD_MS + 1000, toFake: ['Date'] });
         expect((await advanceCommunityRestore(reopened)).status).toBe('released');
+    });
+
+    describe('on a phone holding another account, which asks with its own key', () => {
+        let robin: BeanPoolIdentity;
+        let phoneSays: BeanPoolIdentity | null;
+        const onThisPhone = () => ({ ...deps(), loadIdentity: async () => phoneSays });
+
+        beforeEach(async () => {
+            robin = await draftIdentity('Robin');
+            phone = robin;
+            phoneSays = robin;
+            slot = { community: MULLUM, code: CODE, publicKey: robin.publicKey, madeHere: false, startedAt: Date.now(), shown: true };
+            held = slot;
+        });
+
+        it('the account\'s key is copied nowhere: the record has no key of it, in the store or in the screen\'s hands', async () => {
+            const pending = await takeSharedRelease(slot, released(), onThisPhone());
+            expect(pending.privateKey).toBeNull();
+            expect(mem.secure.get(COMMUNITY_RESTORE_STORE_KEY)).not.toContain(robin.privateKey);
+            const step = await advanceCommunityRestore(pending, onThisPhone());
+            if (step.status !== 'held') throw new Error(`held, not ${step.status}`);
+            expect(mem.secure.get(COMMUNITY_RESTORE_STORE_KEY)).not.toContain(robin.privateKey);
+        });
+
+        it('still asks as that key, from the record alone: the hold names it, and the release opens to the member', async () => {
+            const pending = await takeSharedRelease(slot, released(), onThisPhone());
+            await advanceCommunityRestore(pending, onThisPhone());
+            expect([...vault.holds.values()].map(h => h.requester)).toEqual([robin.publicKey]);
+            vi.useFakeTimers({ now: Date.now() + HOLD_MS + 1000, toFake: ['Date'] });
+            const done = await advanceCommunityRestore((await loadPendingCommunityRestore())!, onThisPhone());
+            if (done.status !== 'released') throw new Error(`released, not ${done.status}`);
+            expect(done.back.publicKey).toBe(kim.publicKey);
+        });
+
+        it('Sign Out while it waits ends it, said once: the key that asked has gone, and the record goes too', async () => {
+            const pending = await takeSharedRelease(slot, released(), onThisPhone());
+            const first = await advanceCommunityRestore(pending, onThisPhone());
+            if (first.status !== 'held') throw new Error(`held, not ${first.status}`);
+            phoneSays = null;
+            expect(await advanceCommunityRestore(first.pending, onThisPhone())).toEqual({ status: 'ended', message: REKEY_TEXT.changedAccount });
+            expect(mem.secure.has(COMMUNITY_RESTORE_STORE_KEY)).toBe(false);
+        });
+
+        it('another account on the phone since is no signer either: nothing is sent as a key that didn\'t ask', async () => {
+            const pending = await takeSharedRelease(slot, released(), onThisPhone());
+            phoneSays = await draftIdentity('Someone else');
+            const before = toVault().length;
+            expect(await advanceCommunityRestore(pending, onThisPhone())).toEqual({ status: 'ended', message: REKEY_TEXT.changedAccount });
+            expect(toVault().length).toBe(before);
+        });
+
+        it('a key the phone can\'t read right now ends nothing: it waits, and asks again', async () => {
+            const pending = await takeSharedRelease(slot, released(), onThisPhone());
+            const step = await advanceCommunityRestore(pending, { loadIdentity: async () => { throw new Error('the store is locked'); } });
+            expect(step.status).toBe('waiting');
+            expect(await loadPendingCommunityRestore()).toEqual(pending);
+        });
+    });
+
+    it('a key this ask made is only a throwaway, and stays in the record: nothing else on the phone holds it', async () => {
+        const pending = await takeSharedRelease(slot, released(), deps());
+        expect(pending.privateKey).toBe(phone.privateKey);
+        expect((await loadPendingCommunityRestore())?.privateKey).toBe(phone.privateKey);
     });
 
     it('a lost answer comes back to the same hold: the same voucher, asked again, opens no second one', async () => {

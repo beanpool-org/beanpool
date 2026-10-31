@@ -27,7 +27,10 @@
  *
  * The record outlives the re-key's: the vault's day ends after the code's does, when the community's answer is `gone`. So it
  * holds everything the rest needs, in this device's secure store, and it goes when the account is saved, when the restore
- * is stopped, or when the vault says there is nothing to wait for.
+ * is stopped, or when the vault says there is nothing to wait for. One thing it never holds: an account's key. A key the ask
+ * made is a throwaway, and is kept. On a phone holding another account the ask used that account's own key
+ * (utils/rekey-redeem.ts `beginRekey`), and an account's key stays in the one place Sign Out wipes: it is read from there at
+ * each step, and if it has gone, so has this restore, since the voucher and the vault's release are for that key alone.
  *
  * Plain English only: this file opens a copy to the account's seed, so it is on the 12 words' key path, where nothing may
  * reach the words layer (core recovery-path-files.test.ts). The screens translate (components/key-lines.ts).
@@ -49,7 +52,7 @@ import {
     vaultCopyDigest,
 } from '@beanpool/core';
 import { hexToBytes } from './crypto';
-import { getMnemonic, type BeanPoolIdentity } from './identity';
+import { getMnemonic, readStoredIdentity, type BeanPoolIdentity } from './identity';
 import { signedDelete, signedPost } from './node-post';
 import { BRING_BACK_NOT_OPENED, keyOf, REKEY_TEXT, type RekeyAnswer, type RekeyDeps, type RekeySlot } from './rekey-redeem';
 import { COMMUNITY_COPY_TEXT, communityCopyStatus, type CommunityCopyStatus } from './community-copy';
@@ -172,8 +175,12 @@ export async function removeSharedCopy(url: string, identity: BeanPoolIdentity, 
 // ── Getting back in ────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** A shared bring-back this phone is waiting on, kept until the account is saved (COMMUNITY_RESTORE_STORE_KEY). */
-export interface PendingCommunityRestore extends VaultSigner {
+export interface PendingCommunityRestore {
     v: 1;
+    /** The key that asked: the voucher names it, and the vault's release is sealed to it. */
+    publicKey: string;
+    /** Its private half when the ask made that key. Null when it is the phone's own account's ({@link signerOf}). */
+    privateKey: string | null;
     /** The community's address and name, to land on. */
     community: string;
     communityName: string;
@@ -197,10 +204,10 @@ function readPending(raw: string | null): PendingCommunityRestore | null {
     if (!raw) return null;
     try {
         const p = JSON.parse(raw) as Partial<PendingCommunityRestore>;
-        if (p.v !== 1 || !isVaultKeyHex(p.publicKey) || !isVaultKeyHex(p.memberKey) || typeof p.privateKey !== 'string' || typeof p.community !== 'string'
-            || typeof p.nodeHalf !== 'string' || typeof p.voucher !== 'string') return null;
+        if (p.v !== 1 || !isVaultKeyHex(p.publicKey) || !isVaultKeyHex(p.memberKey) || (typeof p.privateKey !== 'string' && p.privateKey !== null)
+            || typeof p.community !== 'string' || typeof p.nodeHalf !== 'string' || typeof p.voucher !== 'string') return null;
         return {
-            v: 1, publicKey: p.publicKey, privateKey: p.privateKey, community: p.community, communityName: String(p.communityName ?? ''),
+            v: 1, publicKey: p.publicKey, privateKey: p.privateKey ?? null, community: p.community, communityName: String(p.communityName ?? ''),
             callsign: String(p.callsign ?? ''), memberKey: p.memberKey, nodeHalf: p.nodeHalf, voucher: p.voucher,
             holdId: typeof p.holdId === 'string' && p.holdId ? p.holdId : null,
             until: typeof p.until === 'number' ? p.until : null,
@@ -248,7 +255,7 @@ export async function takeSharedRelease(
         throw new Error(BRING_BACK_NOT_OPENED);
     }
     const pending: PendingCommunityRestore = {
-        v: 1, publicKey: key.publicKey, privateKey: key.privateKey, community: slot.community, communityName: answer.communityName,
+        v: 1, publicKey: key.publicKey, privateKey: slot.madeHere ? key.privateKey : null, community: slot.community, communityName: answer.communityName,
         callsign: answer.callsign, memberKey: answer.memberKey, nodeHalf: half.half, voucher: answer.voucher as string, holdId: null, until: null,
     };
     await savePendingCommunityRestore(pending);
@@ -289,15 +296,34 @@ function finalWords(e: VaultError): string | null {
 }
 
 /**
+ * The key this restore asks with: the one its ask made, or the phone's own account's, read now (rekey-redeem.ts `keyOf`).
+ * Null only when the phone no longer holds that account. `deps.loadIdentity` must say so only then: one that can't read the
+ * key just now (the phone locked) throws, and the wait goes on.
+ */
+async function signerOf(p: PendingCommunityRestore, deps: Pick<RekeyDeps, 'loadIdentity'>): Promise<VaultSigner | null> {
+    if (p.privateKey) return { publicKey: p.publicKey, privateKey: p.privateKey };
+    const stored = await deps.loadIdentity();
+    return stored?.publicKey === p.publicKey ? stored : null;
+}
+
+/**
  * One step on from where the record stands: shows the voucher if no hold is known yet, then asks for the release. Safe to
  * call again at any time and after any restart: one voucher is one hold at the vault, and a release can be collected again
  * until the hold is pruned, so nothing here can open a second restore or lose the first.
  */
-export async function advanceCommunityRestore(start: PendingCommunityRestore): Promise<CommunityRestoreStep> {
+export async function advanceCommunityRestore(
+    start: PendingCommunityRestore, deps: Pick<RekeyDeps, 'loadIdentity'> = { loadIdentity: readStoredIdentity },
+): Promise<CommunityRestoreStep> {
     let pending = start;
     try {
+        const signer = await signerOf(pending, deps);
+        if (!signer) {
+            // The account that asked left the phone: the vault's release could only ever be opened by its key.
+            await clearPendingCommunityRestore();
+            return { status: 'ended', message: REKEY_TEXT.changedAccount };
+        }
         if (!pending.holdId) {
-            const held = await restoreWithVoucher(pending, pending.voucher);
+            const held = await restoreWithVoucher(signer, pending.voucher);
             if (held.status === 'stopped') {
                 await clearPendingCommunityRestore();
                 return { status: 'stopped' };
@@ -305,7 +331,7 @@ export async function advanceCommunityRestore(start: PendingCommunityRestore): P
             pending = { ...pending, holdId: held.holdId, until: held.until };
             await savePendingCommunityRestore(pending);
         }
-        const got = await collectCommunityRelease(pending, pending.holdId as string);
+        const got = await collectCommunityRelease(signer, pending.holdId as string);
         if (got.status === 'stopped') {
             await clearPendingCommunityRestore();
             return { status: 'stopped' };

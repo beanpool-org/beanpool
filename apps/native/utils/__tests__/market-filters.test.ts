@@ -288,3 +288,12 @@ describe('the Market\'s search in any script (review of #1716, finding 1)', () =
         expect(src).not.toMatch(/expandSearchTerms/);
     });
 });
+
+describe('a listing found by a tag its author typed (DESIGN-tags-free-entry-fable.md §4)', () => {
+    it("the Market's own filter runs over the node's answer, so the words of a typed tag pass it, in either shape a row comes in", () => {
+        const title = { title: 'Old laptop', description: 'Works well' };
+        expect(marketSearchMatches({ ...title, freeTags: ['2nd hand'] }, 'hand')).toBe(true);
+        expect(marketSearchMatches({ ...title, free_tags: '["2nd hand"]' }, 'hand')).toBe(true);
+        expect(marketSearchMatches(title, 'hand')).toBe(false);
+    });
+});

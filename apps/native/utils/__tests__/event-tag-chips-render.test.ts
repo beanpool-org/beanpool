@@ -57,7 +57,7 @@ beforeEach(() => { host = document.createElement('div'); document.body.appendChi
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const event = { id: 'ev-1', type: 'event', title: 'Working bee', description: 'Bring gloves', author_pubkey: 'host'.repeat(16), eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), photos: [] };
-const draw = async (tags: unknown) => { await act(async () => { root.render(createElement(EventDetail, { post: { ...event, tags } }) as any); }); };
+const draw = async (tags: unknown, more: Record<string, unknown> = {}) => { await act(async () => { root.render(createElement(EventDetail, { post: { ...event, tags, ...more } }) as any); }); };
 const row = () => host.querySelector('[data-testid="detail-tags-row"]');
 
 describe('an event\'s tags on the phone', () => {
@@ -68,6 +68,19 @@ describe('an event\'s tags on the phone', () => {
         expect(chips[0].getAttribute('aria-label')).toBe('Filter marketplace by tag Lemon');
         await act(async () => { chips[0].click(); });
         expect(dismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { tag: 'food.fruit.lemon' } });
+        expect(push).not.toHaveBeenCalled();
+    });
+
+    it('a typed tag shows as #word and opens the Market with exactly it, by dismissTo: a push from this modal would leave no way back', async () => {
+        for (const more of [{ free_tags: '["2nd hand"]' }, { freeTags: ['2nd hand'] }]) {
+            dismissTo.mockClear();
+            await draw('', more);
+            const chip = row()!.querySelector('[role=button]') as HTMLElement;
+            expect(chip.textContent).toBe('#2nd hand');
+            expect(chip.getAttribute('aria-label')).toBe('Filter marketplace by tag #2nd hand');
+            await act(async () => { chip.click(); });
+            expect(dismissTo).toHaveBeenCalledWith({ pathname: '/(tabs)/market', params: { free: '2nd hand' } });
+        }
         expect(push).not.toHaveBeenCalled();
     });
 

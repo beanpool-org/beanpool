@@ -296,6 +296,12 @@ export function TagPicker({
     const canType = !!onFreeTagsChange;
     const held = { tags: selectedTags, freeTags };
 
+    // The typed word has found its tag. Left in the field, Done would put back one just taken off.
+    const pickFound = (id: string) => {
+        toggleTag(id);
+        if (canType && (selectedTags.includes(id) || selectedTags.length < POST_TAGS_MAX)) setSearchQuery('');
+    };
+
     /** Commits what is typed (core typed-tags.ts); false when a piece was refused and stays in the field with its words. */
     const enter = (text: string, done: boolean): boolean => {
         const entry = enterTypedTags(text, held, done, index);
@@ -502,7 +508,7 @@ export function TagPicker({
                                                     <Pressable
                                                         key={id}
                                                         style={[styles.chip, selected && styles.chipSelected]}
-                                                        onPress={() => toggleTag(id)}
+                                                        onPress={() => pickFound(id)}
                                                         accessibilityRole="button"
                                                         accessibilityState={{ selected }}
                                                     >

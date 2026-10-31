@@ -37,7 +37,12 @@ vi.mock('../components/MarketplaceCard', () => ({ MarketplaceCard: ({ post }: { 
 vi.mock('../components/PollCard', () => ({ PollCard: () => null }));
 vi.mock('../components/EventCard', () => ({
     EventCard: () => null,
-    EventDetail: ({ onOpenTag }: { onOpenTag?: (id: string) => void }) => <button type="button" onClick={() => onOpenTag?.(LEMON)}>the event's chip</button>,
+    EventDetail: ({ onOpenTag, onOpenFreeTag }: { onOpenTag?: (id: string) => void; onOpenFreeTag?: (tag: string) => void }) => (
+        <>
+            <button type="button" onClick={() => onOpenTag?.(LEMON)}>the event's chip</button>
+            <button type="button" onClick={() => onOpenFreeTag?.('2nd hand')}>the event's typed chip</button>
+        </>
+    ),
 }));
 vi.mock('../components/YourEvents', () => ({ YourEvents: () => null }));
 vi.mock('../components/CategoryPickerModal', () => ({ CategoryPickerModal: () => null }));
@@ -64,7 +69,7 @@ function stubNode() {
     vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (f?: any) => {
         if (f?.id) return (node.feed as Array<{ id: string }>).filter(p => p.id === f.id) as any;
         if (f?.author) return [] as any;
-        return (f?.q || f?.tags ? node.answer(f) : node.feed) as any;
+        return (f?.q || f?.tags || f?.free ? node.answer(f) : node.feed) as any;
     });
     vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
     vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
@@ -83,7 +88,7 @@ function stubNode() {
     vi.spyOn(api, 'getRemotePosts').mockResolvedValue([]);
 }
 
-const searches = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f as Read).filter(f => f?.q || f?.tags);
+const searches = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f as Read).filter(f => f?.q || f?.tags || f?.free);
 const cards = () => screen.queryAllByTestId('card-stub').map(c => c.textContent);
 const wait = async (ms: number) => { await act(async () => { await new Promise(r => setTimeout(r, ms)); }); };
 async function openMarket(props: Record<string, unknown> = {}) {
@@ -290,5 +295,45 @@ describe('Beans only where its chip is hidden', () => {
         await openMarket();
         await search('eggs');
         expect(searches().at(-1)?.beansOnly).toBeFalsy();
+    });
+});
+
+describe('a #tag the member typed (DESIGN-tags-free-entry-fable.md §4)', () => {
+    const laptop = listing('laptop', 'A laptop', { freeTags: ['2nd hand'] });
+    const phone = listing('phone', 'A phone');
+    async function filterByTyped() {
+        node.feed = [laptop, phone];
+        node.answer = () => [laptop];
+        await openMarket({ openPostId: 'laptop', onPostOpened: () => {} });
+        fireEvent.click(await screen.findByRole('button', { name: 'Filter marketplace by tag #2nd hand' }));
+        await wait(340);
+    }
+
+    it('tapping its chip asks the node for exactly that tag, and only listings carrying it are drawn', async () => {
+        await filterByTyped();
+        expect(searches().at(-1)?.free).toEqual(['2nd hand']);
+        expect(cards()).toEqual(['A laptop']);
+        expect(screen.getByText('#2nd hand')).toBeInTheDocument();
+    });
+
+    it('the ✕ takes the filter off', async () => {
+        await filterByTyped();
+        fireEvent.click(screen.getByRole('button', { name: 'Clear tag filter' }));
+        await wait(340);
+        expect(cards()).toEqual(['A laptop', 'A phone']);
+    });
+
+    it('it is a filter to the example cards: they never answer one', async () => {
+        info.current = { features: { exampleListings: true } };
+        await filterByTyped();
+        expect(screen.queryByText('the example cards')).toBeNull();
+    });
+
+    it('the words of a typed tag find its listing in the search box, under a tag filter too', async () => {
+        node.feed = [laptop, phone];
+        node.answer = () => [laptop];
+        await openMarket();
+        await search('hand');
+        expect(cards()).toEqual(['A laptop']);
     });
 });

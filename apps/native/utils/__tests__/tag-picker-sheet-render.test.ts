@@ -6,7 +6,7 @@
  * every target is 44 dp; and the keyboard is down before the sheet opens and the search stays above it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
@@ -22,7 +22,7 @@ const device = vi.hoisted(() => ({
 vi.mock('react-native', () => {
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, value, onChangeText, onSubmitEditing, style, hitSlop } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, testID, placeholder, value, onChangeText, onSubmitEditing, onKeyPress, style, hitSlop } = props;
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
         if (onPress) {
@@ -35,6 +35,12 @@ vi.mock('react-native', () => {
         }
         if (onChangeText) { attrs.onChange = (e: { target: { value: string } }) => onChangeText(e.target.value); attrs.value = value ?? ''; }
         if (onSubmitEditing) attrs['data-submits'] = 'true';
+        if (onKeyPress || onSubmitEditing) {
+            attrs.onKeyDown = (e: { key: string }) => {
+                onKeyPress?.({ nativeEvent: { key: e.key } });
+                if (e.key === 'Enter') onSubmitEditing?.();
+            };
+        }
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole === 'button') attrs.role = 'button';
         if (placeholder) attrs.placeholder = placeholder;
@@ -170,6 +176,162 @@ describe('the tag sheet on the phone', () => {
             for (const b of targets) {
                 expect(Number(b.getAttribute('data-min-h')), `${b.textContent} height`).toBeGreaterThanOrEqual(44);
             }
+        });
+    }
+});
+
+describe('a tag the member types (DESIGN-tags-free-entry-fable.md §3, slice F2)', () => {
+    const held = { tags: [] as string[], freeTags: [] as string[] };
+    function Composer({ tags, freeTags }: { tags: string[]; freeTags: string[] }) {
+        const [nowTags, setTags] = useState(tags);
+        const [nowFree, setFree] = useState(freeTags);
+        held.tags = nowTags;
+        held.freeTags = nowFree;
+        return createElement(TagPicker, { value: nowTags, onChange: setTags, freeTags: nowFree, onFreeTagsChange: setFree, category: 'food' });
+    }
+    async function compose(tags: string[] = [], freeTags: string[] = []) {
+        await act(async () => { root.render(createElement(Composer, { tags, freeTags }) as any); });
+        await press(addButton(), '+ Add');
+    }
+    const key = (name: string) => act(async () => { search()!.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true })); });
+    const done = () => press(host.querySelector('[aria-label="Done"]'), 'Done');
+    const addRow = () => host.querySelector('[data-testid="tag-picker-add-typed"]');
+
+    it('Enter makes the typed words a tag, the # shown and not stored; the sheet and the keyboard stay for the next', async () => {
+        await compose();
+        await typeInSearch('#2nd  Hand');
+        await key('Enter');
+        expect(held.freeTags).toEqual(['2nd hand']);
+        expect(held.tags).toEqual([]);
+        expect(search()!.value).toBe('');
+        expect(sheet()).toBeTruthy();
+        expect(host.querySelector('[aria-label="Remove #2nd hand"]')?.textContent).toContain('#2nd hand');
+    });
+
+    it('Enter on a library label picks the library tag, never a free twin', async () => {
+        await compose();
+        await typeInSearch('Lemons');
+        await key('Enter');
+        expect(held.tags).toEqual(['food.fruit.lemon']);
+        expect(held.freeTags).toEqual([]);
+    });
+
+    it('a comma commits what is before it and leaves what follows', async () => {
+        await compose();
+        await typeInSearch('vintage, re');
+        expect(held.freeTags).toEqual(['vintage']);
+        expect(search()!.value).toBe(' re');
+    });
+
+    it('Done commits what is in the field and shuts the sheet', async () => {
+        await compose();
+        await typeInSearch('vintage');
+        await done();
+        expect(held.freeTags).toEqual(['vintage']);
+        expect(sheet()).toBeNull();
+    });
+
+    it('a refused tag shows its words before anything is sent, and Done keeps the sheet open on them', async () => {
+        await compose();
+        await typeInSearch('me@example.org');
+        expect(sheet()!.textContent).toContain('A tag is a word to find your listing by, not a contact');
+        expect(addRow()).toBeNull();
+        await done();
+        expect(held.freeTags).toEqual([]);
+        expect(sheet()).toBeTruthy();
+        expect(search()!.value).toBe('me@example.org');
+    });
+
+    it('a word still being typed is not called too short until it is committed', async () => {
+        await compose();
+        await typeInSearch('a');
+        expect(sheet()!.textContent).not.toContain('at least two letters');
+        await key('Enter');
+        expect(sheet()!.textContent).toContain('A tag needs at least two letters or numbers');
+        await typeInSearch('ab');
+        expect(sheet()!.textContent).not.toContain('at least two letters');
+    });
+
+    it('the cap, in words, on the kind that is full', async () => {
+        await compose([], ['aa', 'bb', 'cc', 'dd', 'ee']);
+        await typeInSearch('ff');
+        expect(sheet()!.textContent).toContain('Five tags at most');
+        await key('Enter');
+        expect(held.freeTags).toHaveLength(5);
+    });
+
+    it('five of a kind leave the + Add for the other kind; ten leave none', async () => {
+        const library = ['food.fruit.apple', 'food.fruit.orange', 'food.produce.herbs', 'food.preserve.jam', 'food.bakery.bread'];
+        await compose(library);
+        await typeInSearch('vintage');
+        await key('Enter');
+        expect(held.freeTags).toEqual(['vintage']);
+        await act(async () => { root.render(null as any); });
+        await act(async () => { root.render(createElement(Composer, { tags: library, freeTags: ['aa', 'bb', 'cc', 'dd', 'ee'] }) as any); });
+        expect(addButton()).toBeNull();
+    });
+
+    it('the last row adds what is typed; a word the library has, or nothing typed, has no such row', async () => {
+        await compose();
+        expect(addRow()).toBeNull();
+        await typeInSearch('2nd hand');
+        expect(addRow()?.textContent).toContain('Add “#2nd hand”');
+        await press(addRow(), 'the Add row');
+        expect(held.freeTags).toEqual(['2nd hand']);
+        await typeInSearch('lemon');
+        expect(addRow()).toBeNull();
+    });
+
+    it('a plural has its label\'s row, and a tap on a result ends what was typed: Done does not put back one just taken off', async () => {
+        await compose();
+        await typeInSearch('lemons');
+        const row = () => Array.from(sheet()!.querySelectorAll('[data-press]')).find((b) => b.textContent === 'Lemon') ?? null;
+        await press(row(), 'Lemon');
+        expect(held.tags).toEqual(['food.fruit.lemon']);
+        expect(search()!.value).toBe('');
+        await press(host.querySelector('[aria-label="Remove Lemon"]'), 'Remove Lemon');
+        await done();
+        expect(held.tags).toEqual([]);
+    });
+
+    it('backspace on an empty field takes the last chip off, the typed ones first; with words in the field it does not', async () => {
+        await compose(['food.fruit.lemon'], ['aa']);
+        await typeInSearch('b');
+        await key('Backspace');
+        expect(held.freeTags).toEqual(['aa']);
+        await typeInSearch('');
+        await key('Backspace');
+        expect(held.freeTags).toEqual([]);
+        await key('Backspace');
+        expect(held.tags).toEqual([]);
+    });
+
+    it('its chip takes it off', async () => {
+        await compose([], ['aa', 'bb']);
+        await press(host.querySelector('[aria-label="Remove #aa"]'), 'Remove #aa');
+        expect(held.freeTags).toEqual(['bb']);
+    });
+
+    it('the two hints are under the field', async () => {
+        await compose();
+        expect(sheet()!.textContent).toContain('Tags are public with your listing');
+        expect(sheet()!.textContent).toContain('A tag you type is in your own words. Pick a library tag to be found in every language.');
+    });
+
+    it('a typed return reaches no composer: the sheet is its own Modal, and Return is spent on the tag', async () => {
+        await compose();
+        expect(search()?.getAttribute('data-submits')).toBe('true');
+    });
+
+    for (const theme of ['light', 'dark'] as const) {
+        it(`every target is at least 44 dp with typed tags and the Add row, in the ${theme} theme`, async () => {
+            device.theme = theme;
+            await compose(['food.fruit.lemon'], ['2nd hand']);
+            await typeInSearch('vintage');
+            expect(addRow()).toBeTruthy();
+            const targets = Array.from(host.querySelectorAll('[data-press]')).filter((b) => b.getAttribute('data-testid') !== 'tag-picker-sheet' && b.getAttribute('role') === 'button');
+            expect(targets.length).toBeGreaterThan(3);
+            for (const b of targets) expect(Number(b.getAttribute('data-min-h')), `${b.textContent} height`).toBeGreaterThanOrEqual(44);
         });
     }
 });

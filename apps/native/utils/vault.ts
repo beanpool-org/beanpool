@@ -464,8 +464,8 @@ export interface VaultStatus {
     providers: SsoProvider[];
     /** The same copies, one per sign-in account (never folded into one per sign-in), with since when each is kept. */
     copies: VaultCopy[];
-    /** The community copies it keeps: none of the sign-ins' above. */
-    communityCopies: VaultCommunityCopy[];
+    /** The community copies it keeps, none of the sign-ins' above. Absent when it keeps none. */
+    communityCopies?: VaultCommunityCopy[];
     /** Restores of this account waiting at the vault. */
     holds: VaultHold[];
 }
@@ -504,7 +504,7 @@ export function readVaultStatus(body: unknown): VaultStatus {
             holds.push({ holdId: x.holdId, provider: x.provider, openedAt: x.openedAt, releaseAt: x.releaseAt });
         }
     }
-    return { providers: [...new Set(providers)], copies, communityCopies, holds };
+    return { providers: [...new Set(providers)], copies, ...(communityCopies.length ? { communityCopies } : {}), holds };
 }
 
 /**
@@ -516,7 +516,7 @@ export async function vaultStatus(identity: VaultSigner, timeoutMs = VAULT_TIMEO
     const answer = await vaultPost('/v1/copies/status', {}, identity, ['status'], timeoutMs);
     if (!Array.isArray(answer.copies) || !Array.isArray(answer.holds)) throw unverified('/v1/copies/status', 'a status without its lists');
     const status = readVaultStatus(answer);
-    await noteVaultCopy(identity.publicKey, status.providers.length + status.communityCopies.length > 0);
+    await noteVaultCopy(identity.publicKey, status.providers.length > 0 || !!status.communityCopies);
     return status;
 }
 
@@ -661,7 +661,7 @@ export async function vaultHoldsAtOpen(identity: VaultSigner): Promise<VaultHold
     if (!hasVault() || (await vaultCopyKnowledge(identity.publicKey)) === 'none') return [];
     try {
         const status = await vaultStatus(identity, 15_000);
-        if (status.providers.length + status.communityCopies.length) void keepVaultPushTokenCurrent(identity);
+        if (status.providers.length || status.communityCopies) void keepVaultPushTokenCurrent(identity);
         await forgetEndedApprovals(identity.publicKey, status.holds);
         // A hold this phone already let through is not asked about again.
         const approved = await approvedHolds(identity.publicKey);

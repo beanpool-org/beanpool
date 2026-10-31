@@ -136,7 +136,7 @@ describe('key-lines.ts: the whole sentences it knows', () => {
     });
 
     it('every sentence it knows whole is one of those, or one of the source files writes it (sentences a function says)', () => {
-        const sources = ['utils/takeover-unlock.ts', 'utils/settings-signin.ts', 'utils/rekey-redeem.ts', 'utils/node-claim.ts', 'utils/community-copy.ts'];
+        const sources = ['utils/takeover-unlock.ts', 'utils/settings-signin.ts', 'utils/rekey-redeem.ts', 'utils/node-claim.ts', 'utils/community-copy.ts', 'utils/community-recovery.ts'];
         const unknown = knownKeyLines().filter((line) => !WHOLE.includes(line) && !sources.some((file) => writtenIn(file, line)));
         expect(unknown).toEqual([]);
         // The ones read from the sources above are still written there.

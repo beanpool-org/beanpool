@@ -100,7 +100,7 @@ export async function sharedCopySide(identity: BeanPoolIdentity, status: Communi
     if (!status.nodeKey || !identity.privateKey) return 'unknown';
     try {
         const ref = communityRefFor(identity, status.nodeKey);
-        const kept = (await vaultStatus(identity)).communityCopies.find(c => c.ref === ref);
+        const kept = (await vaultStatus(identity)).communityCopies?.find(c => c.ref === ref);
         if (!kept) return 'none';
         return kept.copy === status.copy ? 'matches' : 'differs';
     } catch {

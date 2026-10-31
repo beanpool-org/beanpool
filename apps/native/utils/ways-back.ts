@@ -105,7 +105,7 @@ async function askVault(identity: BeanPoolIdentity): Promise<VaultPart> {
     if (!hasVault()) return { kind: 'no-vault' };
     try {
         const { copies, communityCopies } = await vaultStatus(identity);
-        return { kind: 'listed', copies, ...(communityCopies.length ? { communityCopies } : {}) };
+        return { kind: 'listed', copies, ...(communityCopies ? { communityCopies } : {}) };
     } catch (e) {
         const why = notAnswered(e);
         return { kind: 'unknown', why: why === 'refused' ? 'unreachable' : why };

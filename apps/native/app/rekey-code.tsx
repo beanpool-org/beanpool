@@ -36,7 +36,7 @@ import { upperCase } from '@beanpool/core';
 import { buildSignedHeaders } from '../utils/crypto';
 import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
-import { holdEndsWords } from '../components/RecoveryAlertBanner';
+import { holdEndsWords } from '../components/hold-ends-words';
 import { VAULT_WORDS } from '../utils/vault-words';
 import {
     advanceCommunityRestore, clearPendingCommunityRestore, COMMUNITY_RESTORE_POLL_MS, loadPendingCommunityRestore, takeSharedRelease,

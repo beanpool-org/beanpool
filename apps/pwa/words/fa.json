@@ -3663,5 +3663,6 @@
   "Where you live, what you'd like to share or learn": "کجا زندگی می‌کنید، چه چیزهایی را دوست دارید به اشتراک بگذارید یا یاد بگیرید",
   "Kept since {date}": "از {date} نگهداری می‌شود",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "روشن از {date}، از طریق تلفن شما. سرور این جامعه و گاوصندوق کلید BeanPool هرکدام نصف یک نسخهٔ قفل‌شده را نگه می‌دارند. آن را در برنامه تلفن مدیریت کنید.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "نصف یک نسخهٔ قفل‌شده، با نصف دیگر در گاوصندوق کلید BeanPool. آن را در برنامه تلفن مدیریت کنید."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "نصف یک نسخهٔ قفل‌شده، با نصف دیگر در گاوصندوق کلید BeanPool. آن را در برنامه تلفن مدیریت کنید.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "نصف نسخهٔ شما در گاوصندوق کلید BeanPool نگهداری می‌شود که فقط برنامه تلفن به آن دسترسی دارد. از مدیر کدی جدید بخواهید و از آن در برنامه تلفن استفاده کنید."
 }

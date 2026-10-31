@@ -145,7 +145,8 @@ export function CommunityAdminsRow({ communityName }: { communityName?: string |
     const sharedOffer = !!status && !status.offered && status.sharedOffered && hasVault() && !!status.nodeKey;
     const sharedState = sharedCopyState(status, side);
     const unfinished = sharedState === 'unfinished';
-    const shared = sharedOffer || status?.placement === 'shared' || unfinished;
+    // What it keeps decides the row's words and its Remove; only a member with nothing here goes by the offer.
+    const shared = status?.kept ? status.placement === 'shared' : sharedOffer || unfinished;
     // On means it can bring the member back now: a whole copy, or both halves of one copy.
     const kept = status?.kept === true && !unfinished;
     const unopenable = status?.kept ? null : status?.unopenable ?? null;

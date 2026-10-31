@@ -37,12 +37,12 @@ import {
 import { hexToBytes } from '../crypto';
 import { communityCopyStatus, offersCommunityCopy } from '../community-copy';
 import {
-    advanceCommunityRestore, clearPendingCommunityRestore, loadPendingCommunityRestore, removeSharedCopy, sharedCopySide, sharedCopyState,
+    advanceCommunityRestore, clearPendingCommunityRestore, COMMUNITY_RECOVERY_TEXT, loadPendingCommunityRestore, removeSharedCopy, sharedCopySide, sharedCopyState,
     takeSharedRelease, turnOnSharedCopy, type PendingCommunityRestore,
 } from '../community-recovery';
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
 import { BRING_BACK_NOT_OPENED, type RekeySlot } from '../rekey-redeem';
-import { FakeVault, HOLD_MS, TICKET_KEY, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
+import { FakeVault, HOLD_MS, VAULT, noVault, useVault, type SentRequest } from './fake-vault';
 
 const MULLUM = 'https://mullum.test';
 const NODE_SEED = new Uint8Array(32).fill(0x33);
@@ -346,6 +346,14 @@ describe('getting back in on a new phone, on the fake vault', () => {
         expect(await loadPendingCommunityRestore()).toBeNull();
     });
 
+    it('a build with no key vault says so, and the record goes: nothing waits for a vault it can\'t reach', async () => {
+        const pending = await takeSharedRelease(slot, released(), deps());
+        noVault();
+        expect(await advanceCommunityRestore(pending)).toEqual({ status: 'ended', message: COMMUNITY_RECOVERY_TEXT.noVaultHere });
+        expect(await loadPendingCommunityRestore()).toBeNull();
+        useVault();
+    });
+
     it('a paused vault keeps the record, and says so: it is asked again', async () => {
         const pending = await takeSharedRelease(slot, released(), deps());
         vault.locked = true;
@@ -402,9 +410,10 @@ describe('getting back in on a new phone, on the fake vault', () => {
         expect(await loadPendingCommunityRestore()).toBeNull();
     });
 
-    it('never names the vault to the community, or the community\'s ticket keys to anyone: the phone carries the voucher', async () => {
-        await takeSharedRelease(slot, released(), deps());
-        expect(TICKET_KEY).toBeTruthy();
-        expect(toMullum().map(r => r.raw).join('\n')).not.toContain('voucher');
+    it('the community never hears from the vault or about it: the phone carries the voucher, and says nothing back', async () => {
+        const pending = await takeSharedRelease(slot, released(), deps());
+        const before = toMullum().length;
+        await advanceCommunityRestore(pending);
+        expect(toMullum().length).toBe(before);
     });
 });

@@ -6159,5 +6159,6 @@
   "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.": "BeanPool की चाबी वॉल्ट थोड़ी देर के लिए रुकी हुई है। आपका खाता सुरक्षित है, और वॉल्ट के वापस आने पर यह आगे बढ़ेगा।",
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "BeanPool की चाबी वॉल्ट थोड़ी देर के लिए रुकी हुई है, इसलिए यह अभी चालू नहीं है। बाद में फिर से कोशिश करें। आपके 12 शब्द किसी भी समय काम करते हैं।",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "BeanPool की चाबी वॉल्ट थोड़ी देर के लिए रुकी हुई है, इसलिए कुछ भी हटाया नहीं गया। बाद में फिर से कोशिश करें।",
-  "Kept since {date}": "प्रति {date} से रखी है"
+  "Kept since {date}": "प्रति {date} से रखी है",
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "इस प्रति का आधा हिस्सा BeanPool की चाबी वॉल्ट में रखा है, और ऐप का यह संस्करण वहाँ तक नहीं पहुँच सकता। ऐसा संस्करण इस्तेमाल करें जो वहाँ पहुँच सके, या अपने 12 शब्दों का इस्तेमाल करें।"
 }

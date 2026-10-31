@@ -4179,5 +4179,6 @@
   "Where you live, what you'd like to share or learn": "أين تعيش، وما تود مشاركته أو تعلمه",
   "Kept since {date}": "نسخة محفوظة منذ {date}",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "مفعّل منذ {date}، من هاتفك. يحتفظ خادم هذا المجتمع وخزينة مفاتيح BeanPool كل منهما بنصف نسخة مقفلة. أدرها من تطبيق الهاتف.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "نصف نسخة مقفلة، ونصفها الآخر في خزينة مفاتيح BeanPool. أدرها من تطبيق الهاتف."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "نصف نسخة مقفلة، ونصفها الآخر في خزينة مفاتيح BeanPool. أدرها من تطبيق الهاتف.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "نصف نسختك محفوظ في خزينة مفاتيح BeanPool، التي لا يصل إليها إلا تطبيق الهاتف. اطلب من المشرف رمزًا جديدًا، واستخدمه في تطبيق الهاتف."
 }

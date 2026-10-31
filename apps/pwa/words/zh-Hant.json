@@ -3534,5 +3534,6 @@
   "Where you live, what you'd like to share or learn": "你的居住地、你想分享或學習的事物",
   "Kept since {date}": "自 {date} 起保存",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "自 {date} 起開啟，由你的手機設定。此社群的伺服器和 BeanPool 金鑰保險庫各保存鎖定副本的一半。請在手機 App 中管理。",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "鎖定副本的一半，另一半在 BeanPool 金鑰保險庫。請在手機 App 中管理。"
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "鎖定副本的一半，另一半在 BeanPool 金鑰保險庫。請在手機 App 中管理。",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "你的副本有一半保存在 BeanPool 金鑰保險庫，只有手機 App 能存取。請向管理員索取新的代碼，然後在手機 App 中使用。"
 }

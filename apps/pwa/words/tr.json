@@ -3663,5 +3663,6 @@
   "Where you live, what you'd like to share or learn": "Nerede yaşıyorsunuz, ne paylaşmak veya öğrenmek istersiniz",
   "Kept since {date}": "{date} tarihinden beri saklanıyor",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "{date} tarihinden beri açık, telefonunuzdan. Bu topluluğun sunucusu ve BeanPool'un anahtar kasası, her biri kilitli bir kopyanın yarısını tutar. Telefon uygulamasından yönetin.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Kilitli bir kopyanın yarısı; diğer yarısı BeanPool'un anahtar kasasında. Telefon uygulamasından yönetin."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Kilitli bir kopyanın yarısı; diğer yarısı BeanPool'un anahtar kasasında. Telefon uygulamasından yönetin.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "Kopyanızın yarısı BeanPool'un anahtar kasasında saklanıyor ve oraya yalnızca telefon uygulaması ulaşabiliyor. Yöneticiden yeni bir kod isteyin ve telefon uygulamasında kullanın."
 }

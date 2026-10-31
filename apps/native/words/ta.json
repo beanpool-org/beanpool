@@ -6157,5 +6157,6 @@
   "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.": "BeanPool-இன் சாவிப் பெட்டகம் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளது. உங்கள் கணக்கு பாதுகாப்பாக உள்ளது, பெட்டகம் திரும்பியதும் இது தொடரும்.",
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "BeanPool-இன் சாவிப் பெட்டகம் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளது, எனவே இது இன்னும் இயக்கப்படவில்லை. பிறகு மீண்டும் முயற்சிக்கவும். உங்கள் 12 சொற்கள் எப்போதும் செயல்படும்.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "BeanPool-இன் சாவிப் பெட்டகம் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளது, எனவே எதுவும் நீக்கப்படவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.",
-  "Kept since {date}": "{date} முதல் வைக்கப்பட்டுள்ளது"
+  "Kept since {date}": "{date} முதல் வைக்கப்பட்டுள்ளது",
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "இந்த நகலின் பாதி BeanPool-இன் சாவிப் பெட்டகத்தில் உள்ளது; செயலியின் இந்தப் பதிப்பால் அதை அணுக முடியாது. அணுகக்கூடிய பதிப்பைப் பயன்படுத்துங்கள், அல்லது உங்கள் 12 சொற்களைப் பயன்படுத்துங்கள்."
 }

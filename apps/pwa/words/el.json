@@ -3662,5 +3662,6 @@
   "Where you live, what you'd like to share or learn": "Πού μένεις, τι θα ήθελες να μοιραστείς ή να μάθεις",
   "Kept since {date}": "Φυλάσσεται από {date}",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "Ενεργό από {date}, από το τηλέφωνό σου. Ο διακομιστής αυτής της κοινότητας και το θησαυροφυλάκιο κλειδιών του BeanPool κρατούν από το μισό ενός κλειδωμένου αντιγράφου. Διαχειρίσου το στην εφαρμογή τηλεφώνου.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Το μισό ενός κλειδωμένου αντιγράφου, με το άλλο μισό στο θησαυροφυλάκιο κλειδιών του BeanPool. Διαχειρίσου το στην εφαρμογή τηλεφώνου."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Το μισό ενός κλειδωμένου αντιγράφου, με το άλλο μισό στο θησαυροφυλάκιο κλειδιών του BeanPool. Διαχειρίσου το στην εφαρμογή τηλεφώνου.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "Το μισό του αντιγράφου σου φυλάσσεται στο θησαυροφυλάκιο κλειδιών του BeanPool, στο οποίο έχει πρόσβαση μόνο η εφαρμογή τηλεφώνου. Ζήτα νέο κωδικό από τον διαχειριστή και χρησιμοποίησέ τον στην εφαρμογή τηλεφώνου."
 }

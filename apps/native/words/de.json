@@ -6157,5 +6157,6 @@
   "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.": "Der Schlüsseltresor von BeanPool ist für kurze Zeit pausiert. Dein Konto ist sicher, und das geht weiter, sobald der Tresor zurück ist.",
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "Der Schlüsseltresor von BeanPool ist für kurze Zeit pausiert, daher ist dies noch nicht aktiviert. Versuche es später erneut. Deine 12 Wörter funktionieren jederzeit.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "Der Schlüsseltresor von BeanPool ist für kurze Zeit pausiert, daher wurde nichts entfernt. Versuche es später erneut.",
-  "Kept since {date}": "Aufbewahrt seit {date}"
+  "Kept since {date}": "Aufbewahrt seit {date}",
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Die Hälfte dieser Kopie liegt im Schlüsseltresor von BeanPool, und diese Version der App kann ihn nicht erreichen. Nutze eine Version, die das kann, oder deine 12 Wörter."
 }

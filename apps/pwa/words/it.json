@@ -3664,5 +3664,6 @@
   "Where you live, what you'd like to share or learn": "Dove vivi, cosa vorresti condividere o imparare",
   "Kept since {date}": "Copia conservata dal {date}",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "Attivo dal {date}, dal tuo telefono. Il server di questa comunità e la cassaforte delle chiavi di BeanPool conservano ciascuno metà di una copia protetta. Gestiscila nell'app per telefono.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Metà di una copia protetta, con l'altra metà nella cassaforte delle chiavi di BeanPool. Gestiscila nell'app per telefono."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Metà di una copia protetta, con l'altra metà nella cassaforte delle chiavi di BeanPool. Gestiscila nell'app per telefono.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "La metà della tua copia si trova nella cassaforte delle chiavi di BeanPool, che solo l'app per telefono può raggiungere. Chiedi un nuovo codice all'amministratore e usalo nell'app per telefono."
 }

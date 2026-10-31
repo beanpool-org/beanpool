@@ -1128,7 +1128,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * device may have lost its throwaway key), another device's restore takes its place with a fresh 24 hours, told
      * and stoppable like any: never a release sooner than the old hold's.
      */
-    async function holdForRestore(ctx: Ctx, database: VaultDb, row: CopyRow, provider: string, holdId: string): Promise<Answer> {
+    async function holdForRestore(ctx: Ctx, database: VaultDb, row: CopyRow, provider: string, holdId: string, beforeNewHold?: () => void): Promise<Answer> {
         const open = database.openHoldForCopy(row.id);
         if (open) {
             if (open.requester_key === ctx.key) return answer(ctx, 'restore', { status: 'held', holdId: open.id, until: open.release_at });
@@ -1136,6 +1136,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 throw new HttpError(409, 'hold_open', 'A restore of this account is already waiting on another device.', { until: open.release_at });
             }
         }
+        beforeNewHold?.();
         const hold: HoldRow = {
             id: holdId, copy_id: row.id, requester_key: ctx.key, provider, opened_at: ctx.now, release_at: ctx.now + HOLD_MS,
             cancelled_at: null, released_at: null,
@@ -1157,7 +1158,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
      * copy by its keyed index, so a voucher from a node key with no copy under it here finds none, and it must name the
      * copy this vault keeps. One voucher is one hold, whatever became of it (core `vaultVoucherHoldId`): sent again it
      * gets that same hold, and after a Stop it gets `stopped`, so a device can't wear a member down by asking again. A
-     * new hold takes a new voucher, so an admin seeing the member again. Five new ones a day per copy, as for a sign-in.
+     * new hold takes a new voucher, so an admin seeing the member again. Five new ones a day per copy, as for a sign-in; a
+     * phone that asks again while another's hold waits opens none, so it uses up none.
      */
     async function restoreWithVoucher(ctx: Ctx): Promise<Answer> {
         const { voucher, holdId } = checkVoucher(ctx);
@@ -1175,8 +1177,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                     ? answer(ctx, 'restore', { status: 'stopped' })
                     : answer(ctx, 'restore', { status: 'held', holdId: sent.id, until: sent.release_at });
             }
-            limited(limits.restores.take(subIndexB64, ctx.now), 'restores for this account today');
-            return holdForRestore(ctx, database, row, VAULT_COMMUNITY_PROVIDER, holdId);
+            return holdForRestore(ctx, database, row, VAULT_COMMUNITY_PROVIDER, holdId,
+                () => limited(limits.restores.take(subIndexB64, ctx.now), 'restores for this account today'));
         });
     }
 

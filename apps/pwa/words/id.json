@@ -3534,5 +3534,6 @@
   "Where you live, what you'd like to share or learn": "Tempat tinggalmu, apa yang ingin kamu bagikan atau pelajari",
   "Kept since {date}": "Disimpan sejak {date}",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "Aktif sejak {date}, dari ponselmu. Server komunitas ini dan brankas kunci BeanPool masing-masing menyimpan separuh dari salinan terkunci. Kelola di aplikasi ponsel.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Separuh dari salinan terkunci, dengan separuh lainnya di brankas kunci BeanPool. Kelola di aplikasi ponsel."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Separuh dari salinan terkunci, dengan separuh lainnya di brankas kunci BeanPool. Kelola di aplikasi ponsel.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "Separuh dari salinanmu disimpan di brankas kunci BeanPool, yang hanya bisa dijangkau aplikasi ponsel. Minta kode baru kepada admin, lalu pakai kode itu di aplikasi ponsel."
 }

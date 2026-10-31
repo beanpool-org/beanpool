@@ -120,13 +120,14 @@ export const DOOR_PRESETS: ReadonlyArray<{ door: 'members' | 'admins'; name: str
 /**
  * The three choices for where members' copies go, each with the honest words under it (design DESIGN-vault-rethink-fable.md
  * §5.3, VR2). A copy is a member's key, and their 12 words, locked to a sign-in they link, so the sign-in brings the
- * account back on a new phone. Only what exists today is said: the community path (VR3, VR4) adds its own sentence.
+ * account back on a new phone. The community path (VR3, VR4) is said too, in each choice that has it: half here under the
+ * key vault, whole here under this server.
  */
 export const RECOVERY_COPIES_CHOICES: ReadonlyArray<{ rule: RecoveryCopies; name: string; words: string }> = [
     {
         rule: 'vault',
         name: "BeanPool's key vault",
-        words: "Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Nothing on your server needs the vault.",
+        words: "Members' sign-in copies are kept by BeanPool's key vault, a small server in Iceland, which BeanPool looks after and can open. Where a member lets your admins bring them back, your server keeps half of that copy and the vault the other half, and neither can open it alone. Nothing on your server needs the vault.",
     },
     {
         rule: 'server',

@@ -3662,5 +3662,6 @@
   "Where you live, what you'd like to share or learn": "நீங்கள் எங்கு வசிக்கிறீர்கள், எதைப் பகிர அல்லது கற்றுக்கொள்ள விரும்புகிறீர்கள்",
   "Kept since {date}": "{date} முதல் வைக்கப்பட்டுள்ளது",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "{date} முதல் இயக்கத்தில் உள்ளது, உங்கள் தொலைபேசியிலிருந்து. இந்தச் சமூகத்தின் சர்வர் மற்றும் BeanPool-இன் சாவிப் பெட்டகம் ஒவ்வொன்றும் பூட்டப்பட்ட நகலின் பாதியை வைத்திருக்கின்றன. இதைப் போன் செயலியில் நிர்வகிக்கவும்.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "பூட்டப்பட்ட நகலின் பாதி; மற்றொரு பாதி BeanPool-இன் சாவிப் பெட்டகத்தில் உள்ளது. இதைப் போன் செயலியில் நிர்வகிக்கவும்."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "பூட்டப்பட்ட நகலின் பாதி; மற்றொரு பாதி BeanPool-இன் சாவிப் பெட்டகத்தில் உள்ளது. இதைப் போன் செயலியில் நிர்வகிக்கவும்.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "உங்கள் நகலின் பாதி BeanPool-இன் சாவிப் பெட்டகத்தில் உள்ளது; அதைப் போன் செயலியால் மட்டுமே அணுக முடியும். நிர்வாகியிடம் புதிய குறியீடு கேளுங்கள், அதைப் போன் செயலியில் பயன்படுத்துங்கள்."
 }

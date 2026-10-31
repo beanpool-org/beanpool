@@ -3663,5 +3663,6 @@
   "Where you live, what you'd like to share or learn": "Kung saan ka nakatira, kung ano ang gusto mong ibahagi o matutunan",
   "Kept since {date}": "Nakatabi mula {date}",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "Naka-on mula {date}, mula sa iyong telepono. Ang server ng komunidad na ito at ang key vault ng BeanPool ay tig-isang nagtatago ng kalahati ng naka-lock na kopya. Pamahalaan ito sa app sa telepono.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Kalahati ng naka-lock na kopya, at ang kabilang kalahati ay nasa key vault ng BeanPool. Pamahalaan ito sa app sa telepono."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Kalahati ng naka-lock na kopya, at ang kabilang kalahati ay nasa key vault ng BeanPool. Pamahalaan ito sa app sa telepono.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "Kalahati ng iyong kopya ay nasa key vault ng BeanPool, na ang app sa telepono lang ang makaka-access. Humingi ng bagong code sa admin, at gamitin ito sa app sa telepono."
 }

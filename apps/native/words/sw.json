@@ -6157,5 +6157,6 @@
   "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.": "Hifadhi ya funguo ya BeanPool imesitishwa kwa muda mfupi. Akaunti yako iko salama, na hili litaendelea hifadhi itakaporudi.",
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "Hifadhi ya funguo ya BeanPool imesitishwa kwa muda mfupi, kwa hivyo hili bado halijawashwa. Jaribu tena baadaye. Maneno yako 12 yanafanya kazi wakati wowote.",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "Hifadhi ya funguo ya BeanPool imesitishwa kwa muda mfupi, kwa hivyo hakuna kilichoondolewa. Jaribu tena baadaye.",
-  "Kept since {date}": "Imehifadhiwa tangu {date}"
+  "Kept since {date}": "Imehifadhiwa tangu {date}",
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "Nusu ya nakala hii iko kwenye hifadhi ya funguo ya BeanPool, na toleo hili la programu haliwezi kuifikia. Tumia toleo linaloweza kuifikia, au maneno yako 12."
 }

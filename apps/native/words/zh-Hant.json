@@ -5922,5 +5922,6 @@
   "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.": "BeanPool 金鑰保險庫暫時暫停。你的帳號是安全的，保險庫恢復後會繼續進行。",
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "BeanPool 金鑰保險庫暫時暫停，因此尚未開啟。請稍後再試。你的 12 個助記詞隨時可用。",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "BeanPool 金鑰保險庫暫時暫停，因此沒有移除任何內容。請稍後再試。",
-  "Kept since {date}": "自 {date} 起保存"
+  "Kept since {date}": "自 {date} 起保存",
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "這份副本的一半保存在 BeanPool 金鑰保險庫，而這個版本的 App 無法存取它。請使用能存取的版本，或使用你的 12 個助記詞。"
 }

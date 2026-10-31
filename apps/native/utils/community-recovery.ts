@@ -64,6 +64,8 @@ export const COMMUNITY_RECOVERY_TEXT = {
     noCopy: "BeanPool's key vault keeps no copy your community can bring back. Your 12 words work any time, and an admin can re-key you to a new key.",
     /** The voucher's day is over, or the vault didn't take it: the admin starts again. */
     newCode: 'This bring-back ran out of time. Ask the admin for a new code.',
+    /** A version of the app with no key vault, on a copy half kept there. */
+    noVaultHere: "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.",
     /** The vault is locked (a restart, before its custodians open it), while a restore waits: nothing is lost by it. */
     paused: "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.",
     /** The same at Turn on. */
@@ -281,6 +283,8 @@ const toHex = (bytes: Uint8Array): string => Array.from(bytes, b => b.toString(1
 function finalWords(e: VaultError): string | null {
     if (e.reason === 'no_copy' || e.code === 'no_hold') return COMMUNITY_RECOVERY_TEXT.noCopy;
     if (e.code?.startsWith('voucher_')) return COMMUNITY_RECOVERY_TEXT.newCode;
+    // A build with no key vault gets a shared bring-back's answer, and nothing it does can reach the rest.
+    if (e.reason === 'not_configured') return COMMUNITY_RECOVERY_TEXT.noVaultHere;
     return null;
 }
 

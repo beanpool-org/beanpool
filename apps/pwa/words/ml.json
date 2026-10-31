@@ -3663,5 +3663,6 @@
   "Where you live, what you'd like to share or learn": "നിങ്ങൾ താമസിക്കുന്ന സ്ഥലം, എന്താണ് പങ്കിടാനോ പഠിക്കാനോ ആഗ്രഹിക്കുന്നത്",
   "Kept since {date}": "{date} മുതൽ സൂക്ഷിച്ചിരിക്കുന്നു",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "{date} മുതൽ ഓണാണ്, നിങ്ങളുടെ ഫോണിൽ നിന്ന്. ഈ കമ്മ്യൂണിറ്റിയുടെ സെർവറും BeanPool-ന്റെ കീ വോൾട്ടും ഓരോന്നും ലോക്ക് ചെയ്ത പകർപ്പിന്റെ പകുതി സൂക്ഷിക്കുന്നു. ഇത് ഫോൺ ആപ്പിൽ നിയന്ത്രിക്കുക.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "ലോക്ക് ചെയ്ത പകർപ്പിന്റെ പകുതി; മറ്റേ പകുതി BeanPool-ന്റെ കീ വോൾട്ടിലാണ്. ഇത് ഫോൺ ആപ്പിൽ നിയന്ത്രിക്കുക."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "ലോക്ക് ചെയ്ത പകർപ്പിന്റെ പകുതി; മറ്റേ പകുതി BeanPool-ന്റെ കീ വോൾട്ടിലാണ്. ഇത് ഫോൺ ആപ്പിൽ നിയന്ത്രിക്കുക.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "നിങ്ങളുടെ പകർപ്പിന്റെ പകുതി BeanPool-ന്റെ കീ വോൾട്ടിലാണ്; അവിടെ ഫോൺ ആപ്പിന് മാത്രമേ എത്താൻ കഴിയൂ. അഡ്മിനോട് പുതിയ കോഡ് ചോദിക്കുക, അത് ഫോൺ ആപ്പിൽ ഉപയോഗിക്കുക."
 }

@@ -3663,5 +3663,6 @@
   "Where you live, what you'd like to share or learn": "आप कहाँ रहते हैं, आप क्या साझा करना या सीखना चाहते हैं",
   "Kept since {date}": "प्रति {date} से रखी है",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "{date} से चालू है, आपके फ़ोन से। इस समुदाय का सर्वर और BeanPool की चाबी वॉल्ट, दोनों एक लॉक प्रति का आधा-आधा हिस्सा रखते हैं। इसे फ़ोन ऐप में प्रबंधित करें।",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "लॉक प्रति का आधा हिस्सा; दूसरा आधा BeanPool की चाबी वॉल्ट में है। इसे फ़ोन ऐप में प्रबंधित करें।"
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "लॉक प्रति का आधा हिस्सा; दूसरा आधा BeanPool की चाबी वॉल्ट में है। इसे फ़ोन ऐप में प्रबंधित करें।",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "आपकी प्रति का आधा हिस्सा BeanPool की चाबी वॉल्ट में रखा है, जहाँ सिर्फ़ फ़ोन ऐप पहुँच सकता है। एडमिन से नया कोड माँगें, और उसे फ़ोन ऐप में इस्तेमाल करें।"
 }

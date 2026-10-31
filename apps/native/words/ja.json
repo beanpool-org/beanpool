@@ -5922,5 +5922,6 @@
   "BeanPool's key vault is paused for a little while. Your account is safe, and this carries on when the vault is back.": "BeanPoolの鍵の金庫が一時停止中です。アカウントは安全で、金庫が復帰すれば続きから進みます。",
   "BeanPool's key vault is paused for a little while, so this isn't on yet. Try again later. Your 12 words work any time.": "BeanPoolの鍵の金庫が一時停止中のため、まだオンになっていません。後でもう一度お試しください。12個の単語はいつでも使用できます。",
   "BeanPool's key vault is paused for a little while, so nothing was removed. Try again later.": "BeanPoolの鍵の金庫が一時停止中のため、何も削除されていません。後でもう一度お試しください。",
-  "Kept since {date}": "{date}から保管中"
+  "Kept since {date}": "{date}から保管中",
+  "This copy is kept half at BeanPool's key vault, and this version of the app can't reach it. Use a version that can, or your 12 words.": "このコピーの半分はBeanPoolの鍵の金庫にあり、このバージョンのアプリからはアクセスできません。アクセスできるバージョンを使うか、12個の単語を使ってください。"
 }

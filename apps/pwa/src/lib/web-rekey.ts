@@ -63,8 +63,11 @@ export function rekeyCodeFromSearch(search: string): string | null {
 export type WebRekeyAnswer =
     | { state: 'waiting'; match: string; expiresAt: string }
     | { state: 'bound'; callsign: string; communityName: string; linkSignInAgain: boolean }
-    /** A bring-back the admin confirmed with this device's number: the member's copy and its key, sealed to the asking key. */
-    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare }
+    /**
+     * A bring-back the admin confirmed with this device's number: the member's copy and its key, sealed to the asking key.
+     * `phoneOnly`: the copy is kept half at BeanPool's key vault (vault rethink VR4), which this browser can't reach yet.
+     */
+    | { state: 'released'; callsign: string; communityName: string; memberKey: string; release: SealedShare; phoneOnly?: boolean }
     | { state: 'declined' }
     | { state: 'gone' }
     | { state: 'refused'; message: string; code?: string }
@@ -119,7 +122,10 @@ function readAnswer(status: number, body: any): WebRekeyAnswer {
         if (body.state === 'bound') return { state: 'bound', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), linkSignInAgain: body.linkSignInAgain === true };
         if (body.state === 'released' && typeof body.memberKey === 'string' && /^[0-9a-f]{64}$/.test(body.memberKey)
             && body.release && typeof body.release === 'object') {
-            return { state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare };
+            return {
+                state: 'released', callsign: String(body.callsign ?? ''), communityName: String(body.communityName ?? ''), memberKey: body.memberKey, release: body.release as SealedShare,
+                ...(typeof body.voucher === 'string' ? { phoneOnly: true } : {}),
+            };
         }
         if (body.state === 'declined') return { state: 'declined' };
         if (body.state === 'gone') return { state: 'gone' };
@@ -163,6 +169,8 @@ export async function finishWebRekey(key: WebRekeyKey, answer: { callsign: strin
 }
 
 /** A bring-back's release that didn't open to the account it names: nothing is saved. */
+/** A shared copy's bring-back asked in a browser: the web app has no key vault client (design VR6), so it can't finish here. */
+export const WEB_BRING_BACK_NEEDS_PHONE = 'Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.';
 export const WEB_BRING_BACK_NOT_OPENED = 'What your community sent didn’t open to your account, so nothing was saved. Ask the admin to try again.';
 
 const toHex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');

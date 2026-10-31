@@ -3534,5 +3534,6 @@
   "Where you live, what you'd like to share or learn": "Nơi bạn sống, điều bạn muốn chia sẻ hoặc học hỏi",
   "Kept since {date}": "Được giữ từ {date}",
   "On since {date}, from your phone. This community's server and BeanPool's key vault each keep half of a locked copy. Manage it in the phone app.": "Bật từ {date}, từ điện thoại của bạn. Máy chủ của cộng đồng này và kho khóa của BeanPool mỗi bên giữ một nửa của một bản sao bị khóa. Quản lý trong ứng dụng điện thoại.",
-  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Một nửa của một bản sao bị khóa, nửa còn lại ở kho khóa của BeanPool. Quản lý trong ứng dụng điện thoại."
+  "Half of a locked copy, with the other half at BeanPool's key vault. Manage it in the phone app.": "Một nửa của một bản sao bị khóa, nửa còn lại ở kho khóa của BeanPool. Quản lý trong ứng dụng điện thoại.",
+  "Your copy is kept half at BeanPool’s key vault, which only the phone app can reach. Ask the admin for a new code, and use it in the phone app.": "Một nửa bản sao của bạn nằm ở kho khóa của BeanPool, nơi chỉ ứng dụng điện thoại mới truy cập được. Hãy xin quản trị viên một mã mới, rồi dùng mã đó trong ứng dụng điện thoại."
 }

@@ -328,6 +328,21 @@ describe('a voucher in place of a sign-in', () => {
         expect((await restoreWith(over.e, over.voucher)).status).toBe(429);
     });
 
+    it('a phone asking again while another\'s hold waits opens none, so it uses up none of the day\'s five', async () => {
+        const member = newMember();
+        const node = newNode();
+        const { made } = await depositCommunity(member, node);
+        const first = newPhone(node, member, made);
+        await restoreWith(first.e, first.voucher);
+        const other = newPhone(node, member, made);
+        for (let i = 0; i < LIMITS.restoresPerAccountPerDay + 1; i++) {
+            expect((await restoreWith(other.e, other.voucher)).body.code).toBe('hold_open');
+            v.clock.advance(7000);
+        }
+        v.clock.advance(DAY);
+        expect((await restoreWith(other.e, voucherFrom(node, { member: member.key, phone: keyOf(other.e), copy: made.digest }))).body.status).toBe('held');
+    });
+
     it('signs every answer the phone acts on, stopped included', async () => {
         const member = newMember();
         const node = newNode();

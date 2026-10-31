@@ -54,6 +54,7 @@ import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
+import { loadPendingCommunityRestore } from '../utils/community-recovery';
 import { retryCommunityRemovals } from '../utils/vault-move';
 import { attestOwnRekeys, declineRekey, operatorContact, rekeyToAsk } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
@@ -877,6 +878,9 @@ function RootLayoutNav() {
         if (!identity?.publicKey) return;
         let current = true;
         const waits = new Set<() => void>();
+        // A bring-back this phone is waiting on at the key vault, for another account than the one it holds: it has no
+        // welcome screen to come back through, and the wait outlives the code (utils/community-recovery.ts).
+        loadPendingCommunityRestore().then((waiting) => { if (current && waiting) router.push('/rekey-code'); }).catch(() => {});
         const look = () => {
             vaultHoldsAtOpen(identity).then((holds) => {
                 if (!current || holds.length === 0) return;

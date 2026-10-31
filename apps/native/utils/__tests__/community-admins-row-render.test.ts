@@ -73,11 +73,32 @@ const fx = vi.hoisted(() => ({
     removed: [] as string[],
     turnedOn: [] as string[],
     alerts: [] as { title: string; body: string }[],
+    /** The shared placement (vault rethink VR4): whether this build has a vault, and the vault's side of the copy. */
+    vault: false,
+    side: null as string | null,
+    sharedFails: null as string | null,
+    turnedOnShared: [] as string[],
+    removedShared: [] as string[],
 }));
 vi.mock('../node-post', () => ({
     anchorUrl: async () => fx.anchor,
     signedPost: async () => { throw new Error('no node in this test'); },
     signedDelete: async () => { throw new Error('no node in this test'); },
+}));
+vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItemAsync: async () => null, setItemAsync: async () => {}, deleteItemAsync: async () => {} }));
+vi.mock('../vault-config', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../vault-config')>()),
+    hasVault: () => fx.vault,
+}));
+vi.mock('../community-recovery', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../community-recovery')>()),
+    sharedCopySide: async () => fx.side,
+    turnOnSharedCopy: async (url: string) => {
+        if (fx.sharedFails) throw new Error(fx.sharedFails);
+        fx.turnedOnShared.push(url);
+        return { since: new Date().toISOString() };
+    },
+    removeSharedCopy: async (url: string) => { fx.removedShared.push(url); },
 }));
 vi.mock('../copies-rule', () => ({ copiesRuleForScreen: async (url: string | null) => (url ? fx.rules[url] ?? null : null) }));
 vi.mock('../identity', () => ({ getMnemonic: async () => null }));
@@ -116,6 +137,11 @@ beforeEach(() => {
     fx.removed.length = 0;
     fx.turnedOn.length = 0;
     fx.alerts.length = 0;
+    fx.vault = false;
+    fx.side = null;
+    fx.sharedFails = null;
+    fx.turnedOnShared.length = 0;
+    fx.removedShared.length = 0;
     setLanguage('en');
 });
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; });
@@ -133,6 +159,104 @@ async function refocus(): Promise<void> {
     await settle();
 }
 const byTestId = (id: string) => host!.querySelector(`[data-testid="${id}"]`) as HTMLElement | null;
+
+describe('the shared placement: half at the key vault, half at the community (vault rethink VR4)', () => {
+    const NODE_KEY = 'ab'.repeat(32);
+    const OFFER = { kept: false, since: null, offered: false, unopenable: null, sharedOffered: true, nodeKey: NODE_KEY, placement: null, copy: null };
+    const SHARED = { ...OFFER, kept: true, since: '2026-10-05T00:00:00.000Z', placement: 'shared', copy: 'digest' };
+    const text = () => host!.textContent ?? '';
+    beforeEach(() => {
+        fx.vault = true;
+        fx.rules[MULLUM] = 'vault';
+    });
+
+    it('offered where the rule is the key vault: it says half each and a day, and Turn on makes a shared copy', async () => {
+        fx.answers[MULLUM] = OFFER;
+        fx.side = 'none';
+        await mount();
+        expect(text()).toContain("BeanPool's key vault each keep half of a locked copy; it takes both, and it takes a day");
+        expect(text()).not.toContain('The people who run it can open it; nobody else.');
+        expect(byTestId('community-admins-on')).toBeNull();
+        fx.answers[MULLUM] = SHARED;
+        fx.side = 'matches';
+        await act(async () => { byTestId('community-admins-turn-on')!.click(); });
+        await settle();
+        expect(fx.turnedOnShared).toEqual([MULLUM]);
+        expect(fx.turnedOn).toEqual([]);
+        expect(byTestId('community-admins-on')?.textContent).toContain('since');
+    });
+
+    it('On only with both halves: half a pair says "Not finished", with Turn on again and Remove', async () => {
+        fx.answers[MULLUM] = SHARED;
+        for (const side of ['none', 'differs']) {
+            fx.side = side;
+            await mount();
+            expect(byTestId('community-admins-on'), side).toBeNull();
+            expect(byTestId('community-admins-unfinished')?.textContent).toBe('Not finished: tap to try again.');
+            expect(byTestId('community-admins-turn-on')?.textContent).toBe('Turn on again');
+            expect(byTestId('community-admins-remove')).toBeTruthy();
+            act(() => root?.unmount());
+            host?.remove();
+        }
+        root = null;
+        host = null;
+    });
+
+    it('a turn-on cut short at the community leaves "Not finished" on the row, never nothing and never On', async () => {
+        fx.answers[MULLUM] = OFFER;
+        fx.side = 'none';
+        fx.sharedFails = 'Couldn’t reach your community, so nothing changed. Try again in a moment.';
+        await mount();
+        fx.side = 'differs';
+        await act(async () => { byTestId('community-admins-turn-on')!.click(); });
+        await settle();
+        expect(text()).toContain('Couldn’t reach your community');
+        expect(byTestId('community-admins-unfinished')).toBeTruthy();
+        expect(byTestId('community-admins-on')).toBeNull();
+    });
+
+    it('a vault that can\'t be asked never turns an On off', async () => {
+        fx.answers[MULLUM] = SHARED;
+        fx.side = 'unknown';
+        await mount();
+        expect(byTestId('community-admins-on')).toBeTruthy();
+        expect(byTestId('community-admins-unfinished')).toBeNull();
+    });
+
+    it('Remove says both delete, and asks both', async () => {
+        fx.answers[MULLUM] = SHARED;
+        fx.side = 'matches';
+        await mount();
+        await act(async () => { byTestId('community-admins-remove')!.click(); });
+        expect(fx.alerts[0].body).toContain("server and BeanPool's key vault delete their halves");
+    });
+
+    it('a whole copy kept since the rule moved is still a whole copy: its own words, and no vault asked to remove it', async () => {
+        fx.answers[MULLUM] = { ...OFFER, kept: true, since: '2026-10-05T00:00:00.000Z', placement: 'whole' };
+        fx.side = 'none';
+        await mount();
+        expect(byTestId('community-admins-on')).toBeTruthy();
+        expect(byTestId('community-admins-unfinished')).toBeNull();
+        expect(text()).toContain('The people who run it can open it; nobody else.');
+        await act(async () => { byTestId('community-admins-remove')!.click(); });
+        expect(fx.alerts[0].body).toContain('deletes its copy of your account');
+    });
+
+    it('a build with no vault offers nothing here, and doesn\'t ask', async () => {
+        fx.vault = false;
+        fx.answers[MULLUM] = OFFER;
+        await mount();
+        expect(byTestId('community-admins-row')).toBeNull();
+        expect(fx.asked).toEqual([]);
+    });
+
+    it('a server that doesn\'t say its node key offers nothing to deposit against', async () => {
+        fx.answers[MULLUM] = { ...OFFER, nodeKey: null };
+        fx.side = 'unknown';
+        await mount();
+        expect(byTestId('community-admins-row')).toBeNull();
+    });
+});
 
 describe('CommunityAdminsRow: only the community in use speaks', () => {
     it('kept at one community, then Settings comes into view in another that neither offers it nor had it turned on here: nothing of the first stays', async () => {

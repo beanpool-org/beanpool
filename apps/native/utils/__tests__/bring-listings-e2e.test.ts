@@ -53,7 +53,7 @@ vi.mock('expo-secure-store', () => ({
 }));
 
 import { draftIdentity, type BeanPoolIdentity } from '../identity';
-import { signedPost } from '../node-post';
+import { signedGet, signedPost } from '../node-post';
 import { fetchNodeProfile } from '../node-profile';
 import {
     bringLineWords, broughtId, noteBringOffer, pendingBringOffer, planBring, runBring, settleBringOffer, type BringOffer, type BringPlan,
@@ -202,10 +202,10 @@ async function memberOfBoth(name: string): Promise<BeanPoolIdentity> {
 }
 
 /** A listing posted to the global community as the app posts one. */
-async function listOnGlobal(me: BeanPoolIdentity, type: 'offer' | 'need', title: string, photos: number, tags?: string[]): Promise<string> {
+async function listOnGlobal(me: BeanPoolIdentity, type: 'offer' | 'need', title: string, photos: number, tags?: string[], freeTags?: string[]): Promise<string> {
     const res = await signedPost(global_.url, '/api/marketplace/posts', {
         type, category: 'food', title, description: `About ${title}`, credits: 0, priceType: 'fixed', authorPublicKey: me.publicKey,
-        lat: -28.54, lng: 153.51, photos: Array.from({ length: photos }, () => PNG), ...(tags ? { tags } : {}),
+        lat: -28.54, lng: 153.51, photos: Array.from({ length: photos }, () => PNG), ...(tags ? { tags } : {}), ...(freeTags ? { freeTags } : {}),
     }, me);
     const answer = await res.json() as { post?: { id: string }; error?: string };
     expect(answer.error, title).toBeUndefined();
@@ -221,7 +221,7 @@ async function offerFor(me: BeanPoolIdentity): Promise<BringOffer> {
 }
 
 const rowsOn = (node: TestNode, key: string) => node.control<Array<Record<string, any>>>('sql', {
-    sql: `SELECT p.id, p.type, p.title, p.description, p.credits, p.status, p.lat, p.lng, p.author_pubkey, p.tags,
+    sql: `SELECT p.id, p.type, p.title, p.description, p.credits, p.status, p.lat, p.lng, p.author_pubkey, p.tags, p.free_tags,
                  (SELECT COUNT(*) FROM post_photos ph WHERE ph.post_id = p.id) AS photos
             FROM posts p WHERE p.author_pubkey = ? ORDER BY p.created_at, p.rowid`,
     params: [key], all: true,
@@ -296,6 +296,21 @@ describe('bringing listings to a first local community (the phone against two re
         const offer = await offerFor(me);
         expect(await runBring(offer, await planBring(offer, me) as BringPlan, me)).toMatchObject({ brought: 2, kept: false, lines: [] });
         expect((await rowsOn(local, me.publicKey)).map((p) => [p.title, p.tags])).toEqual([['Lemons', 'food.fruit.lemon food.fruit.lime'], ['Plain', '']]);
+    }, START_MS);
+
+    it('a listing keeps the tags its member typed, and the community finds it by one', async () => {
+        const me = await memberOfBoth('Noor');
+        await listOnGlobal(me, 'offer', 'Preserved', 1, ['food.fruit.lemon'], ['Salt cured', 'bio-dynamic']);
+        await listOnGlobal(me, 'offer', 'Unadorned', 1);
+        const offer = await offerFor(me);
+        expect(await runBring(offer, await planBring(offer, me) as BringPlan, me)).toMatchObject({ brought: 2, kept: false, lines: [] });
+        const rows = await rowsOn(local, me.publicKey);
+        expect(rows.map((p) => [p.title, p.tags, p.free_tags])).toEqual([
+            ['Preserved', 'food.fruit.lemon', '["salt cured","bio-dynamic"]'],
+            ['Unadorned', '', ''],
+        ]);
+        const found = await signedGet(local.url, `/api/marketplace/posts?free=${encodeURIComponent('salt cured')}`, me);
+        expect((await found.json() as Array<{ title: string }>).map((p) => p.title)).toEqual(['Preserved']);
     }, START_MS);
 
     it('a community with Beans takes a Need only after an Offer: with no Offer to bring, its own words say so', async () => {

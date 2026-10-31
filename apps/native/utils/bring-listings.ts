@@ -95,6 +95,8 @@ export interface OwnListing {
     lng?: number | null;
     photos?: string[];
     tags?: string[];
+    /** The tags its member typed (core tags/free-tags.ts), beside the library's. */
+    freeTags?: string[];
     originNode?: string;
     audienceScope?: string;
     hiddenByReportsAt?: string | null;
@@ -324,8 +326,10 @@ function postBody(post: OwnListing, id: string, publicKey: string, photos: strin
         photos,
         repeatable: post.repeatable === true,
         cashAlsoNeeded: post.cashAlsoNeeded === true,
-        // As the composers send them: none is no field. A tag this community's library doesn't know yet is refused in its words.
+        // As the composers send them: none is no field. A tag this community's library doesn't know yet is refused in its
+        // words. A typed tag is held to one rule in core on every node, and a node older than the rule ignores the field.
         ...(post.tags?.length ? { tags: post.tags } : {}),
+        ...(post.freeTags?.length ? { freeTags: post.freeTags } : {}),
         ...(post.lendable === true ? { lendable: true, lendMaxDays: post.lendMaxDays, lendTerms: post.lendTerms, replacementValue: post.replacementValue } : {}),
     };
 }

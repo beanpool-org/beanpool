@@ -233,6 +233,14 @@ describe('what a run sends', () => {
         expect(vi.mocked(deps.fetchPhoto).mock.calls.map((c) => c[0])).toEqual([`${GLOBAL}${photoUrl('a', 0)}`, `${GLOBAL}${photoUrl('a', 1)}`]);
     });
 
+    it('a listing keeps the tags its member typed, and one with none sends none', async () => {
+        const { deps, posted } = fakes([]);
+        await runBring(OFFER, { bring: [listing('a', { freeTags: ['salt cured'] }), listing('b'), listing('c', { freeTags: [] })], gone: [] }, identity, undefined, deps);
+        expect(posted[0].freeTags).toEqual(['salt cured']);
+        expect('freeTags' in posted[1]).toBe(false);
+        expect('freeTags' in posted[2]).toBe(false);
+    });
+
     it('a listing keeps its tags, and one with none sends none, as the composers do', async () => {
         const { deps, posted } = fakes([]);
         await runBring(OFFER, { bring: [listing('a', { tags: ['food.fruit.lemon'] }), listing('b'), listing('c', { tags: [] })], gone: [] }, identity, undefined, deps);

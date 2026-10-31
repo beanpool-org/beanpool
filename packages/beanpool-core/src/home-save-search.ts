@@ -12,6 +12,8 @@ import {
     HOME_FRAME_LIMITS, HOME_SEARCH_KMS, homeCardType, readSearchSettings,
     type HomeLayoutV2, type HomeSearchKind, type HomeSearchSettings,
 } from './home-frame.js';
+import { searchTagsFor } from './tags/index.js';
+import { POST_TAGS_MAX } from './tags/post-tags.js';
 import { t, tn, word } from './words.js';
 
 /** The Market's search as each app holds it: the words typed, the Offers/Needs tab, a category chip, a distance. */
@@ -23,6 +25,8 @@ export interface MarketSearchNow {
     category?: string | null;
     /** The Market's distance filter in km, or none. */
     radiusKm?: number | null;
+    /** Tag ids the member chose (a chip they tapped). The words' own are resolved here. */
+    tags?: string[] | null;
 }
 
 /**
@@ -34,22 +38,46 @@ export function searchKmFor(radiusKm: number | null | undefined): HomeSearchSett
     return HOME_SEARCH_KMS.find((km) => km >= radiusKm);
 }
 
+/** The ids a saved search's words resolve to in the member's language, at most a card's (DESIGN-owner-seeding-tags-fable.md §4.7). */
+const wordsTags = (q: string): string[] => searchTagsFor(q, { limit: POST_TAGS_MAX });
+
+/** A saved search's tags: the ones chosen first, so a chip is never cut, then what its words resolve to. */
+const savedTags = (q: string, chosen: readonly string[]): string[] => [...new Set([...chosen, ...wordsTags(q)])].slice(0, POST_TAGS_MAX);
+
 /**
  * The Market's search as a saved search's settings, read as the card reads them (`readSearchSettings`: the words cut
- * to 40 characters, an unknown category none). Null when there are no words: a saved search is a search.
+ * to 40 characters, an unknown category none), with the tag ids resolved now: the card then finds what the Market found
+ * in any language, a Spanish member's "limón" the English lemon listing (§4.7). Null when there are no words: a saved
+ * search is a search.
  */
 export function searchFromMarket(m: MarketSearchNow): HomeSearchSettings | null {
-    const s = readSearchSettings({
-        q: typeof m.q === 'string' ? m.q.split(/\s+/).filter(Boolean).join(' ') : '',
-        kind: m.kind,
-        category: m.category ?? undefined,
-        km: searchKmFor(m.radiusKm),
-    });
-    return s.q ? s : null;
+    const q = typeof m.q === 'string' ? m.q.split(/\s+/).filter(Boolean).join(' ') : '';
+    const s = readSearchSettings({ q, kind: m.kind, category: m.category ?? undefined, km: searchKmFor(m.radiusKm) });
+    return s.q ? readSearchSettings({ ...s, tags: savedTags(s.q, Array.isArray(m.tags) ? m.tags : []) }) : null;
 }
 
 /** The words as two searches are compared: case and spaces aside. */
 const wordsKey = (q: string): string => q.split(/\s+/).filter(Boolean).join(' ').toLocaleLowerCase();
+
+/** What a saved search's settings sheet leaves on Home's two apps. Its tags aren't among its fields. */
+export interface SearchSheetFields {
+    q: string;
+    kind: HomeSearchKind;
+    category?: string | null;
+    km?: number | null;
+}
+
+/**
+ * A saved search as its settings sheet (AddCardDialog, CardSettingsSheet) leaves it, `before` being what it opened with
+ * (nothing, for a new one). Its tags stay when its words do. New words resolve again, and the ids the old words gave go
+ * with them; an id they never gave (a chip tapped in the Market) stays, since the sheet doesn't show it to take off.
+ */
+export function searchFromSheet(before: unknown, fields: SearchSheetFields): HomeSearchSettings {
+    const was = readSearchSettings(before);
+    const held = was.tags ?? [];
+    const old = wordsKey(was.q) === wordsKey(fields.q) ? [] : wordsTags(was.q);
+    return readSearchSettings({ ...fields, tags: savedTags(fields.q, held.filter((id) => !old.includes(id))) });
+}
 
 /** Whether two saved searches are the same search: the same words (case and spaces aside), kind, category and distance. */
 export function sameSearch(a: unknown, b: unknown): boolean {

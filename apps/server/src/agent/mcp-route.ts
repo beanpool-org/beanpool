@@ -40,6 +40,7 @@ import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
 import { grantPosts, offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
 import { AGENT_CREATE_BODY_MAX } from './owner-posts.js';
+import { dropEveryPhotoLink } from './owner-photos.js';
 import { PROMPTS, promptText, welcomeInstructions, type WelcomeFacts } from './welcome.js';
 
 export const MCP_PATH = '/mcp';
@@ -241,7 +242,7 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
         }
         let out;
         try {
-            out = await tool.run(grant, args, newBoundary());
+            out = await tool.run(grant, args, newBoundary(), facts.url);
         } catch (e) {
             logger.warn('AGENT', 'Assistant call failed', { ...logBase, tool: tool.name, args: argNames, ms: Date.now() - started, error: e instanceof Error ? e.name : 'error' });
             return { content: [{ type: 'text' as const, text: 'The server could not answer that now: try again later.' }], isError: true };
@@ -395,6 +396,8 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         const was = aiAssistantsAllowed();
         if (was !== allowed) {
             updateLocalConfig({ aiAssistantsAllowed: allowed });
+            // A photo link dies here, not only while the switch is off: turned on again, it stays dead (agent/owner-photos.ts).
+            if (!allowed) dropEveryPhotoLink();
             const actor = typeof (ctx.state as any)?.actor === 'string' ? (ctx.state as any).actor : 'owner:password';
             logger.info('ADMIN', allowed ? 'AI assistants allowed' : 'AI assistants turned off', { by: String(actor).slice(0, 16) });
             noteSecurityEvent({

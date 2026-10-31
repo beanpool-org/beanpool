@@ -353,6 +353,12 @@ CREATE TABLE IF NOT EXISTS posts (
     -- sets them (engine/post-fields.ts). Their words are in search_keywords; the Market's tag filter is a LIKE on this
     -- column (beanpool-engine posts.ts tagCondition). '' on every row without. Added to an older database by db.ts.
     tags TEXT NOT NULL DEFAULT '',
+    -- The tags its author typed (DESIGN-tags-free-entry-fable.md §2; @beanpool/core tags/free-tags.ts): a JSON list of them
+    -- in their stored form, at most 5 in 200 characters, each held to the rule (engine/post-fields.ts), never mixed with
+    -- `tags`. Their words are in search_keywords; the Market's `free=` is a json_each on this column (beanpool-engine posts.ts
+    -- freeTagCondition). '' on every row without. No trigger, index or default here calls a connection function, so an
+    -- older image boots on this file. Added to an older database by db.ts.
+    free_tags TEXT NOT NULL DEFAULT '',
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

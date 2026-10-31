@@ -28,7 +28,8 @@
  *   the route's own validator (engine/post-fields.ts assertPostFields, in createPost) like any post's.
  * - Photos are required: 1–4, from three fields together: `photos`, each a base64 JPEG or WebP of at most the per-photo cap
  *   (state-engine.ts MAX_PHOTO_BASE64_CHARS); `photo_urls`, public addresses this server fetches; `photo_ids`, photos
- *   uploaded first to POST /mcp/photos (slice S4, agent/owner-photos.ts: a hosted assistant can't write a photo's base64).
+ *   uploaded first to POST /mcp/photos or a photo link (slice S4, agent/owner-photos.ts: a hosted assistant can't write a photo's
+ *   base64, and `photo_upload_link` makes the link).
  *   Each made here what the apps send (at most 800 px, no metadata: storage/photo-thumbnails.ts resizeToStoredPhoto), then
  *   held to the routes' photo rule. One the node can't read (cut off after a whole header) is refused, never stored as
  *   sent. No composer offers a preset tile instead of a photo, so neither does this.
@@ -75,9 +76,12 @@ import { memberErrorText } from '../routes/member-error-text.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
 import {
     admitAgentCreate, admitAgentEdit, admitAgentRemoveAll, agentCreatesToday, agentEditsToday, agentPhotosToday, agentPostsPerDay, returnAgentCreate,
-    returnAgentEdit, AGENT_EDITS_PER_DAY, AGENT_LIST_MAX, AGENT_PHOTOS_PER_DAY,
+    returnAgentEdit, AGENT_EDITS_PER_DAY, AGENT_LIST_MAX, agentPhotosPerDay,
 } from './limits.js';
-import { claimUploadedPhotos, fetchPhoto, photoDayFull, PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_KEEP_MS } from './owner-photos.js';
+import {
+    claimUploadedPhotos, fetchPhoto, issuePhotoLink, photoDayFull, PHOTO_LINK_CURL, PHOTO_LINK_KEEP_MS, PHOTO_LINK_PATH, PHOTO_LINKS_PER_GRANT,
+    PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_KEEP_MS,
+} from './owner-photos.js';
 import { grantStillLive } from './suggestions.js';
 import { listOAuthGrants } from './oauth.js';
 import { listAutomationTokens } from '../automation-tokens.js';
@@ -189,7 +193,7 @@ const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> =
     photos: {
         there: () => false,
         asks: `add 1 to ${AGENT_POST_PHOTOS_MAX} photos first: photo_urls (public addresses of images this server fetches), photo_ids (uploaded `
-            + 'first to /mcp/photos) or photos (base64 JPEG or WebP)',
+            + 'first, to an address photo_upload_link gives or to /mcp/photos) or photos (base64 JPEG or WebP)',
     },
     start_at: { there: isText, asks: 'when it starts, in ISO 8601 with its offset' },
     place_name: { there: isText, asks: 'the name of the place, e.g. "The old bowls club" (or online: true)' },
@@ -371,7 +375,7 @@ async function photosFrom(grant: AgentGrant, args: Record<string, unknown>): Pro
         return { ok: false, error: `Add a photo first: every Offer, Need and event needs 1 to ${AGENT_POST_PHOTOS_MAX} photos, from photo_urls, photo_ids or photos.` };
     }
     if (total > AGENT_POST_PHOTOS_MAX) return { ok: false, error: `At most ${AGENT_POST_PHOTOS_MAX} photos a post, photos, photo_urls and photo_ids together.` };
-    if (urls.length && agentPhotosToday(grant.id) + urls.length > AGENT_PHOTOS_PER_DAY) return { ok: false, error: photoDayFull(grant.id) };
+    if (urls.length && agentPhotosToday(grant.id) + urls.length > agentPhotosPerDay()) return { ok: false, error: photoDayFull(grant.id) };
     const uploads = claimUploadedPhotos(grant.id, ids);
     if (!uploads.ok) return uploads;
     const refuse = (error: string): Photos => {
@@ -423,6 +427,13 @@ function gate(grant: AgentGrant): string | null {
 }
 
 const NOT_TICKED = 'This assistant was connected without "May post for me", so it cannot post. The owner can connect it again with that ticked.';
+
+/** Why this grant can't upload a photo, for a grant that does not post: both upload doors' words, and photo_upload_link's. */
+export function noUploadWords(grant: AgentGrant): string {
+    return grant.role !== 'owner'
+        ? "Only an owner's assistant can upload photos: an admin's cannot post."
+        : 'This assistant was connected without "May post for me", so it cannot upload photos. The owner can connect it again with that ticked.';
+}
 
 /** UTC midnight of `now`'s day: the grant's day, as limits.ts counts it. */
 const utcMidnight = (now: number): string => `${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`;
@@ -679,14 +690,14 @@ const PHOTO_URLS_SCHEMA = {
     items: { type: 'string', maxLength: 2048, description: 'a public http or https address of a JPEG, WebP or PNG' },
     description: `public addresses of images this server fetches itself (a JPEG, WebP or PNG, at most ${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB and `
         + `${AGENT_PHOTO_MAX_INPUT_SIDE} pixels a side, in 8 seconds; never a private address): the way for an assistant that cannot send a file. `
-        + `At most ${AGENT_PHOTOS_PER_DAY} fetched and uploaded a day. ${PHOTOS_RULE}.`,
+        + `Fetched and uploaded together, at most connection_info's photos.perDay a day. ${PHOTOS_RULE}.`,
 };
 const PHOTO_IDS_SCHEMA = {
     type: 'array', maxItems: AGENT_POST_PHOTOS_MAX,
-    items: { type: 'string', pattern: '^ph_[0-9a-f]{32}$', description: 'a photoId POST /mcp/photos answered' },
-    description: 'photos uploaded first: POST each image (a JPEG, WebP or PNG, at most 5 MB) as the whole body to /mcp/photos on this server, with '
-        + 'its Content-Type and the same Authorization header; the photoId it answers goes here. Each is used once, by this assistant, '
-        + `within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. ${PHOTOS_RULE}.`,
+    items: { type: 'string', pattern: '^ph_[0-9a-f]{32}$', description: 'a photoId an upload answered' },
+    description: 'photos uploaded first: send each image (a JPEG, WebP or PNG, at most 5 MB) to the address photo_upload_link gives (no header but its '
+        + 'Content-Type), or POST it as the whole body to /mcp/photos on this server, with its Content-Type and the same Authorization header; the '
+        + `photoId it answers goes here. Each is used once, by this assistant, within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. ${PHOTOS_RULE}.`,
 };
 /** The three photo fields, on every tool that takes photos. */
 const PHOTO_PROPS = { photo_urls: PHOTO_URLS_SCHEMA, photo_ids: PHOTO_IDS_SCHEMA, photos: PHOTOS_SCHEMA };
@@ -850,6 +861,40 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         get inputSchema() { return enterpriseListingSchema(); },
         outputSchema: POST_OUT,
         run: (grant, args) => createListing(grant, { kind: args.kind === 'need' ? 'need' : 'offer', args, enterprise: true }),
+    },
+    {
+        name: 'photo_upload_link',
+        title: 'Get an address to upload photos to',
+        reads: `nothing: it makes a private address on this server that takes photos for ${PHOTO_LINK_KEEP_MS / 60_000} minutes, for an assistant that `
+            + `runs commands but can't send this connection's Authorization header. For each image run \`${PHOTO_LINK_CURL}\` (a JPEG, WebP or PNG, at `
+            + `most ${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB, at least ${AGENT_PHOTO_MIN_SIDE} pixels on its shorter side, each a request of its own): it `
+            + 'answers a photoId, and create_offer, create_need, create_event or create_enterprise_listing take those as photo_ids. One address takes many '
+            + `photos, until it expires; at most ${PHOTO_LINKS_PER_GRANT} are live at once, a new one replacing the oldest. Keep the address to yourself, as a password`,
+        never: "this connection's secret, a list of uploads or a photo back: the address takes uploads and reads nothing",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        outputSchema: {
+            type: 'object',
+            properties: {
+                url: { type: 'string', description: 'where to send each image: a secret, in effect a password, until it expires' },
+                expiresAt: { type: 'string' }, photosLeftToday: { type: 'number' },
+            },
+            required: ['url', 'expiresAt', 'photosLeftToday'],
+        },
+        run: (grant, _args, _boundary, nodeUrl) => {
+            if (grant.role !== 'owner' || !grant.canPost) return { ok: false, error: noUploadWords(grant) };
+            const replaced = getReplacedInfo();
+            if (replaced) return { ok: false, error: `${replaced.message} This server takes no new photos; use the one that took over.` };
+            // A node with no public address names itself by the host the assistant reached, which may not read as one (mcp-route.ts nodeUrlFor).
+            if (!nodeUrl || !/^https?:\/\//.test(nodeUrl)) return { ok: false, error: 'This server cannot name its own address now: give the photos by photo_urls instead.' };
+            const { token, expiresAt } = issuePhotoLink(grant);
+            return {
+                ok: true, rows: 1,
+                result: { url: `${nodeUrl}${PHOTO_LINK_PATH}/${token}`, expiresAt, photosLeftToday: Math.max(0, agentPhotosPerDay() - agentPhotosToday(grant.id)) },
+            };
+        },
     },
 ];
 

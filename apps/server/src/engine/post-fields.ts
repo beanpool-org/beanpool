@@ -23,6 +23,7 @@ import {
     LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, type TextLimit,
     LEND_MAX_DAYS_MAX, LEND_TERMS_LIMIT, REPLACEMENT_VALUE_LIMIT,
     POST_TAGS_CHARS, POST_TAGS_MAX, isTagId, postTagsOf, storedPostTags, word, wordsFor,
+    FREE_TAGS_CHARS, FREE_TAGS_MAX, FREE_TAGS_TOO_LONG_TOGETHER, FREE_TAGS_TOO_MANY, freeTagRefusal, freeTagStored, freeTagsOf, storedFreeTags,
 } from '@beanpool/core';
 
 // A refusal with values in it, in English, its sentence marked for the way out to find again in the member's language
@@ -56,6 +57,8 @@ export interface PostFieldsIn {
     hours?: unknown;
     /** Its tags: a list of ids from the library in core. Written back as the list it will be stored as (assertPostTags). */
     tags?: unknown;
+    /** The tags its author typed. Written back as the list it will be stored as (assertFreeTags). */
+    freeTags?: unknown;
 }
 
 /** A number of units for a deal: finite, from POST_HOURS_MIN to POST_HOURS_MAX. */
@@ -114,6 +117,8 @@ export interface PostTextStored {
     category?: unknown;
     /** Its tags as stored (posts.tags): one sent back by an edit passes though a newer library retired it. */
     tags?: unknown;
+    /** The tags its author typed, as stored (posts.free_tags): one sent back by an edit is not new. */
+    free_tags?: unknown;
 }
 
 /**
@@ -136,6 +141,7 @@ export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', 
     if (has('lng')) coordinate(fields.lng, 'Longitude', 180, mode);
     if (has('hours') && !isDealQuantity(fields.hours)) throw new Error(DEAL_QUANTITY_ERROR);
     if (has('tags')) fields.tags = assertPostTags(fields.tags, postTagsOf(stored.tags));
+    if (has('freeTags')) fields.freeTags = assertFreeTags(fields.freeTags, freeTagsOf(stored.free_tags));
 }
 
 // TAGS (DESIGN-owner-seeding-tags-fable.md §4.5, slice T2). A listing carries at most POST_TAGS_MAX ids from the library in
@@ -165,6 +171,35 @@ export function assertPostTags(raw: unknown, kept: readonly string[] = []): stri
     // Five ids of the library's three levels never come near it; a bound on the column whatever the library grows to.
     if (storedPostTags(ids).length > POST_TAGS_CHARS) throw new Error(tooManyTags());
     return ids;
+}
+
+// THE TAGS A MEMBER TYPES (DESIGN-tags-free-entry-fable.md §2, slice F1). The rule is core's (tags/free-tags.ts), one for
+// the node and the pickers. Refused in words, never dropped, as a library tag is: the author never believes a tag is on a
+// listing that is not. The same tag twice is one. null or [] is none; absent on an edit leaves them. The copies a standby
+// or a peer receive are held to the same rule and refuse nothing (@beanpool/core copiedFreeTags).
+
+export const FREE_TAGS_NOT_A_LIST = word('Your own tags must be a list of words');
+
+/**
+ * The tags as they will be stored, in the order sent, each once in its stored form; refuses what no listing may carry.
+ * `kept`: the listing's tags as stored, for an edit, each of which passes as the text it already holds does (the phone's
+ * edit screen sends every field back). Stops at the first tag past the five, so a body of thousands costs five.
+ */
+export function assertFreeTags(raw: unknown, kept: readonly string[] = []): string[] {
+    if (raw === null) return [];
+    if (!Array.isArray(raw)) throw new Error(FREE_TAGS_NOT_A_LIST);
+    const tags: string[] = [];
+    for (const text of raw) {
+        if (typeof text !== 'string') throw new Error(FREE_TAGS_NOT_A_LIST);
+        const tag = freeTagStored(text);
+        const refusal = kept.includes(tag) ? null : freeTagRefusal(text);
+        if (refusal) throw new Error(refusal);
+        if (tags.includes(tag)) continue;
+        if (tags.length >= FREE_TAGS_MAX) throw new Error(FREE_TAGS_TOO_MANY);
+        tags.push(tag);
+    }
+    if (storedFreeTags(tags).length > FREE_TAGS_CHARS) throw new Error(FREE_TAGS_TOO_LONG_TOGETHER);
+    return tags;
 }
 
 // LENDABLE OFFERS (scratch/tools/DESIGN-tool-library-fable.md §2.3-2.4; DESIGN-shops-and-tools-fable.md §0 row 9, §12 S3).

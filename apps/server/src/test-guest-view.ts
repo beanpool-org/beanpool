@@ -1500,6 +1500,8 @@ async function main(): Promise<void> {
             // An owner's assistant's photo upload beside it (agent/photo-upload-route.ts): the same bearer, an owner's grant ticked
             // "May post for me" only.
             'POST /mcp/photos', 'GET /mcp/photos',
+            // And a photo link under it (agent/owner-photos.ts): a live token and nothing else, upload only.
+            'POST /mcp/photos/u/:token', 'PUT /mcp/photos/u/:token', 'GET /mcp/photos/u/:token',
             // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
             'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
             'POST /api/local/admin/agent/grants/:id/remove-made',

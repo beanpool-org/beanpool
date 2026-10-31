@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, postTagsOf, freeTagsOf, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, isLang, type Lang } from '@beanpool/core';
 import { wordsIn } from './member-words.js';
@@ -535,8 +535,8 @@ function selectInChunks<T = any>(
  * Generate hidden search keywords by expanding post content through the synonym map, and its tags' words.
  * e.g. title "Fresh Lemons" → keywords "fruit citrus produce food tree" (engine/search-keywords.ts)
  */
-export function generateSearchKeywords(title: string, description: string, category: string, tags: readonly string[] = []): string {
-    return postSearchKeywordsWithSynonyms(title, description, category, tags);
+export function generateSearchKeywords(title: string, description: string, category: string, tags: readonly string[] = [], freeTags: readonly string[] = []): string {
+    return postSearchKeywordsWithSynonyms(title, description, category, tags, freeTags);
 }
 
 // ===================== TYPES =====================
@@ -1196,7 +1196,7 @@ export function becomeMainServerInPlace(): void {
  * Also rebuilds the FTS5 index to ensure it's in sync.
  */
 function backfillSearchKeywords(): void {
-    const posts = db.prepare(`SELECT id, title, description, category, tags FROM posts WHERE search_keywords = '' OR search_keywords IS NULL`).all() as any[];
+    const posts = db.prepare(`SELECT id, title, description, category, tags, free_tags FROM posts WHERE search_keywords = '' OR search_keywords IS NULL`).all() as any[];
     if (posts.length === 0) return;
 
     console.log(`🔍 Backfilling FTS5 search keywords for ${posts.length} posts...`);
@@ -1223,7 +1223,7 @@ function backfillSearchKeywords(): void {
         if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
         const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
         for (const p of posts) {
-            const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general', postTagsOf(p.tags));
+            const keywords = generateSearchKeywords(p.title || '', p.description || '', p.category || 'general', postTagsOf(p.tags), freeTagsOf(p.free_tags));
             update.run(keywords, p.id);
         }
         if (touch) db.exec(touch);
@@ -1295,17 +1295,17 @@ export function keywordsWithTagsOnce(): void {
         db.transaction(() => {
             const touch = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'posts_touch_updated_at'`).get() as { sql: string } | undefined)?.sql;
             if (touch) db.exec(`DROP TRIGGER posts_touch_updated_at`);
-            const page = db.prepare(`SELECT rowid, id, title, description, category, tags, search_keywords FROM posts WHERE rowid > ? ORDER BY rowid LIMIT 500`);
+            const page = db.prepare(`SELECT rowid, id, title, description, category, tags, free_tags, search_keywords FROM posts WHERE rowid > ? ORDER BY rowid LIMIT 500`);
             const update = db.prepare(`UPDATE posts SET search_keywords = ? WHERE id = ?`);
             for (let after = 0; ;) {
-                const rows = page.all(after) as Array<{ rowid: number; id: string; title: string | null; description: string | null; category: string | null; tags: string | null; search_keywords: string | null }>;
+                const rows = page.all(after) as Array<{ rowid: number; id: string; title: string | null; description: string | null; category: string | null; tags: string | null; free_tags: string | null; search_keywords: string | null }>;
                 if (rows.length === 0) break;
                 for (const p of rows) {
                     const held = (p.search_keywords ?? '').trim();
                     if (!held) continue;
                     const category = p.category || 'general';
                     const write = held === category ? postSearchKeywords : postSearchKeywordsWithSynonyms;
-                    const keywords = write(p.title || '', p.description || '', category, postTagsOf(p.tags));
+                    const keywords = write(p.title || '', p.description || '', category, postTagsOf(p.tags), freeTagsOf(p.free_tags));
                     if (keywords !== p.search_keywords) { update.run(keywords, p.id); changed++; }
                 }
                 after = rows[rows.length - 1].rowid;
@@ -5686,6 +5686,8 @@ export function createPost(
         shopId?: unknown;
         /** Its tags: ids from the library in core (engine/post-fields.ts assertPostTags). */
         tags?: unknown;
+        /** The tags its author typed (engine/post-fields.ts assertFreeTags). */
+        freeTags?: unknown;
         /** Allowed only for system-created internal posts like Daily Pulse. */
         allowNoPhoto?: boolean;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
@@ -5696,9 +5698,10 @@ export function createPost(
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
     // number of Beans never reaches a listing, whichever route made it.
-    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng, tags: options?.tags };
+    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng, tags: options?.tags, freeTags: options?.freeTags };
     assertPostFields(postFields, 'create');
     if (options?.tags !== undefined) options = { ...options, tags: postFields.tags };
+    if (options?.freeTags !== undefined) options = { ...options, freeTags: postFields.freeTags };
     title = postFields.title as string;
     description = postFields.description as string;
     category = postFields.category as string;
@@ -5748,7 +5751,7 @@ export function updatePost(id: string, authorPublicKey: string, updates: Partial
     // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
     // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
     // sent back unchanged, is not held to a length limit it was stored before (#1493).
-    const storedText = db.prepare('SELECT title, description, category, tags FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    const storedText = db.prepare('SELECT title, description, category, tags, free_tags FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     // A keeper may edit their enterprise's Offer or Need signed with their own key: the signed caller only, by the rule the

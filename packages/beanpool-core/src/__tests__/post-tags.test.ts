@@ -3,7 +3,7 @@
  * §4.5, §4.7, slice T2): tags/post-tags.ts and readSearchSettings in home-frame.ts.
  */
 import { describe, expect, it } from 'vitest';
-import { POST_TAGS_MAX, SEARCH_TAGS_MAX, copiedPostTags, knownSearchTags, postTagsOf, storedPostTags } from '../tags/post-tags.js';
+import { POST_TAGS_MAX, SEARCH_TAGS_MAX, copiedPostTags, editedTagsOver, knownSearchTags, postTagsOf, storedPostTags } from '../tags/post-tags.js';
 import { readSearchSettings } from '../home-frame.js';
 
 describe('post tags', () => {
@@ -45,5 +45,30 @@ describe('a saved search\'s tags', () => {
         const s = readSearchSettings({ q: 'x'.repeat(40), kind: 'offer', category: 'food', km: 25,
             tags: ['food.fruit.passionfruit', 'food.fruit.grapefruit', 'food.fruit.watermelon', 'food.fruit.rockmelon', 'food.fruit.strawberry'] });
         expect(new TextEncoder().encode(JSON.stringify(s)).length).toBeLessThan(512);
+    });
+});
+
+describe('editedTagsOver: an open edit form when the listing moves under it', () => {
+    const A = 'food.fruit.lemon';
+    const B = 'food.fruit.orange';
+    const C = 'food.eggs';
+
+    it('a form opened with none takes the real ones', () => {
+        expect(editedTagsOver([], [], [A, B])).toEqual([A, B]);
+    });
+    it('what the member put on stays, after them', () => {
+        expect(editedTagsOver([], [C], [A, B])).toEqual([A, B, C]);
+    });
+    it('what the member took off stays off', () => {
+        expect(editedTagsOver([A], [], [A, B])).toEqual([B]);
+    });
+    it('a tag the node took off goes', () => {
+        expect(editedTagsOver([A, B], [A, B], [B])).toEqual([B]);
+    });
+    it('each once, and never past the cap', () => {
+        expect(editedTagsOver([], [A], [A, B])).toEqual([A, B]);
+        const now = ['a.a', 'a.b', 'a.c', 'a.d', 'a.e'];
+        expect(editedTagsOver([], ['a.f'], now)).toEqual(now);
+        expect(POST_TAGS_MAX).toBe(now.length);
     });
 });

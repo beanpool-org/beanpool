@@ -60,6 +60,8 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             shopId: b.shopId,
             // Its tags, raw: held to the library by the engine (engine/post-fields.ts assertPostTags).
             tags: b.tags,
+            // The tags its host typed, raw: held to the rule by the engine (engine/post-fields.ts assertFreeTags).
+            freeTags: b.freeTags,
             createdBy,
             beforeWrite,
             out,

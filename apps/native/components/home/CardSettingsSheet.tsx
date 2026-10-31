@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, TextInput, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, t,
+    HOME_DECIDE_CHOICES, HOME_SEARCH_KMS, HOME_SEARCH_MAX_CHARS, readDecideSettings, readSearchSettings, readSkySettings, searchFromSheet, t,
     type HomeDecideShow, type HomeSearchKind, type SkySettings,
 } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
@@ -62,7 +62,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
     const decide = type === 'decide';
     const words = q.trim();
     const ready = sky || decide || !!words;
-    const done = () => onDone(sky ? { place } : decide ? { show } : { q: words, kind, ...(category ? { category } : {}), ...(km ? { km } : {}) });
+    const done = () => onDone(sky ? { place } : decide ? { show } : searchFromSheet(settings, { q: words, kind, category, km }));
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>

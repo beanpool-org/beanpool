@@ -18,6 +18,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Share, Alert, Linking, Platform, ActivityIndicator, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -96,6 +97,7 @@ async function anchorOrThrow(): Promise<string> {
 }
 
 export function EventShareAndCalendar({ post }: { post: any }) {
+    const insets = useSafeAreaInsets();
     const styles = useStyles(makeStyles);
     const event = shareableEvent(post);
     // Labelled with the place's zone ("Sat 17 Oct, 20:50 Lagos time"), so it is right wherever it is pasted (§4).
@@ -183,7 +185,7 @@ export function EventShareAndCalendar({ post }: { post: any }) {
                         accessibilityRole="button"
                         accessibilityLabel={t('Close calendar choices')}
                     />
-                    <View style={styles.sheetCard}>
+                    <View style={[styles.sheetCard, { paddingBottom: 16 + insets.bottom }]}>
                         <Text style={styles.sheetTitle} accessibilityRole="header">{t('Add to calendar')}</Text>
                         <Pressable
                             onPress={addCalendarFile}
@@ -402,7 +404,6 @@ const makeStyles = ({ colors }: ThemeContextType) =>
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             paddingTop: 16,
-            paddingBottom: 28,
             paddingHorizontal: 16,
         },
         sheetTitle: {

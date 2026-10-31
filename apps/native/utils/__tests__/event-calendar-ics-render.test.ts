@@ -9,11 +9,16 @@ import { createRoot, type Root } from 'react-dom/client';
 (globalThis as any).React = ReactAll;
 
 const platform = { OS: 'android' as 'android' | 'ios' };
+const insetsState = vi.hoisted(() => ({ top: 24, bottom: 34, left: 0, right: 0 }));
 const intentCalls = vi.hoisted(() => ({ calls: [] as any[], fail: false }));
 const sharingCalls = vi.hoisted(() => ({ calls: [] as any[] }));
 const fileSystemCalls = vi.hoisted(() => ({ writes: [] as any[], contentUris: [] as string[] }));
 const alertCalls = vi.hoisted(() => ({ calls: [] as any[] }));
 const linkingCalls = vi.hoisted(() => ({ calls: [] as any[], fail: false }));
+
+vi.mock('react-native-safe-area-context', () => ({
+    useSafeAreaInsets: () => insetsState,
+}));
 
 vi.mock('react-native', () => {
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
@@ -157,6 +162,7 @@ async function renderComponent(colors: any = lightColors, isDark = false) {
 
 beforeEach(() => {
     platform.OS = 'android';
+    insetsState.bottom = 34;
     intentCalls.calls = [];
     intentCalls.fail = false;
     sharingCalls.calls = [];
@@ -339,4 +345,35 @@ describe('Choice renders at 320 dp × 1.3, both themes, 44 dp targets', () => {
             expect(host.querySelector('[data-testid="modal-choice"]')).toBeNull();
         });
     }
+
+    it('adds insets.bottom to sheetCard paddingBottom so Cancel clears the navigation bar (finding 2)', async () => {
+        // Test with iOS home indicator (insets.bottom = 34)
+        insetsState.bottom = 34;
+        await renderComponent();
+
+        const addBtn = host.querySelector('[aria-label="Add this event to your calendar"]') as HTMLElement;
+        await act(async () => { addBtn.click(); });
+
+        const cancelBtn = host.querySelector('[data-testid="event-add-calendar-cancel"]') as HTMLElement;
+        const sheetCard = cancelBtn.parentElement as HTMLElement;
+        expect(sheetCard).toBeTruthy();
+
+        const cardStyle = JSON.parse(sheetCard.getAttribute('data-style') || '{}');
+        // paddingBottom must be 16 + insets.bottom = 16 + 34 = 50dp, NOT static 28dp
+        expect(cardStyle.paddingBottom).toBe(50);
+        await act(async () => { cancelBtn.click(); });
+
+        // Test with 3-button Android nav bar (insets.bottom = 48)
+        insetsState.bottom = 48;
+        await renderComponent();
+        const addBtn2 = host.querySelector('[aria-label="Add this event to your calendar"]') as HTMLElement;
+        await act(async () => { addBtn2.click(); });
+
+        const cancelBtn2 = host.querySelector('[data-testid="event-add-calendar-cancel"]') as HTMLElement;
+        const sheetCard2 = cancelBtn2.parentElement as HTMLElement;
+        const cardStyle2 = JSON.parse(sheetCard2.getAttribute('data-style') || '{}');
+        // paddingBottom must be 16 + 48 = 64dp
+        expect(cardStyle2.paddingBottom).toBe(64);
+        await act(async () => { cancelBtn2.click(); });
+    });
 });

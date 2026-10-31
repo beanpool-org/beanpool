@@ -418,6 +418,53 @@ describe('Ask to join from the web find card (front doors S2)', () => {
     });
 });
 
+describe("I'd help on the waiting card (PR #2687 review: its answer was drawn only with no community near, so here, nowhere)", () => {
+    const COMM = { key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 };
+    const DEMAND = { waiting: 4, helping: null };
+
+    async function waitingNearByron(point: 'town' | 'unknown') {
+        await rememberKnock(ME.publicKey, COMM, new Date('2026-10-25T00:00:00.000Z'));
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(globalAnswer({ point: null, communities: [COMM], demand: DEMAND }, true)))
+            .mockResolvedValue(fresh(globalAnswer({ communities: [COMM], demand: DEMAND }, true)));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const help = await screen.findByTestId(`home-waiting-help-${COMM.url}`);
+        if (point === 'unknown') return help;
+        fireEvent.click(screen.getByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        return screen.findByTestId(`home-waiting-help-${COMM.url}`);
+    }
+
+    it('a tap that worked says so, and the button goes', async () => {
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        vi.mocked(api.watchPlace).mockResolvedValue({ success: true } as never);
+        fireEvent.click(await waitingNearByron('town'));
+        const note = await screen.findByTestId('home-find-watch-note');
+        expect(note).toHaveTextContent("Thanks. When three of you are near each other, you'll be introduced.");
+        expect(note.closest('[role="status"]')).not.toBeNull();
+        expect(screen.queryByTestId('home-find-actions')).toBeNull();
+        expect(screen.queryByTestId(`home-waiting-help-${COMM.url}`)).toBeNull();
+        readSpy.mockRestore();
+    });
+
+    it('a refused tap says why, and the button stays for another try', async () => {
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        vi.mocked(api.watchPlace).mockRejectedValue(new Error('You already watch 5 places.'));
+        fireEvent.click(await waitingNearByron('town'));
+        expect(await screen.findByTestId('home-find-watch-note')).toHaveTextContent('You already watch 5 places.');
+        expect(screen.getByTestId(`home-waiting-help-${COMM.url}`)).toBeInTheDocument();
+        readSpy.mockRestore();
+    });
+
+    it('with no place known it asks for one, and nothing is sent', async () => {
+        const readSpy = vi.spyOn(knockModule, 'readKnockStatus').mockResolvedValue({ ok: true, value: { status: 'pending' } });
+        fireEvent.click(await waitingNearByron('unknown'));
+        expect(screen.getByTestId('home-find-watch-note')).toHaveTextContent(WATCH_NEEDS_PLACE);
+        expect(api.watchPlace).not.toHaveBeenCalled();
+        readSpy.mockRestore();
+    });
+});
+
 describe('the honest waiting card on the web find card (Lounge L1)', () => {
     it('shows sent date, arrived status, and measured line for a waiting knock', async () => {
         const comm = {

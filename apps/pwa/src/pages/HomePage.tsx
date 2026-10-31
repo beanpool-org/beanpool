@@ -2238,9 +2238,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                         {t(PLACE_CIRCLE_WORDS.help)}
                                     </button>
                                 )}
-                                {watchNote && <p role="status" data-testid="home-find-watch-note" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
                             </div>
                         )}
+                        {/* Outside findOffersStart: a waiting card's own "I'd help" answers here too, and with a request out that
+                            block is not drawn. Always in the page, so a screen reader hears the line when it is put in. */}
+                        <div role="status">
+                            {watchNote && <p data-testid="home-find-watch-note" className="m-0 mt-1 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
+                        </div>
                         {nearby && <p className="m-0 py-1 text-sm text-nature-700 dark:text-nature-200">{nearby}</p>}
                         {demandLine && <p className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 break-words" data-testid="home-find-demand">{demandLine}</p>}
                         {circle && <PlaceCircleCard id={circle.id} circle={circle} myPubkey={publicKey} onStart={() => setStartOpen(true)} onChange={card => setCircleNow({ ...card, id: circle.id })} />}

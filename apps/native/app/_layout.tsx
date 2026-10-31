@@ -25,6 +25,7 @@ import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { forgetOldPendingClaim, getPendingOnboarding, subscribePendingOnboarding, wizardHold } from '../utils/onboarding-state';
 import { forgetKnockKey } from '../utils/knock-key';
 import { inviteLinkToWelcome } from '../utils/waiting-to-join';
+import { listenForScannedInvites } from '../utils/scanned-invite';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
 import { lookingAroundHere } from '../utils/look-around';
 import { DEFAULT_MEMBER_LANDING, guestRedirect, memberRedirect, takeOpenAfterLanding } from '../utils/member-landing';
@@ -347,6 +348,10 @@ function RootLayoutNav() {
             subscription.remove();
         };
     }, []);
+
+    // 3. An invite scanned inside the app by a phone in a community (Find's Scan a code, utils/scanned-invite.ts): read
+    // below as the same invite opened as a link is, "Switch Nodes?" and all, never put on welcome for the guard to drop.
+    useEffect(() => listenForScannedInvites(url => setDeepLinkUrl(url)), []);
 
     // Process incoming deep links (multi-node support and onboarding redirects)
     useEffect(() => {
@@ -1008,6 +1013,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="public-profile" options={sheetOptions} />
                 <Stack.Screen name="new-message" options={{ headerShown: false, animation: 'slide_from_right' }} />
+                {/* The listing form, out of the map (MAP-FORM): its sheet over the screen that opened it, as it was over the map. */}
+                <Stack.Screen name="new-listing" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
                 <Stack.Screen name="chat/[id]" />
                 <Stack.Screen name="pulse-intake" options={sheetOptions} />
                 <Stack.Screen name="apple-probe" />

@@ -106,6 +106,10 @@ export const PUSH_NOTICE_KINDS = {
     // To the old phone when an admin makes a re-key code (server engine/member-wizards.ts issueRekeyCode): the one sign a
     // member gets of an admin moving their account without them.
     'account.rekey-started': { body: word("An admin started moving your account to a new phone. If you still have this phone and didn't ask for this, tell an owner now."), tab: 'settings' },
+    // To the member's phones when an admin makes a bring-back code (server engine/bring-back.ts issueBringBackCode): someone
+    // is getting the SAME key back on a new phone from the copy the member keeps with their community (vault rethink VR3).
+    // Generic: no community, no admin, no code. Its release is told as `account.restored`.
+    'account.bring-back-started': { body: word("An admin is bringing your account back on a new phone. If you still have this phone and didn't ask for this, tell an owner now."), tab: 'settings' },
     'owner.standby': { body: word("Your community's standby server needs you."), tab: 'settings' },
     'owner.alert': { body: word("Your community's server needs you."), tab: 'settings' },
 } as const satisfies Record<string, { body: string; tab: PushNoticeTab }>;

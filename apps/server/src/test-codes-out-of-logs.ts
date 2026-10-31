@@ -8,8 +8,8 @@
  *
  * Real HTTPS server. Everything the process prints (stdout and stderr), every frame the /ws/logs stream sends (a log
  * client in logger.ts's set) and every system_logs row is captured while:
- *   1. the boot step scrubs lines written before this version: planted rows with a re-key or an invite code lose it,
- *      an invite code becoming the same short tag new lines carry; every other row is left byte for byte;
+ *   1. the boot step scrubs lines written before this version: planted rows with a re-key, a bring-back or an invite
+ *      code lose it, an invite code becoming the same short tag new lines carry; every other row is left byte for byte;
  *   2. an admin makes a seed invite on a fresh node (the genesis path) and on a node with members;
  *   3. a member makes an invite;
  *   4. an admin issues a re-key code and completes the re-key with it.
@@ -95,6 +95,9 @@ async function main() {
     // ── 1. Lines an older version wrote, planted before the server boots ──
     const OLD_RK = 'RK-1A2B-3C4D';
     const OLD_RK_LOWER = 'rk-9f8e-7d6c';
+    // A bring-back code (engine/bring-back.ts) is the same kind of credential: no version logs one, and a line that ever
+    // quotes one loses it the same way.
+    const OLD_BB = 'BB-5E6F-7A8B';
     const OLD_INV = 'INV-ABCD-EFGH';
     // Two days ago, relative to now: the log keeps no line past 30 days (logger.ts LOG_KEEP_DAYS), so a fixed date would
     // one day be pruned at boot before the scrub could be seen.
@@ -106,6 +109,7 @@ async function main() {
         rekeyInfo: plant.run(at, 'INFO', 'AUTH', `[Rekey] Re-enrolment code ${OLD_RK} issued for Bob by owner:password`, null).lastInsertRowid as number,
         rekeyDone: plant.run(at, 'INFO', 'AUTH', 'Member Bob re-keyed: abcdef1234... -> 0123456789... bound to new key by operator owner:password',
             JSON.stringify({ oldPubkey: 'abcdef1234', newPubkey: '0123456789', operatorPubkey: 'owner:password', code: OLD_RK_LOWER })).lastInsertRowid as number,
+        bringBack: plant.run(at, 'WARN', 'AUTH', `[BringBack] The phone asked with ${OLD_BB} for Bob, and it was refused`, null).lastInsertRowid as number,
         seed: plant.run(at, 'SECURITY', 'ADMIN', `Seed invite generated: ${OLD_INV} [elder] issued by owner:password`,
             JSON.stringify({ issuedBy: 'owner:password', code: OLD_INV, type: 'elder', authRole: 'owner' })).lastInsertRowid as number,
     };
@@ -114,6 +118,7 @@ async function main() {
         ['INFO', 'LEDGER', 'Invoice INV-2024-0001 settled', null],
         ['INFO', 'SYS', 'INV-ABCD-EFGHI is too long, XINV-ABCD-EFGH has a letter before it, INV-0000-OOOO uses no code letters', null],
         ['INFO', 'SYS', 'RK-12-34 and XRK-1A2B-3C4D and RK-1A2B-3C4DE are not re-key codes', null],
+        ['INFO', 'SYS', 'BB-12-34 and XBB-1A2B-3C4D and BB-1A2B-3C4DE are not bring-back codes', null],
         ['WARN', 'AUTH', 'code 482913 was wrong; exit code 1; statusCode 404', JSON.stringify({ note: 'backup code rotated', count: 3 })],
         ['INFO', 'SYS', 'An ordinary line', JSON.stringify({ ok: true, name: 'INV' })],
     ] as const;
@@ -138,6 +143,9 @@ async function main() {
         assert(!all.includes(OLD_INV), 'no old invite code is left in a planted line');
         assert(info?.message === '[Rekey] Re-enrolment code [REDACTED_REKEY_CODE] issued for Bob by owner:password',
             `the rest of the re-key line is unchanged (${info?.message})`);
+        const bringBack = byId.get(planted.bringBack);
+        assert(bringBack?.message === '[BringBack] The phone asked with [REDACTED_REKEY_CODE] for Bob, and it was refused',
+            `a bring-back code in a planted line goes as a re-key code does (${bringBack?.message})`);
         let auditMeta: any = null;
         try { auditMeta = JSON.parse(audit?.metadata ?? ''); } catch { /* asserted below */ }
         assert(auditMeta?.code === '[REDACTED_REKEY_CODE]' && auditMeta?.oldPubkey === 'abcdef1234' && auditMeta?.expiresAt === at,

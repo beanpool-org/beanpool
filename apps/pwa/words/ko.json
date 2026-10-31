@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "\"{name}\" 이름은 이 커뮤니티에서 이미 사용 중이에요. 다른 이름을 골라 주세요.",
@@ -2032,7 +2032,7 @@
   "Not finished yet": "아직 완료되지 않음",
   "Reload page": "페이지 새로고침",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "이 브라우저에 다른 BeanPool 계정이 있어 이 계정은 저장되지 않았어요.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "완전한 키 갱신 코드가 아닙니다. RK-로 시작하며 8자리의 영문과 숫자로 구성됩니다.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "완전한 코드가 아닙니다. RK- 또는 BB-로 시작하며 8자리의 영문과 숫자로 구성됩니다.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "이 브라우저에서 시작한 가입이 대기 중이에요. 먼저 가입을 마친 후 코드로 돌아오세요.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "이 브라우저에 키를 안전하게 보관할 수 없어 아무것도 전송되지 않았어요.",
   "Show this number to your admin": "관리자에게 이 번호를 보여주세요",
@@ -3492,9 +3492,44 @@
   "Held in Trust & Deals": "에스크로 및 거래",
   "Held in Trust & Deals Notifications": "에스크로 및 거래 알림",
   "Bid approved! The Beans are held in trust.": "제안이 승인되었어요! 에스크로 자금이 안전하게 예치되었습니다.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "계획을 취소하고 후원자에게 환불할까요?\n\n계획이 종료되며 예치된 모든 서약금이 후원자들에게 즉시 환불됩니다.",
   "{amount} 🫘 held in trust": "에스크로 예치 {amount} 🫘",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "노드에서 계정을 삭제하지 못했어요. 진행 중인 에스크로 거래를 먼저 해결해야 할 수 있어요.",
   "{amount} · held in trust": "{amount} · 보관 중",
-  "Cancel Initiative & Refund Backers": "이니셔티브 취소 및 후원자 환불"
+  "Cancel Initiative & Refund Backers": "이니셔티브 취소 및 후원자 환불",
+  "Second pause in 30 days. The last vote said No.": "30일 안에 두 번째 일시 정지입니다. 지난 투표 결과는 '아니요'였습니다.",
+  "Second pause in 30 days. Too few members voted on the last one.": "30일 안에 두 번째 일시 정지입니다. 지난 투표에는 투표한 회원이 너무 적었습니다.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "30일 안에 두 번째 일시 정지입니다. 지난 투표는 마감 전에 중단되었습니다.",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "계획을 취소하고 후원자에게 환불할까요?\n\n계획이 종료되며 예치된 모든 서약금이 후원자들에게 즉시 환불됩니다. 그 이후 폐쇄된 계정(삭제되었거나 청산된 사업체)의 약정금은 폐쇄된 계정의 나머지 빈과 마찬가지로 대신 커먼즈로 가며, 다른 모든 사람의 약정금은 그대로 환불돼요.",
+  "Please give a name of at least 2 characters.": "이름은 2자 이상 입력해 주세요.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "other": "이름은 {n}자 이하로 입력해 주세요."
+  },
+  "Please say a few words about yourself.": "간단한 자기소개를 입력해 주세요.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "other": "메시지는 {n}자 이하로 입력해 주세요."
+  },
+  "You are already a member of this community.": "이미 이 커뮤니티의 멤버예요.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "이 커뮤니티에 가입을 신청한 사람들이에요. '초대'를 누르면 상대방의 키만 쓸 수 있는 초대장이 만들어져 상대방 앱이 알아서 찾아요. '나중에'를 누르면 \"아직 응답이 없어요\" 외에는 아무것도 전달되지 않아요.",
+  "Couldn't reach your community. Check your connection and try again.": "커뮤니티에 연결할 수 없어요. 네트워크 연결을 확인하고 다시 시도해 주세요.",
+  "Asked today": "오늘 신청함",
+  "Asked yesterday": "어제 신청함",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "other": "{n}일 전 신청함"
+  },
+  "from {node}": "{node}에서",
+  "You invited {name}. Their app will find the invite by itself.": "{name}님을 초대했어요. 상대방 앱이 알아서 초대장을 찾을 거예요.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "other": "🚪 가입 요청 ({n})"
+  },
+  "Inviting {name}...": "{name}님 초대 중...",
+  "Invite {name}": "{name}님 초대",
+  "Declining {name}...": "{name}님 거절 중...",
+  "Not now, {name}": "나중에, {name}님",
+  "Invite\u0004button: let them in": "초대",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "other": "🎟️ 초대 ({n})"
+  },
+  "Ask to join {name}": "{name} 참여 신청",
+  "A few words about yourself": "간단한 자기소개",
+  "Where you live, what you'd like to share or learn": "사는 곳, 나누고 싶거나 배우고 싶은 것"
 }

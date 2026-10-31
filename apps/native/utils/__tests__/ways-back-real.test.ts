@@ -191,6 +191,8 @@ describe('connect, see where the copies are, remove everything, and the way back
         expect(done).toEqual({
             vault: { removed: true },
             communities: [{ url: GLOBAL, name: 'Global community', provider: 'google', removal: { removed: true } }],
+            // The global community keeps no copy for its admins (never offered there, vault rethink VR3).
+            admins: [],
             notAsked: [],
         });
         // The vault signed that it deleted the copy, about this key, for this request.

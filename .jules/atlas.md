@@ -274,3 +274,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `RecoveryCopiesLine` component and `useRecoveryCopies` hook in `apps/manager/src/components/modules/RecoveryCopiesLine.tsx` were untested.
 **Learning:** Testing `useRecoveryCopies` requires using `resolveNodeApiUrl(nodeUrl, '/api/community/info')` when matching mocked `globalThis.fetch` calls.
 **Action:** Continue identifying remaining untested module components in `apps/manager/src/components/modules/`.
+
+## 2026-10-28 - [manager tests] photo-resize error handling unit tests
+**Gap:** Canvas context creation returning `null` and `FileReader` error branches in `resizePhotoFile` (`apps/manager/src/lib/photo-resize.ts`) were untested.
+**Learning:** Testing `resizePhotoFile` error branches required extending `stubPipeline` in `photo-resize.test.ts` to mock `FileReader.prototype.onerror` and `HTMLCanvasElement.prototype.getContext` returning `null`, verifying promise rejections with expected error messages.
+**Action:** Continue identifying error recovery paths in utility functions across `apps/manager/src/lib/`.

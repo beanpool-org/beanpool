@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” ഈ കമ്മ്യൂണിറ്റിയിൽ ഇതിനകം എടുത്തുകഴിഞ്ഞു. മറ്റൊരു പേര് തിരഞ്ഞെടുക്കുക.",
@@ -2088,7 +2088,7 @@
   "Not finished yet": "ഇതുവരെ പൂർത്തിയായിട്ടില്ല",
   "Reload page": "പേജ് റീലോഡ് ചെയ്യുക",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "ഈ ബ്രൗസറിൽ മറ്റൊരു BeanPool അക്കൗണ്ട് ഉള്ളതിനാൽ ഇത് ഇവിടെ സേവ് ചെയ്തില്ല.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "അതൊരു പൂർണ്ണമായ റീ-കീ കോഡല്ല. ഇത് RK- എന്ന് തുടങ്ങുകയും എട്ട് അക്ഷരങ്ങളും അക്കങ്ങളും ഉണ്ടായിരിക്കുകയും ചെയ്യും.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "അതൊരു പൂർണ്ണമായ കോഡല്ല. ഇത് RK- അല്ലെങ്കിൽ BB- എന്ന് തുടങ്ങുകയും എട്ട് അക്ഷരങ്ങളും അക്കങ്ങളും ഉണ്ടായിരിക്കുകയും ചെയ്യും.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "ഈ ബ്രൗസറിൽ നിങ്ങൾ ആരംഭിച്ച ഒരു ചേരൽ ഇപ്പോഴും കാത്തിരിക്കുകയാണ്. ആദ്യം അത് പൂർത്തിയാക്കുക, തുടർന്ന് നിങ്ങളുടെ കോഡിലേക്ക് തിരികെ വരിക.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "ഈ ബ്രൗസറിന് കീ സുരക്ഷിതമായി സൂക്ഷിക്കാൻ കഴിഞ്ഞില്ല, അതിനാൽ ഒന്നും അയച്ചില്ല.",
   "Show this number to your admin": "ഈ നമ്പർ നിങ്ങളുടെ അഡ്മിനെ കാണിക്കുക",
@@ -3616,9 +3616,49 @@
   "Held in Trust & Deals": "എസ്ക്രോയും ഇടപാടുകളും",
   "Held in Trust & Deals Notifications": "എസ്ക്രോയും ഇടപാടുകളും സംബന്ധിച്ച അറിയിപ്പുകൾ",
   "Bid approved! The Beans are held in trust.": "ബിഡ് അംഗീകരിച്ചു! എസ്ക്രോ ഫണ്ടുകൾ സുരക്ഷിതമായി ലോക്ക് ചെയ്തു.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "സംരംഭം റദ്ദാക്കി പിന്തുണക്കാർക്ക് പണം തിരികെ നൽകണോ?\n\nഇത് സംരംഭം അവസാനിപ്പിക്കുകയും എസ്ക്രോയിലുള്ള എല്ലാ സംഭാവനകളും ഉടനടി അവരവർക്ക് തിരികെ നൽകുകയും ചെയ്യും.",
   "{amount} 🫘 held in trust": "എസ്ക്രോയിൽ {amount} 🫘",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "നോഡിൽ നിന്ന് അക്കൗണ്ട് നീക്കം ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു. സജീവമായ എസ്ക്രോ ഇടപാടുകൾ ആദ്യം പരിഹരിക്കേണ്ടി വന്നേക്കാം.",
   "{amount} · held in trust": "{amount} · എസ്ക്രോയിൽ",
-  "Cancel Initiative & Refund Backers": "സംരംഭം റദ്ദാക്കി പിന്തുണച്ചവർക്ക് തുക തിരികെ നൽകുക"
+  "Cancel Initiative & Refund Backers": "സംരംഭം റദ്ദാക്കി പിന്തുണച്ചവർക്ക് തുക തിരികെ നൽകുക",
+  "Second pause in 30 days. The last vote said No.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ടിന്റെ ഫലം 'അല്ല' എന്നായിരുന്നു.",
+  "Second pause in 30 days. Too few members voted on the last one.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ടിൽ വളരെ കുറച്ച് അംഗങ്ങളേ വോട്ട് ചെയ്തുള്ളൂ.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "30 ദിവസത്തിനുള്ളിൽ രണ്ടാമത്തെ താൽക്കാലിക നിർത്തൽ. കഴിഞ്ഞ വോട്ട് അവസാനിക്കുന്നതിന് മുമ്പ് നിർത്തിവച്ചു.",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "സംരംഭം റദ്ദാക്കി പിന്തുണക്കാർക്ക് പണം തിരികെ നൽകണോ?\n\nഇത് സംരംഭം അവസാനിപ്പിക്കുകയും എസ്ക്രോയിലുള്ള എല്ലാ സംഭാവനകളും ഉടനടി അവരവർക്ക് തിരികെ നൽകുകയും ചെയ്യും. തുടർന്ന് ക്ലോസ് ചെയ്ത അക്കൗണ്ടിൽ നിന്നുള്ള (ഡിലീറ്റ് ചെയ്തതോ അല്ലെങ്കിൽ നിർത്തിവച്ചതോ ആയ സംരംഭം) വാഗ്ദാനം ക്ലോസ് ചെയ്ത അക്കൗണ്ടിന്റെ ബാക്കി ബീൻസുകൾ പോയതുപോലെ പകരം കോമൺസിലേക്ക് പോകുന്നു, മറ്റുള്ളവരുടേത് ഇപ്പോഴും അവർക്ക് തന്നെ തിരികെ ലഭിക്കും.",
+  "Please give a name of at least 2 characters.": "കുറഞ്ഞത് 2 അക്ഷരങ്ങളുള്ള ഒരു പേര് നൽകുക.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "പേര് {n} അക്ഷരത്തിൽ ഒതുക്കുക.",
+    "other": "പേര് {n} അക്ഷരങ്ങളിൽ ഒതുക്കുക."
+  },
+  "Please say a few words about yourself.": "നിങ്ങളെക്കുറിച്ച് ചുരുക്കം ചില വാക്കുകൾ പറയുക.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "സന്ദേശം {n} അക്ഷരത്തിൽ ഒതുക്കുക.",
+    "other": "സന്ദേശം {n} അക്ഷരങ്ങളിൽ ഒതുക്കുക."
+  },
+  "You are already a member of this community.": "നിങ്ങൾ ഇതിനകം ഈ കമ്മ്യൂണിറ്റിയിലെ ഒരംഗമാണ്.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "ഈ കമ്മ്യൂണിറ്റിയിൽ ചേരാൻ അഭ്യർത്ഥിക്കുന്ന ആളുകൾ. ക്ഷണം അവരുടെ കീക്ക് മാത്രം ഉപയോഗിക്കാൻ കഴിയുന്ന ഒന്നാണ്, അവരുടെ ആപ്പ് അത് സ്വയം കണ്ടെത്തും. 'ഇപ്പോഴില്ല' എന്നത് \"ഇതുവരെ മറുപടിയില്ല\" എന്ന് മാത്രമാണ് അവരെ അറിയിക്കുക.",
+  "Couldn't reach your community. Check your connection and try again.": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുമായി ബന്ധപ്പെടാൻ കഴിഞ്ഞില്ല. കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.",
+  "Asked today": "ഇന്ന് ചോദിച്ചു",
+  "Asked yesterday": "ഇന്നലെ ചോദിച്ചു",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "{n} ദിവസം മുമ്പ് ചോദിച്ചു",
+    "other": "{n} ദിവസങ്ങൾക്ക് മുമ്പ് ചോദിച്ചു"
+  },
+  "from {node}": "{node}-ൽ നിന്ന്",
+  "You invited {name}. Their app will find the invite by itself.": "നിങ്ങൾ {name}-നെ ക്ഷണിച്ചു. അവരുടെ ആപ്പ് ക്ഷണം സ്വയം കണ്ടെത്തും.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 ചേരാൻ ആഗ്രഹിക്കുന്നു ({n})",
+    "other": "🚪 ചേരാൻ ആഗ്രഹിക്കുന്നു ({n})"
+  },
+  "Inviting {name}...": "{name}-നെ ക്ഷണിക്കുന്നു...",
+  "Invite {name}": "{name}-നെ ക്ഷണിക്കുക",
+  "Declining {name}...": "{name}-നെ നിരസിക്കുന്നു...",
+  "Not now, {name}": "ഇപ്പോഴില്ല, {name}",
+  "Invite\u0004button: let them in": "ക്ഷണിക്കുക",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ ക്ഷണം ({n})",
+    "other": "🎟️ ക്ഷണങ്ങൾ ({n})"
+  },
+  "Ask to join {name}": "{name}-ൽ ചേരാൻ അഭ്യർത്ഥിക്കുക",
+  "A few words about yourself": "നിങ്ങളെക്കുറിച്ച് ചുരുക്കം ചില വാക്കുകൾ",
+  "Where you live, what you'd like to share or learn": "നിങ്ങൾ താമസിക്കുന്ന സ്ഥലം, എന്താണ് പങ്കിടാനോ പഠിക്കാനോ ആഗ്രഹിക്കുന്നത്"
 }

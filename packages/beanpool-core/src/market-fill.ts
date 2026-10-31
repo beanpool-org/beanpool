@@ -14,6 +14,23 @@ export const FILL_BELOW = 8;
 /** The most the whole list holds with the fill in it: the node's own page (50) of the "everywhere" read. */
 export const FILL_MAX = 50;
 
+/**
+ * Given up after this long: the screen does not start a second read while one is out, so a read that never answered
+ * (a radio gone cold mid-request) would hold the section on its spinner for good.
+ */
+export const READ_TIMEOUT_MS = 20_000;
+
+/** Whether a post is the node's own Daily Pulse post (pinned/reflection), not a listing from elsewhere. */
+export function isNodePulsePost(p: any): boolean {
+    return Boolean(
+        p &&
+        ((p.author_callsign || p.authorCallsign) === 'Daily Pulse') &&
+        !p.origin_node &&
+        !p.originNode &&
+        !p._remoteNode
+    );
+}
+
 /** Whether the list shown near the member is short enough to be filled. */
 export function wantsFill(shownNear: number): boolean {
     return shownNear < FILL_BELOW;

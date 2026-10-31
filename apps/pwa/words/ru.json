@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "Имя «{name}» уже занято в этом сообществе. Выберите другое имя.",
@@ -2203,7 +2203,7 @@
   "Not finished yet": "Ещё не завершено",
   "Reload page": "Перезагрузить страницу",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "В этом браузере уже открыт другой аккаунт BeanPool, поэтому этот аккаунт не был сохранён здесь.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Это не полный код смены ключа. Он начинается с RK- и содержит восемь букв и цифр.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "Это не полный код. Он начинается с RK- или BB- и содержит восемь букв и цифр.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "Начатая в этом браузере регистрация ещё ожидает завершения. Сначала закончите её, а затем вернитесь к коду.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "Этот браузер не смог надёжно сохранить ключ, поэтому ничего не отправлено.",
   "Show this number to your admin": "Покажите этот номер администратору",
@@ -3864,9 +3864,59 @@
   "Held in Trust & Deals": "Удержание и сделки",
   "Held in Trust & Deals Notifications": "Уведомления об удержаниях и сделках",
   "Bid approved! The Beans are held in trust.": "Предложение принято! Средства заблокированы на удержании.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "Отменить инициативу и вернуть средства участникам?\n\nЭто закроет инициативу и немедленно вернёт все взносы с удержания участникам.",
   "{amount} 🫘 held in trust": "{amount} 🫘 на удержании",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Не удалось удалить аккаунт с узла. Возможно, сначала необходимо завершить активные сделки с удержанием средств.",
   "{amount} · held in trust": "{amount} · депонировано",
-  "Cancel Initiative & Refund Backers": "Отменить инициативу и вернуть средства участникам"
+  "Cancel Initiative & Refund Backers": "Отменить инициативу и вернуть средства участникам",
+  "Second pause in 30 days. The last vote said No.": "Вторая пауза за 30 дней. На прошлом голосовании ответили «Нет».",
+  "Second pause in 30 days. Too few members voted on the last one.": "Вторая пауза за 30 дней. В прошлом голосовании проголосовало слишком мало членов сообщества.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Вторая пауза за 30 дней. Прошлое голосование остановили до его закрытия.",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Отменить инициативу и вернуть средства участникам?\n\nЭто закроет инициативу и немедленно вернёт все взносы с удержания участникам. Вклад из аккаунта, который с тех пор был закрыт (удалён, или деятельность предприятия прекращена), вместо этого поступает в Общие проекты, как и остальные бобы закрытого аккаунта, а вклады всех остальных возвращаются им.",
+  "Please give a name of at least 2 characters.": "Имя должно содержать не менее 2 символов.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Имя не должно превышать {n} символ.",
+    "few": "Имя не должно превышать {n} символа.",
+    "many": "Имя не должно превышать {n} символов.",
+    "other": "Имя не должно превышать {n} символа."
+  },
+  "Please say a few words about yourself.": "Пожалуйста, расскажите немного о себе.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Сообщение не должно превышать {n} символ.",
+    "few": "Сообщение не должно превышать {n} символа.",
+    "many": "Сообщение не должно превышать {n} символов.",
+    "other": "Сообщение не должно превышать {n} символа."
+  },
+  "You are already a member of this community.": "Вы уже состоите в этом сообществе.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Люди, желающие вступить в это сообщество. «Пригласить» создаёт приглашение, которое может использовать только их ключ, и приложение найдёт его автоматически. «Не сейчас» лишь сообщит «ответа пока нет».",
+  "Couldn't reach your community. Check your connection and try again.": "Не удалось связаться с вашим сообществом. Проверьте подключение и повторите попытку.",
+  "Asked today": "Запрос сегодня",
+  "Asked yesterday": "Запрос вчера",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Запрос отправлен {n} день назад",
+    "few": "Запрос отправлен {n} дня назад",
+    "many": "Запрос отправлен {n} дней назад",
+    "other": "Запрос отправлен {n} дня назад"
+  },
+  "from {node}": "с {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Вы пригласили {name}. Приложение пользователя само найдёт приглашение.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Хочет вступить ({n})",
+    "few": "🚪 Хотят вступить ({n})",
+    "many": "🚪 Хотят вступить ({n})",
+    "other": "🚪 Хотят вступить ({n})"
+  },
+  "Inviting {name}...": "Приглашение {name}...",
+  "Invite {name}": "Пригласить {name}",
+  "Declining {name}...": "Отклонение {name}...",
+  "Not now, {name}": "Не сейчас, {name}",
+  "Invite\u0004button: let them in": "Пригласить",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Приглашения ({n})",
+    "few": "🎟️ Приглашения ({n})",
+    "many": "🎟️ Приглашения ({n})",
+    "other": "🎟️ Приглашения ({n})"
+  },
+  "Ask to join {name}": "Запросить вступление в {name}",
+  "A few words about yourself": "Пара слов о себе",
+  "Where you live, what you'd like to share or learn": "Где вы живёте, чем хотите поделиться или чему научиться"
 }

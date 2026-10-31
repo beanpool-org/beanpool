@@ -693,7 +693,7 @@ describe('"Put this in your shop"', () => {
         await openOfferComposer('me-key', 'fixture-kit', DRAFT, { kind: 'free', beans: 0 }, true);
         expect(JSON.parse(store.map.get(SHOP_CHOICE_KEY)!)).toMatchObject({ anchorUrl: 'https://mullum.example', title: 'Cordless drill' });
         expect(store.map.has('beanpool_offer_draft')).toBe(true);
-        expect(nav.pushed.at(-1)).toBe('/(tabs)/map?newPost=offer');
+        expect(nav.pushed.at(-1)).toBe('/new-listing?newPost=offer');
         await openOfferComposer('me-key', 'fixture-kit', DRAFT, { kind: 'free', beans: 0 }, false);
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
     });
@@ -729,7 +729,7 @@ describe('"Put this in your shop"', () => {
         await opening;
         expect(JSON.parse(store.map.get('beanpool_offer_draft')!).postType).toBe('need');
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
-        expect(nav.pushed.at(-1)).toBe('/(tabs)/map?newPost=need');
+        expect(nav.pushed.at(-1)).toBe('/new-listing?newPost=need');
     });
 
     it('the edit toggle starts where the listing is, and an edit sends an id in, null out, nothing when unchanged', async () => {

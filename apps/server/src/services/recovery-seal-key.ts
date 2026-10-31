@@ -560,6 +560,48 @@ export function rewrapRowsFromRetiredKeys(): { shares: number; releases: number 
 }
 
 /**
+ * {@link rewrapRowsFromRetiredKeys} for members' community copies (vault rethink VR3, engine/community-copy.ts, the table
+ * `community_copies`, bound to (owner, 'community')): a row only a retired key opens is locked again with the live one,
+ * zeroed where it lay, and stamped by its touch trigger (a plain table), so a standby is sent it in the live key's lock and
+ * the next take-over bundle, which carries the live key only, opens it. A row no key here opens is left as it is.
+ * Idempotent. A database from before the table has none. Returns how many were locked again.
+ */
+export function rewrapCommunityCopiesFromRetiredKeys(): number {
+    const live = requireKey();
+    if (retiredKeys().length === 0) return 0;
+    let rows: { owner_pubkey: string; copy_ct: string; copy_iv: string; copy_tag: string; kdf_params: string }[];
+    try {
+        rows = db.prepare('SELECT owner_pubkey, copy_ct, copy_iv, copy_tag, kdf_params FROM community_copies').all() as typeof rows;
+    } catch {
+        return 0;
+    }
+    const relocked: { owner: string; f: RecoverySealFields }[] = [];
+    for (const r of rows) {
+        const f: RecoverySealFields = { encryptedShare: r.copy_ct, shareIv: r.copy_iv, shareTag: r.copy_tag, kdfParams: r.kdf_params };
+        const aad = shareRowAad(r.owner_pubkey, 'community');
+        if (!isNodeWrapped(f.kdfParams) || openWith(live, f, aad)) continue;
+        try {
+            relocked.push({ owner: r.owner_pubkey, f: sealRecoveryFields(openRecoveryFieldsUnder(f, aad, true), aad) });
+        } catch {
+            // No key here opens it: left as it is.
+        }
+    }
+    if (relocked.length === 0) return 0;
+    const priorSecureDelete = Number(db.pragma('secure_delete', { simple: true })) || 0;
+    db.pragma('secure_delete = ON');
+    try {
+        const upd = db.prepare('UPDATE community_copies SET copy_ct = ?, copy_iv = ?, copy_tag = ?, kdf_params = ? WHERE owner_pubkey = ?');
+        db.transaction(() => {
+            for (const { owner, f } of relocked) upd.run(f.encryptedShare, f.shareIv, f.shareTag, f.kdfParams, owner);
+        })();
+    } finally {
+        db.pragma(`secure_delete = ${priorSecureDelete}`);
+    }
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* best effort: the next checkpoint writes over them */ }
+    return relocked.length;
+}
+
+/**
  * The reverse, for a rollback past this change: every wrapped row back to the client's bytes. Refuses (and changes
  * nothing) if any wrapped row does not open with this key, because an older server would then serve it as garbage.
  * It also forgets that the database was cleared ({@link clearCopiesDroppedBeforeSeal}): the older server deletes
@@ -1250,6 +1292,11 @@ export function installRecoverySealAtBoot(opts: { standby: boolean }): void {
             console.log(`🔐 Recovery seal: locked ${relocked.shares} recovery cop${relocked.shares === 1 ? 'y' : 'ies'} and ${relocked.releases} released `
                 + `cop${relocked.releases === 1 ? 'y' : 'ies'} again with data/${RECOVERY_SEAL_KEY_FILE}: only a key it replaced opened them `
                 + '(kept as data/recovery-seal-retired-….key).');
+        }
+        const copiesRelocked = rewrapCommunityCopiesFromRetiredKeys();
+        if (copiesRelocked) {
+            console.log(`🔐 Recovery seal: locked ${copiesRelocked} community cop${copiesRelocked === 1 ? 'y' : 'ies'} again with `
+                + `data/${RECOVERY_SEAL_KEY_FILE}: only a key it replaced opened them.`);
         }
         const { wrapped, unopenable } = countWrapped();
         console.log(`🔐 Recovery seal: ${wrapped} recovery cop${wrapped === 1 ? 'y' : 'ies'}, key present.`);

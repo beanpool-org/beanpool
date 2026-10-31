@@ -31,6 +31,8 @@ import { webAppAddress, webAppHost } from '../lib/former-address';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { noWordsHere, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { WaysBackSection } from '../components/WaysBackSection';
+import { CommunityAdminsSection } from '../components/CommunityAdminsSection';
+import { webCommunityCopyStatus, type WebCommunityCopyStatus } from '../lib/community-copy';
 import { MemberAvatar } from '../components/MemberAvatar';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
@@ -242,6 +244,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity.publicKey]);
     const signInRecoveryNames = signInRecovery ? signInNames(signInRecovery) : null;
+    // The copy this server keeps for its admins to bring the member back from (vault rethink VR3), asked once and after
+    // each change: "Your community's admins" turns it on and off, and "Where your account can be brought back from"
+    // lists and removes it, so both say the same, wherever it was turned on. Undefined while asking, null when it couldn't
+    // be asked (a server from before it answers 404).
+    const [communityCopy, setCommunityCopy] = useState<WebCommunityCopyStatus | null | undefined>(undefined);
+    const readCommunityCopy = () => webCommunityCopyStatus().then(setCommunityCopy);
+    useEffect(() => {
+        let cancelled = false;
+        webCommunityCopyStatus().then((s) => { if (!cancelled) setCommunityCopy(s); });
+        return () => { cancelled = true; };
+    }, [identity.publicKey]);
     // Whether this browser holds the 12 words. One restored from a sign-in copy without them (web-restore.ts) does not:
     // nothing here tells it to save, view or rely on words it hasn't got, and each place says what brings it back.
     const hasWords = hasMnemonic(identity);
@@ -1020,9 +1033,19 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     line above says what it keeps now. */}
                                 <WaysBackSection
                                     enrolled={signInRecovery}
+                                    adminsCopy={communityCopy?.kept ? { since: communityCopy.since } : null}
+                                    adminsCopyUnopenable={communityCopy?.unopenable ?? null}
                                     hasWords={hasWords}
                                     onShowWords={() => setMode('seed')}
-                                    onChanged={() => { getSignInRecovery().then(setSignInRecovery); }}
+                                    onChanged={() => { getSignInRecovery().then(setSignInRecovery); void readCommunityCopy(); }}
+                                />
+                                {/* The third way back (vault rethink VR3): your community's admins, where this community keeps
+                                    copies itself and is not the global community, or where it already keeps this member's. */}
+                                <CommunityAdminsSection
+                                    identity={identity}
+                                    offeredHere={communityInfo?.recoveryCopies === 'server' && !isAppsGlobal(communityInfo, pageHost)}
+                                    status={communityCopy}
+                                    onChanged={readCommunityCopy}
                                 />
                             </div>
                         </div>

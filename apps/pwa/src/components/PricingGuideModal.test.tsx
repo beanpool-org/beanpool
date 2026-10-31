@@ -32,6 +32,81 @@ describe('PricingGuideModal Component', () => {
         expect(allItemsBtn.className).toContain('min-h-[44px]');
         expect(allItemsBtn.className).toContain('focus-visible:ring-2');
     });
+
+    // The 1.2 s "Feedback Submitted" timer, by its delay: the testing library's own timers use other delays.
+    const reportTimers = (spy: { mock: { calls: unknown[][]; results: { value: unknown }[] } }) =>
+        spy.mock.calls.flatMap((c, i) => (c[1] === 1200 ? [spy.mock.results[i].value] : []));
+
+    it('clears the pending feedback timer itself on unmount', async () => {
+        // Each timer remembers when it has fired: on a busy machine the 1.2 s can pass before the unmount, and then nothing is pending.
+        const fired = new Set<unknown>();
+        const realSetTimeout = window.setTimeout.bind(window);
+        const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((fn: (...a: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+            const id: unknown = realSetTimeout(() => { fired.add(id); fn(...args); }, ms);
+            return id;
+        }) as typeof window.setTimeout);
+        const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+        try {
+            const { unmount } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+            const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+            await userEvent.click(reportBtns[0]);
+            await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+            expect(await screen.findByRole('heading', { name: /Feedback Submitted/i })).toBeInTheDocument();
+
+            const [timer] = reportTimers(setTimeoutSpy);
+            expect(timer).toBeDefined();
+            unmount();
+            // Cleared by the unmount, unless it had already fired (nothing left to clear).
+            expect(fired.has(timer) || clearTimeoutSpy.mock.calls.some(c => c[0] === timer)).toBe(true);
+        } finally {
+            setTimeoutSpy.mockRestore();
+            clearTimeoutSpy.mockRestore();
+        }
+    });
+
+    it('a submit still out when the modal goes starts no timer and sets no state after it', async () => {
+        const api = await import('../lib/api');
+        let answer!: (v: { success: boolean }) => void;
+        vi.mocked(api.submitPricingReportApi).mockImplementationOnce(() => new Promise(r => { answer = r; }) as any);
+        const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+        try {
+            const { unmount } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+            const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+            await userEvent.click(reportBtns[0]);
+            await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+            unmount();
+            answer({ success: true });
+            await new Promise(r => setTimeout(r, 0));
+            expect(reportTimers(setTimeoutSpy)).toEqual([]);
+        } finally {
+            setTimeoutSpy.mockRestore();
+        }
+    });
+
+    it('resets reporting feedback state when modal closes and reopens', async () => {
+        const { rerender } = render(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+        const reportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+        await userEvent.click(reportBtns[0]);
+
+        const submitBtn = screen.getByRole('button', { name: 'Submit' });
+        await userEvent.click(submitBtn);
+
+        expect(await screen.findByRole('heading', { name: /Feedback Submitted/i })).toBeInTheDocument();
+
+        // Close modal while success message is showing
+        rerender(<PricingGuideModal isOpen={false} onClose={() => {}} />);
+        expect(screen.queryByRole('heading', { name: /Feedback Submitted/i })).not.toBeInTheDocument();
+
+        // Reopen modal: should be back in main catalog view, not stuck on Feedback Submitted
+        rerender(<PricingGuideModal isOpen={true} onClose={() => {}} />);
+        expect(screen.queryByRole('heading', { name: /Feedback Submitted/i })).not.toBeInTheDocument();
+
+        // Clicking report again should show the report form, not Feedback Submitted
+        const reopenedReportBtns = await screen.findAllByRole('button', { name: /Report price for/i });
+        await userEvent.click(reopenedReportBtns[0]);
+        expect(screen.getByRole('heading', { name: /Report Price/i })).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /Feedback Submitted/i })).not.toBeInTheDocument();
+    });
 });
 
 describe('PricingGuideModal price accessible text', () => {

@@ -27,9 +27,10 @@ import Router from '@koa/router';
 import type { RouteDeps } from '../routes/types.js';
 import { requireAdminRole, requireFreshProof, requirePhoneStepUp } from '../admin-auth.js';
 import {
-    issueAutomationToken, listAutomationTokens, revokeAutomationToken, AGENT_TOKEN_DEFAULT_DAYS, AGENT_TOKEN_MAX_DAYS,
+    issueAutomationToken, listAutomationTokens, revokeAutomationToken, AGENT_TOKEN_DEFAULT_DAYS, AGENT_TOKEN_MAX_DAYS, TOKEN_NAME_MAX,
     type AutomationTokenView,
 } from '../automation-tokens.js';
+import { grantIdsWithMadePosts, madePostsCount, removeAllMadeBy } from './owner-posts.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getMember } from '../state-engine.js';
 import { logger } from '../logger.js';
@@ -40,6 +41,7 @@ import {
     AGENT_POSTS_PER_DAY_DEFAULT, AGENT_POSTS_PER_DAY_MAX, AGENT_POSTS_PER_DAY_MIN,
 } from './limits.js';
 import { dropSuggestionsOf } from './suggestions.js';
+import { dropUploadedPhotosOf } from './owner-photos.js';
 import { aiAssistantsAllowed, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
 import { agentConnectedWords, agentDisconnectedWords } from './welcome.js';
@@ -116,6 +118,7 @@ function oauthGrantView(g: OAuthGrantView, me: string | null, now = Date.now()) 
         callsToday: agentCallsToday(g.id, now),
         canPost: g.canPost === true,
         postsToday: agentCreatesToday(g.id, now),
+        madePosts: madePostsCount(g.id),
     };
 }
 
@@ -137,7 +140,15 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
         callsToday: agentCallsToday(t.id, now),
         canPost: t.canPost === true,
         postsToday: agentCreatesToday(t.id, now),
+        /** Its live posts (created_via), which "Remove its posts" takes down. */
+        madePosts: madePostsCount(t.id),
     };
+}
+
+/** Grants with live posts here (created_via) whose token or OAuth record is gone: revoked, or expired and cleared. */
+function disconnectedWithPosts(): string[] {
+    const known = new Set([...listAutomationTokens().filter((t) => t.scope === 'agent').map((t) => t.id), ...listOAuthGrants().map((g) => g.id)]);
+    return grantIdsWithMadePosts().filter((id) => !known.has(id));
 }
 
 /** The grant a preview runs as: one the caller may see, else the caller themselves with their own role. */
@@ -188,7 +199,31 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
             postsPerDayMin: AGENT_POSTS_PER_DAY_MIN,
             postsPerDayMax: AGENT_POSTS_PER_DAY_MAX,
             grants: [...visibleGrants(ctx).map((t) => grantView(t, me)), ...visibleOAuthGrants(ctx).map((g) => oauthGrantView(g, me))],
+            /**
+             * Assistants disconnected or expired whose posts are still up (design §2.7): an owner removes them here, by the grant
+             * id on the rows, whether or not its record remains. An owner's list only.
+             */
+            disconnected: role === 'owner' ? disconnectedWithPosts().map((id) => ({ id, madePosts: madePostsCount(id) })) : [],
         };
+    });
+
+    router.post('/api/local/admin/agent/grants/:id/remove-made', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        if (!(await personOnly(ctx, deps))) return;
+        if (!requireAdminRole(ctx, ['owner'], 'Only an owner removes the posts an assistant made')) return;
+        const id = String(ctx.params.id || '');
+        const known = listAutomationTokens().some((t) => t.scope === 'agent' && t.id === id) || listOAuthGrants().some((g) => g.id === id);
+        if (!id || (!known && !grantIdsWithMadePosts().includes(id))) {
+            ctx.status = 404;
+            ctx.body = { error: 'No such assistant, and no posts made by one with that id' };
+            return;
+        }
+        // Takes down what may be many members' cards at once: an owner's fresh proof every time, as the other owner changes
+        // here (posts a day; a ticked token): a computer's key session is sent to the phone.
+        if (!(await requireFreshProof(ctx, body(ctx).code, 'remove the posts an assistant made'))) return;
+        const by = actorOf(ctx) ?? 'owner:password';
+        const out = removeAllMadeBy(id, 'settings', by);
+        ctx.body = { grant: id, removed: out.removed, kept: out.kept };
     });
 
     router.post('/api/local/admin/agent/grants', async (ctx) => {
@@ -231,6 +266,13 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         // (routes/automation-tokens.ts) and as the posts-a-day number does (below): a computer's key session is sent to the phone.
         // After the range checks: a code is spent when it is checked (#2002 NB1). An unticked token keeps the gate it had.
         const canPost = b.canPost === true && role === 'owner';
+        // The name too (MCP-OWNER-POSTS-W): a name left out or too long is refused before the proof, so it spends no code.
+        const name = typeof b.name === 'string' ? b.name.trim() : '';
+        if (!name || name.length > TOKEN_NAME_MAX) {
+            ctx.status = 400;
+            ctx.body = { error: name ? `A token's name is at most ${TOKEN_NAME_MAX} characters` : 'Give the token a name, so you know later what uses it' };
+            return;
+        }
         if (canPost && !(await requireFreshProof(ctx, b.code, 'connect an assistant that may post for you'))) return;
         const res = issueAutomationToken({ name: b.name, scope: 'agent', expiresAt: now + days * DAY_MS, createdBy: me, canPost }, now);
         if (!res.ok) {
@@ -282,6 +324,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         if (oauth && revokeOAuthGrant(id)) {
             forgetAgentGrant(id);
             dropSuggestionsOf(id);
+            dropUploadedPhotosOf(id);
             const by = actorOf(ctx) ?? 'owner:password';
             const role = roleOf(ctx);
             const name = `${cleanMemberText(oauth.clientName, 60) || 'unnamed'}, sending to ${redirectHost(oauth.redirectUri)}`;
@@ -298,6 +341,7 @@ export function createAgentGrantRoutes(deps: RouteDeps): Router {
         }
         forgetAgentGrant(id);
         dropSuggestionsOf(id);
+        dropUploadedPhotosOf(id);
         const by = actorOf(ctx) ?? 'owner:password';
         const role = roleOf(ctx);
         logger.info('AUTH', 'AI assistant disconnected', { tokenId: id, role, by: by.slice(0, 16) });

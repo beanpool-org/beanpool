@@ -538,7 +538,7 @@ export default function TreasuryManageScreen() {
         if (!treasuryKey || cancelling) return;
         Alert.alert(
             t('Cancel Initiative & Refund Backers?'),
-            t('This will close the initiative and immediately refund all pledges held in trust back to their backers.'),
+            t('This will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account\'s beans did, and everyone else\'s still goes back to them.'),
             [
                 { text: t('Keep Initiative'), style: 'cancel' },
                 {

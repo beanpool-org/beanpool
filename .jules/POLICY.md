@@ -1189,3 +1189,58 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 ### 2026-10-29 — Watchman: fix test-sync-copy-pages (#2581) — CLOSED, ALREADY FIXED
 - **Category:** PHANTOM
 - **Why not to re-file:** the suite passes on main (local full run 29 Oct, 56 s). main already resets the admin-auth tarpit and the runner sets BEANPOOL_SUITE_ENV_PASSWORD; the PR's wide-copy rewrite would have weakened the check.
+
+### 2026-10-31 — Flow: loading indicator in StrandedEscrowsPanel (#2610) — CLOSED, RE-FILE OF #1725
+- **Category:** RE-FILE (see #1725)
+- **Claim:** add loading indicator for StrandedEscrowsPanel.
+- **Why not to re-file:** re-file of #1725. The panel renders nothing on most nodes (only when stranded escrows exist); a spinner only flashes and vanishes.
+
+### 2026-10-31 — Pixel: dynamic label and hint on AreaPicker location button (#2611) — CLOSED, RE-FILE OF #2375 / #2172
+- **Category:** RE-FILE (see #2375, #2172)
+- **Claim:** add dynamic accessibilityLabel and hint to AreaPicker "use my location" button.
+- **Why not to re-file:** re-file of #2375 and #2172. Main already has the label and busy state; the new `t()` strings had no catalog entries in the translation catalogs.
+
+### 2026-10-31 — Sentinel: bound notices seen array validation (#2613) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** bound notices seen array validation on `POST /api/notices/seen`.
+- **Why not to re-file:** CLAIM FALSE: `/notices/seen` already caps ids at `MARK_SEEN_MAX_IDS = 100` with 64 chars per id (`apps/server/src/routes/notices.ts:88`).
+
+### 2026-10-31 — Bolt: O(1) group lookups in PWA ProjectsPage (#2614, #2647) — CLOSED, THIRD FILING (#2547, #2579)
+- **Category:** RE-FILE (see #2547, #2579)
+- **Claim:** replace `.find()` over `groups` with a precomputed Map in PWA ProjectsPage.
+- **Why not to re-file:** third and fourth filings (see #2547, #2579). No Map-for-find swaps without a profile of a real screen. A community has a handful of groups; nothing measurable is saved.
+
+### 2026-10-31 — Expo: repeated route params in propose-project and community-card (#2616, #2651) — CLOSED, DECIDED (#1753, #2073)
+- **Category:** DELIBERATE DECISION (see #1753, #2073)
+- **Claim:** `useLocalSearchParams` can return `string[]`, so take `[0]` (`kind` in `propose-project.tsx` #2616, `node` in `community-card.tsx` #2651).
+- **Why not to re-file:** ninth and tenth filings; DECIDED in #1753 and #2073. A repeated parameter is ambiguous and refused on purpose across every screen; taking `[0]` is wrong.
+
+### 2026-10-31 — Flow: replace catch err any with unknown in CommunityShapeSection (#2645) — CLOSED, SECOND FILING (#2451)
+- **Category:** RE-FILE (see #2451)
+- **Claim:** replace `catch (err: any)` with `unknown` and format error text in `CommunityShapeSection.tsx`.
+- **Why not to re-file:** second filing (see #2451). Its fallback sits on a dead branch.
+
+### 2026-10-31 — Palette: keyboard focus rings on SharedOutsideSection controls (#2649) — CLOSED, CLAIM FALSE (#1369, #2423, #2452)
+- **Category:** CLAIM FALSE (see #1369, #2423, #2452)
+- **Claim:** add keyboard focus rings to interactive controls in `SharedOutsideSection.tsx`.
+- **Why not to re-file:** see #1369, #2423, #2452: the global `:focus-visible` outline in `apps/pwa/src/index.css` already applies to these elements.
+
+### 2026-10-31 — Pixel: dynamic label and busy state on GroupDetailModal join/leave buttons (#2650) — CLOSED, FIFTH FILING (#2576)
+- **Category:** RE-FILE (see #2576, #2172, #2117, #1036)
+- **Claim:** add dynamic accessibilityLabel and busy state to group join and leave action buttons in `GroupDetailModal.tsx`.
+- **Why not to re-file:** fifth filing; see #2576 ("stop filing this button"). The button is replaced by a spinner while busy.
+
+### 2026-10-31 — Sentinel: buffer length checks in timing-safe comparisons in four files (#2652) — CLOSED, PHANTOM (#2491, #2338)
+- **Category:** PHANTOM (see #2491, #2338)
+- **Claim:** enforce explicit buffer length checks before `crypto.timingSafeEqual` in four files.
+- **Why not to re-file:** PHANTOM vulnerability; see #2491, #2338. Digests are fixed at 32 bytes, `claimProofMatches` is guarded by `PROOF_SHAPE` `/^[0-9a-f]{64}$/` (`apps/server/src/claim-code.ts:51,119`), and `verifyPassword` is already wrapped in try/catch.
+
+### 2026-10-31 — Forge: catch errors in POST /api/local/admin/alerts/test (#2653) — CLOSED, RE-FILE OF #1502 / #2007
+- **Category:** RE-FILE (see #1502, #2007)
+- **Claim:** catch errors in `POST /api/local/admin/alerts/test`.
+- **Why not to re-file:** re-file of #1502 and #2007. Koa already turns an uncaught throw into a 500; the catch echoed raw `e.message` to the client instead of logging server-side.
+
+### 2026-10-31 — Watchman: door-signal Retry-After bound widened to 580 (#2655) — CLOSED, RE-FILE OF #2494
+- **Category:** RE-FILE (see #2494)
+- **Claim:** fix `test-door-signal` failure by widening the Retry-After bound to 580.
+- **Why not to re-file:** re-file of #2494. Unreproduced on main. Keep the bound tight; derive it from the tick time (`Date.now() - tick`) rather than widening.

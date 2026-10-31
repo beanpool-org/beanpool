@@ -2,10 +2,10 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» è già in uso in questa comunità. Scegli un altro nome.",
@@ -2090,7 +2090,7 @@
   "Not finished yet": "Non ancora terminato",
   "Reload page": "Ricarica pagina",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "Questo browser conserva un altro account BeanPool, quindi questo non è stato salvato qui.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Questo non è un codice di ri-chiave completo. Inizia con RK- e contiene otto lettere e numeri.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "Questo non è un codice completo. Inizia con RK- o BB- e contiene otto lettere e numeri.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "Un'adesione avviata in questo browser è ancora in attesa. Completala prima, poi torna al tuo codice.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "Questo browser non ha potuto memorizzare la chiave in modo sicuro, quindi non è stato inviato nulla.",
   "Show this number to your admin": "Mostra questo numero al tuo amministratore",
@@ -3617,9 +3617,49 @@
   "Held in Trust & Deals": "Deposito di garanzia e accordi",
   "Held in Trust & Deals Notifications": "Notifiche deposito di garanzia e accordi",
   "Bid approved! The Beans are held in trust.": "Offerta approvata! Fondi vincolati nel deposito di garanzia.",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "Annullare l'iniziativa e rimborsare i sostenitori?\n\nQuesto chiuderà l'iniziativa e rimborserà immediatamente tutti gli impegni in deposito ai rispettivi sostenitori.",
   "{amount} 🫘 held in trust": "{amount} 🫘 in deposito di garanzia",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Impossibile rimuovere l'account dal nodo. Gli accordi con deposito di garanzia attivi potrebbero dover essere prima risolti.",
   "{amount} · held in trust": "{amount} · in garanzia",
-  "Cancel Initiative & Refund Backers": "Annullare l'iniziativa e rimborsare i sostenitori"
+  "Cancel Initiative & Refund Backers": "Annullare l'iniziativa e rimborsare i sostenitori",
+  "Second pause in 30 days. The last vote said No.": "Seconda pausa in 30 giorni. L'ultima votazione ha detto No.",
+  "Second pause in 30 days. Too few members voted on the last one.": "Seconda pausa in 30 giorni. All'ultima votazione hanno votato troppo pochi membri.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Seconda pausa in 30 giorni. L'ultima votazione è stata fermata prima della chiusura.",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Annullare l'iniziativa e rimborsare i sostenitori?\n\nQuesto chiuderà l'iniziativa e rimborserà immediatamente tutti gli impegni in deposito ai rispettivi sostenitori. Una promessa proveniente da un conto che da allora è stato chiuso (eliminato o un'attività liquidata) va invece ai Beni Comuni, come il resto dei fagioli di un conto chiuso, e quella di tutti gli altri torna comunque a loro.",
+  "Please give a name of at least 2 characters.": "Inserisci un nome di almeno 2 caratteri.",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "one": "Il nome deve avere al massimo {n} carattere.",
+    "other": "Il nome deve avere al massimo {n} caratteri."
+  },
+  "Please say a few words about yourself.": "Scrivi qualche parola su di te.",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "one": "Il messaggio deve avere al massimo {n} carattere.",
+    "other": "Il messaggio deve avere al massimo {n} caratteri."
+  },
+  "You are already a member of this community.": "Sei già membro di questa comunità.",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "Persone che chiedono di unirti a questa comunità. Invita crea un invito utilizzabile solo dalla loro chiave, che la loro app troverà automaticamente. Non ora comunica semplicemente che \"non c'è ancora risposta\".",
+  "Couldn't reach your community. Check your connection and try again.": "Impossibile raggiungere la tua comunità. Controlla la connessione e riprova.",
+  "Asked today": "Richiesto oggi",
+  "Asked yesterday": "Richiesto ieri",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "one": "Richiesto {n} giorno fa",
+    "other": "Richiesto {n} giorni fa"
+  },
+  "from {node}": "da {node}",
+  "You invited {name}. Their app will find the invite by itself.": "Hai invitato {name}. La sua app troverà l'invito automaticamente.",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "one": "🚪 Vuole entrare ({n})",
+    "other": "🚪 Vogliono entrare ({n})"
+  },
+  "Inviting {name}...": "Invito di {name} in corso...",
+  "Invite {name}": "Invita {name}",
+  "Declining {name}...": "Rifiuto di {name} in corso...",
+  "Not now, {name}": "Non ora, {name}",
+  "Invite\u0004button: let them in": "Invita",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "one": "🎟️ Inviti ({n})",
+    "other": "🎟️ Inviti ({n})"
+  },
+  "Ask to join {name}": "Chiedi di unirti a {name}",
+  "A few words about yourself": "Qualche parola su di te",
+  "Where you live, what you'd like to share or learn": "Dove vivi, cosa vorresti condividere o imparare"
 }

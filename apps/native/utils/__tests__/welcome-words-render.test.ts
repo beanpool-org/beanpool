@@ -604,6 +604,27 @@ describe('the join wizard in the pseudo-locale: every sentence through t(), at 3
         check('How it Works, no Beans');
     });
 
+    // Vault rethink VR8 (design §6 door 7): the owner a claim makes is told at Safety Backup that their key also unlocks
+    // the community's backups, and to make a second owner; an invite's member never is.
+    const OWNER_LINE = "Your key also unlocks this community's backups. Keep your words, and make a second owner, so one can bring the other back.";
+    it("Safety Backup after a claim: the owner's line, in the member's language, at 320 dp; never after an invite", async () => {
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'claim', inviteCode: '', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        await mount('xx');
+        const line = host!.querySelector('[data-testid="owner-backup-line"]');
+        expect(line?.textContent, 'the owner is told why their way back matters').toBe(pseudoLocalise(OWNER_LINE));
+        check("Safety Backup after a claim, the owner's line");
+    });
+    it("Safety Backup after an invite: no owner's line", async () => {
+        store.map.set('beanpool_anchor_url', 'https://mullum.beanpool.org');
+        phone.stored = SALLY;
+        phone.pending = { step: 'seedBackup', flow: 'invite', inviteCode: 'BP-ABCD-1234', anchorUrl: 'https://mullum.beanpool.org', callsign: 'Sally', redeemed: true, newKey: SALLY.publicKey };
+        await mount('en');
+        expect(host!.querySelector('[data-testid="owner-backup-line"]')).toBeNull();
+        expect(host!.textContent).not.toContain(OWNER_LINE);
+    });
+
     // Vault rethink VR2: Safety Backup read the community's rule as the key vault, and its owners set `none` since. The
     // connect links nothing (and keeps the fresh answer, as copies-rule.ts copiesRuleNow does); the sheet offers no Try
     // again, which could only say so again, and closing it has the step read the rule again: no sign-in is offered.

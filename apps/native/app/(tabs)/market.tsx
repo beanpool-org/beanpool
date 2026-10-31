@@ -1018,7 +1018,7 @@ export default function MarketScreen() {
     const fillNeeded = marketFillWanted({
         profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
         searching: searchQuery.trim().length > 0, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
-        shownNear: filteredPosts.length,
+        shownNear: filteredPosts,
     });
     const fillKey = `${filter}|${categoryFilter}`;
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: any[] | null } | null>(null);
@@ -1354,7 +1354,7 @@ export default function MarketScreen() {
                     </Text>
                     <Pressable
                         style={{ marginTop: 10, backgroundColor: colors.feedback.warning.solid, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
-                        onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                        onPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
                         accessibilityRole="button"
                     >
                         <Text style={{ color: colors.text.onGold, fontSize: 14, fontWeight: '800' }}>{t('➕ Post your first Offer')}</Text>
@@ -1977,7 +1977,7 @@ export default function MarketScreen() {
                                 </Pressable>
                             </View>
                             {showExamples && <ExampleListings />}
-                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
                                 viewerPubkey={identity?.publicKey}
                                 onOpenPost={(postId) => router.push(`/post/${postId}`)}
                                 onOpenProfile={(publicKey, callsign) => router.push({ pathname: '/public-profile', params: { publicKey: publicKey, callsign: callsign || '' } })}
@@ -2002,7 +2002,7 @@ export default function MarketScreen() {
                         <Pressable
                             accessibilityRole="button"
                             style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
-                            onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
+                            onPress={() => router.push({ pathname: '/new-listing', params: { newPost: 'true' } })}
                         >
                             <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>{t('+ Post a Deal')}</Text>
                         </Pressable>
@@ -2077,10 +2077,10 @@ export default function MarketScreen() {
                     const target = composeTargetFor(type);
                     if (target === 'poll-modal') { setShowNewPollModal(true); return; }
                     if (target === 'event-modal') { setShowNewEventModal(true); return; }
-                    // The offer/need form lives on the map, so this hands the chosen type over in the
-                    // deep link. It used to push a bare `newPost=true`, which dropped the choice and
+                    // The offer/need form is its own screen (app/new-listing.tsx), so this hands the chosen type
+                    // over in the link. It used to push a bare `newPost=true`, which dropped the choice and
                     // opened the form on Offer even when the member had picked Need.
-                    router.push({ pathname: '/map', params: { newPost: type } });
+                    router.push({ pathname: '/new-listing', params: { newPost: type } });
                 }}
             />
 

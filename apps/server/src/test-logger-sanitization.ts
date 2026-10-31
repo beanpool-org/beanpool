@@ -86,6 +86,18 @@ const testCases = [
         input: "statusCode: 404, exit code 1, Invoice INV-2024-0001, INV-ABCD-EFGHI, XRK-1A2B-3C4D, RK-12-34",
         expected: "statusCode: 404, exit code 1, Invoice INV-2024-0001, INV-ABCD-EFGHI, XRK-1A2B-3C4D, RK-12-34"
     },
+    // A bring-back code (engine/bring-back.ts, vault rethink VR3) is the same kind of credential as a re-key code: its
+    // release hands out the member's key and 12 words.
+    {
+        name: "A bring-back code in plain text: gone, as a re-key code is, typed in any case",
+        input: "[BringBack] Bring-back code BB-1A2B-3C4D issued for Bob; the phone typed bb-9f8e-7d6c",
+        expected: "[BringBack] Bring-back code [REDACTED_REKEY_CODE] issued for Bob; the phone typed [REDACTED_REKEY_CODE]"
+    },
+    {
+        name: "Not bring-back codes: look-alikes",
+        input: "XBB-1A2B-3C4D, BBB-1A2B-3C4D, BB-12-34, BB-1A2B-3C4DE, BB-GGGG-1234",
+        expected: "XBB-1A2B-3C4D, BBB-1A2B-3C4D, BB-12-34, BB-1A2B-3C4DE, BB-GGGG-1234"
+    },
     // A community server's logs never record an internet address (log-address.ts, sanitize-message.ts).
     {
         name: "IPv4 address, with a port, and ending a sentence",

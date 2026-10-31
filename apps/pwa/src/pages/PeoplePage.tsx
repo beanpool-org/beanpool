@@ -6,12 +6,13 @@
 
 import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import {
-    getFriends, addFriendApi, removeFriendApi, getAddedYou,
-    type FriendEntry, type Member, type MemberCard, type AddedYou,
+    getFriends, addFriendApi, removeFriendApi, getAddedYou, getJoinRequests, request,
+    type FriendEntry, type Member, type MemberCard, type AddedYou, type CommunityInfo,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { InvitePage } from './InvitePage';
+import { WantsToJoin } from '../components/WantsToJoin';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import {
     useMembersOnDemand, useMemberSearch, membersNear, dayBudgetWords, getMembersWhole, isMembersOnDemandRefusal,
@@ -21,6 +22,8 @@ import { t, tn, word, type WordKey } from '@beanpool/core';
 import { readMyArea } from '../lib/member-area';
 import { type LocalCommunityWays } from '../components/LocalCommunityMark';
 import { Sentence } from '../components/Sentence';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { onlyAdminsInvite, readInviteRole, mayInviteHere, takesKnocks, type InviteRole } from '../lib/node-invites';
 
 interface Props extends LocalCommunityWays {
     identity: BeanPoolIdentity;
@@ -28,6 +31,7 @@ interface Props extends LocalCommunityWays {
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
     preview?: boolean;
+    canSeeKnocks?: boolean;
 }
 
 type SubView = 'friends' | 'community' | 'invites';
@@ -77,7 +81,7 @@ function Avatar({ callsign, avatarUrl, pubkey, size = 40 }: { callsign: string; 
     );
 }
 
-export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOpenProfile, preview, ...ways }: Props) {
+export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOpenProfile, preview, canSeeKnocks, ...ways }: Props) {
     const [view, setView] = useState<SubView>(initialView);
     const [friends, setFriends] = useState<FriendEntry[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
@@ -114,6 +118,44 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     const [nearTry, setNearTry] = useState(0);
     // With 'failed': the node's words when today's "near you" reads are spent (dayBudgetWords), else null.
     const [nearRefusal, setNearRefusal] = useState<string | null>(null);
+
+    // Where canSeeKnocks wasn't passed by the caller, derive it from the same facts (lib/node-invites.ts):
+    // takesKnocks(info) && mayInviteHere(info, role), as the phone does.
+    const [pageNodeInfo, setPageNodeInfo] = useState<CommunityInfo | null>(null);
+    useEffect(() => {
+        if (canSeeKnocks !== undefined) return;
+        let alive = true;
+        Promise.resolve().then(() => communityInfoOnce()).then((i) => { if (alive) setPageNodeInfo(i); }).catch(() => {});
+        return () => { alive = false; };
+    }, [canSeeKnocks]);
+
+    const pageDoorAdmins = canSeeKnocks === undefined && !preview && onlyAdminsInvite(pageNodeInfo);
+    const [pageRole, setPageRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        if (!pageDoorAdmins) return;
+        let alive = true;
+        request<{ role?: unknown }>('GET', '/api/node-admin/me')
+            .then((body) => { if (alive) setPageRole(readInviteRole(body?.role)); })
+            .catch((e) => {
+                const status = (e as { status?: unknown } | null)?.status;
+                if (alive && typeof status === 'number' && status < 500) setPageRole(null);
+            });
+        return () => { alive = false; };
+    }, [pageDoorAdmins]);
+
+    const canSee = canSeeKnocks !== undefined
+        ? canSeeKnocks
+        : (!preview && takesKnocks(pageNodeInfo) && mayInviteHere(pageNodeInfo, pageRole));
+
+    // How many ask to join, for the Invites tab, as the phone's People reads it on open (front doors S2). Nothing where the
+    // community takes no requests or this member can't answer them (getJoinRequests' 'hidden'); none in a preview.
+    const [knockCount, setKnockCount] = useState(0);
+    useEffect(() => {
+        if (!canSee) { setKnockCount(0); return; }
+        let alive = true;
+        getJoinRequests().then(r => { if (alive) setKnockCount(r.ok ? r.total : 0); }, () => { if (alive) setKnockCount(0); });
+        return () => { alive = false; };
+    }, [canSee, identity.publicKey]);
 
     useEffect(() => { loadFriends(); loadAddedYou(); }, []);
     useEffect(() => { if (view === 'community' && onDemand === false) loadMembers(); }, [view, onDemand]);
@@ -322,7 +364,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-oat-50 hover:bg-oat-200 dark:hover:bg-nature-800'
                         }`}
                     >
-                        {t(PANE_WORDS[v])}
+                        {v === 'invites' && knockCount > 0 ? tn(knockCount, '🎟️ Invites ({n})', '🎟️ Invites ({n})') : t(PANE_WORDS[v])}
                     </button>
                 ))}
             </div>
@@ -609,6 +651,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             <div role="tabpanel" id={panelId('invites')} aria-labelledby={tabId('invites')} hidden={view !== 'invites'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden">
+                    {!preview && <WantsToJoin onCount={setKnockCount} canSee={canSee} />}
                     <InvitePage identity={identity} onNavigate={onNavigate} preview={preview} {...ways} />
                 </div>
             )}

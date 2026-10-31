@@ -951,10 +951,13 @@ function searchCard(c: Ctx, settings?: Record<string, unknown>): SearchCard {
     const near = c.point && s.km ? { ...c.point, radiusKm: s.km } : undefined;
     // Words that expand to nothing (蛋, "!!!") are searched as typed, never an unfiltered read under the member's words.
     const query = searchTermsFor(s.q).join(' ');
-    // Words that leave nothing FTS5 can ask (quote marks alone) find nothing: never every listing under them.
-    if (s.q.trim() && !query) return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items: [], more: false };
+    // Words that leave nothing FTS5 can ask (quote marks alone) find nothing: never every listing under them. With tags
+    // saved beside them, the tags still find.
+    if (s.q.trim() && !query && !s.tags) return { q: s.q, kind: s.kind, category: s.category ?? null, km: near ? s.km! : null, items: [], more: false };
+    // The tag ids the app resolved the words to when the card was saved (core readSearchSettings, at most 5): a listing
+    // tagged with one, or with a tag under one, is found as a listing holding the words is (DESIGN-owner-seeding-tags §4.7).
     const pool = postsFor(c, {
-        types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], status: 'active', category: s.category, query: query || undefined, limit: SEARCH_ITEMS + 1,
+        types: s.kind === 'any' ? ['offer', 'need'] : [s.kind], status: 'active', category: s.category, query: query || undefined, tags: s.tags, limit: SEARCH_ITEMS + 1,
         near, sortByDistance: !!near && c.switches.distanceSortDefault, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
     }).filter(p => p.status === 'active' && p.active !== false && !!bounded(p.id, ID_CHARS));
     const items = pool.slice(0, SEARCH_ITEMS).map((p): MarketItem => ({

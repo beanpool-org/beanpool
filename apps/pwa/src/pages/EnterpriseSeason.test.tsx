@@ -68,6 +68,21 @@ const mockIdentity: BeanPoolIdentity = {
 describe('Enterprise Season & Lifecycle (PWA)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
+        vi.spyOn(globalThis, 'fetch').mockImplementation((input: any) => {
+            throw new Error(`Unexpected real fetch to ${String(input)}`);
+        });
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({
+            memberCount: 3,
+            postCount: 0,
+            transactionCount: 0,
+            commonsBalance: 100,
+            profile: 'local',
+            features: { beans: true, enterprises: true, decisions: true },
+        } as any);
+        vi.spyOn(api, 'getCommunityMe').mockResolvedValue({ tier: 'member', features: null } as any);
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getYourGroups').mockResolvedValue({ items: [] } as any);
     });
 
     describe('TreasuryDetailPage', () => {

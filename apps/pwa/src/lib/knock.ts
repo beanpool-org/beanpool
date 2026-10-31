@@ -1,19 +1,24 @@
 /**
- * "Ask to join" a local community from the web app (DESIGN-global-lounge-fable.md §6 L1).
+ * "Ask to join" a local community from the web app (DESIGN-global-lounge-fable.md §6 L1; the knock itself is front doors
+ * S2: the phone's apps/native/utils/knock.ts, on the web).
  *
- * Persists remembered knocks in `localStorage` under `beanpool_knocks` (matching native's KNOCKS_STORE_KEY),
- * and reads status and cancels requests at the community origin. The signing is lib/api.ts's (signedFetchAt): the
- * member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
+ * Sends a knock to the community's own address, persists remembered knocks in `localStorage` under `beanpool_knocks`
+ * (matching native's KNOCKS_STORE_KEY), and reads status and cancels requests at the community origin. The signing is
+ * lib/api.ts's (signedFetchAt): the member key becomes a signer in that one file only (lib/signing-source-rule.test.ts).
  */
 
-import { isPublicIpv4, knockStillAnswerable, t, word } from '@beanpool/core';
-import { signedFetchAt } from './api';
+import { isPublicIpv4, knockStillAnswerable, t, tn, word } from '@beanpool/core';
+import { getNodeApiUrl, signedFetchAt } from './api';
 import type { BeanPoolIdentity } from './identity';
 
 export const KNOCK_PATH = '/api/join/knock';
 export const KNOCK_STATUS_PATH = '/api/join/knock/status';
 export const KNOCK_CANCEL_PATH = '/api/join/knock/cancel';
 export const KNOCK_CANCEL_BLOCK_HOURS = 24;
+/** The node's limits (engine/knocks.ts KNOCK_RULES): what the form holds the member to before sending, as the phone's. */
+export const KNOCK_MESSAGE_CHARS = 280;
+export const KNOCK_CALLSIGN_CHARS = 20;
+const KNOCK_AVATAR_CHARS = 150_000;
 const TIMEOUT_MS = 20_000;
 const STORE_KEY = 'beanpool_knocks';
 
@@ -26,6 +31,25 @@ export const KNOCK_MESSAGES = {
     cancelled: word('You cancelled your request. You can ask again after 24 hours.'),
     invited: word('A member invited you. Join now to become a member.'),
 } as const;
+
+export type KnockSendResult =
+    /** Sent, or already open there: now waiting for an answer. */
+    | { kind: 'waiting'; message: string }
+    /** A member has already said yes: read the status for the invite. */
+    | { kind: 'invited' }
+    /** This key is a member there already. */
+    | { kind: 'member'; message: string }
+    /** The community said no to the request itself, in its own words. */
+    | { kind: 'refused'; status: number; code: string | null; message: string }
+    | { kind: 'no_address'; message: string }
+    | { kind: 'unreachable'; message: string };
+
+export interface KnockRequest {
+    message: string;
+    callsign: string;
+    /** A photo as a data URL, or a shipped `bundled://` picture. Left out when it isn't one of those. */
+    avatar?: string | null;
+}
 
 export type KnockStatus =
     | { status: 'none' }
@@ -67,6 +91,56 @@ export function communityOrigin(raw: unknown): string | null {
     if (/^[\d.]+$/.test(name) ? !isPublicIpv4(name) : !new RegExp(`^${label}(?:\\.${label})+$`).test(name)) return null;
     if (h === 'global.beanpool.org') return null;
     return `https://${h}`;
+}
+
+// ── The form (the phone's knockFormProblem / knockBody) ──────────────────────────────────────────────────────
+
+const chars = (s: string) => Array.from(s).length;
+
+/** What is wrong with the form, in the member's language (the node's own terms, as the phone says them), or null. */
+export function knockFormProblem(req: KnockRequest): string | null {
+    const name = req.callsign.replace(/\s+/g, ' ').trim();
+    if (chars(name) < 2) return t('Please give a name of at least 2 characters.');
+    if (chars(name) > KNOCK_CALLSIGN_CHARS) return tn(KNOCK_CALLSIGN_CHARS, 'Please keep your name to {n} character.', 'Please keep your name to {n} characters.');
+    const message = req.message.trim();
+    if (!message) return t('Please say a few words about yourself.');
+    if (chars(message) > KNOCK_MESSAGE_CHARS) return tn(KNOCK_MESSAGE_CHARS, 'Please keep your message to {n} character.', 'Please keep your message to {n} characters.');
+    return null;
+}
+
+/** The avatar the node will take (engine/knocks.ts parseAvatar), or nothing. */
+export function knockAvatar(value: string | null | undefined): string | undefined {
+    if (!value) return undefined;
+    const v = value.trim();
+    if (/^bundled:\/\/[A-Za-z0-9_-]{1,64}$/.test(v)) return v;
+    if (v.length <= KNOCK_AVATAR_CHARS && /^data:image\/(jpeg|jpg|png|webp|gif);base64,/i.test(v)) return v;
+    return undefined;
+}
+
+/**
+ * The host a knock says it came from: the community this web app talks to (shown to the asked community's members, not
+ * checked). Never a fixed name of ours: a web app any community serves says that community.
+ */
+export function knockFromNode(): string | undefined {
+    const base = getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
+    const m = /^https?:\/\/([^/?#@\s]+)/i.exec(base);
+    return m ? m[1].toLowerCase().replace(/:443$/, '') : undefined;
+}
+
+/**
+ * The body a knock sends, as the phone's: no key in it, `fromNode`, never `from` (the node's signature check reads a
+ * `from` field as the sender's key), and `toNode` naming the community it is for, inside what is signed.
+ */
+export function knockBody(req: KnockRequest, toNode?: string): { message: string; callsign: string; fromNode?: string; toNode?: string; avatar?: string } {
+    const avatar = knockAvatar(req.avatar);
+    const fromNode = knockFromNode();
+    return {
+        message: req.message.trim(),
+        callsign: req.callsign.replace(/\s+/g, ' ').trim(),
+        ...(fromNode ? { fromNode } : {}),
+        ...(toNode ? { toNode } : {}),
+        ...(avatar ? { avatar } : {}),
+    };
 }
 
 async function readError(res: Response): Promise<{ message: string | null; code: string | null }> {
@@ -158,6 +232,28 @@ export async function forgetKnock(pubkey: string, url: string): Promise<void> {
     const knocks = readStore(pubkey);
     const next = knocks.filter(k => k.url !== origin);
     if (next.length !== knocks.length) writeStore(pubkey, next);
+}
+
+/**
+ * Ask `communityUrl` to let this key in, at the community's own address (never through the community this web app talks
+ * to). A refusal is the community's own words, as it sent them; a decline is never shown (it reads as waiting).
+ */
+export async function sendKnock(communityUrl: string | null, identity: BeanPoolIdentity, req: KnockRequest): Promise<KnockSendResult> {
+    const origin = communityOrigin(communityUrl);
+    if (!origin) return { kind: 'no_address', message: t(KNOCK_MESSAGES.noAddress) };
+    let res: Response;
+    try {
+        const body = JSON.stringify(knockBody(req, origin.replace(/^https:\/\//, '')));
+        res = await withTimeout(signedFetchAt('POST', origin, KNOCK_PATH, body, identity));
+    } catch {
+        return { kind: 'unreachable', message: t(KNOCK_MESSAGES.unreachable) };
+    }
+    if (res.status === 201 || res.status === 200) return { kind: 'waiting', message: t(KNOCK_MESSAGES.waiting) };
+    const { message, code } = await readError(res);
+    if (res.status === 409 && code === 'knock_open') return { kind: 'waiting', message: message ?? t(KNOCK_MESSAGES.waiting) };
+    if (res.status === 409 && code === 'knock_approved') return { kind: 'invited' };
+    if (res.status === 409 && code === 'already_member') return { kind: 'member', message: message ?? t('You are already a member of this community.') };
+    return { kind: 'refused', status: res.status, code, message: message ?? t(KNOCK_MESSAGES.unreadable) };
 }
 
 export async function readKnockStatus(communityUrl: string | null, identity: BeanPoolIdentity): Promise<KnockStatusResult> {

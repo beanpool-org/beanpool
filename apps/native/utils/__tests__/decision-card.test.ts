@@ -11,6 +11,7 @@ import {
     proposedByLine,
     replyHeading,
     replyTakenDownLine,
+    secondPauseLine,
     turnoutLine,
     voiceCreditsLine,
 } from '../decision-card';
@@ -56,6 +57,17 @@ describe('Decision card wording (native)', () => {
         expect(pauseVoteBody(pause.params, 'abc')).toBe('Yes removes Dave after 7 days. No brings Dave back as soon as the vote closes.');
         expect(pauseVoteBody({ ...pause.params, serverRole: 'owner' }, 'abc'))
             .toBe("Dave holds a role that runs this community's server, and no community vote removes an owner or admin: whatever this vote decides, Dave is back when it closes.");
+    });
+
+    // Removal by vote S4 (design §3.4): an owner's second pause within 30 days of a vote that didn't remove them says so.
+    it('says a second pause within 30 days is one, by how the last vote ended, and nothing for a first', () => {
+        const endedAt = '2026-10-15T10:00:00.000Z';
+        expect(secondPauseLine({ secondPause: { after: 'no', endedAt } } as any)).toBe('Second pause in 30 days. The last vote said No.');
+        expect(secondPauseLine({ secondPause: { after: 'too_few', endedAt } } as any)).toBe('Second pause in 30 days. Too few members voted on the last one.');
+        expect(secondPauseLine({ secondPause: { after: 'stopped', endedAt } } as any)).toBe('Second pause in 30 days. The last vote was stopped before it closed.');
+        expect(secondPauseLine({ memberName: 'Dave', rule: 2 } as any)).toBeNull();
+        expect(secondPauseLine({ secondPause: { after: 'something new' } })).toBeNull();
+        expect(secondPauseLine(null)).toBeNull();
     });
 
     // Removal by vote, Amendment A: who brought it is named (point 3), the member's reply (point 2), a hidden case (point 4).

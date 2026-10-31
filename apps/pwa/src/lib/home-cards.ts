@@ -72,7 +72,7 @@ export type NeedsTarget =
     | { to: 'people' }
     | { to: 'shop'; id: string }
     | { to: 'shop-mine' };
-/** `knock`: requests to join (front doors S1), only to an app that asks with lands=people, which this one doesn't yet (S2 lists them here). */
+/** `knock`: requests to join (front doors S1), only to an app that asks with lands=people (lib/api.ts getHome); People → Invites lists them (S2). */
 export interface NeedsItem { kind: 'admin' | 'knock' | 'deal' | 'vote' | 'invite' | 'message' | 'group'; count: number; accent: boolean; label: string; target: NeedsTarget; closesAt?: string }
 
 /**

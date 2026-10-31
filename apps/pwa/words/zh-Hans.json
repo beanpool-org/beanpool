@@ -2,10 +2,10 @@
   "_meta": {
     "language": "zh-Hans",
     "name": "Chinese (Simplified)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}”在这个社区已被占用。请选择其他名称。",
@@ -2032,7 +2032,7 @@
   "Not finished yet": "尚未完成",
   "Reload page": "重新加载页面",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "此浏览器已存有另一个 BeanPool 账户，因此该账户未保存在此处。",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "这不是完整的重置密钥代码。它以 RK- 开头，后接八位字母和数字。",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "这不是完整的代码。它以 RK- 或 BB- 开头，后接八位字母和数字。",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "你在此浏览器中发起的加入申请仍在等待中。请先完成该流程，然后再返回查看你的代码。",
   "This browser couldn’t keep the key safely, so nothing was sent.": "此浏览器无法安全保存密钥，因此未发送任何内容。",
   "Show this number to your admin": "将此数字出示给管理员",
@@ -3492,9 +3492,44 @@
   "Held in Trust & Deals": "托管与交易",
   "Held in Trust & Deals Notifications": "托管与交易通知",
   "Bid approved! The Beans are held in trust.": "投标已批准！托管资金已存入信托。",
-  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers.": "取消倡议并向支持者退款？\n\n这将终止该倡议并立即将所有托管的认捐退还给各自的支持者。",
   "{amount} 🫘 held in trust": "{amount} 🫘 托管中",
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "未能从节点中清除账户。可能需要先处理正在进行的托管交易。",
   "{amount} · held in trust": "{amount} · 托管中",
-  "Cancel Initiative & Refund Backers": "取消倡议并退还支持者款项"
+  "Cancel Initiative & Refund Backers": "取消倡议并退还支持者款项",
+  "Second pause in 30 days. The last vote said No.": "30 天内第二次暂停。上次投票的结果是“否”。",
+  "Second pause in 30 days. Too few members voted on the last one.": "30 天内第二次暂停。上次投票的参与成员太少。",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "30 天内第二次暂停。上次投票在结束前被中止。",
+  "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "取消倡议并向支持者退款？\n\n这将终止该倡议并立即将所有托管的认捐退还给各自的支持者。自那之后已关闭的账户（已注销，或已清算的企业）的认捐款项将转入公共资金池，就像已关闭账户的其他豆子一样，而其他所有人的认捐仍会退还给他们。",
+  "Please give a name of at least 2 characters.": "请输入至少包含 2 个字符的姓名。",
+  "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
+    "other": "请将你的姓名控制在 {n} 个字符以内。"
+  },
+  "Please say a few words about yourself.": "请简单介绍一下你自己。",
+  "Please keep your message to {n} character.|Please keep your message to {n} characters.": {
+    "other": "请将你的留言控制在 {n} 个字符以内。"
+  },
+  "You are already a member of this community.": "你已经是该社区的成员。",
+  "People asking to join this community. Invite makes an invite that only their key can use, and their app finds it by itself. Not now tells them nothing more than \"no answer yet\".": "申请加入此社区的人员。“邀请”会生成只有其密钥能使用的邀请，其应用会自动找到。“暂不”只会告知对方“暂无回复”。",
+  "Couldn't reach your community. Check your connection and try again.": "无法连接到你的社区。请检查网络连接后重试。",
+  "Asked today": "今天申请",
+  "Asked yesterday": "昨天申请",
+  "Asked {n} days ago|Asked {n} days ago": {
+    "other": "{n} 天前申请"
+  },
+  "from {node}": "来自 {node}",
+  "You invited {name}. Their app will find the invite by itself.": "你已邀请 {name}。对方的应用会自动找到该邀请。",
+  "🚪 Wants to join ({n})|🚪 Wants to join ({n})": {
+    "other": "🚪 想加入 ({n})"
+  },
+  "Inviting {name}...": "正在邀请 {name}...",
+  "Invite {name}": "邀请 {name}",
+  "Declining {name}...": "正在拒绝 {name}...",
+  "Not now, {name}": "暂不，{name}",
+  "Invite\u0004button: let them in": "邀请",
+  "🎟️ Invites ({n})|🎟️ Invites ({n})": {
+    "other": "🎟️ 邀请 ({n})"
+  },
+  "Ask to join {name}": "申请加入 {name}",
+  "A few words about yourself": "个人简介",
+  "Where you live, what you'd like to share or learn": "你居住在哪里、想要分享或学习什么"
 }

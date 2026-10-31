@@ -1459,6 +1459,7 @@ async function main(): Promise<void> {
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',
             'POST /api/recovery/collect/hub',
+            'POST /api/recovery/community-copy', 'POST /api/recovery/community-copy/status', 'DELETE /api/recovery/community-copy',
             'POST /api/recovery/collect/mine', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/sso-nonce',
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
@@ -1496,8 +1497,12 @@ async function main(): Promise<void> {
             // The AI assistant endpoint (agent/mcp-route.ts): an agent token is the only way in (every guest refused, below),
             // and the owner switch that turns it off.
             'POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /api/local/admin/agent/switch', 'POST /api/local/admin/agent/switch',
+            // An owner's assistant's photo upload beside it (agent/photo-upload-route.ts): the same bearer, an owner's grant ticked
+            // "May post for me" only.
+            'POST /mcp/photos', 'GET /mcp/photos',
             // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
             'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
+            'POST /api/local/admin/agent/grants/:id/remove-made',
             // "Assistant posts a day" (#2629): an owner's fresh proof only, never a token or a guest.
             'POST /api/local/admin/agent/posts-per-day',
             'POST /api/local/admin/agent/preview',

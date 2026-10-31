@@ -18,6 +18,7 @@ lookups/counts → O(1)" fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
+- 2026-10-31 #2614, #2647: PWA ProjectsPage groups Map (third and fourth filings; see #2547, #2579: no Map-for-find swaps without a profile). See POLICY.md.
 - 2026-10-27 #2516: native EnterpriseDecisions Map (re-file of #1968) — CLOSED. Resolved — do NOT re-file.
 - 2026-10-26 #2485: Resolved — do NOT re-file: GroupDetailModal myMembership Map (#2485).
 - 2026-10-25 #2455: Map lookup in GroupDecisions is NO BENEFIT (#1968). See POLICY.md.

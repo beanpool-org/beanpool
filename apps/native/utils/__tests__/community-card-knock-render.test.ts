@@ -88,8 +88,12 @@ let currentIdentity: typeof DEFAULT_IDENTITY | null = DEFAULT_IDENTITY;
 vi.mock('../../app/IdentityContext', () => ({
     useIdentity: () => ({ identity: currentIdentity }),
 }));
+const dbRow = vi.hoisted(() => ({ profile: null as null | Record<string, unknown> }));
+vi.mock('../db', () => ({
+    getMemberProfile: vi.fn(async () => dbRow.profile),
+}));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({ 'X-Test-Signed': '1' }) }));
-vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => null }));
+vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => 'bundled://phone-wide' }));
 vi.mock('../notification-permission', () => ({ askNotificationPermissionOnAction: async () => {} }));
 // The join itself (utils/join-another-community.ts) is Find a community's; here, only that the card hands it the invite.
 const joins = vi.hoisted(() => [] as Array<{ targetUrl: string; code: string; knownName?: string | null }>);
@@ -126,6 +130,7 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     currentIdentity = DEFAULT_IDENTITY;
+    dbRow.profile = null;
     store.map.clear();
     store.map.set('beanpool_anchor_url', 'https://home.example');
     nav.pushed.length = 0;
@@ -246,7 +251,25 @@ describe("a member's request to join, on the community's card", () => {
         expect(scene.statusReads).toBe(1);
         expect(asked()).toBe('You asked to join. No answer yet: communities usually answer within a few days.');
         expect(buttons()).not.toContain('Ask to join');
+        // Profile S2-W: sends this community's photo (or none), never the phone-wide canonical copy.
+        expect('avatar' in scene.sent[0]).toBe(false);
         expect(JSON.parse(store.map.get(KNOCKS_STORE_KEY)!).knocks.map((k: { url: string }) => k.url)).toEqual([ORIGIN]);
+    });
+
+    it("does not send this community's photo with the knock even when this community's row holds one", async () => {
+        dbRow.profile = { avatar_url: 'bundled://fox' };
+        scene.answer = { status: 'pending' };
+        await open();
+        await tap(byTestId('community-card-ask'));
+        const message = host.querySelectorAll('input')[1] as HTMLInputElement;
+        await act(async () => {
+            const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            set.call(message, 'Hello from this community.');
+            message.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await tap(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Send') as HTMLElement);
+        expect(scene.knocks).toBe(1);
+        expect('avatar' in scene.sent[0]).toBe(false);
     });
 });
 

@@ -256,6 +256,7 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
 
         render(<EventDetail post={event} identity={identity} />);
         fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        fireEvent.click(screen.getByTestId('event-add-calendar-file'));
 
         expect(clicks).toHaveLength(1);
         expect(clicks[0].download).toBe('working-bee-at-the-hall.ics');
@@ -268,6 +269,21 @@ describe('Share and Add to calendar (decisions 3 and 4)', () => {
         expect(ics).toMatch(/DTSTART:\d{8}T\d{6}Z/);
 
         HTMLAnchorElement.prototype.click = realClick;
+    });
+
+    it('opens Google Calendar with pre-filled details when chosen', () => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        render(<EventDetail post={event} identity={identity} />);
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        fireEvent.click(screen.getByTestId('event-add-google-calendar'));
+
+        expect(open).toHaveBeenCalledTimes(1);
+        const [url, target, rel] = open.mock.calls[0];
+        expect(url).toContain('https://calendar.google.com/calendar/render?');
+        expect(url).toContain('text=Working+bee+at+the+hall');
+        expect(target).toBe('_blank');
+        expect(rel).toBe('noopener,noreferrer');
+        open.mockRestore();
     });
 
     it('offers both to a member with no RSVP — you do not have to be going to pass it on', () => {

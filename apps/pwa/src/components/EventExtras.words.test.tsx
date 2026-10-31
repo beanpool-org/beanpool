@@ -52,6 +52,12 @@ describe('Share, Add to calendar and Remind me in the pseudo-locale', () => {
         fireEvent.click(screen.getByTestId('event-share'));
         expect(await screen.findByTestId('event-share-note')).toHaveTextContent(xx('Link copied.'));
         expect(bypassing(document.body)).toEqual([]);
+
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        expect(screen.getByTestId('event-add-calendar-file')).toHaveTextContent(xx('Calendar file (.ics)'));
+        expect(screen.getByTestId('event-add-calendar-file')).toHaveTextContent(xx('For any calendar app'));
+        expect(screen.getByTestId('event-add-google-calendar')).toHaveTextContent(xx('Google Calendar'));
+        expect(bypassing(document.body)).toEqual([]);
     });
 
     it('Remind me, its picker and a failed save', async () => {
@@ -77,6 +83,10 @@ describe('Share, Add to calendar and Remind me in English', () => {
         expect(bracketed()).toBe(0);
         expect(screen.getByTestId('event-share').textContent).toBe('🔗 Share');
         expect(screen.getByTestId('event-add-to-calendar').textContent).toBe('📅 Add to calendar');
+        fireEvent.click(screen.getByTestId('event-add-to-calendar'));
+        expect(screen.getByTestId('event-add-calendar-file').textContent).toContain('Calendar file (.ics)');
+        expect(screen.getByTestId('event-add-calendar-file').textContent).toContain('For any calendar app');
+        expect(screen.getByTestId('event-add-google-calendar').textContent).toBe('Google Calendar');
         expect(reminder.querySelector('p')!.textContent).toBe('⏰ Remind me: 1 day before (your default)');
         fireEvent.click(screen.getByTestId('event-reminder-change'));
         expect(screen.getByLabelText('1 day before')).toBeInTheDocument();

@@ -7,17 +7,20 @@
  * a word, because a member on an older community should see an event screen that simply has no reminders,
  * not an error about a feature they never asked for.
  *
- * Add to calendar adds NO native module. iOS gets the .ics through expo-sharing, which iOS opens straight
- * into "Add to Calendar"; Android gets Google Calendar's template URL, because Android's share sheet
- * (ACTION_SEND) is not what a calendar app answers for a file — Google Calendar answers ACTION_VIEW — so
- * sharing the .ics there would mostly offer Drive and Gmail. Both are already-installed paths, and the
- * ledger's CSV export uses the same two modules.
+ * Add to calendar offers a choice between a calendar file (.ics) for any calendar app, and Google Calendar.
+ * On Android, the file option writes the .ics to cache, gets a content URI (FileSystem.getContentUriAsync),
+ * and starts ACTION_VIEW with type text/calendar and read permission through expo-intent-launcher (which adds
+ * a native module for the 1.2.85 native build). If no calendar app answers, it falls back to expo-sharing so
+ * the member can still save or share the file, telling them plainly. On iOS, the file option hands the .ics
+ * to expo-sharing, which iOS opens straight into "Add to Calendar". Google Calendar opens its template URL
+ * on both platforms.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Share, Alert, Linking, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Share, Alert, Linking, Platform, ActivityIndicator, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
 import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { fetchMemberPreferences, fetchMyEvents, isRouteMissing, setEventReminder } from '../utils/db';
@@ -87,6 +90,7 @@ export function EventShareAndCalendar({ post }: { post: any }) {
     const event = shareableEvent(post);
     // Labelled with the place's zone ("Sat 17 Oct, 20:50 Lagos time"), so it is right wherever it is pasted (§4).
     const when = eventShareWhen(post);
+    const [choiceOpen, setChoiceOpen] = useState(false);
 
     const share = async () => {
         try {
@@ -97,15 +101,36 @@ export function EventShareAndCalendar({ post }: { post: any }) {
         }
     };
 
-    const addToCalendar = async () => {
+    const addCalendarFile = async () => {
+        setChoiceOpen(false);
         try {
             const link = eventLink(await anchorOrThrow(), event.id);
+            const path = `${FileSystem.cacheDirectory}${icsFileName(event)}`;
+            await FileSystem.writeAsStringAsync(path, buildIcs(event, link), { encoding: FileSystem.EncodingType.UTF8 });
             if (Platform.OS === 'ios') {
-                const path = `${FileSystem.cacheDirectory}${icsFileName(event)}`;
-                await FileSystem.writeAsStringAsync(path, buildIcs(event, link), { encoding: FileSystem.EncodingType.UTF8 });
                 await Sharing.shareAsync(path, { mimeType: 'text/calendar', UTI: 'com.apple.ical.ics', dialogTitle: t('Add to calendar') });
                 return;
             }
+            try {
+                const contentUri = await FileSystem.getContentUriAsync(path);
+                await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+                    data: contentUri,
+                    type: 'text/calendar',
+                    flags: 1,
+                });
+            } catch {
+                Alert.alert(t('No calendar app'), t('Nothing on this phone could open a calendar entry.'));
+                await Sharing.shareAsync(path, { mimeType: 'text/calendar', dialogTitle: t('Add to calendar') });
+            }
+        } catch (e: any) {
+            Alert.alert(t('Not added'), e?.message || t('Could not make a calendar entry.'));
+        }
+    };
+
+    const addGoogleCalendar = async () => {
+        setChoiceOpen(false);
+        try {
+            const link = eventLink(await anchorOrThrow(), event.id);
             const url = googleCalendarUrl(event, link);
             const opened = await Linking.openURL(url).then(() => true).catch(() => false);
             if (!opened) Alert.alert(t('No calendar app'), t('Nothing on this phone could open a calendar entry.'));
@@ -120,12 +145,59 @@ export function EventShareAndCalendar({ post }: { post: any }) {
                 <Pressable onPress={share} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Share this event')}>
                     <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('🔗 Share')}</Text>
                 </Pressable>
-                <Pressable onPress={addToCalendar} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Add this event to your calendar')}>
+                <Pressable onPress={() => setChoiceOpen(true)} style={styles.btn} accessibilityRole="button" accessibilityLabel={t('Add this event to your calendar')}>
                     <Text style={styles.btnText} numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📅 Add to calendar')}</Text>
                 </Pressable>
             </View>
             {/* Outside the community (front doors S6): a link to this event alone, for seven days, without names or faces. */}
             <ShareOutsideButton post={post} />
+
+            <Modal
+                visible={choiceOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setChoiceOpen(false)}
+                statusBarTranslucent
+            >
+                <Pressable
+                    style={styles.sheetBackdrop}
+                    onPress={() => setChoiceOpen(false)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Close calendar choices')}
+                >
+                    <Pressable style={styles.sheetCard} onPress={() => {}} accessible={false}>
+                        <Text style={styles.sheetTitle} accessibilityRole="header">{t('Add to calendar')}</Text>
+                        <Pressable
+                            onPress={addCalendarFile}
+                            style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Calendar file (.ics) for any calendar app')}
+                            testID="event-add-calendar-file"
+                        >
+                            <Text style={styles.sheetItemText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Calendar file (.ics)')}</Text>
+                            <Text style={styles.sheetItemSubtext} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('For any calendar app')}</Text>
+                        </Pressable>
+                        <Pressable
+                            onPress={addGoogleCalendar}
+                            style={({ pressed }) => [styles.sheetItem, pressed && styles.sheetItemPressed]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Google Calendar')}
+                            testID="event-add-google-calendar"
+                        >
+                            <Text style={styles.sheetItemText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Google Calendar')}</Text>
+                        </Pressable>
+                        <Pressable
+                            onPress={() => setChoiceOpen(false)}
+                            style={({ pressed }) => [styles.sheetCancelBtn, pressed && styles.sheetItemPressed]}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Cancel')}
+                            testID="event-add-calendar-cancel"
+                        >
+                            <Text style={styles.sheetCancelText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t('Cancel')}</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </View>
     );
 }
@@ -302,4 +374,61 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         saveBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
         resetBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
         resetBtnText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
+        sheetBackdrop: {
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.45)',
+            justifyContent: 'flex-end',
+        },
+        sheetCard: {
+            backgroundColor: colors.surface.card,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            paddingTop: 16,
+            paddingBottom: 28,
+            paddingHorizontal: 16,
+        },
+        sheetTitle: {
+            fontSize: 16,
+            fontWeight: '800',
+            color: colors.text.heading,
+            marginBottom: 12,
+            paddingHorizontal: 4,
+        },
+        sheetItem: {
+            minHeight: 52,
+            justifyContent: 'center',
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            marginBottom: 8,
+            backgroundColor: colors.surface.card,
+        },
+        sheetItemPressed: {
+            backgroundColor: colors.surface.subtle,
+        },
+        sheetItemText: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: colors.text.heading,
+        },
+        sheetItemSubtext: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: colors.text.secondary,
+            marginTop: 2,
+        },
+        sheetCancelBtn: {
+            minHeight: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 12,
+            marginTop: 4,
+        },
+        sheetCancelText: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: EVENT_ACCENT,
+        },
     });

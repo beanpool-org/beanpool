@@ -8728,14 +8728,18 @@ export const REMOVAL_IS_THE_VOTE_CODE = 'removal_is_the_vote';
  */
 export type PruneDoor = 'direct' | 'owner-branch' | 'settles-removal';
 
-/** The removal the community voted for that is waiting out its grace window for this member, if there is one. */
-export function removalInGraceOf(publicKey: string): { id: string; gracePeriodEndsAt: string | null } | null {
+/**
+ * The removal waiting out its grace window for this member, if there is one: one the community voted for, or, too few being
+ * able to vote, one an owner decided (`decidedByOwner`, decisions-engine ownerDecideTooFew; removal by vote S6), which no
+ * vote passed, so nothing may say the community voted for it.
+ */
+export function removalInGraceOf(publicKey: string): { id: string; gracePeriodEndsAt: string | null; decidedByOwner: boolean } | null {
     const row = db.prepare(`
-        SELECT id, grace_period_ends_at FROM decisions
+        SELECT id, grace_period_ends_at, owner_decision_carried_at FROM decisions
         WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'
         ORDER BY created_at DESC LIMIT 1
-    `).get(publicKey) as { id: string; grace_period_ends_at: string | null } | undefined;
-    return row ? { id: row.id, gracePeriodEndsAt: row.grace_period_ends_at } : null;
+    `).get(publicKey) as { id: string; grace_period_ends_at: string | null; owner_decision_carried_at: string | null } | undefined;
+    return row ? { id: row.id, gracePeriodEndsAt: row.grace_period_ends_at, decidedByOwner: !!row.owner_decision_carried_at } : null;
 }
 
 /**

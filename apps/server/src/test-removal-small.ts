@@ -23,8 +23,8 @@
  *     phone, an owner's automation token is refused, an owner's stale hand-off is asked Manage again, a short reason is
  *     refused before any proof; from the phone just now it is recorded. Members read the reason, never the owner's key;
  *     the member is told; the owners are told, never whom. Once only. The vote closes: the grace window opens, its record
- *     "Decided by the owner: too few members to vote."; the grace window ends: the member is removed. The password decides
- *     another with its current code.
+ *     "Decided by the owner: too few members to vote.", and Settings says an owner decided it, not that the community voted
+ *     for it; the grace window ends: the member is removed. The password decides another with its current code.
  *  4. When the owner's decision does not stand: enough members voted by the close (a dormant member's vote made it 3),
  *     the owner who decided lost the role, no decision at all, a vote on someone holding a server role, a vote with enough
  *     voters, a standby (refused at the door, before the proof), votes off. Two that keep it standing: an owner who moves
@@ -258,6 +258,14 @@ async function main() {
         fresh();
         return admin(`/api/local/admin/decisions/${decisionId}/owner-decision`, session, { reason, ...extra });
     };
+    /** Whose removal Settings says this is, in its grace window: on Offboard's preview, and on the refusal to lift the pause. */
+    const graceWords = async (who: Id) => {
+        fresh();
+        const preview = await answerOf(await fetch(`${BASE}/api/local/admin/members/${who.pubKeyHex}/offboard/preview`, { headers: adaSession }));
+        fresh();
+        const lift = await admin(`/api/local/admin/users/${who.pubKeyHex}/status`, adaSession, { status: 'active' });
+        return { decidedByOwner: preview.body?.settlesRemoval?.decidedByOwner, lift: `${lift.status} ${lift.body?.error}` };
+    };
 
     // ── 1. The design's table ───────────────────────────────────────────────────────────────────────────────────────
     console.log('1. The design\'s table: quorum, the 3-Yes floor, and the tick');
@@ -308,6 +316,9 @@ async function main() {
                 assert(after.status === 'execution_pending_grace' && statusOf(subject) === 'disabled' && frozenOf(subject) === 1
                     && after.execution_reason === 'Member suspended. 7-day grace period active before destructive removal.',
                     `${community.label}: ${shape}: the tick opens the grace window, the member paused and frozen (${after.status})`);
+                const words = await graceWords(subject);
+                assert(words.decidedByOwner === false && words.lift === '409 The community voted to remove this member; halt that Decision instead',
+                    `${community.label}: ${shape}: a vote passed, and Settings says the community voted for it (${JSON.stringify(words)})`);
             } else {
                 assert(after.status === (c.why?.startsWith('Quorum') ? 'unresolved' : 'failed') && statusOf(subject) === 'active'
                     && String(after.execution_reason).startsWith(`${c.why}.`),
@@ -410,6 +421,9 @@ async function main() {
     seen = await cardFor(tia, samVote);
     assert(!!seen.card?.ownerDecisionCarriedAt && seen.card.ownerDecidedReason === REASON && seen.card.tally?.passed === false,
         'the closed card says the owner decided it, with the reason; the vote itself did not pass');
+    const samWords = await graceWords(sam);
+    assert(samWords.decidedByOwner === true && samWords.lift === `409 ${de.LIFT_OWNER_DECIDED_REMOVAL}`,
+        `no vote passed, so in its grace window Settings says an owner decided it: Offboard's preview, and the refusal to lift (${JSON.stringify(samWords)})`);
     db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 1000).toISOString(), samVote);
     de.tickDecisions();
     assert(row(samVote).status === 'executed' && statusOf(sam) === 'pruned', `the grace window ends: Sam is removed (${row(samVote).status}, ${statusOf(sam)})`);

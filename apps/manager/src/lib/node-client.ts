@@ -3193,10 +3193,11 @@ export interface OffboardPreviewResponse {
         callsign: string;
     }>;
     /**
-     * Where the community votes, the removal it voted for that this offboarding settles and completes (removal by vote S3);
-     * the node refuses the preview for anyone without one. Null where votes are off, and absent from a node before S3.
+     * Where the community votes, the removal this offboarding settles and completes (removal by vote S3): one it voted for, or
+     * one an owner decided because too few could vote (`decidedByOwner`, S6; absent from a node before it). The node refuses
+     * the preview for anyone without one. Null where votes are off, and absent from a node before S3.
      */
-    settlesRemoval?: { decisionId: string; gracePeriodEndsAt: string | null } | null;
+    settlesRemoval?: { decisionId: string; gracePeriodEndsAt: string | null; decidedByOwner?: boolean } | null;
 }
 
 export interface OffboardResponse {

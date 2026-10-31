@@ -70,6 +70,7 @@ import {
     COMMUNITY_DECISION_ACTOR,
     isOwnerLevelActor,
     heldPrivilegedRole,
+    removalInGraceOf,
     pruneNeedsOwner,
     inviteBranchOf,
     reportSuspensionTakesPrivilegedRole,
@@ -2470,6 +2471,8 @@ export function emergencySuspendRefusal(
 
 /** Why a pause's own vote closed when an admin lifted the pause by hand (adminLiftSuspension). */
 export const PAUSE_LIFTED_BY_ADMIN = word('An admin lifted the pause before the vote closed');
+/** Why a removal an owner decided, too few being able to vote, isn't lifted by hand (adminLiftSuspension): no vote passed it. */
+export const LIFT_OWNER_DECIDED_REMOVAL = 'Too few members could vote, so an owner decided to remove this member; halt that Decision instead';
 
 /**
  * An admin lifts a suspension by hand. An open vote holding it (the pause's own vote, or a "Keep this suspension?" vote
@@ -2500,11 +2503,12 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
                 : 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension',
         };
     }
-    const pendingRemoval = db.prepare(
-        "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
-    ).get(subjectPubkey);
+    const pendingRemoval = removalInGraceOf(subjectPubkey);
     if (pendingRemoval) {
-        return { success: false, status: 409, error: 'The community voted to remove this member; halt that Decision instead' };
+        return {
+            success: false, status: 409,
+            error: pendingRemoval.decidedByOwner ? LIFT_OWNER_DECIDED_REMOVAL : 'The community voted to remove this member; halt that Decision instead',
+        };
     }
     const nowIso = new Date().toISOString();
     const openKeeps = openPauseVotes(subjectPubkey);

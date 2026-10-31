@@ -636,6 +636,15 @@ describe('MemberDetailModal', () => {
             vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([removalInGrace(KEY)]);
             draw();
             expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here, and it voted to remove them: Offboard settles their Beans and completes the removal now\.$/);
+            expect((await screen.findByText('🚪 Offboard')).closest('button')).toHaveAttribute('title', 'Settle their Beans, and complete the removal the community voted for now');
+        });
+
+        // Removal by vote S6: too few could vote, so no vote passed, and nothing here says the community voted for it.
+        it('inside a removal an owner decided because too few could vote, says so, not that the community voted for it', async () => {
+            vi.spyOn(nodeClient, 'fetchAdminDecisions').mockResolvedValue([{ ...removalInGrace(KEY), ownerDecisionCarriedAt: '2026-10-08T00:00:00.000Z' }]);
+            draw();
+            expect(await screen.findByTestId('removal-is-the-vote')).toHaveTextContent(/^Removing a member is the community's vote here, but too few could vote on this one, so an owner decided it: Offboard settles their Beans and completes the removal now\.$/);
+            expect((await screen.findByText('🚪 Offboard')).closest('button')).toHaveAttribute('title', 'Settle their Beans, and complete the removal an owner decided now');
         });
 
         it("and the suspension's words for them say the vote can't remove them: it lifts when the vote closes", async () => {

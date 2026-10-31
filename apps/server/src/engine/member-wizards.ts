@@ -114,8 +114,11 @@ export interface OffboardPreview {
         publicKey: string;
         callsign: string;
     }>;
-    /** Where the community votes, the removal it voted for that this offboarding settles (removalToSettle); null where votes are off. */
-    settlesRemoval: { decisionId: string; gracePeriodEndsAt: string | null } | null;
+    /**
+     * Where the community votes, the removal this offboarding settles (removalToSettle): one it voted for, or one an owner
+     * decided because too few could vote (`decidedByOwner`, removal by vote S6). Null where votes are off.
+     */
+    settlesRemoval: { decisionId: string; gracePeriodEndsAt: string | null; decidedByOwner: boolean } | null;
 }
 
 export interface OffboardOptions {
@@ -795,7 +798,7 @@ export const OFFBOARD_A_ROLE_HOLDER = "Offboarding settles a removal the communi
  * never a removal of its own there: refused 400 in words when no removal of the member waits out its grace window. Null
  * where votes are off, where the offboarding is the admins' own removal, as before (Q11).
  */
-export function removalToSettle(publicKey: string): { id: string; gracePeriodEndsAt: string | null } | null {
+export function removalToSettle(publicKey: string): { id: string; gracePeriodEndsAt: string | null; decidedByOwner: boolean } | null {
     if (!getProfileSwitches().decisions) return null;
     const removal = removalInGraceOf(publicKey);
     if (removal) return removal;
@@ -884,7 +887,7 @@ export function getOffboardPreview(publicKey: string): OffboardPreview {
         pendingEscrowsCount: pendingEscrows,
         isSoleOwner: isOwner,
         activeMembers,
-        settlesRemoval: settles ? { decisionId: settles.id, gracePeriodEndsAt: settles.gracePeriodEndsAt } : null,
+        settlesRemoval: settles ? { decisionId: settles.id, gracePeriodEndsAt: settles.gracePeriodEndsAt, decidedByOwner: settles.decidedByOwner } : null,
     };
 }
 

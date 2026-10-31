@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-    View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet, Dimensions,
+    View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet, Dimensions, BackHandler,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -33,6 +33,30 @@ export function TagPicker({
     const [sheetVisible, setSheetVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (!sheetVisible) return;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            setSheetVisible(false);
+            return true;
+        });
+        return () => sub.remove();
+    }, [sheetVisible]);
+
+    useEffect(() => {
+        if (!sheetVisible) return;
+        if (typeof window !== 'undefined' && window.addEventListener) {
+            const handleKeyDown = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSheetVisible(false);
+                }
+            };
+            window.addEventListener('keydown', handleKeyDown, true);
+            return () => window.removeEventListener('keydown', handleKeyDown, true);
+        }
+    }, [sheetVisible]);
 
     const styles = useStyles(({ colors, theme }) => StyleSheet.create({
         container: {
@@ -262,16 +286,16 @@ export function TagPicker({
             <View style={styles.chipsRow}>
                 {selectedTags.map((id) => {
                     const label = index.label(id);
-                    if (!label && !isTagId(id)) return null;
+                    if (!label) return null;
                     return (
                         <Pressable
                             key={id}
                             style={[styles.chip, styles.chipSelected]}
                             onPress={() => toggleTag(id)}
                             accessibilityRole="button"
-                            accessibilityLabel={t('Remove {name}', { name: label || id })}
+                            accessibilityLabel={t('Remove {name}', { name: label })}
                         >
-                            <Text style={[styles.chipText, styles.chipTextSelected]}>{label || id}</Text>
+                            <Text style={[styles.chipText, styles.chipTextSelected]}>{label}</Text>
                             <MaterialCommunityIcons name="close" size={16} color={colors.text.inverse} style={styles.removeIcon} />
                         </Pressable>
                     );
@@ -284,7 +308,6 @@ export function TagPicker({
                         accessibilityRole="button"
                         accessibilityLabel={t('+ Add tag')}
                     >
-                        <MaterialCommunityIcons name="plus" size={16} color={colors.brand.primary} />
                         <Text style={styles.addBtnText}>{t('+ Add')}</Text>
                     </Pressable>
                 )}
@@ -326,7 +349,7 @@ export function TagPicker({
                             {searchQuery.length > 0 && (
                                 <Pressable
                                     onPress={() => setSearchQuery('')}
-                                    style={{ padding: 4 }}
+                                    style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' }}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('Clear search')}
                                 >

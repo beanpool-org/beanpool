@@ -2,7 +2,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { TagPicker } from './TagPicker';
-import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf } from '@beanpool/core';
+import { POST_TAGS_MAX, SUGGESTED_TAGS_MAX, searchTagsFor, tagIndex, postTagsOf, buildTagIndex, wordsFor, setLanguage } from '@beanpool/core';
+import coreEs from '@beanpool/core/words/es.json';
 import { matchesExpandedSearch } from '../lib/search';
 
 describe('TagPicker Web Component', () => {
@@ -71,7 +72,7 @@ describe('TagPicker Web Component', () => {
     });
 
     it('searches from 2 characters in two languages (Spanish and English)', () => {
-        const index = tagIndex('es');
+        const index = buildTagIndex(wordsFor('es', [coreEs]));
         expect('a'.length >= 2).toBe(false);
 
         // English search from 2 chars
@@ -81,6 +82,45 @@ describe('TagPicker Web Component', () => {
         // Spanish search from 2 chars
         const esResults = index.search('lim');
         expect(esResults.some(t => (typeof t === 'string' ? t : (t as any).id) === 'food.fruit.lemon')).toBe(true);
+    });
+
+    it('pressing Enter in the tag search input does not submit an outer form', () => {
+        const handleSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+        render(
+            <form onSubmit={handleSubmit}>
+                <TagPicker tags={[]} onChange={vi.fn()} category="food" />
+                <button type="submit">Submit outer form</button>
+            </form>
+        );
+
+        // Open sheet
+        fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+        const input = screen.getByPlaceholderText('Search tags...');
+
+        // Type in search and press Enter
+        fireEvent.change(input, { target: { value: 'lemon' } });
+        fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
+        expect(handleSubmit).not.toHaveBeenCalled();
+    });
+
+    it('Escape in the tag sheet closes only the sheet and stops propagation to parent', () => {
+        const parentEscape = vi.fn();
+        window.addEventListener('keydown', parentEscape);
+        try {
+            render(<TagPicker tags={[]} onChange={vi.fn()} category="food" />);
+            fireEvent.click(screen.getByRole('button', { name: /\+ Add/i }));
+            expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+            // Press Escape
+            const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+            window.dispatchEvent(event);
+
+            expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+            expect(parentEscape).not.toHaveBeenCalled();
+        } finally {
+            window.removeEventListener('keydown', parentEscape);
+        }
     });
 
     it('suggests up to 8 tags from title, description and category', () => {
@@ -113,13 +153,18 @@ describe('TagPicker Web Component', () => {
     });
 
     it('cross-language search: matchesExpandedSearch matches Spanish query with tagged post', () => {
-        // Post tagged food.fruit.lemon in English text
-        const matches = matchesExpandedSearch(
-            'limón',
-            'Backyard citrus basket',
-            'Freshly picked organic citrus',
-            'food.fruit.lemon'
-        );
-        expect(matches).toBe(true);
+        try {
+            setLanguage('es', [coreEs]);
+            // Post tagged food.fruit.lemon in English text
+            const matches = matchesExpandedSearch(
+                'limón',
+                'Backyard citrus basket',
+                'Freshly picked organic citrus',
+                'food.fruit.lemon'
+            );
+            expect(matches).toBe(true);
+        } finally {
+            setLanguage('en');
+        }
     });
 });

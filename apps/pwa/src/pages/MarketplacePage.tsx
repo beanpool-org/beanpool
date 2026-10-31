@@ -1856,6 +1856,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <div className="flex flex-wrap gap-1.5 mb-5" data-testid="post-detail-tags">
                                     {visibleTags.map(id => {
                                         const label = idx.label(id);
+                                        if (!label) return null;
                                         return (
                                             <button
                                                 key={id}
@@ -1864,7 +1865,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     setSelectedTag(id);
                                                     setSelectedPost(null);
                                                 }}
-                                                className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700/60 cursor-pointer transition-colors"
+                                                className="inline-flex items-center min-h-[44px] px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700/60 cursor-pointer transition-colors"
                                                 aria-label={t('Filter marketplace by tag {tag}', { tag: label })}
                                             >
                                                 #{label}
@@ -3400,21 +3401,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </button>
                     </>)}
                 </div>
-                {selectedTag && (
-                    <div className="flex items-center gap-1.5 mt-2">
-                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
-                            #{tagIndex().label(selectedTag)}
-                            <button
-                                type="button"
-                                onClick={() => setSelectedTag(null)}
-                                className="hover:text-emerald-950 dark:hover:text-white font-bold ml-1 cursor-pointer"
-                                aria-label={t('Clear tag filter')}
-                            >
-                                ✕
-                            </button>
-                        </span>
-                    </div>
-                )}
+                {selectedTag && (() => {
+                    const label = tagIndex().label(selectedTag);
+                    if (!label) return null;
+                    return (
+                        <div className="flex items-center gap-1.5 mt-2">
+                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                                #{label}
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedTag(null)}
+                                    className="min-h-[44px] min-w-[44px] flex items-center justify-center hover:text-emerald-950 dark:hover:text-white font-bold ml-1 cursor-pointer"
+                                    aria-label={t('Clear tag filter')}
+                                >
+                                    ✕
+                                </button>
+                            </span>
+                        </div>
+                    );
+                })()}
                 {toSave && (
                     <button
                         type="button"

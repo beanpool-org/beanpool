@@ -37,8 +37,8 @@ export function TagPicker({
                 setIsOpen(false);
             }
         };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
     }, [isOpen]);
 
     const index = useMemo(() => tagIndex(), [isOpen]);
@@ -88,16 +88,16 @@ export function TagPicker({
             <div className="flex flex-wrap gap-2 items-center">
                 {selectedTags.map((id) => {
                     const label = index.label(id);
-                    if (!label && !isTagId(id)) return null;
+                    if (!label) return null;
                     return (
                         <button
                             key={id}
                             type="button"
                             onClick={() => toggleTag(id)}
                             className="min-h-[44px] px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5 transition-colors bg-terra-600 text-white hover:opacity-90 dark:bg-terra-500"
-                            aria-label={t('Remove {name}', { name: label || id })}
+                            aria-label={t('Remove {name}', { name: label })}
                         >
-                            <span>{label || id}</span>
+                            <span>{label}</span>
                             <span className="text-xs font-bold opacity-80" aria-hidden="true">✕</span>
                         </button>
                     );
@@ -110,7 +110,7 @@ export function TagPicker({
                         className="min-h-[44px] px-4 py-1.5 rounded-full text-sm font-bold flex items-center gap-1 border border-dashed border-terra-500 text-terra-600 dark:text-terra-400 hover:bg-terra-50 dark:hover:bg-terra-950/30 transition-colors"
                         aria-label={t('+ Add tag')}
                     >
-                        <span aria-hidden="true">+</span> {t('+ Add')}
+                        {t('+ Add')}
                     </button>
                 )}
             </div>
@@ -152,14 +152,20 @@ export function TagPicker({
                                     type="text"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                        }
+                                    }}
                                     placeholder={t('Search tags...')}
+                                    aria-label={t('Search tags...')}
                                     className="w-full min-h-[44px] pl-10 pr-9 py-2 rounded-xl border border-nature-200 dark:border-nature-700 bg-nature-50 dark:bg-nature-950 text-nature-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-terra-300"
                                 />
                                 {searchQuery.length > 0 && (
                                     <button
                                         type="button"
                                         onClick={() => setSearchQuery('')}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-nature-400 hover:text-nature-600"
+                                        className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-nature-400 hover:text-nature-600"
                                         aria-label={t('Clear search')}
                                     >
                                         ✕

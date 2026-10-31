@@ -1170,35 +1170,39 @@ export default function MarketScreen() {
                     />
                 </Pressable>
             </View>
-            {selectedTag && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 2 }}>
-                    <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: colors.accent.tint,
-                        borderColor: colors.accent.border,
-                        borderWidth: 1,
-                        borderRadius: 16,
-                        paddingVertical: 3,
-                        paddingLeft: 10,
-                        paddingRight: 6,
-                        minHeight: 28,
-                    }}>
-                        <Text style={{ fontSize: 13, color: colors.text.body, fontWeight: '500', marginRight: 4 }} maxFontSizeMultiplier={1.3}>
-                            #{tagIndex().label(selectedTag)}
-                        </Text>
-                        <Pressable
-                            onPress={() => setSelectedTag(null)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            accessibilityRole="button"
-                            accessibilityLabel={t('Clear tag filter')}
-                            style={{ padding: 2 }}
-                        >
-                            <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '700' }}>✕</Text>
-                        </Pressable>
+            {selectedTag && (() => {
+                const label = tagIndex().label(selectedTag);
+                if (!label) return null;
+                return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 2 }}>
+                        <View style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            backgroundColor: colors.accent.tint,
+                            borderColor: colors.accent.border,
+                            borderWidth: 1,
+                            borderRadius: 16,
+                            paddingVertical: 3,
+                            paddingLeft: 10,
+                            paddingRight: 6,
+                            minHeight: 28,
+                        }}>
+                            <Text style={{ fontSize: 13, color: colors.text.body, fontWeight: '500', marginRight: 4 }} maxFontSizeMultiplier={1.3}>
+                                #{label}
+                            </Text>
+                            <Pressable
+                                onPress={() => setSelectedTag(null)}
+                                hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Clear tag filter')}
+                                style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' }}
+                            >
+                                <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '700' }}>✕</Text>
+                            </Pressable>
+                        </View>
                     </View>
-                </View>
-            )}
+                );
+            })()}
 
             {/* The map's filter shape (utils/market-filters.ts): the type row, and under it one row that stays in
                 the same place and changes with the type — the category chip and the feed's own filters, or the

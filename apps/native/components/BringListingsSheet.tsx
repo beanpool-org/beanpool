@@ -60,8 +60,7 @@ export function BringListingsSheet() {
                 busy.current = false;
             }
             if (plan === 'unreachable') return;
-            const nothing = plan === 'nothing' || (plan.bring.length === 0 && (offer.accepted || plan.gone.length === 0));
-            if (plan === 'nothing' || nothing) {
+            if (plan === 'nothing' || (plan.bring.length === 0 && (offer.accepted || plan.gone.length === 0))) {
                 await closeBringOffer(publicKey);
                 return;
             }

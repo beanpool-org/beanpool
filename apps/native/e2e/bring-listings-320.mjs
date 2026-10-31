@@ -52,6 +52,8 @@ const STUBS = {
     // The sheet's words are the app's own (utils/bring-listings.ts); what would reach a community or the phone's memory is not here.
     './node-post': `export const signedGet = async () => { throw new Error('no network here'); }; export const signedPost = signedGet;`,
     './node-profile': `export const GLOBAL_NODE_URL = 'https://global.beanpool.org'; export const getCachedNodeProfile = async () => null;`,
+    './post-photo': `export const fetchedPostPhoto = async () => ({ failed: 'gone' });`,
+    './db': `export const pushProfileToServer = async () => false;`,
     '../app/ThemeContext': `
         import { lightColors, darkColors } from ${JSON.stringify(path.join(NATIVE, 'constants/colors'))};
         const dark = new URLSearchParams(location.search).get('scheme') === 'dark';

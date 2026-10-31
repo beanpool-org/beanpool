@@ -1197,7 +1197,7 @@ export default function MarketScreen() {
                                 accessibilityLabel={t('Clear tag filter')}
                                 style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center' }}
                             >
-                                <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '700' }}>✕</Text>
+                                <Text style={{ fontSize: 12, color: colors.text.body, fontWeight: '700' }}>✕</Text>
                             </Pressable>
                         </View>
                     </View>

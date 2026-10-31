@@ -96,8 +96,8 @@ export function TagPicker({
             gap: 6,
         },
         chipSelected: {
-            backgroundColor: colors.brand.primary,
-            borderColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
+            borderColor: colors.brand.fill,
         },
         chipText: {
             fontSize: 14,
@@ -105,7 +105,7 @@ export function TagPicker({
             color: colors.text.body,
         },
         chipTextSelected: {
-            color: colors.text.inverse,
+            color: colors.text.onBrand,
             fontWeight: '700',
         },
         addBtn: {
@@ -296,7 +296,7 @@ export function TagPicker({
                             accessibilityLabel={t('Remove {name}', { name: label })}
                         >
                             <Text style={[styles.chipText, styles.chipTextSelected]}>{label}</Text>
-                            <MaterialCommunityIcons name="close" size={16} color={colors.text.inverse} style={styles.removeIcon} />
+                            <MaterialCommunityIcons name="close" size={16} color={colors.text.onBrand} style={styles.removeIcon} />
                         </Pressable>
                     );
                 })}
@@ -385,7 +385,7 @@ export function TagPicker({
                                                             {label || id}
                                                         </Text>
                                                         {selected && (
-                                                            <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />
+                                                            <MaterialCommunityIcons name="check" size={16} color={colors.text.onBrand} />
                                                         )}
                                                     </Pressable>
                                                 );
@@ -414,7 +414,7 @@ export function TagPicker({
                                                                 {label || id}
                                                             </Text>
                                                             {selected && (
-                                                                <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />
+                                                                <MaterialCommunityIcons name="check" size={16} color={colors.text.onBrand} />
                                                             )}
                                                         </Pressable>
                                                     );
@@ -466,7 +466,7 @@ export function TagPicker({
                                                                                         {itemLabel}
                                                                                     </Text>
                                                                                     {selected && (
-                                                                                        <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />
+                                                                                        <MaterialCommunityIcons name="check" size={16} color={colors.text.onBrand} />
                                                                                     )}
                                                                                 </Pressable>
                                                                             );
@@ -482,7 +482,7 @@ export function TagPicker({
                                                                                 {groupLabel}
                                                                             </Text>
                                                                             {selectedTags.includes(group.id) && (
-                                                                                <MaterialCommunityIcons name="check" size={16} color={colors.text.inverse} />
+                                                                                <MaterialCommunityIcons name="check" size={16} color={colors.text.onBrand} />
                                                                             )}
                                                                         </Pressable>
                                                                     )}

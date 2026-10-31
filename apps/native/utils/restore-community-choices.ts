@@ -9,7 +9,7 @@
  * typed.
  */
 import { GLOBAL_NODE_URL } from './global-node-url';
-import { copyCommunityUrl, type CopyCommunity } from '@beanpool/core';
+import { copyCommunityUrl, t, type CopyCommunity } from '@beanpool/core';
 import { isPlainNodeAddress, normalizeNodeUrl } from './node-url';
 import type { SavedNode } from './nodes';
 
@@ -83,4 +83,46 @@ export function chosenRestoreChoice(typed: string, choices: readonly RestoreChoi
     if (!typed.trim()) return null;
     const key = sameAddress(typed);
     return choices.find((c) => sameAddress(c.url) === key) ?? 'another';
+}
+
+/**
+ * What the sign-in restore's "Which community?" field holds, for the lines that say so (vault rethink VR5; #2660 review
+ * finding 3): the global community it starts with, the copy's first community it was filled with (by the copy's name for
+ * it), or something else the member typed or picked. Never "the global community" for a field that holds another.
+ */
+export function releaseFieldHolds(
+    field: string, fromCopy: CopyCommunity | null | undefined, globalUrl: string = GLOBAL_NODE_URL,
+): { kind: 'global' } | { kind: 'copy'; name: string } | { kind: 'other' } {
+    const key = sameAddress(field);
+    const copyUrl = copyCommunityUrl(fromCopy?.url);
+    if (copyUrl && field.trim() && key === sameAddress(copyUrl)) {
+        let host = copyUrl;
+        try { host = new URL(copyUrl).host; } catch { /* shown as given */ }
+        return { kind: 'copy', name: fromCopy?.name?.trim() || host };
+    }
+    if (field.trim() && key === sameAddress(globalUrl)) return { kind: 'global' };
+    return { kind: 'other' };
+}
+
+/** The line under that field and its screen-reader hint, naming what the field really holds (`releaseFieldHolds`). */
+export function releaseFieldHints(
+    field: string, fromCopy: CopyCommunity | null | undefined, globalUrl: string = GLOBAL_NODE_URL,
+): { hint: string; a11y: string } {
+    const holds = releaseFieldHolds(field, fromCopy, globalUrl);
+    if (holds.kind === 'copy') {
+        return {
+            hint: t('{community}, from your copy, is filled in. To open your account in another community, pick it above or type its name or address. Your name and picture come back from it.', { community: holds.name }),
+            a11y: t("{community}, from your copy, is filled in. Enter your community's name, like mullum, or its full address", { community: holds.name }),
+        };
+    }
+    if (holds.kind === 'global') {
+        return {
+            hint: t('The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.'),
+            a11y: t("The global community is filled in. Enter your community's name, like mullum, or its full address"),
+        };
+    }
+    return {
+        hint: t("Type your community's name or address, or pick one above. Your name and picture come back from it."),
+        a11y: t("Enter your community's name, like mullum, or its full address"),
+    };
 }

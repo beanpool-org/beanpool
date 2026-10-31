@@ -95,7 +95,7 @@ import { doorFromLink, doorLinkKey } from '../utils/global-link';
 import { takeInstallReferrer } from '../utils/install-referrer';
 import { peekRoute } from '../utils/peek-link';
 import { RestoreCommunityChips } from '../components/RestoreCommunityChips';
-import { fieldTextFor, withCopyCommunities } from '../utils/restore-community-choices';
+import { fieldTextFor, releaseFieldHints, withCopyCommunities } from '../utils/restore-community-choices';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
@@ -3873,7 +3873,8 @@ export default function WelcomeScreen() {
                                     />
                                     <TextInput
                                         accessibilityLabel={t('Community name or node address')}
-                                        accessibilityHint={t("The global community is filled in. Enter your community's name, like mullum, or its full address")}
+                                        // What the field really holds: the global community, the copy's first one, or another.
+                                        accessibilityHint={releaseFieldHints(ssoCommunity, ssoReleased.communities?.[0]).a11y}
                                         style={styles.input}
                                         placeholder={t('Community name or address (e.g. mullum)')}
                                         placeholderTextColor={colors.text.muted}
@@ -3890,7 +3891,7 @@ export default function WelcomeScreen() {
                                         </Text>
                                     )}
                                     <Text style={styles.fieldHint}>
-                                        {t('The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.')}
+                                        {releaseFieldHints(ssoCommunity, ssoReleased.communities?.[0]).hint}
                                     </Text>
                                     {error && <Text style={styles.error}>{error}</Text>}
                                     <Pressable

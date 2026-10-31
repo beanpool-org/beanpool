@@ -5,6 +5,7 @@
  * submit of the form round the picker. At 320 px, 130% text, both themes.
  *
  * Run:  node apps/pwa/e2e/tags-t3-panel-check.mjs   (Chromium for Playwright; contacts no node)
+ *   TAG_PANEL_SHOTS=<dir>  also write the open sheet in each theme to that folder
  */
 /* global console, process, document, window */
 import { createServer } from 'vite';
@@ -35,6 +36,8 @@ try {
         await page.getByRole('button', { name: '+ Add tag' }).click();
         const sheet = page.locator('[role="dialog"]');
         await sheet.waitFor();
+
+        if (process.env.TAG_PANEL_SHOTS) await page.screenshot({ path: path.join(process.env.TAG_PANEL_SHOTS, `tag-sheet-panel-${theme}-320.png`) });
 
         const box = await sheet.boundingBox();
         check(box.x === 0 && box.y === 0 && box.width === 320 && box.height === 568, `${theme}: the overlay covers the whole 320 x 568 screen (got ${box.width} x ${box.height} at ${box.x},${box.y})`);

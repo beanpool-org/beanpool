@@ -48,6 +48,12 @@ const STUBS = {
         export const useTheme = () => globalThis.__theme;
         export const useStyles = (make) => make(globalThis.__theme);
     `,
+    'react-native-keyboard-controller': `
+        import React from 'react';
+        import { View } from 'react-native-web';
+        export const KeyboardAvoidingView = ({ behavior, ...p }) => React.createElement(View, p);
+        export const KeyboardController = { dismiss: async () => {} };
+    `,
     '../utils/haptics': `
         export const hapticTick = () => {};
         export const hapticWarning = () => {};

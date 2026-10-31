@@ -9,6 +9,8 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { openSeedFromSso, sealSeedToSso } from '../keeper-crypto.js';
 import { toEd25519Seed } from '../ed25519-key.js';
 import {
+    SSO_SHARE_LIST_VECTORS,
+    SSO_SHARE_LIST_VECTOR_COMMUNITIES,
     SSO_SHARE_VECTORS,
     SSO_SHARE_VECTOR_PKCS8_HEX,
     SSO_SHARE_VECTOR_PUBLIC_KEY,
@@ -58,5 +60,33 @@ describe('sign-in recovery copy vectors', () => {
         const parts = [b(new Uint8Array(32)), b(new Uint8Array(24)), b(new Uint8Array(24))];
         expect(bytesToHex(one)).toBe(parts.map(bytesToHex).join(''));
         expect(bytesToHex(seededGetRandomValues('y')(new Uint8Array(80)))).not.toBe(bytesToHex(one));
+    });
+
+    it.each(SSO_SHARE_LIST_VECTORS.map((v) => [v.name, v] as const))('%s: opens to the vector key, words as sealed, and the list', async (_name, v) => {
+        const [share] = v.shares;
+        const opened = await openSeedFromSso(share, v.provider, v.sub);
+        expect(bytesToHex(opened.seed)).toBe(SSO_SHARE_VECTOR_SEED_HEX);
+        expect(opened.words).toEqual(v.withWords ? SSO_SHARE_VECTOR_WORDS : null);
+        expect(opened.communitiesStatus).toBe('carried');
+        expect(opened.communities).toEqual(SSO_SHARE_LIST_VECTOR_COMMUNITIES);
+        await expect(openSeedFromSso(share, v.provider, `${v.sub}0`)).rejects.toThrow();
+    });
+
+    it.each(SSO_SHARE_LIST_VECTORS.map((v) => [v.name, v] as const))('%s: core seals the same bytes, list and all, from the same random stream', async (_name, v) => {
+        vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(seededGetRandomValues(v.name) as never);
+        const sealed = await sealSeedToSso(hexToBytes(SSO_SHARE_VECTOR_SEED_HEX), v.provider, v.sub, {
+            words: v.withWords ? SSO_SHARE_VECTOR_WORDS : null, communities: SSO_SHARE_LIST_VECTOR_COMMUNITIES,
+        });
+        const { holderType: _t, holderRef: _r, shareIndex: _i, ...box } = v.shares[0];
+        expect(sealed).toEqual(box);
+    });
+
+    it('the vectors without a list carry no list, and open to none', async () => {
+        for (const v of SSO_SHARE_VECTORS) {
+            expect(Object.keys(JSON.parse(v.shares[0].kdfParams))).not.toContain('communities');
+            const opened = await openSeedFromSso(v.shares[0], v.provider, v.sub);
+            expect(opened.communitiesStatus).toBe('absent');
+            expect(opened.communities).toBeNull();
+        }
     });
 });

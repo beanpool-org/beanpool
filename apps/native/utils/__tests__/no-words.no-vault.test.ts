@@ -117,7 +117,7 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         const buttons = findAll(tree, 'SsoButton');
         expect(buttons.map(b => b.props.name)).toEqual(['google', 'facebook']);
         buttons[1].props.onPress();
-        expect(onProtectSso).toHaveBeenCalledWith('facebook');
+        expect(onProtectSso).toHaveBeenCalledWith('facebook', false);
     });
 
     it('covered: nothing on the panel mentions 12 words', () => {
@@ -156,7 +156,7 @@ describe('KeeperProtectionPanel on a phone with no 12 words', () => {
         expect(again).toBeDefined();
         expect(textOf([again!])).toBe('Connect again');
         again!.props.onPress();
-        expect(onProtectSso).toHaveBeenCalledWith('facebook');
+        expect(onProtectSso).toHaveBeenCalledWith('facebook', false);
         // Disconnect is still there beside it.
         expect(withWords.map(b => b.props.accessibilityLabel)).toContain('Disconnect Facebook');
 

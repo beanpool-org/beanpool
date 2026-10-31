@@ -11,7 +11,8 @@
  * - **Every community saved on this phone** (utils/nodes.ts): `/api/recovery/shares/status`, signed by the key
  *   (utils/vault-move.ts `communityCopyStatus`). A community that gives no answer in time is `null`, never "none".
  *   A community's copy has no "since": its server rewrites every row of the member's copies whenever one is linked or
- *   removed there, so the only date it has is the last change, not the copy's.
+ *   removed there, so the only date it has is the last change, not the copy's. The same answer lists the copy its admins
+ *   can bring the member back from (`communityCopy`, vault rethink VR3), with since when, wherever it was turned on.
  * - **Deletes asked for that haven't landed** (the move card's list, utils/vault-move.ts): shown as not yet removed, and
  *   tried again before every listing, at app open (app/_layout.tsx) and when the move card looks.
  *
@@ -20,7 +21,8 @@
  * - A vault copy is removed only on the vault's signed `deleted` answer (utils/vault.ts `disconnectFromVault`); a
  *   community's only on its own answer: a 2xx naming the copy removed, or its 404 for a copy already gone (never a
  *   proxy's page, vault-move.ts `removeCommunityCopy`). Anything short of that is "not removed", and a community's
- *   delete is then remembered and tried again (with the guard against a newer copy, vault-move.ts).
+ *   delete is then remembered and tried again (with the guard against a newer copy, vault-move.ts). The copy for a
+ *   community's admins (VR3) goes on its own answer too; one that doesn't land is said as not removed, never remembered.
  * - **Remove everything**: the vault's `all`, when it listed a copy or couldn't say, and a delete for every copy each
  *   community listed. A community that couldn't be asked has nothing removed, and the result says so: the phone never
  *   deletes a copy it was never shown, at a community it couldn't see.
@@ -37,11 +39,11 @@ import { readOneWayBack } from './one-way-back';
 import type { SsoProvider } from './sso-providers';
 import { wordsWrittenDownStoreKey } from './storage-keys';
 import { disconnectFromVault, hasVault, vaultStatus, VaultError } from './vault';
-import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, retryCommunityRemovals } from './vault-move';
+import { communityCopyStatus, deleteOrRemember, pendingCommunityRemovals, removeAdminsCopy, retryCommunityRemovals } from './vault-move';
 import { sameCommunity, type CommunityPart, type NotAnswered, type Removal, type VaultPart, type WaysBack } from './ways-back-state';
 
 export {
-    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, vaultCopiesBySignIn, wordsOnly,
+    beforeRemoving, everyoneAnswered, isPending, knownCopies, sameCommunity, unopenableAdminsCopies, vaultCopiesBySignIn, wordsOnly,
     type BeforeRemoving, type CommunityPart, type CopyAt, type NotAnswered, type Removal, type VaultPart, type WaysBack,
 } from './ways-back-state';
 
@@ -114,18 +116,29 @@ export async function removeCommunityCopyFrom(
     return gone ? { removed: true } : { removed: false, why: 'remembered' };
 }
 
+/**
+ * Remove the copy a community keeps for its admins to bring the member back from (vault rethink VR3): removed on the
+ * community's own answer; otherwise not removed, and not remembered (vault-move.ts `removeAdminsCopy`).
+ */
+export async function removeAdminsCopyFrom(identity: BeanPoolIdentity, community: CommunityPart): Promise<Removal> {
+    return (await removeAdminsCopy(identity, community.url)) ? { removed: true } : { removed: false, why: 'unreachable' };
+}
+
 export interface EverythingRemoved {
     /** The vault's answer, or null when nothing was asked of it (no vault in this build, or it listed no copy). */
     vault: Removal | null;
     /** Each community copy that was listed, and what its delete did. */
     communities: { url: string; name: string; provider: SsoProvider; removal: Removal }[];
+    /** Each copy a community keeps for its admins to bring the member back from (VR3), and what its delete did. */
+    admins: { url: string; name: string; removal: Removal }[];
     /** Communities that couldn't be asked: nothing there was removed. */
     notAsked: { url: string; name: string }[];
 }
 
 /**
  * Remove everything (design §5.1): the vault's copies (`all`) when it listed one or couldn't say, and every copy each
- * community listed, the communities at once and each one's copies in turn. Never throws, never blocks on one keeper.
+ * community listed, its admins' copy included, the communities at once and each one's copies in turn. Never throws,
+ * never blocks on one keeper.
  */
 export async function removeEverything(identity: BeanPoolIdentity, w: WaysBack): Promise<EverythingRemoved> {
     const askVaultToo = w.vault.kind === 'unknown' || (w.vault.kind === 'listed' && w.vault.copies.length > 0);
@@ -148,9 +161,14 @@ export async function removeEverything(identity: BeanPoolIdentity, w: WaysBack):
         }
         return done;
     }));
+    // A copy a community keeps for its admins but can't open goes too: it is still the member's key, there.
+    const admins = Promise.all(w.communities.filter(c => c.status?.adminsCopy || c.status?.adminsCopyUnopenable).map(async c => (
+        { url: c.url, name: c.name, removal: await removeAdminsCopyFrom(identity, c) }
+    )));
     return {
         vault: await vault,
         communities: (await communities).flat(),
+        admins: await admins,
         notAsked: w.communities.filter(c => !c.status).map(({ url, name }) => ({ url, name })),
     };
 }

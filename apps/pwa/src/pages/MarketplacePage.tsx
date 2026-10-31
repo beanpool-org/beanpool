@@ -24,7 +24,7 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, formatDate, formatNumber, t, tn, word, type WordKey,
     amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, dealQuantityUnit, type DealQuantityUnit,
     dealsNeedingMe, dealMoves, listingDeals, listingDealLines, listingChips, listingChipWords, releaseLine, type DealMoves,
-    FILL_BELOW, FILL_MAX, elsewhereFill, wantsFill,
+    FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill,
     postTagsOf, searchTagsFor, tagIndex,
 } from '@beanpool/core';
 import { TagPicker } from '../components/TagPicker';
@@ -298,6 +298,7 @@ const NEAR_WAIT_MS = 1500;
 
 /** The least time between two reads of the fill for the same filters (the phone's minute, market.tsx). */
 const FILL_REREAD_MS = 60_000;
+export { READ_TIMEOUT_MS };
 
 /**
  * The Save-search button's words: core's word() key, shown here through t(), so the words a member sees are in the same
@@ -1298,10 +1299,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // The fill (core market-fill): where the list is cut to the member's area and fewer than FILL_BELOW listings are left
     // near them under their filters, the newest from elsewhere come beneath them, read as "Show everywhere" reads. Not
-    // under Events (the list is not cut there), not for a visitor, and not when the member picked a distance: that is the
-    // circle they asked for, and the filter above would cut the fill to it anyway.
-    const fillOn = !!near && !isVisitor && !membersOnly && typeFilter !== 'event' && !radiusSettings;
-    const fillWanted = fillOn && !loading && wantsFill(clientFilter(posts).length);
+    // under Events (the list is not cut there), not for a visitor, not while a search is typed (the phone's rule; search
+    // across all listings is "Show everywhere"), and not when the member picked a distance: that is the circle they
+    // asked for, and the filter above would cut the fill to it anyway.
+    const fillOn = !!near && !isVisitor && !membersOnly && typeFilter !== 'event' && !radiusSettings && !searchQuery.trim();
+    const fillWanted = fillOn && !loading && wantsFill(clientFilter(posts).filter(p => !isNodePulsePost(p)).length);
     const fillFilter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
     const fillKey = JSON.stringify(fillFilter);
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: MarketplacePost[] | null } | null>(null);
@@ -1322,14 +1324,26 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         if (last && last.key === fillKey && (last.out || Date.now() - last.at < FILL_REREAD_MS)) return;
         const read = { key: fillKey, at: 0, out: true };
         fillReadRef.current = read;
+        const stop = new AbortController();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<null>(resolve => {
+            timer = setTimeout(() => {
+                stop.abort();
+                resolve(null);
+            }, READ_TIMEOUT_MS);
+        });
         // One page (the node's own 50), so the fill never holds more than core's FILL_MAX.
-        getMarketplacePosts({ ...fillFilter, limit: FILL_MAX })
-            .then(rows => { read.at = Date.now(); return rows; }, () => null)
-            .then(rows => {
-                read.out = false;
-                // Dropped only if the member has since moved to other filters, whose read has replaced this one.
-                if (fillReadRef.current === read) setElsewhere({ key: read.key, posts: rows });
-            });
+        // Given up after READ_TIMEOUT_MS (20 s) so a dead connection never holds "Loading..." forever.
+        Promise.race([
+            getMarketplacePosts({ ...fillFilter, limit: FILL_MAX }, stop.signal)
+                .then(rows => { read.at = Date.now(); return rows; }, () => null),
+            timeout,
+        ]).then(rows => {
+            if (timer) clearTimeout(timer);
+            read.out = false;
+            // Dropped only if the member has since moved to other filters, whose read has replaced this one.
+            if (fillReadRef.current === read) setElsewhere({ key: read.key, posts: rows });
+        });
     }, [fillWanted, fillKey, fillStamp]);
 
     // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll.
@@ -3653,17 +3667,16 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
                 const realMemberListingsCount = posts.filter(p => {
-                    const isPulse = ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode;
-                    return !isPulse && p.type !== 'poll' && p.type !== 'event' && p.status === 'active';
+                    return !isNodePulsePost(p) && p.type !== 'poll' && p.type !== 'event' && p.status === 'active';
                 }).length;
                 if (realMemberListingsCount >= 2) {
-                    filtered = filtered.filter(p => !(((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse') && !(p as any).originNode && !(p as any)._remoteNode));
+                    filtered = filtered.filter(p => !isNodePulsePost(p));
                 }
 
                 // Pin Daily Pulse post to the top of the feed (local only)
                 filtered.sort((a, b) => {
-                    const isPulseA = ((a as any).author_callsign === 'Daily Pulse' || a.authorCallsign === 'Daily Pulse') && !(a as any).originNode && !(a as any)._remoteNode;
-                    const isPulseB = ((b as any).author_callsign === 'Daily Pulse' || b.authorCallsign === 'Daily Pulse') && !(b as any).originNode && !(b as any)._remoteNode;
+                    const isPulseA = isNodePulsePost(a);
+                    const isPulseB = isNodePulsePost(b);
                     if (isPulseA && !isPulseB) return -1;
                     if (!isPulseA && isPulseB) return 1;
                     return 0;
@@ -3671,10 +3684,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 // The fill beneath a short nearby list (see clientFilter): none of them already shown, and not the node's own
                 // Daily Pulse, which is not from elsewhere. Pending while the read is out; nothing if it failed or came back empty.
-                const isPulsePost = (p: MarketplacePost) => ((p as any).author_callsign === 'Daily Pulse' || p.authorCallsign === 'Daily Pulse')
-                    && !(p as any).originNode && !(p as any)._remoteNode;
                 const fillRead = fillWanted && elsewhere?.key === fillKey ? elsewhere.posts : undefined;
-                const fillRows = fillRead ? elsewhereFill(filtered, clientFilter(fillRead).filter(p => !isPulsePost(p))) : [];
+                const fillRows = fillRead ? elsewhereFill(filtered, clientFilter(fillRead).filter(p => !isNodePulsePost(p))) : [];
                 const fillPending = fillWanted && elsewhere?.key !== fillKey;
 
                 // Distance on a card: the node's, where it read from a point, else from the centre the viewer picked for

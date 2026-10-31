@@ -1466,7 +1466,7 @@ export async function getMarketplacePosts(filter?: {
     keeper?: boolean;
     /** Tag filter: comma-separated tag ids or array (routes/marketplace.ts, DESIGN-owner-seeding-tags-fable.md §4.6) */
     tags?: string | string[];
-}): Promise<MarketplacePost[]> {
+}, signal?: AbortSignal): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
     if (filter?.type) params.set('type', filter.type);
@@ -1492,7 +1492,7 @@ export async function getMarketplacePosts(filter?: {
     }
     if (filter?.sort) params.set('sort', filter.sort);
     if (filter?.online) params.set('online', '1');
-    return request('GET', `/api/marketplace/posts?${params}`);
+    return request('GET', `/api/marketplace/posts?${params}`, undefined, signal);
 }
 
 export async function createMarketplacePost(post: {

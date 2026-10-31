@@ -19,7 +19,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
 type Call = { url: string; method: string; body: any };
 
 /** A fake node: the list is `state.grants`; connecting pushes one; disconnecting removes it; the preview answers its tools. */
-function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[]; postsPerDay?: number; perDayProof?: 'phone' | 'code' }) {
+function fakeNode(state: { grants: any[]; disconnected?: Array<{ id: string; madePosts: number }>; removeProof?: 'phone'; allowed?: boolean; role?: 'owner' | 'admin'; canConnect?: boolean; seesAll?: boolean; makeStatus?: number; makeBody?: unknown; previewStatus?: number; previewBody?: unknown; previewTools?: unknown[]; postsPerDay?: number; perDayProof?: 'phone' | 'code' }) {
     const calls: Call[] = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any, init?: RequestInit) => {
         const url = String(input);
@@ -31,7 +31,19 @@ function fakeNode(state: { grants: any[]; allowed?: boolean; role?: 'owner' | 'a
                 allowed: state.allowed ?? true, mcpUrl: 'https://mullum.example/mcp', role: state.role ?? 'owner', canConnect: state.canConnect ?? true, canConnectOAuth: true,
                 seesAll: state.seesAll ?? true, defaultDays: 30, maxDays: 90, perMember: 5, grants: state.grants,
                 postsPerDay: state.postsPerDay ?? 100, postsPerDayDefault: 100, postsPerDayMin: 1, postsPerDayMax: 1000,
+                disconnected: state.disconnected ?? [],
             }), { status: 200 });
+        }
+        const removeMade = url.match(/agent\/grants\/([^/]+)\/remove-made$/);
+        if (removeMade) {
+            if (state.removeProof === 'phone') {
+                return new Response(JSON.stringify({ error: 'Do this from your phone: open BeanPool, press Manage, then make this change there.', code: 'phone_required', phoneRequired: true }), { status: 403 });
+            }
+            const id = removeMade[1];
+            const n = state.grants.find((g) => g.id === id)?.madePosts ?? state.disconnected?.find((d) => d.id === id)?.madePosts ?? 0;
+            state.grants = state.grants.map((g) => (g.id === id ? { ...g, madePosts: 0 } : g));
+            state.disconnected = (state.disconnected ?? []).filter((d) => d.id !== id);
+            return new Response(JSON.stringify({ grant: id, removed: Array.from({ length: n }, (_, i) => `p${i}`), kept: [] }), { status: 200 });
         }
         if (url.endsWith('/api/local/admin/agent/grants') && method === 'POST') {
             if (state.makeStatus && state.makeStatus !== 201) return new Response(JSON.stringify(state.makeBody ?? { error: 'bad' }), { status: state.makeStatus });
@@ -256,6 +268,39 @@ describe('ConnectedAssistantsPanel', () => {
         render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
         expect(await screen.findByText('Only an owner turns this on or off.')).toBeInTheDocument();
         expect(screen.queryByRole('switch')).toBeNull();
+    });
+
+    it('"Remove its posts" (slice S2): a row says what it made; the owner confirms, and its posts are removed', async () => {
+        const calls = fakeNode({ grants: [grant({ canPost: true, postsToday: 2, madePosts: 12 })] });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        expect(await screen.findByTestId('agent-grant-made')).toHaveTextContent('Made: 12 posts still up');
+        fireEvent.click(screen.getByRole('button', { name: 'Remove its posts: "Claude on my laptop"' }));
+        expect(await screen.findByRole('alertdialog')).toHaveTextContent('Remove the 12 posts "Claude on my laptop" made?');
+        await answerInPageConfirm('Remove its posts');
+        await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/agent/grants/0123456789ab/remove-made'))).toBe(true));
+        expect(await screen.findByText('Removed 12 posts.')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByTestId('agent-grant-made')).toBeNull());
+    });
+
+    it('"Remove its posts" works for a disconnected assistant, and from a computer it is sent to the phone', async () => {
+        const calls = fakeNode({ grants: [], disconnected: [{ id: 'goneeeeeeeee', madePosts: 3 }], removeProof: 'phone' });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={OWNER_KEY} />);
+        const row = await screen.findByTestId('agent-disconnected-row');
+        expect(row).toHaveTextContent('A disconnected assistant');
+        expect(row).toHaveTextContent('Made: 3 posts still up');
+        fireEvent.click(within(row).getByRole('button', { name: 'Remove its posts: a disconnected assistant' }));
+        await answerInPageConfirm('Remove its posts');
+        expect(await screen.findByTestId('agent-remove-proof-phone')).toHaveTextContent('Do this from your phone');
+        expect(calls.filter((c) => c.url.endsWith('/agent/grants/goneeeeeeeee/remove-made'))).toHaveLength(1);
+        expect(screen.getByTestId('agent-disconnected-row')).toBeInTheDocument();
+    });
+
+    it('an admin sees no "Remove its posts" and no disconnected list', async () => {
+        fakeNode({ grants: [grant({ mine: true, role: 'admin', madePosts: 4 })], role: 'admin', seesAll: false, disconnected: [{ id: 'goneeeeeeeee', madePosts: 3 }] });
+        render(<ConnectedAssistantsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        await screen.findByTestId('agent-grant-row');
+        expect(screen.queryByTestId('agent-remove-made')).toBeNull();
+        expect(screen.queryByTestId('agent-disconnected-list')).toBeNull();
     });
 
     it('Disconnect asks, then disconnects that assistant', async () => {

@@ -26,10 +26,12 @@
  *   mandatory fields should be mandatory even if seeding through MCP"): by the tool's input schema and again by the server,
  *   from one list per kind (REQUIRED), each one missing or empty refused in words that name it. Then the values go through
  *   the route's own validator (engine/post-fields.ts assertPostFields, in createPost) like any post's.
- * - Photos are required: 1–4, each a base64 JPEG or WebP of at most the per-photo cap (state-engine.ts
- *   MAX_PHOTO_BASE64_CHARS), made here what the apps send (at most 800 px, no metadata: storage/photo-thumbnails.ts
- *   resizeToStoredPhoto), then held to the routes' photo rule. One the node can't read (cut off after a whole header) is
- *   refused, never stored as sent. No composer offers a preset tile instead of a photo, so neither does this.
+ * - Photos are required: 1–4, from three fields together: `photos`, each a base64 JPEG or WebP of at most the per-photo cap
+ *   (state-engine.ts MAX_PHOTO_BASE64_CHARS); `photo_urls`, public addresses this server fetches; `photo_ids`, photos
+ *   uploaded first to POST /mcp/photos (slice S4, agent/owner-photos.ts: a hosted assistant can't write a photo's base64).
+ *   Each made here what the apps send (at most 800 px, no metadata: storage/photo-thumbnails.ts resizeToStoredPhoto), then
+ *   held to the routes' photo rule. One the node can't read (cut off after a whole header) is refused, never stored as
+ *   sent. No composer offers a preset tile instead of a photo, so neither does this.
  * - The owners' "Assistant posts a day" per grant per UTC day (limits.ts agentPostsPerDay: 100 unless an owner sets 1 to 1,000),
  *   read on every post; one the engine refuses is not counted. Counted in memory as each is admitted (two calls at once
  *   can't both take the last one) and, just before the row is written, from the rows the grant made today, which a
@@ -39,6 +41,13 @@
  * - The row records `created_via = 'assistant:<grant id>'` (schema.sql posts.created_via); the AGENT line of every create
  *   names the post id (mcp-route.ts). Revoking the grant or turning the switch off stops the next call at the door; posts
  *   made stay, and are deleted as any post is.
+ * - Slice S2 (design §2.3, §2.7): `my_posts`, `update_post`, `remove_post` and `remove_all_i_made` act only on a post THIS
+ *   grant made (created_via = 'assistant:<this grant id>'), still by the owner or an enterprise they keep now: never another
+ *   member's post, nor one the owner made in the app, nor another assistant's. Through the routes' own engine calls
+ *   (updatePost, removePost): an edit holds to the create's fields, a deal in escrow keeps a post up, and no tool moves a
+ *   Bean. 200 edits a day; remove_all_i_made once a day. The owner's own "Remove its posts" in Settings
+ *   (agent/grants-route.ts) runs the same removal (removeAllMadeBy), for a disconnected assistant too, and both write an
+ *   ADMIN line naming the ids removed.
  * - An answer carries the new post's id and its link in the app (`/?post=<id>`, a path the assistant joins to the address in
  *   its welcome), an event's start and end as its members see them, and the day's count: no key, no token, nothing about
  *   another member. An event's times must carry their offset: one without would be read in this server's own zone.
@@ -48,10 +57,11 @@ import { approximateLocation, PRICING_CATEGORIES } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { featureOffMessage, getProfileSwitches } from '../config/node-profile.js';
 import { featureOffFor } from '../routes/profile-feature-gate.js';
-import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS } from '../state-engine.js';
+import { canOperateTreasury, createPost, MAX_PHOTO_BASE64_CHARS, removePost, updatePost } from '../state-engine.js';
+import { logger } from '../logger.js';
 import { createEventFromBody } from '../routes/event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
-import { assertMayAddPhotos, assertMayPost } from '../engine/probation.js';
+import { assertMayAddPhotos, assertMayEditPhotos, assertMayPost } from '../engine/probation.js';
 import { enterprisePostLimit } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { readMemberArea } from '../engine/member-area.js';
@@ -63,7 +73,15 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { getReplacedInfo } from '../services/identity-epoch.js';
 import { memberErrorText } from '../routes/member-error-text.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE } from './fence.js';
-import { admitAgentCreate, agentCreatesToday, agentPostsPerDay, returnAgentCreate } from './limits.js';
+import {
+    admitAgentCreate, admitAgentEdit, admitAgentRemoveAll, agentCreatesToday, agentEditsToday, agentPhotosToday, agentPostsPerDay, returnAgentCreate,
+    returnAgentEdit, AGENT_EDITS_PER_DAY, AGENT_LIST_MAX, AGENT_PHOTOS_PER_DAY,
+} from './limits.js';
+import { claimUploadedPhotos, fetchPhoto, photoDayFull, PHOTO_SOURCE_MAX_BYTES, PHOTO_UPLOAD_KEEP_MS } from './owner-photos.js';
+import { grantStillLive } from './suggestions.js';
+import { listOAuthGrants } from './oauth.js';
+import { listAutomationTokens } from '../automation-tokens.js';
+import { getLocalConfig } from '../config/local-config.js';
 import type { AgentGrant, AgentTool, ToolResult } from './tools.js';
 
 export const AGENT_POST_PHOTOS_MIN = 1;
@@ -98,23 +116,39 @@ export const AGENT_POST_CATEGORIES: readonly string[] = PRICING_CATEGORIES.map((
  *   happens and the zone it is in (design §3 item 1: the assistant has no device clock to take one from); in person also
  *   its pin and the place's name (the phone asks for both), online neither. The end is the engine's default length;
  * - an enterprise's Offer or Need (phone treasury-post.tsx; web TreasuryDetailPage handleCreatePost): Offer or Need, the
- *   enterprise, a title, a category, a price of more than 0 Beans and a photo. Neither app asks a place or a description.
+ *   enterprise, a title, a category, a price of more than 0 Beans where the node has Beans (Marty, 31 Oct: none asked where
+ *   it has none, as for a member's own) and a photo. Neither app asks a place or a description.
+ * A photo may come from any of three fields (photos, photo_urls, photo_ids), so `photos` is the server's check of all three
+ * (photoCount) and the schemas say it in words: a JSON Schema `required` cannot say "one of" (schemaRequired).
  */
 export const REQUIRED = {
     listing: ['title', 'description', 'category', 'photos'],
     /** A listing's place: its pin, unless `use_my_area: true` (listingRequiredFor). */
     listingPlace: ['lat', 'lng'],
-    /** A listing's price, required where the node has Beans (listingRequired). */
+    /** A listing's price, required where the node has Beans (listingRequired, enterpriseListingRequired). */
     listingPrice: ['beans'],
     event: ['title', 'description', 'start_at', 'timezone', 'photos'],
     /** An event in person: a JSON Schema `required` cannot say "unless online", so the schema says it in words. */
     eventInPerson: ['place_name', 'lat', 'lng'],
-    enterpriseListing: ['kind', 'as_enterprise', 'title', 'category', 'beans', 'photos'],
+    enterpriseListing: ['kind', 'as_enterprise', 'title', 'category', 'photos'],
 } as const;
 
-/** What create_offer and create_need require on this node now, in the schema: a price only where it has Beans. */
+/** What create_offer and create_need require on this node now: a price only where it has Beans. */
 export function listingRequired(): string[] {
     return getProfileSwitches().beans ? [...REQUIRED.listing, ...REQUIRED.listingPrice] : [...REQUIRED.listing];
+}
+
+/**
+ * What create_enterprise_listing requires on this node now: a price of more than 0 only where it has Beans. (Beans off
+ * turns enterprises off too, config/node-profile.ts lockToLedger, and the tool is then refused before its price is read.)
+ */
+export function enterpriseListingRequired(): string[] {
+    return getProfileSwitches().beans ? [...REQUIRED.enterpriseListing, ...REQUIRED.listingPrice] : [...REQUIRED.enterpriseListing];
+}
+
+/** A tool schema's `required`: every field the server asks for but `photos`, which any of three fields gives. */
+function schemaRequired(fields: readonly string[]): string[] {
+    return fields.filter((f) => f !== 'photos');
 }
 
 /** What the server asks of one call: the schema's list, and the pin unless the call says `use_my_area: true`. */
@@ -149,7 +183,12 @@ const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> =
     lat: { there: isNumber, asks: 'the latitude of the place on the map (or use_my_area: true for your own area)' },
     lng: { there: isNumber, asks: 'the longitude of the place on the map (or use_my_area: true for your own area)' },
     timezone: { there: isText, asks: 'the IANA zone it is in, e.g. Australia/Melbourne' },
-    photos: { there: (v) => Array.isArray(v) && v.length > 0, asks: `add 1 to ${AGENT_POST_PHOTOS_MAX} photos first (base64 JPEG or WebP)` },
+    // Read for the whole call, not one field: any of the three photo fields (missingField).
+    photos: {
+        there: () => false,
+        asks: `add 1 to ${AGENT_POST_PHOTOS_MAX} photos first: photo_urls (public addresses of images this server fetches), photo_ids (uploaded `
+            + 'first to /mcp/photos) or photos (base64 JPEG or WebP)',
+    },
     start_at: { there: isText, asks: 'when it starts, in ISO 8601 with its offset' },
     place_name: { there: isText, asks: 'the name of the place, e.g. "The old bowls club" (or online: true)' },
     kind: { there: isText, asks: 'offer or need' },
@@ -158,8 +197,15 @@ const FIELDS: Record<string, { there: (v: unknown) => boolean; asks: string }> =
 
 /** The first required field left out or empty, refused in words that name it; null when every one is there. */
 export function missingField(args: Record<string, unknown>, required: readonly string[]): string | null {
-    const field = required.find((k) => !FIELDS[k].there(args[k]));
+    const field = required.find((k) => !(k === 'photos' ? photoCount(args) > 0 : FIELDS[k].there(args[k])));
     return field ? `${field} is required: ${FIELDS[field].asks}.` : null;
+}
+
+const PHOTO_FIELDS = ['photos', 'photo_urls', 'photo_ids'] as const;
+
+/** How many photos a call sends, from the three fields together (a field that is not a list counts its one value). */
+function photoCount(args: Record<string, unknown>): number {
+    return PHOTO_FIELDS.reduce((n, k) => n + (Array.isArray(args[k]) ? (args[k] as unknown[]).length : args[k] === undefined || args[k] === null ? 0 : 1), 0);
 }
 
 /** An ISO 8601 date and time with its offset (Z or ±hh:mm): the one kind every server reads as the same instant. */
@@ -220,15 +266,59 @@ function authorFor(grant: AgentGrant, ref: unknown, required: boolean): Author {
     return { ok: true, author: hit.key, enterprise: true };
 }
 
-type Photos = { ok: true; photos: string[] } | { ok: false; error: string };
+/** The photos a post is made with, and `settle`, called once it is made or refused: an uploaded one is used up only when made. */
+type Photos = { ok: true; photos: string[]; settle: (made: boolean) => void } | { ok: false; error: string };
+type Stored = { ok: true; value: string } | { ok: false; error: string };
 
 const DATA_URL = /^data:image\/(jpeg|jpg|webp);base64,([A-Za-z0-9+/=\s]+)$/i;
 const BASE64 = /^[A-Za-z0-9+/=\s]+$/;
 /** `data:image/jpeg;base64,`, as long as WebP's. */
 const DATA_PREFIX_CHARS = 'data:image/jpeg;base64,'.length;
 
-/** One photo made what the apps send, or why not. */
-async function storablePhoto(value: unknown, n: number): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+/** A refusal's words for a photo, by where it came from: base64 in the call, an address fetched, or an upload. */
+export interface ImageWords {
+    /** "Photo 1", "photo_urls #2", "The upload". */
+    which: string;
+    /** Not an image this server stores. */
+    format: string;
+    /** Wider or taller than the decoder takes. */
+    tooWide: (size: { width: number; height: number }) => string;
+    /** Its header reads, the rest does not. */
+    unreadable: string;
+    /** A PNG is taken (and stored as a JPEG): from an address or an upload, never base64 (the S1 tools' rule, unchanged). */
+    png: boolean;
+}
+
+/**
+ * Image bytes made what the apps send (at most 800 px on its longest side, upright, no metadata: a JPEG or a WebP), or why
+ * not in `words`: sniffed, whatever the sender said it was; at most AGENT_PHOTO_MAX_INPUT_SIDE a side, the decoder's
+ * ceiling (storage/photo-thumbnails.ts); one resize at a time. Base64 photos, fetched ones and uploads alike.
+ */
+export async function storableImage(bytes: Buffer, words: ImageWords): Promise<Stored> {
+    const sniffed = sniffRasterImageType(bytes);
+    const kind = sniffed === 'image/jpeg' || sniffed === 'image/webp' || (words.png && sniffed === 'image/png') ? sniffed : null;
+    if (!kind) return { ok: false, error: words.format };
+    const size = imageSize(bytes);
+    if (!size) return { ok: false, error: words.format };
+    if (Math.max(size.width, size.height) > AGENT_PHOTO_MAX_INPUT_SIDE) return { ok: false, error: words.tooWide(size) };
+    // A PNG is stored as a JPEG, as the apps send one.
+    const format = kind === 'image/webp' ? 'webp' : 'jpeg';
+    const resized = await resizeToStoredPhoto(bytes, format);
+    let out: Buffer;
+    if (resized) out = resized;
+    // sharp loaded and could not read it: a photo cut off or broken after a whole header, never stored as sent.
+    else if (await loadSharp()) return { ok: false, error: words.unreadable };
+    // No resizer on this host (sharp would not load): a photo already the apps' size is stored as they send it, its
+    // metadata stripped at the store as every upload's is (storage/image-columns.ts storeUploadedPhotoColumns). A PNG
+    // can't be made a JPEG without it.
+    else if (kind === 'image/png') return { ok: false, error: `This server cannot convert a PNG now: send ${words.which.toLowerCase()} as a JPEG or WebP.` };
+    else if (Math.max(size.width, size.height) <= PHOTO_MAX_SIDE) out = bytes;
+    else return { ok: false, error: `This server cannot resize photos now: send ${words.which.toLowerCase()} at most ${PHOTO_MAX_SIDE} pixels on its longest side.` };
+    return { ok: true, value: `data:image/${format};base64,${out.toString('base64')}` };
+}
+
+/** One base64 photo made what the apps send, or why not (the S1 tools' words, unchanged). */
+async function storablePhoto(value: unknown, n: number): Promise<Stored> {
     const which = `Photo ${n}`;
     const formatError = { ok: false as const, error: `${which} must be a JPEG or WebP image, as base64 (a data: URL or the bare base64).` };
     if (typeof value !== 'string' || !value.trim()) return formatError;
@@ -240,41 +330,71 @@ async function storablePhoto(value: unknown, n: number): Promise<{ ok: true; val
     if (DATA_PREFIX_CHARS + b64.length > MAX_PHOTO_BASE64_CHARS) {
         return { ok: false, error: `${which} is too large: each may be at most ${MAX_PHOTO_BASE64_CHARS.toLocaleString('en')} base64 characters. Resize it to ${PHOTO_MAX_SIDE} pixels on its longest side and send it again.` };
     }
-    const bytes = Buffer.from(b64, 'base64');
-    const kind = sniffRasterImageType(bytes);
-    if (kind !== 'image/jpeg' && kind !== 'image/webp') return formatError;
-    const size = imageSize(bytes);
-    if (!size) return formatError;
-    if (Math.max(size.width, size.height) > AGENT_PHOTO_MAX_INPUT_SIDE) {
-        return { ok: false, error: `${which} is ${size.width} × ${size.height} pixels: send it at most ${AGENT_PHOTO_MAX_INPUT_SIDE.toLocaleString('en')} on its longest side (${PHOTO_MAX_SIDE} is what the apps send).` };
-    }
-    const resized = await resizeToStoredPhoto(bytes, kind === 'image/jpeg' ? 'jpeg' : 'webp');
-    let out: Buffer;
-    if (resized) out = resized;
-    // sharp loaded and could not read it: a photo cut off or broken after a whole header, never stored as sent.
-    else if (await loadSharp()) return { ok: false, error: `${which} could not be read: send the whole image again.` };
-    // No resizer on this host (sharp would not load): a photo already the apps' size is stored as they send it, its
-    // metadata stripped at the store as every upload's is (storage/image-columns.ts storeUploadedPhotoColumns).
-    else if (Math.max(size.width, size.height) <= PHOTO_MAX_SIDE) out = bytes;
-    else return { ok: false, error: `This server cannot resize photos now: send ${which.toLowerCase()} at most ${PHOTO_MAX_SIDE} pixels on its longest side.` };
-    return { ok: true, value: `data:${kind};base64,${out.toString('base64')}` };
+    return storableImage(Buffer.from(b64, 'base64'), {
+        which, format: formatError.error, png: false,
+        tooWide: (size) => `${which} is ${size.width} × ${size.height} pixels: send it at most ${AGENT_PHOTO_MAX_INPUT_SIDE.toLocaleString('en')} on its longest side (${PHOTO_MAX_SIDE} is what the apps send).`,
+        unreadable: `${which} could not be read: send the whole image again.`,
+    });
 }
 
-/** 1–4 photos, each made what the apps send and held to the routes' photo rule (engine/avatar.ts routePhotosRefusal). */
-async function photosFrom(value: unknown): Promise<Photos> {
-    if (!Array.isArray(value) || value.length < AGENT_POST_PHOTOS_MIN) {
-        return { ok: false, error: 'Add a photo first: every Offer, Need and event needs 1 to 4 photos (base64 JPEG or WebP).' };
+/** The words for a photo this server fetched or was sent as an upload. */
+export function sourceImageWords(which: string, from: 'address' | 'upload'): ImageWords {
+    const give = from === 'address' ? 'the address must give' : 'send';
+    return {
+        which, png: true,
+        format: `${which} is not an image: ${give} a JPEG, WebP or PNG.`,
+        tooWide: (size) => `${which} is ${size.width} × ${size.height} pixels: at most ${AGENT_PHOTO_MAX_INPUT_SIDE.toLocaleString('en')} on its longest side `
+            + `(${PHOTO_MAX_SIDE} is what the apps send). ${from === 'address' ? 'Give the address of a smaller copy' : 'Send a smaller copy'}.`,
+        unreadable: `${which} is not an image this server can read: ${give} a whole JPEG, WebP or PNG.`,
+    };
+}
+
+/**
+ * 1–4 photos, from `photos` (base64), `photo_urls` (fetched here) and `photo_ids` (uploaded first) together, in that order,
+ * each made what the apps send and held to the routes' photo rule (engine/avatar.ts routePhotosRefusal). The uploads are
+ * held for this post until `settle`; the addresses are fetched last, each counted against the grant's photos for the day,
+ * all refused before any is fetched when the day has no room for them.
+ */
+async function photosFrom(grant: AgentGrant, args: Record<string, unknown>): Promise<Photos> {
+    for (const k of PHOTO_FIELDS) {
+        if (args[k] !== undefined && args[k] !== null && !Array.isArray(args[k])) return { ok: false, error: `${k} is a list.` };
     }
-    if (value.length > AGENT_POST_PHOTOS_MAX) return { ok: false, error: `At most ${AGENT_POST_PHOTOS_MAX} photos a post.` };
-    const photos: string[] = [];
-    for (let i = 0; i < value.length; i++) {
-        const one = await storablePhoto(value[i], i + 1);
-        if (!one.ok) return one;
-        photos.push(one.value);
+    const list = (k: (typeof PHOTO_FIELDS)[number]): unknown[] => (Array.isArray(args[k]) ? args[k] as unknown[] : []);
+    const inline = list('photos'), urls = list('photo_urls'), ids = list('photo_ids');
+    const total = inline.length + urls.length + ids.length;
+    if (total < AGENT_POST_PHOTOS_MIN) {
+        return { ok: false, error: `Add a photo first: every Offer, Need and event needs 1 to ${AGENT_POST_PHOTOS_MAX} photos, from photo_urls, photo_ids or photos.` };
     }
-    const refusal = routePhotosRefusal(photos);
-    if (refusal) return { ok: false, error: photoRefusalText(refusal, 'Each photo must be a JPEG or WebP image.') };
-    return { ok: true, photos };
+    if (total > AGENT_POST_PHOTOS_MAX) return { ok: false, error: `At most ${AGENT_POST_PHOTOS_MAX} photos a post, photos, photo_urls and photo_ids together.` };
+    if (urls.length && agentPhotosToday(grant.id) + urls.length > AGENT_PHOTOS_PER_DAY) return { ok: false, error: photoDayFull(grant.id) };
+    const uploads = claimUploadedPhotos(grant.id, ids);
+    if (!uploads.ok) return uploads;
+    const refuse = (error: string): Photos => {
+        uploads.settle(false);
+        return { ok: false, error };
+    };
+    try {
+        const photos: string[] = [];
+        for (let i = 0; i < inline.length; i++) {
+            const one = await storablePhoto(inline[i], i + 1);
+            if (!one.ok) return refuse(one.error);
+            photos.push(one.value);
+        }
+        for (let i = 0; i < urls.length; i++) {
+            const fetched = await fetchPhoto(grant.id, urls[i], i + 1);
+            if (!fetched.ok) return refuse(fetched.error);
+            const one = await storableImage(fetched.bytes, sourceImageWords(`photo_urls #${i + 1}`, 'address'));
+            if (!one.ok) return refuse(one.error);
+            photos.push(one.value);
+        }
+        photos.push(...uploads.photos);
+        const refusal = routePhotosRefusal(photos);
+        if (refusal) return refuse(photoRefusalText(refusal, 'Each photo must be a JPEG or WebP image.'));
+        return { ok: true, photos, settle: uploads.settle };
+    } catch (e) {
+        uploads.settle(false);
+        throw e;
+    }
 }
 
 function str(v: unknown, max: number): string | undefined {
@@ -380,7 +500,7 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
     // An enterprise's listing meets its routes' switch first, as their gate runs before the handler.
     const refused = gate(grant) ?? (asEnterprise ? enterprisesOff() : null);
     if (refused) return { ok: false, error: refused };
-    const missing = missingField(args, asEnterprise ? REQUIRED.enterpriseListing : listingRequiredFor(args))
+    const missing = missingField(args, asEnterprise ? enterpriseListingRequired() : listingRequiredFor(args))
         ?? titleTooLong(args, AGENT_TITLE_MAX.listing);
     if (missing) return { ok: false, error: missing };
     if (asEnterprise && args.kind !== 'offer' && args.kind !== 'need') return { ok: false, error: 'kind must be offer or need.' };
@@ -398,50 +518,90 @@ async function createListing(grant: AgentGrant, { kind, args, enterprise: asEnte
         return { ok: false, error: `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.` };
     }
     const credits = num(args.beans) ?? 0;
-    // Both apps' enterprise forms ask a price of more than 0 (treasury-post.tsx, TreasuryDetailPage); a member's own may be 0.
-    if (who.enterprise && credits <= 0) return { ok: false, error: "beans must be more than 0: an enterprise's listing has a price, as its form asks." };
-    const shopId = str(args.shop_id, 200);
-    const photos = await photosFrom(args.photos);
-    if (!photos.ok) return photos;
-    // Counted before the post is made, so two calls at once cannot both take the last one; given back when it is not made.
-    if (!admitAgentCreate(grant.id)) {
-        return { ok: false, error: dayFull(grant) };
+    // Both apps' enterprise forms ask a price of more than 0 (treasury-post.tsx, TreasuryDetailPage), where the node has
+    // Beans; a member's own may be 0. Where it has none, none is asked (enterpriseListingRequired).
+    if (who.enterprise && getProfileSwitches().beans && credits <= 0) {
+        return { ok: false, error: "beans must be more than 0: an enterprise's listing has a price, as its form asks." };
     }
-    const owner = grant.member;
-    // The area rounded as the apps round a pin (@beanpool/core approximateLocation).
-    const { lat, lng } = area ? approximateLocation(area.lat, area.lng) : roundedPin(args);
-    const priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
-    try {
-        let post;
-        if (who.enterprise) {
-            const enterprise = who.author;
-            assertNotMuted(owner);
-            assertNotMuted(enterprise);
-            assertMayAddPhotos(owner, Math.min(photos.photos.length, 5));
-            const limit = enterprisePostLimit(enterprise, owner);
-            // An Offer is repeatable unless it says not; a Need only when it says so (the enterprise routes' defaults).
-            const repeatable = kind === 'offer' ? args.repeatable !== false : args.repeatable === true;
-            post = createPost(kind, category, title, description, credits, priceType, enterprise, lat, lng,
-                photos.photos, repeatable, undefined, undefined,
-                { createdBy: owner, beforeWrite: () => { assertAssistantDay(grant); limit.beforeWrite(); }, shopId, createdVia: createdViaOf(grant) });
-            if (post) limit.stored(post.id);
-        } else {
-            assertNotMuted(owner);
-            assertMayPost(owner, Math.min(photos.photos.length, 5));
-            // The owners' "Assistant posts a day", in place of the member's own 100 (the director, 30 Oct).
-            post = createPost(kind, category, title, description, credits, priceType, owner, lat, lng,
-                photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
-                { beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant) });
-            if (post) syncPulseMarketplaceGate();
+    const shopId = str(args.shop_id, 200);
+    const photos = await photosFrom(grant, args);
+    if (!photos.ok) return photos;
+    return withPhotos(grant, photos, () => {
+        // Counted before the post is made, so two calls at once cannot both take the last one; given back when it is not made.
+        if (!admitAgentCreate(grant.id)) {
+            return { ok: false, error: dayFull(grant) };
         }
-        if (!post) {
+        const owner = grant.member;
+        // The area rounded as the apps round a pin (@beanpool/core approximateLocation).
+        const { lat, lng } = area ? approximateLocation(area.lat, area.lng) : roundedPin(args);
+        const priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
+        try {
+            let post;
+            if (who.enterprise) {
+                const enterprise = who.author;
+                assertNotMuted(owner);
+                assertNotMuted(enterprise);
+                assertMayAddPhotos(owner, Math.min(photos.photos.length, 5));
+                const limit = enterprisePostLimit(enterprise, owner);
+                // An Offer is repeatable unless it says not; a Need only when it says so (the enterprise routes' defaults).
+                const repeatable = kind === 'offer' ? args.repeatable !== false : args.repeatable === true;
+                post = createPost(kind, category, title, description, credits, priceType, enterprise, lat, lng,
+                    photos.photos, repeatable, undefined, undefined,
+                    { createdBy: owner, beforeWrite: () => { assertAssistantDay(grant); limit.beforeWrite(); }, shopId, createdVia: createdViaOf(grant) });
+                if (post) limit.stored(post.id);
+            } else {
+                assertNotMuted(owner);
+                assertMayPost(owner, Math.min(photos.photos.length, 5));
+                // The owners' "Assistant posts a day", in place of the member's own 100 (the director, 30 Oct).
+                post = createPost(kind, category, title, description, credits, priceType, owner, lat, lng,
+                    photos.photos, args.repeatable === true, undefined, args.cash_also_needed === true,
+                    { beforeWrite: () => assertAssistantDay(grant), createdVia: createdViaOf(grant) });
+                if (post) syncPulseMarketplaceGate();
+            }
+            if (!post) {
+                returnAgentCreate(grant.id);
+                return { ok: false, error: kind === 'need' && who.enterprise ? 'The enterprise needs a live Offer before it can post a Need.' : 'The post could not be made.' };
+            }
+            return answer(grant, kind, post.id, who.enterprise);
+        } catch (e) {
             returnAgentCreate(grant.id);
-            return { ok: false, error: kind === 'need' && who.enterprise ? 'The enterprise needs a live Offer before it can post a Need.' : 'The post could not be made.' };
+            return { ok: false, error: refusalText(e, grant, 'The post could not be made: try again later.') };
         }
-        return answer(grant, kind, post.id, who.enterprise);
-    } catch (e) {
-        returnAgentCreate(grant.id);
-        return { ok: false, error: refusalText(e, grant, 'The post could not be made: try again later.') };
+    });
+}
+
+const STOPPED_MEANWHILE = 'This assistant was disconnected, or may no longer post, while its photos were fetched: nothing was posted.';
+
+/**
+ * Whether the grant may still post NOW: not revoked or expired and its member still an owner (grantStillLive), still ticked
+ * "May post for me", and the owners' switch "Allow AI assistants" still on. Read again after any wait (photo fetches, uploads).
+ */
+export function grantMayStillPost(grant: AgentGrant, now = Date.now()): boolean {
+    if (getLocalConfig().aiAssistantsAllowed === false) return false;
+    const live = grantStillLive(grant.id, now);
+    if (!live || live.role !== 'owner' || live.member !== grant.member) return false;
+    const oauth = listOAuthGrants(now).find((g) => g.id === grant.id);
+    if (oauth) return oauth.canPost === true;
+    return listAutomationTokens().find((t) => t.id === grant.id)?.canPost === true;
+}
+
+/**
+ * Make a post (or an edit) with its photos, then settle them: an uploaded photo is used up only by a post that was made, and
+ * can be sent again after a refusal.
+ */
+function withPhotos(grant: AgentGrant, photos: Extract<Photos, { ok: true }>, make: () => ToolResult): ToolResult {
+    let out: ToolResult | undefined;
+    try {
+        // Fetching photo_urls takes seconds; the grant was checked before it. Disconnecting the assistant, untick "May post for me",
+        // or turning AI assistants off in that time stops the post (the manual: "Disconnecting stops it at once").
+        if (!grantMayStillPost(grant)) {
+            out = { ok: false, error: STOPPED_MEANWHILE };
+            return out;
+        }
+        out = make();
+        return out;
+    } finally {
+        photos.settle(out?.ok === true);
     }
 }
 
@@ -454,57 +614,77 @@ async function createEvent(grant: AgentGrant, args: Record<string, unknown>): Pr
     if (missing) return { ok: false, error: missing };
     const who = authorFor(grant, args.as_enterprise, false);
     if (!who.ok) return who;
-    const photos = await photosFrom(args.photos);
+    const photos = await photosFrom(grant, args);
     if (!photos.ok) return photos;
-    if (!admitAgentCreate(grant.id)) {
-        return { ok: false, error: dayFull(grant) };
-    }
-    const owner = grant.member;
-    // The body the apps send (routes/event-post.ts reads it): instants, the zone, the place or the link; the text trimmed as
-    // both apps trim it.
-    const body = {
-        title: (args.title as string).trim(), description: typeof args.description === 'string' ? args.description.trim() : '', photos: photos.photos,
-        ...roundedPin(args),
-        eventStartAt: str(args.start_at, 64), eventEndAt: str(args.end_at, 64), eventTz: str(args.timezone, 64),
-        eventPlaceName: str(args.place_name, 500), eventOnline: args.online === true, eventLink: str(args.link, 2000),
-    };
-    const timeOut: EventTimeOut = {};
-    try {
-        let post;
-        if (who.enterprise) {
-            const enterprise = who.author;
-            assertNotMuted(owner);
-            assertNotMuted(enterprise);
-            assertMayAddPhotos(owner, Math.min(photos.photos.length, 5));
-            const limit = enterprisePostLimit(enterprise, owner);
-            post = createEventFromBody(body, enterprise, owner, () => { assertAssistantDay(grant); limit.beforeWrite(); }, timeOut, createdViaOf(grant));
-            if (post) limit.stored(post.id);
-        } else {
-            assertNotMuted(owner);
-            assertMayPost(owner, Math.min(photos.photos.length, 5));
-            post = createEventFromBody(body, owner, undefined, () => assertAssistantDay(grant), timeOut, createdViaOf(grant));
-            if (post) syncPulseMarketplaceGate();
+    return withPhotos(grant, photos, () => {
+        if (!admitAgentCreate(grant.id)) {
+            return { ok: false, error: dayFull(grant) };
         }
-        if (!post) {
+        const owner = grant.member;
+        // The body the apps send (routes/event-post.ts reads it): instants, the zone, the place or the link; the text trimmed as
+        // both apps trim it.
+        const body = {
+            title: (args.title as string).trim(), description: typeof args.description === 'string' ? args.description.trim() : '', photos: photos.photos,
+            ...roundedPin(args),
+            eventStartAt: str(args.start_at, 64), eventEndAt: str(args.end_at, 64), eventTz: str(args.timezone, 64),
+            eventPlaceName: str(args.place_name, 500), eventOnline: args.online === true, eventLink: str(args.link, 2000),
+        };
+        const timeOut: EventTimeOut = {};
+        try {
+            let post;
+            if (who.enterprise) {
+                const enterprise = who.author;
+                assertNotMuted(owner);
+                assertNotMuted(enterprise);
+                assertMayAddPhotos(owner, Math.min(photos.photos.length, 5));
+                const limit = enterprisePostLimit(enterprise, owner);
+                post = createEventFromBody(body, enterprise, owner, () => { assertAssistantDay(grant); limit.beforeWrite(); }, timeOut, createdViaOf(grant));
+                if (post) limit.stored(post.id);
+            } else {
+                assertNotMuted(owner);
+                assertMayPost(owner, Math.min(photos.photos.length, 5));
+                post = createEventFromBody(body, owner, undefined, () => assertAssistantDay(grant), timeOut, createdViaOf(grant));
+                if (post) syncPulseMarketplaceGate();
+            }
+            if (!post) {
+                returnAgentCreate(grant.id);
+                return { ok: false, error: 'The event could not be made.' };
+            }
+            const { eventStartLocal, eventEndLocal, eventTz } = post;
+            return answer(grant, 'event', post.id, who.enterprise,
+                eventStartLocal && eventEndLocal && eventTz ? { startsLocal: eventStartLocal, endsLocal: eventEndLocal, timezone: eventTz } : undefined);
+        } catch (e) {
             returnAgentCreate(grant.id);
-            return { ok: false, error: 'The event could not be made.' };
+            return { ok: false, error: refusalText(e, grant, 'The event could not be made: try again later.') };
         }
-        const { eventStartLocal, eventEndLocal, eventTz } = post;
-        return answer(grant, 'event', post.id, who.enterprise,
-            eventStartLocal && eventEndLocal && eventTz ? { startsLocal: eventStartLocal, endsLocal: eventEndLocal, timezone: eventTz } : undefined);
-    } catch (e) {
-        returnAgentCreate(grant.id);
-        return { ok: false, error: refusalText(e, grant, 'The event could not be made: try again later.') };
-    }
+    });
 }
 
+/** The photo rule every create states, since its schema cannot require "one of three" (schemaRequired). */
+const PHOTOS_RULE = `1 to ${AGENT_POST_PHOTOS_MAX} photos are required, from photo_urls, photo_ids and photos together; the server makes each `
+    + `${PHOTO_MAX_SIDE} px with no metadata, as the apps do. Never a photo of people you were not given to post`;
 const PHOTOS_SCHEMA = {
-    type: 'array', minItems: AGENT_POST_PHOTOS_MIN, maxItems: AGENT_POST_PHOTOS_MAX,
+    type: 'array', maxItems: AGENT_POST_PHOTOS_MAX,
     items: { type: 'string', description: 'a JPEG or WebP image as base64 (data:image/jpeg;base64,… or the bare base64)' },
-    description: `1 to ${AGENT_POST_PHOTOS_MAX} photos, required; each at most ${MAX_PHOTO_BASE64_CHARS.toLocaleString('en')} base64 characters and `
-        + `${AGENT_PHOTO_MAX_INPUT_SIDE} pixels on its longest side; the server makes each ${PHOTO_MAX_SIDE} px, as the apps do. Never a photo of people `
-        + 'you were not given to post.',
+    description: `photos as base64, for a program that has the files: each at most ${MAX_PHOTO_BASE64_CHARS.toLocaleString('en')} base64 characters and `
+        + `${AGENT_PHOTO_MAX_INPUT_SIDE} pixels on its longest side. ${PHOTOS_RULE}.`,
 };
+const PHOTO_URLS_SCHEMA = {
+    type: 'array', maxItems: AGENT_POST_PHOTOS_MAX,
+    items: { type: 'string', maxLength: 2048, description: 'a public http or https address of a JPEG, WebP or PNG' },
+    description: `public addresses of images this server fetches itself (a JPEG, WebP or PNG, at most ${PHOTO_SOURCE_MAX_BYTES / (1024 * 1024)} MB and `
+        + `${AGENT_PHOTO_MAX_INPUT_SIDE} pixels a side, in 8 seconds; never a private address): the way for an assistant that cannot send a file. `
+        + `At most ${AGENT_PHOTOS_PER_DAY} fetched and uploaded a day. ${PHOTOS_RULE}.`,
+};
+const PHOTO_IDS_SCHEMA = {
+    type: 'array', maxItems: AGENT_POST_PHOTOS_MAX,
+    items: { type: 'string', pattern: '^ph_[0-9a-f]{32}$', description: 'a photoId POST /mcp/photos answered' },
+    description: 'photos uploaded first: POST each image (a JPEG, WebP or PNG, at most 5 MB) as the whole body to /mcp/photos on this server, with '
+        + 'its Content-Type and the same Authorization header; the photoId it answers goes here. Each is used once, by this assistant, '
+        + `within ${PHOTO_UPLOAD_KEEP_MS / 3_600_000} hours. ${PHOTOS_RULE}.`,
+};
+/** The three photo fields, on every tool that takes photos. */
+const PHOTO_PROPS = { photo_urls: PHOTO_URLS_SCHEMA, photo_ids: PHOTO_IDS_SCHEMA, photos: PHOTOS_SCHEMA };
 const LISTING_PROPS = {
     title: { type: 'string', maxLength: AGENT_TITLE_MAX.listing, description: `what it is, in a few words: at most ${AGENT_TITLE_MAX.listing} characters` },
     description: { type: 'string', description: 'the details a member reads' },
@@ -514,7 +694,7 @@ const LISTING_PROPS = {
     repeatable: { type: 'boolean', description: 'stays up after each trade' },
     lat: { type: 'number', description: 'latitude of the place on the map, rounded to about 100 m as the apps do; required unless use_my_area' },
     lng: { type: 'number', description: 'longitude of the place on the map, rounded the same; required unless use_my_area' },
-    photos: PHOTOS_SCHEMA,
+    ...PHOTO_PROPS,
 };
 /** create_offer's and create_need's input, made when the tools are listed: a price is required only where Beans are on. */
 function ownerListingSchema(): Record<string, unknown> {
@@ -526,7 +706,27 @@ function ownerListingSchema(): Record<string, unknown> {
             cash_also_needed: { type: 'boolean', description: 'a real cash outlay is attached (fuel, materials)' },
         },
         // The pin (lat, lng) is required too unless use_my_area is true (REQUIRED.listingPlace): a JSON Schema `required` cannot say "unless".
-        required: listingRequired(),
+        required: schemaRequired(listingRequired()),
+        additionalProperties: false,
+    };
+}
+/** create_enterprise_listing's input, made when the tools are listed: a price of more than 0 only where Beans are on. */
+function enterpriseListingSchema(): Record<string, unknown> {
+    const beansOn = getProfileSwitches().beans;
+    return {
+        type: 'object',
+        properties: {
+            kind: { type: 'string', enum: ['offer', 'need'], description: 'offer or need' },
+            as_enterprise: { type: 'string', description: 'the enterprise: its ref from my_enterprises' },
+            ...LISTING_PROPS,
+            beans: beansOn
+                ? { type: 'number', exclusiveMinimum: 0, description: 'the price in Beans, more than 0' }
+                : { type: 'number', minimum: 0, description: 'none: this community has no Beans' },
+            lat: { type: 'number', description: "latitude of the place; left out, the enterprise's own area" },
+            lng: { type: 'number', description: "longitude of the place; left out, the enterprise's own area" },
+            shop_id: { type: 'string', description: "the enterprise's own shop to put an Offer in (optional)" },
+        },
+        required: schemaRequired(enterpriseListingRequired()),
         additionalProperties: false,
     };
 }
@@ -623,10 +823,10 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
                 online: { type: 'boolean', description: 'online instead of in person: no place, a link' },
                 link: { type: 'string', description: 'the join link of an online event' },
                 as_enterprise: { type: 'string', description: 'host as an enterprise: its ref from my_enterprises' },
-                photos: PHOTOS_SCHEMA,
+                ...PHOTO_PROPS,
             },
             // In person (online not true) place_name, lat and lng are required too (REQUIRED.eventInPerson), in their words.
-            required: [...REQUIRED.event],
+            required: schemaRequired(REQUIRED.event),
             additionalProperties: false,
         },
         outputSchema: POST_OUT,
@@ -641,21 +841,323 @@ export const OWNER_POST_TOOLS: AgentTool[] = [
         ownerOnly: true,
         posts: true,
         write: true,
+        // Read each time the tools are listed, as create_offer's: whether a price is required follows the Beans switch.
+        get inputSchema() { return enterpriseListingSchema(); },
+        outputSchema: POST_OUT,
+        run: (grant, args) => createListing(grant, { kind: args.kind === 'need' ? 'need' : 'offer', args, enterprise: true }),
+    },
+];
+
+/** A post this grant made, as it is now: for update_post, remove_post and the undo list. */
+interface MadeRow {
+    id: string; type: string; status: string; active: number; title: string; author_pubkey: string; created_by: string | null; created_at: string;
+}
+
+/** The words for a post that is not this assistant's to change (design §2.3). */
+const NOT_MADE_HERE = 'That is not a post this assistant made: edit or remove it in the app. my_posts lists the ones it made.';
+
+/**
+ * The post `postId` names, when THIS grant made it (created_via) and it is this community's own (not a copy pulled from
+ * another), still by the owner or an enterprise they keep now; else why not, in words.
+ */
+function madePost(grant: AgentGrant, postId: unknown): { ok: true; row: MadeRow } | { ok: false; error: string } {
+    if (typeof postId !== 'string' || !postId.trim()) return { ok: false, error: 'post_id is required: the id a create answered, or my_posts lists.' };
+    const row = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at FROM posts
+        WHERE id = ? AND created_via = ? AND origin_node IS NULL`).get(postId.trim().slice(0, 200), createdViaOf(grant)) as MadeRow | undefined;
+    if (!row) return { ok: false, error: NOT_MADE_HERE };
+    if (row.author_pubkey !== grant.member && !(row.created_by === grant.member && canOperateTreasury(grant.member, row.author_pubkey))) {
+        return { ok: false, error: "That post is an enterprise's you no longer keep: its keepers edit or remove it in the app." };
+    }
+    return { ok: true, row };
+}
+
+const isLive = (r: Pick<MadeRow, 'active' | 'status'>): boolean => r.active === 1 && r.status !== 'cancelled';
+
+/** The refusals before an edit, a removal or the undo list: an owner's grant ticked "May post for me", on a server still this community's. */
+function tendGate(grant: AgentGrant): string | null {
+    if (grant.role !== 'owner') return "Only an owner's assistant can change posts: an admin's cannot.";
+    if (!grant.canPost) return NOT_TICKED;
+    const replaced = getReplacedInfo();
+    if (replaced) return `${replaced.message} This server takes no changes now; use the one that took over.`;
+    return null;
+}
+
+/** update_post: the fields an edit may change, by the tools' own names, through the route's own updatePost. */
+async function updateMade(grant: AgentGrant, args: Record<string, unknown>): Promise<ToolResult> {
+    const refused = tendGate(grant);
+    if (refused) return { ok: false, error: refused };
+    const made = madePost(grant, args.post_id);
+    if (!made.ok) return made;
+    const { row } = made;
+    if (!isLive(row) || row.status !== 'active') return { ok: false, error: `That post is ${isLive(row) ? row.status : 'removed'} now: only a live post is edited.` };
+    const event = row.type === 'event';
+    const updates: Record<string, unknown> = {};
+    for (const k of ['title', 'description'] as const) {
+        if (args[k] === undefined) continue;
+        if (!isText(args[k])) return { ok: false, error: `${k} is empty: send the new ${k}, or leave it out to keep it.` };
+        updates[k] = (args[k] as string).trim();
+    }
+    const tooLong = updates.title !== undefined ? titleTooLong(args, event ? AGENT_TITLE_MAX.event : AGENT_TITLE_MAX.listing) : null;
+    if (tooLong) return { ok: false, error: tooLong };
+    if (event && (args.category !== undefined || args.beans !== undefined || args.price_type !== undefined)) {
+        return { ok: false, error: 'An event has no category or price: send title, description or photos.' };
+    }
+    if (args.category !== undefined) {
+        const category = typeof args.category === 'string' ? args.category.trim() : '';
+        if (!AGENT_POST_CATEGORIES.includes(category)) return { ok: false, error: `category must be one of ${AGENT_POST_CATEGORIES.join(', ')}, as the apps offer.` };
+        updates.category = category;
+    }
+    if (args.beans !== undefined) {
+        const beans = num(args.beans);
+        if (beans === undefined || beans < 0) return { ok: false, error: 'beans is the price in Beans: a number, 0 or more.' };
+        // An enterprise's listing keeps a price of more than 0 where the node has Beans, as its form asks (create_enterprise_listing).
+        if (row.author_pubkey !== grant.member && getProfileSwitches().beans && beans <= 0) {
+            return { ok: false, error: "beans must be more than 0: an enterprise's listing has a price, as its form asks." };
+        }
+        updates.credits = beans;
+    }
+    if (args.price_type !== undefined) updates.priceType = args.price_type === 'hourly' ? 'hourly' : 'fixed';
+    // New photos in place of the ones it has, from any of the three fields, as a create takes them.
+    const newPhotos = PHOTO_FIELDS.some((k) => args[k] !== undefined) ? await photosFrom(grant, args) : null;
+    if (newPhotos && !newPhotos.ok) return newPhotos;
+    if (newPhotos) updates.photos = newPhotos.photos;
+    if (!Object.keys(updates).length) {
+        return { ok: false, error: 'Send at least one field to change: title, description, category, beans, price_type, or photos (photo_urls, photo_ids or photos).' };
+    }
+    const edit = (): ToolResult => {
+        if (!admitAgentEdit(grant.id)) {
+            return { ok: false, error: `This assistant has made ${AGENT_EDITS_PER_DAY} edits today, the most a day allows: try again tomorrow (UTC).` };
+        }
+        const owner = grant.member;
+        try {
+            // What POST /api/marketplace/posts/update runs after its signature check: the mute, the photo allowance, then the
+            // engine's own edit, which holds every field to the create's rules and lets a keeper edit their enterprise's.
+            assertNotMuted(owner);
+            const photos = updates.photos as string[] | undefined;
+            if (photos) assertMayEditPhotos(owner, row.id, Math.min(photos.length, 5), photos.length);
+            const post = updatePost(row.id, row.author_pubkey, updates as Parameters<typeof updatePost>[2], owner, {});
+            if (!post) {
+                returnAgentEdit(grant.id);
+                return { ok: false, error: 'The post could not be changed now: try again later.' };
+            }
+            return {
+                ok: true, rows: 1,
+                result: {
+                    postId: row.id, kind: row.type, link: `/?post=${encodeURIComponent(row.id)}`,
+                    changed: Object.keys(args).filter((k) => k !== 'post_id'), editsToday: agentEditsToday(grant.id), editsPerDay: AGENT_EDITS_PER_DAY,
+                },
+            };
+        } catch (e) {
+            returnAgentEdit(grant.id);
+            return { ok: false, error: refusalText(e, grant, 'The post could not be changed: try again later.') };
+        }
+    };
+    return newPhotos ? withPhotos(grant, newPhotos, edit) : edit();
+}
+
+/** One post taken down by `member` through the route's own removePost (the author, or the keeper who made it); why not, in words. */
+function removeOne(postId: string, member: string): { ok: true } | { ok: false; error: string } {
+    try {
+        if (!removePost(postId, member)) return { ok: false, error: 'It could not be removed here: its author or keeper removes it in the app.' };
+        syncPulseMarketplaceGate();
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: memberErrorText(e, 'It could not be removed now: try again later.') };
+    }
+}
+
+/** The ADMIN line of a removal of what an assistant made: the grant, who asked, and the ids (design §2.8). */
+function logRemoval(grantId: string, ids: string[], via: 'assistant' | 'settings', by: string): void {
+    logger.info('ADMIN', 'Posts an AI assistant made removed', { grant: grantId, via, by: by.slice(0, 16), count: ids.length, posts: ids.slice(0, 200) });
+}
+
+function removeMade(grant: AgentGrant, args: Record<string, unknown>): ToolResult {
+    const refused = tendGate(grant);
+    if (refused) return { ok: false, error: refused };
+    const made = madePost(grant, args.post_id);
+    if (!made.ok) return made;
+    if (!isLive(made.row)) return { ok: false, error: 'That post is already removed.' };
+    const out = removeOne(made.row.id, grant.member);
+    if (!out.ok) return out;
+    logRemoval(grant.id, [made.row.id], 'assistant', grant.member);
+    return { ok: true, rows: 1, result: { removed: [made.row.id], kept: [] } };
+}
+
+/** The confirmation remove_all_i_made asks, said out loud (design §2.3). */
+export const REMOVE_ALL_CONFIRM = 'remove everything this assistant made';
+
+export interface RemovedMade {
+    removed: string[];
+    /** Posts still up (a deal in escrow, an enterprise its maker no longer keeps), each with why, in words. */
+    kept: Array<{ postId: string; why: string }>;
+}
+
+/**
+ * Every live post the assistant `grantId` made, taken down by the member it acted for (the keeper who made an enterprise's,
+ * else the author), through the route's own removePost: remove_all_i_made, and the owner's "Remove its posts" in Settings,
+ * which works whether or not the grant is still connected (its id is on the rows). Never a post it did not make.
+ */
+export function removeAllMadeBy(grantId: string, via: 'assistant' | 'settings', by: string): RemovedMade {
+    const rows = db.prepare(`SELECT id, author_pubkey, created_by FROM posts WHERE created_via = ? AND origin_node IS NULL
+        AND active = 1 AND status != 'cancelled' ORDER BY created_at`).all(`assistant:${grantId}`) as Array<{ id: string; author_pubkey: string; created_by: string | null }>;
+    const result: RemovedMade = { removed: [], kept: [] };
+    for (const row of rows) {
+        const out = removeOne(row.id, row.created_by ?? row.author_pubkey);
+        if (out.ok) result.removed.push(row.id);
+        else result.kept.push({ postId: row.id, why: out.error });
+    }
+    logRemoval(grantId, result.removed, via, by);
+    return result;
+}
+
+/** How many live posts the assistant `grantId` made (Settings' "Made: N posts"). */
+export function madePostsCount(grantId: string): number {
+    return (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE created_via = ? AND origin_node IS NULL AND active = 1 AND status != 'cancelled'`)
+        .get(`assistant:${grantId}`) as { c: number }).c;
+}
+
+/** The grants that made live posts here, by id: Settings lists the ones whose assistant is gone ("a disconnected assistant"). */
+export function grantIdsWithMadePosts(): string[] {
+    return (db.prepare(`SELECT DISTINCT substr(created_via, 11) AS id FROM posts WHERE created_via LIKE 'assistant:%' AND origin_node IS NULL
+        AND active = 1 AND status != 'cancelled'`).all() as Array<{ id: string }>).map((r) => r.id);
+}
+
+/** my_posts: what THIS grant made, newest first (design §2.2: the undo list). */
+function myPosts(grant: AgentGrant, args: Record<string, unknown>, boundary: string): ToolResult {
+    const status = args.status === 'removed' ? 'removed' : args.status === 'all' ? 'all' : 'live';
+    const n = Math.floor(Number(args.limit));
+    const limit = Number.isFinite(n) && n >= 1 ? Math.min(n, AGENT_LIST_MAX) : 20;
+    const where = status === 'live' ? `AND active = 1 AND status != 'cancelled'` : status === 'removed' ? `AND (active = 0 OR status = 'cancelled')` : '';
+    const rows = db.prepare(`SELECT id, type, status, active, title, author_pubkey, created_by, created_at FROM posts
+        WHERE created_via = ? AND origin_node IS NULL ${where} ORDER BY created_at DESC LIMIT ?`).all(createdViaOf(grant), limit) as MadeRow[];
+    const total = (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE created_via = ? AND origin_node IS NULL ${where}`).get(createdViaOf(grant)) as { c: number }).c;
+    return {
+        ok: true, rows: rows.length,
+        result: {
+            status, total, returned: rows.length,
+            posts: rows.map((r) => ({
+                postId: r.id, kind: r.type, status: isLive(r) ? r.status : 'removed', createdAt: r.created_at,
+                by: r.author_pubkey === grant.member ? 'me' : `enterprise:${enterpriseRef(r.author_pubkey)}`,
+                link: `/?post=${encodeURIComponent(r.id)}`,
+                title: fence(boundary, `post ${r.id}, title`, r.title),
+            })),
+            _notice: MEMBER_TEXT_NOTICE,
+        },
+    };
+}
+
+const POST_ID_PROP = { post_id: { type: 'string', description: 'the id a create answered (my_posts lists them)' } };
+const REMOVED_OUT = {
+    type: 'object',
+    properties: { removed: { type: 'array', items: { type: 'string' } }, kept: { type: 'array' } },
+    required: ['removed', 'kept'],
+};
+
+/** Slice S2's rows (design §2.3, §2.7): the undo list, and tending what this assistant made, nothing else. */
+export const OWNER_TEND_TOOLS: AgentTool[] = [
+    {
+        name: 'my_posts',
+        title: 'Posts this assistant made',
+        reads: `the posts THIS assistant made, newest first, at most ${AGENT_LIST_MAX}: id, kind, status, when, whether as you or an enterprise you keep, `
+            + 'its link and its title, fenced; the live ones (the default), the removed ones, or all',
+        never: "a post made in the app or by another assistant, another member's data, or a key",
+        memberText: true,
+        ownerOnly: true,
+        posts: true,
         inputSchema: {
             type: 'object',
             properties: {
-                kind: { type: 'string', enum: ['offer', 'need'], description: 'offer or need' },
-                as_enterprise: { type: 'string', description: 'the enterprise: its ref from my_enterprises' },
-                ...LISTING_PROPS,
-                beans: { type: 'number', exclusiveMinimum: 0, description: 'the price in Beans, more than 0' },
-                lat: { type: 'number', description: "latitude of the place; left out, the enterprise's own area" },
-                lng: { type: 'number', description: "longitude of the place; left out, the enterprise's own area" },
-                shop_id: { type: 'string', description: "the enterprise's own shop to put an Offer in (optional)" },
+                status: { type: 'string', enum: ['live', 'removed', 'all'], description: 'live (default), removed or all' },
+                limit: { type: 'integer', minimum: 1, maximum: AGENT_LIST_MAX },
             },
-            required: [...REQUIRED.enterpriseListing],
             additionalProperties: false,
         },
-        outputSchema: POST_OUT,
-        run: (grant, args) => createListing(grant, { kind: args.kind === 'need' ? 'need' : 'offer', args, enterprise: true }),
+        outputSchema: {
+            type: 'object',
+            properties: { status: { type: 'string' }, total: { type: 'number' }, returned: { type: 'number' }, posts: { type: 'array' } },
+            required: ['status', 'total', 'returned', 'posts'],
+        },
+        run: (grant, args, boundary) => {
+            const refused = tendGate(grant);
+            return refused ? { ok: false, error: refused } : myPosts(grant, args, boundary);
+        },
+    },
+    {
+        name: 'update_post',
+        title: 'Edit a post this assistant made',
+        reads: `nothing: it changes the title, description, category, price or photos of a live post THIS assistant made, as the app's edit does, `
+            + `at most ${AGENT_EDITS_PER_DAY} edits a day; any other post is refused`,
+        never: "anything but the post's id and its link, or another member's data; it never moves Beans",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        inputSchema: {
+            type: 'object',
+            properties: {
+                ...POST_ID_PROP,
+                title: { type: 'string', description: `the new title: at most ${AGENT_TITLE_MAX.listing} characters for an Offer or a Need, ${AGENT_TITLE_MAX.event} for an event` },
+                description: { type: 'string', description: 'the new details' },
+                category: { type: 'string', enum: AGENT_POST_CATEGORIES, description: "an Offer's or a Need's new Market category" },
+                beans: { type: 'number', minimum: 0, description: "an Offer's or a Need's new price in Beans (an enterprise's more than 0)" },
+                price_type: { type: 'string', enum: ['fixed', 'hourly'] },
+                // New photos, in place of the ones it has, from any of the three fields as a create takes them.
+                photo_urls: { ...PHOTO_URLS_SCHEMA, description: `in place of the ones it has: ${PHOTO_URLS_SCHEMA.description}` },
+                photo_ids: { ...PHOTO_IDS_SCHEMA, description: `in place of the ones it has: ${PHOTO_IDS_SCHEMA.description}` },
+                photos: { ...PHOTOS_SCHEMA, description: `in place of the ones it has: ${PHOTOS_SCHEMA.description}` },
+            },
+            required: ['post_id'],
+            additionalProperties: false,
+        },
+        outputSchema: {
+            type: 'object',
+            properties: {
+                postId: { type: 'string' }, kind: { type: 'string' }, link: { type: 'string' }, changed: { type: 'array' },
+                editsToday: { type: 'number' }, editsPerDay: { type: 'number' },
+            },
+            required: ['postId', 'kind', 'link', 'changed', 'editsToday', 'editsPerDay'],
+        },
+        run: (grant, args) => updateMade(grant, args),
+    },
+    {
+        name: 'remove_post',
+        title: 'Remove a post this assistant made',
+        reads: 'nothing: it takes down one live post THIS assistant made, as its author does in the app (an event is cancelled and its goers told); '
+            + 'one with a deal in escrow stays up; any other post is refused',
+        never: "another member's data; it never moves Beans",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        destructive: true,
+        inputSchema: { type: 'object', properties: POST_ID_PROP, required: ['post_id'], additionalProperties: false },
+        outputSchema: REMOVED_OUT,
+        run: (grant, args) => removeMade(grant, args),
+    },
+    {
+        name: 'remove_all_i_made',
+        title: 'Remove everything this assistant made',
+        reads: `nothing: it takes down every live post THIS assistant made, once a day, when confirm is "${REMOVE_ALL_CONFIRM}"; `
+            + 'one with a deal in escrow stays up and is listed back with why',
+        never: "a post made in the app or by another assistant, or another member's data; it never moves Beans",
+        ownerOnly: true,
+        posts: true,
+        write: true,
+        destructive: true,
+        inputSchema: {
+            type: 'object',
+            properties: { confirm: { type: 'string', const: REMOVE_ALL_CONFIRM, description: `exactly "${REMOVE_ALL_CONFIRM}"` } },
+            required: ['confirm'],
+            additionalProperties: false,
+        },
+        outputSchema: REMOVED_OUT,
+        run: (grant, args) => {
+            const refused = tendGate(grant);
+            if (refused) return { ok: false, error: refused };
+            if (args.confirm !== REMOVE_ALL_CONFIRM) return { ok: false, error: `confirm must be exactly "${REMOVE_ALL_CONFIRM}": nothing was removed.` };
+            if (!admitAgentRemoveAll(grant.id)) {
+                return { ok: false, error: 'This assistant has removed everything it made once today, the most a day allows: try again tomorrow (UTC), or the owner presses "Remove its posts" in Settings.' };
+            }
+            const out = removeAllMadeBy(grant.id, 'assistant', grant.member);
+            return { ok: true, rows: out.removed.length, result: { removed: out.removed, kept: out.kept } };
+        },
     },
 ];

@@ -19,6 +19,11 @@
  * sign-in at the vault, a vault that couldn't say, a build without a vault, the words-only line with and without the 12
  * words on the phone, and Remove everything's result lines.
  *
+ * And "Your community's admins" (vault rethink VR3, §4.3, §4.5): the copy a community keeps for its admins in the list
+ * above (under its community, with since when; alone, the last copy), its line in Remove everything's result, and
+ * Account Protection's row (components/CommunityAdminsRow.tsx) offered, turned on just now, on since a date, and kept at a
+ * community that no longer offers it.
+ *
  * Each state fails on: the page scrolling sideways; any text past the 320 edge or clipped in its box; a button under
  * 44dp tall (the panel's own floor); text under 4.5:1 contrast with what it is drawn on (3:1 from 18.66px bold or 24px).
  * Not counted: an emoji on its own (drawn in its own colours, whatever the text colour says), and Facebook's own button,
@@ -94,8 +99,23 @@ const STUBS = {
     `,
     'identity': `export const hasMnemonic = () => globalThis.__hasWords !== false;`,
     'SsoEnrolSheet': `export const SsoEnrolSheet = () => null;`,
+    // Account Protection's "Your community's admins" row (VR3): the community's rule, its answer about the copy (the
+    // page's query), the phone's lock (always yes) and the turn-on, all here; nothing is sealed or sent.
+    // This phone turned it on here (the row's marker) whenever the community keeps the copy: the row then asks even where it
+    // is no longer offered.
+    '@react-native-async-storage/async-storage': `export default { getItem: async () => (globalThis.__copy?.kept || globalThis.__copy?.unopenable ? '1' : null), setItem: async () => {}, removeItem: async () => {} };`,
+    'LocalAuth': `export const authenticateUser = async () => true;`,
+    'copies-rule': `export const copiesRuleForScreen = async () => (globalThis.__offered ? 'server' : 'vault');`,
+    'community-copy': `
+        const ON = { kept: true, since: '2026-10-29T04:05:06.000Z', offered: true };
+        export const COMMUNITY_COPY_TEXT = {};
+        export const offersCommunityCopy = (url, rule) => rule === 'server';
+        export const communityCopyStatus = async () => globalThis.__copy;
+        export const turnOnCommunityCopy = async () => { globalThis.__copy = ON; return { since: ON.since }; };
+        export const removeCommunityCopy = async () => { globalThis.__copy = { kept: false, since: null, offered: true }; };
+    `,
 };
-const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet']);
+const STUB_BASENAMES = new Set(['vault-config', 'IdentityContext', 'ThemeContext', 'node-post', 'vault-move', 'identity', 'SsoEnrolSheet', 'LocalAuth', 'copies-rule', 'community-copy']);
 const stubFor = (spec) => {
     if (STUBS[spec]) return spec;
     if (!spec.startsWith('.')) return null;
@@ -117,6 +137,7 @@ import { WaysBackList } from ${JSON.stringify(path.join(NATIVE, 'components/Ways
 import { onboardingColors } from ${JSON.stringify(path.join(NATIVE, 'utils/onboarding-colors'))};
 import { VaultMoveCard } from ${JSON.stringify(path.join(NATIVE, 'components/VaultMoveCard'))};
 import { CopiesRuleCardView } from ${JSON.stringify(path.join(NATIVE, 'components/CopiesRuleCardView'))};
+import { CommunityAdminsRow } from ${JSON.stringify(path.join(NATIVE, 'components/CommunityAdminsRow'))};
 
 const q = new URLSearchParams(location.search);
 const scheme = q.get('scheme') === 'dark' ? 'dark' : 'light';
@@ -133,6 +154,13 @@ globalThis.__offer = q.get('offer') === 'keep-here'
     : q.get('offer') === 'move' ? { kind: 'move', provider: 'google', communityUrl: 'https://mullumbimby.beanpool.org' } : null;
 const covered = (sso) => protectionFrom({ enrolled: sso.map(() => 'sso'), generation: 1, skipped: [], available: sso.length, enrolledSso: sso, threshold: 1, isSingleBlob: true });
 const hasWords = q.get('words') !== 'none';
+// "Your community's admins" (VR3): offered here (the rule "this server"), and whether the community keeps the copy.
+globalThis.__offered = q.get('offered') !== 'no';
+// A copy it keeps but can't open (#2626): its key gone (copy=cantopen-key), or another key in its place (copy=cantopen-other).
+const CANT_OPEN = { 'cantopen-key': 'recovery_seal_key_missing', 'cantopen-other': 'recovery_seal_unopenable' }[q.get('copy') || ''];
+globalThis.__copy = q.get('copy') === 'on' ? { kept: true, since: '2026-10-29T04:05:06.000Z', offered: globalThis.__offered }
+    : CANT_OPEN ? { kept: false, since: null, offered: globalThis.__offered, unopenable: { since: '2026-10-29T04:05:06.000Z', reason: CANT_OPEN } }
+    : { kept: false, since: null, offered: globalThis.__offered };
 const protection = q.get('signin') === 'google' ? covered(['google']) : protectionFrom(null);
 const noop = () => {};
 
@@ -160,11 +188,29 @@ const WAYS = {
             { provider: 'facebook', since: '2026-10-20', lastReleasedAt: null },
         ] },
         communities: [
-            { url: MULLUM, name: 'Mullumbimby', status: { providers: ['google', 'apple'], generation: 3 } },
+            { url: MULLUM, name: 'Mullumbimby', status: { providers: ['google', 'apple'], generation: 3, adminsCopy: { since: '2026-10-29T04:05:06.000Z' } } },
             { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
             { url: 'https://bellingen.beanpool.org', name: 'Bellingen', status: null },
         ],
         pending: [{ url: MULLUM, provider: 'apple' }],
+    },
+    // A copy Mullumbimby keeps for its admins but can't open now (#2626): listed, removable, never a way back.
+    cantopen: {
+        vault: { kind: 'listed', copies: [] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, adminsCopyUnopenable: { since: '2026-10-29T04:05:06.000Z', reason: 'recovery_seal_key_missing' } } },
+            { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
+        ],
+        pending: [],
+    },
+    // Only the copy Mullumbimby keeps for its admins (VR3): the last way back this phone knows of.
+    adminsonly: {
+        vault: { kind: 'listed', copies: [] },
+        communities: [
+            { url: MULLUM, name: 'Mullumbimby', status: { providers: [], generation: 0, adminsCopy: { since: '2026-10-29T04:05:06.000Z' } } },
+            { url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } },
+        ],
+        pending: [],
     },
     last: { vault: { kind: 'listed', copies: [{ provider: 'google', since: '2026-10-03', lastReleasedAt: null }] }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: [], generation: 0 } }], pending: [] },
     paused: { vault: { kind: 'unknown', why: 'paused' }, communities: [{ url: GLOBAL, name: 'Global community', status: { providers: ['google'], generation: 2 } }], pending: [] },
@@ -186,6 +232,7 @@ const RESULT = [
     t("Not removed: BeanPool's key vault is paused for a little while. Try again later."),
     t("Not removed yet: {community} didn't answer. The app tries again each time it opens.", { community: 'Mullumbimby' }),
     t("{community} didn't answer, so nothing kept there was removed. Open this screen again later.", { community: 'Bellingen' }),
+    t("Not removed: {community} couldn't do it just now. Try again later.", { community: 'Mullumbimby' }),
 ];
 
 /** app/ways-back.tsx's page: its header bar (from the screen's styles; the icon drawn as an arrow) and its card. */
@@ -246,6 +293,7 @@ const Page = () => {
                 <Text style={{ fontSize: 14, color: colors.text.secondary, marginBottom: 16, lineHeight: 20 }}>{t('This is how you get back into your account if you lose your phone.')}</Text>
                 <WordsRow />
                 <KeeperProtectionPanel colors={colors} protection={protection} hasWords={hasWords} waysBack copiesAt={copiesAt} communityName="Mullumbimby" onProtectSso={noop} onDisconnectSso={noop} />
+                {place === 'admins' && <CommunityAdminsRow communityName="Mullumbimby" />}
             </View>
         </View>
     );
@@ -393,6 +441,8 @@ try {
             ['state=none', 'Ways back, nothing kept anywhere'],
             ['state=none&words=none', 'Ways back, nothing kept anywhere, no 12 words on the phone'],
             ['state=result', 'Ways back, after Remove everything'],
+            ['state=adminsonly', "Ways back, only the copy for your community's admins"],
+            ['state=cantopen', "Ways back, a copy for your community's admins its server can't open"],
         ];
         for (const [query, label] of WAYS_CASES) {
             await open(`place=ways&${query}&scheme=${scheme}`);
@@ -423,6 +473,26 @@ try {
             if (query.includes('here=none') && await page.getByText('Link a sign-in').count()) problems.push(`${scheme} · ${label}: Link a sign-in is offered`);
             await measure(`${scheme} · ${label}`);
         }
+
+        // "Your community's admins" (VR3): Account Protection's third row, in each of its states.
+        const ADMINS_CASES = [
+            ['copy=off', "Account Protection, your community's admins, offered", /Turn on/],
+            ['copy=on', "Account Protection, your community's admins, on since a date", /On in Mullumbimby since/],
+            ['copy=on&offered=no', "Account Protection, your community's admins, kept where it is no longer offered", /no longer offers this to new members/],
+            // A copy its server keeps but can't open (#2626): never On, and what can be done.
+            ['copy=cantopen-key', "Account Protection, your community's admins, kept but its server's key is gone", /The people who run it can put that key back/],
+            ['copy=cantopen-other', "Account Protection, your community's admins, kept under another key, offered", /Turn it on again to make a copy it can open/],
+            ['copy=cantopen-other&offered=no', "Account Protection, your community's admins, kept under another key, no longer offered", /no longer makes new copies/],
+        ];
+        for (const [query, label, shows] of ADMINS_CASES) {
+            await open(`place=admins&${query}&scheme=${scheme}`);
+            await page.getByText(shows).first().waitFor();
+            await measure(`${scheme} · ${label}`);
+        }
+        await open(`place=admins&copy=off&scheme=${scheme}`);
+        await page.getByRole('button', { name: 'Turn on' }).click();
+        await page.getByText(/If you lose this phone, go and see one of your admins/).waitFor();
+        await measure(`${scheme} · Account Protection, your community's admins, turned on just now`);
     }
     for (const e of errors) problems.push(`page error: ${e}`);
 } finally {

@@ -2,10 +2,10 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "Το «{name}» χρησιμοποιείται ήδη σε αυτή την κοινότητα. Επιλέξτε άλλο όνομα.",
@@ -2087,7 +2087,7 @@
   "Not finished yet": "Δεν έχει ολοκληρωθεί ακόμα",
   "Reload page": "Επαναφόρτωση σελίδας",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "Αυτό το πρόγραμμα περιήγησης διατηρεί άλλον λογαριασμό BeanPool, οπότε αυτός δεν αποθηκεύτηκε εδώ.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Αυτός δεν είναι πλήρης κωδικός αλλαγής κλειδιού. Ξεκινά με RK- και περιλαμβάνει οκτώ γράμματα και αριθμούς.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "Αυτός δεν είναι πλήρης κωδικός. Ξεκινά με RK- ή BB- και περιλαμβάνει οκτώ γράμματα και αριθμούς.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "Μια είσοδος που ξεκίνησες σε αυτό το πρόγραμμα περιήγησης εκκρεμεί ακόμα. Ολοκλήρωσέ την πρώτα και μετά επίστρεψε στον κωδικό σου.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "Αυτό το πρόγραμμα περιήγησης δεν μπόρεσε να κρατήσει το κλειδί με ασφάλεια, οπότε δεν στάλθηκε τίποτα.",
   "Show this number to your admin": "Δείξε αυτόν τον αριθμό στον διαχειριστή σου",
@@ -3619,6 +3619,9 @@
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Αποτυχία οριστικής διαγραφής λογαριασμού από τον διακομιστή. Οι ενεργές συμφωνίες μεσεγγύησης μπορεί να χρειαστεί να επιλυθούν πρώτα.",
   "{amount} · held in trust": "{amount} · σε καταπίστευμα",
   "Cancel Initiative & Refund Backers": "Ακύρωση πρωτοβουλίας & επιστροφή στους υποστηρικτές",
+  "Second pause in 30 days. The last vote said No.": "Δεύτερη παύση μέσα σε 30 ημέρες. Η τελευταία ψηφοφορία είπε Όχι.",
+  "Second pause in 30 days. Too few members voted on the last one.": "Δεύτερη παύση μέσα σε 30 ημέρες. Στην τελευταία ψηφοφορία ψήφισαν πολύ λίγα μέλη.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Δεύτερη παύση μέσα σε 30 ημέρες. Η τελευταία ψηφοφορία σταμάτησε πριν κλείσει.",
   "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Ακύρωση πρωτοβουλίας & επιστροφή χρημάτων στους υποστηρικτές;\n\nΑυτό θα κλείσει την πρωτοβουλία και θα επιστρέψει άμεσα όλες τις δεσμεύσεις πίσω στους υποστηρικτές τους. Μια δέσμευση από λογαριασμό που έχει κλείσει έκτοτε (διαγράφηκε ή μια επιχείρηση που έχει εκκαθαριστεί) πηγαίνει αντ' αυτού στα Κοινά, όπως έκαναν και τα υπόλοιπα beans ενός κλειστού λογαριασμού, και των υπολοίπων επιστρέφονται κανονικά σε αυτούς.",
   "Please give a name of at least 2 characters.": "Δώσε ένα όνομα τουλάχιστον 2 χαρακτήρων.",
   "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
@@ -3656,5 +3659,6 @@
   },
   "Ask to join {name}": "Αίτημα συμμετοχής: {name}",
   "A few words about yourself": "Λίγα λόγια για εσένα",
-  "Where you live, what you'd like to share or learn": "Πού μένεις, τι θα ήθελες να μοιραστείς ή να μάθεις"
+  "Where you live, what you'd like to share or learn": "Πού μένεις, τι θα ήθελες να μοιραστείς ή να μάθεις",
+  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Αυτός δεν είναι πλήρης κωδικός αλλαγής κλειδιού. Ξεκινά με RK- και περιλαμβάνει οκτώ γράμματα και αριθμούς."
 }

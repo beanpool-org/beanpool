@@ -37,10 +37,12 @@ import { backupLockState } from '../services/sealed-backup.js';
 import { getBackupStatus } from '../services/backup-puller.js';
 import { cleanMemberText, fence, MEMBER_TEXT_NOTICE, type Fenced } from './fence.js';
 import {
-    admitAgentBackup, agentBackupsToday, agentCallsToday, returnAgentBackup,
-    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPostsPerDay, AGENT_LIST_MAX,
+    admitAgentBackup, agentBackupsToday, agentCallsToday, agentPhotosToday, returnAgentBackup,
+    AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, agentPostsPerDay, AGENT_LIST_MAX, AGENT_PHOTOS_PER_DAY,
 } from './limits.js';
 import { assistantPostsToday, OWNER_POST_TOOLS, photoRoomWords } from './owner-posts.js';
+import { PHOTO_UPLOAD_PATH, PHOTO_WAYS } from './owner-photos.js';
+import { OWNER_READ_TOOLS } from './owner-reads.js';
 import {
     fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
     type SuggestionKind,
@@ -79,6 +81,8 @@ export interface AgentTool {
     /** Only a grant ticked "May post for me" has it (agent/owner-posts.ts): listed and callable. */
     posts?: boolean;
     write?: boolean;
+    /** Takes something down (remove_post, remove_all_i_made): the MCP annotation says so. */
+    destructive?: boolean;
     inputSchema: JsonSchema;
     outputSchema: JsonSchema;
     /** A create (agent/owner-posts.ts) answers once its photos are resized; every other tool answers at once. */
@@ -512,6 +516,7 @@ export const AGENT_TOOLS: AgentTool[] = [
             name: STR, member: STR, role: STR, via: STR, createdAt: STR_OR_NULL, expiresAt: STR_OR_NULL,
             calls: OBJ({ today: NUM, perMinute: NUM, perDay: NUM }), backups: OBJ({ today: NUM, perDay: NUM }), tools: ARR, cannot: ARR,
             posts: OBJ({ today: NUM, perDay: NUM, photoRoom: STR }), canPost: { type: 'boolean' },
+            photos: OBJ({ today: NUM, perDay: NUM, uploadPath: STR, ways: STR }),
         }, ['name', 'member', 'role', 'via', 'createdAt', 'expiresAt', 'calls', 'backups', 'tools', 'cannot', 'canPost']),
         run: (grant) => ({
             ok: true, rows: 1,
@@ -528,6 +533,9 @@ export const AGENT_TOOLS: AgentTool[] = [
                 // with the owner's photo room left in words; a grant that does not post (an admin's, or one not ticked) has no count.
                 canPost: grantPosts(grant),
                 ...(grantPosts(grant) ? { posts: { today: assistantPostsToday(grant), perDay: agentPostsPerDay(), photoRoom: photoRoomWords(grant.member) } } : {}),
+                // Slice S4: the photos it has had fetched or uploaded today against the 200 (agent/owner-photos.ts), where an
+                // upload goes (a path it joins to the address in its welcome), and the two ways besides base64, in words.
+                ...(grantPosts(grant) ? { photos: { today: agentPhotosToday(grant.id), perDay: AGENT_PHOTOS_PER_DAY, uploadPath: PHOTO_UPLOAD_PATH, ways: PHOTO_WAYS } } : {}),
                 tools: toolsFor(grant).map((t) => t.name),
                 cannot: AGENT_CANNOT,
             },
@@ -630,8 +638,9 @@ AGENT_TOOLS.push({
     },
 });
 
-// An owner's assistant posts for them: Offers, Needs, events and enterprise listings (agent/owner-posts.ts).
-AGENT_TOOLS.push(...OWNER_POST_TOOLS);
+// An owner's assistant posts for them: Offers, Needs, events and enterprise listings (agent/owner-posts.ts); slice S2, what it
+// reads for seeding, and its own undo: my_posts, update_post, remove_post, remove_all_i_made (agent/owner-reads.ts).
+AGENT_TOOLS.push(...OWNER_POST_TOOLS, ...OWNER_READ_TOOLS);
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {

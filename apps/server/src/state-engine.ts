@@ -73,6 +73,7 @@ import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
 import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
+import { deleteCommunityCopy } from './engine/community-copy.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges, isClosedAccount } from './engine/stranded-pledges.js';
 import { returnUnfundedPledges, noticeEndDateMoved, closedPledgeToCommons } from './engine/unfunded-pledges.js';
@@ -154,8 +155,10 @@ import {
     announcePause,
     mayBePaused,
     suspendReasonProblem,
-    removalCoolDownRefusal,
-    REMOVAL_COOL_DOWN_CODE,
+    pauseChainRefusal,
+    repauseNeedsOwner,
+    PauseRefusedError,
+    type PauseRefusal,
     eraseRepliesOf,
     announceDecisionUpdated,
     ENTERPRISE_NOT_PAUSED,
@@ -7688,25 +7691,43 @@ export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
 }
 
 /**
- * Why actioning this report with suspendUser can't pause its member for `actor` (the cool-down, decisions-engine.ts
- * removalCoolDownRefusal), or null: asked by the route before any fresh proof, as actionReport asks it again. Only for a
- * member the action would pause (not a closed account, an enterprise, or one already paused or held).
+ * Whether actioning this report with suspendUser pauses its member where the chain rules keep that for an owner
+ * (decisions-engine.ts repauseNeedsOwner: within 30 days of a vote on removing them that ended without removing them).
+ * The route asks the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly), as on a pause that takes a role.
  */
-export function reportPauseCoolDown(reportId: string, actor: string | null | undefined): string | null {
+export function reportPauseNeedsOwner(reportId: string): boolean {
+    const subject = reportPauseSubject(reportId);
+    return !!subject && repauseNeedsOwner(subject);
+}
+
+/** Who actioning this report with suspendUser would pause (reportSubjectOf), or null: it names nobody, or a closed account. */
+function reportPauseSubject(reportId: string): string | null {
     const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
         { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
     const subject = report ? reportSubjectOf(report) : null;
-    const member = subject && !isClosedAccountKey(subject) ? getMember(subject) : undefined;
-    return member && !member.isTreasury && mayBePaused(member) ? removalCoolDownRefusal(member.publicKey, actor) : null;
+    return subject && !isClosedAccountKey(subject) ? subject : null;
+}
+
+/**
+ * Why actioning this report with suspendUser can't pause its member for `actor` now (the chain rules, the cool-down first:
+ * decisions-engine.ts pauseChainRefusal), or null: asked by the route before any fresh proof, as actionReport asks it again
+ * and pauseMember once more. `reason` is the admin's own, or null for the one the record would give (reportPauseReason).
+ * Only for a member the action would pause (not a closed account, an enterprise, or one already paused or held).
+ */
+export function reportPauseRefusal(
+    reportId: string, actor: string | null | undefined, reason: string | null, opts: { freshProof?: boolean; reasonCategory?: string | null } = {},
+): PauseRefusal | null {
+    const subject = reportPauseSubject(reportId);
+    const member = subject ? getMember(subject) : undefined;
+    if (!member || member.isTreasury || !mayBePaused(member)) return null;
+    const pauseReason = reason || reportPauseReason(member.callsign || member.publicKey.slice(0, 8), opts.reasonCategory);
+    return pauseChainRefusal(member.publicKey, actor, pauseReason, { freshProof: opts.freshProof });
 }
 
 /** The owner's or admin's role actioning this report with suspendUser would take away, or null (reportSuspensionTakesPrivilegedRole). */
 export function reportSuspensionTakesRole(reportId: string): 'owner' | 'admin' | null {
-    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
-        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
-    if (!report) return null;
-    const subject = reportSubjectOf(report);
-    return subject && !isClosedAccountKey(subject) ? heldPrivilegedRole(subject) : null;
+    const subject = reportPauseSubject(reportId);
+    return subject ? heldPrivilegedRole(subject) : null;
 }
 
 /**
@@ -7733,7 +7754,11 @@ export function actionReport(
     deletePost: boolean = false,
     suspendUser: boolean = false,
     removePulseItem: boolean = false,
-    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void; actor?: string | null; reason?: string | null },
+    opts?: {
+        reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void; actor?: string | null; reason?: string | null;
+        /** The route asked the owner's fresh proof, for the chain rules' tripwire (decisions-engine.ts pauseChainRefusal). */
+        freshProof?: boolean;
+    },
 ): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
@@ -7783,15 +7808,12 @@ export function actionReport(
             err.status = 400;
             throw err;
         }
-        // Whoever brought a vote on removing them that ended without removing them waits out the cool-down (removal by vote,
-        // Amendment A point 5), as adminEmergencySuspend refuses it: 403, before any write. Only for a pause this would make.
-        const coolDown = toPause && mayBePaused(toPause) ? removalCoolDownRefusal(toPause.publicKey, opts?.actor) : null;
-        if (coolDown) {
-            const err: any = new Error(coolDown);
-            err.status = 403;
-            err.code = REMOVAL_COOL_DOWN_CODE;
-            throw err;
-        }
+        // The chain rules (removal by vote: the cool-down of Amendment A point 5, and S4's, design §3.4), as
+        // adminEmergencySuspend refuses them: before any write. Only for a pause this would make; pauseMember asks again.
+        const pauseReason = toPause && mayBePaused(toPause)
+            ? givenReason || reportPauseReason(toPause.callsign || toPause.publicKey.slice(0, 8), opts?.reasonCategory) : null;
+        const chain = toPause && pauseReason !== null ? pauseChainRefusal(toPause.publicKey, opts?.actor, pauseReason, { freshProof: opts?.freshProof }) : null;
+        if (chain) throw new PauseRefusedError(chain);
         const wasOpen = report.status === 'pending' || report.status == null;
         
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
@@ -7816,9 +7838,9 @@ export function actionReport(
         // (reportSubjectOf). The pause writes 'disabled', which no re-key code's cancel or completion undoes
         // (member-wizards.ts cancelRekeyCode puts back only its own 'suspended'), so a code waiting for them needs no word
         // of it; one that alone holds them 'suspended' is paused over (mayBePaused), as an admin's suspension is.
-        if (toPause && mayBePaused(toPause)) {
-            paused = pauseMember(toPause, opts?.actor ?? null, givenReason || reportPauseReason(toPause.callsign || toPause.publicKey.slice(0, 8), opts?.reasonCategory),
-                { actor: opts?.actor ?? undefined, how: 'suspended on a report' });
+        if (toPause && pauseReason !== null) {
+            paused = pauseMember(toPause, opts?.actor ?? null, pauseReason, { actor: opts?.actor ?? undefined, how: 'suspended on a report' },
+                { freshProof: opts?.freshProof });
         }
         // Whether this report suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
         // Recorded on the first action; a later one (a takedown after the fact sends no suspendUser) only ever raises
@@ -9067,6 +9089,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Through deleteAllShares, which writes the tombstone that deletes them on a standby too. Not in a try: a copy left
         // behind here would still bring the deleted account back, so a failure fails the deletion instead.
         deleteAllShares(publicKey);
+        // And their community copy (engine/community-copy.ts), with its tombstone: the same reason, not in a try either.
+        deleteCommunityCopy(publicKey);
         try {
             // By the owner each row names, which a server that took over has too (its sessions stay each server's own), and
             // by their sessions here, for a row made before rows named their owner.

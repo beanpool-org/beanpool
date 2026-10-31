@@ -33,7 +33,7 @@ export function rekeyLink(nodeUrl: string, code: string): string {
 }
 
 /** When a phone asked, as the admin's clock shows it: "14:02". */
-function askedAt(iso: string): string {
+export function askedAt(iso: string): string {
     const d = new Date(iso);
     return Number.isFinite(d.getTime()) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 }
@@ -153,6 +153,8 @@ export function RekeyMemberWizard({
         setUnderAttack(status.codeUnderAttack ?? null);
         const pending = status.pendingRequest;
         if (!pending) return;
+        // A Bring back code (vault rethink VR3) holds nothing and is shown in Bring back's own window, never as a re-key's.
+        if (pending.kind === 'bring_back') return;
         const isExpired = new Date(pending.expires_at).getTime() < Date.now();
         if (isExpired) return;
         setExpiresAt(pending.expires_at);

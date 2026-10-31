@@ -936,6 +936,10 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 <p className="text-[11px] text-nature-300 m-0 leading-relaxed">
                                     Add a second owner soon: if this phone is lost, a second owner can still manage the community.
                                 </p>
+                                {/* The reason an owner's way back matters (vault rethink VR8, design §6 door 7). */}
+                                <p className="text-[11px] text-nature-300 m-0 leading-relaxed" data-testid="owner-backups-reason">
+                                    Your key also unlocks this community&apos;s backups. Keep your words, and make a second owner, so one can bring the other back.
+                                </p>
                                 <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
                                     Once they have joined, open <strong>People &amp; Safety → Owners &amp; admins</strong> here in
                                     Settings and add them as an owner.

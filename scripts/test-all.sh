@@ -42,6 +42,33 @@ if [ $ALL_REQUESTED -eq 1 ] && [ -n "${SERVER_SUITES_ONLY:-}" ]; then
 fi
 [ $ALL_REQUESTED -eq 1 ] && unset SERVER_SUITES_ONLY
 
+# CI's shards (.github/workflows/ci.yml) each run a part of this: TEST_ALL_ONLY="name name" runs only the checks named
+# (each must be a check below), SERVER_SUITES_SHARD=i/K only the i-th of K parts of the server suites, and
+# TEST_ALL_TEST_SLICE adds turbo arguments to the `test` check (`--only --filter=beanpool-pillar -- --shard=1/2`). A run
+# narrowed by TEST_ALL_ONLY never records green. Without it, --all is the merge gate's full run as before: it drops the
+# other two, as it drops SERVER_SUITES_ONLY. Not passed on to the checks (merge_gate runs this script again inside).
+TEST_ALL_ONLY=$(echo ${TEST_ALL_ONLY:-})
+TEST_ALL_TEST_SLICE="${TEST_ALL_TEST_SLICE:-}"
+export -n TEST_ALL_ONLY TEST_ALL_TEST_SLICE
+if [ $ALL_REQUESTED -eq 1 ] && [ -z "$TEST_ALL_ONLY" ]; then
+  for knob in SERVER_SUITES_SHARD TEST_ALL_TEST_SLICE; do
+    [ -n "${!knob:-}" ] && echo "ℹ️  --all runs every check in full: ignoring $knob=${!knob} (TEST_ALL_ONLY narrows a run, and it then records no green)."
+    unset "$knob"
+  done
+fi
+if [ -n "$TEST_ALL_ONLY" ]; then
+  ALL_CHECKS=" $(sed -nE 's/^ *(run|skip)_check "([a-z0-9_]+)".*/\2/p' "$SCRIPT_DIR/test-all.sh" | sort -u | tr '\n' ' ')"
+  for name in $TEST_ALL_ONLY; do
+    case "$ALL_CHECKS" in
+      *" $name "*) ;;
+      *) echo "❌ TEST_ALL_ONLY names $name, which is no check here. The checks:$ALL_CHECKS"; exit 2 ;;
+    esac
+  done
+  echo "🎯 TEST_ALL_ONLY: running only $TEST_ALL_ONLY${TEST_ALL_TEST_SLICE:+ (test: $TEST_ALL_TEST_SLICE)}${SERVER_SUITES_SHARD:+ (server suites shard $SERVER_SUITES_SHARD)}. This run records no green."
+fi
+# True when the check is in this run: every check, or only those TEST_ALL_ONLY names.
+selected() { [ -z "$TEST_ALL_ONLY" ] || [[ " $TEST_ALL_ONLY " == *" $1 "* ]]; }
+
 # Stop before anything else if the install is older than a package.json. A missing dependency surfaces as "Cannot
 # find module ..." from tsc, vitest and the server suites, which reads like broken code; this names the real problem.
 node scripts/check-deps-installed.mjs || exit 1
@@ -54,7 +81,7 @@ if [ -d "packages/beanpool-core" ]; then
 fi
 
 # The commit under test, and whether the tree is exactly that commit, for the green record at the end.
-[ $ALL_REQUESTED -eq 1 ] && green_run_start
+[ $ALL_REQUESTED -eq 1 ] && [ -z "$TEST_ALL_ONLY" ] && green_run_start
 
 # Scope auto-detection via git diff (unless FORCE_ALL=1)
 HAS_CORE_CHANGES=1
@@ -131,8 +158,10 @@ stop_run() {
 }
 
 # The checks that start once build has finished wait here (each says why). A stopped run starts none of them: build
-# ends BECAUSE of the stop, and a check launched then would outlive the run.
+# ends BECAUSE of the stop, and a check launched then would outlive the run. A run without the build check (a CI shard)
+# has nothing to wait for: core, engine and signin, the dist the waiting checks read, were built above.
 wait_for_build() {
+  selected build || return 0
   until [ -f "$LOGDIR/build.rc" ] || [ -f "$LOGDIR/stopped" ]; do sleep 1; done
   if [ -f "$LOGDIR/stopped" ]; then echo "Not started: the run was stopped."; return 1; fi
 }
@@ -152,6 +181,7 @@ MAX_CONCURRENT_JOBS=4
 run_check() {
   local name="$1"
   shift
+  selected "$name" || return 0
 
   while [ $(jobs -rp | wc -l) -ge $MAX_CONCURRENT_JOBS ]; do
     sleep 0.2
@@ -186,7 +216,14 @@ fmt_secs() {
 
 skip_check() {
   local name="$1"
+  selected "$name" || return 0
   SKIPPED_NAMES+=("$name")
+}
+
+# A check that needs another to finish first waits here; a run without that other check (a CI shard) does not wait.
+wait_for_check() {
+  selected "$1" || return 0
+  while [ ! -f "$LOGDIR/$1.rc" ]; do sleep 1; done
 }
 
 # Turbo fan-out caps, CI only.
@@ -245,7 +282,7 @@ echo ""
 # behind the checks launched after it. A failed build is reported by its own check; the suites still run.
 run_server_suites() {
   wait_for_build || return 1
-  [ "$(cat "$LOGDIR/build.rc")" = "0" ] || echo "⚠️  build failed; these suites ran against whatever dist it left."
+  ! selected build || [ "$(cat "$LOGDIR/build.rc")" = "0" ] || echo "⚠️  build failed; these suites ran against whatever dist it left."
   SERVER_SUITES_SUMMARY="$LOGDIR/server_suites.summary" node scripts/run-server-suites.mjs
 }
 
@@ -258,7 +295,7 @@ if [ $HAS_SERVER_CHANGES -eq 1 ] || [ $HAS_CORE_CHANGES -eq 1 ] || [ $HAS_ENGINE
 else
   skip_check "server_suites"
 fi
-run_check "test"          pnpm turbo run test --continue $TURBO_TEST_ARGS
+run_check "test"          pnpm turbo run test --continue $TURBO_TEST_ARGS $TEST_ALL_TEST_SLICE
 
 # e2e/fresh-proof.mjs (owner-delete S4a): an owner's fresh-proof box is on screen at the press, survives a second Manage
 # press, and never offers a spent code.
@@ -389,8 +426,9 @@ run_check "directory_register" bash scripts/test-directory-register.sh
 
 # Every GitHub workflow pins its actions to a full commit SHA, says what its token may do, and gates the job that moves
 # the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
-# the repository's workflows and each edit the check exists to catch. Instant.
-run_check "workflows" node --test scripts/check-workflows.test.mjs
+# the repository's workflows and each edit the check exists to catch. check-ci-shards.test.mjs: every check here runs in
+# exactly one of CI's shards (.github/workflows/ci.yml) and the required check's name is on the aggregate job alone. Instant.
+run_check "workflows" node --test scripts/check-workflows.test.mjs scripts/check-ci-shards.test.mjs
 
 # No page in apps/ asks Google for a font: the web app, Settings, the website and its guide serve their own files
 # (with their licences), and the node's document policies allow fonts from the node only. Instant.
@@ -411,7 +449,7 @@ run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwrigh
 # unknown status said in words; nothing from the status drawn as markup. Its Chromium is the one website_contrast
 # installs, so it starts once that has finished. Seconds.
 run_website_status() {
-  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  wait_for_check website_contrast
   node --test scripts/website-status.test.mjs
 }
 run_check "website_status" run_website_status
@@ -423,7 +461,7 @@ run_check "website_global_link" node --test scripts/website-global-link.test.mjs
 # the home page's and /global's lines to it; drawn at 320 px with text at 130 %, light and dark. Its Chromium is the one
 # website_contrast installs, so it starts once that has finished. Seconds.
 run_website_android() {
-  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  wait_for_check website_contrast
   node --test scripts/website-android.test.mjs
 }
 run_check "website_android" run_website_android
@@ -432,7 +470,7 @@ run_check "website_android" run_website_android
 # socialism.org's link), no page linking the old anchor, the apps' address a page in the tree; drawn at 320 px with text at
 # 130 %, light and dark. Its Chromium is the one website_contrast installs, so it starts once that has finished. Seconds.
 run_website_start() {
-  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  wait_for_check website_contrast
   node --test scripts/website-start.test.mjs
 }
 run_check "website_start" run_website_start
@@ -442,7 +480,7 @@ run_check "website_links" node --test scripts/website-links.test.mjs scripts/web
 
 # website-s6: every page in the 24 languages, hreflang, footer row, read in banner, RTL, check
 run_website_lang() {
-  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  wait_for_check website_contrast
   node --test scripts/website-lang.test.mjs
 }
 run_check "website_lang" run_website_lang
@@ -627,8 +665,9 @@ fi
 # Cleanup
 [ -n "$LOGDIR" ] && rm -rf "$LOGDIR"
 
-# The merge gate's record (scripts/test-all-lib.sh): only an --all run, not --fast, in which every check ran and passed.
-if [ $FAIL -eq 0 ] && [ $ALL_REQUESTED -eq 1 ] && [ $FAST -eq 0 ] && [ ${#SKIPPED_NAMES[@]} -eq 0 ]; then
+# The merge gate's record (scripts/test-all-lib.sh): only an --all run, not --fast or narrowed by TEST_ALL_ONLY, in which
+# every check ran and passed.
+if [ $FAIL -eq 0 ] && [ $ALL_REQUESTED -eq 1 ] && [ $FAST -eq 0 ] && [ -z "$TEST_ALL_ONLY" ] && [ ${#SKIPPED_NAMES[@]} -eq 0 ]; then
   echo ""
   record_green_run "$WALL"
 fi

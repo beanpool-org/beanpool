@@ -87,8 +87,14 @@ const FIXED: Readonly<Record<string, WordKey>> = {
     'That code is for another community. Check the community’s name or address and try again.': word('That code is for another community. Check the community’s name or address and try again.'),
     'Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.': word('Couldn’t reach your community. Check your connection: you can try again, and the code still works until it expires.'),
     'This phone’s account changed while you waited, so nothing was saved. Start again.': word('This phone’s account changed while you waited, so nothing was saved. Start again.'),
-    'That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.': word('That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.'),
+    'That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.': word('That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.'),
     'That isn’t a community address the app can use.': word('That isn’t a community address the app can use.'),
+    // utils/rekey-redeem.ts openBringBack (vault rethink VR3): a bring-back's release that didn't open to the account.
+    // utils/community-copy.ts COMMUNITY_COPY_TEXT (vault rethink VR3): turning "Your community's admins" on or off.
+    'Couldn’t reach your community, so nothing changed. Try again in a moment.': word('Couldn’t reach your community, so nothing changed. Try again in a moment.'),
+    'Your community didn’t keep the copy, so this isn’t on yet. Try again.': word('Your community didn’t keep the copy, so this isn’t on yet. Try again.'),
+    'This phone can’t read its own key, so no copy was made.': word('This phone can’t read its own key, so no copy was made.'),
+    'What your community sent didn’t open to your account, so nothing was saved. Ask the admin to try again.': word('What your community sent didn’t open to your account, so nothing was saved. Ask the admin to try again.'),
     // utils/node-claim.ts: the server's status, and why a claim didn't go through.
     'That is not a community address the app can use.': word('That is not a community address the app can use.'),
     'Could not reach the server.': word('Could not reach the server.'),

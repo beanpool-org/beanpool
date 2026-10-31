@@ -2,10 +2,10 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up); claude-sonnet-5-5 (machine draft, deals S7: My Deals is now Your deals); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the old escrow sentences' drafts carried to the new held-in-trust sentences; meaning-check due); claude-sonnet-5-5 (machine draft, held-in-trust words 30 Oct: the phone's draft of the deal card line reused on the web; meaning-check due); claude-opus-5-5 (machine draft, held-in-trust cancel labels from the existing \"…Refund Backers?\" draft, 30 Oct); claude-sonnet-5-5 (machine draft, market fill from elsewhere, 30 Oct); gemini-3.8-flash-high (machine draft, crowdfund cancel words name closed-account case, 30 Oct); claude-opus-5-5 (machine draft, #2626 bring-back words: RK- or BB-, 31 Oct); claude-opus-5-5 (machine draft, removal S4 second-pause line, 30 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-30",
+    "updated": "2026-10-31",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "\"{name}\" tayari limechukuliwa katika jamii hii. Chagua jina lingine.",
@@ -2089,7 +2089,7 @@
   "Not finished yet": "Bado haijakamilika",
   "Reload page": "Pakia upya ukurasa",
   "This browser holds another BeanPool account, so this one wasn’t saved here.": "Kivinjari hiki kina akaunti nyingine ya BeanPool, kwa hivyo hii haikuhifadhiwa hapa.",
-  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Huo si msimbo kamili wa kubadilisha ufunguo. Huanza na RK- na una herufi na nambari nane.",
+  "That isn’t a whole code. It starts RK- or BB- and has eight letters and numbers.": "Huo si msimbo kamili. Huanza na RK- au BB- na una herufi na nambari nane.",
   "A join you started in this browser is still waiting. Finish it first, then come back to your code.": "Kujiunga ulikoanza katika kivinjari hiki bado kunasubiri. Maliza kwanza, kisha urudi kwenye msimbo wako.",
   "This browser couldn’t keep the key safely, so nothing was sent.": "Kivinjari hiki hakikuweza kuweka ufunguo salama, kwa hivyo hakuna kilichotumwa.",
   "Show this number to your admin": "Onyesha nambari hii kwa msimamizi wako",
@@ -3620,6 +3620,9 @@
   "Failed to purge account from node. Active deals holding Beans in trust may need to be resolved first.": "Imeshindwa kufuta akaunti kutoka kwenye seva. Huenda makubaliano amilifu ya amana yanapaswa kutatuliwa kwanza.",
   "{amount} · held in trust": "{amount} · kwenye amana",
   "Cancel Initiative & Refund Backers": "Ghairi Mpango na Uwarejeshee Wafadhili",
+  "Second pause in 30 days. The last vote said No.": "Usitishaji wa pili ndani ya siku 30. Kura iliyopita ilisema Hapana.",
+  "Second pause in 30 days. Too few members voted on the last one.": "Usitishaji wa pili ndani ya siku 30. Wanachama wachache mno walipiga kura iliyopita.",
+  "Second pause in 30 days. The last vote was stopped before it closed.": "Usitishaji wa pili ndani ya siku 30. Kura iliyopita ilisimamishwa kabla haijafungwa.",
   "Cancel Initiative & Refund Backers?\n\nThis will close the initiative and immediately refund all pledges held in trust back to their backers. A pledge from an account that has since closed (deleted, or an enterprise that has wound up) goes to the Commons instead, as the rest of a closed account's beans did, and everyone else's still goes back to them.": "Ghairi Mradi na Urejeshe Fedha kwa Wafadhili?\n\nHii itafunga mradi na kurejesha mara moja ahadi zote zilizowekwa kwenye amana kwa wafadhili wao. Ahadi kutoka kwa akaunti ambayo imefungwa tangu wakati huo (iliyofutwa, au biashara iliyomalizika) huenda kwa Commons badala yake, kama maharagwe mengine ya akaunti iliyofungwa, na ya kila mtu mwingine bado inarudi kwao.",
   "Please give a name of at least 2 characters.": "Tafadhali weka jina lenye angalau herufi 2.",
   "Please keep your name to {n} character.|Please keep your name to {n} characters.": {
@@ -3657,5 +3660,6 @@
   },
   "Ask to join {name}": "Omba kujiunga na {name}",
   "A few words about yourself": "Maneno machache kukuhusu",
-  "Where you live, what you'd like to share or learn": "Unapoishi, kile ungependa kushiriki au kujifunza"
+  "Where you live, what you'd like to share or learn": "Unapoishi, kile ungependa kushiriki au kujifunza",
+  "That isn’t a whole re-key code. It starts RK- and has eight letters and numbers.": "Huo si msimbo kamili wa kubadilisha ufunguo. Huanza na RK- na una herufi na nambari nane."
 }

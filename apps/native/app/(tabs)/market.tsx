@@ -1049,7 +1049,7 @@ export default function MarketScreen() {
     const fillNeeded = marketFillWanted({
         profile: nodeProfile, member: !!identity?.publicKey, ready: firstSyncDone && !refusal, noArea,
         searching: searchQuery.trim().length > 0, filter, groupFiltered: groupFilter !== 'all', distancePicked: radiusKm != null,
-        shownNear: filteredPosts.length,
+        shownNear: filteredPosts,
     });
     const fillKey = `${filter}|${categoryFilter}`;
     const [elsewhere, setElsewhere] = useState<{ key: string; posts: any[] | null } | null>(null);

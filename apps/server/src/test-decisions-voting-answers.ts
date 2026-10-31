@@ -164,6 +164,20 @@ function closeForTick(id: string): void {
     db.prepare("UPDATE decisions SET closes_at = datetime('now', '-10 seconds') WHERE id = ?").run(id);
 }
 
+/**
+ * A closed vote moved `days` back in time, as if made then. Removal S4's rules turn on when pauses happen (a second within
+ * 30 days of a vote is an owner's, a third in 90 days nobody's): where this suite's steps mean "later", the vote is dated so.
+ */
+function age(id: string, days: number): void {
+    const r = db.prepare('SELECT opens_at, closes_at, created_at, params FROM decisions WHERE id = ?').get(id) as
+        { opens_at: string; closes_at: string; created_at: string; params: string | null };
+    const shift = (t: string) => new Date(Date.parse(t.includes('T') ? t : `${t.replace(' ', 'T')}Z`) - days * DAY).toISOString();
+    const params = JSON.parse(r.params || '{}');
+    if (params.pausedAt) params.pausedAt = shift(params.pausedAt);
+    db.prepare('UPDATE decisions SET opens_at = ?, closes_at = ?, created_at = ?, params = ? WHERE id = ?')
+        .run(shift(r.opens_at), shift(r.closes_at), shift(r.created_at), JSON.stringify(params), id);
+}
+
 function roleRow(pk: string): any {
     return db.prepare('SELECT role, granted_at, granted_by, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?').get(pk);
 }
@@ -470,6 +484,9 @@ async function run() {
     assert(sameRole(trollRole2, roleRow(troll)), 'and gives the role back exactly');
 
     // Passed on an admin → no vote removes an owner or admin (§3.8): not carried out, and the pause still ends with its vote.
+    // Months on (removal S4: a third pause in 90 days is nobody's, and within 30 days of a vote only an owner's).
+    age(keep.id, 91);
+    age(downVote.id, 31);
     const trollRole3 = roleRow(troll);
     const keptVote = (await callRouter(admin, 'POST', `/api/local/admin/users/${troll}/suspend`, { actor: plainAdmin, body: { reason: 'Third incident, same person' } })).body.decision;
     for (const v of voters.slice(0, 4)) castDecisionVote(keptVote.id, v, true);

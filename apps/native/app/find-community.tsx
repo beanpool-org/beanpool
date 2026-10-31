@@ -10,7 +10,6 @@ import * as Location from 'expo-location';
 import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
 import type { BeanPoolIdentity } from '../utils/identity';
-import { getCanonicalAvatar } from '../utils/canonical-profile';
 import {
     fetchCommunities, fetchGlobalHome, watchPlace, unwatchPlace, communityLabel, communityFacts, notAnsweringLine,
     type DirectoryCommunity, type PlaceWatch, type Point,
@@ -21,6 +20,7 @@ import {
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { knockAddressFrom, knockFromNode, knockScanTarget } from '../utils/knock-address';
+import { handScannedInvite, scannedInviteGoesToRoot } from '../utils/scanned-invite';
 import type { JoinKey } from '../utils/door-key';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
@@ -286,19 +286,27 @@ export default function FindCommunityScreen() {
         else setWatchNote(findLineWords(r.message));
     };
 
-    // ── Scan a code (S3): a community's QR (its address, its card, its door) fills the address box; an invite's goes to
-    // the first screen's invite step, as it is. The camera loads, and is asked for, only at the tap. ──────────────────
+    // ── Scan a code (S3): a community's QR (its address, its card, its door) fills the address box. An invite's goes as
+    // that invite opened as a link goes: for a phone in a community, the root layout's "Switch Nodes?" (utils/scanned-invite.ts),
+    // since the root guard takes a member off welcome; with no account, or waiting to be let in, the first screen's invite
+    // step, as it is. The camera loads, and is asked for, only at the tap. ────────────────────────────────────────────
     const [Scanner, setScanner] = useState<null | typeof import('../components/ScanCodeModal').default>(null);
     const openScanner = async () => {
         const m = await import('../components/ScanCodeModal');
         setScanner(() => m.default);
+    };
+    const goWithInvite = async (raw: string) => {
+        // Read at the scan, not from `inCommunity`: a member's invite is never sent to welcome before that read is back.
+        const anchorUrl = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
+        if (scannedInviteGoesToRoot({ hasIdentity: !!identity, anchorUrl })) handScannedInvite(raw);
+        else router.push({ pathname: '/welcome', params: { invite: raw } });
     };
     const onScanned = (data: string): boolean => {
         const target = knockScanTarget(data);
         if (!target) return false;
         setScanner(null);
         if (target.kind === 'invite') {
-            router.push({ pathname: '/welcome', params: { invite: target.raw } });
+            void goWithInvite(target.raw);
             return true;
         }
         setQuery(target.origin.replace(/^https:\/\//, ''));
@@ -350,7 +358,8 @@ export default function FindCommunityScreen() {
         await askNotificationPermissionOnAction('knock', signer.publicKey);
         setSending(true);
         setFormError(null);
-        const avatar = identity ? await getCanonicalAvatar().catch(() => null) : null;
+        // Profile S2-W: knocks do not leak another community's photo
+        const avatar = null;
         // From the global community only for a member there; otherwise the knock names no community it came from.
         const anchor = identity ? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) : null;
         const guest = anchor ? await import('../utils/nodes').then(m => m.isGuestNode(anchor)).catch(() => true) : false;

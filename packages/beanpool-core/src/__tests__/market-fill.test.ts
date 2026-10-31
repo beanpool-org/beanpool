@@ -3,11 +3,25 @@
  * from elsewhere, once, up to a page, and only while fewer than FILL_BELOW are shown near the member.
  */
 import { describe, expect, it } from 'vitest';
-import { FILL_BELOW, FILL_MAX, elsewhereFill, wantsFill } from '../market-fill';
+import { FILL_BELOW, FILL_MAX, READ_TIMEOUT_MS, elsewhereFill, isNodePulsePost, wantsFill } from '../market-fill';
 
 const posts = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => ({ id: `${prefix}-${i}` }));
 
 describe('market fill', () => {
+    it('gives up after READ_TIMEOUT_MS (20 s)', () => {
+        expect(READ_TIMEOUT_MS).toBe(20_000);
+    });
+
+    it('recognises a local Daily Pulse post and not one from elsewhere or an ordinary listing', () => {
+        expect(isNodePulsePost({ authorCallsign: 'Daily Pulse' })).toBe(true);
+        expect(isNodePulsePost({ author_callsign: 'Daily Pulse' })).toBe(true);
+        expect(isNodePulsePost({ authorCallsign: 'Daily Pulse', originNode: 'node-2' })).toBe(false);
+        expect(isNodePulsePost({ author_callsign: 'Daily Pulse', origin_node: 'node-2' })).toBe(false);
+        expect(isNodePulsePost({ authorCallsign: 'Daily Pulse', _remoteNode: {} })).toBe(false);
+        expect(isNodePulsePost({ authorCallsign: 'Alice' })).toBe(false);
+        expect(isNodePulsePost(null)).toBe(false);
+    });
+
     it('wants a fill below 8 shown and not from 8', () => {
         expect(FILL_BELOW).toBe(8);
         expect(wantsFill(0)).toBe(true);

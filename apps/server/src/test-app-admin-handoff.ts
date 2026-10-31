@@ -579,7 +579,8 @@ async function main() {
         seedMember(otherOwner.pub, 'hoOwner9');
         grantNodeRole(otherOwner.pub, 'owner', owner.pub);
         const otherFresh = await exchange((await requestLink(otherOwner)).body.handshakeToken);
-        const suspendAgain = await postJson(`/api/local/admin/users/${coOwner.pub}/suspend`, reason, as(otherFresh));
+        // Within 30 days of the vote the lift stopped, a pause is an owner's with a reason of its own (removal S4).
+        const suspendAgain = await postJson(`/api/local/admin/users/${coOwner.pub}/suspend`, { reason: 'Testing the step-up on suspensions, a second time' }, as(otherFresh));
         const haltFresh = await postJson(`/api/local/admin/decisions/${suspendAgain.body?.decision?.id}/halt`, reason, as(fresh));
         assert(haltFresh.status === 200 && roleOf(coOwner.pub) === 'owner', `…and so does halting the vote (got ${haltFresh.status} ${JSON.stringify(haltFresh.body)})`);
 

@@ -20,10 +20,11 @@
 #           as the recheck writes. A failure the train cannot run alone (lint, typecheck, a browser check, fail_summary)
 #           merges nothing, and says so.
 #
-# Who rides: at most 4. A PR labelled tier-A, or touching ledger or money paths ($MONEY_PATHS, or a changed line that calls
-# conservingTransaction or writes accounts SET balance, in any case), rides alone: in a train of two or more PRs still riding
-# (not dropped or held) it is left out with a line. A RED GitHub "Run BeanPool Test-All Pipeline" on a PR's head holds it,
-# before the run and again before merging; pending never holds.
+# Who rides: at most 4. A PR labelled tier-A, or touching a file that is about money ($MONEY_PATHS), or changing a line that
+# calls conservingTransaction or writes accounts SET balance, in any case and any file, rides alone: in a train of two or more
+# PRs still riding (not dropped or held) it is left out with a line. A large file that only holds some money (state-engine.ts,
+# decisions-engine.ts) is read by that changed-line rule, not listed: a wording change there may ride. A RED GitHub
+# "Run BeanPool Test-All Pipeline" on a PR's head holds it, before the run and again before merging; pending never holds.
 # If main or any PR head moves during the run, or a PR's CI goes red, nothing is merged: run the train again.
 #
 #   --no-merge   test, bisect and report, but merge and push nothing
@@ -53,10 +54,12 @@ CAP=4
 CHECK_NAME="Run BeanPool Test-All Pipeline"
 MERGER="$SCRIPT_DIR/words-merge-3way.mjs"
 CATALOG_RE='^(apps|packages)/[^/]+/words/[^/]+\.json$'
-# Ledger and money: the ledger itself, the files that move Beans (check-balance-writes.mjs's baseline and the engine's
-# escrow, pledge and debt paths), the treasury routes, and the two scripts that guard conservation. db.ts is too central to
-# list whole: a changed line there (or anywhere) that calls conservingTransaction or writes a balance counts instead.
-MONEY_PATHS='^(packages/beanpool-core/src/ledger|apps/server/src/(state-engine|decisions-engine|federation-settlement-exchange|srv20-ledger-reset)\.ts$|apps/server/src/engine/(escrow|money-requests|unfunded-pledges|stranded-pledges|names-debts|key-move|audit|sync)\.ts$|apps/server/src/routes/treasury|scripts/(check-balance-writes|audit-conservation)\.mjs$)'
+# Ledger and money: the ledger itself, the settlement exchange and the ledger reset, the engine's escrow, pledge and debt paths,
+# the schema, the treasury routes, and the two scripts that guard conservation. A file too central to list whole (db.ts,
+# state-engine.ts, decisions-engine.ts, engine/sync.ts, engine/key-move.ts, engine/audit.ts: 5 of 9 PRs rode alone on 1 Nov
+# 2026, a words-only one for touching decisions-engine.ts) counts by its changed lines instead: a line there, or anywhere, that
+# calls conservingTransaction or writes a balance. Keep this on one line, in this form: board.sh reads it with sed.
+MONEY_PATHS='^(packages/beanpool-core/src/ledger|apps/server/src/(federation-settlement-exchange|srv20-ledger-reset)\.ts$|apps/server/src/engine/(escrow|money-requests|unfunded-pledges|stranded-pledges|names-debts)\.ts$|apps/server/src/db/schema\.sql$|apps/server/src/routes/treasury|scripts/(check-balance-writes|audit-conservation)\.mjs$)'
 
 usage() { echo "usage: $0 <PR> [<PR>…] (at most $CAP) [--no-merge] [--keep] [--shadow]" >&2; exit 2; }
 PRS=(); MERGE=1; KEEP=0; SHADOW=0

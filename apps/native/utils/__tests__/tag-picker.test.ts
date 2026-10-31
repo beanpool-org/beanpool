@@ -191,7 +191,7 @@ describe('Market search sends q AND tags', () => {
                 groupId: 'all',
             };
 
-            const saved = marketSearchToSave(filterState, 'limón');
+            const saved = marketSearchToSave(filterState, 'limón', 'food.fruit.lemon');
             expect(saved).not.toBeNull();
             expect(saved?.q).toBe('limón');
             expect(saved?.tags).toContain('food.fruit.lemon');

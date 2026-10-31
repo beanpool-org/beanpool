@@ -40,7 +40,8 @@ describe('matchesExpandedSearch', () => {
 
 describe('marketSearchToSave: Save this search to Home on the web (Marty, 7 Oct)', () => {
     it('takes the words, Offers or Needs from the tab, the category and the distance filter', () => {
-        expect(marketSearchToSave({ type: 'offer', category: 'food', radiusKm: 5 }, 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5, tags: ['food.eggs'] });
+        expect(marketSearchToSave({ type: 'offer', category: 'food', radiusKm: 5 }, 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5 });
+        expect(marketSearchToSave({ type: 'offer', category: 'food', radiusKm: 5 }, 'eggs', 'food.eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5, tags: ['food.eggs'] });
         expect(marketSearchToSave({ type: 'need', category: 'all', radiusKm: null }, ' help  moving ')).toEqual({ q: 'help moving', kind: 'need' });
         expect(marketSearchToSave({ type: 'all', category: 'tools', radiusKm: 12 }, 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 25 });
         expect(marketSearchToSave({ type: 'for-you', category: 'all', radiusKm: 100 }, 'eggs')).toEqual({ q: 'eggs', kind: 'any' });
